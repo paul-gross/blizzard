@@ -10,18 +10,14 @@ from blizzard.runner.cli.worker_call import WorkerCall
 
 @click.group("garden")
 def garden_group() -> None:
-    """Worker: read this run's own garden machinery.
-
-    The lease binding is ambient, like ``artifact``: every verb acts on the worker's own
-    lease, resolved from the spawn environment — none takes a flag naming another routine
-    or scope."""
+    """Worker: read this run's own garden machinery — the routine and scope are both
+    derived server-side from the worker's own lease, so no verb here takes a flag
+    naming either."""
 
 
 @garden_group.command("findings")
 def garden_findings() -> None:
-    """Worker: list this run's live finding bucket as JSON. The routine and the scope
-    are derived server-side from this lease's own chunk — nothing here names either, so
-    a worker cannot point this read at another routine's bucket."""
+    """Worker: list this run's live finding bucket as JSON."""
     worker = WorkerCall.of("garden findings")
     resp = worker.get(worker.leased("garden/findings"), failure="could not read the finding bucket")
     click.echo(resp.text)
@@ -30,8 +26,7 @@ def garden_findings() -> None:
 @garden_group.command("proposals")
 def garden_proposals() -> None:
     """Worker: list this run's own routine's open garden proposals as JSON, closed ones
-    excluded. The routine is derived server-side from this lease's own chunk — nothing
-    here names it, so a worker cannot point this read at another routine's proposals."""
+    excluded."""
     worker = WorkerCall.of("garden proposals")
     resp = worker.get(worker.leased("garden/proposals"), failure="could not read the proposal docket")
     click.echo(resp.text)

@@ -67,8 +67,8 @@ class AuthCommand(HubCommand):
 
 class SessionServiceCommand(AuthCommand):
     """An ``AuthCommand`` that hands the session application service to the controller
-    (hub:98) — ``login``/``logout``, reached through ``ctx.params`` rather than
-    ``@click.pass_context`` so it stays outside the recorded CLI surface."""
+    (hub:98) — pinned by
+    ``tests/test_cli_surface_contract.py::test_login_and_logout_keep_session_service_off_the_recorded_surface``."""
 
     def invoke(self, ctx: click.Context) -> Any:
         ctx.params["session_service"] = ctx.obj

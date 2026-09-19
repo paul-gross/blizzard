@@ -28,8 +28,7 @@ def session_end() -> None:
     """Worker hook: record the session's exit (identity from the environment) — the worker's
     "declared done" signal.
 
-    Fails **soft**, like the heartbeat: a hook must never break the worker's exit, so a failure
-    is reported to stderr and this still exits 0."""
+    Fails **soft**, like the heartbeat."""
     if os.environ.get(ENV_ELICITATION):
         return
     worker = WorkerCall.hook("session-end")
@@ -52,11 +51,7 @@ def ask(prompt: str, options: str | None) -> None:
 
 @click.group("chunk")
 def chunk_group() -> None:
-    """Worker: read facts about the chunk this node-step belongs to.
-
-    The lease binding is ambient, like ``artifact``: every verb in this group acts on the worker's
-    own lease, resolved from the spawn environment, so none takes a flag by which a worker could
-    name another chunk."""
+    """Worker: read facts about the chunk this node-step belongs to."""
 
 
 @chunk_group.command("history")

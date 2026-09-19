@@ -30,8 +30,8 @@ def external_usage_group() -> None:
 def external_usage_probe(slug: str | None, directory: str) -> None:
     """Sample one declared subscription's rate-limit usage, by SLUG, and print it.
 
-    Read-only, through the same sampler seam the loop uses — no store write, no tick.
-    SLUG defaults to the legacy ``anthropic`` declaration every runner still carries."""
+    Read-only, writes nothing. SLUG defaults to the legacy ``anthropic`` declaration
+    every runner still carries."""
     slug = slug or LEGACY_ANTHROPIC_SLUG
     try:
         config = RunnerConfig.load(Path(directory))

@@ -226,7 +226,7 @@
           "short_help": "Force the standing derivation sweep's own replacement unit now, rather than waiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate (neither option given)."
         },
         "summary": {
-          "help": "Read one of the canned counts or operational-dataset rollups (blizzard#255/#256):\nthe four DATASET counts (counts-files, counts-skills, counts-agent-types,\ncounts-nodes) and the six operational datasets (durations-nodes, durations-graphs,\nspend-nodes, spend-graphs, spend-chunks, outcomes-nodes). Only spend-chunks pages\nor streams; a filter DATASET's own route does not expose is refused.",
+          "help": "Read one of the canned counts or operational-dataset rollups (blizzard#255/#256).\nOnly spend-chunks pages or streams; a filter DATASET's own route does not expose is\nrefused.",
           "params": [
             {
               "hidden": false,
@@ -395,7 +395,7 @@
             }
           ],
           "path": "hub analytics summary",
-          "short_help": "Read one of the canned counts or operational-dataset rollups (blizzard#255/#256): the four DATASET counts (counts-files, counts-skills, counts-agent-types, counts-nodes) and the six operational datasets (durations-nodes, durations-graphs, spend-nodes, spend-graphs, spend-chunks, outcomes-nodes)."
+          "short_help": "Read one of the canned counts or operational-dataset rollups (blizzard#255/#256)."
         }
       },
       "help": "Operator verbs over derived transcript-event analytics.",
@@ -741,7 +741,7 @@
           "short_help": "The fleet chunk list \u2014 derived status per chunk."
         },
         "migrate": {
-          "help": "Set, overwrite, or clear CHUNK's standing migration intent (issue #124).\n\n``--node`` present selects ``forced``, absent selects ``auto``; ``--cancel`` clears\na standing intent and conflicts with ``--to-graph``/``--node``. The intent is consulted at\nthe chunk's next transition, never applied eagerly \u2014 ``restart --to-graph`` moves it now.",
+          "help": "Set, overwrite, or clear CHUNK's standing migration intent (issue #124).\n\n``--node`` present selects ``forced``, absent selects ``auto``; ``--cancel`` clears\na standing intent and conflicts with ``--to-graph``/``--node``. The intent is consulted\nat the chunk's next transition.",
           "params": [
             {
               "hidden": false,
@@ -814,7 +814,7 @@
           "short_help": "Set, overwrite, or clear CHUNK's standing migration intent (issue #124)."
         },
         "pause": {
-          "help": "Pause CHUNK \u2014 the runner kills and parks the worker but keeps the claim (issue #46).\n\nA pure client of the hub API: ``POST /api/chunks/{id}/pause``. Unlike ``detach``, no\nroute is released and no retry is consumed. 409 when the chunk is done/stopped/\ndelivering.",
+          "help": "Pause CHUNK \u2014 the runner kills and parks the worker but keeps the claim (issue #46).\n\nA pure client of the hub API: ``POST /api/chunks/{id}/pause``. 409 when the chunk is\ndone/stopped/delivering.",
           "params": [
             {
               "hidden": false,
@@ -1544,7 +1544,7 @@
           "short_help": "Confirm by hand that FINDING_IDS no longer reproduce."
         },
         "list": {
-          "help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone, which\nalso surfaces every exited finding, not just a merely `gone` one.\n\nThis is the read a running pass calls to cross-reference its own bucket\n(blizzard-context:/domain/findings-and-proposals.md).",
+          "help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone, which\nalso surfaces every exited finding, not just a merely `gone` one.",
           "params": [
             {
               "hidden": false,
@@ -2725,7 +2725,7 @@
       "short_help": "Operator verbs over one work item: author, edit, or withdraw it at its source."
     },
     "login": {
-      "help": "Log into the hub (issue #96) \u2014 opens the browser to the hub's own authorize\nendpoint (PKCE, an ephemeral ``127.0.0.1`` loopback redirect) and stores the\nresulting session token locally. The CLI never contacts a provider directly.\n``--paste`` uses the paste-code fallback for a shell with no reachable loopback\nlistener; ``--no-browser`` still runs the loopback flow, printing the URL.",
+      "help": "Log into the hub (issue #96) \u2014 opens the browser to authorize and stores the\nresulting session token locally. ``--paste`` uses the paste-code fallback for a\nshell with no reachable loopback listener; ``--no-browser`` still runs the loopback\nflow, printing the URL.",
       "params": [
         {
           "hidden": false,
@@ -2762,7 +2762,7 @@
         }
       ],
       "path": "hub login",
-      "short_help": "Log into the hub (issue #96) \u2014 opens the browser to the hub's own authorize endpoint (PKCE, an ephemeral ``127.0.0.1`` loopback redirect) and stores the resulting session token locally."
+      "short_help": "Log into the hub (issue #96) \u2014 opens the browser to authorize and stores the resulting session token locally."
     },
     "logout": {
       "help": "Log out of the hub (issue #96) \u2014 deletes the locally stored session token and\nrevokes it at the hub, so it stops resolving even if it leaked. A no-op (locally)\nif never logged in; the revoke call is best-effort (a hub already unreachable, or\nan already-expired session, does not block the local cleanup).",

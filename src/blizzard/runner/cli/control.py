@@ -204,8 +204,8 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
     """Take over a parked chunk: exec the interactive resume command in this terminal (issue #52). The
     takeover fact is recorded before anything else runs, so no loop step can respawn or judge the
     session while it is open; the lease token travels only in the response body and the exec, never
-    printed. ``--force`` supersedes a live worker attempt instead of refusing. The end-PATCH runs in a
-    ``finally`` around the child, so a stranded open takeover cannot outlive an interrupted session."""
+    printed. ``--force`` supersedes a live worker attempt instead of refusing. An interrupted session
+    still closes the takeover."""
     with RunnerDaemon.reach("takeover", directory, runner_url) as daemon:
         resp = daemon.send("post", f"/api/chunks/{chunk_id}/takeovers", json_body={"force": force})
         if resp.status_code == 409:
