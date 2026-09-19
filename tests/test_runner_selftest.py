@@ -187,6 +187,8 @@ def test_selftest_runs_every_check_against_the_fake_harness_and_passes(tmp_path:
         "verdict_elicitation",
         "automated_resume",
         "resume_command",
+        "usage_parsing",
+        "transcript_readability",
     ]
     assert all(c["passed"] for c in run["checks"]), run["checks"]
 
@@ -662,6 +664,8 @@ def test_cli_selftest_prints_every_check_and_exits_zero_on_success(tmp_path: Pat
     assert "[PASS] verdict_elicitation" in result.output
     assert "[PASS] automated_resume" in result.output
     assert "[PASS] resume_command" in result.output
+    assert "[PASS] usage_parsing" in result.output
+    assert "[PASS] transcript_readability" in result.output
     assert "passed for claude_code" in result.output
 
 
