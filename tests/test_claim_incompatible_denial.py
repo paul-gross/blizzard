@@ -88,6 +88,33 @@ def test_registration_with_no_capabilities_is_never_revalidated(tmp_path: Path) 
     assert resp.status_code == 201, resp.text
 
 
+def test_claim_denied_when_the_only_satisfying_capability_is_unavailable(tmp_path: Path) -> None:
+    """A capability health has withdrawn (blizzard#438, ``available=False``) satisfies no
+    lineage, even though it otherwise matches by harness id and default binding — the same
+    409 an entirely mismatched capability draws."""
+    hub = build_hub(tmp_path)
+    _register(hub, capabilities=[{"harness_id": "claude", "default": True, "available": False}])
+    chunk_id = _ingest(hub, "1")  # no declared preference — would be satisfied by the default binding alone
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["incompatible_runner_id"] == "r1"
+
+
+def test_claim_allowed_when_available_defaults_true_on_an_unset_field(tmp_path: Path) -> None:
+    """A registration reporting no ``available`` field at all (the previous-minor case)
+    matches exactly as before this field existed — the wire's own default, never a reason
+    to strand a pre-upgrade runner."""
+    hub = build_hub(tmp_path)
+    _register(hub, capabilities=_MATCHING_CAPABILITY)  # no `available` key in the wire body
+    chunk_id = _ingest(hub, "1")
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
+
+    assert resp.status_code == 201, resp.text
+
+
 def test_claim_denied_once_capabilities_regress_between_registration_and_claim(tmp_path: Path) -> None:
     """The peek-then-claim skew window: a re-registration dropping the satisfying
     binding lands before the claim POST, which re-reads the stored registration fresh

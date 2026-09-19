@@ -87,6 +87,25 @@ def test_hold_returns_a_usable_head_normally(tmp_path: Path) -> None:
     assert [e["chunk_id"] for e in resp.json()["entries"]] == [workable]
 
 
+def test_an_unavailable_default_capability_is_treated_as_incompatible(tmp_path: Path) -> None:
+    """A capability health has withdrawn (blizzard#438, ``available=False``) satisfies no
+    lineage on the peek path either — mirroring the claim path's own denial."""
+    hub = build_hub(tmp_path)
+    token = _token(hub)
+    unavailable = _ingest(hub, "1")  # no declared preference — would need the default binding alone
+    workable = _ingest(hub, "2", default_harnesses=["special-harness"])
+
+    capabilities = [
+        {"harness_id": "claude", "default": True, "available": False},
+        {"harness_id": "special-harness", "tiers": ["blizzard:frontier"]},
+    ]
+    resp = hub.client.post("/api/fleet/queue/peek", json={"capabilities": capabilities}, headers=_bearer(token))
+    assert resp.status_code == 200, resp.text
+    entries = resp.json()["entries"]
+    assert [e["chunk_id"] for e in entries] == [workable]
+    assert unavailable not in [e["chunk_id"] for e in entries]
+
+
 def test_no_capabilities_asserted_applies_no_capability_filter(tmp_path: Path) -> None:
     """An empty ``capabilities`` — an unenrolled snapshot, or a request declaring none —
     applies no capability filter at all: the head is returned even though no real

@@ -19,9 +19,12 @@ from blizzard.runner.composition import build_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
-from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
-from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
+from blizzard.runner.harness.internal.harness_registry import (
+    build_production_harness_health_probes,
+    build_production_harness_registry,
+)
+from blizzard.runner.loop.capability_snapshot import HarnessHealthCache, HarnessVersionCache
 from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -107,11 +110,20 @@ class LoopWiring:
         # A startup guard: this composition's transcripts lane requires the default
         # harness's own binding to resolve one, not merely to be registered at all.
         harnesses.transcript_source(CLAUDE_CODE_HARNESS_ID)
+        _clock = SystemClock()
+        health_cache = HarnessHealthCache(
+            clock=_clock,
+            probes=build_production_harness_health_probes(config),
+            selftest_results=stores.selftest_results,
+            configured_tiers={
+                CLAUDE_CODE_HARNESS_ID: config.model_aliases,
+                OPENCODE_HARNESS_ID: config.opencode_model_aliases,
+            },
+        )
         # The subscription-sampling seam (blizzard#436) — each declaration paired with its
         # resolved binding; an unknown provider selects `None` (declared, unsampled). Every
         # sampler shares one lazily-built HTTP client, owned by this context (blizzard#436,
         # hub:95), rather than opening its own.
-        _clock = SystemClock()
         usage_http_client = _LazyUsageHttpClient()
         resolved_subscriptions = tuple(
             ResolvedSubscription(
@@ -192,7 +204,7 @@ class LoopWiring:
                 harnesses=harnesses,
                 transcripts_wired=True,
             ),
-            harness_selector=HarnessSelector(harnesses=harnesses),
+            harness_selector=HarnessSelector(harnesses=harnesses, health=health_cache),
             env_release=EnvironmentRelease(
                 environments=stores.environments,
                 leases=stores.lease_record,
@@ -208,6 +220,8 @@ class LoopWiring:
             harnesses=harnesses,
             # Built once here (D4), long-lived across every tick `PeriodicDriver._run` drives on this context.
             harness_versions=HarnessVersionCache(clock=_clock),
+            # Mirrors `harness_versions` (D4, blizzard#438): built once, long-lived across every tick.
+            harness_health=health_cache,
         )
 
     def tick_once(self) -> None:

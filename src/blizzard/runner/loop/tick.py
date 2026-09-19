@@ -47,7 +47,7 @@ def tick(ctx: LoopContext) -> None:
     ctx = dataclasses.replace(
         ctx,
         chunk_views=MemoizingChunkViewCache(ctx.hub),
-        capabilities=TickCapabilities(ctx.harnesses, ctx.harness_versions),
+        capabilities=TickCapabilities(ctx.harnesses, ctx.harness_versions, ctx.harness_health),
     )
     ctx.chunk_views.prime(_primed_chunk_ids(ctx))
     # The spend-ceiling kill-switch (issue #61b) — first, so it brakes the same tick it fires in.

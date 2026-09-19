@@ -743,7 +743,13 @@ def register_runner(
     ride the same authenticated write."""
     fleet.assert_owns(request.runner_id)
     capabilities = tuple(
-        RunnerCapability(harness_id=c.harness_id, version=c.version, tiers=tuple(c.tiers), default=c.default)
+        RunnerCapability(
+            harness_id=c.harness_id,
+            version=c.version,
+            tiers=tuple(c.tiers),
+            default=c.default,
+            available=c.available,
+        )
         for c in request.capabilities
     )
     first = services.fleet.register(

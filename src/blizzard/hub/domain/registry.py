@@ -69,12 +69,15 @@ class RunnerCapability:
     """One harness binding a registered runner reported it can execute (blizzard#433) —
     the hub-domain mirror of the wire shape, kept import-free of it (``bzh:domain-core``).
     ``version`` is ``None`` when the binding exposes none; ``default`` marks the runner's
-    own default binding, at most one per snapshot."""
+    own default binding, at most one per snapshot. ``available`` (blizzard#438) defaults
+    ``True`` so a runner asserting none matches exactly as it did before this field
+    existed."""
 
     harness_id: str
     version: str | None = None
     tiers: tuple[str, ...] = ()
     default: bool = False
+    available: bool = True
 
 
 @dataclass(frozen=True)

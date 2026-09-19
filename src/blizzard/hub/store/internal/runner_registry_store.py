@@ -138,7 +138,13 @@ class RunnerRegistryStore:
         capabilities_json = (
             json.dumps(
                 [
-                    {"harness_id": c.harness_id, "version": c.version, "tiers": list(c.tiers), "default": c.default}
+                    {
+                        "harness_id": c.harness_id,
+                        "version": c.version,
+                        "tiers": list(c.tiers),
+                        "default": c.default,
+                        "available": c.available,
+                    }
                     for c in capabilities
                 ]
             )
@@ -322,6 +328,7 @@ class RunnerRegistryStore:
                 version=c.get("version"),
                 tiers=tuple(c.get("tiers") or ()),
                 default=bool(c.get("default", False)),
+                available=bool(c.get("available", True)),
             )
             for c in (json.loads(row.capabilities) if row.capabilities else [])
         )

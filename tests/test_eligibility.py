@@ -80,8 +80,10 @@ def _chunk(
     )
 
 
-def _capability(harness_id: str, *, tiers: tuple[str, ...] = (), default: bool = False) -> RunnerCapability:
-    return RunnerCapability(harness_id=harness_id, tiers=tiers, default=default)
+def _capability(
+    harness_id: str, *, tiers: tuple[str, ...] = (), default: bool = False, available: bool = True
+) -> RunnerCapability:
+    return RunnerCapability(harness_id=harness_id, tiers=tiers, default=default, available=available)
 
 
 # --- The reachability walk: branches, a cycle, and the two kinds of stop ---
@@ -209,6 +211,25 @@ def test_an_unconstrained_bare_lineage_is_unsatisfied_without_a_default_capabili
     graph = _graph([node])
 
     assert not EligibilityCheck(_chunk(), graph, node, capabilities).eligible
+
+
+# --- An unavailable capability (blizzard#438) satisfies no lineage ---
+
+
+def test_a_named_harness_lineage_is_unsatisfied_by_an_unavailable_capability() -> None:
+    node = _node("code", session_source="code")
+    decl = SessionDecl(name="code", harnesses=["claude"])
+    chunk = _chunk()
+    graph = _graph([node], sessions=[decl])
+
+    assert not EligibilityCheck(chunk, graph, node, [_capability("claude", available=False)]).eligible
+
+
+def test_an_unconstrained_bare_lineage_is_unsatisfied_by_an_unavailable_default_capability() -> None:
+    node = _node("build")
+    graph = _graph([node])
+
+    assert not EligibilityCheck(_chunk(), graph, node, [_capability("claude", default=True, available=False)]).eligible
 
 
 # --- Mixed requirements across two reachable lineages on the same snapshot ---

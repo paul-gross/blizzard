@@ -4127,9 +4127,15 @@ export type RunRowView = {
  *
  * One harness binding this runner can execute (blizzard#433) — the id, its observed
  * version (``None`` when the binding exposes none), the tier ids it can resolve, and
- * whether it is this runner's default binding.
+ * whether it is this runner's default binding. ``available`` (blizzard#438) defaults
+ * ``True`` so a runner asserting none matches exactly as it did before this field
+ * existed — never a reason to strand a pre-upgrade runner.
  */
 export type RunnerCapability = {
+    /**
+     * Available
+     */
+    available?: boolean;
     /**
      * Default
      */
