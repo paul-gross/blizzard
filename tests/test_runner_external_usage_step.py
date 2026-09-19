@@ -204,6 +204,56 @@ def test_a_successful_sample_records_one_attempt_and_enqueues_one_runner_scoped_
     assert "resets_at" in five_hour
 
 
+@pytest.mark.parametrize(
+    "invalid_pct",
+    [float("nan"), float("inf"), float("-inf"), -0.1, 100.1],
+    ids=["nan", "inf", "-inf", "below", "above"],
+)
+def test_an_invalid_utilization_window_is_dropped_before_it_is_persisted_or_buffered(
+    tmp_path, invalid_pct: float
+) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(
+        snapshot=ExternalSubscriptionUsageSnapshot(
+            sampled_at=_NOW,
+            windows=(
+                ExternalSubscriptionUsageWindow(
+                    window="5h", utilization_pct=42.0, resets_at=_NOW + timedelta(hours=5), window_seconds=18_000
+                ),
+                ExternalSubscriptionUsageWindow(
+                    window="7d", utilization_pct=invalid_pct, resets_at=_NOW + timedelta(days=7), window_seconds=604_800
+                ),
+                ExternalSubscriptionUsageWindow(window="zero", utilization_pct=10.0, resets_at=_NOW, window_seconds=0),
+            ),
+        )
+    )
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
+
+    ExternalUsageSample(ctx).run()
+
+    payload = json.loads(next(f.payload for f in store.pending_outbound() if f.kind == _SAMPLED_KIND))
+    assert payload["windows"] == [
+        {
+            "window": "5h",
+            "utilization_pct": 42.0,
+            "resets_at": "2026-08-01T17:00:00+00:00",
+            "window_seconds": 18_000,
+        }
+    ]
+    json.dumps(payload, allow_nan=False)
+
+
+def test_an_empty_sample_is_persisted_and_buffered_as_an_empty_windows_collection(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(snapshot=ExternalSubscriptionUsageSnapshot(sampled_at=_NOW, windows=()))
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
+
+    ExternalUsageSample(ctx).run()
+
+    payload = json.loads(next(f.payload for f in store.pending_outbound() if f.kind == _SAMPLED_KIND))
+    assert payload["windows"] == []
+
+
 # AC 3 — a None sample writes a NULL-payload attempt row and enqueues nothing.
 # --------------------------------------------------------------------------- #
 
@@ -425,30 +475,3 @@ def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_pa
     assert known.sample_calls == 1
     assert store.last_external_usage_attempt_at("known") == _NOW
     assert store.last_external_usage_attempt_at("no-binding") is None  # never attempted
-
-
-# Parse-contract stability — `slug` is additive JSON (blizzard#436 phase 2).
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.unit
-def test_the_payload_is_still_parseable_by_a_reader_ignorant_of_slug(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The wire fact gained ``slug`` additively — a reader written against the pre-slug
-    shape, which only ever projected ``sampled_at`` and ``windows``, must still parse
-    everything it always did, unaware the field was ever added."""
-    store = _store(tmp_path)
-    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
-    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
-
-    ExternalUsageSample(ctx).run()
-
-    fact = next(f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND)
-    payload = json.loads(fact.payload)
-
-    def _read_pre_slug_shape(raw: dict[str, object]) -> tuple[str, list[dict[str, object]]]:
-        # Exactly what a reader written before `slug` existed would project — no `slug` key.
-        return raw["sampled_at"], raw["windows"]  # type: ignore[return-value]
-
-    sampled_at, windows = _read_pre_slug_shape(payload)
-    assert sampled_at == "2026-08-01T12:00:00+00:00"
-    assert {w["window"] for w in windows} == {"5h", "7d"}

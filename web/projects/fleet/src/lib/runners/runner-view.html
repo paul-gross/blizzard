@@ -79,31 +79,15 @@
                 [total]="row.env_capacity ?? 0"
               />
             }
-            <!-- The rate-limit pacing bars: one group per declared subscription, keyed
+            <!-- The rate-limit pacing bars: one group per reported subscription sample, keyed
                  by slug (blizzard#478), so two subscriptions sharing a window label
-                 never collide. Falls back to the legacy flat loop only for a runner
-                 still on the single-subscription shape alone (blizzard#436) — a runner
-                 reporting the per-slug collection renders that exclusively, never both,
-                 so the same windows never render twice. -->
+                 never collide. -->
             @if (row.subscriptionPaces.length > 0) {
               <fleet-subscription-pace-group
                 data-testid="runner-subscription-groups"
                 [attr.data-runner-subscription-groups]="row.runner_id"
                 [subscriptionPaces]="row.subscriptionPaces"
               />
-            } @else if (row.paceBars.length > 0) {
-              <div class="pace-bars" data-testid="runner-pace-bars">
-                @for (bar of row.paceBars; track bar.window) {
-                  <fleet-kit-pace-bar
-                    data-testid="runner-pace-bar"
-                    [attr.data-runner-pace-bar]="row.runner_id"
-                    [attr.data-pace-window]="bar.window"
-                    [label]="bar.window"
-                    [utilizationPct]="bar.utilizationPct"
-                    [elapsedPct]="bar.elapsedPct"
-                  />
-                }
-              </div>
             }
             <div class="r3">
               <span class="badges">

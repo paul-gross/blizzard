@@ -83,6 +83,7 @@ def test_pause_and_resume_flip_the_derived_brake(tmp_path: Path) -> None:
     paused = hub.client.post("/api/runners/runner-a/pause", json={"by": "alice"})
     assert paused.status_code == 200
     assert paused.json()["hub_paused"] is True
+    assert paused.json()["subscriptions"] == []
     assert hub.client.get("/api/fleet/runners/runner-a").json()["hub_paused"] is True
     # The fleet's brake is not the runner's own: pausing here leaves that one alone.
     assert hub.client.get("/api/fleet/runners/runner-a").json()["locally_paused"] is False
@@ -90,6 +91,7 @@ def test_pause_and_resume_flip_the_derived_brake(tmp_path: Path) -> None:
     resumed = hub.client.post("/api/runners/runner-a/resume", json={"by": "alice"})
     assert resumed.status_code == 200
     assert resumed.json()["hub_paused"] is False
+    assert resumed.json()["subscriptions"] == []
     assert hub.client.get("/api/fleet/runners/runner-a").json()["hub_paused"] is False
 
 

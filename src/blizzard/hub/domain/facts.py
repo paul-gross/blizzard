@@ -12,10 +12,12 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 
+from pydantic import ValidationError
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, narrow_event_log_kind
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import as_utc
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
@@ -23,7 +25,7 @@ from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunks.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.event_log import EventLogService
-from blizzard.hub.domain.registry import LEGACY_ANTHROPIC_SLUG, FleetService
+from blizzard.hub.domain.registry import FleetService
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import ChunkFacts
 from blizzard.wire.facts import (
@@ -32,11 +34,11 @@ from blizzard.wire.facts import (
     EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     LEASE_MINTED,
-    LEGACY_ANTHROPIC_NAME,
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
     RUNNER_LOCALLY_RESUMED,
     USAGE_RECORDED,
+    ExternalSubscriptionUsageWindowFact,
     RunnerFactAck,
     RunnerFactBatch,
 )
@@ -46,6 +48,30 @@ _log = get_logger("blizzard.hub.facts")
 # The chunk-scoped, fence-advancing kinds gated on intake (issue #84b): a fabricated one from a
 # non-holder must not advance the fence or open a decision. Runner-scoped kinds are never gated.
 _ROUTE_TOKEN_GATED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
+
+
+def _external_usage_windows_json(raw: object, *, runner_id: str, slug: str) -> str:
+    """The complete usage windows from a fact; malformed entries are omitted at intake.
+
+    Instants are normalized to UTC here, so a naive or offset ``resets_at`` is stored
+    already-UTC rather than repaired on every later read (``bzh:utc-instants``)."""
+    if not isinstance(raw, list):
+        _log.warning("external usage windows not a list", runner_id=runner_id, slug=slug)
+        return "[]"
+    windows = []
+    for entry in raw:
+        try:
+            window = ExternalSubscriptionUsageWindowFact.model_validate(entry)
+        except ValidationError as exc:
+            _log.warning(
+                "dropped malformed external usage window",
+                runner_id=runner_id,
+                slug=slug,
+                reason=exc.errors()[0]["type"] if exc.errors() else "invalid",
+            )
+            continue
+        windows.append({**window.model_dump(mode="json"), "resets_at": iso_utc(as_utc(window.resets_at))})
+    return json.dumps(windows)
 
 
 @dataclass(frozen=True)
@@ -293,16 +319,16 @@ class FactIngestService:
             )
             return True, None
         if kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
-            # Advisory, refresh-in-place per (runner_id, slug); a fact missing `slug`
-            # defaults to the legacy one, and a missing `name` to that slug's own label.
-            slug = fact.text("slug") or LEGACY_ANTHROPIC_SLUG
-            default_name = LEGACY_ANTHROPIC_NAME if slug == LEGACY_ANTHROPIC_SLUG else slug
+            # Advisory, refresh-in-place per (runner_id, slug).
+            slug = fact.get("slug")
+            if not isinstance(slug, str) or not slug:
+                return False, None
             self._fleet.record_external_usage(
                 runner_id,
                 slug=slug,
-                name=fact.text("name") or default_name,
+                name=fact.text("name") or slug,
                 sampled_at=fact.instant("sampled_at", now),
-                windows_json=json.dumps(fact.get("windows", [])),
+                windows_json=_external_usage_windows_json(fact.get("windows", []), runner_id=runner_id, slug=slug),
                 at=now,
             )
             return True, None

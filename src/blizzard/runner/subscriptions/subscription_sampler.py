@@ -19,10 +19,8 @@ __all__ = [
     "ISubscriptionSampler",
 ]
 
-# The Anthropic provider-sampler binding's own selector value (blizzard#436) — distinct from
-# `wire.facts.LEGACY_ANTHROPIC_SLUG`, which identifies a *declaration*, not a provider; the
-# two happen to share a literal today, but a config change to one must not silently unbind
-# the other.
+# The Anthropic provider-sampler binding's own selector value (blizzard#436) — distinct
+# from a subscription declaration's `slug`, which identifies an operator's subscription.
 PROVIDER_ANTHROPIC = "anthropic"
 
 # The OpenAI (ChatGPT plan) binding's selector — reached only by an explicit `[[subscription]]`.

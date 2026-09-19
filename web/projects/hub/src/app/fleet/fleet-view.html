@@ -73,9 +73,7 @@
             />
           }
 
-          <!-- Rate-limit pacing: one group per declared subscription, falling
-               back to the legacy flat window list for a runner still on the
-               single-subscription shape alone. -->
+          <!-- Rate-limit pacing: one group per declared subscription. -->
           @if (row.subscriptionPaces.length > 0) {
             <div class="paces" data-testid="mobile-fleet-runner-subscriptions">
               @for (group of row.subscriptionPaces; track group.slug) {
@@ -95,23 +93,11 @@
                     <span
                       class="pace-unsampled"
                       data-testid="mobile-fleet-runner-subscription-unsampled"
-                      [attr.aria-label]="group.name + ' usage not yet sampled'"
-                      >NOT YET SAMPLED</span
+                      [attr.aria-label]="group.name + ' sample reported no usage windows'"
+                      >NO USAGE WINDOWS REPORTED</span
                     >
                   }
                 </div>
-              }
-            </div>
-          } @else if (row.paceBars.length > 0) {
-            <div class="paces" data-testid="mobile-fleet-runner-pace-bars">
-              @for (bar of row.paceBars; track bar.window) {
-                <fleet-kit-pace-bar
-                  data-testid="mobile-fleet-runner-pace-bar"
-                  [attr.data-pace-window]="bar.window"
-                  [label]="bar.window"
-                  [utilizationPct]="bar.utilizationPct"
-                  [elapsedPct]="bar.elapsedPct"
-                />
               }
             </div>
           }

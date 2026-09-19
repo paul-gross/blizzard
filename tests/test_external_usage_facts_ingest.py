@@ -28,8 +28,9 @@ pytestmark = pytest.mark.component
 _T0 = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 
 
-def _payload(*, sampled_at: datetime, utilization_pct: float, slug: str | None = None, name: str | None = None) -> dict:
+def _payload(*, slug: str, sampled_at: datetime, utilization_pct: float, name: str | None = None) -> dict:
     payload: dict = {
+        "slug": slug,
         "sampled_at": sampled_at.isoformat(),
         "windows": [
             {
@@ -40,8 +41,6 @@ def _payload(*, sampled_at: datetime, utilization_pct: float, slug: str | None =
             }
         ],
     }
-    if slug is not None:
-        payload["slug"] = slug
     if name is not None:
         payload["name"] = name
     return payload
@@ -85,7 +84,7 @@ def test_applying_the_fact_upserts_one_row_and_a_later_call_wins(tmp_path: Path)
                 RunnerFact(
                     seq=1,
                     kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(sampled_at=_T0, utilization_pct=10.0),
+                    payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=10.0),
                 )
             ],
         )
@@ -104,7 +103,7 @@ def test_applying_the_fact_upserts_one_row_and_a_later_call_wins(tmp_path: Path)
                 RunnerFact(
                     seq=2,
                     kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(sampled_at=later, utilization_pct=55.0),
+                    payload=_payload(slug="anthropic", sampled_at=later, utilization_pct=55.0),
                 )
             ],
         )
@@ -131,7 +130,7 @@ def test_replayed_seq_at_or_below_high_water_is_already_applied_and_writes_nothi
                 RunnerFact(
                     seq=1,
                     kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(sampled_at=_T0, utilization_pct=10.0),
+                    payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=10.0),
                 )
             ],
         )
@@ -147,7 +146,7 @@ def test_replayed_seq_at_or_below_high_water_is_already_applied_and_writes_nothi
                 RunnerFact(
                     seq=1,
                     kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(sampled_at=_T0, utilization_pct=99.0),
+                    payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=99.0),
                 )
             ],
         )
@@ -175,7 +174,7 @@ def test_fact_for_a_runner_with_no_registration_row_applies_without_stalling_hig
                 RunnerFact(
                     seq=1,
                     kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-                    payload=_payload(sampled_at=_T0, utilization_pct=1.0),
+                    payload=_payload(slug="anthropic", sampled_at=_T0, utilization_pct=1.0),
                 )
             ],
         )
@@ -205,7 +204,7 @@ def test_posted_through_the_route_publishes_runner_changed_once_and_a_replay_pub
                 {
                     "seq": 1,
                     "kind": "external_subscription_usage.sampled",
-                    "payload": _payload(sampled_at=_T0, utilization_pct=25.0),
+                    "payload": _payload(slug="anthropic", sampled_at=_T0, utilization_pct=25.0),
                 }
             ],
         },
@@ -225,7 +224,7 @@ def test_posted_through_the_route_publishes_runner_changed_once_and_a_replay_pub
                 {
                     "seq": 1,
                     "kind": "external_subscription_usage.sampled",
-                    "payload": _payload(sampled_at=_T0, utilization_pct=99.0),
+                    "payload": _payload(slug="anthropic", sampled_at=_T0, utilization_pct=99.0),
                 }
             ],
         },
@@ -237,9 +236,8 @@ def test_posted_through_the_route_publishes_runner_changed_once_and_a_replay_pub
     assert replay_frames == []
 
 
-def test_get_runners_renders_the_landed_sample_with_exact_wire_field_names(tmp_path: Path) -> None:
-    """``GET /api/runners`` renders the landed sample's exact wire shape (issue #218
-    phase 4)."""
+def test_get_runners_renders_the_landed_sample_on_its_subscription(tmp_path: Path) -> None:
+    """``GET /api/runners`` renders the landed sample on its per-slug response entry."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
 
@@ -251,7 +249,7 @@ def test_get_runners_renders_the_landed_sample_with_exact_wire_field_names(tmp_p
                 {
                     "seq": 1,
                     "kind": "external_subscription_usage.sampled",
-                    "payload": _payload(sampled_at=_T0, utilization_pct=42.5),
+                    "payload": _payload(slug="anthropic", sampled_at=_T0, utilization_pct=42.5, name="Anthropic"),
                 }
             ],
         },
@@ -260,30 +258,30 @@ def test_get_runners_renders_the_landed_sample_with_exact_wire_field_names(tmp_p
 
     runners = hub.client.get("/api/runners").json()["runners"]
     assert len(runners) == 1
-    usage = runners[0]["external_subscription_usage"]
-    assert usage == {
-        "sampled_at": "2026-08-01T12:00:00+00:00",
-        "windows": [
-            {
-                "window": "5h",
-                "utilization_pct": 42.5,
-                "resets_at": "2026-08-01T17:00:00+00:00",
-                "window_seconds": 18000,
-            }
-        ],
+    subscriptions = {subscription["slug"]: subscription for subscription in runners[0]["subscriptions"]}
+    assert subscriptions == {
+        "anthropic": {
+            "slug": "anthropic",
+            "name": "Anthropic",
+            "sampled_at": "2026-08-01T12:00:00+00:00",
+            "windows": [
+                {
+                    "window": "5h",
+                    "utilization_pct": 42.5,
+                    "resets_at": "2026-08-01T17:00:00+00:00",
+                    "window_seconds": 18000,
+                }
+            ],
+        }
     }
 
     # Symmetric on the single-runner detail read too (`runner_view` is the one renderer).
     detail = hub.client.get("/api/runners/r1").json()
-    assert detail["external_subscription_usage"] == usage
+    assert detail["subscriptions"] == list(subscriptions.values())
 
 
-def test_two_distinct_subscriptions_render_separately_and_the_legacy_field_tracks_only_the_legacy_slug(
-    tmp_path: Path,
-) -> None:
-    """A reader consuming only ``external_subscription_usage`` still sees the Anthropic
-    subscription's windows, and ``subscriptions`` reports the *same* windows for that slug
-    from the same sample (blizzard#436 phase 3)."""
+def test_two_distinct_subscriptions_render_separately(tmp_path: Path) -> None:
+    """Each slug's independently stored sample renders in ``subscriptions``."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
 
@@ -295,13 +293,12 @@ def test_two_distinct_subscriptions_render_separately_and_the_legacy_field_track
                 {
                     "seq": 1,
                     "kind": "external_subscription_usage.sampled",
-                    # No `slug` — the legacy shape a pre-#436 runner still emits.
-                    "payload": _payload(sampled_at=_T0, utilization_pct=42.5),
+                    "payload": _payload(slug="anthropic", sampled_at=_T0, utilization_pct=42.5, name="Anthropic"),
                 },
                 {
                     "seq": 2,
                     "kind": "external_subscription_usage.sampled",
-                    "payload": _payload(sampled_at=_T0, utilization_pct=17.0, slug="openai", name="OpenAI"),
+                    "payload": _payload(slug="openai", sampled_at=_T0, utilization_pct=17.0, name="OpenAI"),
                 },
             ],
         },
@@ -311,19 +308,200 @@ def test_two_distinct_subscriptions_render_separately_and_the_legacy_field_track
 
     detail = hub.client.get("/api/runners/r1").json()
 
-    # The legacy field renders the legacy slug's own windows, untouched by the sibling.
-    assert detail["external_subscription_usage"]["windows"][0]["utilization_pct"] == 42.5
-
     subscriptions = {s["slug"]: s for s in detail["subscriptions"]}
     assert set(subscriptions) == {"anthropic", "openai"}
-    assert subscriptions["anthropic"]["name"] == "Anthropic"  # no `name` on the legacy-shaped fact
+    assert subscriptions["anthropic"]["name"] == "Anthropic"
     assert subscriptions["anthropic"]["windows"][0]["utilization_pct"] == 42.5
     assert subscriptions["openai"]["name"] == "OpenAI"
     assert subscriptions["openai"]["windows"][0]["utilization_pct"] == 17.0
 
-    # The legacy field and the legacy slug's own per-subscription view report the same
-    # windows from the one sample that landed them.
-    assert detail["external_subscription_usage"]["windows"] == subscriptions["anthropic"]["windows"]
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"sampled_at": _T0.isoformat(), "windows": []},
+        {"slug": "", "sampled_at": _T0.isoformat(), "windows": []},
+        {"slug": 123, "sampled_at": _T0.isoformat(), "windows": []},
+    ],
+    ids=["missing-slug", "empty-slug", "non-string-slug"],
+)
+def test_a_fact_with_an_invalid_slug_is_rejected_without_writing_a_subscription(
+    tmp_path: Path, payload: dict[str, object]
+) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+
+    response = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": payload,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["rejected"] == [1]
+    assert hub.client.get("/api/runners/r1").json()["subscriptions"] == []
+
+
+def test_malformed_usage_windows_are_omitted_and_a_later_valid_empty_sample_renders(tmp_path: Path) -> None:
+    """A malformed window never poisons the registry read; the fact remains an advisory sample."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+    valid_window = _payload(slug="anthropic", sampled_at=_T0, utilization_pct=42.5)["windows"][0]
+    malformed = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": {
+                        "slug": "anthropic",
+                        "name": "Anthropic",
+                        "sampled_at": _T0.isoformat(),
+                        "windows": [
+                            valid_window,
+                            {"window": "7d", "utilization_pct": 10.0},
+                            {
+                                "window": "1h",
+                                "utilization_pct": "not-a-number",
+                                "resets_at": "2026-08-01T13:00:00+00:00",
+                                "window_seconds": 3600,
+                            },
+                            {
+                                "window": "daily",
+                                "utilization_pct": 20.0,
+                                "resets_at": "not-an-instant",
+                                "window_seconds": 86400,
+                            },
+                            {
+                                "window": "zero",
+                                "utilization_pct": 20.0,
+                                "resets_at": "2026-08-01T12:00:00+00:00",
+                                "window_seconds": 0,
+                            },
+                        ],
+                    },
+                }
+            ],
+        },
+    )
+    assert malformed.status_code == 200, malformed.text
+    assert malformed.json()["applied"] == [1]
+
+    first_read = hub.client.get("/api/runners")
+    assert first_read.status_code == 200
+    assert first_read.json()["runners"][0]["subscriptions"][0]["windows"] == [valid_window]
+
+    empty_at = _T0 + timedelta(minutes=1)
+    healthy = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 2,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": {
+                        "slug": "anthropic",
+                        "name": "Anthropic",
+                        "sampled_at": empty_at.isoformat(),
+                        "windows": [],
+                    },
+                }
+            ],
+        },
+    )
+    assert healthy.status_code == 200, healthy.text
+    assert healthy.json()["applied"] == [2]
+    assert hub.client.get("/api/runners").json()["runners"][0]["subscriptions"] == [
+        {"slug": "anthropic", "name": "Anthropic", "sampled_at": empty_at.isoformat(), "windows": []}
+    ]
+
+
+def test_a_historical_malformed_window_cannot_break_runner_reads(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+    assert (
+        hub.client.post(
+            "/api/fleet/events",
+            json={
+                "runner_id": "r1",
+                "facts": [
+                    {
+                        "seq": 1,
+                        "kind": "external_subscription_usage.sampled",
+                        "payload": _payload(slug="anthropic", sampled_at=_T0, utilization_pct=42.5),
+                    }
+                ],
+            },
+        ).status_code
+        == 200
+    )
+    with hub.engine.begin() as conn:
+        conn.execute(
+            s.runner_external_usage.update()
+            .where(s.runner_external_usage.c.runner_id == "r1")
+            .values(windows='[{"window":"5h"}]')
+        )
+
+    response = hub.client.get("/api/runners/r1")
+
+    assert response.status_code == 200
+    assert response.json()["subscriptions"][0]["windows"] == []
+
+
+@pytest.mark.parametrize(
+    "invalid_pct",
+    [float("nan"), float("inf"), float("-inf"), -0.1, 100.1, True, "42"],
+    ids=["nan", "inf", "-inf", "below", "above", "bool", "numeric-string"],
+)
+def test_non_finite_or_out_of_range_utilization_windows_are_omitted_at_ingest(
+    tmp_path: Path, invalid_pct: object
+) -> None:
+    _, engine = migrate_to(tmp_path, "head")
+    service = _service(engine, FixedClock(_T0))
+    valid_window = _payload(slug="anthropic", sampled_at=_T0, utilization_pct=42.5)["windows"][0]
+    result = service.ingest(
+        RunnerFactBatch(
+            runner_id="r1",
+            facts=[
+                RunnerFact(
+                    seq=1,
+                    kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                    payload={
+                        "slug": "anthropic",
+                        "sampled_at": _T0.isoformat(),
+                        "windows": [
+                            valid_window,
+                            {
+                                "window": "7d",
+                                "utilization_pct": invalid_pct,
+                                "resets_at": "2026-08-08T12:00:00+00:00",
+                                "window_seconds": 604_800,
+                            },
+                        ],
+                    },
+                )
+            ],
+        )
+    )
+
+    assert result.ack.applied == [1]
+    row = _row(engine, "r1")
+    assert row is not None
+    # Intake normalizes the instant, so the stored stamp carries an explicit +00:00
+    # offset rather than the sender's own spelling of the same instant.
+    assert json.loads(row.windows) == [{**valid_window, "resets_at": "2026-08-01T17:00:00+00:00"}]
+    json.dumps(json.loads(row.windows), allow_nan=False)
 
 
 def test_a_stale_subscription_does_not_blank_a_healthy_sibling_at_the_component_tier(tmp_path: Path) -> None:
@@ -364,4 +542,3 @@ def test_a_stale_subscription_does_not_blank_a_healthy_sibling_at_the_component_
     # The stale sibling is simply absent — never a reason to omit the healthy one.
     assert set(subscriptions) == {"anthropic"}
     assert subscriptions["anthropic"]["windows"][0]["utilization_pct"] == 5.0
-    assert detail["external_subscription_usage"]["windows"][0]["utilization_pct"] == 5.0

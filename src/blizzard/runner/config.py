@@ -18,7 +18,10 @@ from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
-from blizzard.wire.facts import LEGACY_ANTHROPIC_NAME, LEGACY_ANTHROPIC_SLUG
+
+# Default declaration synthesized from the retained `[external_subscription_usage]` configuration.
+LEGACY_ANTHROPIC_SLUG = "anthropic"
+LEGACY_ANTHROPIC_NAME = "Anthropic"
 
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"

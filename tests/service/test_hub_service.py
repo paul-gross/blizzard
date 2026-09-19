@@ -11,6 +11,7 @@ import contextlib
 import signal
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -338,6 +339,34 @@ def test_runner_registers_and_reads_its_pause_brake(tmp_path: Path) -> None:
         # The runner's own brake is a separate field the hub only ever reads; the
         # operator flipping the fleet's brake must not appear to have set it.
         assert view["locally_paused"] is False
+
+
+def test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string_slug(tmp_path: Path) -> None:
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    sampled_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+    with (
+        _forge(bin_dir, origins, forge_port),
+        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-subscriptions") as runner,
+    ):
+        assert runner.post("/_drive/register").json()["status"] == 201
+        valid = runner.post(
+            "/_drive/report-external-usage",
+            json={"slug": "openai", "name": "OpenAI", "sampled_at": sampled_at, "windows": []},
+        ).json()
+        assert valid["response"]["applied"] == [1]
+
+        # `raw_slug` is the mock's malformed-slug lever: it pushes the value unnarrowed so
+        # the real hub's own intake is what rejects it, rather than the drive plane's model.
+        invalid = runner.post(
+            "/_drive/report-external-usage",
+            json={"raw_slug": 123, "sampled_at": sampled_at, "windows": []},
+        ).json()
+        assert invalid["response"]["rejected"] == [2]
+
+        assert hub.get("/api/runners/runner-subscriptions").json()["subscriptions"] == [
+            {"slug": "openai", "name": "OpenAI", "sampled_at": sampled_at, "windows": []}
+        ]
 
 
 # --- Route-token authorization over the wire (issue #84b) ---

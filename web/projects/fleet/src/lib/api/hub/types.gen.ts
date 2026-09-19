@@ -1874,22 +1874,6 @@ export type EventsResponse = {
 export type Executor = 'runner' | 'hub';
 
 /**
- * ExternalSubscriptionUsageView
- *
- * A runner's newest sampled external-subscription-usage snapshot (issue #218).
- */
-export type ExternalSubscriptionUsageView = {
-    /**
-     * Sampled At
-     */
-    sampled_at: string;
-    /**
-     * Windows
-     */
-    windows: Array<ExternalSubscriptionUsageWindowView>;
-};
-
-/**
  * ExternalSubscriptionUsageWindowView
  *
  * One rate-limit window's utilization, as the harness's own account reported it
@@ -4333,17 +4317,16 @@ export type RunnerRegistrationResponse = {
 /**
  * RunnerView
  *
- * One fleet-registry row — derived liveness, both brakes, and an advisory snapshot.
+ * One fleet-registry row — derived liveness, both brakes, and advisory subscription usage.
  *
  * The two brakes stay separate (issues #43, #45): ``hub_paused`` is claims-only, while
- * ``locally_paused`` answers "is it spawning at all?". The usage snapshot is advisory.
+ * ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory.
  */
 export type RunnerView = {
     /**
      * Env Capacity
      */
     env_capacity?: number | null;
-    external_subscription_usage?: ExternalSubscriptionUsageView | null;
     /**
      * Hub Paused
      */
@@ -4581,9 +4564,9 @@ export type SubmittedArtifact = {
 /**
  * SubscriptionUsageView
  *
- * One declared subscription's newest sampled usage, carrying its identity
- * (issue #218) — additive beside the single legacy usage snapshot. ``slug`` is the
- * runner-unique join key, ``name`` the operator-facing label.
+ * One reported subscription's newest sampled usage, carrying its identity
+ * (issue #218). ``slug`` is the runner-unique join key, ``name`` the operator-facing
+ * label.
  */
 export type SubscriptionUsageView = {
     /**

@@ -4,7 +4,6 @@ import type { ChunkStatus } from '../api/hub';
 import { STATUS_TONE } from '../chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
-import { KitPaceBar } from '../kit/kit-pace-bar';
 import { KitPanel } from '../kit/kit-panel';
 import { KitSlotBar } from '../kit/kit-slot-bar';
 import type { Tone } from '../kit/tone';
@@ -21,7 +20,7 @@ import { SubscriptionPaceGroup } from './subscription-pace-group';
 @Component({
   selector: 'fleet-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitPaceBar, KitPanel, KitSlotBar, SubscriptionPaceGroup],
+  imports: [KitAsyncState, KitBadge, KitPanel, KitSlotBar, SubscriptionPaceGroup],
   templateUrl: './runner-view.html',
   styleUrl: './runner-view.css',
 })

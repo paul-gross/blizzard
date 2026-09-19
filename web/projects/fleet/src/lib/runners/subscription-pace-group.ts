@@ -5,12 +5,10 @@ import type { SubscriptionPace } from './runner-rows';
 
 /**
  * The runner registry's per-subscription pace render (blizzard#478) — one group per
- * declared subscription, headed by its operator-facing name and keyed by slug, so two
+ * reported subscription, headed by its operator-facing name and keyed by slug, so two
  * subscriptions reporting identically labelled windows (both a `"5h"`) never merge into
- * one bar list. A subscription with no folded {@link SubscriptionPace.paceBars} reads
- * as **not yet sampled**, never as a fabricated zero-utilization bar — the same
- * never-fabricate rule the legacy single-subscription pace bars already hold to
- * (issue #218).
+ * one bar list. A sample with no folded {@link SubscriptionPace.paceBars} renders no
+ * fabricated zero-utilization bar.
  *
  * Presentational only.
  */
@@ -22,7 +20,6 @@ import type { SubscriptionPace } from './runner-rows';
   styleUrl: './subscription-pace-group.css',
 })
 export class SubscriptionPaceGroup {
-  /** Every subscription this runner has declared, each pre-folded to its own pace
-   * bars (empty when declared but not yet sampled). */
+  /** Every reported subscription, each pre-folded to its own pace bars. */
   readonly subscriptionPaces = input.required<readonly SubscriptionPace[]>();
 }

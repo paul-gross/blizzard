@@ -268,6 +268,7 @@ def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> Non
                     "seq": 3,
                     "kind": "external_subscription_usage.sampled",
                     "payload": {
+                        "slug": "anthropic",
                         "sampled_at": "2026-08-01T12:00:00+00:00",
                         "windows": [
                             {

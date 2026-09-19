@@ -2937,28 +2937,6 @@
         "title": "Executor",
         "type": "string"
       },
-      "ExternalSubscriptionUsageView": {
-        "description": "A runner's newest sampled external-subscription-usage snapshot (issue #218).",
-        "properties": {
-          "sampled_at": {
-            "title": "Sampled At",
-            "type": "string"
-          },
-          "windows": {
-            "items": {
-              "$ref": "#/components/schemas/ExternalSubscriptionUsageWindowView"
-            },
-            "title": "Windows",
-            "type": "array"
-          }
-        },
-        "required": [
-          "sampled_at",
-          "windows"
-        ],
-        "title": "ExternalSubscriptionUsageView",
-        "type": "object"
-      },
       "ExternalSubscriptionUsageWindowView": {
         "description": "One rate-limit window's utilization, as the harness's own account reported it\n(issue #218) \u2014 ``window`` is the harness-native label, ``utilization_pct`` is 0-100,\n``resets_at`` the reset instant, ``window_seconds`` the window's length.",
         "properties": {
@@ -6671,7 +6649,7 @@
         "type": "object"
       },
       "RunnerView": {
-        "description": "One fleet-registry row \u2014 derived liveness, both brakes, and an advisory snapshot.\n\nThe two brakes stay separate (issues #43, #45): ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". The usage snapshot is advisory.",
+        "description": "One fleet-registry row \u2014 derived liveness, both brakes, and advisory subscription usage.\n\nThe two brakes stay separate (issues #43, #45): ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". Subscription usage is advisory.",
         "properties": {
           "env_capacity": {
             "anyOf": [
@@ -6683,16 +6661,6 @@
               }
             ],
             "title": "Env Capacity"
-          },
-          "external_subscription_usage": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ExternalSubscriptionUsageView"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "hub_paused": {
             "title": "Hub Paused",
@@ -7086,7 +7054,7 @@
         "type": "object"
       },
       "SubscriptionUsageView": {
-        "description": "One declared subscription's newest sampled usage, carrying its identity\n(issue #218) \u2014 additive beside the single legacy usage snapshot. ``slug`` is the\nrunner-unique join key, ``name`` the operator-facing label.",
+        "description": "One reported subscription's newest sampled usage, carrying its identity\n(issue #218). ``slug`` is the runner-unique join key, ``name`` the operator-facing\nlabel.",
         "properties": {
           "name": {
             "title": "Name",

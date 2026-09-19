@@ -39,6 +39,10 @@ in `blizzard-runner.toml` sets (default 300 seconds when the table or key is abs
 runs the single legacy table's own subscription unchanged. The sampled utilization is advisory only — it never throttles
 claiming, scheduling, or spawning, and no cost cap consults it.
 
+Every sample crosses the wire carrying the `slug` of the subscription it belongs to, and the hub rejects one that does
+not. A runner predating per-subscription reporting therefore needs upgrading before the hub that drops the singular
+usage response — [`docs/upgrade.md`](../upgrade.md) owns that ordering.
+
 Two providers ship a sampler binding, selected by a declaration's `provider` key: `anthropic`, reading Claude Code's
 OAuth plan, and `openai`, reading a ChatGPT plan's Codex usage. A provider naming neither stays declared and unsampled
 rather than failing configuration, and no sample renders as an absent usage block on the board — never a fabricated

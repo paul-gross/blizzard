@@ -61,14 +61,15 @@ describe('SubscriptionPaceGroup', () => {
     ).toContain('width: 90%');
   });
 
-  it('renders a declared subscription with no sample yet as unsampled, never a fabricated zero bar', async () => {
+  it('reports no usage windows for a subscription with a sampled empty window list', async () => {
     const el = await render([{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [] }]);
 
     const group = el.querySelector('[data-subscription-slug="anthropic-default"]');
     expect(group?.querySelector('[data-testid="runner-pace-bar"]')).toBeNull();
     const unsampled = group?.querySelector('[data-testid="subscription-pace-group-unsampled"]');
     expect(unsampled).not.toBeNull();
-    expect(unsampled?.getAttribute('aria-label')).toBe('Anthropic (default) usage not yet sampled');
+    expect(unsampled?.textContent?.trim()).toBe('NO USAGE WINDOWS REPORTED');
+    expect(unsampled?.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
   });
 
   it('renders nothing at all for a runner with no declared subscriptions', async () => {
