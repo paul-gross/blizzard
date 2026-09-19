@@ -34,7 +34,8 @@ def hub(ctx: click.Context) -> None:
     # The composition root (issue #104): built once, inherited as `ctx.obj` by every
     # subcommand's own context — a `SessionService` (hub:98) wrapping the one `SessionFile`,
     # so a read-only verb still narrows it to `IReadSessionStore` while login/logout pull
-    # the full service off the same object. No other module under `src/` names `SessionFile`.
+    # the full service off the same object (pinned by
+    # tests/test_layering.py::test_session_file_is_named_only_at_its_composition_root).
     ctx.obj = SessionService(SessionFile.of())
     if ctx.invoked_subcommand is None:
         ctx.invoke(host)

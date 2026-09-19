@@ -70,3 +70,14 @@ def test_live_tree_matches_the_committed_surface_contract(name: str, root: objec
 def test_every_root_is_scanned() -> None:
     """A renamed or dropped root would otherwise reduce this guard to a green no-op."""
     assert {name for name, _ in ROOTS} == {"hub", "runner"}
+
+
+def test_login_and_logout_keep_session_service_off_the_recorded_surface() -> None:
+    """``SessionServiceCommand`` (``hub/cli/command.py``) hands ``login``/``logout`` the
+    session service through ``ctx.params`` rather than a declared click option, so it
+    never becomes a recorded parameter — this is the decision ``SessionServiceCommand``'s
+    docstring now points at instead of restating."""
+    hub_tree = build("hub", dict(ROOTS)["hub"])
+    for name in ("login", "logout"):
+        param_names = {p["name"] for p in hub_tree["commands"][name]["params"]}
+        assert "session_service" not in param_names, f"{name} declared session_service as a recorded parameter"

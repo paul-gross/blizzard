@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import click
 import httpx
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.inputs import read_body_file
 
 
 class WorkToken(click.ParamType):
@@ -39,16 +38,6 @@ def item_group() -> None:
     """Operator verbs over one work item: author, edit, or withdraw it at its source."""
 
 
-def _read_body_file(path: str) -> str:
-    """PATH's contents, or stdin when PATH is ``-`` (``graph mint`` precedent)."""
-    if path == "-":
-        return click.get_text_stream("stdin").read()
-    try:
-        return Path(path).read_text()
-    except OSError as exc:
-        raise click.ClickException(f"failed to read {path}: {exc}") from exc
-
-
 @item_group.command("create", cls=FleetCommand)
 @click.option("--title", required=True, help="The item's title.")
 @click.option("--body-file", "body_file", required=True, help="Path to the item's body, or '-' for stdin.")
@@ -70,7 +59,7 @@ def item_create(cli: CliContext, title: str, body_file: str, priority: str, sour
 
     --body-file may be '-' to read the body from stdin, so an agent can pipe a composed
     spec without shell-quoting a multi-line markdown document."""
-    body = _read_body_file(body_file)
+    body = read_body_file(body_file)
     resp = cli.send(
         "post",
         f"/api/work-sources/{source}/items",
@@ -108,7 +97,7 @@ def item_edit(
     if title is not None:
         json_body["title"] = title
     if body_file is not None:
-        json_body["body"] = _read_body_file(body_file)
+        json_body["body"] = read_body_file(body_file)
     if priority is not None:
         json_body["stated_priority"] = priority
     resp = cli.patch(

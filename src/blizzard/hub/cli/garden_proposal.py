@@ -5,13 +5,13 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import click
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.inputs import read_body_file
 from blizzard.hub.cli.views import Listing
 
 
@@ -77,16 +77,6 @@ def garden_proposal_show(cli: CliContext, proposal_id: str) -> None:
     cli.show(body, GardenProposalDetail(body))
 
 
-def _read_body_file(path: str) -> str:
-    """PATH's contents, or stdin when PATH is ``-`` (``item create`` precedent)."""
-    if path == "-":
-        return click.get_text_stream("stdin").read()
-    try:
-        return Path(path).read_text()
-    except OSError as exc:
-        raise click.ClickException(f"failed to read {path}: {exc}") from exc
-
-
 def _already_closed_fallback(proposal_id: str) -> str:
     return f"garden proposal {proposal_id} already carries a closure"
 
@@ -139,7 +129,7 @@ def garden_proposal_accept(
     if reason is not None:
         json_body["reason"] = reason
     if body_file is not None:
-        json_body["body"] = _read_body_file(body_file)
+        json_body["body"] = read_body_file(body_file)
     resp = cli.post(
         f"/api/garden-proposals/{proposal_id}/accept",
         "POST /garden-proposals/{id}/accept",

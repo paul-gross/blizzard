@@ -8,15 +8,15 @@ from typing import Protocol
 
 
 class IReadSessionStore(Protocol):
-    """The read-only seam ``CliContext`` takes (``bzh:controller-read-only``) — every
-    read-only hub verb loses the ability to rewrite or delete the operator's session."""
+    """The read-only seam over the local session store (``bzh:controller-read-only``):
+    loads a stored token for a hub URL, with no ability to write or delete one."""
 
     def load(self, hub_url: str) -> str | None: ...
 
 
 class IWriteSessionStore(IReadSessionStore, Protocol):
-    """The full seam only ``login``/``logout`` take — the two verbs that legitimately
-    write the local session store."""
+    """The full seam over the local session store: read access, plus saving or
+    deleting a token, reserved for the verbs that legitimately mutate it."""
 
     def save(self, hub_url: str, token: str) -> None: ...
 
