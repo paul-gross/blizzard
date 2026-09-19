@@ -11,8 +11,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from blizzard.runner.harness.internal.opencode_cursor import MessagePartIdentity
-from blizzard.runner.harness.internal.opencode_shapes import OpenCodeMessage, OpenCodePart, OpenCodeSessionExport
-from blizzard.runner.harness.transcript import NormalizedTurn, NormalizedTurnKind, ToolCall
+from blizzard.runner.harness.internal.opencode_shapes import (
+    OpenCodeMessage,
+    OpenCodePart,
+    OpenCodeSessionExport,
+    OpenCodeToolState,
+)
+from blizzard.runner.harness.transcript import LateToolOutput, NormalizedTurn, NormalizedTurnKind, ToolCall
 
 #: The normalizer version stamped onto every batch; bumped when this module's output changes.
 NORMALIZER_VERSION = "opencode-export/1"
@@ -23,8 +28,9 @@ MAX_BLOCK_CHARS = 1024 * 1024
 
 @dataclass(frozen=True)
 class Text:
-    """One string block, capped at :data:`MAX_BLOCK_CHARS`. Unlike Claude Code's own, OpenCode's
-    export is not known to carry ANSI escapes, so nothing here strips any."""
+    """One string block, capped at :data:`MAX_BLOCK_CHARS`. OpenCode's own export carries
+    plain text — no ANSI escape sequences observed in any pinned fixture — so this block
+    strips none; it only truncates."""
 
     text: str
     truncated: bool
@@ -82,14 +88,14 @@ def _joined_text(message: OpenCodeMessage) -> str:
 
 def build_turns(
     messages: Sequence[OpenCodeMessage], *, admitted: frozenset[MessagePartIdentity] | None
-) -> tuple[list[NormalizedTurn], dict[int, ChildCandidate]]:
+) -> tuple[list[NormalizedTurn], dict[MessagePartIdentity, int]]:
     """Fold ``messages``' parts into turns, in file order. ``admitted=None`` builds every part
     (a resolved child sidechain's own full conversation); otherwise only an identity in
-    ``admitted`` turns into anything. A user/assistant text turn joins every *current* text
-    part of its message, however many of them ``admitted`` names; a step-start/step-finish/
-    compaction/snapshot/patch/agent/subtask part never produces a turn on its own."""
+    ``admitted`` turns into anything; a step-start/step-finish/compaction/snapshot/patch/agent/
+    subtask part never produces one. The second return names every built tool turn's own
+    identity by index — the source's own hook for attaching a resolved sidechain onto it."""
     turns: list[NormalizedTurn] = []
-    child_candidates: dict[int, ChildCandidate] = {}
+    tool_turns: dict[MessagePartIdentity, int] = {}
     joined_messages: set[str] = set()
     for message in messages:
         for part in message.parts:
@@ -107,10 +113,8 @@ def build_turns(
             elif part.type == "tool":
                 index = len(turns)
                 turns.append(_tool_turn(index, part))
-                candidate = child_candidate_of(part)
-                if candidate is not None:
-                    child_candidates[index] = candidate
-    return turns, child_candidates
+                tool_turns[identity] = index
+    return turns, tool_turns
 
 
 def _text_turn(index: int, kind: NormalizedTurnKind, raw: str) -> NormalizedTurn:
@@ -142,15 +146,34 @@ def _thinking_turn(index: int, part: OpenCodePart) -> NormalizedTurn:
     )
 
 
+def _tool_output_text(state: OpenCodeToolState) -> str | None:
+    """The tool state's own output text: ``state.output`` when present, else ``state.error``
+    on an ``"error"`` status. ``None`` while pending/running — a live turn, not corruption."""
+    if state.output is not None:
+        return state.output
+    if state.status == "error" and state.error is not None:
+        return state.error
+    return None
+
+
+def late_tool_output_of(part: OpenCodePart) -> LateToolOutput | None:
+    """The output patch for a tool part the cursor admits as an ``"updated"`` revision to an
+    identity already shipped — the pending/running to completed/error transition the spec's
+    "a later completed state produces the output patch" names. ``None`` when the revision
+    still carries no output (e.g. pending to running): nothing yet to patch."""
+    state = part.state
+    assert state is not None  # OpenCodePart.parse requires `state` on every tool part
+    raw_output = _tool_output_text(state)
+    if raw_output is None or part.call_id is None:
+        return None
+    text = Text.of(raw_output)
+    return LateToolOutput(tool_use_id=part.call_id, output=text.text, output_truncated=text.truncated)
+
+
 def _tool_turn(index: int, part: OpenCodePart) -> NormalizedTurn:
     state = part.state
     assert state is not None  # OpenCodePart.parse requires `state` on every tool part
-    if state.output is not None:
-        raw_output: str | None = state.output
-    elif state.status == "error" and state.error is not None:
-        raw_output = state.error
-    else:
-        raw_output = None  # pending/running — a live turn, not corruption
+    raw_output = _tool_output_text(state)
     output_text = Text.of(raw_output) if raw_output is not None else _EMPTY
     tool = ToolCall(
         name=part.tool or "",
@@ -181,4 +204,5 @@ __all__ = [
     "build_turns",
     "child_candidate_of",
     "harness_version_of",
+    "late_tool_output_of",
 ]
