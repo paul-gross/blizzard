@@ -18,8 +18,7 @@ from blizzard.hub.cli.views import Listing
 
 
 def _utc_query_value(value: datetime | None) -> str | None:
-    """A bare ``--since``/``--until`` is read as the operator's own local wall clock,
-    not UTC — converted before it crosses the wire (``routine trend``'s own rule)."""
+    """See `src/blizzard/hub/cli/analytics.py`'s own `_utc_query_value`."""
     return iso_utc(value.astimezone(UTC)) if value is not None else None
 
 

@@ -36,11 +36,10 @@ def rotate_signing_key(cli: CliContext) -> None:
     "--no-browser", "no_browser", is_flag=True, default=False, help="Print the login URL instead of opening it."
 )
 def login(cli: CliContext, session_service: SessionService, paste: bool, no_browser: bool) -> None:
-    """Log into the hub (issue #96) — opens the browser to the hub's own authorize
-    endpoint (PKCE, an ephemeral ``127.0.0.1`` loopback redirect) and stores the
-    resulting session token locally. The CLI never contacts a provider directly.
-    ``--paste`` uses the paste-code fallback for a shell with no reachable loopback
-    listener; ``--no-browser`` still runs the loopback flow, printing the URL."""
+    """Log into the hub (issue #96) — opens the browser to authorize and stores the
+    resulting session token locally. ``--paste`` uses the paste-code fallback for a
+    shell with no reachable loopback listener; ``--no-browser`` still runs the loopback
+    flow, printing the URL."""
     try:
         flow = (
             cli_login.Login.paste_code(cli.hub_url, prompt_for_code=lambda: click.prompt("Paste the code"))

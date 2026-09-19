@@ -242,9 +242,8 @@ def chunk_promote(cli: CliContext, chunk_id: str) -> None:
 def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
     """Pause CHUNK — the runner kills and parks the worker but keeps the claim (issue #46).
 
-    A pure client of the hub API: ``POST /api/chunks/{id}/pause``. Unlike ``detach``, no
-    route is released and no retry is consumed. 409 when the chunk is done/stopped/
-    delivering."""
+    A pure client of the hub API: ``POST /api/chunks/{id}/pause``. 409 when the chunk is
+    done/stopped/delivering."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/pause",
         "POST /chunks/{id}/pause",
@@ -440,8 +439,8 @@ def chunk_migrate(cli: CliContext, chunk_id: str, to_graph: str | None, node: st
     """Set, overwrite, or clear CHUNK's standing migration intent (issue #124).
 
     ``--node`` present selects ``forced``, absent selects ``auto``; ``--cancel`` clears
-    a standing intent and conflicts with ``--to-graph``/``--node``. The intent is consulted at
-    the chunk's next transition, never applied eagerly — ``restart --to-graph`` moves it now."""
+    a standing intent and conflicts with ``--to-graph``/``--node``. The intent is consulted
+    at the chunk's next transition."""
     if cancel and (to_graph is not None or node is not None):
         raise click.UsageError("--cancel cannot be combined with --to-graph/--node")
     if not cancel and to_graph is None:

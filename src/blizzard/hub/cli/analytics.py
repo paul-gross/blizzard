@@ -381,11 +381,9 @@ def analytics_summary(
     limit: int | None,
     ndjson: bool,
 ) -> None:
-    """Read one of the canned counts or operational-dataset rollups (blizzard#255/#256):
-    the four DATASET counts (counts-files, counts-skills, counts-agent-types,
-    counts-nodes) and the six operational datasets (durations-nodes, durations-graphs,
-    spend-nodes, spend-graphs, spend-chunks, outcomes-nodes). Only spend-chunks pages
-    or streams; a filter DATASET's own route does not expose is refused."""
+    """Read one of the canned counts or operational-dataset rollups (blizzard#255/#256).
+    Only spend-chunks pages or streams; a filter DATASET's own route does not expose is
+    refused."""
     spec = _DATASETS[dataset]
     given = {
         "graph_id": graph_id,

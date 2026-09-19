@@ -1,5 +1,5 @@
-"""``blizzard hub routine`` — issue #389: operator verbs over routines; blizzard#394
-adds ``trend``, the gardening routine panel adds ``sweeps``."""
+"""``blizzard hub routine`` — operator verbs over routines: create, list, inspect,
+edit, run, and the ``trend``/``sweeps`` gardening reports."""
 
 from __future__ import annotations
 

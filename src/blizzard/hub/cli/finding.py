@@ -1,5 +1,5 @@
-"""``blizzard hub finding`` — blizzard#390: read verbs over findings; blizzard#394
-adds the human-driven exit verbs and `reopen`."""
+"""``blizzard hub finding`` — read verbs over findings, plus the human-driven exit
+verbs and ``reopen``."""
 
 from __future__ import annotations
 
@@ -56,10 +56,7 @@ def finding_group() -> None:
 )
 def finding_list(cli: CliContext, routine: str, scope: str, include_gone: bool) -> None:
     """List ROUTINE's findings under SCOPE — live only, unless --include-gone, which
-    also surfaces every exited finding, not just a merely `gone` one.
-
-    This is the read a running pass calls to cross-reference its own bucket
-    (blizzard-context:/domain/findings-and-proposals.md)."""
+    also surfaces every exited finding, not just a merely `gone` one."""
     rows = cli.get_all(
         "/api/findings",
         "GET /findings",
