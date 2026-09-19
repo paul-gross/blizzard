@@ -115,11 +115,9 @@ def test_list_users_query_count_is_independent_of_user_count(tmp_path: Path) -> 
 def test_list_users_identity_read_count_tracks_the_batch_count_across_a_lowered_batch_size(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``list_for_users`` costs one query per :func:`id_batches` batch, not one query
-    total — proven, per the sibling ``*_bulk_reads.py`` idiom, by lowering ``BATCH_SIZE``
-    so the large fixture spans more batches than the small one and asserting the
-    query-count delta matches the batch-count delta; fails if ``list_for_users``
-    resolved ``user_ids`` through a single unbatched ``IN`` instead."""
+    """``list_for_users`` costs one query per :func:`id_batches` batch — pinned by a
+    query-count delta that tracks a batch-count delta across a lowered ``BATCH_SIZE``;
+    fails if ``list_for_users`` used one unbatched ``IN`` instead."""
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
