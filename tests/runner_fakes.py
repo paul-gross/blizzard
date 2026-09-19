@@ -72,6 +72,7 @@ from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
 from blizzard.runner.store.internal.outbound_store import OutboundStore
 from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
+from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
@@ -130,6 +131,7 @@ class SqlAlchemyRunnerStore(
     GraphArtifactStore,
     ElicitationStore,
     InvocationBoundaryStore,
+    SelfTestResultStore,
 ):
     """The flat, every-concept-at-once runner store — test support only (D3, blizzard#410):
     production composes the extracted concept adapters individually via
@@ -160,6 +162,7 @@ class SqlAlchemyRunnerStore(
         GraphArtifactStore.__init__(self, store)
         ElicitationStore.__init__(self, store)
         InvocationBoundaryStore.__init__(self, store)
+        SelfTestResultStore.__init__(self, store)
         self._engine = engine
         self._errors = errors
 
@@ -240,6 +243,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         graph_artifacts=store,
         elicitations=store,
         invocation_boundaries=store,
+        selftest_results=store,
     )
 
 

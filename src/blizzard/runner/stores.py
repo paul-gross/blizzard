@@ -46,6 +46,10 @@ from blizzard.runner.domain.leases import (
 from blizzard.runner.domain.outbound import IReadOutboundRepository, IWriteOutboundRepository
 from blizzard.runner.domain.pause import IReadPauseRepository, IWritePauseRepository
 from blizzard.runner.domain.requeue import IReadRequeueRepository, IWriteRequeueRepository
+from blizzard.runner.domain.selftest_result import (
+    IReadSelfTestResultRepository,
+    IWriteSelfTestResultRepository,
+)
 from blizzard.runner.domain.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
 from blizzard.runner.domain.usage import IReadUsageRepository, IWriteUsageRepository
 from blizzard.runner.environments.repository import IReadEnvironmentRepository, IWriteEnvironmentRepository
@@ -77,6 +81,7 @@ class IReadRunnerStore(
     IReadGraphArtifactRepository,
     IReadElicitationRepository,
     IReadInvocationBoundaryRepository,
+    IReadSelfTestResultRepository,
     Protocol,
 ):
     """Read-only runner-store queries, every concept's read seam composed (held by
@@ -106,6 +111,7 @@ class IWriteRunnerStore(
     IWriteGraphArtifactRepository,
     IWriteElicitationRepository,
     IWriteInvocationBoundaryRepository,
+    IWriteSelfTestResultRepository,
     IReadRunnerStore,
     Protocol,
 ):
@@ -139,6 +145,7 @@ class RunnerStores:
     graph_artifacts: IWriteGraphArtifactRepository
     elicitations: IWriteElicitationRepository
     invocation_boundaries: IWriteInvocationBoundaryRepository
+    selftest_results: IWriteSelfTestResultRepository
 
 
 @dataclass(frozen=True)
@@ -170,6 +177,7 @@ class RunnerReadStores:
     graph_artifacts: IReadGraphArtifactRepository
     elicitations: IReadElicitationRepository
     invocation_boundaries: IReadInvocationBoundaryRepository
+    selftest_results: IReadSelfTestResultRepository
 
     @classmethod
     def of(cls, stores: RunnerStores) -> RunnerReadStores:
@@ -197,4 +205,5 @@ class RunnerReadStores:
             graph_artifacts=stores.graph_artifacts,
             elicitations=stores.elicitations,
             invocation_boundaries=stores.invocation_boundaries,
+            selftest_results=stores.selftest_results,
         )

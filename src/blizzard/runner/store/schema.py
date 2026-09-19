@@ -678,3 +678,27 @@ graph_artifacts = Table(
     Column("content", Text, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
+
+# --- Selftest results (blizzard#438) ------------------------------------------
+# Latest-wins-per-harness_id: a completed run is a definite occurrence at a definite time,
+# superseded by the next run for the same harness (bzh:facts-not-status).
+
+selftest_results = Table(
+    "selftest_results",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("harness_id", String, nullable=False),
+    Column("status", String, nullable=False),  # "passed" / "failed" — SelfTestStatus's terminal values
+    Column("error", Text, nullable=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+
+selftest_result_checks = Table(
+    "selftest_result_checks",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("selftest_result_id", Integer, nullable=False),
+    Column("name", String, nullable=False),
+    Column("passed", Boolean, nullable=False),
+    Column("detail", Text, nullable=False),
+)
