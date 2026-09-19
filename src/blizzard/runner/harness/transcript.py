@@ -159,12 +159,12 @@ class TranscriptErrorFactory:
 
 
 class IHarnessTranscriptSource(Protocol):
-    """The per-harness transcript source seam. Four operations, all reads: ``turns_since`` collapses
+    """The per-harness transcript source seam. Five operations, all reads: ``turns_since`` collapses
     the harness's raw session records into :class:`NormalizedTurn`\\ s, reading forward from ``since``
-    (``None`` for "from the start"); ``read_raw_lines``/``size_bytes``/``context_tokens`` sit here
-    too, so the file-location knowledge this seam carries is never duplicated outside it. The last
-    two are the measurable rotation bounds, answering ``None`` for *unmeasurable* — never a zero
-    reading as "under bound"."""
+    (``None`` for "from the start"); ``read_raw_lines``/``tail_position``/``size_bytes``/
+    ``context_tokens`` sit here too, so the file-location knowledge this seam carries is never
+    duplicated outside it. ``size_bytes``/``context_tokens`` are the measurable rotation bounds,
+    answering ``None`` for *unmeasurable* — never a zero reading as "under bound"."""
 
     def turns_since(
         self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
@@ -173,9 +173,26 @@ class IHarnessTranscriptSource(Protocol):
         optional disambiguation hint — never the lookup key, used only to break a multi-match tie."""
         ...
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
-        """The session's raw transcript lines, unparsed — empty when none exist or the
-        file is unreadable (the envelope-less usage fallback's own read)."""
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
+        """The session's raw transcript lines in the durable range ``[start, end)``, unparsed —
+        empty when none exist, the range is empty, or the file is unreadable (the interrupted-usage
+        recovery read and the envelope-less usage fallback's own read). ``start=None`` reads from the
+        beginning; ``end=None`` reads through the current tail — the pair a caller wanting today's
+        whole-session read passes as ``None, None``."""
+        ...
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        """The transcript's current durable tail, in the same token vocabulary ``turns_since`` mints
+        as ``next_position`` — taken now, not as a forward read's own by-product. A boundary closer's
+        anchor for "read up through here." ``None`` when the session cannot be located or read, never
+        a stand-in for "empty"."""
         ...
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
@@ -219,8 +236,18 @@ class NullTranscriptSource:
             harness_version=None,
         )
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
         return []
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        return None
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         return None

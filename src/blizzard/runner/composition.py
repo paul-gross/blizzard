@@ -21,6 +21,7 @@ from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
 from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
@@ -74,6 +75,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         checks=CheckStore(connections),
         graph_artifacts=GraphArtifactStore(connections),
         elicitations=ElicitationStore(connections),
+        invocation_boundaries=InvocationBoundaryStore(connections),
     )
 
 

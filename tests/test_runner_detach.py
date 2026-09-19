@@ -175,6 +175,37 @@ def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_thi
     assert store.active_lease("lease_1") is None
 
 
+@pytest.mark.unit
+def test_pull_reconcile_leases_closes_a_stopped_chunks_open_invocation_boundary(tmp_path):  # type: ignore[no-untyped-def]
+    """The hub-terminal closure claim (blizzard#437 D11), proven through the actual funnel a
+    `STOPPED` chunk drives — never just a direct ``Attempt.abandon`` call standing in for it."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        kind="spawn",
+        start_position=None,
+        opened_at=_NOW,
+    )
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _routed_chunk(status=ChunkStatus.STOPPED, runner_id="r1")
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    Pull(ctx).run()
+
+    assert store.active_lease("lease_1") is None
+    assert ctx.stores.invocation_boundaries.open_boundaries_for_lease("lease_1") == []
+    boundary = ctx.stores.invocation_boundaries.boundary("lease_1", 1, "spawn")
+    assert boundary is not None
+    assert boundary.closed_at is not None
+
+
 # The route-only predicate — a live runner keeps its healthy lease
 
 

@@ -11,6 +11,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.artifacts import GraphArtifactRecord
+from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import (
     LeaseRecord,
@@ -39,6 +40,10 @@ _log = get_logger("blizzard.runner.loop")
 
 # The lease-mint -> spawn -> record window is the orphan-lease window REAP must absorb.
 _CP_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted; worker not spawned")
+# The transcript invocation boundary (blizzard#437 D6): a genuinely new pre-launch write.
+_CP_AFTER_BOUNDARY = crashpoint(
+    "spawn.after-boundary-record.before-spawn", "spawn invocation boundary durable; worker not yet launched"
+)
 # The two-phase spawn's three windows (D1/D2), each bracketing a durable write.
 _CP_AFTER_LAUNCH = crashpoint(
     "spawn.after-launch.before-provisional-record", "worker process launched; provisional ownership not yet durable"
@@ -156,6 +161,27 @@ class Spawner:
             node_name=envelope.node.node_name,
             resume=resumed,
         )
+        # The invocation boundary (D6/D11): a fresh spawn opens on the beginning sentinel; a
+        # `resume_from` continuation of an EXISTING session is a `resume`, reading its tail (F1).
+        kind: InvocationBoundaryKind
+        if resume_from is not None:
+            kind = "resume"
+            workdir = environments[0].workdir if environments else None
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(resume_from, workdir)
+        else:
+            kind, start_position, start_unreadable = "spawn", None, False
+        self.ctx.stores.invocation_boundaries.record_boundary_open(
+            lease_id=lease.lease_id,
+            chunk_id=chunk_id,
+            node_id=envelope.node.node_id,
+            epoch=lease.epoch,
+            generation=self.generation(lease.lease_id),
+            kind=kind,
+            start_position=start_position,
+            start_unreadable=start_unreadable,
+            opened_at=now,
+        )
+        _CP_AFTER_BOUNDARY.reached()
         # Observed before the spawn: a hang or raise here costs only this generation's
         # `harness_version` observation, never runs after the worker is already live and unrecorded.
         version = harness.observe_version()

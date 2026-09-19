@@ -553,6 +553,138 @@ def test_distinct_generation_or_kind_usage_rows_are_not_a_violation(tmp_path: Pa
     assert RunnerInvariants(engine).run() == []
 
 
+def test_a_closed_leases_open_invocation_boundary_is_a_violation(tmp_path: Path) -> None:
+    """blizzard#437 D11 (``bzh:open-facts-declare-closure``): once a lease's own closure fact
+    is durable, every boundary it opened must be closed too — a still-open one here means
+    ``Attempt.close``, the one funnel every closure path shares, was bypassed."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
+        )
+        conn.execute(
+            insert(runner.invocation_boundaries).values(
+                lease_id="lease_a",
+                chunk_id="ch_1",
+                node_id="nd",
+                epoch=1,
+                generation=1,
+                kind="spawn",
+                start_position=None,
+                opened_at=_NOW,
+            )
+        )
+        conn.execute(
+            insert(runner.lease_closures).values(
+                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
+            )
+        )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:invocation-boundary-closed-when-lease-closed" in slugs
+
+
+def test_a_closed_leases_closed_invocation_boundary_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
+        )
+        conn.execute(
+            insert(runner.invocation_boundaries).values(
+                lease_id="lease_a",
+                chunk_id="ch_1",
+                node_id="nd",
+                epoch=1,
+                generation=1,
+                kind="spawn",
+                start_position=None,
+                opened_at=_NOW,
+                closed_at=_NOW,
+                closed_reason="transitioned",
+            )
+        )
+        conn.execute(
+            insert(runner.lease_closures).values(
+                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
+            )
+        )
+    assert RunnerInvariants(engine).run() == []
+
+
+def test_an_open_leases_open_invocation_boundary_is_not_a_violation(tmp_path: Path) -> None:
+    """A still-ACTIVE lease's boundary is expected to be open — only a CLOSED lease's own
+    open boundary is the violation."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
+        )
+        conn.execute(
+            insert(runner.invocation_boundaries).values(
+                lease_id="lease_a",
+                chunk_id="ch_1",
+                node_id="nd",
+                epoch=1,
+                generation=1,
+                kind="spawn",
+                start_position=None,
+                opened_at=_NOW,
+            )
+        )
+    assert RunnerInvariants(engine).run() == []
+
+
+def test_a_single_worker_starting_boundary_per_generation_is_not_a_violation(tmp_path: Path) -> None:
+    """A ``spawn`` boundary at generation 1 and a ``resume`` boundary at generation 2 are each
+    the sole worker-starting boundary of their own generation — the exclusivity invariant is
+    scoped per generation, not per lease (blizzard#437 Phase 4)."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
+        )
+        for generation, kind in ((1, "spawn"), (2, "resume")):
+            conn.execute(
+                insert(runner.invocation_boundaries).values(
+                    lease_id="lease_a",
+                    chunk_id="ch_1",
+                    node_id="nd",
+                    epoch=1,
+                    generation=generation,
+                    kind=kind,
+                    start_position=None,
+                    opened_at=_NOW,
+                )
+            )
+    assert RunnerInvariants(engine).run() == []
+
+
+def test_two_worker_starting_boundaries_at_one_generation_is_a_violation(tmp_path: Path) -> None:
+    """A ``resume`` boundary landing at the same generation an already-open ``nudge``
+    boundary owns would corrupt ``_worker_boundary``'s try-in-order lookup silently — the
+    checker names it instead (blizzard#437 Phase 4)."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, runner_id="r", created_at=_NOW)
+        )
+        for kind in ("nudge", "resume"):
+            conn.execute(
+                insert(runner.invocation_boundaries).values(
+                    lease_id="lease_a",
+                    chunk_id="ch_1",
+                    node_id="nd",
+                    epoch=1,
+                    generation=2,
+                    kind=kind,
+                    start_position=None,
+                    opened_at=_NOW,
+                )
+            )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:worker-boundary-kind-exclusive-per-generation" in slugs
+
+
 def test_duplicate_nudge_fact_for_one_lease_epoch_is_a_violation(tmp_path: Path) -> None:
     """`record_nudge_fired` is an insert never an upsert, gated in code not by a DB
     constraint (issue #113); two rows for the same ``(lease, epoch)`` mean that guard

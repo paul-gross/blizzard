@@ -29,6 +29,10 @@ from blizzard.runner.domain.git_commit_declaration import (
     IReadGitCommitDeclarationRepository,
     IWriteGitCommitDeclarationRepository,
 )
+from blizzard.runner.domain.invocation_boundaries import (
+    IReadInvocationBoundaryRepository,
+    IWriteInvocationBoundaryRepository,
+)
 from blizzard.runner.domain.leases import (
     IReadLeaseLivenessRepository,
     IReadLeaseRecordRepository,
@@ -72,6 +76,7 @@ class IReadRunnerStore(
     IReadCheckRepository,
     IReadGraphArtifactRepository,
     IReadElicitationRepository,
+    IReadInvocationBoundaryRepository,
     Protocol,
 ):
     """Read-only runner-store queries, every concept's read seam composed (held by
@@ -100,6 +105,7 @@ class IWriteRunnerStore(
     IWriteCheckRepository,
     IWriteGraphArtifactRepository,
     IWriteElicitationRepository,
+    IWriteInvocationBoundaryRepository,
     IReadRunnerStore,
     Protocol,
 ):
@@ -132,6 +138,7 @@ class RunnerStores:
     checks: IWriteCheckRepository
     graph_artifacts: IWriteGraphArtifactRepository
     elicitations: IWriteElicitationRepository
+    invocation_boundaries: IWriteInvocationBoundaryRepository
 
 
 @dataclass(frozen=True)
@@ -162,6 +169,7 @@ class RunnerReadStores:
     checks: IReadCheckRepository
     graph_artifacts: IReadGraphArtifactRepository
     elicitations: IReadElicitationRepository
+    invocation_boundaries: IReadInvocationBoundaryRepository
 
     @classmethod
     def of(cls, stores: RunnerStores) -> RunnerReadStores:
@@ -188,4 +196,5 @@ class RunnerReadStores:
             checks=stores.checks,
             graph_artifacts=stores.graph_artifacts,
             elicitations=stores.elicitations,
+            invocation_boundaries=stores.invocation_boundaries,
         )

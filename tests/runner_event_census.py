@@ -122,6 +122,13 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "record_elicitation_started": Silent(_INTERNAL_BOOKKEEPING + " (the elicitation's pid, once Popen returns)"),
     "record_elicitation_relaunch": Silent(_INTERNAL_BOOKKEEPING + " (a lost elicitation's retry record)"),
     "clear_elicitation": Silent(_INTERNAL_BOOKKEEPING + " (retiring a collected or closed-out elicitation record)"),
+    "record_boundary_open": Silent(
+        _INTERNAL_BOOKKEEPING + " (blizzard#437 — a transcript invocation boundary, runner-local recovery"
+        " bookkeeping never read by any panel surface)"
+    ),
+    "close_boundaries_for_lease": Silent(
+        _INTERNAL_BOOKKEEPING + " (blizzard#437 D11 — closing a lease's invocation boundaries)"
+    ),
     # --- asks ----------------------------------------------------------------
     "record_ask": Published(ASK_CHANGED, "POST /api/leases/{lease_id}/asks (runner/api/asks.py) — cause='asked'"),
     "record_park": Published(

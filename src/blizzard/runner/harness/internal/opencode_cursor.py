@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -157,11 +157,11 @@ class MessagePartCursor:
         )
 
     def admit(self, records: Iterable[CursorRecord]) -> CursorRead:
-        """Admit new identities and changed revisions, preserving current order.
-        Repeated identities inside one export collapse to their last state while retaining the
-        identity's first position.  That mirrors an export's final pending-to-complete state and
-        prevents duplicate identities from reaching the transcript lane.
-        """
+        """Admit new identities and changed revisions, preserving current order; repeated
+        identities inside one export collapse to their last state. D1's bound: a mark absent
+        from the current export is dropped only when this export ALSO carries a
+        ``compaction`` part — real proof of pruning, since absence alone is indistinguishable
+        from a transient read race and would silently re-admit retained history as "new"."""
 
         current: dict[MessagePartIdentity, CursorRecord] = {}
         for record in records:
@@ -178,6 +178,9 @@ class MessagePartCursor:
                 marks[record.identity] = CursorMark(record.identity, record.fingerprint)
                 admissions.append(CursorAdmission(record, "updated"))
 
+        if any(_is_compaction_record(record) for record in current.values()):
+            marks = {identity: mark for identity, mark in marks.items() if identity in current}
+
         ordered_marks = tuple(marks.values())
         return CursorRead(tuple(admissions), MessagePartCursor(ordered_marks))
 
@@ -193,6 +196,13 @@ def records_for_export(export: OpenCodeSessionExport) -> tuple[CursorRecord, ...
         for part in message.parts:
             records.append(CursorRecord.of(message.info.id, part.id, part.raw))
     return tuple(records)
+
+
+def _is_compaction_record(record: CursorRecord) -> bool:
+    """Whether ``record`` is a ``type: "compaction"`` part — the one signal ``admit`` trusts
+    as proof that this tick's export reflects genuinely pruned history, never inferred from a
+    record's own age or size (D1)."""
+    return isinstance(record.payload, Mapping) and record.payload.get("type") == "compaction"
 
 
 def _fingerprint(value: object) -> str:

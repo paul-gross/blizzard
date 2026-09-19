@@ -183,6 +183,7 @@ class LoopWiring:
                 worker_files=_worker_files,
                 workspace_root=config.workspace_root,
                 harnesses=harnesses,
+                invocation_boundaries=stores.invocation_boundaries,
                 transcripts_wired=True,
                 events=self.events,
             ),

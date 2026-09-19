@@ -64,6 +64,7 @@ from blizzard.runner.store.internal.environment_store import EnvironmentStore
 from blizzard.runner.store.internal.escalation_store import EscalationStore
 from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.internal.graph_artifact_store import GraphArtifactStore
+from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
 from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
@@ -128,12 +129,13 @@ class SqlAlchemyRunnerStore(
     CheckStore,
     GraphArtifactStore,
     ElicitationStore,
+    InvocationBoundaryStore,
 ):
     """The flat, every-concept-at-once runner store — test support only (D3, blizzard#410):
     production composes the extracted concept adapters individually via
     :func:`~blizzard.runner.composition.build_stores`, never this class. Kept here because a
     test fixture wants one object standing in for every concept at once, structurally
-    satisfying every one of the seventeen concept Protocols by inheritance."""
+    satisfying every one of the eighteen concept Protocols by inheritance."""
 
     def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
         store = RunnerStoreConnections(engine, errors)
@@ -157,6 +159,7 @@ class SqlAlchemyRunnerStore(
         CheckStore.__init__(self, store)
         GraphArtifactStore.__init__(self, store)
         ElicitationStore.__init__(self, store)
+        InvocationBoundaryStore.__init__(self, store)
         self._engine = engine
         self._errors = errors
 
@@ -236,6 +239,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         checks=store,
         graph_artifacts=store,
         elicitations=store,
+        invocation_boundaries=store,
     )
 
 
@@ -566,23 +570,26 @@ class FakeProvider:
 
 
 class FakeTranscriptSource:
-    """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, sizes, and
-    context sizes by session id (blizzard#245). An unscripted session reads as ``not_found``
-    for turns and as *unmeasurable* for both bounds, so a test only names what it cares about.
-    """
+    """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, tail
+    positions, sizes, and context sizes by session id (blizzard#245) — unscripted reads as
+    ``not_found``/*unmeasurable*. ``read_raw_lines`` ignores ``start``/``end``; script
+    ``lines_by_session`` with the exact range-scoped lines a call should return."""
 
     def __init__(
         self,
         batches_by_session: dict[str, TranscriptBatch] | None = None,
         lines_by_session: dict[str, list[str]] | None = None,
+        tail_positions_by_session: dict[str, TranscriptPosition] | None = None,
         sizes_by_session: dict[str, int] | None = None,
         context_tokens_by_session: dict[str, int] | None = None,
     ) -> None:
         self._batches = batches_by_session or {}
         self._lines = lines_by_session or {}
+        self._tail_positions = tail_positions_by_session or {}
         self._sizes = sizes_by_session or {}
         self._context_tokens = context_tokens_by_session or {}
         self.turns_since_calls: list[tuple[str, str | None, TranscriptPosition | None]] = []
+        self.read_raw_lines_calls: list[tuple[str, TranscriptPosition | None, TranscriptPosition | None]] = []
         self.size_bytes_calls: list[str] = []
         self.context_tokens_calls: list[str] = []
 
@@ -606,8 +613,19 @@ class FakeTranscriptSource:
             harness_version=None,
         )
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
+        self.read_raw_lines_calls.append((session_id, start, end))
         return list(self._lines.get(session_id, []))
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        return self._tail_positions.get(session_id)
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         self.size_bytes_calls.append(session_id)
@@ -1129,6 +1147,7 @@ def make_context(
             worker_files=_files,
             workspace_root=resolved_config.workspace_root,
             harnesses=_harnesses,
+            invocation_boundaries=store,
             transcripts_wired=_transcripts_wired,
             events=events,
         ),
@@ -1174,6 +1193,7 @@ def make_usage_recorder(
         worker_files=WorkerStdoutFiles("", store),
         workspace_root="",
         harnesses=_default_harness_registry(harness),
+        invocation_boundaries=store,
     )
 
 

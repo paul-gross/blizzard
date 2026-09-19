@@ -305,16 +305,50 @@ class ClaudeCodeTranscriptSource:
             agent_tool_use_ids=normalized.agent_tool_use_ids,
         )
 
-    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+    def read_raw_lines(
+        self,
+        session_id: str,
+        *,
+        spawn_cwd: str | None,
+        start: TranscriptPosition | None = None,
+        end: TranscriptPosition | None = None,
+    ) -> list[str]:
         matches = self._matches(session_id)
         if not matches:
             return []
         try:
-            return FileRead.cold(self._locate(matches, spawn_cwd)).lines
+            path = self._locate(matches, spawn_cwd)
+            if start is None and end is None:
+                # start-of-file -> current tail, preserving the pre-range whole-session read
+                # (the envelope-less usage fallback's own historical call shape).
+                return FileRead.cold(path).lines
+            size = path.stat().st_size
+            begin = Position.of(start).main
+            if begin > size:
+                # A truncated/rotated transcript's start is unreadable, not "start over" —
+                # unlike `turns_since`'s own clamp, this read has no budget bounding a reread from 0 (F9).
+                return []
+            stop = Position.of(end).main if end is not None else size
+            stop = min(max(stop, begin), size)
+            return FileRead.forward(path, start_offset=begin, budget=stop - begin).lines
         except OSError as exc:
             # Recovered, not a boundary failure: an empty reply reads as "no signal".
             self._errors.from_io_recovered(exc, f"transcript unreadable: {session_id}", session_id=session_id)
             return []
+
+    def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
+        matches = self._matches(session_id)
+        if not matches:
+            return None
+        try:
+            path = self._locate(matches, spawn_cwd)
+            # Newline-aligned like every `turns_since` `next_position` (F11) — reusing
+            # `FileRead.cold`'s own tail-seek holds back a trailing partial line.
+            main = FileRead.cold(path).next_offset
+        except OSError as exc:
+            self._errors.from_io_recovered(exc, f"transcript unreadable: {session_id}", session_id=session_id)
+            return None
+        return Position(main=main, sidecars={}).token
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         """``stat().st_size`` on the located transcript, or ``None`` when there is none.

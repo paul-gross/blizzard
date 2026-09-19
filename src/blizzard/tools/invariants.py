@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import Connection, Engine, func, select
+from sqlalchemy import Connection, Engine, and_, func, select
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
@@ -26,6 +26,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
+from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
 from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
 from blizzard.runner.store import schema as runner
 
@@ -361,6 +362,50 @@ class UsageAttributedOnce(QueryCheck):
                     )
                 )
         return violations
+
+
+class InvocationBoundaryClosedWhenLeaseClosed(QueryCheck):
+    """Every invocation boundary a closed lease ever opened is itself closed (blizzard#437
+    D11, ``bzh:open-facts-declare-closure``) — no lease_id may own a still-open boundary
+    once its own closure fact is durable; `Attempt.close` is the one funnel every closure
+    path shares, so a hub-terminal chunk closes its boundaries the same as any other."""
+
+    def run(self) -> list[Violation]:
+        closed_leases = {row[0] for row in self.conn.execute(select(runner.lease_closures.c.lease_id))}
+        stmt = select(runner.invocation_boundaries.c.lease_id, runner.invocation_boundaries.c.kind).where(
+            and_(
+                runner.invocation_boundaries.c.lease_id.in_(closed_leases),
+                runner.invocation_boundaries.c.closed_at.is_(None),
+            )
+        )
+        return [
+            Violation(
+                "runner:invocation-boundary-closed-when-lease-closed",
+                f"lease {row.lease_id} is closed but its {row.kind} invocation boundary is still open",
+            )
+            for row in self.conn.execute(stmt)
+        ]
+
+
+class WorkerBoundaryKindExclusivePerGeneration(QueryCheck):
+    """At most one worker-starting boundary — ``spawn``, ``resume``, or ``nudge`` — exists per
+    (lease, generation) (blizzard#437 Phase 4): the exclusivity ``UsageRecorder._worker_boundary``'s
+    try-each-kind lookup depends on. ``judge`` is excluded — it can coexist with one of the
+    other three at the same generation by design."""
+
+    def run(self) -> list[Violation]:
+        stmt = select(runner.invocation_boundaries.c.lease_id, runner.invocation_boundaries.c.generation).where(
+            runner.invocation_boundaries.c.kind.in_(WORKER_STARTING_KINDS)
+        )
+        key_count = Counter((row[0], row[1]) for row in self.conn.execute(stmt))
+        return [
+            Violation(
+                "runner:worker-boundary-kind-exclusive-per-generation",
+                f"lease {lease_id} generation {generation} has {n} worker-starting invocation boundaries",
+            )
+            for (lease_id, generation), n in key_count.items()
+            if n > 1
+        ]
 
 
 class NudgeAtMostOnce(QueryCheck):
@@ -833,6 +878,8 @@ class RunnerInvariants:
                 UsageAttributedOnce(conn),
                 NudgeAtMostOnce(conn),
                 ChecksRecordedWhenMarked(conn),
+                InvocationBoundaryClosedWhenLeaseClosed(conn),
+                WorkerBoundaryKindExclusivePerGeneration(conn),
             )
             for check in checks:
                 violations.extend(check.run())

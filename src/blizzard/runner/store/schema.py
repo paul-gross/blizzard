@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    false,
 )
 
 from blizzard.foundation.store.utc import UtcDateTime
@@ -484,6 +485,29 @@ in_flight_elicitations = Table(
     Column("first_launched_at", UtcDateTime, nullable=False),
     Column("relaunch_count", Integer, nullable=False),
 )
+
+# --- Transcript invocation boundaries (blizzard#437 D6/D11) -------------------
+# One row per fleet-driven invocation, durable BEFORE it launches. Runner-local only.
+
+invocation_boundaries = Table(
+    "invocation_boundaries",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("generation", Integer, nullable=False),
+    Column("kind", String, nullable=False),  # spawn | resume | judge | nudge
+    Column("start_position", String, nullable=True),  # opaque TranscriptPosition.token; NULL = beginning
+    # True only when start_position is NULL because a tail read genuinely failed — never a
+    # stand-in for a fresh session's own beginning sentinel.
+    Column("start_unreadable", Boolean, nullable=False, server_default=false()),
+    Column("opened_at", UtcDateTime, nullable=False),
+    Column("closed_at", UtcDateTime, nullable=True),
+    Column("closed_reason", String, nullable=True),
+)
+Index("ix_invocation_boundaries_lease_id", invocation_boundaries.c.lease_id)
 
 # --- SSO federation jti replay cache (issue #95, decision D4) ----------------
 # The `jti` primary key alone is the single-use guarantee, enforced by the store.

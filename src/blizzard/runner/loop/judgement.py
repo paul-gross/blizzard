@@ -157,6 +157,22 @@ class Judgement:
             self.ctx.stores.checks.record_nudge_fired(
                 lease_id=lease.lease_id, epoch=lease.epoch, at=self.ctx.clock.now()
             )
+            # The nudge's own boundary (D5/D6), riding `record_nudge_fired`'s own
+            # pre-resume transaction — no new window, so no new crash point brackets it.
+            if lease.session is not None:
+                workdir = self.bindings[0].workdir if self.bindings else None
+                start_position, start_unreadable = self.ctx.resolve_boundary_start(lease.session, workdir)
+                self.ctx.stores.invocation_boundaries.record_boundary_open(
+                    lease_id=lease.lease_id,
+                    chunk_id=lease.chunk_id,
+                    node_id=lease.node_id,
+                    epoch=lease.epoch,
+                    generation=Spawner(self.ctx).generation(lease.lease_id),
+                    kind="nudge",
+                    start_position=start_position,
+                    start_unreadable=start_unreadable,
+                    opened_at=self.ctx.clock.now(),
+                )
             _CP_NUDGE_AFTER_FIRED_FACT.reached()
             DormantSession(self.ctx, lease).resume_on_unmet_produces(produces.nudge_message(missing), self.bindings)
             return
@@ -308,6 +324,22 @@ class Judgement:
         self.ctx.stores.elicitations.record_elicitation_launch(
             lease.lease_id, lease.epoch, output_path=output_path, at=self.ctx.clock.now()
         )
+        # The judgement's own boundary (D6), riding `record_elicitation_launch`'s own
+        # pre-launch write. Keyed by the CURRENT generation — a judgement mints no new one.
+        if lease.session is not None:
+            workdir = self.bindings[0].workdir if self.bindings else None
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(lease.session, workdir)
+            self.ctx.stores.invocation_boundaries.record_boundary_open(
+                lease_id=lease.lease_id,
+                chunk_id=lease.chunk_id,
+                node_id=lease.node_id,
+                epoch=lease.epoch,
+                generation=self.ctx.stores.liveness.lease_generation(lease.lease_id),
+                kind="judge",
+                start_position=start_position,
+                start_unreadable=start_unreadable,
+                opened_at=self.ctx.clock.now(),
+            )
         _CP_ELICIT_AFTER_RECORD.reached()
         self._elicit(output_path)
         _CP_ELICIT_AFTER_LAUNCH.reached()
