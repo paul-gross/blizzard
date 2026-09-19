@@ -269,6 +269,32 @@ def test_segment_derivation_input_decodes_turns_from_stored_content(tmp_path: Pa
     assert result.turns[0].tool.input == {"file_path": "a.py"}
 
 
+def test_segment_derivation_input_folds_harness_version_across_windows(tmp_path: Path) -> None:
+    """blizzard#439 D3: the runner folds ``harness_version`` per shipped window, so an
+    early window that never observed it (``None``) must not shadow a later window's real
+    value once both windows' records land on the same segment."""
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    segments.insert_accepted(
+        _segment_record(turn_range_start=0, turn_range_end=0, harness_version=None, final=False),
+        byte_count=10,
+        codec="zlib",
+        at=_NOW,
+    )
+    segments.insert_accepted(
+        _segment_record(turn_range_start=1, turn_range_end=1, harness_version="claude-code-1.0"),
+        byte_count=10,
+        codec="zlib",
+        at=_NOW,
+    )
+
+    store = TranscriptEventStore(hub_store_connections(engine))
+    result = store.segment_derivation_input("sg_1")
+
+    assert result is not None
+    assert result.provenance.harness_version == "claude-code-1.0"
+
+
 def test_segment_derivation_input_is_none_for_an_unknown_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
@@ -392,6 +418,37 @@ def test_candidacy_includes_a_segment_after_a_late_record_lands(tmp_path: Path) 
 
     segments.insert_accepted(
         _segment_record(turn_range_start=1, turn_range_end=1), byte_count=10, codec="zlib", at=_NOW
+    )
+
+    read = store.candidacy(_EXTRACTOR_VERSION)
+
+    assert read.candidate_segment_ids == ["sg_1"]
+
+
+def test_candidacy_includes_a_still_rejected_segment_whose_harness_version_refreshed(tmp_path: Path) -> None:
+    """blizzard#439: a still-rejected re-offer can refresh ``harness_version`` with no
+    change to its content — the fingerprint must still move, or the refreshed value
+    never reaches an already-derived event."""
+    engine = _migrated_engine(tmp_path)
+    segments = TranscriptSegmentStore(hub_store_connections(engine))
+    record = _segment_record(harness_version=None)
+    segments.insert_rejected(record, byte_count=999, reason="record_too_large", at=_NOW)
+    store = TranscriptEventStore(hub_store_connections(engine))
+    stale = store.segment_derivation_input("sg_1")
+    assert stale is not None
+    store.replace_segment_events(
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [],
+        complete=False,
+        content_fingerprint=stale.content_fingerprint,
+        at=_NOW,
+        provenance=_PROVENANCE,
+    )
+    assert store.candidacy(_EXTRACTOR_VERSION).candidate_segment_ids == []
+
+    segments.update_still_rejected(
+        _segment_record(harness_version="claude-code-1.0"), byte_count=999, reason="record_too_large", at=_NOW
     )
 
     read = store.candidacy(_EXTRACTOR_VERSION)

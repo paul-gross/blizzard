@@ -28,7 +28,7 @@ _CLAUDE_CODE_JSONL_2: dict[str, DialectEntry] = {
     KIND_AGENT_SPAWN: DialectEntry(tool_name="Agent", argument_key="subagent_type"),
 }
 
-#: OpenCode's spawn entry only (D5) — fixture-proven; read/skill await a live capture (Phase 5).
+#: OpenCode's spawn entry only (D5) — fixture-proven; read/skill have no proven tool name yet.
 _OPENCODE_EXPORT_1: dict[str, DialectEntry] = {
     KIND_AGENT_SPAWN: DialectEntry(tool_name="task", argument_key="agent"),
 }

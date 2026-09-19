@@ -66,16 +66,16 @@ def _derived_segment_ids_stmt() -> Select[Any]:
 
 
 def _candidacy_digests_stmt(chunk_id: str | None = None) -> Select[Any]:
-    """One row per visible segment's own stored ``content_digest`` alone (blizzard#513
-    D2), joined against the visibility subselect so this read IS the pass's one
-    visibility evaluation, at a constant statement count. No ``content`` column named —
-    the candidacy read's whole point, that it never touches a content byte.
-    Ordered so each segment's digests arrive in range order for the fingerprint fold."""
+    """Each visible segment's own ``content_digest`` and ``harness_version`` (blizzard#513
+    D2) — the latter folds per shipped window, so a still-rejected re-offer that only
+    refreshes it still changes the fingerprint. No ``content`` column named — the
+    candidacy read's whole point. Ordered so a segment's rows arrive in range order."""
     return (
         select(
             s.transcript_segments.c.segment_id,
             s.transcript_segments.c.turn_range_start,
             s.transcript_segments.c.content_digest,
+            s.transcript_segments.c.harness_version,
         )
         .where(s.transcript_segments.c.segment_id.in_(_visible_segment_ids_stmt(chunk_id)))
         .order_by(s.transcript_segments.c.segment_id, s.transcript_segments.c.turn_range_start)
@@ -227,28 +227,38 @@ def _delete_all_markers_for_segments_stmt(segment_ids: Collection[str]) -> Delet
     return s.transcript_event_derivations.delete().where(s.transcript_event_derivations.c.segment_id.in_(segment_ids))
 
 
-def _fingerprint_from_digests(digests: Sequence[str]) -> str:
+def _fingerprint_from_parts(parts: Sequence[tuple[str, str | None]]) -> str:
     digest = hashlib.sha256()
-    for d in digests:
-        digest.update(d.encode("ascii"))
+    for content_digest_value, harness_version in parts:
+        digest.update(content_digest_value.encode("ascii"))
+        digest.update(b"\x00")
+        digest.update((harness_version or "").encode("utf-8"))
         digest.update(b"\x01")
     return digest.hexdigest()
 
 
 def content_fingerprint(records: Sequence[Any]) -> str:
-    """A deterministic fingerprint of a segment's stored content — every record's own
-    ``content_digest`` (blizzard#513 D1), in range order — so the derivation marker can
-    tell a later re-adjudication (a rejected record accepted, a late record landing) from
-    an unchanged segment (D6). Rebased onto the persisted per-record digest rather than
-    raw content: recomputing it never reads a content byte."""
-    return _fingerprint_from_digests([row.content_digest for row in records])
+    """A deterministic fingerprint of a segment's own content plus its own
+    ``harness_version`` (blizzard#513 D1) — content via each record's ``content_digest``,
+    harness_version folded in too since a still-rejected re-offer can refresh it with no
+    content change. Rebased onto persisted state, not raw content: recomputing it never
+    reads a content byte."""
+    return _fingerprint_from_parts([(row.content_digest, row.harness_version) for row in records])
 
 
-def _provenance(row: Any) -> SegmentProvenance:
-    """A segment's frozen provenance, read off its own first stored row — identical
-    across every record of one segment (blizzard#439 D3), so any one row states it."""
+def _provenance(rows: Sequence[Any]) -> SegmentProvenance:
+    """A segment's frozen provenance (blizzard#439 D3): ``harness_id``/``model``/``effort``
+    are identical on every stored record, so the first states them; ``harness_version`` is
+    folded per shipped window on the runner (only the window that observed it carries a
+    value) and re-folded here the same way, over every row in ``turn_range_start`` order,
+    so a later row's real value is never shadowed by an earlier window's ``None``."""
+    first = rows[0]
+    harness_version = first.harness_version
+    for row in rows:
+        if row.harness_version is not None:
+            harness_version = row.harness_version
     return SegmentProvenance(
-        harness_id=row.harness_id, harness_version=row.harness_version, model=row.model, effort=row.effort
+        harness_id=first.harness_id, harness_version=harness_version, model=first.model, effort=first.effort
     )
 
 
@@ -295,7 +305,7 @@ class TranscriptEventStore:
         candidates: list[str] = []
         for segment_id, rows in itertools.groupby(digest_rows, key=lambda r: r.segment_id):
             visible_segment_ids.add(segment_id)
-            fingerprint = _fingerprint_from_digests([row.content_digest for row in rows])
+            fingerprint = _fingerprint_from_parts([(row.content_digest, row.harness_version) for row in rows])
             if markers.get(segment_id) != fingerprint:
                 candidates.append(segment_id)
         return CandidacyRead(visible_segment_ids=frozenset(visible_segment_ids), candidate_segment_ids=candidates)
@@ -326,7 +336,7 @@ class TranscriptEventStore:
             turns=_decode_turns(rows),
             complete=not any(row.rejected for row in rows),
             content_fingerprint=content_fingerprint(rows),
-            provenance=_provenance(first),
+            provenance=_provenance(rows),
         )
 
     def derivation_marker(self, segment_id: str, extractor_version: str) -> DerivationMarker | None:
@@ -382,7 +392,7 @@ class TranscriptEventStore:
                             turns=_decode_turns(group_rows),
                             complete=not any(row.rejected for row in group_rows),
                             content_fingerprint=content_fingerprint(group_rows),
-                            provenance=_provenance(group_rows[0]),
+                            provenance=_provenance(group_rows),
                         )
                     except Exception:
                         continue  # decode failure: this id is dropped, unlike the singular's raise
@@ -406,7 +416,7 @@ class TranscriptEventStore:
                         normalizer_version=group_rows[0].normalizer_version,
                         complete=not any(row.rejected for row in group_rows),
                         content_fingerprint=content_fingerprint(group_rows),
-                        provenance=_provenance(group_rows[0]),
+                        provenance=_provenance(group_rows),
                     )
         return result
 

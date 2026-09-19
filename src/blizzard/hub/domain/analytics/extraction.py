@@ -54,9 +54,26 @@ class ITurnEventExtractor(Protocol):
         ...
 
 
+def _resolve_call(turn: TurnSegmentView, *, normalizer_version: str, kind: str) -> tuple[str, str] | None:
+    """This turn's own ``(tool_name, argument_value)`` for ``kind``, per the dialect
+    named by ``normalizer_version`` — ``None`` when the turn doesn't match at all. The
+    one recognition rule every extractor below shares; only the payload each builds
+    from the resolved pair differs (blizzard#439 D5)."""
+    entry = DIALECTS.get(normalizer_version, {}).get(kind)
+    if entry is None:
+        return None
+    if turn.kind != "tool" or turn.tool is None or turn.tool.name != entry.tool_name:
+        return None
+    value = turn.tool.input.get(entry.argument_key)
+    if not isinstance(value, str) or not value:
+        return None
+    return turn.tool.name, value
+
+
 class FileReadExtractor:
-    """A :class:`Read` call naming a concrete path it read (D5) — a pattern search
-    (``Grep``/``Glob``) is a different act and is not one."""
+    """A file-read call naming a concrete path it read (D5) — a pattern search
+    (``Grep``/``Glob``) is a different act and is not one; which tool name and argument
+    key count as a file read is resolved per dialect, not fixed here (blizzard#327)."""
 
     kind = KIND_FILE_READ
 
@@ -65,19 +82,16 @@ class FileReadExtractor:
         return path if isinstance(path, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
-        entry = DIALECTS.get(normalizer_version, {}).get(self.kind)
-        if entry is None:
+        resolved = _resolve_call(turn, normalizer_version=normalizer_version, kind=self.kind)
+        if resolved is None:
             return []
-        if turn.kind != "tool" or turn.tool is None or turn.tool.name != entry.tool_name:
-            return []
-        path = turn.tool.input.get(entry.argument_key)
-        if not isinstance(path, str) or not path:
-            return []
-        return [{"tool_name": turn.tool.name, "path": path}]
+        tool_name, path = resolved
+        return [{"tool_name": tool_name, "path": path}]
 
 
 class SkillInvocationExtractor:
-    """A ``Skill`` call naming which skill it invoked."""
+    """A skill-invocation call naming which skill it invoked — which tool name and
+    argument key count as one is resolved per dialect, not fixed here (blizzard#327)."""
 
     kind = KIND_SKILL_INVOCATION
 
@@ -86,14 +100,10 @@ class SkillInvocationExtractor:
         return skill_name if isinstance(skill_name, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
-        entry = DIALECTS.get(normalizer_version, {}).get(self.kind)
-        if entry is None:
+        resolved = _resolve_call(turn, normalizer_version=normalizer_version, kind=self.kind)
+        if resolved is None:
             return []
-        if turn.kind != "tool" or turn.tool is None or turn.tool.name != entry.tool_name:
-            return []
-        skill_name = turn.tool.input.get(entry.argument_key)
-        if not isinstance(skill_name, str) or not skill_name:
-            return []
+        _, skill_name = resolved
         return [{"skill_name": skill_name}]
 
 
@@ -109,14 +119,10 @@ class AgentSpawnExtractor:
         return agent_type if isinstance(agent_type, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
-        entry = DIALECTS.get(normalizer_version, {}).get(self.kind)
-        if entry is None:
+        resolved = _resolve_call(turn, normalizer_version=normalizer_version, kind=self.kind)
+        if resolved is None:
             return []
-        if turn.kind != "tool" or turn.tool is None or turn.tool.name != entry.tool_name:
-            return []
-        agent_type = turn.tool.input.get(entry.argument_key)
-        if not isinstance(agent_type, str) or not agent_type:
-            return []
+        _, agent_type = resolved
         return [{"agent_type": agent_type}]
 
 

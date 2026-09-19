@@ -143,14 +143,13 @@ def _operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
 
 @dataclass(frozen=True)
 class EventScopeFilters:
-    """:class:`ScopeFilters` plus ``extractor_version`` — meaningless outside the
-    derived-event projection (blizzard#256 D7). Takes its five query params flat rather
-    than nesting a ``Depends(ScopeFilters.of)``, so FastAPI's per-dependant param
-    ordering reproduces the pre-split parameter order byte-for-byte."""
+    """:class:`ScopeFilters` plus ``extractor_version`` and four provenance dimensions
+    (blizzard#256 D7, blizzard#439 D6) — meaningless outside the derived-event
+    projection. Takes its nine query params flat, not nested behind
+    ``Depends(ScopeFilters.of)``, reproducing the pre-split param order byte-for-byte."""
 
     scope: ScopeFilters
     extractor_version: str | None
-    #: Provenance dimensions (blizzard#439 D6) — reach every route, including ``counts_by_*``.
     harness_id: str | None
     harness_version: str | None
     model: str | None

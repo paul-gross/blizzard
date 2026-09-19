@@ -316,7 +316,7 @@ def test_opencode_linked_child_spawn_carries_nested_depth_and_agent_type() -> No
 def test_opencode_unlinked_child_stays_analyzable_with_no_fabricated_spawn() -> None:
     """D7: an unlinked OpenCode sidechain keeps its own agent type — the child's own,
     never an ancestor's — and produces no fabricated parent spawn event."""
-    inner = _tool_turn(0, "read", {"filePath": "orphan.py"})
+    inner = _tool_turn(0, "task", {"agent": "coder", "prompt": "implement"})
     outer = _tool_turn(
         0,
         "bash",
@@ -326,7 +326,12 @@ def test_opencode_unlinked_child_stays_analyzable_with_no_fabricated_spawn() -> 
 
     events = extract_events([outer], normalizer_version=_OPENCODE)
 
-    assert events == []
+    spawns = [e for e in events if e.kind == KIND_AGENT_SPAWN]
+    assert len(spawns) == 1
+    assert spawns[0].turn_path == "0.0"
+    assert spawns[0].depth == 1
+    assert spawns[0].agent_type == "explorer"
+    assert spawns[0].subject == "coder"
 
 
 def test_claude_code_recognition_is_unchanged_by_the_registry_move() -> None:
