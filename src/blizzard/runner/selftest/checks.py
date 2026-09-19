@@ -1,4 +1,4 @@
-"""The selftest's five checks — deterministic orchestration (``bzh:deterministic-shell``)
+"""The selftest's seven checks — deterministic orchestration (``bzh:deterministic-shell``)
 over the harness and scratch-git seams (``bzh:pluggable-seams``), issue #54.
 
 Every op runs against one throwaway scratch repo the ``IScratchGit`` seam mints and
@@ -11,15 +11,17 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import (
     DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
-    IHarnessLifecycleAndVerdict,
+    IHarnessAdapter,
     WorkerHandle,
     WorkerPreamble,
 )
+from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.selftest.model import (
@@ -27,6 +29,8 @@ from blizzard.runner.selftest.model import (
     END_TO_END_EDIT_COMMIT,
     RESUME_COMMAND,
     SPAWN_SESSION_ID,
+    TRANSCRIPT_READABILITY,
+    USAGE_PARSING,
     VERDICT_ELICITATION,
     SelfTestCheck,
 )
@@ -84,7 +88,7 @@ class Scratch:
     """The throwaway repo a run is performed against, the seams its checks drive it
     through, and the session id they drive it under."""
 
-    adapter: IHarnessLifecycleAndVerdict
+    adapter: IHarnessAdapter
     scratch_git: IScratchGit
     process: IProcessProbe
     workdir: str
@@ -228,11 +232,65 @@ class ResumeCommand(Check):
         return SelfTestCheck(RESUME_COMMAND, True, command)
 
 
+class UsageParsing(Check):
+    """Whether ``parse_usage`` can be handed the resume check's own captured stdout
+    without raising (blizzard#438). A missing usage envelope in that output is a
+    legitimate answer the adapter's own contract allows (a worker killed before
+    producing one, or — as here — a canary harness that never emits real provider
+    usage at all): this check cannot tell that case apart from a genuinely broken
+    parser without a real provider round trip, so it reports only whether the parse
+    path itself stays exception-free against real captured CLI output, not whether a
+    sample was actually found."""
+
+    def run(self) -> SelfTestCheck:
+        scratch = self.scratch
+        stdout_path = os.path.join(scratch.workdir, ".selftest-resume-stdout")
+        try:
+            output = Path(stdout_path).read_text(encoding="utf-8") if os.path.exists(stdout_path) else ""
+        except OSError as exc:
+            return SelfTestCheck(USAGE_PARSING, False, f"could not read the resume check's own stdout: {exc}")
+        try:
+            sample = scratch.adapter.parse_usage(output, "resume", model=None)
+        except Exception as exc:
+            return SelfTestCheck(USAGE_PARSING, False, f"parse_usage raised: {exc}")
+        detail = (
+            f"parsed a usage sample ({sample.input_tokens} in / {sample.output_tokens} out)"
+            if sample is not None
+            else "no usage envelope in the resume output — parse_usage's own documented answer for one, not a fault"
+        )
+        return SelfTestCheck(USAGE_PARSING, True, detail)
+
+
+class TranscriptReadability(Check):
+    """Whether the adapter's transcript source can be queried without raising, only
+    when it claims one at all (mirroring ``honors_session_hint()``'s own
+    required-only-when-declared shape) — a :class:`~blizzard.runner.harness.transcript.
+    NullTranscriptSource` binding means the harness declares no on-disk transcript
+    concept, so the check passes vacuously rather than demanding a read nothing backs.
+    A throwaway canary session may leave no real transcript file behind even for a
+    harness that does claim a source (no provider turn ever truly ran), so an empty or
+    absent read is accepted the same way — only an actual exception, proof the
+    reader itself is broken, fails this check."""
+
+    def run(self) -> SelfTestCheck:
+        scratch = self.scratch
+        source = scratch.adapter.transcript_source()
+        if isinstance(source, NullTranscriptSource):
+            return SelfTestCheck(TRANSCRIPT_READABILITY, True, "adapter declares no transcript source to check")
+        try:
+            lines = source.read_raw_lines(scratch.session_id, spawn_cwd=scratch.workdir)
+            position = source.tail_position(scratch.session_id, spawn_cwd=scratch.workdir)
+        except Exception as exc:
+            return SelfTestCheck(TRANSCRIPT_READABILITY, False, f"transcript source raised: {exc}")
+        detail = f"read {len(lines)} raw line(s); tail position {position!r}"
+        return SelfTestCheck(TRANSCRIPT_READABILITY, True, detail)
+
+
 @dataclass(frozen=True)
 class SelfTest:
-    """The five adapter-drift checks against a single throwaway scratch repo."""
+    """The seven adapter-drift checks against a single throwaway scratch repo."""
 
-    adapter: IHarnessLifecycleAndVerdict
+    adapter: IHarnessAdapter
     scratch_git: IScratchGit
     process: IProcessProbe
 
@@ -253,6 +311,8 @@ class SelfTest:
                 checks.append(SelfTestCheck(VERDICT_ELICITATION, False, skipped))
                 checks.append(SelfTestCheck(AUTOMATED_RESUME, False, skipped))
                 checks.append(SelfTestCheck(RESUME_COMMAND, False, skipped))
+                checks.append(SelfTestCheck(USAGE_PARSING, False, skipped))
+                checks.append(SelfTestCheck(TRANSCRIPT_READABILITY, False, skipped))
                 return checks
 
             # The id the adapter actually returned, which a failed gate check may leave
@@ -262,4 +322,6 @@ class SelfTest:
             checks.append(Judge(spawned).run())
             checks.append(Resume(spawned).run())
             checks.append(ResumeCommand(spawned).run())
+            checks.append(UsageParsing(spawned).run())
+            checks.append(TranscriptReadability(spawned).run())
             return checks
