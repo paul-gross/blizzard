@@ -12,10 +12,10 @@ from datetime import datetime
 from typing import Literal, Protocol
 
 __all__ = [
-    "InvocationBoundaryKind",
-    "InvocationBoundaryRecord",
     "IReadInvocationBoundaryRepository",
     "IWriteInvocationBoundaryRepository",
+    "InvocationBoundaryKind",
+    "InvocationBoundaryRecord",
 ]
 
 #: The four invocation kinds a boundary ever names — a nudge's own, distinct from ``resume`` (D5).
