@@ -21,19 +21,14 @@ class DialectEntry:
     argument_key: str
 
 
-#: Claude Code's own normalizer stamp (blizzard#327) — the same tool names the
-#: prior single-dialect literal named, now data rather than a name-only mapping.
+#: Claude Code's own normalizer stamp (blizzard#327), now data rather than a name-only mapping.
 _CLAUDE_CODE_JSONL_2: dict[str, DialectEntry] = {
     KIND_FILE_READ: DialectEntry(tool_name="Read", argument_key="file_path"),
     KIND_SKILL_INVOCATION: DialectEntry(tool_name="Skill", argument_key="skill"),
     KIND_AGENT_SPAWN: DialectEntry(tool_name="Agent", argument_key="subagent_type"),
 }
 
-#: OpenCode's spawn entry only (D5) — fixture-proven against
-#: ``contracts/opencode/1.18.25/child_session.json``'s ``task`` tool call. Read
-#: and skill rows are a deliberate, visible hole until a live capture proves
-#: their tool names (Phase 5) — registering a plausible-looking name today is
-#: exactly the heuristic AC-2 forbids.
+#: OpenCode's spawn entry only (D5) — fixture-proven; read/skill await a live capture (Phase 5).
 _OPENCODE_EXPORT_1: dict[str, DialectEntry] = {
     KIND_AGENT_SPAWN: DialectEntry(tool_name="task", argument_key="agent"),
 }

@@ -164,6 +164,22 @@ def _node_option(f: Any) -> Any:
     return click.option("--node", "node_id", default=None, help="Narrow to one node id.")(f)
 
 
+def _harness_id_option(f: Any) -> Any:
+    return click.option("--harness-id", "harness_id", default=None, help="Narrow to one harness family.")(f)
+
+
+def _harness_version_option(f: Any) -> Any:
+    return click.option("--harness-version", "harness_version", default=None, help="Narrow to one harness version.")(f)
+
+
+def _model_option(f: Any) -> Any:
+    return click.option("--model", default=None, help="Narrow to one model.")(f)
+
+
+def _effort_option(f: Any) -> Any:
+    return click.option("--effort", default=None, help="Narrow to one effort level.")(f)
+
+
 def _utc_query_value(value: datetime | None) -> str | None:
     """D6: a bare ``--since``/``--until`` is read as the operator's own local wall clock,
     not UTC — converted (not merely relabeled) before it crosses the wire."""
@@ -181,6 +197,10 @@ def _scope_params(
     tool: str | None = None,
     subject_prefix: str | None = None,
     node_id: str | None = None,
+    harness_id: str | None = None,
+    harness_version: str | None = None,
+    model: str | None = None,
+    effort: str | None = None,
 ) -> dict[str, str]:
     """Every named filter as a query param, omitting whichever were left unset."""
     named = {
@@ -193,6 +213,10 @@ def _scope_params(
         "tool": tool,
         "subject_prefix": subject_prefix,
         "node_id": node_id,
+        "harness_id": harness_id,
+        "harness_version": harness_version,
+        "model": model,
+        "effort": effort,
     }
     return {k: v for k, v in named.items() if v is not None}
 
@@ -207,6 +231,10 @@ def _scope_params(
 @_tool_option
 @_subject_prefix_option
 @_node_option
+@_harness_id_option
+@_harness_version_option
+@_model_option
+@_effort_option
 @click.option("--cursor", default=None, help="Resume from a prior page's next_cursor.")
 @click.option(
     "--limit", default=None, type=int, help="Max rows in one page (1-1000, default 200). Illegal with --ndjson."
@@ -228,6 +256,10 @@ def analytics_events(
     tool: str | None,
     subject_prefix: str | None,
     node_id: str | None,
+    harness_id: str | None,
+    harness_version: str | None,
+    model: str | None,
+    effort: str | None,
     cursor: str | None,
     limit: int | None,
     ndjson: bool,
@@ -252,6 +284,10 @@ def analytics_events(
         tool=tool,
         subject_prefix=subject_prefix,
         node_id=node_id,
+        harness_id=harness_id,
+        harness_version=harness_version,
+        model=model,
+        effort=effort,
     )
     if ndjson:
         for line in cli.stream("/api/analytics/events/ndjson", "GET /analytics/events/ndjson", params=params):
@@ -273,6 +309,9 @@ def analytics_events(
 #: dataset's own applicable set on top of.
 _SCOPE_FILTERS = frozenset({"graph_id", "source", "since", "until"})
 
+#: The four provenance filters the counts routes honor (blizzard#439 D6).
+_PROVENANCE_FILTERS = frozenset({"harness_id", "harness_version", "model", "effort"})
+
 #: The flag each filter's dest name renders as, for a per-dataset applicability error.
 _FLAG_NAMES = {
     "graph_id": "--graph",
@@ -284,6 +323,10 @@ _FLAG_NAMES = {
     "tool": "--tool",
     "subject_prefix": "--subject-prefix",
     "node_id": "--node",
+    "harness_id": "--harness-id",
+    "harness_version": "--harness-version",
+    "model": "--model",
+    "effort": "--effort",
 }
 
 
@@ -308,22 +351,25 @@ _DATASETS: dict[str, _Dataset] = {
         "/api/analytics/counts/files",
         "counts",
         CountsListing,
-        _SCOPE_FILTERS | {"extractor_version", "tool", "subject_prefix", "node_id"},
+        _SCOPE_FILTERS | _PROVENANCE_FILTERS | {"extractor_version", "tool", "subject_prefix", "node_id"},
     ),
     "counts-skills": _Dataset(
-        "/api/analytics/counts/skills", "counts", CountsListing, _SCOPE_FILTERS | {"extractor_version", "node_id"}
+        "/api/analytics/counts/skills",
+        "counts",
+        CountsListing,
+        _SCOPE_FILTERS | _PROVENANCE_FILTERS | {"extractor_version", "node_id"},
     ),
     "counts-agent-types": _Dataset(
         "/api/analytics/counts/agent-types",
         "counts",
         CountsListing,
-        _SCOPE_FILTERS | {"extractor_version", "kind", "tool", "subject_prefix", "node_id"},
+        _SCOPE_FILTERS | _PROVENANCE_FILTERS | {"extractor_version", "kind", "tool", "subject_prefix", "node_id"},
     ),
     "counts-nodes": _Dataset(
         "/api/analytics/counts/nodes",
         "counts",
         CountsListing,
-        _SCOPE_FILTERS | {"extractor_version", "kind", "tool", "subject_prefix"},
+        _SCOPE_FILTERS | _PROVENANCE_FILTERS | {"extractor_version", "kind", "tool", "subject_prefix"},
     ),
     "durations-nodes": _Dataset("/api/analytics/durations/nodes", "durations", DurationsListing, _SCOPE_FILTERS),
     "durations-graphs": _Dataset("/api/analytics/durations/graphs", "durations", DurationsListing, _SCOPE_FILTERS),
@@ -354,6 +400,10 @@ _SPEND_CHUNKS_NDJSON_PATH = "/api/analytics/spend/chunks/ndjson"
 @_tool_option
 @_subject_prefix_option
 @_node_option
+@_harness_id_option
+@_harness_version_option
+@_model_option
+@_effort_option
 @click.option("--cursor", default=None, help="Resume from a prior page's next_cursor (spend-chunks only).")
 @click.option(
     "--limit", default=None, type=int, help="Max rows in one page (spend-chunks only). Illegal with --ndjson."
@@ -377,6 +427,10 @@ def analytics_summary(
     tool: str | None,
     subject_prefix: str | None,
     node_id: str | None,
+    harness_id: str | None,
+    harness_version: str | None,
+    model: str | None,
+    effort: str | None,
     cursor: str | None,
     limit: int | None,
     ndjson: bool,
@@ -395,6 +449,10 @@ def analytics_summary(
         "tool": tool,
         "subject_prefix": subject_prefix,
         "node_id": node_id,
+        "harness_id": harness_id,
+        "harness_version": harness_version,
+        "model": model,
+        "effort": effort,
     }
     for name, value in given.items():
         if value is not None and name not in spec.filters:
@@ -422,6 +480,10 @@ def analytics_summary(
         tool=tool,
         subject_prefix=subject_prefix,
         node_id=node_id,
+        harness_id=harness_id,
+        harness_version=harness_version,
+        model=model,
+        effort=effort,
     )
     if ndjson:
         for line in cli.stream(_SPEND_CHUNKS_NDJSON_PATH, "GET /analytics/spend/chunks/ndjson", params=params):

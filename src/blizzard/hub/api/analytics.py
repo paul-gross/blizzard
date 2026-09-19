@@ -150,6 +150,11 @@ class EventScopeFilters:
 
     scope: ScopeFilters
     extractor_version: str | None
+    #: Provenance dimensions (blizzard#439 D6) — reach every route, including ``counts_by_*``.
+    harness_id: str | None
+    harness_version: str | None
+    model: str | None
+    effort: str | None
 
     @classmethod
     def of(
@@ -159,8 +164,14 @@ class EventScopeFilters:
         since: Annotated[datetime | None, Query()] = None,
         until: Annotated[datetime | None, Query()] = None,
         extractor_version: Annotated[str | None, Query()] = None,
+        harness_id: Annotated[str | None, Query()] = None,
+        harness_version: Annotated[str | None, Query()] = None,
+        model: Annotated[str | None, Query()] = None,
+        effort: Annotated[str | None, Query()] = None,
     ) -> EventScopeFilters:
-        return cls(ScopeFilters(graph_id, source, since, until), extractor_version)
+        return cls(
+            ScopeFilters(graph_id, source, since, until), extractor_version, harness_id, harness_version, model, effort
+        )
 
     def criteria(
         self,
@@ -186,6 +197,10 @@ class EventScopeFilters:
             source=scope.source,
             since=scope.since,
             until=scope.until,
+            harness_id=self.harness_id,
+            harness_version=self.harness_version,
+            model=self.model,
+            effort=self.effort,
         )
 
 
@@ -233,6 +248,10 @@ def _event_view(record: EventRecord) -> AnalyticsEventView:
         depth=record.depth,
         agent_type=record.agent_type,
         occurred_at=iso_utc(record.occurred_at) if record.occurred_at is not None else None,
+        harness_id=record.harness_id,
+        harness_version=record.harness_version,
+        model=record.model,
+        effort=record.effort,
     )
 
 

@@ -58,7 +58,17 @@ def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: st
     }
 
 
-def _record(chunk_id: str, *, turns: list[dict], node_id: str = "nd_build", segment_id: str = "sg_1") -> dict:
+def _record(
+    chunk_id: str,
+    *,
+    turns: list[dict],
+    node_id: str = "nd_build",
+    segment_id: str = "sg_1",
+    harness_id: str | None = None,
+    harness_version: str | None = "claude-code-1.0",
+    model: str | None = None,
+    effort: str | None = None,
+) -> dict:
     return {
         "seq": 1,
         "segment_id": segment_id,
@@ -70,7 +80,10 @@ def _record(chunk_id: str, *, turns: list[dict], node_id: str = "nd_build", segm
         "turn_range_end": len(turns) - 1,
         "final": True,
         "normalizer_version": "claude-code-jsonl/2",
-        "harness_version": "claude-code-1.0",
+        "harness_version": harness_version,
+        "harness_id": harness_id,
+        "model": model,
+        "effort": effort,
         "turns": turns,
     }
 
@@ -184,6 +197,56 @@ def test_events_filters_by_time_range(tmp_path: Path) -> None:
     assert [e["subject"] for e in resp.json()["events"]] == ["wf-commit"]
 
 
+def test_events_filter_by_provenance(tmp_path: Path) -> None:
+    """blizzard#439 D6: harness_id/harness_version/model/effort narrow the events route,
+    and the response carries each dimension on every event."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
+    token = seed_session(hub, contributor)
+    chunk_id = _ingest_chunk(hub, headers=_cookie(token))
+    push = hub.client.post(
+        "/api/fleet/transcripts",
+        json={
+            "runner_id": "r1",
+            "records": [
+                _record(
+                    chunk_id,
+                    segment_id="sg_claude",
+                    turns=[_tool_turn(0, "Read", {"file_path": "src/a.py"}, timestamp="2026-08-12T09:00:00Z")],
+                    harness_id="claude_code",
+                    model="claude-sonnet-5",
+                    effort="high",
+                ),
+                _record(
+                    chunk_id,
+                    segment_id="sg_opencode",
+                    turns=[_tool_turn(0, "Read", {"file_path": "src/b.py"}, timestamp="2026-08-12T09:00:00Z")],
+                    harness_id="opencode",
+                    harness_version="1.18.25",
+                    model="gpt-5.6-luna",
+                    effort="max",
+                ),
+            ],
+        },
+    )
+    assert push.status_code == 200, push.text
+    hub.services.event_derivation.sweep()
+
+    resp = hub.client.get("/api/analytics/events", params={"harness_id": "opencode"}, headers=_cookie(token))
+    assert [e["subject"] for e in resp.json()["events"]] == ["src/b.py"]
+
+    resp = hub.client.get("/api/analytics/events", params={"model": "claude-sonnet-5"}, headers=_cookie(token))
+    assert [e["subject"] for e in resp.json()["events"]] == ["src/a.py"]
+
+    resp = hub.client.get("/api/analytics/events", params={"effort": "max"}, headers=_cookie(token))
+    [event] = resp.json()["events"]
+    assert event["subject"] == "src/b.py"
+    assert event["harness_id"] == "opencode"
+    assert event["harness_version"] == "1.18.25"
+    assert event["model"] == "gpt-5.6-luna"
+    assert event["effort"] == "max"
+
+
 def test_events_pages_with_a_cursor(tmp_path: Path) -> None:
     hub, token, _chunk_id = _seeded_hub(tmp_path)
 
@@ -241,7 +304,7 @@ def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> 
     """The batch boundary is the stream's only moving part, and the default 500 puts it
     out of reach of any fixture — so the body is served here one event per batch."""
     hub, token, _chunk_id = _seeded_hub(tmp_path)
-    criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None).criteria()
+    criteria = EventScopeFilters(ScopeFilters(None, None, None, None), None, None, None, None, None).criteria()
 
     body = b"".join(ndjson_lines(hub.services.analytics_events, criteria, batch_size=1)).decode()
     lines = [json.loads(line) for line in body.splitlines()]

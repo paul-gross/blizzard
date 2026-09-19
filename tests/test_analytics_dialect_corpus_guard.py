@@ -17,8 +17,7 @@ pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
-#: Every dialect this build has a pinned compatibility corpus for — Claude Code
-#: has no ``contracts/`` corpus, so OpenCode is the only one this guard checks (D5).
+#: Every dialect with a pinned compatibility corpus — Claude Code has none (D5).
 _CORPUS_DIRS: dict[str, Path] = {
     "opencode-export/1": _REPO_ROOT / "contracts" / "opencode" / "1.18.25",
 }

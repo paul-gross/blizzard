@@ -107,6 +107,50 @@
             {
               "hidden": false,
               "kind": "option",
+              "name": "harness_id",
+              "opts": [
+                "--harness-id"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "harness_version",
+              "opts": [
+                "--harness-version"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "model",
+              "opts": [
+                "--model"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "effort",
+              "opts": [
+                "--effort"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
               "name": "cursor",
               "opts": [
                 "--cursor"
@@ -333,6 +377,50 @@
               "name": "node_id",
               "opts": [
                 "--node"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "harness_id",
+              "opts": [
+                "--harness-id"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "harness_version",
+              "opts": [
+                "--harness-version"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "model",
+              "opts": [
+                "--model"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "effort",
+              "opts": [
+                "--effort"
               ],
               "required": false,
               "secondary_opts": [],
