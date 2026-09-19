@@ -91,6 +91,7 @@ function dashboardBody(asks: unknown) {
     escalations: { items: [] },
     takeovers: { items: [] },
     facts: { items: [] },
+    harness_health: { items: [] },
     fleet_summary: null,
   };
 }

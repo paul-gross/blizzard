@@ -34,6 +34,7 @@ function dashboardBody(overrides: Partial<runnerApi.DashboardView> = {}): runner
     escalations: { items: [] },
     takeovers: { items: [] },
     facts: { items: [] },
+    harness_health: { items: [] },
     fleet_summary: null,
     ...overrides,
   };

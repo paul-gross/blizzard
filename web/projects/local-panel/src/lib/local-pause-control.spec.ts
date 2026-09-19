@@ -21,6 +21,7 @@ async function render(pause: { local: boolean; hub: boolean }, patchError?: Retu
         escalations: { items: [] },
         takeovers: { items: [] },
         facts: { items: [] },
+        harness_health: { items: [] },
         fleet_summary: null,
       };
     }

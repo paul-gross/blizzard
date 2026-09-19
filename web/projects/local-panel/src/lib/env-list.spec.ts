@@ -30,6 +30,7 @@ function dashboardBody(envs: readonly runnerApi.EnvironmentView[]): runnerApi.Da
     takeovers: { items: [] },
     fleet_summary: null,
     facts: { items: [] },
+    harness_health: { items: [] },
   };
 }
 
