@@ -613,6 +613,10 @@ transcript_segments = Table(
     # the source seam's "never ran" sentinel at spawn, so a closure always has one to declare.
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
+    # Frozen at segment open from `lease_context`'s own resolved pair (D3) — nullable
+    # throughout, unset for a segment opened before this pair existed. NULL means unknown.
+    Column("model", String, nullable=True),
+    Column("effort", String, nullable=True),
     # `truncated_reason` displays the WORST reason seen so far, by explicit severity;
     # `shipping_stopped_reason` is a separate field that latches on its first cause instead.
     Column("truncated_reason", String, nullable=True),  # NULL = no record ever shrunk

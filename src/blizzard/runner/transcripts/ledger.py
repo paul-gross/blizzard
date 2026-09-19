@@ -47,6 +47,9 @@ class TranscriptSegmentLedgerRow:
     finalized_at: datetime | None
     stamped_at: datetime
     harness_id: str
+    #: Frozen at segment open from the lease's own resolved pair (blizzard#439 D3); ``None`` when unresolved.
+    model: str | None
+    effort: str | None
     #: agent_id -> spawning `tool_use_id` (blizzard#338), accumulated across every window
     #: this segment has read; empty until one names a pair.
     agent_tool_use_ids: dict[str, str] = field(default_factory=dict)

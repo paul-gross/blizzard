@@ -367,6 +367,8 @@ class TranscriptLedgerStore:
             shipped_turns=int(r.shipped_turns),
             normalizer_version=str(r.normalizer_version),
             harness_version=str(r.harness_version) if r.harness_version is not None else None,
+            model=str(r.model) if r.model is not None else None,
+            effort=str(r.effort) if r.effort is not None else None,
             truncated_reason=str(r.truncated_reason) if r.truncated_reason is not None else None,
             shipping_stopped_reason=str(r.shipping_stopped_reason) if r.shipping_stopped_reason is not None else None,
             supersedes=str(r.supersedes) if r.supersedes is not None else None,

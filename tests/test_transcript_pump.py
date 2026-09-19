@@ -97,6 +97,8 @@ def _ledger_row_stub() -> TranscriptSegmentLedgerRow:
         shipped_turns=0,
         normalizer_version="fake/1",
         harness_version="claude/9",
+        model="claude-sonnet-5",
+        effort="high",
         truncated_reason=None,
         shipping_stopped_reason=None,
         supersedes=None,
@@ -292,6 +294,8 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
             runner_id="r1",
             retries_max=2,
             created_at=_NOW,
+            resolved_model="claude-sonnet-5",
+            resolved_effort="high",
         )
     )
     ctx.stores.liveness.record_spawn(
@@ -366,11 +370,13 @@ def test_pump_ships_a_record_and_advances_the_cursor() -> None:
     body = json.loads(pending[0].payload)
     assert (body["turn_range_start"], body["turn_range_end"]) == (0, 1)  # blizzard#247's turn-range key
     assert body["normalizer_version"] == "fake/1"
+    assert (body["model"], body["effort"]) == ("claude-sonnet-5", "high")
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert (segment.cursor, segment.shipped_turns) == ("pos-1", 2)
     assert segment.normalizer_version == "fake/1"
     assert segment.shipped_bytes == len(pending[0].payload.encode("utf-8"))
+    assert (segment.model, segment.effort) == ("claude-sonnet-5", "high")
 
 
 def test_pump_never_reads_before_the_cursor() -> None:

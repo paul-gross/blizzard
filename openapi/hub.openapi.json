@@ -7393,6 +7393,17 @@
             "title": "Chunk Id",
             "type": "string"
           },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
           "epoch": {
             "title": "Epoch",
             "type": "integer"
@@ -7422,6 +7433,17 @@
               }
             ],
             "title": "Harness Version"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
           },
           "node_id": {
             "title": "Node Id",
