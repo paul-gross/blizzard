@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -307,6 +307,54 @@ def test_a_version_bump_re_derives_history_leaving_the_prior_version_intact(fixt
     versions = {row.extractor_version for row in rows}
     assert versions == {EXTRACTOR_VERSION, _NEXT_EXTRACTOR_VERSION}
     assert fixture.events.derivation_marker("sg_1", EXTRACTOR_VERSION) == marker_v1
+
+
+#: The version the current one superseded — its rows predate the provenance columns.
+_PRIOR_EXTRACTOR_VERSION = "blizzard-analytics/3"
+
+
+def test_the_bump_leaves_a_prior_versions_un_backfilled_rows_untouched(fixture: _Fixture) -> None:
+    """The provenance columns land un-backfilled, so a row derived before the bump holds
+    NULL for all four. Sweeping at the current version must neither restamp nor drop it:
+    ``replace_segment_events`` scopes its delete and insert to one version's rows alone."""
+    fixture.segments.insert_accepted(
+        _segment_record(harness_id="claude_code", model="claude-sonnet-5", effort="high"),
+        byte_count=10,
+        codec="zlib",
+        at=_NOW,
+    )
+    prior_service = EventDerivationService(
+        events=fixture.events,
+        facts=fixture.chunks.facts,
+        record=fixture.chunks.record,
+        clock=fixture.clock,
+        extractor_version=_PRIOR_EXTRACTOR_VERSION,
+    )
+    EventDerivationReconciler(service=prior_service, events=fixture.events, clock=fixture.clock).sweep()
+    with fixture.engine.begin() as conn:
+        conn.execute(
+            update(s.transcript_events)
+            .where(s.transcript_events.c.extractor_version == _PRIOR_EXTRACTOR_VERSION)
+            .values(harness_id=None, harness_version=None, model=None, effort=None)
+        )
+    prior_rows = [row for row in fixture.stored_events() if row.extractor_version == _PRIOR_EXTRACTOR_VERSION]
+    prior_marker = fixture.events.derivation_marker("sg_1", _PRIOR_EXTRACTOR_VERSION)
+    assert prior_rows and prior_marker is not None
+
+    fixture.reconciler.sweep()
+
+    rows = fixture.stored_events()
+    assert [row for row in rows if row.extractor_version == _PRIOR_EXTRACTOR_VERSION] == prior_rows
+    assert fixture.events.derivation_marker("sg_1", _PRIOR_EXTRACTOR_VERSION) == prior_marker
+    bumped = [row for row in rows if row.extractor_version == EXTRACTOR_VERSION]
+    assert bumped
+    for row in bumped:
+        assert (row.harness_id, row.harness_version, row.model, row.effort) == (
+            "claude_code",
+            "claude-code-1.0",
+            "claude-sonnet-5",
+            "high",
+        )
 
 
 def test_a_superseded_segments_rows_are_dropped(fixture: _Fixture) -> None:
