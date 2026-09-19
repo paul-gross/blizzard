@@ -49,13 +49,10 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* Split into two nested rows (review:F2) rather than one `flex-wrap: wrap` row:
-   flexbox's own wrap decision uses `.fl-class`'s *hypothetical* (unshrunk) main
-   size for a `flex-basis: auto`, `white-space: nowrap` item, not its post-ellipsis
-   rendered width, so a long unbroken class name sharing a wrap context with
-   `.fl-routine`/`.fl-scope` wrapped `.fl-ref` onto a second line instead of
-   `.fl-class` shrinking on the first. `.fl-hdr-primary` (class + ref) never wraps;
-   `.fl-hdr-secondary` (routine/scope) wraps freely beneath it. */
+/* Split into two nested rows rather than one `flex-wrap: wrap` row — pinned by
+   `gardening-findings-filters.shell-sweep.spec.ts`'s disambiguated-row case (the
+   `.fl-class`/`.fl-ref` same-line assertion). `.fl-hdr-primary` (class + ref) never
+   wraps; `.fl-hdr-secondary` (routine/scope) wraps freely beneath it. */
 .fl-hdr {
   display: flex;
   flex-direction: column;

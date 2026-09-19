@@ -91,12 +91,10 @@ export function injectHubFindingQuery(findingId: () => string | null) {
  * The findings triage bucket read — every finding matching `routine`/`scope`, live
  * through `GET /api/findings` (the triage surface, as distinct from
  * {@link injectHubFindingsQuery}'s by-id fan-out the docket detail's evidence table
- * reads). Widened (blizzard#486) to every routine and every scope: `routine` and
- * `scope` are each independently optional on the server, a `null` meaning "every
- * value on that dimension, unfiltered" rather than "not chosen yet" — so the read is
- * always enabled, with no precondition it has to wait out. A `null` half is simply
- * omitted from the request's query params (never sent through as the literal string
- * `"null"`); a named half rides as-is. Always reads with `include_gone: true` — a gone
+ * reads). `routine` and `scope` are each independently optional: a `null` means every
+ * value on that dimension, unfiltered, so the read is always enabled. A `null` half is
+ * simply omitted from the request's query params (never sent through as the literal
+ * string `"null"`); a named half rides as-is. Always reads with `include_gone: true` — a gone
  * finding still belongs on the triage surface until a person confirms it (that's what
  * `confirm-gone` records), so the bucket can't afford to have the server drop it
  * before a person has weighed in. The read is keyset-paginated on the hub

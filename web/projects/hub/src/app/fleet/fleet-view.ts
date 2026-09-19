@@ -61,8 +61,7 @@ export class FleetView {
     return this.pendingRunnerIds().includes(row.runner_id);
   }
 
-  /** Emitted with the row to flip the **hub** brake on — the container reads
-   * `hub_paused` off it to decide pause vs. resume. */
+  /** Emitted with the row to flip the **hub** brake on. */
   readonly togglePause = output<RunnerRow>();
 
   protected readonly formatSeenAgo = formatSeenAgo;

@@ -28,17 +28,14 @@ import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters
  * A container: it injects the bucket read through
  * `gardening-findings-bucket-filters.ts` and forwards plain rows to the
  * presentational {@link FleetFindingList}. The routine/scope pair, the class/state
- * filters, and the bucket read all live in that module. The bucket widened to
- * every routine and every scope (blizzard#486) — its resting state, with no query
- * params at all, reads everything, no seeded pair required. All four filters
- * render as `fleet-kit-chips`, always visible (no accordion — no other gardening
- * tab collapses its filters, so this one doesn't either), one labeled row per
- * filter — `kit-fact-list.css`'s own fixed-label-column shape, so the four groups
- * read distinctly instead of running together in one row. Every chip row now
- * carries an "All" option: class and state's come from the fetched bucket's own
- * `class` values (never a hardcoded vocabulary) and the fixed seven-value state
- * vocabulary respectively; routine and scope's each name every fetched
- * routine/scope, per the widened bucket.
+ * filters, and the bucket read all live in that module; its resting state, with no
+ * query params at all, reads every routine and every scope. All four filters render
+ * as `fleet-kit-chips`, always visible, one labeled row per filter —
+ * `kit-fact-list.css`'s own fixed-label-column shape, so the four groups read
+ * distinctly instead of running together in one row. Each carries a leading "All"
+ * option: class and state's come from the fetched bucket's own `class` values (never
+ * a hardcoded vocabulary) and the fixed seven-value state vocabulary respectively;
+ * routine and scope's each name every fetched routine/scope.
  */
 @Component({
   selector: 'app-gardening-findings-page',

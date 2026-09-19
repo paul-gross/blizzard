@@ -154,10 +154,9 @@ export class GlanceBoard {
           row: {
             chunkId: chunk.chunk_id,
             shortId: compactRef(chunk.chunk_id),
-            // Only labeled pointers show — the same filter the desktop board's card applies
-            // (board-shell.ts). Unlike that card (issue #176), this row's own `DoneRow` type
-            // keeps its labels space-joined into one line: the "done today" glance is a
-            // denser, read-only summary, not the card these rows are a distinct type from.
+            // Only labeled pointers show. This row's own `DoneRow` type keeps its labels
+            // space-joined into one line: the "done today" glance is a denser, read-only
+            // summary.
             pointerLabel: (chunk.work_refs ?? []).flatMap((p) => (p.label ? [p.label] : [])).join(' '),
           },
         }];

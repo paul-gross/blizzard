@@ -12,9 +12,7 @@ import type { SubscriptionPace } from './runner-rows';
  * never-fabricate rule the legacy single-subscription pace bars already hold to
  * (issue #218).
  *
- * Presentational only, split out of {@link RunnerPanelView}'s markup rather than folded
- * into its existing flat window loop: that loop stays the legacy single-subscription
- * fallback, this owns the per-slug grouped render exclusively.
+ * Presentational only.
  */
 @Component({
   selector: 'fleet-subscription-pace-group',

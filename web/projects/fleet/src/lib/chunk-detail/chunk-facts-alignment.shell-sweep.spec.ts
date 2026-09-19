@@ -1,4 +1,4 @@
-import { Component, provideZonelessChangeDetection } from '@angular/core';
+import { Component, input, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
@@ -35,13 +35,13 @@ import { ChunkTokenBreakdown } from './chunk-token-breakdown';
   selector: 'fleet-chunk-facts-alignment-host',
   imports: [ChunkFacts, ChunkTokenBreakdown],
   template: `
-    <fleet-chunk-detail-facts [detail]="detail">
-      <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail" />
+    <fleet-chunk-detail-facts [detail]="detail()">
+      <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
     </fleet-chunk-detail-facts>
   `,
 })
 class AlignmentHost {
-  readonly detail: ChunkDetail = DETAIL;
+  readonly detail = input<ChunkDetail>(DETAIL);
 }
 
 const DETAIL: ChunkDetail = {
@@ -98,6 +98,41 @@ describe('chunk-facts / chunk-token-breakdown value-column alignment shell sweep
         usageLeft,
         `the usage table's value column (${usageLeft}) drifted from the facts table's own (${factsLeft}) — the two tables no longer share --kv-label-col/--chunk-facts-pad`,
       ).toBeCloseTo(factsLeft, 0);
+    } finally {
+      root.remove();
+    }
+  });
+
+  /**
+   * The standing edges belong in the shared fact table — one label column, so a Depends
+   * on/Blocks row's value lines up under the same right-hand edge as Status, Node, and
+   * Runner, rather than sitting in a block of its own with its own alignment.
+   */
+  it("keeps a standing-edge row's value column at the facts table's own left, alongside Status/Node/Runner", async () => {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [AlignmentHost],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(AlignmentHost);
+    fixture.componentRef.setInput('detail', {
+      ...DETAIL,
+      neighborhood: {
+        prerequisites: [{ chunk_id: 'ch_01prereq00000000000000AAAA', satisfied: false, status: 'running' }],
+        dependents: [],
+      },
+    });
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+
+    try {
+      const runnerValue = root.querySelector<HTMLElement>('[data-testid="fact-runner"]')!;
+      const dependsOnValue = root.querySelector<HTMLElement>('[data-testid="fact-depends-on"]')!;
+      expect(
+        dependsOnValue.getBoundingClientRect().left,
+        "the depends-on row's value column drifted from the facts table's own Runner row — it is no longer sharing the table's grid",
+      ).toBeCloseTo(runnerValue.getBoundingClientRect().left, 0);
     } finally {
       root.remove();
     }

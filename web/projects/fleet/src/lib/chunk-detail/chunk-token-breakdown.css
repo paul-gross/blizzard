@@ -1,12 +1,8 @@
 :host {
   display: block;
 }
-/* Same `--chunk-facts-pad` override hook `chunk-facts.css` reads on its own
-   `fleet-kit-fact-list` — set on `ChunkFacts`'s `:host` and inherited here since
-   this component's rendered DOM lands inside that host's subtree — so the two
-   tables' padding stays identical regardless of context. Their label columns
-   already match with no override needed, since both render through the one
-   shared `KitFactList`. */
+/* `--chunk-facts-pad` — the padding-parity override hook `chunk-facts.css` owns and
+   documents. */
 .ctb-facts {
   display: block;
   padding: var(--chunk-facts-pad, 8px);

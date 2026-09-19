@@ -62,7 +62,7 @@ export class ChunkTranscriptsTab {
 
   /** Opt-in phone drill-down presentation. An unselected tab is a segment list;
    * a URL-selected segment (including a stale one) is its detail state only.
-   * The default retains simultaneous list and detail for desktop and runner. */
+   * The default retains simultaneous list and detail. */
   readonly drilldown = input(false);
 
   /** The `injectChunkTranscriptSegmentQuery` read: `'empty'` while {@link segmentId} names nothing, else loading/error/ready. */

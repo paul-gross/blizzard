@@ -168,8 +168,8 @@ describe('GardeningFindingsPage', () => {
     expect(el.querySelector('[data-testid="gardening-findings-scope-item-blizzard"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-finding-class-all"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-finding-state-all"]')).toBeTruthy();
-    // Every filter now carries an "All" option (blizzard#486) — the bucket read no
-    // longer requires a concrete routine/scope pair.
+    // Every filter carries an "All" option — the bucket read never requires a
+    // concrete routine/scope pair.
     expect(el.querySelector('[data-testid="gardening-findings-routine-all"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-findings-scope-all"]')).toBeTruthy();
   });

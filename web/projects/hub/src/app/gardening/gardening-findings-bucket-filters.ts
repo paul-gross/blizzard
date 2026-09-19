@@ -63,22 +63,19 @@ export interface FindingsBucketFilters {
 
 /**
  * The findings triage bucket's routine/scope pair, class/state filters, and the
- * bucket read itself — split out of `gardening-findings-page.ts` purely to keep
- * that file under the lint's own line cap.
+ * bucket read itself.
  *
  * All four filters live in the URL's query string (`route-state.ts`), not in
  * signals of their own: a filtered bucket is then a link the operator can send
  * somebody, and it survives every navigation this tab makes.
  *
- * The bucket widened to every routine and every scope (blizzard#486): its resting
- * state, with no query params at all, is "every routine, every scope" — `null`/`null`
- * — rather than a seeded pair. {@link selectedRoutine}/{@link selectedScope} read the
- * URL straight through with no fallback, since a `null` is now a fully meaningful
- * "all" state and not "nothing chosen yet". Routine and scope render as
- * {@link KitChipOption} rows, `classChips`/`stateChips`'s own shape, each now carrying
- * a leading "All" chip ({@link routineChipValue}/{@link scopeChipValue} map the `null`
- * filter state onto it, `classChipValue`'s own pattern) — there is no longer a
- * "requires a concrete pair" constraint pinning one of each selected at all times.
+ * The bucket's resting state, with no query params at all, is "every routine, every
+ * scope" — `null`/`null`. {@link selectedRoutine}/{@link selectedScope} read the URL
+ * straight through with no fallback: `null` is itself a meaningful "all" state.
+ * Routine and scope render as {@link KitChipOption} rows, `classChips`/`stateChips`'s
+ * own shape, each carrying a leading "All" chip
+ * ({@link routineChipValue}/{@link scopeChipValue} map the `null` filter state onto
+ * it, `classChipValue`'s own pattern).
  */
 export function injectFindingsBucketFilters(): FindingsBucketFilters {
   const url = injectQueryFilters();
@@ -115,10 +112,8 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
     return s === null ? ALL_SCOPES : SCOPE_VALUE_PREFIX + s;
   });
 
-  /** Each pick patches only its own URL param — no more pinning the other
-   * dimension's current value alongside it (blizzard#486 retired the seeding chain
-   * that pinning existed to keep coherent). It also clears the class/state filters
-   * (F5), so a filter chosen against the old bucket can't strand the new one
+  /** Each pick patches only its own URL param. It also clears the class/state
+   * filters, so a filter chosen against the old bucket can't strand the new one
    * looking empty with no active chip explaining why. */
   function onRoutineChoose(value: string): void {
     url.patch({

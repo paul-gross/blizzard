@@ -202,6 +202,25 @@ describe('ChunkFacts', () => {
     expect(el.querySelector('[data-testid="graph-value"]')).not.toBeNull();
   });
 
+  it('renders the standing edges in the shared fact list, with no row at all for a direction that has none', async () => {
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', {
+      ...ROUTED_DETAIL,
+      neighborhood: {
+        prerequisites: [{ chunk_id: 'ch_01prereq00000000000000AAAA', satisfied: false, status: 'running' }],
+        dependents: [],
+      },
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const dependsOn = el.querySelector('[data-testid="fact-depends-on"]');
+    expect(dependsOn).not.toBeNull();
+    expect(dependsOn?.querySelector('[data-testid="depends-on-neighbor"]')?.textContent?.trim()).toBe('C-AAAA');
+    expect(dependsOn?.querySelector('.edge-status')?.textContent?.trim()).toBe('running');
+    expect(el.querySelector('[data-testid="fact-blocks"]')).toBeNull();
+  });
+
   it('renders no model row at all (issue #144)', async () => {
     // `Chunk.model` is retired and its replacements have no web editing surface, so the
     // row is gone rather than turned read-only — a read-only row for a field the board
