@@ -24,6 +24,7 @@ from blizzard.hub.domain.analytics.events import (
     IWriteTranscriptEvents,
     SegmentContext,
     SegmentDerivationInput,
+    SegmentProvenance,
     TranscriptEvent,
 )
 from blizzard.hub.store import schema as s
@@ -141,6 +142,10 @@ def _segment_contexts_stmt(segment_ids: Sequence[str]) -> Select[Any]:
             s.transcript_segments.c.epoch,
             s.transcript_segments.c.spawn_generation,
             s.transcript_segments.c.normalizer_version,
+            s.transcript_segments.c.harness_id,
+            s.transcript_segments.c.harness_version,
+            s.transcript_segments.c.model,
+            s.transcript_segments.c.effort,
             s.transcript_segments.c.rejected,
             s.transcript_segments.c.content_digest,
         )
@@ -163,7 +168,9 @@ def _delete_marker_stmt(segment_id: str, extractor_version: str) -> Delete:
     )
 
 
-def _insert_events_stmt(segment_id: str, extractor_version: str, events: list[TranscriptEvent]) -> Insert:
+def _insert_events_stmt(
+    segment_id: str, extractor_version: str, events: list[TranscriptEvent], provenance: SegmentProvenance
+) -> Insert:
     return insert(s.transcript_events).values(
         [
             {
@@ -183,6 +190,10 @@ def _insert_events_stmt(segment_id: str, extractor_version: str, events: list[Tr
                 "depth": event.depth,
                 "agent_type": event.agent_type,
                 "occurred_at": event.occurred_at,
+                "harness_id": provenance.harness_id,
+                "harness_version": provenance.harness_version,
+                "model": provenance.model,
+                "effort": provenance.effort,
             }
             for event in events
         ]
@@ -231,6 +242,14 @@ def content_fingerprint(records: Sequence[Any]) -> str:
     an unchanged segment (D6). Rebased onto the persisted per-record digest rather than
     raw content: recomputing it never reads a content byte."""
     return _fingerprint_from_digests([row.content_digest for row in records])
+
+
+def _provenance(row: Any) -> SegmentProvenance:
+    """A segment's frozen provenance, read off its own first stored row — identical
+    across every record of one segment (blizzard#439 D3), so any one row states it."""
+    return SegmentProvenance(
+        harness_id=row.harness_id, harness_version=row.harness_version, model=row.model, effort=row.effort
+    )
 
 
 def _decode_turns(records: Sequence[Any]) -> list[TurnSegmentView]:
@@ -307,6 +326,7 @@ class TranscriptEventStore:
             turns=_decode_turns(rows),
             complete=not any(row.rejected for row in rows),
             content_fingerprint=content_fingerprint(rows),
+            provenance=_provenance(first),
         )
 
     def derivation_marker(self, segment_id: str, extractor_version: str) -> DerivationMarker | None:
@@ -362,6 +382,7 @@ class TranscriptEventStore:
                             turns=_decode_turns(group_rows),
                             complete=not any(row.rejected for row in group_rows),
                             content_fingerprint=content_fingerprint(group_rows),
+                            provenance=_provenance(group_rows[0]),
                         )
                     except Exception:
                         continue  # decode failure: this id is dropped, unlike the singular's raise
@@ -385,6 +406,7 @@ class TranscriptEventStore:
                         normalizer_version=group_rows[0].normalizer_version,
                         complete=not any(row.rejected for row in group_rows),
                         content_fingerprint=content_fingerprint(group_rows),
+                        provenance=_provenance(group_rows[0]),
                     )
         return result
 
@@ -399,12 +421,13 @@ class TranscriptEventStore:
         complete: bool,
         content_fingerprint: str,
         at: datetime,
+        provenance: SegmentProvenance,
     ) -> None:
         with self._store.write("replace_segment_events") as conn:
             conn.execute(_delete_events_stmt(segment_id, extractor_version))
             conn.execute(_delete_marker_stmt(segment_id, extractor_version))
             if events:
-                conn.execute(_insert_events_stmt(segment_id, extractor_version, events))
+                conn.execute(_insert_events_stmt(segment_id, extractor_version, events, provenance))
             conn.execute(
                 _upsert_marker_stmt(
                     segment_id,

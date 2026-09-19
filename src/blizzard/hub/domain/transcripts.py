@@ -69,6 +69,9 @@ class SegmentRecord:
     #: Re-ship only: the segment this replaces, which a lease read drops (blizzard#250).
     supersedes: str | None = None
     harness_id: str | None = None
+    #: Frozen at the runner's segment open (blizzard#439 D3).
+    model: str | None = None
+    effort: str | None = None
 
 
 @dataclass(frozen=True)

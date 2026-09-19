@@ -149,6 +149,7 @@ class EventDerivationService:
             complete=current.complete,
             content_fingerprint=current.content_fingerprint,
             at=self._clock.now(),
+            provenance=current.provenance,
         )
         return True
 

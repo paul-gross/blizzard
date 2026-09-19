@@ -14,7 +14,7 @@ from sqlalchemy import Engine, insert
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics import MalformedCursor
-from blizzard.hub.domain.analytics.events import TranscriptEvent
+from blizzard.hub.domain.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.analytics.queries import EventQueryCriteria
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
@@ -29,6 +29,7 @@ _OTHER_VERSION = "blizzard-analytics/1"
 _NOW = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
 #: Comfortably over any fixture here, so a page bound never shapes what a filter returns.
 _LIMIT = 50
+_PROVENANCE = SegmentProvenance(harness_id="claude_code", harness_version="1.0", model="claude-sonnet-5", effort="high")
 
 
 def _event(**overrides: object) -> TranscriptEvent:
@@ -76,7 +77,13 @@ def _new_store(tmp_path: Path) -> _Fixture:
 
     def insert_events(segment_id: str, *events: TranscriptEvent, extractor_version: str = _VERSION) -> None:
         writer.replace_segment_events(
-            segment_id, extractor_version, list(events), complete=True, content_fingerprint="fp", at=_NOW
+            segment_id,
+            extractor_version,
+            list(events),
+            complete=True,
+            content_fingerprint="fp",
+            at=_NOW,
+            provenance=_PROVENANCE,
         )
 
     return _Fixture(AnalyticsEventQueryStore(connections), engine, insert_events)

@@ -16,9 +16,8 @@ from blizzard.hub.domain.analytics.dialects import DIALECTS
 from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
 from blizzard.wire.transcript_segment import TurnSegmentView
 
-#: Bumped when recognition changes — the sweep re-derives history, leaving earlier
-#: rows untouched (D5/D9).
-EXTRACTOR_VERSION = "blizzard-analytics/3"
+#: Bumped when recognition changes — the sweep re-derives history, leaving earlier rows untouched (D5/D9).
+EXTRACTOR_VERSION = "blizzard-analytics/4"
 
 
 @dataclass(frozen=True)

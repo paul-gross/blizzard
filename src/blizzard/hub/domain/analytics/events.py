@@ -22,6 +22,19 @@ KIND_AGENT_SPAWN = "agent_spawn"
 
 
 @dataclass(frozen=True)
+class SegmentProvenance:
+    """A segment's own frozen harness identity (blizzard#439 D2/D3) — one per
+    :meth:`IWriteTranscriptEvents.replace_segment_events` call, since it is the same for
+    every event that call writes, never repeated per row. Each field ``None`` means
+    unknown, never a value."""
+
+    harness_id: str | None
+    harness_version: str | None
+    model: str | None
+    effort: str | None
+
+
+@dataclass(frozen=True)
 class TranscriptEvent:
     """One derived occurrence, ready to store. ``segment_id``/``extractor_version`` are
     not carried here — they are the same for every event in one
@@ -96,6 +109,7 @@ class SegmentDerivationInput:
     turns: list[TurnSegmentView]
     complete: bool
     content_fingerprint: str
+    provenance: SegmentProvenance
 
 
 @dataclass(frozen=True)
@@ -112,6 +126,7 @@ class SegmentContext:
     normalizer_version: str
     complete: bool
     content_fingerprint: str
+    provenance: SegmentProvenance
 
 
 class IReadTranscriptEvents(Protocol):
@@ -188,9 +203,11 @@ class IWriteTranscriptEvents(IReadTranscriptEvents, Protocol):
         complete: bool,
         content_fingerprint: str,
         at: datetime,
+        provenance: SegmentProvenance,
     ) -> None:
-        """One transaction: delete this pair's existing rows, write ``events``, and write
-        the marker (D6). Rows at *other* extractor versions are untouched."""
+        """One transaction: delete this pair's existing rows, write ``events`` each
+        stamped with ``provenance`` (D2), and write the marker (D6). Rows at *other*
+        extractor versions are untouched."""
         ...
 
     def drop_segments(self, segment_ids: frozenset[str]) -> None:

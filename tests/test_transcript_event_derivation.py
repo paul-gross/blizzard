@@ -152,6 +152,25 @@ def test_a_finalized_segments_events_appear_with_no_manual_step(fixture: _Fixtur
     assert rows[0].epoch == 1
 
 
+def test_a_derived_events_provenance_matches_its_segments_own(fixture: _Fixture) -> None:
+    """blizzard#439 D2/D3: the segment's own frozen harness identity rides every event
+    that segment derives, read straight off `transcript_segments`."""
+    fixture.segments.insert_accepted(
+        _segment_record(harness_id="claude_code", model="claude-sonnet-5", effort="high"),
+        byte_count=10,
+        codec="zlib",
+        at=_NOW,
+    )
+
+    fixture.reconciler.sweep()
+
+    [row] = fixture.stored_events()
+    assert row.harness_id == "claude_code"
+    assert row.harness_version == "claude-code-1.0"
+    assert row.model == "claude-sonnet-5"
+    assert row.effort == "high"
+
+
 def test_the_derived_events_graph_id_resolves_from_the_matching_transition(fixture: _Fixture) -> None:
     fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
 

@@ -18,7 +18,7 @@ from sqlalchemy.sql.elements import TextClause
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from blizzard.hub.domain.analytics.events import TranscriptEvent
+from blizzard.hub.domain.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.transcripts import SegmentRecord
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
@@ -31,6 +31,7 @@ pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 8, 12, tzinfo=UTC)
 _EXTRACTOR_VERSION = "blizzard-analytics/1"
+_PROVENANCE = SegmentProvenance(harness_id="claude_code", harness_version="1.0", model="claude-sonnet-5", effort="high")
 
 
 def _segment_record(**overrides: object) -> SegmentRecord:
@@ -119,7 +120,7 @@ def _executed_statements() -> dict[str, ClauseElement]:
         "_marker_stmt": m._marker_stmt("sg_1", _EXTRACTOR_VERSION),
         "_delete_events_stmt": m._delete_events_stmt("sg_1", _EXTRACTOR_VERSION),
         "_delete_marker_stmt": m._delete_marker_stmt("sg_1", _EXTRACTOR_VERSION),
-        "_insert_events_stmt": m._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()]),
+        "_insert_events_stmt": m._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE),
         "_upsert_marker_stmt": m._upsert_marker_stmt(
             "sg_1", _EXTRACTOR_VERSION, content_fingerprint="fp", event_count=1, complete=True, at=_NOW
         ),
@@ -326,7 +327,13 @@ def test_candidacy_excludes_a_segment_whose_marker_matches_its_current_digests(t
     current = store.segment_derivation_input("sg_1")
     assert current is not None
     store.replace_segment_events(
-        "sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint=current.content_fingerprint, at=_NOW
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [],
+        complete=True,
+        content_fingerprint=current.content_fingerprint,
+        at=_NOW,
+        provenance=_PROVENANCE,
     )
 
     read = store.candidacy(_EXTRACTOR_VERSION)
@@ -345,7 +352,13 @@ def test_candidacy_includes_a_segment_whose_content_changed_since_its_marker(tmp
     stale = store.segment_derivation_input("sg_1")
     assert stale is not None
     store.replace_segment_events(
-        "sg_1", _EXTRACTOR_VERSION, [], complete=False, content_fingerprint=stale.content_fingerprint, at=_NOW
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [],
+        complete=False,
+        content_fingerprint=stale.content_fingerprint,
+        at=_NOW,
+        provenance=_PROVENANCE,
     )
 
     segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW)
@@ -367,7 +380,13 @@ def test_candidacy_includes_a_segment_after_a_late_record_lands(tmp_path: Path) 
     derived = store.segment_derivation_input("sg_1")
     assert derived is not None
     store.replace_segment_events(
-        "sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint=derived.content_fingerprint, at=_NOW
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [],
+        complete=True,
+        content_fingerprint=derived.content_fingerprint,
+        at=_NOW,
+        provenance=_PROVENANCE,
     )
     assert store.candidacy(_EXTRACTOR_VERSION).candidate_segment_ids == []
 
@@ -401,7 +420,13 @@ def test_replace_segment_events_writes_events_and_marker(tmp_path: Path) -> None
     store = TranscriptEventStore(hub_store_connections(engine))
 
     store.replace_segment_events(
-        "sg_1", _EXTRACTOR_VERSION, [_event()], complete=True, content_fingerprint="fp1", at=_NOW
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [_event()],
+        complete=True,
+        content_fingerprint="fp1",
+        at=_NOW,
+        provenance=_PROVENANCE,
     )
 
     with engine.connect() as conn:
@@ -425,7 +450,13 @@ def test_replace_segment_events_converges_under_a_repeated_call(tmp_path: Path) 
 
     for _ in range(2):
         store.replace_segment_events(
-            "sg_1", _EXTRACTOR_VERSION, [_event()], complete=True, content_fingerprint="fp1", at=_NOW
+            "sg_1",
+            _EXTRACTOR_VERSION,
+            [_event()],
+            complete=True,
+            content_fingerprint="fp1",
+            at=_NOW,
+            provenance=_PROVENANCE,
         )
 
     with engine.connect() as conn:
@@ -437,11 +468,23 @@ def test_replace_segment_events_leaves_other_extractor_versions_untouched(tmp_pa
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
-        "sg_1", "blizzard-analytics/1", [_event()], complete=True, content_fingerprint="fp1", at=_NOW
+        "sg_1",
+        "blizzard-analytics/1",
+        [_event()],
+        complete=True,
+        content_fingerprint="fp1",
+        at=_NOW,
+        provenance=_PROVENANCE,
     )
 
     store.replace_segment_events(
-        "sg_1", "blizzard-analytics/2", [_event(turn_path="1")], complete=True, content_fingerprint="fp2", at=_NOW
+        "sg_1",
+        "blizzard-analytics/2",
+        [_event(turn_path="1")],
+        complete=True,
+        content_fingerprint="fp2",
+        at=_NOW,
+        provenance=_PROVENANCE,
     )
 
     with engine.connect() as conn:
@@ -456,7 +499,9 @@ def test_replace_segment_events_with_no_events_still_writes_a_marker(tmp_path: P
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
 
-    store.replace_segment_events("sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp1", at=_NOW)
+    store.replace_segment_events(
+        "sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp1", at=_NOW, provenance=_PROVENANCE
+    )
 
     marker = store.derivation_marker("sg_1", _EXTRACTOR_VERSION)
     assert marker is not None
@@ -469,19 +514,31 @@ def test_replace_segment_events_with_no_events_still_writes_a_marker(tmp_path: P
 def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     with engine.begin() as conn:
-        conn.execute(store_module._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()]))
+        conn.execute(store_module._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE))
         with pytest.raises(IntegrityError):
-            conn.execute(store_module._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()]))
+            conn.execute(store_module._insert_events_stmt("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE))
 
 
 def test_drop_segments_removes_events_and_markers_at_every_extractor_version(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
-        "sg_1", "blizzard-analytics/1", [_event()], complete=True, content_fingerprint="fp1", at=_NOW
+        "sg_1",
+        "blizzard-analytics/1",
+        [_event()],
+        complete=True,
+        content_fingerprint="fp1",
+        at=_NOW,
+        provenance=_PROVENANCE,
     )
     store.replace_segment_events(
-        "sg_1", "blizzard-analytics/2", [_event(turn_path="1")], complete=True, content_fingerprint="fp2", at=_NOW
+        "sg_1",
+        "blizzard-analytics/2",
+        [_event(turn_path="1")],
+        complete=True,
+        content_fingerprint="fp2",
+        at=_NOW,
+        provenance=_PROVENANCE,
     )
 
     store.drop_segments(frozenset({"sg_1"}))
@@ -496,7 +553,13 @@ def test_drop_segments_is_a_set_scoped_no_op_for_an_empty_set(tmp_path: Path) ->
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
-        "sg_1", _EXTRACTOR_VERSION, [_event()], complete=True, content_fingerprint="fp1", at=_NOW
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [_event()],
+        complete=True,
+        content_fingerprint="fp1",
+        at=_NOW,
+        provenance=_PROVENANCE,
     )
 
     store.drop_segments(frozenset())
@@ -516,7 +579,13 @@ def test_drop_segments_batches_a_stale_set_larger_than_one_batch(
     segment_ids = [f"sg_{i}" for i in range(5)]
     for segment_id in segment_ids:
         store.replace_segment_events(
-            segment_id, _EXTRACTOR_VERSION, [_event()], complete=True, content_fingerprint="fp", at=_NOW
+            segment_id,
+            _EXTRACTOR_VERSION,
+            [_event()],
+            complete=True,
+            content_fingerprint="fp",
+            at=_NOW,
+            provenance=_PROVENANCE,
         )
 
     store.drop_segments(frozenset(segment_ids))
@@ -531,8 +600,16 @@ def test_derived_segment_ids_reflects_every_segment_with_a_marker(tmp_path: Path
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
     store.replace_segment_events(
-        "sg_1", _EXTRACTOR_VERSION, [_event()], complete=True, content_fingerprint="fp1", at=_NOW
+        "sg_1",
+        _EXTRACTOR_VERSION,
+        [_event()],
+        complete=True,
+        content_fingerprint="fp1",
+        at=_NOW,
+        provenance=_PROVENANCE,
     )
-    store.replace_segment_events("sg_2", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp2", at=_NOW)
+    store.replace_segment_events(
+        "sg_2", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp2", at=_NOW, provenance=_PROVENANCE
+    )
 
     assert store.derived_segment_ids() == frozenset({"sg_1", "sg_2"})
