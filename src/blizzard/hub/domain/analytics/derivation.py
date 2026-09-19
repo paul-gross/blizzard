@@ -81,23 +81,22 @@ class EventDerivationService:
         self._extractor_version = extractor_version
 
     def candidacy(self, *, chunk_id: str | None = None) -> CandidacyRead:
-        """The pass's one visibility evaluation (D2): a bulk read of the visible set's
-        stored digests against their current-version markers, with no content byte read
-        and no statement issued per segment. ``chunk_id`` narrows it for the re-derive
-        route's chunk-scoped call (D7); the standing reconciler never passes it."""
+        """:meth:`IReadTranscriptEvents.candidacy`, fixed to this service's own
+        ``extractor_version``. ``chunk_id`` narrows the read to one chunk when given
+        (D7); omitted, the whole visible set is evaluated."""
         return self._events.candidacy(self._extractor_version, chunk_id=chunk_id)
 
     def candidate_segment_ids(self, *, chunk_id: str | None = None) -> list[str]:
         """Every visible segment (D1) lacking a current-version marker, or whose marker
-        disagrees with the segment's stored content today (D2) — the re-derive route's
-        own entry point onto :meth:`candidacy`."""
+        disagrees with the segment's stored content today (D2), read via
+        :meth:`candidacy`."""
         return self.candidacy(chunk_id=chunk_id).candidate_segment_ids
 
     def graph_pins_for(self, segment_ids: Sequence[str]) -> GraphPins:
-        """:meth:`derive_segment`'s graph-pin resolution, built once for a whole pass (D4):
-        one ``segment_contexts`` call resolves ``segment_ids``' chunk ids, then one
-        ``load_facts_for`` plus one ``graph_id_of_many`` call resolves the distinct
-        chunk set's transitions and mint pins. Empty input issues neither read."""
+        """Every one of ``segment_ids``' resolved chunks' graph pins, in two bulk reads
+        for the whole batch (D4): one ``segment_contexts`` call resolves the chunk ids,
+        then one ``load_facts_for`` plus one ``graph_id_of_many`` call resolves the
+        distinct chunk set's transitions and mint pins. Empty input issues neither read."""
         if not segment_ids:
             return GraphPins()
         chunk_ids = sorted({context.chunk_id for context in self._events.segment_contexts(segment_ids).values()})

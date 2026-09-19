@@ -60,8 +60,8 @@ class DerivationMarker:
 class CandidacyRead:
     """One candidacy pass's whole visibility evaluation (blizzard#513 D2): the visible
     segment set, and which of those segments' stored digests disagree with their current-
-    version marker (or carry none at all). The reconciler's drop pass reuses
-    ``visible_segment_ids`` rather than evaluating it a second time."""
+    version marker (or carry none at all). ``visible_segment_ids`` is exposed here so a
+    caller that also needs the visible set itself never has to re-derive it."""
 
     visible_segment_ids: frozenset[str]
     candidate_segment_ids: list[str]
@@ -72,7 +72,7 @@ class DerivationSignature:
     """A cheap aggregate fingerprint of every input :meth:`IReadTranscriptEvents.candidacy`
     and its visibility read see today (blizzard#524 D5): row count, highest
     ``transcript_segments.id``, latest ``received_at``, and ``chunks`` row count. No
-    per-row content is read; the reconciler compares this against the previous pass's signature."""
+    per-row content is read; two equal signatures mean nothing relevant changed."""
 
     segment_count: int
     max_segment_id: int | None
@@ -125,7 +125,7 @@ class IReadTranscriptEvents(Protocol):
 
     def derived_segment_ids(self) -> frozenset[str]:
         """Every segment id carrying at least one derivation marker, at any extractor
-        version — the reconciler's own bookkeeping of what it has ever derived."""
+        version — everything ever derived, regardless of current visibility."""
         ...
 
     def candidacy(self, extractor_version: str, *, chunk_id: str | None = None) -> CandidacyRead:
@@ -136,19 +136,18 @@ class IReadTranscriptEvents(Protocol):
         ...
 
     def derivation_signature(self) -> DerivationSignature:
-        """The standing reconciler's change probe (blizzard#524 D5): one constant-cost
-        aggregate read over every input :meth:`candidacy` and its visibility read see —
-        no per-row read, so its cost never grows with segment count. The reconciler
-        compares this against the previous pass's signature to decide whether to skip the
-        full pass (candidacy/derive/drop) entirely."""
+        """One constant-cost aggregate read over every input :meth:`candidacy` and its
+        visibility read see (blizzard#524 D5) — no per-row read, so its cost never grows
+        with segment count. Equal to a previous call's result exactly when nothing
+        relevant to a pass has changed since, cheap enough to check before running the
+        full pass (candidacy/derive/drop)."""
         ...
 
     def segment_derivation_input(self, segment_id: str) -> SegmentDerivationInput | None:
         """``segment_id``'s decoded turns and content fingerprint, or ``None`` when the
-        segment no longer exists at all (superseded segments still resolve; only the
-        caller's own visible-set check decides whether to derive). Called only by
-        :meth:`~blizzard.hub.domain.analytics.derivation.EventDerivationService.derive_segment`
-        (D2) — :meth:`candidacy` never decodes content, so this is the sweep's one decode."""
+        segment no longer exists at all (superseded segments still resolve; only a
+        visible-set check decides whether to derive). The one method on this Protocol
+        that decodes content (D2) — :meth:`candidacy` never does."""
         ...
 
     def derivation_marker(self, segment_id: str, extractor_version: str) -> DerivationMarker | None: ...
@@ -196,7 +195,7 @@ class IWriteTranscriptEvents(IReadTranscriptEvents, Protocol):
 
     def drop_segments(self, segment_ids: frozenset[str]) -> None:
         """One transaction: delete every row and marker every one of ``segment_ids`` ever
-        produced, at every extractor version, set-scoped rather than one transaction per
-        segment (D4) — the reconciler's own response to segments leaving the visible set
-        (D1, D6). A no-op for an empty set."""
+        produced, at every extractor version — set-scoped rather than one transaction per
+        segment (D4), since segments leave the visible set in batches (D1, D6). A no-op
+        for an empty set."""
         ...
