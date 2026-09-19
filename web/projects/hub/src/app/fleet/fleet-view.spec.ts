@@ -17,7 +17,6 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   locally_paused: false,
   claims: [],
   used: 0,
-  paceBars: [],
   subscriptionPaces: [],
   ...over,
 });
@@ -125,14 +124,20 @@ describe('FleetView (mobile Fleet screen)', () => {
     expect(el.querySelector('[data-runner="rn_nocap"] [data-testid="mobile-fleet-runner-slot-bar"]')).toBeNull();
   });
 
-  it('renders one pace bar per folded window', async () => {
+  it('renders one pace bar per folded subscription window', async () => {
     const fixture = TestBed.createComponent(FleetView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_paced', {
-        paceBars: [
-          { window: '5h', utilizationPct: 40, elapsedPct: 20 },
-          { window: '7d', utilizationPct: 70, elapsedPct: 55 },
+        subscriptionPaces: [
+          {
+            slug: 'anthropic-default',
+            name: 'Anthropic (default)',
+            paceBars: [
+              { window: '5h', utilizationPct: 40, elapsedPct: 20 },
+              { window: '7d', utilizationPct: 70, elapsedPct: 55 },
+            ],
+          },
         ],
       }),
     ]);
@@ -144,12 +149,11 @@ describe('FleetView (mobile Fleet screen)', () => {
     expect([...bars].map((b) => b.getAttribute('data-pace-window'))).toEqual(['5h', '7d']);
   });
 
-  it('renders per-subscription groups instead of the flat loop when the row carries subscriptionPaces', async () => {
+  it('renders per-subscription groups without merging identical window labels', async () => {
     const fixture = TestBed.createComponent(FleetView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_multi', {
-        paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }],
         subscriptionPaces: [
           { slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }] },
           { slug: 'anthropic-secondary', name: 'Anthropic (secondary)', paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }] },
@@ -161,11 +165,30 @@ describe('FleetView (mobile Fleet screen)', () => {
 
     const subs = el.querySelector('[data-runner="rn_multi"] [data-testid="mobile-fleet-runner-subscriptions"]');
     expect(subs).not.toBeNull();
-    expect(subs?.querySelectorAll('[data-testid="mobile-fleet-runner-subscription-name"]')).toHaveLength(2);
-    expect(el.querySelector('[data-runner="rn_multi"] [data-testid="mobile-fleet-runner-pace-bars"]')).toBeNull();
+    const groups = [...(subs?.querySelectorAll('[data-subscription-slug]') ?? [])];
+    expect(groups.map((group) => group.getAttribute('data-subscription-slug'))).toEqual([
+      'anthropic-default',
+      'anthropic-secondary',
+    ]);
+    expect(
+      groups.map((group) =>
+        group.querySelector('[data-testid="mobile-fleet-runner-pace-bar"]')?.getAttribute('data-pace-window'),
+      ),
+    ).toEqual(['5h', '5h']);
   });
 
-  it('renders the not-yet-sampled label for a declared subscription with no folded pace bars', async () => {
+  it('renders no subscription-usage component when the row has no declared subscriptions', async () => {
+    const fixture = TestBed.createComponent(FleetView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [row('rn_unsampled')]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="mobile-fleet-runner-subscriptions"]')).toBeNull();
+    expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="mobile-fleet-runner-pace-bar"]')).toBeNull();
+  });
+
+  it('reports no usage windows for a subscription with a sampled empty window list', async () => {
     const fixture = TestBed.createComponent(FleetView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
@@ -177,8 +200,8 @@ describe('FleetView (mobile Fleet screen)', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const unsampled = el.querySelector('[data-testid="mobile-fleet-runner-subscription-unsampled"]');
-    expect(unsampled?.textContent).toBe('NOT YET SAMPLED');
-    expect(unsampled?.getAttribute('aria-label')).toBe('Anthropic (default) usage not yet sampled');
+    expect(unsampled?.textContent).toBe('NO USAGE WINDOWS REPORTED');
+    expect(unsampled?.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
   });
 
   it('emits togglePause with the row when the pause/resume button is activated', async () => {

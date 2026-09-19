@@ -29,6 +29,12 @@ with runners at `0.4.x` or `0.5.x`, but not `0.3.x`.
 That window is policy, not enforcement — nothing checks it at runtime, so there is no version negotiation and no
 minimum-runner rejection to catch a runner that has fallen outside it.
 
+One user-approved exception has been taken against it: the release that removes `RunnerView.external_subscription_usage`
+requires every runner to report slug-carrying per-subscription usage **before** the hub is deployed, so across that one
+boundary a previous-minor runner is not supported. The hub rejects a slug-less usage sample rather than defaulting it,
+and [`docs/upgrade.md`](./upgrade.md) owns the operator-facing ordering and recovery detail. The exception is scoped to
+that boundary and does not widen the policy.
+
 Most string-valued wire fields stay open strings, so a value the receiver does not recognize round-trips instead of
 failing. `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is the exception: it is typed as a closed
 `TurnKind` literal because a transcript viewer branches its rendering on it turn by turn. Closing it costs on both

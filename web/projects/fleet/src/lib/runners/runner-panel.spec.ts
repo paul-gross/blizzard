@@ -473,57 +473,7 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
   });
 });
 
-describe('RunnerPanel external-subscription pace bars (issue #218)', () => {
-  let stub: RequestClientStub;
-
-  const RUNNERS_WITH_USAGE = {
-    runners: [
-      runner('rn_paced', {
-        external_subscription_usage: {
-          sampled_at: NOW,
-          windows: [
-            { window: '5h', utilization_pct: 40, resets_at: '2026-07-16T17:00:00.000Z', window_seconds: 5 * 60 * 60 },
-            { window: '7d', utilization_pct: 70, resets_at: '2026-07-22T12:00:00.000Z', window_seconds: 7 * 24 * 60 * 60 },
-          ],
-        },
-      }),
-      runner('rn_unsampled', { external_subscription_usage: null }),
-    ],
-  };
-
-  beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/runners') return RUNNERS_WITH_USAGE;
-      if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
-      return {};
-    });
-    await TestBed.configureTestingModule({
-      imports: [RunnerPanel],
-      providers: [
-        provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      ],
-    }).compileComponents();
-  });
-
-  afterEach(() => stub.restore());
-
-  it('renders one pace bar per sampled window, and none for a runner that has never sampled', async () => {
-    const fixture = TestBed.createComponent(RunnerPanel);
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    const bars = el.querySelectorAll('[data-runner-pace-bar="rn_paced"]');
-    expect(bars).toHaveLength(2);
-    expect([...bars].map((b) => b.getAttribute('data-pace-window'))).toEqual(['5h', '7d']);
-    expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="runner-pace-bars"]')).toBeNull();
-  });
-});
-
-describe('RunnerPanel per-subscription data model (blizzard#436)', () => {
-  // Data model only, asserted on the component's `rows` output directly — this
-  // template renders no per-subscription grouping.
+describe('RunnerPanel subscription pace groups (issue #218)', () => {
   let stub: RequestClientStub;
 
   const RUNNERS_WITH_SUBSCRIPTIONS = {
@@ -531,10 +481,6 @@ describe('RunnerPanel per-subscription data model (blizzard#436)', () => {
       runner('rn_multi', {
         // Both subscriptions report a "5h" window — grouping by slug is what keeps
         // them from colliding into one bar list.
-        external_subscription_usage: {
-          sampled_at: NOW,
-          windows: [{ window: '5h', utilization_pct: 40, resets_at: '2026-07-16T17:00:00.000Z', window_seconds: 5 * 60 * 60 }],
-        },
         subscriptions: [
           {
             slug: 'anthropic-default',
@@ -550,14 +496,7 @@ describe('RunnerPanel per-subscription data model (blizzard#436)', () => {
           },
         ],
       }),
-      // Legacy-only: reports the single-subscription field but no `subscriptions`
-      // collection at all — an unupgraded hub, or a runner with no declarations.
-      runner('rn_legacy', {
-        external_subscription_usage: {
-          sampled_at: NOW,
-          windows: [{ window: '5h', utilization_pct: 55, resets_at: '2026-07-16T17:00:00.000Z', window_seconds: 5 * 60 * 60 }],
-        },
-      }),
+      runner('rn_no_subscriptions'),
     ],
   };
 
@@ -592,13 +531,12 @@ describe('RunnerPanel per-subscription data model (blizzard#436)', () => {
     expect(bySlug.get('anthropic-secondary')?.paceBars).toEqual([expect.objectContaining({ window: '5h', utilizationPct: 90 })]);
   });
 
-  it('still yields the legacy paceBars for a runner reporting no subscriptions collection', async () => {
+  it('renders no subscription-usage component for a runner with no declared subscriptions', async () => {
     const fixture = TestBed.createComponent(RunnerPanel);
     await settle(fixture);
-    const rows = fixture.componentInstance['rows']();
-    const row = rows.find((r) => r.runner_id === 'rn_legacy');
+    const el = fixture.nativeElement as HTMLElement;
 
-    expect(row?.subscriptionPaces).toEqual([]);
-    expect(row?.paceBars).toEqual([expect.objectContaining({ window: '5h', utilizationPct: 55 })]);
+    expect(el.querySelector('[data-runner="rn_no_subscriptions"] [data-testid="runner-subscription-groups"]')).toBeNull();
+    expect(el.querySelector('[data-runner="rn_no_subscriptions"] [data-testid="runner-pace-bar"]')).toBeNull();
   });
 });

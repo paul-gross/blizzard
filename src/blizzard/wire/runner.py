@@ -68,17 +68,10 @@ class ExternalSubscriptionUsageWindowView(BaseModel):
     window_seconds: int
 
 
-class ExternalSubscriptionUsageView(BaseModel):
-    """A runner's newest sampled external-subscription-usage snapshot (issue #218)."""
-
-    sampled_at: str
-    windows: list[ExternalSubscriptionUsageWindowView]
-
-
 class SubscriptionUsageView(BaseModel):
-    """One declared subscription's newest sampled usage, carrying its identity
-    (issue #218) — additive beside the single legacy usage snapshot. ``slug`` is the
-    runner-unique join key, ``name`` the operator-facing label."""
+    """One reported subscription's newest sampled usage, carrying its identity
+    (issue #218). ``slug`` is the runner-unique join key, ``name`` the operator-facing
+    label."""
 
     slug: str
     name: str
@@ -87,10 +80,10 @@ class SubscriptionUsageView(BaseModel):
 
 
 class RunnerView(BaseModel):
-    """One fleet-registry row — derived liveness, both brakes, and an advisory snapshot.
+    """One fleet-registry row — derived liveness, both brakes, and advisory subscription usage.
 
     The two brakes stay separate (issues #43, #45): ``hub_paused`` is claims-only, while
-    ``locally_paused`` answers "is it spawning at all?". The usage snapshot is advisory."""
+    ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory."""
 
     runner_id: str
     workspace_id: str
@@ -105,11 +98,7 @@ class RunnerView(BaseModel):
     locally_paused_reason: str | None = None
     # The configured environment-pool size — ``None`` when none was reported, never zero.
     env_capacity: int | None = None
-    # The newest external-subscription-usage sample (issue #218) — absent when never
-    # sampled or stale. Derives from the legacy slug's row alone (blizzard#436).
-    external_subscription_usage: ExternalSubscriptionUsageView | None = None
-    # Every declared subscription's own non-stale usage, additive beside the field above
-    # (blizzard#436); empty for a runner that has never sampled anything.
+    # Every reported per-slug sample's own non-stale usage, empty when none was reported.
     subscriptions: list[SubscriptionUsageView] = []
 
 

@@ -37,7 +37,6 @@ const ROWS: readonly RunnerRow[] = [
     claims: [
       { chunkId: 'ch_01claim000000000000000000000', shortId: 'C-01CLAIM0000000000000000', node: 'build', status: 'running' },
     ],
-    paceBars: [],
     subscriptionPaces: [
       {
         slug: 'anthropic-default',
@@ -60,8 +59,7 @@ const ROWS: readonly RunnerRow[] = [
     locally_paused_reason: 'spend ceiling $5.00 reached over the trailing 24h (spend $7.00)',
     used: 0,
     claims: [],
-    paceBars: [],
-    subscriptionPaces: [],
+    subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [] }],
   },
 ];
 
@@ -123,6 +121,10 @@ describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
 
       const subName = root.querySelector<HTMLElement>('[data-testid="mobile-fleet-runner-subscription-name"]')!;
       expect(subName.getBoundingClientRect().right).toBeLessThanOrEqual(cards[0].getBoundingClientRect().right + 1);
+
+      const report = root.querySelector<HTMLElement>('[data-testid="mobile-fleet-runner-subscription-unsampled"]')!;
+      expect(report.textContent?.trim()).toBe('NO USAGE WINDOWS REPORTED');
+      expect(report.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
 
       expect(
         panel.scrollWidth,

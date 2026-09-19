@@ -87,14 +87,6 @@
   font-size: var(--fs-label);
   white-space: nowrap;
 }
-/* One stacked utilization/elapsed pair per sampled window (#218), same
-   vertical rhythm as the slot bar. */
-.pace-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 3px;
-}
 /* The runner's claims: chunk short name — node, one line each, dim so the
    registry row's own identity stays the loudest thing in it. */
 .claims {

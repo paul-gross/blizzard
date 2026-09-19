@@ -20,8 +20,8 @@ depends_on: str | Sequence[str] | None = None
 _TABLE = "runner_external_usage"
 _PK_NAME = "pk_runner_external_usage"
 
-# Mirrors `blizzard.wire.facts.LEGACY_ANTHROPIC_SLUG` — restated, not imported
-# (``bzh:frozen-revisions``): this historical backfill value must never track it.
+# The historical backfill value, frozen as a literal (``bzh:frozen-revisions``): a
+# migration may import no live application code, and this value must never track one.
 _LEGACY_ANTHROPIC_SLUG = "anthropic"
 _LEGACY_ANTHROPIC_NAME = "Anthropic"
 

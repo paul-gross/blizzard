@@ -27,27 +27,21 @@ export interface PaceBar {
   readonly elapsedPct: number;
 }
 
-/** One declared subscription's own pace bars, grouped under its slug and name. Two
- * subscriptions can share a window label (both report a `"5h"` window), so
- * grouping by slug is what keeps them distinct. */
+/** One reported subscription sample's pace bars, grouped under its slug and name. Two
+ * subscriptions can share a window label (both report a `"5h"` window), so grouping
+ * by slug is what keeps them distinct. */
 export interface SubscriptionPace {
   readonly slug: string;
   readonly name: string;
   readonly paceBars: readonly PaceBar[];
 }
 
-/** A registry row: the runner plus the claims it holds, pre-folded so a
- * presentational view needs no second read to render them. `used` is the slot
- * bar's numerator — environments held by this runner's live routes.
- * `paceBars` is empty when the runner has never sampled its external-subscription
- * usage, or the sample is stale — the hub already nulls `external_subscription_usage`
- * in that case, so this row never needs to re-derive staleness itself.
- * `subscriptionPaces` is the per-slug grouping of the same windows, empty for a
- * runner that has declared none. */
+/** A registry row: the runner plus its claims and subscription pace groups, pre-folded
+ * so a presentational view needs no second read to render them. `used` is the slot
+ * bar's numerator — environments held by this runner's live routes. */
 export interface RunnerRow extends RunnerView {
   readonly claims: readonly ClaimLine[];
   readonly used: number;
-  readonly paceBars: readonly PaceBar[];
   readonly subscriptionPaces: readonly SubscriptionPace[];
 }
 
@@ -75,8 +69,9 @@ export function runnerToggleHint(row: RunnerRow): string {
  * to `[0, 100]`: a `resetsAt` more than a full window out (not yet started) reads 0, one
  * already passed (a stale sample) reads 100 rather than overshooting.
  *
- * `nowMs` is the caller's own clock reading — this function does no clock reads of
- * its own, so it stays directly testable against a fixed instant.
+ * `nowMs` is the caller's own clock reading (`injectNowSignal()`'s value in the
+ * container) — this function does no clock reads of its own, so it stays directly
+ * testable against a fixed instant.
  */
 export function windowElapsedPct(nowMs: number, resetsAt: string, windowSeconds: number): number {
   const resetsAtMs = Date.parse(resetsAt);
@@ -87,8 +82,7 @@ export function windowElapsedPct(nowMs: number, resetsAt: string, windowSeconds:
   return Math.min(100, Math.max(0, fraction * 100));
 }
 
-/** A subscription's windows folded to pace bars against `now` — the shared step
- * between the legacy single-subscription bars and the per-slug grouped ones. */
+/** A subscription's windows folded to pace bars against `now`. */
 function toPaceBars(now: number, windows: readonly ExternalSubscriptionUsageWindowView[]): readonly PaceBar[] {
   return windows.map((w) => ({
     window: w.window,
@@ -156,26 +150,9 @@ export function injectRunnerRows(): {
    * visually live between those pushes, not driving fresh reads. */
   const now = injectNowSignal(30_000);
 
-  /** Each runner's pace bars, one per external-subscription window — empty for a
-   * runner that has never sampled, or whose sample the hub has already nulled as
-   * stale. Recomputes on {@link now}'s tick as well as on fresh data, so
-   * the elapsed bar keeps advancing even between `runner-changed` pushes. */
-  const paceBarsByRunner = computed<Map<string, readonly PaceBar[]>>(() => {
-    const nowMs = now();
-    const bars = new Map<string, readonly PaceBar[]>();
-    for (const runner of runners()) {
-      const usage = runner.external_subscription_usage;
-      if (!usage) continue;
-      bars.set(runner.runner_id, toPaceBars(nowMs, usage.windows));
-    }
-    return bars;
-  });
-
-  /** Each runner's declared subscriptions, grouped by slug — the
-   * per-slug counterpart to {@link paceBarsByRunner}'s legacy single-subscription
-   * bars. A runner that has declared no subscriptions, including one still reporting
-   * only through the legacy field, maps to an empty list. Recomputes on {@link now}
-   * for the same reason {@link paceBarsByRunner} does. */
+  /** Each runner's reported subscription samples, grouped by slug. A runner that has
+   * reported none maps to an empty list. Recomputes on {@link now} so elapsed bars
+   * keep advancing even between `runner-changed` pushes. */
   const subscriptionPacesByRunner = computed<Map<string, readonly SubscriptionPace[]>>(() => {
     const nowMs = now();
     const grouped = new Map<string, readonly SubscriptionPace[]>();
@@ -193,13 +170,12 @@ export function injectRunnerRows(): {
     return grouped;
   });
 
-  /** Each runner with its claims, slot-bar numerator, and pace bars folded on. */
+  /** Each runner with its claims, slot-bar numerator, and subscription pace groups folded on. */
   const rows = computed<readonly RunnerRow[]>(() =>
     runners().map((runner) => ({
       ...runner,
       claims: claims().get(runner.runner_id) ?? [],
       used: usedByRunner().get(runner.runner_id) ?? 0,
-      paceBars: paceBarsByRunner().get(runner.runner_id) ?? [],
       subscriptionPaces: subscriptionPacesByRunner().get(runner.runner_id) ?? [],
     })),
   );

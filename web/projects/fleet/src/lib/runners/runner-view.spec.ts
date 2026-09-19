@@ -17,7 +17,6 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   locally_paused: false,
   claims: [],
   used: 0,
-  paceBars: [],
   subscriptionPaces: [],
   ...over,
 });
@@ -119,21 +118,27 @@ describe('RunnerPanelView', () => {
     expect(el.querySelector('[data-runner="rn_nocap"] [data-testid="runner-slot-bar"]')).toBeNull();
   });
 
-  it('renders one pace bar per folded window (#218)', async () => {
+  it('renders one pace bar per folded subscription window (#218)', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_paced', {
-        paceBars: [
-          { window: '5h', utilizationPct: 40, elapsedPct: 20 },
-          { window: '7d', utilizationPct: 70, elapsedPct: 55 },
+        subscriptionPaces: [
+          {
+            slug: 'anthropic-default',
+            name: 'Anthropic (default)',
+            paceBars: [
+              { window: '5h', utilizationPct: 40, elapsedPct: 20 },
+              { window: '7d', utilizationPct: 70, elapsedPct: 55 },
+            ],
+          },
         ],
       }),
     ]);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const bars = el.querySelectorAll('[data-runner-pace-bar="rn_paced"]');
+    const bars = el.querySelectorAll('[data-runner="rn_paced"] [data-testid="runner-pace-bar"]');
     expect(bars).toHaveLength(2);
     expect([...bars].map((b) => b.getAttribute('data-pace-window'))).toEqual(['5h', '7d']);
     expect(bars[0].querySelector('[data-testid="pace-bar-utilization"] .fill')?.getAttribute('style')).toContain(
@@ -144,26 +149,38 @@ describe('RunnerPanelView', () => {
     );
   });
 
-  it('renders no pace-bar markup at all when the row has no folded windows (#218)', async () => {
+  it('renders no subscription-usage component when the row has no declared subscriptions (#218)', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
     fixture.componentRef.setInput('state', 'ready');
-    fixture.componentRef.setInput('rows', [row('rn_unsampled', { paceBars: [] })]);
+    fixture.componentRef.setInput('rows', [row('rn_unsampled')]);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="runner-pace-bars"]')).toBeNull();
-    expect(el.querySelector('[data-testid="runner-pace-bar"]')).toBeNull();
+    expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="runner-subscription-groups"]')).toBeNull();
+    expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="runner-pace-bar"]')).toBeNull();
   });
 
-  it('renders per-subscription groups instead of the flat loop when the row carries subscriptionPaces (blizzard#478)', async () => {
+  it('reports no usage windows for a subscription with a sampled empty window list', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_empty_sample', {
+        subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [] }],
+      }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const report = el.querySelector('[data-testid="subscription-pace-group-unsampled"]');
+    expect(report?.textContent?.trim()).toBe('NO USAGE WINDOWS REPORTED');
+    expect(report?.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
+  });
+
+  it('renders per-subscription groups without merging identical window labels (blizzard#478)', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_multi', {
-        // Both subscriptions report a "5h" window, and the row also still carries the
-        // legacy flat paceBars — the grouped render must win, exclusively, so the same
-        // windows never render twice.
-        paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }],
         subscriptionPaces: [
           { slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }] },
           { slug: 'anthropic-secondary', name: 'Anthropic (secondary)', paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }] },
@@ -175,26 +192,15 @@ describe('RunnerPanelView', () => {
 
     const groupsHost = el.querySelector('[data-runner="rn_multi"] [data-testid="runner-subscription-groups"]');
     expect(groupsHost).not.toBeNull();
-    expect(groupsHost?.querySelectorAll('[data-testid="subscription-pace-group"]')).toHaveLength(2);
-    // The legacy flat loop is withheld entirely once the grouped render has data.
-    expect(el.querySelector('[data-runner="rn_multi"] [data-testid="runner-pace-bars"]')).toBeNull();
-  });
-
-  it('falls back to the legacy flat loop for a runner reporting only the single-subscription shape (blizzard#478)', async () => {
-    const fixture = TestBed.createComponent(RunnerPanelView);
-    fixture.componentRef.setInput('state', 'ready');
-    fixture.componentRef.setInput('rows', [
-      row('rn_legacy', {
-        paceBars: [{ window: '5h', utilizationPct: 55, elapsedPct: 30 }],
-        subscriptionPaces: [],
-      }),
+    const groups = [...(groupsHost?.querySelectorAll('[data-testid="subscription-pace-group"]') ?? [])];
+    expect(groups.map((group) => group.getAttribute('data-subscription-slug'))).toEqual([
+      'anthropic-default',
+      'anthropic-secondary',
     ]);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-runner="rn_legacy"] [data-testid="runner-subscription-groups"]')).toBeNull();
-    const bars = el.querySelectorAll('[data-runner-pace-bar="rn_legacy"]');
-    expect(bars).toHaveLength(1);
+    expect(groups.map((group) => group.querySelector('[data-testid="runner-pace-bar"]')?.getAttribute('data-pace-window'))).toEqual([
+      '5h',
+      '5h',
+    ]);
   });
 
   it('emits togglePause with the row when the pause/resume button is activated', async () => {

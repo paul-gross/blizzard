@@ -10,8 +10,10 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
+from pydantic import ValidationError
 from sqlalchemy import insert, select
 
+from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.registry import (
     ExternalSubscriptionUsageWindow,
     IWriteRunnerRegistry,
@@ -22,6 +24,7 @@ from blizzard.hub.domain.registry import (
 from blizzard.hub.domain.work import ActivityRow
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.wire.facts import ExternalSubscriptionUsageWindowFact
 
 
 class RunnerRegistryStore:
@@ -281,7 +284,7 @@ class RunnerRegistryStore:
 
     @staticmethod
     def _external_usage(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:  # type: ignore[no-untyped-def]
-        """Every declared subscription's newest sample for this runner, raw (issue #218),
+        """Every reported subscription's newest sample for this runner, raw (issue #218),
         one row per slug — ``(slug, name, sampled_at, windows_json)`` tuples. Empty for a
         runner that has never reported one."""
         rows = conn.execute(
@@ -309,15 +312,7 @@ class RunnerRegistryStore:
                 slug=slug,
                 name=name,
                 sampled_at=sampled_at,
-                windows=tuple(
-                    ExternalSubscriptionUsageWindow(
-                        window=w["window"],
-                        utilization_pct=w["utilization_pct"],
-                        resets_at=datetime.fromisoformat(w["resets_at"]),
-                        window_seconds=w["window_seconds"],
-                    )
-                    for w in json.loads(windows_json)
-                ),
+                windows=RunnerRegistryStore._usage_windows(windows_json),
             )
             for slug, name, sampled_at, windows_json in external_usage
         )
@@ -346,6 +341,31 @@ class RunnerRegistryStore:
             subscription_usage=subscription_usage,
             capabilities=capabilities,
         )
+
+    @staticmethod
+    def _usage_windows(windows_json: str) -> tuple[ExternalSubscriptionUsageWindow, ...]:
+        """Valid windows from current or pre-validation stored samples."""
+        try:
+            entries = json.loads(windows_json)
+        except (TypeError, json.JSONDecodeError):
+            return ()
+        if not isinstance(entries, list):
+            return ()
+        windows = []
+        for entry in entries:
+            try:
+                window = ExternalSubscriptionUsageWindowFact.model_validate(entry)
+            except ValidationError:
+                continue
+            windows.append(
+                ExternalSubscriptionUsageWindow(
+                    window=window.window,
+                    utilization_pct=window.utilization_pct,
+                    resets_at=as_utc(window.resets_at),
+                    window_seconds=window.window_seconds,
+                )
+            )
+        return tuple(windows)
 
 
 def _conforms_registry(x: RunnerRegistryStore) -> IWriteRunnerRegistry:

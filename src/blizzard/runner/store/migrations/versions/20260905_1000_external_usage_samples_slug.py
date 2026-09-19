@@ -18,8 +18,8 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 _TABLE = "external_usage_samples"
-# Mirrors `blizzard.wire.facts.LEGACY_ANTHROPIC_SLUG` — restated, not imported
-# (``bzh:frozen-revisions``): this historical backfill value must never track it.
+# The historical backfill value, frozen as a literal (``bzh:frozen-revisions``): a
+# migration may import no live application code, and this value must never track one.
 _LEGACY_ANTHROPIC_SLUG = "anthropic"
 
 # The reshaped shape — the one column the backfill's UPDATE names, added by this revision.

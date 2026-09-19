@@ -7,9 +7,10 @@ Completions ride neither, since they carry the next-node envelope in their reply
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Fact kinds the batched /events push accepts (``noun.verb`` names).
 LEASE_MINTED = "lease.minted"
@@ -28,16 +29,23 @@ USAGE_RECORDED = "usage.recorded"
 # chunk_id|null, lease_id|null, node_name|null, message, detail|null}. Never token-gated.
 EVENT_RECORDED = "event.recorded"
 # An advisory sample of subscription rate-limit utilization (issue #218), never one a
-# status derives from. Payload: {sampled_at, windows: [...], slug|null, name|null};
-# upserted per (runner_id, slug), not appended — a fact missing slug/name lands under
-# the legacy slug and its own name.
+# status derives from. Payload: {slug, sampled_at, windows: [...], name|null}; upserted
+# per (runner_id, slug), not appended.
 EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED = "external_subscription_usage.sampled"
 
-# The join key a runner with no `[[subscription]]` declarations gets exactly one
-# declaration synthesized under (`bzh:frozen-revisions`).
-LEGACY_ANTHROPIC_SLUG = "anthropic"
-# The legacy slug's operator-facing label, case-stable everywhere it is written.
-LEGACY_ANTHROPIC_NAME = "Anthropic"
+
+class ExternalSubscriptionUsageWindowFact(BaseModel):
+    """One complete subscription-usage window accepted from a runner fact.
+
+    The numeric fields are strict, because the samplers already refuse a ``bool``
+    where a number belongs and a backstop that coerced ``True`` to ``1.0`` would
+    admit what its own producers reject. ``resets_at`` stays lax: it crosses the
+    wire as an ISO-8601 string and is normalized to UTC at intake."""
+
+    window: str = Field(strict=True)
+    utilization_pct: float = Field(ge=0, le=100, allow_inf_nan=False, strict=True)
+    resets_at: datetime
+    window_seconds: int = Field(gt=0, strict=True)
 
 
 class LeaseMintReport(BaseModel):

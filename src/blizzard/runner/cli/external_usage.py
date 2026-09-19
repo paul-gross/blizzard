@@ -8,9 +8,8 @@ import httpx
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.config import LEGACY_ANTHROPIC_SLUG, ConfigError, RunnerConfig
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
-from blizzard.wire.facts import LEGACY_ANTHROPIC_SLUG
 
 
 @click.group("external-usage")

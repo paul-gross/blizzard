@@ -30,11 +30,16 @@ const ROW: RunnerRow = {
   locally_paused: false,
   claims: [],
   used: 0,
-  paceBars: [
-    { window: '5h', utilizationPct: 62, elapsedPct: 38 },
-    { window: '7d', utilizationPct: 81, elapsedPct: 90 },
+  subscriptionPaces: [
+    {
+      slug: 'anthropic-default',
+      name: 'Anthropic (default)',
+      paceBars: [
+        { window: '5h', utilizationPct: 62, elapsedPct: 38 },
+        { window: '7d', utilizationPct: 81, elapsedPct: 90 },
+      ],
+    },
   ],
-  subscriptionPaces: [],
 };
 
 // Labels of unequal glyph count, which the fixed label column must absorb. A provider
@@ -51,11 +56,16 @@ const UNEQUAL_LABEL_ROW: RunnerRow = {
   locally_paused: false,
   claims: [],
   used: 0,
-  paceBars: [
-    { window: '5h', utilizationPct: 62, elapsedPct: 38 },
-    { window: '30d', utilizationPct: 81, elapsedPct: 90 },
+  subscriptionPaces: [
+    {
+      slug: 'anthropic-default',
+      name: 'Anthropic (default)',
+      paceBars: [
+        { window: '5h', utilizationPct: 62, elapsedPct: 38 },
+        { window: '30d', utilizationPct: 81, elapsedPct: 90 },
+      ],
+    },
   ],
-  subscriptionPaces: [],
 };
 
 const SUBSCRIPTION_ROW: RunnerRow = {
@@ -68,7 +78,6 @@ const SUBSCRIPTION_ROW: RunnerRow = {
   locally_paused: false,
   claims: [],
   used: 0,
-  paceBars: [],
   // Two declared subscriptions sharing an identical "5h" window label (blizzard#478) —
   // the layout claim this sweep exists to prove is that the two groups stay visually
   // distinct rather than merging into one shared bar list.
@@ -87,6 +96,19 @@ const SUBSCRIPTION_ROW: RunnerRow = {
       paceBars: [{ window: '5h', utilizationPct: 15, elapsedPct: 5 }],
     },
   ],
+};
+
+const EMPTY_SAMPLE_ROW: RunnerRow = {
+  runner_id: 'rn_empty_sample',
+  workspace_id: 'ws_a',
+  registered_at: NOW,
+  last_seen_at: NOW,
+  online: true,
+  hub_paused: false,
+  locally_paused: false,
+  claims: [],
+  used: 0,
+  subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [] }],
 };
 
 async function render(rows: readonly RunnerRow[] = [ROW]) {
@@ -121,7 +143,7 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
       const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
       expect(panel).not.toBeNull();
 
-      const bars = root.querySelectorAll<HTMLElement>('[data-runner-pace-bar="rn_paced"]');
+      const bars = root.querySelectorAll<HTMLElement>('[data-runner="rn_paced"] [data-testid="runner-pace-bar"]');
       expect(bars).toHaveLength(2);
 
       // The two windows' bars sit on distinct rows, not overlapping — a genuine flex
@@ -162,7 +184,7 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
       await page.viewport(390, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      const bars = [...root.querySelectorAll<HTMLElement>('[data-runner-pace-bar="rn_unequal"]')];
+      const bars = [...root.querySelectorAll<HTMLElement>('[data-runner="rn_unequal"] [data-testid="runner-pace-bar"]')];
       expect(bars).toHaveLength(2);
 
       // Measured over the text, not the element: the label box IS the fixed column, so
@@ -249,5 +271,23 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
     }
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it('renders a sampled empty window list as a no-usage-windows report at ~390px', async () => {
+    const fixture = await render([EMPTY_SAMPLE_ROW]);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const report = root.querySelector<HTMLElement>('[data-testid="subscription-pace-group-unsampled"]')!;
+      expect(report.textContent?.trim()).toBe('NO USAGE WINDOWS REPORTED');
+      expect(report.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
+    } finally {
+      root.remove();
+    }
   });
 });

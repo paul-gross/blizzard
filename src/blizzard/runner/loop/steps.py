@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
 
+from pydantic import ValidationError
+
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
@@ -40,6 +42,7 @@ from blizzard.wire.facts import (
     EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     RUNNER_LOCALLY_PAUSED,
+    ExternalSubscriptionUsageWindowFact,
 )
 
 #: This module's public API — the loop steps it owns, in tick order.
@@ -736,19 +739,31 @@ class ExternalUsageSample(Step):
     def _payload(resolved: ResolvedSubscription, snapshot: ExternalSubscriptionUsageSnapshot) -> dict[str, object]:
         """The stable JSON shape for a sampled snapshot — both this attempt's stored
         ``payload`` and its buffered outbound report use this exact shape. ``slug`` and
-        ``name`` (blizzard#436) name the declared subscription and its operator-facing
-        label; a reader ignorant of either still parses ``sampled_at``/``windows``."""
+        ``name`` name the declared subscription and its operator-facing label. A window
+        the hub's own fact model would refuse is dropped here rather than sent, so the
+        persisted attempt and the outbound report carry the same complete windows."""
+        windows: list[dict[str, object]] = []
+        for window in snapshot.windows:
+            payload = {
+                "window": window.window,
+                "utilization_pct": window.utilization_pct,
+                "resets_at": iso_utc(window.resets_at),
+                "window_seconds": window.window_seconds,
+            }
+            try:
+                ExternalSubscriptionUsageWindowFact.model_validate(payload)
+            except ValidationError as exc:
+                _log.warning(
+                    "dropped malformed external usage window",
+                    slug=resolved.slug,
+                    window=window.window,
+                    reason=exc.errors()[0]["type"] if exc.errors() else "invalid",
+                )
+                continue
+            windows.append(payload)
         return {
             "slug": resolved.slug,
             "name": resolved.name,
             "sampled_at": iso_utc(snapshot.sampled_at),
-            "windows": [
-                {
-                    "window": w.window,
-                    "utilization_pct": w.utilization_pct,
-                    "resets_at": iso_utc(w.resets_at),
-                    "window_seconds": w.window_seconds,
-                }
-                for w in snapshot.windows
-            ],
+            "windows": windows,
         }
