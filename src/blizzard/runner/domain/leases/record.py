@@ -38,11 +38,7 @@ class IReadLeaseRecordRepository(Protocol):
         ...
 
     def latest_lease_with_session_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
-        """The chunk's most-recently-minted lease that carries a session, active or closed.
-
-        A takeover's own reference lease: a node-entry escalation's own never-spawned mint
-        (`Spawner._escalate_unresolvable_resume_owner`) carries no session to resume, so it
-        is skipped in favor of the newest lease that does."""
+        """The chunk's most-recently-minted lease that carries a session, active or closed."""
         ...
 
     def lease(self, lease_id: str) -> LeaseRecord | None:

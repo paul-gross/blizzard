@@ -259,10 +259,9 @@ class DormantSession:
         )
 
     def _resolve_harness(self, *, via: str) -> IHarnessLifecycleAndVerdict | None:
-        """Resolve the dormant session's recorded owner; escalate the chunk in place and
-        return ``None`` — never raising — when it is unknown or unavailable, the guard every
-        wake path shares. No other runner can resume this exact session, so escalating is the
-        only move that does not substitute a different harness. :meth:`park_on_ask` uses
+        """Resolve the dormant session's recorded owner; escalate the chunk in place via
+        :meth:`Attempt.escalate_owner_unresolvable` and return ``None`` — never raising —
+        when it is unknown or unavailable. :meth:`park_on_ask` uses
         :meth:`_resolve_harness_for_usage_only` instead, since parking needs no harness at all."""
         lease = self.lease
         session = lease.session
@@ -274,10 +273,8 @@ class DormantSession:
             return None
 
     def _resolve_harness_for_usage_only(self, *, via: str) -> IHarnessLifecycleAndVerdict | None:
-        """:meth:`park_on_ask`'s own guard: log and return ``None`` — never escalate, never
-        raise — when the recorded owner is unknown or unavailable. Parking itself needs no
-        harness, so this skips only the harness-dependent usage record it gates, the same
-        shape :meth:`_resolve_harness` had before it started escalating."""
+        """Resolve the dormant session's recorded owner, logging and returning ``None`` —
+        never escalating, never raising — when it is unknown or unavailable."""
         lease = self.lease
         session = lease.session
         assert session is not None

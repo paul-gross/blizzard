@@ -103,9 +103,8 @@ class IReadTranscriptRepository(Protocol):
 
 class ITranscriptRepositoryResolver(Protocol):
     """Resolves one recorded owner's :class:`IReadTranscriptRepository`, by its exact
-    harness id (``bzh:dependency-inversion``) — the per-owner analogue of
-    :class:`~blizzard.runner.harness.registry.IHarnessRegistry`, so a caller holding a
-    session never needs the registry, or the harness-side projection it drives, itself."""
+    harness id (``bzh:dependency-inversion``) — so a caller holding a session never needs
+    anything wider than that one owner's own repository."""
 
     def transcript_repository(self, harness_id: str) -> IReadTranscriptRepository:
         """The owner's read repository, or raise ``UnknownHarnessError`` /

@@ -186,9 +186,7 @@ class LoopContext:
 
     def adapter_for(self, session: SessionReference) -> IHarnessLifecycleAndVerdict:
         """Resolve an existing session's adapter from its recorded owner — may raise
-        ``UnknownHarnessError``/``UnavailableHarnessError``; every caller guards it (see
-        e.g. ``DormantSession._resolve_harness``), never lets it reach the tick's own
-        catch-all."""
+        ``UnknownHarnessError``/``UnavailableHarnessError``."""
         return self.harnesses.adapter(session.harness_id)
 
     def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource:

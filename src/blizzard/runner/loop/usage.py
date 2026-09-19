@@ -160,8 +160,6 @@ class UsageRecorder:
 
     def _resolved_harness(self, session: SessionReference) -> IHarnessUsageAccounting:
         """Resolve ``session``'s recorded owner — may raise ``UnknownHarnessError``/
-        ``UnavailableHarnessError``. Every caller that can reach an unresolvable owner
-        guards the resolution itself, first (e.g. ``DormantSession._resolve_harness``
-        before ``record_worker``/``record_attempt``); this method never catches on their
-        behalf, so it can never silently record against an owner it could not serve."""
+        ``UnavailableHarnessError``; never caught here, so this can never silently record
+        against an owner it could not serve."""
         return self.harnesses.adapter(session.harness_id)

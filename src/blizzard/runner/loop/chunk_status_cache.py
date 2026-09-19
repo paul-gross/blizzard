@@ -1,6 +1,6 @@
-"""The per-tick chunk-status read seam (blizzard#521) — the batch projection every one of
-the loop's nine per-chunk reads goes through, so a whole ``tick()`` costs at most one hub
-round-trip per distinct chunk id instead of one per read site.
+"""The per-tick chunk-status read seam (blizzard#521) — the batch projection every
+per-chunk read goes through, so a whole ``tick()`` costs at most one hub round-trip per
+distinct chunk id instead of one per read site.
 """
 
 from __future__ import annotations

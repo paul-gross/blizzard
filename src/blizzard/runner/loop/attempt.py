@@ -243,10 +243,9 @@ class Attempt:
         self, *, session: SessionReference, exc: UnknownHarnessError | UnavailableHarnessError, via: str
     ) -> None:
         """Escalate this still-OPEN lease in place because its recorded owner cannot be
-        dispatched to right now — the shared entry a dormant wake, a judgement launch/collect,
-        or the escalation mint itself reaches when no other runner can resume this exact
-        session. Takes the same detached/paused precedence :meth:`fail` takes ahead of its own
-        exhausted-retries escalation, so every caller gets it without asking first."""
+        dispatched to right now — no other runner can resume this exact session. Takes the
+        same detached/paused precedence :meth:`fail` takes ahead of its own exhausted-retries
+        escalation."""
         lease = self.lease
         now = self.ctx.clock.now()
         if self.detached():
@@ -280,8 +279,7 @@ class Attempt:
         """The actual close: :meth:`escalate_owner_unresolvable`'s own body, reached once its
         detached/paused precedence has cleared. Unlike :meth:`escalate` (reached only after
         ``fail`` has already closed the lease), this closes it itself, so a crash right after
-        leaves nothing to redo — the next pass reads a closed lease and never re-enters
-        whichever wake/collect call reached here."""
+        leaves nothing to redo — the next pass reads a closed lease."""
         lease = self.lease
         now = self.ctx.clock.now()
         self._kill_process()  # best-effort hygiene; nothing is live behind it
@@ -297,8 +295,8 @@ class Attempt:
             "message": message,
             "detail": {"via": via, "harness_id": session.harness_id, "owner_status": status},
         }
-        # Only the escalation mint itself (`Spawner._escalate_unresolvable_resume_owner`) ever
-        # reaches here never spawned; every other caller's lease already ran a real attempt.
+        # `lease.session` is None only for a lease that was never spawned — the
+        # escalation-mint path; every other lease reaching here already ran a real attempt.
         closure_reason = ESCALATION_MINT if lease.session is None else None
         self.close(ESCALATED, now, event, closure_reason=closure_reason)
         # Resolved inline, same as `abandon`/`park_paused`/`preempt` — escalated is a third
@@ -329,8 +327,7 @@ class Attempt:
             },
         }
         self.close(ESCALATED, now, event, closure_reason=NO_ACCEPTABLE_HARNESS_MINT)
-        # Resolved inline, same as `_escalate_owner_unresolvable` — escalated is a third
-        # resolution `record_resume_clear` closes here, not a fourth pending state.
+        # Same resolve-inline shape as `_escalate_owner_unresolvable`.
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         self.escalate(reason="no acceptable harness")
 
@@ -545,8 +542,7 @@ class Attempt:
 
     def _resolve_harness(self, session: SessionReference, *, via: str) -> IHarnessLifecycleAndVerdict | None:
         """Resolve ``session``'s recorded owner, logging and returning ``None`` — never
-        raising — when it is unknown or unavailable: the same guard
-        :meth:`DormantSession._resolve_harness` gives a blocked wake."""
+        raising — when it is unknown or unavailable."""
         try:
             return self.ctx.adapter_for(session)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:

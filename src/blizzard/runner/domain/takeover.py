@@ -115,15 +115,12 @@ class IReadTakeoverRepository(Protocol):
         """The chunk's open takeover, or ``None`` — a ``takeovers`` row with no
         ``takeover_ends`` row for the same ``takeover_id`` (issue #52).
 
-        At most one open takeover per chunk by construction: ``TakeoverService`` refuses
-        a second ``POST`` while one is already open."""
+        At most one open takeover exists per chunk at a time."""
         ...
 
     def open_takeover_chunk_ids(self) -> set[str]:
-        """Every chunk id currently under an open takeover (issue #52).
-
-        The loop's per-tick skip set, so no step touches a chunk's session while the
-        human holds it."""
+        """Every chunk id currently under an open takeover (issue #52): each names a chunk
+        whose session the human holds, untouchable until the takeover closes."""
         ...
 
     def open_takeovers(self) -> list[TakeoverRecord]:

@@ -114,10 +114,10 @@ class IReadTranscriptLedgerRepository(Protocol):
 
     def outstanding_transcript_buffer_bytes(self) -> int:
         """Sum of ``payload`` bytes across every UNACKED row of the transcript outbound
-        buffer, across every segment — the pump's own backpressure
-        gate against a prolonged hub outage leaving unbounded content resident in SQLite.
-        Distinct from :meth:`chunk_transcript_shipped_bytes`, which bounds one chunk's
-        SHIPPED total, not the buffer's own resident total."""
+        buffer, across every segment — the resident total a prolonged hub outage can leave
+        unbounded in SQLite absent a bound on it. Distinct from
+        :meth:`chunk_transcript_shipped_bytes`, which bounds one chunk's SHIPPED total,
+        not the buffer's own resident total."""
         ...
 
     def has_unshipped_transcript_content(self, chunk_id: str) -> bool:
@@ -237,6 +237,6 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         ...
 
     def ack_transcript_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
-        """Ack every seq in ``seqs`` in one transaction — one delivered ``push_transcripts``
-        batch's ack (issue #522), same delta/final split as :meth:`ack_transcript_outbound`."""
+        """Ack every seq in ``seqs`` in one transaction (issue #522), same delta/final
+        split as :meth:`ack_transcript_outbound`."""
         ...

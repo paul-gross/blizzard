@@ -89,8 +89,8 @@ heartbeats = Table(
     Column("beat_at", UtcDateTime, nullable=False),  # injected-clock stamp of the tool call
 )
 
-# REAP's staleness probe (issue #520) reads `max(beat_at) WHERE lease_id = ?` — trailing
-# `beat_at` lets sqlite answer that MAX from the index alone, never touching a heartbeat row.
+# Serves `max(beat_at) WHERE lease_id = ?` (issue #520): trailing `beat_at` lets sqlite
+# answer that MAX from the index alone, never touching a heartbeat row.
 Index("ix_heartbeats_lease_id_beat_at", heartbeats.c.lease_id, heartbeats.c.beat_at)
 
 # --- Lease node context (the node identity of each attempt) ------------------
