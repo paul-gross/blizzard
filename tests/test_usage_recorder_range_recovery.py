@@ -261,3 +261,158 @@ def test_a_nudge_opened_boundary_still_recovers_a_resume_labeled_generation(tmp_
         (_SESSION_ID, TranscriptPosition("tail-after-gen-1"), TranscriptPosition("tail-after-gen-2"))
     ]
     assert _usage_payloads_by_lease(store)["lease_a"]["input_tokens"] == 42
+
+
+def test_a_worker_boundary_with_an_unreadable_start_records_no_sample_and_reads_no_transcript(  # type: ignore[no-untyped-def]
+    tmp_path,
+) -> None:
+    """``start_unreadable=True`` must never be treated as "read from zero" — a transient tail
+    read failure on a RESUME/JUDGE/NUDGE boundary is never a stand-in for the fresh-session
+    sentinel (blizzard#437 F2/F10)."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_a",
+        pid=1,
+        process_start_time="start-1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
+        spawned_at=_NOW,
+    )
+    store.record_boundary_open(
+        lease_id="lease_a",
+        chunk_id=_CHUNK_ID,
+        node_id=_NODE_ID,
+        epoch=1,
+        generation=1,
+        kind="resume",
+        start_position=None,
+        start_unreadable=True,
+        opened_at=_NOW,
+    )
+    source = FakeTranscriptSource(lines_by_session={_SESSION_ID: ["would-be-whole-session-line"]})
+    handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
+    harness = FakeHarness(handle=handle, verdict=None, transcript_source=source)
+    registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=source)})
+    recorder = _recorder(store, registry)
+
+    lease_a = store.active_lease("lease_a")
+    assert lease_a is not None
+    recorder.record_worker(lease_a, bindings=[])
+
+    assert source.read_raw_lines_calls == []
+    assert _usage_payloads_by_lease(store) == {}
+
+
+def test_a_readable_judge_boundary_caps_the_worker_sample_at_its_own_start(  # type: ignore[no-untyped-def]
+    tmp_path,
+) -> None:
+    """The companion, positive case: a judge boundary that DID read its own start caps the
+    worker's own range read there — its own later turns never bleed into the worker's sum."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_a",
+        pid=1,
+        process_start_time="start-1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
+        spawned_at=_NOW,
+    )
+    store.record_boundary_open(
+        lease_id="lease_a",
+        chunk_id=_CHUNK_ID,
+        node_id=_NODE_ID,
+        epoch=1,
+        generation=1,
+        kind="spawn",
+        start_position=None,
+        opened_at=_NOW,
+    )
+    store.record_boundary_open(
+        lease_id="lease_a",
+        chunk_id=_CHUNK_ID,
+        node_id=_NODE_ID,
+        epoch=1,
+        generation=1,
+        kind="judge",
+        start_position="tail-at-judge",
+        opened_at=_NOW,
+    )
+    source = FakeTranscriptSource(
+        lines_by_session={_SESSION_ID: ["a line"]},
+        tail_positions_by_session={_SESSION_ID: TranscriptPosition("tail-now")},
+    )
+    sample = UsageSample(
+        kind="spawn",
+        model="m",
+        input_tokens=5,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=None,
+    )
+    handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
+    harness = FakeHarness(handle=handle, verdict=None, transcript_usage=sample, transcript_source=source)
+    registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=source)})
+    recorder = _recorder(store, registry)
+
+    lease_a = store.active_lease("lease_a")
+    assert lease_a is not None
+    recorder.record_worker(lease_a, bindings=[])
+
+    # Capped at the judge's own start — never the raw tail (`tail-now`), which would bleed
+    # the judge's own later turns into the worker's own fallback sum.
+    assert source.read_raw_lines_calls == [(_SESSION_ID, None, TranscriptPosition("tail-at-judge"))]
+    assert _usage_payloads_by_lease(store)["lease_a"]["input_tokens"] == 5
+
+
+def test_a_judge_boundary_with_an_unreadable_start_skips_the_worker_sample_entirely(  # type: ignore[no-untyped-def]
+    tmp_path,
+) -> None:
+    """A judge boundary exists but its own start could not be read: falling back to "tail
+    right now" would risk the judge's own later turns bleeding into the worker's own sum —
+    skip the sample instead (blizzard#437 F10)."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_a",
+        pid=1,
+        process_start_time="start-1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
+        spawned_at=_NOW,
+    )
+    store.record_boundary_open(
+        lease_id="lease_a",
+        chunk_id=_CHUNK_ID,
+        node_id=_NODE_ID,
+        epoch=1,
+        generation=1,
+        kind="spawn",
+        start_position=None,
+        opened_at=_NOW,
+    )
+    store.record_boundary_open(
+        lease_id="lease_a",
+        chunk_id=_CHUNK_ID,
+        node_id=_NODE_ID,
+        epoch=1,
+        generation=1,
+        kind="judge",
+        start_position=None,
+        start_unreadable=True,
+        opened_at=_NOW,
+    )
+    source = FakeTranscriptSource(
+        lines_by_session={_SESSION_ID: ["would-be-whole-session-line"]},
+        tail_positions_by_session={_SESSION_ID: TranscriptPosition("tail-now")},
+    )
+    handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
+    harness = FakeHarness(handle=handle, verdict=None, transcript_source=source)
+    registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=source)})
+    recorder = _recorder(store, registry)
+
+    lease_a = store.active_lease("lease_a")
+    assert lease_a is not None
+    recorder.record_worker(lease_a, bindings=[])
+
+    assert source.read_raw_lines_calls == []
+    assert _usage_payloads_by_lease(store) == {}

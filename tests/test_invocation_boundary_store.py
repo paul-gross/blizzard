@@ -34,9 +34,33 @@ def test_record_boundary_open_is_readable_back() -> None:
     assert boundary.generation == 1
     assert boundary.kind == "spawn"
     assert boundary.start_position is None
+    # The default — never conflated with a genuine read failure unless requested.
+    assert boundary.start_unreadable is False
     assert boundary.opened_at == _T0
     assert boundary.closed_at is None
     assert boundary.closed_reason is None
+
+
+def test_record_boundary_open_persists_start_unreadable() -> None:
+    """``start_unreadable=True`` is durable and distinct from ``start_position is None``'s
+    fresh-session meaning (blizzard#437 F2/F10)."""
+    store = make_store("sqlite://")
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=2,
+        kind="resume",
+        start_position=None,
+        start_unreadable=True,
+        opened_at=_T0,
+    )
+
+    boundary = store.boundary("lease_1", 2, "resume")
+    assert boundary is not None
+    assert boundary.start_position is None
+    assert boundary.start_unreadable is True
 
 
 def test_boundary_of_an_unopened_invocation_is_none() -> None:

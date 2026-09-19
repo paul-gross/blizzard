@@ -875,15 +875,15 @@ def test_read_raw_lines_empty_range_is_empty(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_read_raw_lines_start_past_eof_clamps_to_the_start_of_file(tmp_path: Path) -> None:
-    """A stale or corrupt ``start`` — same tolerant clamp ``turns_since`` gives ``since`` — never
-    inflates a delta negative or raises out of a bad seek."""
+def test_read_raw_lines_start_past_eof_is_unreadable_not_a_whole_file_reread(tmp_path: Path) -> None:
+    """A durable ``start`` past the file's size is unreadable, not "start over" — unlike
+    `turns_since`'s own tolerant clamp, this read has no budget bounding a reread from 0 (F9)."""
     _write_main(tmp_path, [fx.user_env("hello")])
     source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
     stale_start = TranscriptPosition(token=json.dumps({"main": 10_000, "sidecars": {}}))
 
     lines = source.read_raw_lines("sess-1", spawn_cwd="/home/user/workspace", start=stale_start)
-    assert len(lines) == 1
+    assert lines == []
 
 
 @pytest.mark.unit

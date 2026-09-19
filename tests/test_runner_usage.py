@@ -12,13 +12,16 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.dormant import DormantSession
-from blizzard.runner.loop.steps import Advance
+from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import USAGE_RECORDED
 from tests.runner_fakes import (
     FakeHarness,
@@ -29,6 +32,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    make_stores,
 )
 
 pytestmark = pytest.mark.unit
@@ -242,7 +246,12 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
         verdict="pass",
         usage_by_kind={"resume": contamination_sample},
         transcript_usage=fallback_sample,
-        transcript_source=FakeTranscriptSource(lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']}),
+        transcript_source=FakeTranscriptSource(
+            lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']},
+            # A judge boundary always resolves an EXISTING session's tail (never the fresh
+            # sentinel) — script it so the boundary opens readable, not `start_unreadable`.
+            tail_positions_by_session={"sess-a": TranscriptPosition("tail-1")},
+        ),
     )
     ctx = make_context(
         store,
@@ -291,7 +300,12 @@ def test_advance_falls_back_to_transcript_usage_when_no_envelope(tmp_path):  # t
         handle=_HANDLE,
         verdict="pass",
         transcript_usage=fallback_sample,
-        transcript_source=FakeTranscriptSource(lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']}),
+        transcript_source=FakeTranscriptSource(
+            lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']},
+            # A judge boundary always resolves an EXISTING session's tail (never the fresh
+            # sentinel) — script it so the boundary opens readable, not `start_unreadable`.
+            tail_positions_by_session={"sess-a": TranscriptPosition("tail-1")},
+        ),
     )
     ctx = make_context(
         store,
@@ -546,7 +560,12 @@ def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path
         handle=_HANDLE,
         verdict=None,
         transcript_usage=fallback_sample,
-        transcript_source=FakeTranscriptSource(lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']}),
+        transcript_source=FakeTranscriptSource(
+            lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']},
+            # A judge boundary always resolves an EXISTING session's tail (never the fresh
+            # sentinel) — script it so the boundary opens readable, not `start_unreadable`.
+            tail_positions_by_session={"sess-a": TranscriptPosition("tail-1")},
+        ),
     )
     ctx = make_context(
         store,
@@ -620,3 +639,79 @@ def test_release_all_is_a_noop_when_no_stdout_dir_configured(tmp_path):  # type:
     ctx.env_release.release_chunk("ch_1")  # must not raise
 
     assert store.held_environment_ids() == []
+
+
+# Crash-detected resume records the crashed generation's own usage (blizzard#437 F12) —
+# without their own `record_worker` call, `on_unpause`/`_restart` never record it at all.
+
+
+@pytest.mark.unit
+def test_on_unpause_records_the_paused_generations_usage_before_waking(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
+    )
+    fallback_sample = UsageSample(
+        kind="resume",
+        model="claude-x",
+        input_tokens=9,
+        output_tokens=1,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=None,
+    )
+    transcript_source = FakeTranscriptSource(
+        lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']},
+        tail_positions_by_session={"sess-a": TranscriptPosition("tail-1")},
+    )
+    harness = FakeHarness(
+        handle=_HANDLE, verdict="pass", transcript_usage=fallback_sample, transcript_source=transcript_source
+    )
+    harness.resume_pid = 4321
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    DormantSession(ctx, lease).on_unpause()
+
+    payloads = _usage_payloads(store)
+    resume_payload = next(p for p in payloads if p["kind"] == "resume")
+    assert resume_payload["input_tokens"] == 9
+
+
+@pytest.mark.unit
+def test_restart_resume_records_the_crashed_generations_usage_before_waking(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r1"
+    )
+    fallback_sample = UsageSample(
+        kind="resume",
+        model="claude-x",
+        input_tokens=13,
+        output_tokens=2,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=None,
+    )
+    transcript_source = FakeTranscriptSource(
+        lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']},
+        tail_positions_by_session={"sess-a": TranscriptPosition("tail-1")},
+    )
+    harness = FakeHarness(
+        handle=_HANDLE, verdict="pass", transcript_usage=fallback_sample, transcript_source=transcript_source
+    )
+    harness.resume_pid = 4321
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    Resume(ctx).run()
+
+    payloads = _usage_payloads(store)
+    resume_payload = next(p for p in payloads if p["kind"] == "resume")
+    assert resume_payload["input_tokens"] == 13

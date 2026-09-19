@@ -19,21 +19,6 @@ from blizzard.runner.store.schema import invocation_boundaries
 _log = get_logger("blizzard.runner.store")
 
 
-def _record(r: object) -> InvocationBoundaryRecord:
-    return InvocationBoundaryRecord(
-        lease_id=str(r.lease_id),  # type: ignore[attr-defined]
-        chunk_id=str(r.chunk_id),  # type: ignore[attr-defined]
-        node_id=str(r.node_id),  # type: ignore[attr-defined]
-        epoch=int(r.epoch),  # type: ignore[attr-defined]
-        generation=int(r.generation),  # type: ignore[attr-defined]
-        kind=r.kind,  # type: ignore[attr-defined]
-        start_position=str(r.start_position) if r.start_position is not None else None,  # type: ignore[attr-defined]
-        opened_at=r.opened_at,  # type: ignore[attr-defined]
-        closed_at=r.closed_at,  # type: ignore[attr-defined]
-        closed_reason=str(r.closed_reason) if r.closed_reason is not None else None,  # type: ignore[attr-defined]
-    )
-
-
 class InvocationBoundaryStore:
     """Read-write invocation-boundary adapter over the runner store engine."""
 
@@ -52,7 +37,7 @@ class InvocationBoundaryStore:
         )
         if not rows:
             return None
-        return _record(rows[0])
+        return self._row_to_boundary(rows[0])
 
     def open_boundaries_for_lease(self, lease_id: str) -> list[InvocationBoundaryRecord]:
         rows = self._store.all(
@@ -60,7 +45,7 @@ class InvocationBoundaryStore:
             .where(and_(invocation_boundaries.c.lease_id == lease_id, invocation_boundaries.c.closed_at.is_(None)))
             .order_by(invocation_boundaries.c.opened_at, invocation_boundaries.c.id)
         )
-        return [_record(r) for r in rows]
+        return [self._row_to_boundary(r) for r in rows]
 
     def record_boundary_open(
         self,
@@ -73,6 +58,7 @@ class InvocationBoundaryStore:
         kind: InvocationBoundaryKind,
         start_position: str | None,
         opened_at: datetime,
+        start_unreadable: bool = False,
     ) -> None:
         # Check-then-insert in one transaction, mirroring `record_usage` — idempotent by
         # construction rather than a DB constraint (`bzh:sql-portable`).
@@ -97,6 +83,7 @@ class InvocationBoundaryStore:
                     generation=generation,
                     kind=kind,
                     start_position=start_position,
+                    start_unreadable=start_unreadable,
                     opened_at=opened_at,
                     closed_at=None,
                     closed_reason=None,
@@ -114,6 +101,22 @@ class InvocationBoundaryStore:
                 .values(closed_at=at, closed_reason=reason)
             )
         _log.info("invocation boundaries closed", lease_id=lease_id, reason=reason)
+
+    @staticmethod
+    def _row_to_boundary(r) -> InvocationBoundaryRecord:  # type: ignore[no-untyped-def]
+        return InvocationBoundaryRecord(
+            lease_id=str(r.lease_id),
+            chunk_id=str(r.chunk_id),
+            node_id=str(r.node_id),
+            epoch=int(r.epoch),
+            generation=int(r.generation),
+            kind=r.kind,
+            start_position=str(r.start_position) if r.start_position is not None else None,
+            opened_at=r.opened_at,
+            closed_at=r.closed_at,
+            closed_reason=str(r.closed_reason) if r.closed_reason is not None else None,
+            start_unreadable=bool(r.start_unreadable),
+        )
 
 
 def _conforms_invocation_boundary_store(x: InvocationBoundaryStore) -> IWriteInvocationBoundaryRepository:

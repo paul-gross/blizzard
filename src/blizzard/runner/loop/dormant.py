@@ -9,12 +9,11 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.asks import AskRecord
+from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
-from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
@@ -69,9 +68,9 @@ class DormantSession:
         if harness is None:
             return
         self.ctx.usage.record_worker(lease, bindings)
-        # The nudge already opened its own boundary at the call site (D6) — `_wake` must
-        # not also open a `resume` boundary for the same launch (D5).
-        pid, _ = self._wake(message, bindings, harness=harness, open_boundary=False)
+        # The nudge already opened its own boundary at the call site (D6) — `_wake` self-
+        # determines this and skips opening a second one (D5), even for a LATER, unrelated wake.
+        pid, _ = self._wake(message, bindings, harness=harness)
         _log.info(
             "resumed premature exit for unmet produces",
             chunk_id=lease.chunk_id,
@@ -204,6 +203,8 @@ class DormantSession:
         harness = self._resolve_harness(via="unpause-resume")
         if harness is None:
             return
+        # The paused generation's own usage (F12) — recorded before `_wake` mints the new one.
+        self.ctx.usage.record_worker(lease, bindings)
         pid, _ = self._wake(_UNPAUSE_MESSAGE, bindings, harness=harness, at=now)
         self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
         _log.info(
@@ -244,6 +245,8 @@ class DormantSession:
             )
             Attempt(self.ctx, lease).abandon(killed=True, via="resume")
             return
+        # The crashed generation's own usage (F12) — recorded before `_wake` mints the new one.
+        self.ctx.usage.record_worker(lease, bindings)
         pid, _ = self._wake(_RESTART_MESSAGE, bindings, harness=harness, at=now)
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _CP_RESUME_AFTER.reached()  # pid recorded, intent cleared — a crash here re-runs as a no-op
@@ -291,23 +294,15 @@ class DormantSession:
             )
             return None
 
-    def _current_tail_position(self, session: SessionReference, bindings: list[EnvBindingRecord]) -> str | None:
-        """This session's transcript tail, right now, as the boundary's ``start_position``
-        (blizzard#437 D6) — ``None`` (the beginning sentinel) when the source cannot be
-        resolved or the transcript cannot be read, the conservative fallback: recovery
-        reads more than strictly needed rather than less, and dedups by message id (D7)."""
-        spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
-        try:
-            source = self.ctx.transcript_source_for(session)
-        except (UnknownHarnessError, UnavailableHarnessError) as exc:
-            _log.info(
-                "invocation boundary tail read blocked by unavailable harness transcript source",
-                harness_id=session.harness_id,
-                detail=str(exc),
-            )
-            return None
-        position = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
-        return position.token if position is not None else None
+    def _worker_boundary_already_open(self, generation: int) -> bool:
+        """Whether some worker-starting kind (:data:`WORKER_STARTING_KINDS`) already opened
+        its boundary at this generation — `_wake`'s own, self-determined guard against opening
+        a second one alongside a nudge's own, even across a LATER, unrelated wake trigger
+        reaching the same still-dormant lease (blizzard#437 D5/F6)."""
+        return any(
+            b.generation == generation and b.kind in WORKER_STARTING_KINDS
+            for b in self.ctx.stores.invocation_boundaries.open_boundaries_for_lease(self.lease.lease_id)
+        )
 
     def _wake(
         self,
@@ -316,26 +311,29 @@ class DormantSession:
         *,
         harness: IHarnessLifecycleAndVerdict,
         at: datetime | None = None,
-        open_boundary: bool = True,
     ) -> tuple[int, datetime]:
         """Deliver ``message`` into the dormant session and record the new pid under the same
         lease, returning that pid with the instant it was stamped — an omitted ``at`` reads the
-        clock *after* the resume returns. ``harness`` is the caller's already-resolved owner
-        (:meth:`_resolve_harness`), so this method can never be reached with an unresolvable one.
-        ``open_boundary=False`` only for the nudge caller (D5/D6), whose own boundary is already open."""
+        clock *after* the resume returns. ``harness`` is the caller's already-resolved owner, so
+        this method can never be reached with an unresolvable one. Opens a `resume` boundary
+        unless :meth:`_worker_boundary_already_open` finds one open already (D5/D6)."""
         lease = self.lease
         spawner = Spawner(self.ctx)
         session = lease.session
         assert session is not None
-        if open_boundary:
+        generation = spawner.generation(lease.lease_id)
+        if not self._worker_boundary_already_open(generation):
+            workdir = bindings[0].workdir if bindings else None
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(session, workdir)
             self.ctx.stores.invocation_boundaries.record_boundary_open(
                 lease_id=lease.lease_id,
                 chunk_id=lease.chunk_id,
                 node_id=lease.node_id,
                 epoch=lease.epoch,
-                generation=spawner.generation(lease.lease_id),
+                generation=generation,
                 kind="resume",
-                start_position=self._current_tail_position(session, bindings),
+                start_position=start_position,
+                start_unreadable=start_unreadable,
                 opened_at=at if at is not None else self.ctx.clock.now(),
             )
             _CP_WAKE_AFTER_BOUNDARY.reached()

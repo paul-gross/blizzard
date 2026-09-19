@@ -26,6 +26,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
+from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
 from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
 from blizzard.runner.store import schema as runner
 
@@ -392,11 +393,9 @@ class WorkerBoundaryKindExclusivePerGeneration(QueryCheck):
     try-each-kind lookup depends on. ``judge`` is excluded — it can coexist with one of the
     other three at the same generation by design."""
 
-    _WORKER_STARTING_KINDS = ("spawn", "resume", "nudge")
-
     def run(self) -> list[Violation]:
         stmt = select(runner.invocation_boundaries.c.lease_id, runner.invocation_boundaries.c.generation).where(
-            runner.invocation_boundaries.c.kind.in_(self._WORKER_STARTING_KINDS)
+            runner.invocation_boundaries.c.kind.in_(WORKER_STARTING_KINDS)
         )
         key_count = Counter((row[0], row[1]) for row in self.conn.execute(stmt))
         return [

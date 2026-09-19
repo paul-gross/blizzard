@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.invocation_boundaries import (
-    InvocationBoundaryKind,
+    WORKER_STARTING_KINDS,
     InvocationBoundaryRecord,
     IReadInvocationBoundaryRepository,
 )
@@ -25,9 +25,6 @@ from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.loop")
-
-#: Worker-starting boundary kinds, tried in order; `"judge"` excluded — it can coexist (blizzard#437).
-_WORKER_STARTING_KINDS: tuple[InvocationBoundaryKind, ...] = ("spawn", "resume", "nudge")
 
 
 @dataclass(frozen=True)
@@ -116,6 +113,10 @@ class UsageRecorder:
             # No durable start for this exact generation: never charge the whole session to
             # one generation (blizzard#437 Phase 4) — no boundary, no sample.
             return None
+        if boundary.start_unreadable:
+            # A genuinely failed tail read must never silently read from zero, re-summing an
+            # earlier generation's already-recorded tokens (F2/F10).
+            return None
         fallback_workdir = bindings[0].workdir if bindings else None
         spawn_cwd = SpawnCwd(self.workspace_root, fallback_workdir).path
         try:
@@ -132,9 +133,15 @@ class UsageRecorder:
         # A same-generation judge's own durable start (`Judgement._launch`) caps this read —
         # its own later turns must never bleed into the worker's own fallback sum.
         judge_boundary = self.invocation_boundaries.boundary(lease.lease_id, generation, "judge")
+        if judge_boundary is not None and judge_boundary.start_unreadable:
+            # Its own start could not be read: falling back to "tail right now" risks the
+            # judge's own later turns bleeding into this worker's sum (F10) — skip it instead.
+            return None
         if judge_boundary is not None and judge_boundary.start_position is not None:
             end = TranscriptPosition(judge_boundary.start_position)
         else:
+            # Genuinely no judge boundary at all for this generation — the tail right now
+            # is the safe cap.
             end = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
         start = TranscriptPosition(boundary.start_position) if boundary.start_position is not None else None
         lines = source.read_raw_lines(session.session_id, spawn_cwd=spawn_cwd, start=start, end=end)
@@ -145,7 +152,7 @@ class UsageRecorder:
     def _worker_boundary(self, lease_id: str, generation: int) -> InvocationBoundaryRecord | None:
         """This generation's own worker-starting boundary — whichever of spawn/resume/nudge
         actually opened it, since `record_worker`'s usage-kind label doesn't reliably name it."""
-        for kind in _WORKER_STARTING_KINDS:
+        for kind in WORKER_STARTING_KINDS:
             boundary = self.invocation_boundaries.boundary(lease_id, generation, kind)
             if boundary is not None:
                 return boundary

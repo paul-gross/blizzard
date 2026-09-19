@@ -11,11 +11,13 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.logging import get_logger
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.registry import IHarnessRegistry
+from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.capability_snapshot import HarnessVersionCache, TickCapabilities, capability_snapshot
 from blizzard.runner.loop.checks import ICheckRunner
@@ -31,6 +33,8 @@ from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler
 from blizzard.wire.runner import RunnerCapability
+
+_log = get_logger("blizzard.runner.loop")
 
 #: The retry budget a node with no ``retries.max`` falls back to — a chosen constant:
 #: two execution attempts before escalation to needs-human.
@@ -191,3 +195,24 @@ class LoopContext:
         """Resolve an existing session's transcript source from its recorded owner — same
         raise/guard contract as :meth:`adapter_for`."""
         return self.harnesses.transcript_source(session.harness_id)
+
+    def resolve_boundary_start(self, session: SessionReference, workdir: str | None) -> tuple[str | None, bool]:
+        """``(start_position, start_unreadable)`` for a boundary about to open on ``session`` —
+        the current transcript tail, or ``(None, True)`` when the source is unresolvable or the
+        read fails; never conflate that with ``(None, False)``, a fresh session's own beginning
+        sentinel (blizzard#437 D6). Shared by every resume/judge/nudge boundary opener, so a
+        transient read failure on any of them is durably distinguishable from a fresh spawn."""
+        spawn_cwd = SpawnCwd(self.config.workspace_root, workdir).path
+        try:
+            source = self.transcript_source_for(session)
+        except (UnknownHarnessError, UnavailableHarnessError) as exc:
+            _log.info(
+                "invocation boundary tail read blocked by unavailable harness transcript source",
+                harness_id=session.harness_id,
+                detail=str(exc),
+            )
+            return None, True
+        position = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
+        if position is None:
+            return None, True
+        return position.token, False

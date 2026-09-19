@@ -14,13 +14,16 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.loop.attempt import Attempt
+from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Resume, ResumeIntents
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeHarness,
@@ -233,3 +236,147 @@ def test_closing_a_lease_closes_every_boundary_it_opened(tmp_path: Path) -> None
     assert boundary is not None
     assert boundary.closed_at is not None
     assert boundary.closed_reason == "released"
+
+
+def test_a_resumed_existing_session_spawn_opens_a_resume_boundary_from_its_own_tail(  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+) -> None:
+    """`Spawner.spawn`'s own ``resume_from`` branch (`enter_node`'s resume, not a fresh mint)
+    opens a `resume` boundary reading that session's own tail, never the fresh-spawn
+    sentinel (blizzard#437 F1)."""
+    store = _store(tmp_path)
+    tail = TranscriptPosition(token='{"main": 777, "sidecars": {}}')
+    transcript_source = FakeTranscriptSource(tail_positions_by_session={"sess-prior": tail})
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-prior", pid=100, process_start_time="start-100", pgid=100),
+        verdict="pass",
+        transcript_source=transcript_source,
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    Spawner(ctx).spawn(
+        "ch_1",
+        make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES),
+        [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        via="test",
+        resume_from=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-prior"),
+    )
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    boundary = ctx.stores.invocation_boundaries.boundary(lease.lease_id, 1, "resume")
+    assert boundary is not None
+    assert boundary.start_position == tail.token
+    assert boundary.start_unreadable is False
+    # Never ALSO a `spawn` boundary at the same generation (D5's exclusivity).
+    assert ctx.stores.invocation_boundaries.boundary(lease.lease_id, 1, "spawn") is None
+
+
+def test_a_resumed_existing_session_spawn_with_an_unreadable_tail_marks_it_unreadable(  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+) -> None:
+    """The companion case: the resumed session's tail read fails (unscripted here) — the
+    boundary still opens, but flagged `start_unreadable`, never a silent fresh-session sentinel."""
+    store = _store(tmp_path)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-prior", pid=100, process_start_time="start-100", pgid=100),
+        verdict="pass",
+        transcript_source=FakeTranscriptSource(),  # no tail scripted for "sess-prior"
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    Spawner(ctx).spawn(
+        "ch_1",
+        make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES),
+        [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        via="test",
+        resume_from=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-prior"),
+    )
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    boundary = ctx.stores.invocation_boundaries.boundary(lease.lease_id, 1, "resume")
+    assert boundary is not None
+    assert boundary.start_position is None
+    assert boundary.start_unreadable is True
+
+
+def test_a_stranded_nudge_boundary_blocks_a_later_unrelated_wakes_own_resume_boundary(  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+) -> None:
+    """A nudge boundary can open and then strand (its own `_wake` never ran) — a LATER,
+    unrelated wake reaching the same lease must self-determine a boundary is already open at
+    that generation, never opening a second `resume` one (blizzard#437 F6)."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)  # generation 1's own spawn; node defaults to "nd_review"
+    # The stranded nudge: its own boundary opened at generation 2, but its `_wake` never ran.
+    store.record_boundary_open(
+        lease_id="lease_r",
+        chunk_id="ch_1",
+        node_id="nd_review",
+        epoch=1,
+        generation=2,
+        kind="nudge",
+        start_position="tail-at-nudge",
+        opened_at=_NOW,
+    )
+    store.record_ask(
+        lease_id="lease_r",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="Q",
+        options=[],
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        asked_at=_NOW,
+    )
+    store.record_park(lease_id="lease_r", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    hub = FakeHub()
+    hub.questions["qn_1"] = QuestionView(
+        question_id="qn_1",
+        chunk_id="ch_1",
+        runner_id="r1",
+        epoch=1,
+        question="Q",
+        asked_at="t",
+        answered=True,
+        answer="go",
+        answered_by="alice",
+        answered_at="t2",
+    )
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
+    )
+    harness.resume_pid = 4321
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    Advance(ctx).run()  # the parked lease's `on_answer` wakes it
+
+    # The unrelated wake resumed the session (so the fix does not merely block the wake)...
+    assert harness.resumed == [("/ws/e1", "sess-a", "# Answer from alice. Continue.\ngo")]
+    # ...but opened no second `resume` boundary at the nudge's own generation.
+    assert ctx.stores.invocation_boundaries.boundary("lease_r", 2, "resume") is None
+    nudge_boundary = ctx.stores.invocation_boundaries.boundary("lease_r", 2, "nudge")
+    assert nudge_boundary is not None
+    assert nudge_boundary.start_position == "tail-at-nudge"  # untouched by the later wake

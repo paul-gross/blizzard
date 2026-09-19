@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    false,
 )
 
 from blizzard.foundation.store.utc import UtcDateTime
@@ -499,6 +500,9 @@ invocation_boundaries = Table(
     Column("generation", Integer, nullable=False),
     Column("kind", String, nullable=False),  # spawn | resume | judge | nudge
     Column("start_position", String, nullable=True),  # opaque TranscriptPosition.token; NULL = beginning
+    # True only when start_position is NULL because a tail read genuinely failed — never a
+    # stand-in for a fresh session's own beginning sentinel.
+    Column("start_unreadable", Boolean, nullable=False, server_default=false()),
     Column("opened_at", UtcDateTime, nullable=False),
     Column("closed_at", UtcDateTime, nullable=True),
     Column("closed_reason", String, nullable=True),

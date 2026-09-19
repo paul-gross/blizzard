@@ -33,6 +33,7 @@ def upgrade() -> None:
         sa.Column("generation", sa.Integer(), nullable=False),
         sa.Column("kind", sa.String(), nullable=False),
         sa.Column("start_position", sa.String(), nullable=True),
+        sa.Column("start_unreadable", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("opened_at", UtcDateTime(), nullable=False),
         sa.Column("closed_at", UtcDateTime(), nullable=True),
         sa.Column("closed_reason", sa.String(), nullable=True),

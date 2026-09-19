@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Literal, Protocol
 
 __all__ = [
+    "WORKER_STARTING_KINDS",
     "IReadInvocationBoundaryRepository",
     "IWriteInvocationBoundaryRepository",
     "InvocationBoundaryKind",
@@ -21,13 +22,16 @@ __all__ = [
 #: The four invocation kinds a boundary ever names — a nudge's own, distinct from ``resume`` (D5).
 InvocationBoundaryKind = Literal["spawn", "resume", "judge", "nudge"]
 
+#: Worker-starting kinds, tried in order (``"judge"`` excluded, D5) — shared with the invariant checker.
+WORKER_STARTING_KINDS: tuple[InvocationBoundaryKind, ...] = ("spawn", "resume", "nudge")
+
 
 @dataclass(frozen=True)
 class InvocationBoundaryRecord:
     """One invocation's durable start marker. ``start_position`` is the opaque
-    ``TranscriptPosition.token`` the transcript source minted just before this invocation
-    launched, or ``None`` — a fresh session's own beginning sentinel, never a stand-in for
-    "unknown". ``closed_at``/``closed_reason`` are unset until the owning lease closes."""
+    ``TranscriptPosition.token`` minted just before launch, or ``None`` — a fresh session's
+    own beginning sentinel. ``start_unreadable`` distinguishes that from a failed tail read;
+    ``closed_at``/``closed_reason`` are unset until the owning lease closes."""
 
     lease_id: str
     chunk_id: str
@@ -39,6 +43,7 @@ class InvocationBoundaryRecord:
     opened_at: datetime
     closed_at: datetime | None
     closed_reason: str | None
+    start_unreadable: bool = False
 
 
 class IReadInvocationBoundaryRepository(Protocol):
@@ -69,11 +74,13 @@ class IWriteInvocationBoundaryRepository(IReadInvocationBoundaryRepository, Prot
         kind: InvocationBoundaryKind,
         start_position: str | None,
         opened_at: datetime,
+        start_unreadable: bool = False,
     ) -> None:
         """Durably open one invocation's boundary BEFORE it launches. Idempotent by its own
-        check-then-insert over ``(lease_id, generation, kind)``, not a DB constraint
-        (``bzh:sql-portable``), mirroring :meth:`~blizzard.runner.domain.usage.IWriteUsageRepository.record_usage`
-        — a replayed open for an already-open boundary writes nothing a second time."""
+        check-then-insert over ``(lease_id, generation, kind)`` (``bzh:sql-portable``) — a
+        replayed open for an already-open boundary writes nothing a second time.
+        ``start_unreadable=True`` marks a ``start_position is None`` here as a failed read,
+        never the fresh-session sentinel."""
         ...
 
     def close_boundaries_for_lease(self, lease_id: str, *, reason: str, at: datetime) -> None:

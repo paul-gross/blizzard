@@ -11,6 +11,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.artifacts import GraphArtifactRecord
+from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import (
     LeaseRecord,
@@ -160,16 +161,24 @@ class Spawner:
             node_name=envelope.node.node_name,
             resume=resumed,
         )
-        # The invocation boundary (blizzard#437 D6/D11), durable BEFORE launch — a fresh
-        # session opens on the beginning sentinel; no `tail_position` read is possible yet.
+        # The invocation boundary (D6/D11): a fresh spawn opens on the beginning sentinel; a
+        # `resume_from` continuation of an EXISTING session is a `resume`, reading its tail (F1).
+        kind: InvocationBoundaryKind
+        if resume_from is not None:
+            kind = "resume"
+            workdir = environments[0].workdir if environments else None
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(resume_from, workdir)
+        else:
+            kind, start_position, start_unreadable = "spawn", None, False
         self.ctx.stores.invocation_boundaries.record_boundary_open(
             lease_id=lease.lease_id,
             chunk_id=chunk_id,
             node_id=envelope.node.node_id,
             epoch=lease.epoch,
             generation=self.generation(lease.lease_id),
-            kind="spawn",
-            start_position=None,
+            kind=kind,
+            start_position=start_position,
+            start_unreadable=start_unreadable,
             opened_at=now,
         )
         _CP_AFTER_BOUNDARY.reached()
