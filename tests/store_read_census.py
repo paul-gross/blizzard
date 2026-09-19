@@ -107,6 +107,7 @@ from blizzard.runner.domain.leases import (
 from blizzard.runner.domain.outbound import IReadOutboundRepository
 from blizzard.runner.domain.pause import IReadPauseRepository
 from blizzard.runner.domain.requeue import IReadRequeueRepository
+from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository, SelfTestCheckRecord
 from blizzard.runner.domain.takeover import IReadTakeoverRepository
 from blizzard.runner.domain.usage import IReadUsageRepository
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
@@ -532,6 +533,13 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
     stores.usage.record_external_usage_attempt(
         slug=usage_slug, sampled_at=_t(86), payload="{}", report_kind="", report_payload=""
     )
+    stores.selftest_results.record_selftest_result(
+        harness_id=CLAUDE_CODE_HARNESS_ID,
+        status="passed",
+        error=None,
+        checks=(SelfTestCheckRecord(name="spawn_session_id", passed=True, detail="ok"),),
+        recorded_at=_t(87),
+    )
 
     seq_a = stores.outbound.enqueue_outbound(
         kind="lease.minted", chunk_id=chunk_1, lease_id=lease_2, payload="{}", created_at=_t(90)
@@ -688,6 +696,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadInvocationBoundaryRepository, "open_boundaries_for_lease"): lambda w: (
         w.read.invocation_boundaries.open_boundaries_for_lease(w.lease_2)
+    ),
+    (IReadSelfTestResultRepository, "latest_selftest_result"): lambda w: w.read.selftest_results.latest_selftest_result(
+        CLAUDE_CODE_HARNESS_ID
     ),
 }
 

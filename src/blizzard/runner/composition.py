@@ -29,6 +29,7 @@ from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
 from blizzard.runner.store.internal.outbound_store import OutboundStore
 from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
+from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
@@ -76,6 +77,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         graph_artifacts=GraphArtifactStore(connections),
         elicitations=ElicitationStore(connections),
         invocation_boundaries=InvocationBoundaryStore(connections),
+        selftest_results=SelfTestResultStore(connections),
     )
 
 

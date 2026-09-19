@@ -262,6 +262,10 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "is hub-sourced from the completion submission, not this runner-local staging fact."
     ),
     "record_git_commit_declaration": Silent("same as record_attachment — worker-local staging, no matching kind."),
+    "record_selftest_result": Silent(
+        _INTERNAL_BOOKKEEPING + " (blizzard#438 — a harness's just-completed selftest run, consumed by the"
+        " harness-health evaluator in a later phase, not by any panel surface today)"
+    ),
     # --- the transcript lane — its own poll, no kind in this vocabulary ----------------
     "mark_transcript_record_truncated": Silent(_TRANSCRIPT_LANE_POLLS),
     "stop_transcript_segment_shipping": Silent(_TRANSCRIPT_LANE_POLLS),

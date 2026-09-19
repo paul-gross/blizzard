@@ -237,12 +237,15 @@ def create_app(
     app.state.workspace_prompts = workspace_prompts or (
         WorkspacePromptService(runner_stores.workspace_prompt, SystemClock()) if runner_stores else None
     )
-    # The adapter-drift canary (issue #54): store-free, so wired unconditionally.
+    # The adapter-drift canary (issue #54): run state stays process-local, so this is wired
+    # unconditionally even with no store — `results` is the only part that needs one
+    # (blizzard#438), and is simply omitted (no durable outcome) when `runner_stores` is `None`.
     app.state.selftests = selftests or SelfTestService(
         harnesses=resolved_harnesses,
         scratch_git=SubprocessScratchGit(),
         process=LinuxProcessProbe(),
         clock=SystemClock(),
+        results=runner_stores.selftest_results if runner_stores else None,
     )
     # This default must **not** reach the network (issue #95) — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
