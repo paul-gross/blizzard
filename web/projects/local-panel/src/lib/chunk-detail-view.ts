@@ -49,4 +49,11 @@ export class MachineDetailView {
       { label: 'heartbeat', template: heartbeatValue },
     ];
   }
+
+  /** Names harness and version explicitly for the resume box's harness badge
+   * (`bzh:frontend-kit-floor`'s computed-label form) — a plain `<span>` here carries no
+   * label of its own. */
+  protected harnessLabel(esc: runnerApi.EscalationView): string {
+    return esc.harness_version ? `${esc.harness_id} version ${esc.harness_version}` : `${esc.harness_id}`;
+  }
 }

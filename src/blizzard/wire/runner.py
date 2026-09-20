@@ -103,6 +103,8 @@ class RunnerView(BaseModel):
     env_capacity: int | None = None
     # Every reported per-slug sample's own non-stale usage, empty when none was reported.
     subscriptions: list[SubscriptionUsageView] = []
+    # The runner's reported capability snapshot — every harness/tier it can execute right now.
+    capabilities: list[RunnerCapability] = []
 
 
 class RunnerListResponse(BaseModel):

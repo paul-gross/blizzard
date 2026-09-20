@@ -166,6 +166,33 @@ describe('ChunkTranscriptsTab', () => {
     expect(el.querySelector('[data-testid="transcript-continues-in"]')?.textContent).toContain('segment 2');
   });
 
+  it('renders the recorded harness on the segment-list badge, and passes the open segment’s own stamp through to the segment view', async () => {
+    const { el } = await render({
+      history: HISTORY,
+      segments: [segment({ harness_id: 'claude_code', harness_version: '1.2.3' })],
+      segmentId: 'seg-1',
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [] },
+    });
+
+    const listBadge = el.querySelector('[data-testid="transcript-segment-harness"][data-harness-id="claude_code"]');
+    expect(listBadge?.textContent?.trim()).toBe('claude_code 1.2.3');
+
+    // Both the nav-list badge and the open segment body's own badge render — two
+    // distinct affordances, one per surface.
+    expect(el.querySelectorAll('[data-testid="transcript-segment-harness"]')).toHaveLength(2);
+  });
+
+  it('renders no harness affordance at all for a segment that recorded none', async () => {
+    const { el } = await render({
+      history: HISTORY,
+      segments: [segment()],
+      segmentId: 'seg-1',
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [] },
+    });
+
+    expect(el.querySelector('[data-testid="transcript-segment-harness"]')).toBeNull();
+  });
+
   it('renders a truncated segment through KitAsyncState-style banner, never as empty or a generic error', async () => {
     const { el } = await render({
       history: HISTORY,

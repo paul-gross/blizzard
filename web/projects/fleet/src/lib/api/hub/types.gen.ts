@@ -1335,6 +1335,14 @@ export type ChunkUsageView = {
      */
     epoch: number;
     /**
+     * Harness Id
+     */
+    harness_id?: string | null;
+    /**
+     * Harness Version
+     */
+    harness_version?: string | null;
+    /**
      * Input Tokens
      */
     input_tokens: number;
@@ -4345,6 +4353,10 @@ export type RunnerRegistrationResponse = {
  * ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory.
  */
 export type RunnerView = {
+    /**
+     * Capabilities
+     */
+    capabilities?: Array<RunnerCapability>;
     /**
      * Env Capacity
      */

@@ -276,6 +276,32 @@ describe('ChunkTimeline', () => {
     expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-partial"]')).not.toBeNull();
   });
 
+  it("renders a step's own recorded harness id and version beside its usage (blizzard#441)", async () => {
+    const detail: ChunkDetail = {
+      ...COST_DETAIL,
+      chunk_id: 'ch_01harness0000000000000000000',
+      usage: [{ ...COST_DETAIL.usage![0], harness_id: 'claude_code', harness_version: '1.2.3' }],
+    };
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', detail);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const badge = el.querySelector('[data-testid="history-step-harness"]');
+    expect(badge?.textContent?.trim()).toBe('claude_code 1.2.3');
+    expect(badge?.getAttribute('data-harness-id')).toBe('claude_code');
+    expect(badge?.getAttribute('aria-label')).toBe('claude_code version 1.2.3');
+  });
+
+  it('renders no harness affordance for a step whose usage recorded none (blizzard#441)', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="history-step-harness"]')).toBeNull();
+  });
+
   it('renders its own "Node history" heading by default (issue #205)', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);

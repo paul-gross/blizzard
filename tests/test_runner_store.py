@@ -6,6 +6,8 @@ assert the SQL derivations the loop relies on, against a real tmp sqlite store.
 
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -467,6 +469,47 @@ def test_lease_generation_counts_spawn_facts(tmp_path):  # type: ignore[no-untyp
 
 
 @pytest.mark.unit
+def test_latest_spawn_harness_version_reads_none_for_a_generation_that_recorded_none(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "s1"),
+        spawned_at=_NOW,
+    )
+    assert store.latest_spawn_harness_version("lease_1") is None
+
+
+@pytest.mark.unit
+def test_latest_spawn_harness_version_reads_the_newest_generations_own_recorded_version(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "s1"),
+        spawned_at=_NOW,
+        harness_version="1.0.0",
+    )
+    assert store.latest_spawn_harness_version("lease_1") == "1.0.0"
+
+    # A later generation's own recorded version — never the earlier generation's, and
+    # never re-resolved.
+    store.record_spawn(
+        "lease_1",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "s1"),
+        spawned_at=_NOW,
+        harness_version="2.0.0",
+    )
+    assert store.latest_spawn_harness_version("lease_1") == "2.0.0"
+
+
+@pytest.mark.unit
 def test_record_usage_lands_fact_and_buffers_outbound(tmp_path):  # type: ignore[no-untyped-def]
     """The atomic local-write + outbound-enqueue pairing (mirrors ``record_local_pause``)."""
     store = _store(tmp_path)
@@ -489,6 +532,47 @@ def test_record_usage_lands_fact_and_buffers_outbound(tmp_path):  # type: ignore
     assert pending[0].kind == "usage.recorded"
     assert pending[0].chunk_id == "ch_1"
     assert pending[0].lease_id == "lease_1"
+
+
+@pytest.mark.unit
+def test_record_usage_stamps_the_samples_own_harness_identity_onto_the_outbound_payload(tmp_path):  # type: ignore[no-untyped-def]
+    """blizzard#441 — the sample's own ``harness_id``/``harness_version`` (stamped by the
+    caller, D4) ride the outbound ``usage.recorded`` payload untransformed."""
+    store = _store(tmp_path)
+    _mint(store)
+    sample = replace(_sample(), harness_id="claude_code", harness_version="1.2.3")
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=sample,
+        recorded_at=_NOW,
+    )
+    payload = json.loads(store.pending_outbound()[0].payload)
+    assert payload["harness_id"] == "claude_code"
+    assert payload["harness_version"] == "1.2.3"
+
+
+@pytest.mark.unit
+def test_record_usage_with_no_stamped_harness_identity_reads_back_null(tmp_path):  # type: ignore[no-untyped-def]
+    """A sample nobody stamped (D4's gate: no session, no stamp) reads back null, never a
+    fabricated identity."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=_sample(),
+        recorded_at=_NOW,
+    )
+    payload = json.loads(store.pending_outbound()[0].payload)
+    assert payload["harness_id"] is None
+    assert payload["harness_version"] is None
 
 
 @pytest.mark.unit

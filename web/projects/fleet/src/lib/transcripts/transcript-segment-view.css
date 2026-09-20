@@ -1,6 +1,16 @@
 :host {
   display: block;
 }
+.tag {
+  display: inline-block;
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--label-dim);
+  border: 1px solid var(--line);
+  padding: 0 4px;
+  margin-bottom: 4px;
+}
 .banner {
   color: var(--amber-hi);
   font-size: var(--fs-sm);

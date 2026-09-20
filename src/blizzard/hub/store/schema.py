@@ -880,6 +880,10 @@ usage_facts = Table(
     Column("runner_id", String, nullable=False),  # the reporting runner — audit/attribution only
     Column("kind", String, nullable=False),  # spawn | resume | judge
     Column("model", String, nullable=False),
+    # The invocation's own recorded harness identity (blizzard#441) — nullable and
+    # un-backfilled; NULL declares unknown, never a value.
+    Column("harness_id", String, nullable=True),
+    Column("harness_version", String, nullable=True),
     Column("input_tokens", Integer, nullable=False),
     Column("output_tokens", Integer, nullable=False),
     Column("cache_read_tokens", Integer, nullable=False),

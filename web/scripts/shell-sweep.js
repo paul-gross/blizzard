@@ -220,6 +220,16 @@
  *     pane, sized to `--master-list-col`, at 1024px, and genuinely stacks above it with
  *     no horizontal overflow at 390/320px — the `@media (min-width: 720px)` row/column
  *     flip jsdom cannot resolve.
+ *   - projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts —
+ *     two transcript segments recording distinct harnesses (blizzard#441) render two
+ *     genuinely distinct provenance badges with no horizontal overflow at 390px.
+ *   - projects/fleet/src/lib/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts —
+ *     two node-history steps recording distinct harnesses (blizzard#441) render two
+ *     genuinely distinct provenance badges beside their usage figures with no horizontal
+ *     overflow at 390px.
+ *   - projects/local-panel/src/lib/chunk-detail-view-provenance.shell-sweep.spec.ts — the
+ *     escalation resume box's harness-provenance badge (blizzard#441) renders beside the
+ *     resume command with no horizontal overflow at 390px.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -266,6 +276,9 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/graphs/graph-session-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/fleet/fleet-view.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-timeline-provenance.shell-sweep.spec.ts' },
+  { project: 'local-panel', spec: 'projects/local-panel/src/lib/chunk-detail-view-provenance.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.

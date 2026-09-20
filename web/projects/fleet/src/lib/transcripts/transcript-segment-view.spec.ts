@@ -41,6 +41,8 @@ interface RenderOptions {
   truncated?: boolean;
   continuedFrom?: TranscriptSegmentIndexEntry | null;
   continuesIn?: TranscriptSegmentIndexEntry | null;
+  harnessId?: string | null;
+  harnessVersion?: string | null;
 }
 
 async function render(options: RenderOptions = {}): Promise<{ el: HTMLElement; fixture: ComponentFixture<TranscriptSegmentView> }> {
@@ -53,6 +55,8 @@ async function render(options: RenderOptions = {}): Promise<{ el: HTMLElement; f
   fixture.componentRef.setInput('truncated', options.truncated ?? false);
   fixture.componentRef.setInput('continuedFrom', options.continuedFrom ?? null);
   fixture.componentRef.setInput('continuesIn', options.continuesIn ?? null);
+  fixture.componentRef.setInput('harnessId', options.harnessId ?? null);
+  fixture.componentRef.setInput('harnessVersion', options.harnessVersion ?? null);
   await fixture.whenStable();
   return { el: fixture.nativeElement as HTMLElement, fixture };
 }
@@ -66,6 +70,30 @@ describe('TranscriptSegmentView', () => {
     expect(el.querySelector('[data-testid="transcript-continues-in"]')).toBeNull();
     expect(el.querySelector('[data-testid="transcript-segment-truncated"]')).toBeNull();
     expect(el.querySelector('[data-testid="transcript-segment-turns-capped"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-harness"]')).toBeNull();
+  });
+
+  it('renders the recorded harness id and version', async () => {
+    const { el } = await render({ harnessId: 'claude_code', harnessVersion: '1.2.3' });
+
+    const badge = el.querySelector('[data-testid="transcript-segment-harness"]');
+    expect(badge?.textContent?.trim()).toBe('claude_code 1.2.3');
+    expect(badge?.getAttribute('data-harness-id')).toBe('claude_code');
+    expect(badge?.getAttribute('aria-label')).toBe('claude_code version 1.2.3');
+  });
+
+  it('renders the harness id alone when no version was recorded', async () => {
+    const { el } = await render({ harnessId: 'claude_code', harnessVersion: null });
+
+    const badge = el.querySelector('[data-testid="transcript-segment-harness"]');
+    expect(badge?.textContent?.trim()).toBe('claude_code');
+    expect(badge?.getAttribute('aria-label')).toBe('claude_code');
+  });
+
+  it('renders no harness affordance at all when the segment recorded none', async () => {
+    const { el } = await render({ harnessId: null });
+
+    expect(el.querySelector('[data-testid="transcript-segment-harness"]')).toBeNull();
   });
 
   it('renders a truncated banner when truncated is set', async () => {

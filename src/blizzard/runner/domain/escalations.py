@@ -28,6 +28,10 @@ class EscalationRecord:
     resolved_model: str | None = None
     resolved_effort: str | None = None
     harness_id: str | None = None
+    #: The escalated generation's own recorded harness build version (blizzard#441),
+    #: read off ``lease_spawns`` beside ``harness_id``. ``None`` when the generation
+    #: recorded none.
+    harness_version: str | None = None
 
     @property
     def session(self) -> SessionReference | None:

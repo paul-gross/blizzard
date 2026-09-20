@@ -247,6 +247,16 @@ a.gr:focus-visible {
   text-align: right;
   white-space: nowrap;
 }
+/* The harness-provenance badge beside a step's usage figures (blizzard#441). */
+.harness-badge {
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 /* The PARTIAL badge marks a cost total whose sum is a lower bound (issue #60). */
 .partial-badge {
   margin-left: 4px;

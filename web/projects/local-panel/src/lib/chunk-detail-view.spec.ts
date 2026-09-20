@@ -74,4 +74,41 @@ describe('MachineDetailView', () => {
 
     expect(el.querySelector('[data-testid="detail-resume"]')?.textContent).toContain('blizzard runner resume sess-new');
   });
+
+  it('renders the escalated session’s own recorded harness id and version (blizzard#441)', async () => {
+    const { el } = await render({
+      lease: LEASE,
+      escalation: {
+        chunk_id: LEASE.chunk_id,
+        lease_id: LEASE.lease_id,
+        node_id: LEASE.node_id,
+        epoch: LEASE.epoch,
+        closed_at: '2026-07-16T11:00:00.000Z',
+        resume_command: 'blizzard runner resume sess-new',
+        harness_id: 'claude_code',
+        harness_version: '1.2.3',
+      },
+    });
+
+    const badge = el.querySelector('[data-testid="detail-resume-harness"]');
+    expect(badge?.textContent?.trim()).toBe('claude_code 1.2.3');
+    expect(badge?.getAttribute('data-harness-id')).toBe('claude_code');
+    expect(badge?.getAttribute('aria-label')).toBe('claude_code version 1.2.3');
+  });
+
+  it('renders no harness affordance when the escalation recorded none', async () => {
+    const { el } = await render({
+      lease: LEASE,
+      escalation: {
+        chunk_id: LEASE.chunk_id,
+        lease_id: LEASE.lease_id,
+        node_id: LEASE.node_id,
+        epoch: LEASE.epoch,
+        closed_at: '2026-07-16T11:00:00.000Z',
+        resume_command: 'blizzard runner resume sess-new',
+      },
+    });
+
+    expect(el.querySelector('[data-testid="detail-resume-harness"]')).toBeNull();
+  });
 });

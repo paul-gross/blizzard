@@ -41,6 +41,15 @@
                     (click)="pickSegment.emit(seg.segment_id)"
                   >
                     <span>Segment {{ seg.spawn_generation + 1 }}</span>
+                    @if (seg.harness_id) {
+                      <span
+                        class="tag"
+                        data-testid="transcript-segment-harness"
+                        [attr.data-harness-id]="seg.harness_id"
+                        [attr.aria-label]="harnessLabel(seg)"
+                        >{{ seg.harness_id }}{{ seg.harness_version ? ' ' + seg.harness_version : '' }}</span
+                      >
+                    }
                     @if (seg.truncated) {
                       <span class="tag warn">truncated</span>
                     }
@@ -87,6 +96,8 @@
               [truncated]="segmentData()?.truncated ?? false"
               [continuedFrom]="continuedFrom()"
               [continuesIn]="continuesIn()"
+              [harnessId]="openSegmentEntry()?.harness_id ?? null"
+              [harnessVersion]="openSegmentEntry()?.harness_version ?? null"
               (pickSegment)="pickSegment.emit($event)"
               (openStandalone)="onTopLevelOpenStandalone($event)"
             />

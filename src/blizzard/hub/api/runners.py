@@ -31,6 +31,9 @@ from blizzard.wire.runner import (
     RunnerView,
 )
 from blizzard.wire.runner import (
+    RunnerCapability as RunnerCapabilityWire,
+)
+from blizzard.wire.runner import (
     SubscriptionUsageView as SubscriptionUsageViewWire,
 )
 from blizzard.wire.sse import RunnerChangeKind
@@ -105,6 +108,16 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
                 ],
             )
             for view in PerSubscriptionUsageView.every(r, now=now)
+        ],
+        capabilities=[
+            RunnerCapabilityWire(
+                harness_id=c.harness_id,
+                version=c.version,
+                tiers=list(c.tiers),
+                default=c.default,
+                available=c.available,
+            )
+            for c in r.capabilities
         ],
     )
 

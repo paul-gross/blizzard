@@ -63,6 +63,11 @@ export interface StepUsageTotal {
   readonly tokens: number;
   readonly costUsd: number;
   readonly costPartial: boolean;
+  /** The step's own recorded harness identity (blizzard#441) — read off whichever of
+   * its own summed rows recorded one, newest first, never derived from `model`. `null`
+   * when no row at this step recorded a stamp (a pre-provenance row, or none at all). */
+  readonly harnessId: string | null;
+  readonly harnessVersion: string | null;
 }
 
 /**
@@ -164,9 +169,14 @@ export function usageForStep(detail: ChunkDetail, row: HistoryRow): StepUsageTot
   if (!row.nodeId) return null;
   const rows = (detail.usage ?? []).filter((u) => u.node_id === row.nodeId && u.epoch === row.epoch);
   if (rows.length === 0) return null;
+  // Newest-first: `detail.usage` arrives oldest-first (the hub's own `_usage_history`),
+  // so the step's own most recent invocation is the step's own current identity.
+  const stamped = [...rows].reverse().find((u) => u.harness_id != null);
   return {
     tokens: rows.reduce((sum, u) => sum + u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_create_tokens, 0),
     costUsd: rows.reduce((sum, u) => sum + (u.cost_usd ?? 0), 0),
     costPartial: rows.some((u) => u.cost_usd === null),
+    harnessId: stamped?.harness_id ?? null,
+    harnessVersion: stamped?.harness_version ?? null,
   };
 }

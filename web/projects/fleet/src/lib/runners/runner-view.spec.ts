@@ -203,6 +203,42 @@ describe('RunnerPanelView', () => {
     ]);
   });
 
+  it('renders one distinct badge per capability for a two-harness runner, and marks an unavailable one distinguishably', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_multi_harness', {
+        capabilities: [
+          { harness_id: 'claude', version: '1.2.3', tiers: ['sonnet'], default: true, available: true },
+          { harness_id: 'codex', version: '4.5.6', tiers: [], default: false, available: false },
+        ],
+      }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const host = el.querySelector('[data-runner="rn_multi_harness"] [data-testid="runner-capabilities-group"]');
+    expect(host).not.toBeNull();
+    const badges = host?.querySelectorAll('[data-testid="runner-capability-badge"]') ?? [];
+    expect(badges).toHaveLength(2);
+    expect(host?.querySelector('[data-harness-id="claude"]')?.getAttribute('data-available')).toBe('true');
+    expect(host?.querySelector('[data-harness-id="codex"]')?.getAttribute('data-available')).toBe('false');
+  });
+
+  it('renders a labelled empty branch for a runner with no reported capabilities', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [row('rn_no_capabilities', { capabilities: [] })]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const host = el.querySelector('[data-runner="rn_no_capabilities"] [data-testid="runner-capabilities-group"]');
+    expect(host?.querySelector('[data-testid="runner-capability-badge"]')).toBeNull();
+    expect(host?.querySelector('[data-testid="runner-capabilities-empty"]')?.textContent?.trim()).toBe(
+      'NO CAPABILITIES REPORTED',
+    );
+  });
+
   it('emits togglePause with the row when the pause/resume button is activated', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
     fixture.componentRef.setInput('state', 'ready');

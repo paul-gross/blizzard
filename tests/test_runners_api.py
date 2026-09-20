@@ -34,6 +34,44 @@ def test_get_runner_returns_the_same_view_the_list_carries(tmp_path: Path) -> No
     assert resp.json() == next(r for r in listed if r["runner_id"] == "r1")
 
 
+def test_get_runner_returns_no_capabilities_when_none_were_registered(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+
+    resp = hub.client.get("/api/runners/r1")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["capabilities"] == []
+
+    listed = hub.client.get("/api/runners").json()["runners"]
+    assert next(r for r in listed if r["runner_id"] == "r1")["capabilities"] == []
+
+
+def test_get_runner_and_list_runners_both_carry_every_registered_capability(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.post(
+        "/api/fleet/runners",
+        json={
+            "runner_id": "r1",
+            "workspace_id": "w1",
+            "capabilities": [
+                {"harness_id": "claude", "version": "1.2.3", "tiers": ["sonnet"], "default": True, "available": True},
+                {"harness_id": "codex", "version": None, "tiers": [], "default": False, "available": False},
+            ],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    resp = hub.client.get("/api/runners/r1")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["capabilities"] == [
+        {"harness_id": "claude", "version": "1.2.3", "tiers": ["sonnet"], "default": True, "available": True},
+        {"harness_id": "codex", "version": None, "tiers": [], "default": False, "available": False},
+    ]
+
+    listed = hub.client.get("/api/runners").json()["runners"]
+    assert next(r for r in listed if r["runner_id"] == "r1")["capabilities"] == resp.json()["capabilities"]
+
+
 def test_get_runner_unknown_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.get("/api/runners/does-not-exist")

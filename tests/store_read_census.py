@@ -259,6 +259,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         process_start_time="st-200",
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
         spawned_at=_t(8),
+        harness_version="rc-1.0",
     )
     stores.liveness.record_heartbeat(lease_id=lease_2, beat_at=_t(9))
     stores.invocation_boundaries.record_boundary_open(
@@ -607,6 +608,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadLeaseLivenessRepository, "latest_heartbeat"): lambda w: w.read.liveness.latest_heartbeat(w.lease_2),
     (IReadLeaseLivenessRepository, "latest_spawn"): lambda w: w.read.liveness.latest_spawn(w.lease_2),
     (IReadLeaseLivenessRepository, "lease_generation"): lambda w: w.read.liveness.lease_generation(w.lease_2),
+    (IReadLeaseLivenessRepository, "latest_spawn_harness_version"): lambda w: (
+        w.read.liveness.latest_spawn_harness_version(w.lease_2)
+    ),
     (IReadLeaseResumeIntentRepository, "resume_intent_lease_ids"): lambda w: (
         w.read.resume_intent.resume_intent_lease_ids()
     ),
