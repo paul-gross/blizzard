@@ -17,6 +17,7 @@ from sqlalchemy import Engine, update
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.analytics.events import SegmentProvenance
 from blizzard.hub.domain.transcripts import SegmentRecord
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
@@ -29,6 +30,7 @@ pytestmark = pytest.mark.component
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _EXTRACTOR_VERSION = "blizzard-analytics/1"
+_PROVENANCE = SegmentProvenance(harness_id="claude_code", harness_version="1.0", model="claude-sonnet-5", effort="high")
 
 
 def _segment_record(**overrides: object) -> SegmentRecord:
@@ -89,10 +91,16 @@ def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "c
 def test_derivation_markers_matches_derivation_marker_per_segment(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = TranscriptEventStore(hub_store_connections(engine))
-    store.replace_segment_events("sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp1", at=_T0)
-    store.replace_segment_events("sg_2", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp2", at=_T0)
+    store.replace_segment_events(
+        "sg_1", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp1", at=_T0, provenance=_PROVENANCE
+    )
+    store.replace_segment_events(
+        "sg_2", _EXTRACTOR_VERSION, [], complete=True, content_fingerprint="fp2", at=_T0, provenance=_PROVENANCE
+    )
     # A different extractor version's marker must not leak into the requested version's read.
-    store.replace_segment_events("sg_2", "blizzard-analytics/2", [], complete=True, content_fingerprint="fp3", at=_T0)
+    store.replace_segment_events(
+        "sg_2", "blizzard-analytics/2", [], complete=True, content_fingerprint="fp3", at=_T0, provenance=_PROVENANCE
+    )
 
     result = store.derivation_markers(_EXTRACTOR_VERSION)
 

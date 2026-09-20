@@ -80,6 +80,8 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
             runner_id="r1",
             retries_max=2,
             created_at=_NOW,
+            resolved_model="claude-sonnet-5",
+            resolved_effort="high",
         )
     )
     ctx.stores.liveness.record_spawn(
@@ -230,6 +232,7 @@ def test_drain_renders_a_final_marker_from_the_ledger_row_not_a_hand_built_paylo
     assert (final.epoch, final.spawn_generation) == (1, 1)
     assert (final.turn_range_start, final.turn_range_end) == (3, 2)  # empty — claims no new turns
     assert (final.normalizer_version, final.harness_version) == ("claude-code/1.2", "1.2.3")
+    assert (final.model, final.effort) == ("claude-sonnet-5", "high")
     assert final.turns == []
     assert final.record_truncated is False
 

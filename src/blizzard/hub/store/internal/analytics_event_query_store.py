@@ -53,6 +53,14 @@ def _filtered_stmt(base: Select[Any], criteria: EventQueryCriteria) -> Select[An
         stmt = stmt.where(t.c.occurred_at >= criteria.since)
     if criteria.until is not None:
         stmt = stmt.where(t.c.occurred_at < criteria.until)
+    if criteria.harness_id is not None:
+        stmt = stmt.where(t.c.harness_id == criteria.harness_id)
+    if criteria.harness_version is not None:
+        stmt = stmt.where(t.c.harness_version == criteria.harness_version)
+    if criteria.model is not None:
+        stmt = stmt.where(t.c.model == criteria.model)
+    if criteria.effort is not None:
+        stmt = stmt.where(t.c.effort == criteria.effort)
     return stmt
 
 
@@ -98,6 +106,10 @@ def _to_record(row: Any) -> EventRecord:
         depth=row.depth,
         agent_type=row.agent_type,
         occurred_at=row.occurred_at,
+        harness_id=row.harness_id,
+        harness_version=row.harness_version,
+        model=row.model,
+        effort=row.effort,
     )
 
 

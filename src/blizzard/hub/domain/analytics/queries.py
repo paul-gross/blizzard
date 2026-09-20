@@ -30,6 +30,11 @@ class EventQueryCriteria:
     # An untimed event (no ``occurred_at``) falls outside every range, ``since``/``until`` alike.
     since: datetime | None = None
     until: datetime | None = None
+    # Provenance dimensions (blizzard#439 D6) — the segment's own frozen harness identity.
+    harness_id: str | None = None
+    harness_version: str | None = None
+    model: str | None = None
+    effort: str | None = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +56,10 @@ class EventRecord:
     depth: int
     agent_type: str | None
     occurred_at: datetime | None
+    harness_id: str | None
+    harness_version: str | None
+    model: str | None
+    effort: str | None
 
 
 @dataclass(frozen=True)

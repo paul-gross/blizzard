@@ -12,17 +12,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
+from blizzard.hub.domain.analytics.dialects import DIALECTS
 from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
 from blizzard.wire.transcript_segment import TurnSegmentView
 
-#: Bumped when recognition changes — the sweep re-derives history, leaving earlier
-#: rows untouched (D5/D9).
-EXTRACTOR_VERSION = "blizzard-analytics/3"
-
-#: The one dialect this build's extractors know (A1) — Claude Code's own normalizer
-#: stamp, mapped to the tool name that dialect uses for an agent spawn (blizzard#327).
-#: A future harness naming it differently is a new dialect entry here, not a rewrite.
-_CLAUDE_CODE_DIALECTS: dict[str, str] = {"claude-code-jsonl/2": "Agent"}
+#: Bumped when recognition changes — the sweep re-derives history, leaving earlier rows untouched (D5/D9).
+EXTRACTOR_VERSION = "blizzard-analytics/4"
 
 
 @dataclass(frozen=True)
@@ -59,9 +54,26 @@ class ITurnEventExtractor(Protocol):
         ...
 
 
+def _resolve_call(turn: TurnSegmentView, *, normalizer_version: str, kind: str) -> tuple[str, str] | None:
+    """This turn's own ``(tool_name, argument_value)`` for ``kind``, per the dialect
+    named by ``normalizer_version`` — ``None`` when the turn doesn't match at all. The
+    one recognition rule every extractor below shares; only the payload each builds
+    from the resolved pair differs (blizzard#439 D5)."""
+    entry = DIALECTS.get(normalizer_version, {}).get(kind)
+    if entry is None:
+        return None
+    if turn.kind != "tool" or turn.tool is None or turn.tool.name != entry.tool_name:
+        return None
+    value = turn.tool.input.get(entry.argument_key)
+    if not isinstance(value, str) or not value:
+        return None
+    return turn.tool.name, value
+
+
 class FileReadExtractor:
-    """A :class:`Read` call naming a concrete path it read (D5) — a pattern search
-    (``Grep``/``Glob``) is a different act and is not one."""
+    """A file-read call naming a concrete path it read (D5) — a pattern search
+    (``Grep``/``Glob``) is a different act and is not one; which tool name and argument
+    key count as a file read is resolved per dialect, not fixed here (blizzard#327)."""
 
     kind = KIND_FILE_READ
 
@@ -70,18 +82,16 @@ class FileReadExtractor:
         return path if isinstance(path, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
-        if normalizer_version not in _CLAUDE_CODE_DIALECTS:
+        resolved = _resolve_call(turn, normalizer_version=normalizer_version, kind=self.kind)
+        if resolved is None:
             return []
-        if turn.kind != "tool" or turn.tool is None or turn.tool.name != "Read":
-            return []
-        path = turn.tool.input.get("file_path")
-        if not isinstance(path, str) or not path:
-            return []
-        return [{"tool_name": turn.tool.name, "path": path}]
+        tool_name, path = resolved
+        return [{"tool_name": tool_name, "path": path}]
 
 
 class SkillInvocationExtractor:
-    """A ``Skill`` call naming which skill it invoked."""
+    """A skill-invocation call naming which skill it invoked — which tool name and
+    argument key count as one is resolved per dialect, not fixed here (blizzard#327)."""
 
     kind = KIND_SKILL_INVOCATION
 
@@ -90,20 +100,17 @@ class SkillInvocationExtractor:
         return skill_name if isinstance(skill_name, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
-        if normalizer_version not in _CLAUDE_CODE_DIALECTS:
+        resolved = _resolve_call(turn, normalizer_version=normalizer_version, kind=self.kind)
+        if resolved is None:
             return []
-        if turn.kind != "tool" or turn.tool is None or turn.tool.name != "Skill":
-            return []
-        skill_name = turn.tool.input.get("skill")
-        if not isinstance(skill_name, str) or not skill_name:
-            return []
+        _, skill_name = resolved
         return [{"skill_name": skill_name}]
 
 
 class AgentSpawnExtractor:
     """A subagent-spawn call naming the subagent type it spawned — which tool name that
-    is comes from the turn's own dialect (``_CLAUDE_CODE_DIALECTS``), since it is not the
-    same across every harness (blizzard#327)."""
+    is comes from the turn's own dialect (:data:`~blizzard.hub.domain.analytics.dialects.DIALECTS`),
+    since it is not the same across every harness (blizzard#327)."""
 
     kind = KIND_AGENT_SPAWN
 
@@ -112,14 +119,10 @@ class AgentSpawnExtractor:
         return agent_type if isinstance(agent_type, str) else None
 
     def recognize(self, turn: TurnSegmentView, *, normalizer_version: str) -> list[dict[str, object]]:
-        tool_name = _CLAUDE_CODE_DIALECTS.get(normalizer_version)
-        if tool_name is None:
+        resolved = _resolve_call(turn, normalizer_version=normalizer_version, kind=self.kind)
+        if resolved is None:
             return []
-        if turn.kind != "tool" or turn.tool is None or turn.tool.name != tool_name:
-            return []
-        agent_type = turn.tool.input.get("subagent_type")
-        if not isinstance(agent_type, str) or not agent_type:
-            return []
+        _, agent_type = resolved
         return [{"agent_type": agent_type}]
 
 

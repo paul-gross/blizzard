@@ -143,13 +143,17 @@ def _operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
 
 @dataclass(frozen=True)
 class EventScopeFilters:
-    """:class:`ScopeFilters` plus ``extractor_version`` — meaningless outside the
-    derived-event projection (blizzard#256 D7). Takes its five query params flat rather
-    than nesting a ``Depends(ScopeFilters.of)``, so FastAPI's per-dependant param
-    ordering reproduces the pre-split parameter order byte-for-byte."""
+    """:class:`ScopeFilters` plus ``extractor_version`` and four provenance dimensions
+    (blizzard#256 D7, blizzard#439 D6) — meaningless outside the derived-event
+    projection. Takes its nine query params flat, not nested behind
+    ``Depends(ScopeFilters.of)``, reproducing the pre-split param order byte-for-byte."""
 
     scope: ScopeFilters
     extractor_version: str | None
+    harness_id: str | None
+    harness_version: str | None
+    model: str | None
+    effort: str | None
 
     @classmethod
     def of(
@@ -159,8 +163,14 @@ class EventScopeFilters:
         since: Annotated[datetime | None, Query()] = None,
         until: Annotated[datetime | None, Query()] = None,
         extractor_version: Annotated[str | None, Query()] = None,
+        harness_id: Annotated[str | None, Query()] = None,
+        harness_version: Annotated[str | None, Query()] = None,
+        model: Annotated[str | None, Query()] = None,
+        effort: Annotated[str | None, Query()] = None,
     ) -> EventScopeFilters:
-        return cls(ScopeFilters(graph_id, source, since, until), extractor_version)
+        return cls(
+            ScopeFilters(graph_id, source, since, until), extractor_version, harness_id, harness_version, model, effort
+        )
 
     def criteria(
         self,
@@ -186,6 +196,10 @@ class EventScopeFilters:
             source=scope.source,
             since=scope.since,
             until=scope.until,
+            harness_id=self.harness_id,
+            harness_version=self.harness_version,
+            model=self.model,
+            effort=self.effort,
         )
 
 
@@ -233,6 +247,10 @@ def _event_view(record: EventRecord) -> AnalyticsEventView:
         depth=record.depth,
         agent_type=record.agent_type,
         occurred_at=iso_utc(record.occurred_at) if record.occurred_at is not None else None,
+        harness_id=record.harness_id,
+        harness_version=record.harness_version,
+        model=record.model,
+        effort=record.effort,
     )
 
 

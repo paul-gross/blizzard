@@ -69,7 +69,13 @@ def _open_transcript_segment(
     and :meth:`~LeaseLivenessStore.record_identified_spawn`. Every start path is a segment
     boundary (issue #246, D1), stamped here so a future write can't miss it."""
     context_row = conn.execute(
-        select(leases.c.chunk_id, leases.c.epoch, lease_context.c.node_id)
+        select(
+            leases.c.chunk_id,
+            leases.c.epoch,
+            lease_context.c.node_id,
+            lease_context.c.resolved_model,
+            lease_context.c.resolved_effort,
+        )
         .select_from(leases.join(lease_context, leases.c.lease_id == lease_context.c.lease_id))
         .where(leases.c.lease_id == lease_id)
     ).one()
@@ -110,6 +116,8 @@ def _open_transcript_segment(
             shipped_turns=0,
             normalizer_version=NO_NORMALIZER_VERSION,
             harness_version=None,
+            model=context_row.resolved_model,
+            effort=context_row.resolved_effort,
             truncated_reason=None,
             shipping_stopped_reason=None,
             finalized_at=None,

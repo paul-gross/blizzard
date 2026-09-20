@@ -82,6 +82,9 @@ class TranscriptSegmentRecord(BaseModel):
     harness_id: str | None = None
     normalizer_version: str
     harness_version: str | None
+    # Optional for previous-minor runners, exactly as harness_id is (blizzard#439 D3).
+    model: str | None = None
+    effort: str | None = None
     record_truncated: bool = False
     #: Re-ship only: the segment this replaces, which the lease key alone cannot distinguish.
     supersedes: str | None = None

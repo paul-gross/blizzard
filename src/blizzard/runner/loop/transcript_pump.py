@@ -492,6 +492,8 @@ def _record_envelope(
         "harness_id": segment.harness_id,
         "normalizer_version": batch.normalizer_version,
         "harness_version": batch.harness_version,
+        "model": segment.model,
+        "effort": segment.effort,
         "record_truncated": False,
         "supersedes": segment.supersedes,
         "turns": [],

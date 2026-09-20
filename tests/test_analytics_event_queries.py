@@ -14,7 +14,7 @@ from sqlalchemy import Engine, insert
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics import MalformedCursor
-from blizzard.hub.domain.analytics.events import TranscriptEvent
+from blizzard.hub.domain.analytics.events import SegmentProvenance, TranscriptEvent
 from blizzard.hub.domain.analytics.queries import EventQueryCriteria
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
@@ -29,6 +29,8 @@ _OTHER_VERSION = "blizzard-analytics/1"
 _NOW = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
 #: Comfortably over any fixture here, so a page bound never shapes what a filter returns.
 _LIMIT = 50
+_PROVENANCE = SegmentProvenance(harness_id="claude_code", harness_version="1.0", model="claude-sonnet-5", effort="high")
+_OTHER_PROVENANCE = SegmentProvenance(harness_id="opencode", harness_version="2.0", model="gpt-5.6-luna", effort="max")
 
 
 def _event(**overrides: object) -> TranscriptEvent:
@@ -74,9 +76,20 @@ def _new_store(tmp_path: Path) -> _Fixture:
     connections = hub_store_connections(engine)
     writer = TranscriptEventStore(connections)
 
-    def insert_events(segment_id: str, *events: TranscriptEvent, extractor_version: str = _VERSION) -> None:
+    def insert_events(
+        segment_id: str,
+        *events: TranscriptEvent,
+        extractor_version: str = _VERSION,
+        provenance: SegmentProvenance = _PROVENANCE,
+    ) -> None:
         writer.replace_segment_events(
-            segment_id, extractor_version, list(events), complete=True, content_fingerprint="fp", at=_NOW
+            segment_id,
+            extractor_version,
+            list(events),
+            complete=True,
+            content_fingerprint="fp",
+            at=_NOW,
+            provenance=provenance,
         )
 
     return _Fixture(AnalyticsEventQueryStore(connections), engine, insert_events)
@@ -129,6 +142,7 @@ def store(tmp_path: Path) -> AnalyticsEventQueryStore:
             agent_type="explorer",
             occurred_at=_NOW.replace(day=13),
         ),
+        provenance=_OTHER_PROVENANCE,
     )
     # A prior-version row — must never surface under `_VERSION`'s reads (D1: mixing
     # versions double-counts the same occurrence).
@@ -179,6 +193,37 @@ def test_node_id_filters_events(store: AnalyticsEventQueryStore) -> None:
 def test_graph_id_filters_events(store: AnalyticsEventQueryStore) -> None:
     page = store.events(_criteria(graph_id="gr_2"), limit=_LIMIT)
     assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_harness_id_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(harness_id="opencode"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_harness_version_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(harness_version="2.0"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_model_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(model="gpt-5.6-luna"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_effort_filters_events(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(effort="max"), limit=_LIMIT)
+    assert [e.subject for e in page.events] == ["src/c.py"]
+
+
+def test_events_carry_their_own_provenance(store: AnalyticsEventQueryStore) -> None:
+    page = store.events(_criteria(graph_id="gr_2"), limit=_LIMIT)
+    [event] = page.events
+    assert (event.harness_id, event.harness_version, event.model, event.effort) == (
+        "opencode",
+        "2.0",
+        "gpt-5.6-luna",
+        "max",
+    )
 
 
 def test_source_filters_by_chunk_work_ref_existence(store: AnalyticsEventQueryStore) -> None:
@@ -297,6 +342,11 @@ def test_counts_by_file(store: AnalyticsEventQueryStore) -> None:
 def test_counts_by_file_honors_a_combined_filter(store: AnalyticsEventQueryStore) -> None:
     rows = store.counts_by_file(_criteria(node_id="nd_build"))
     assert {(r.key, r.count) for r in rows} == {("src/a.py", 1), ("src/b.py", 1)}
+
+
+def test_counts_by_file_honors_a_harness_id_filter(store: AnalyticsEventQueryStore) -> None:
+    rows = store.counts_by_file(_criteria(harness_id="opencode"))
+    assert {(r.key, r.count) for r in rows} == {("src/c.py", 1)}
 
 
 def test_counts_by_skill(store: AnalyticsEventQueryStore) -> None:

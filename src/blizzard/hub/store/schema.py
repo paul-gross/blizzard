@@ -1290,6 +1290,9 @@ transcript_segments = Table(
     Column("harness_id", String, nullable=True),
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
+    # Frozen at the runner's segment open (blizzard#439 D3); nullable, no backfill.
+    Column("model", String, nullable=True),
+    Column("effort", String, nullable=True),
     # The runner's OWN cap declaration, distinct from `rejected` above; nullable, no backfill.
     Column("record_truncated", Boolean, nullable=True),
     # Re-ship only: the segment this replaces — dropped from a bounded per-lease read.
@@ -1355,6 +1358,11 @@ transcript_events = Table(
     Column("graph_id", String, nullable=False),
     Column("depth", Integer, nullable=False),  # 0 main lane; nesting depth otherwise (D8)
     Column("agent_type", String, nullable=True),  # nearest-enclosing sidechain's; None at depth 0
+    # The segment's own frozen provenance (blizzard#439), stamped once per derivation call.
+    Column("harness_id", String, nullable=True),
+    Column("harness_version", String, nullable=True),
+    Column("model", String, nullable=True),
+    Column("effort", String, nullable=True),
     # The turn's own instant, never the hub's receipt instant; nullable for an
     # untimed turn.
     Column("occurred_at", UtcDateTime, nullable=True),

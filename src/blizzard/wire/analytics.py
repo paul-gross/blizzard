@@ -27,6 +27,10 @@ class AnalyticsEventView(BaseModel):
     depth: int
     agent_type: str | None
     occurred_at: str | None
+    harness_id: str | None
+    harness_version: str | None
+    model: str | None
+    effort: str | None
 
 
 class AnalyticsEventsResponse(BaseModel):

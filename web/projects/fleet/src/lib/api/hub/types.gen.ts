@@ -263,6 +263,10 @@ export type AnalyticsEventView = {
      */
     depth: number;
     /**
+     * Effort
+     */
+    effort: string | null;
+    /**
      * Epoch
      */
     epoch: number;
@@ -271,6 +275,14 @@ export type AnalyticsEventView = {
      */
     graph_id: string;
     /**
+     * Harness Id
+     */
+    harness_id: string | null;
+    /**
+     * Harness Version
+     */
+    harness_version: string | null;
+    /**
      * Id
      */
     id: number;
@@ -278,6 +290,10 @@ export type AnalyticsEventView = {
      * Kind
      */
     kind: string;
+    /**
+     * Model
+     */
+    model: string | null;
     /**
      * Node Id
      */
@@ -4817,6 +4833,10 @@ export type TranscriptSegmentRecord = {
      */
     chunk_id: string;
     /**
+     * Effort
+     */
+    effort?: string | null;
+    /**
      * Epoch
      */
     epoch: number;
@@ -4832,6 +4852,10 @@ export type TranscriptSegmentRecord = {
      * Harness Version
      */
     harness_version: string | null;
+    /**
+     * Model
+     */
+    model?: string | null;
     /**
      * Node Id
      */
@@ -5600,6 +5624,22 @@ export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData = {
          * Extractor Version
          */
         extractor_version?: string | null;
+        /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
+         * Effort
+         */
+        effort?: string | null;
     };
     url: '/api/analytics/counts/agent-types';
 };
@@ -5658,6 +5698,22 @@ export type CountsByFileApiAnalyticsCountsFilesGetData = {
          * Extractor Version
          */
         extractor_version?: string | null;
+        /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
+         * Effort
+         */
+        effort?: string | null;
     };
     url: '/api/analytics/counts/files';
 };
@@ -5716,6 +5772,22 @@ export type CountsByNodeApiAnalyticsCountsNodesGetData = {
          * Extractor Version
          */
         extractor_version?: string | null;
+        /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
+         * Effort
+         */
+        effort?: string | null;
     };
     url: '/api/analytics/counts/nodes';
 };
@@ -5766,6 +5838,22 @@ export type CountsBySkillApiAnalyticsCountsSkillsGetData = {
          * Extractor Version
          */
         extractor_version?: string | null;
+        /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
+         * Effort
+         */
+        effort?: string | null;
     };
     url: '/api/analytics/counts/skills';
 };
@@ -5920,6 +6008,22 @@ export type ListEventsApiAnalyticsEventsGetData = {
          * Extractor Version
          */
         extractor_version?: string | null;
+        /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
+         * Effort
+         */
+        effort?: string | null;
     };
     url: '/api/analytics/events';
 };
@@ -5982,6 +6086,22 @@ export type StreamEventsApiAnalyticsEventsNdjsonGetData = {
          * Extractor Version
          */
         extractor_version?: string | null;
+        /**
+         * Harness Id
+         */
+        harness_id?: string | null;
+        /**
+         * Harness Version
+         */
+        harness_version?: string | null;
+        /**
+         * Model
+         */
+        model?: string | null;
+        /**
+         * Effort
+         */
+        effort?: string | null;
     };
     url: '/api/analytics/events/ndjson';
 };
