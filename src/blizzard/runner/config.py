@@ -410,6 +410,8 @@ class RunnerConfig:
     harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod
     harness_permission_mode: str | None = None  # `claude -p --permission-mode` (headless); None omits it
     worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)
+    #: Override for the Claude Code health probe's own credential file (blizzard#438); `None` is its own default.
+    claude_code_credentials_path: str | None = None
     max_agents: int = DEFAULT_MAX_AGENTS
     base_branch: str = DEFAULT_BASE_BRANCH
     #: Node NAMES this runner imposes a human gate on; reloaded every tick.
@@ -491,6 +493,8 @@ class RunnerConfig:
     opencode_effort_aliases: tuple[tuple[str, str], ...] = ()
     #: The runner-owned OpenCode permission/plugin document's path (D7); `None` predates the binding.
     opencode_worker_config_path: str | None = None
+    #: Override for the OpenCode health probe's own auth file (blizzard#438); `None` is its own default.
+    opencode_auth_path: str | None = None
     #: The reverse-proxy trust set (issue #130) — addresses or CIDRs whose
     #: `X-Forwarded-Proto` is honored; empty ignores the header from every peer.
     trusted_proxies: tuple[str, ...] = ()
@@ -710,7 +714,12 @@ class RunnerConfig:
             f'harness_binary = "{self.harness_binary}"\n'
             f'harness_permission_mode = "{self.harness_permission_mode or ""}"\n'
             f"worker_settings_path = {settings}\n"
-            f"max_agents = {self.max_agents}\n"
+            + (
+                f'claude_code_credentials_path = "{self.claude_code_credentials_path}"\n'
+                if self.claude_code_credentials_path is not None
+                else '# claude_code_credentials_path = "~/.claude/.credentials.json"  # this is the default\n'
+            )
+            + f"max_agents = {self.max_agents}\n"
             f'base_branch = "{self.base_branch}"\n'
             "\n# Human gates this runner imposes by node name; empty = none.\n"
             f"gates = [{gates}]\n"
@@ -839,6 +848,11 @@ class RunnerConfig:
             + "[opencode]\n"
             + f'binary = "{self.opencode_binary}"\n'
             + f"worker_config_path = {json.dumps(self.opencode_worker_config_path or '')}\n"
+            + (
+                f'auth_path = "{self.opencode_auth_path}"\n'
+                if self.opencode_auth_path is not None
+                else '# auth_path = "/path/to/auth.json"  # defaults to the OpenCode CLI\'s own discovery path\n'
+            )
             + "\n[opencode.models.aliases]\n"
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.opencode_model_aliases)
             + "\n[opencode.effort.aliases]\n"
@@ -884,6 +898,9 @@ class RunnerConfig:
             worker_settings_path=(str(raw["worker_settings_path"]) or None)
             if raw.get("worker_settings_path")
             else None,
+            claude_code_credentials_path=(str(raw["claude_code_credentials_path"]) or None)
+            if raw.get("claude_code_credentials_path")
+            else None,
             max_agents=int(raw.get("max_agents", DEFAULT_MAX_AGENTS)),
             base_branch=str(raw.get("base_branch", DEFAULT_BASE_BRANCH)),
             gates=tuple(str(g) for g in raw.get("gates", ())),
@@ -914,6 +931,7 @@ class RunnerConfig:
             effort_aliases=Table.of(raw.get("effort")).pairs("aliases"),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
             opencode_binary=opencode.word("binary") or DEFAULT_OPENCODE_BINARY,
+            opencode_auth_path=opencode.word("auth_path"),
             opencode_model_aliases=Table.of(opencode.body.get("models")).pairs("aliases"),
             opencode_effort_aliases=Table.of(opencode.body.get("effort")).pairs("aliases"),
             # A pre-`[opencode]` config carries no `worker_config_path`; default to the

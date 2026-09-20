@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -698,6 +699,19 @@ def write_work_sources(hub_dir: Path, sources: Sequence[WorkSourceConfig]) -> Hu
     config = replace(config, work_sources=tuple(sources))
     config.config_path.write_text(config.to_toml())
     return config
+
+
+def write_mock_harness_credentials(runner_dir: Path) -> tuple[str, str]:
+    """Fixture-controlled, always-valid credential files for the harness-health probes
+    (blizzard#438) — neither mock CLI is a real, logged-in provider, so a runner driven
+    against them needs its own disposable stand-ins rather than reading whatever (if
+    anything) sits at each probe's real-credential-store default on this machine.
+    Returns ``(claude_code_credentials_path, opencode_auth_path)``."""
+    claude_credentials = runner_dir / "mock-claude-credentials.json"
+    claude_credentials.write_text(json.dumps({"claudeAiOauth": {"accessToken": "mock-token"}}))
+    opencode_auth = runner_dir / "mock-opencode-auth.json"
+    opencode_auth.write_text(json.dumps({"anthropic": {"type": "oauth"}}))
+    return str(claude_credentials), str(opencode_auth)
 
 
 def daemon_log_sink(path: Path) -> IO[str]:

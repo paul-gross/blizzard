@@ -27,7 +27,13 @@ from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
-from tests.support import daemon_log_sink, free_port, read_daemon_log, write_work_sources
+from tests.support import (
+    daemon_log_sink,
+    free_port,
+    read_daemon_log,
+    write_mock_harness_credentials,
+    write_work_sources,
+)
 
 pytestmark = [
     pytest.mark.e2e,
@@ -426,6 +432,7 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
     harness binaries are always wired: ``harness_binary`` keeps meaning Claude Code
     (harness selection is per-node, never this function), ``opencode_binary`` lets a scenario opt in by naming ``opencode``."""
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
+    claude_credentials, opencode_auth = write_mock_harness_credentials(runner_dir)
     return dataclasses.replace(
         base,
         host="127.0.0.1",
@@ -437,7 +444,11 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
         # omitted (``None``).
         harness_permission_mode=None,
+        # Both health probes read a fixture-written credential file (blizzard#438) — neither
+        # mock binary is a real, logged-in provider CLI.
+        claude_code_credentials_path=claude_credentials,
         opencode_binary=str(bin_dir / "mock-opencode"),
+        opencode_auth_path=opencode_auth,
         # A path that is never created, so the external-usage sampler's missing-credentials
         # soft failure trips before any request is built (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),

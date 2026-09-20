@@ -467,6 +467,49 @@ def test_external_usage_credentials_path_round_trips_through_to_toml_and_load(tm
 
 
 @pytest.mark.unit
+def test_claude_code_credentials_path_defaults_none(tmp_path: Path) -> None:
+    # Absent means the health probe's own default (`~/.claude/.credentials.json`),
+    # distinct from `external_usage_credentials_path` (blizzard#438).
+    assert RunnerConfig.scaffold(tmp_path).claude_code_credentials_path is None
+
+
+@pytest.mark.unit
+def test_claude_code_credentials_path_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    scratch = str(tmp_path / "scratch-credentials.json")
+    edited = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        claude_code_credentials_path=scratch,
+    )
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.claude_code_credentials_path == scratch
+
+
+@pytest.mark.unit
+def test_opencode_auth_path_defaults_none(tmp_path: Path) -> None:
+    # Absent means the health probe's own default discovery path (blizzard#438).
+    assert RunnerConfig.scaffold(tmp_path).opencode_auth_path is None
+
+
+@pytest.mark.unit
+def test_opencode_auth_path_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    scratch = str(tmp_path / "scratch-auth.json")
+    edited = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        opencode_auth_path=scratch,
+    )
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.opencode_auth_path == scratch
+
+
+@pytest.mark.unit
 def test_worker_env_passthrough_defaults_absent(tmp_path: Path) -> None:
     # No `[worker]` table at all on a fresh scaffold — absent means no operator
     # extension to the spawn-environment allowlist (issue #88).
