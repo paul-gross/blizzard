@@ -380,6 +380,9 @@ usage_facts = Table(
     Column("cache_read_tokens", Integer, nullable=False),
     Column("cache_create_tokens", Integer, nullable=False),
     Column("cost_usd", Float, nullable=True),  # None = no envelope for this invocation — never fabricated
+    Column("reported_cost_usd", Float, nullable=True),  # the harness's own figure, verbatim, as audit
+    # False = a pre-reading row, whose cost_usd is the harness's figure rather than a share.
+    Column("cost_is_share", Boolean, nullable=False, server_default=false()),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 

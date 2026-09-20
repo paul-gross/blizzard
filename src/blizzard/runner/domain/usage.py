@@ -79,10 +79,11 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         sample: UsageSample,
         recorded_at: datetime,
     ) -> int | None:
-        """Idempotently record one usage fact **and** buffer its outbound report,
-        atomically (issue #58); return the buffered report's seq. Keyed on
-        ``(lease_id, generation, sample.kind)``: a resume within the same lease is a
-        genuinely new row; an exact replay writes nothing, buffers nothing, returns ``None``."""
+        """Idempotently record one usage fact **and** buffer its outbound report, atomically
+        (issue #58); return the buffered report's seq. Keyed on ``(lease_id, generation,
+        sample.kind)``: a resume within the same lease is a genuinely new row; an exact replay
+        writes nothing, buffers nothing, returns ``None``. The cost stored and reported is this
+        invocation's own share of ``sample.cost_usd``, and is absent when no reading was possible."""
         ...
 
     def record_context_sample(

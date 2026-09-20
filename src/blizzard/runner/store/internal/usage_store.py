@@ -6,15 +6,21 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import Connection, and_, case, func, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.domain.usage import ContextSampleState, IWriteUsageRepository, UsageTotals
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.harness.usage import SessionCostBasis, UsageSample, invocation_cost
 from blizzard.runner.store.internal.base import RunnerStoreConnections
-from blizzard.runner.store.schema import context_samples, external_usage_samples, outbound_buffer, usage_facts
+from blizzard.runner.store.schema import (
+    context_samples,
+    external_usage_samples,
+    leases,
+    outbound_buffer,
+    usage_facts,
+)
 from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.store")
@@ -48,6 +54,36 @@ class UsageStore:
             cost_usd=float(row[4]),
             cost_partial=bool(row[5]),
         )
+
+    def _session_cost_basis(self, conn: Connection, lease_id: str) -> SessionCostBasis | None:
+        """What ``lease_id``'s session has banked; ``None`` without an identified session.
+
+        Keyed on ``(harness_id, session_id)``, joined through ``leases`` because a session
+        outlives the lease it was minted under. The basis holds still only because one session
+        is driven by one lease at a time — no transaction serializes this read against the insert."""
+        row = conn.execute(
+            select(leases.c.session_id, leases.c.harness_id).where(leases.c.lease_id == lease_id)
+        ).one_or_none()
+        if row is None or not row.session_id or not row.harness_id:
+            return None
+        tokens = (
+            usage_facts.c.input_tokens
+            + usage_facts.c.output_tokens
+            + usage_facts.c.cache_read_tokens
+            + usage_facts.c.cache_create_tokens
+        )
+        banked = conn.execute(
+            select(
+                func.coalesce(func.sum(tokens), 0),
+                # Shares sum. A pre-reading row's figure does not — it is a running total, so
+                # the largest of them already stands for everything banked before the change.
+                func.coalesce(func.sum(case((usage_facts.c.cost_is_share, usage_facts.c.cost_usd))), 0.0)
+                + func.coalesce(func.max(case((~usage_facts.c.cost_is_share, usage_facts.c.reported_cost_usd))), 0.0),
+            )
+            .select_from(usage_facts.join(leases, leases.c.lease_id == usage_facts.c.lease_id))
+            .where(and_(leases.c.session_id == row.session_id, leases.c.harness_id == row.harness_id))
+        ).one()
+        return SessionCostBasis(token_total=int(banked[0]), banked_cost_usd=float(banked[1]))
 
     def last_external_usage_attempt_at(self, slug: str) -> datetime | None:
         stmt = select(func.max(external_usage_samples.c.sampled_at)).where(external_usage_samples.c.slug == slug)
@@ -100,6 +136,9 @@ class UsageStore:
                 # A replay of the exact same invocation — the row is already durable;
                 # write nothing a second time.
                 return None
+            # What this invocation alone cost, which is the harness's own figure only
+            # until the session has banked something for a session-scoped one to include.
+            cost_usd = invocation_cost(sample, self._session_cost_basis(conn, lease_id))
             conn.execute(
                 usage_facts.insert().values(
                     lease_id=lease_id,
@@ -113,7 +152,9 @@ class UsageStore:
                     output_tokens=sample.output_tokens,
                     cache_read_tokens=sample.cache_read_tokens,
                     cache_create_tokens=sample.cache_create_tokens,
-                    cost_usd=sample.cost_usd,
+                    cost_usd=cost_usd,
+                    reported_cost_usd=sample.cost_usd,
+                    cost_is_share=True,
                     recorded_at=recorded_at,
                 )
             )
@@ -128,7 +169,7 @@ class UsageStore:
                     "output_tokens": sample.output_tokens,
                     "cache_read_tokens": sample.cache_read_tokens,
                     "cache_create_tokens": sample.cache_create_tokens,
-                    "cost_usd": sample.cost_usd,
+                    "cost_usd": cost_usd,
                 }
             )
             result = conn.execute(
@@ -140,13 +181,23 @@ class UsageStore:
                     created_at=recorded_at,
                 )
             )
+        if sample.cost_usd is not None and cost_usd is None:
+            # Absent cost here is a rejected reading, not a worker that died before its
+            # envelope — the two are indistinguishable on the board, so say so once here.
+            _log.warning(
+                "harness cost figure reads below what its session already banked",
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                generation=generation,
+                reported_cost_usd=sample.cost_usd,
+            )
         _log.info(
             "usage fact recorded",
             lease_id=lease_id,
             chunk_id=chunk_id,
             generation=generation,
             kind=sample.kind,
-            cost_usd=sample.cost_usd,
+            cost_usd=cost_usd,
         )
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0

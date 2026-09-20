@@ -292,11 +292,11 @@ class IHarnessUsageAccounting(Protocol):
     transcript-sum fallback."""
 
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
-        """Translate a result envelope's ``usage`` + ``total_cost_usd`` into a sample.
+        """Translate a result envelope's ``usage`` + its cost figure into a sample.
 
-        ``kind`` names which invocation produced ``output``; the adapter never infers it.
-        ``model`` attributes the sample only when the harness reports none of its own.
-        ``None`` when there is no result envelope at all. Cost rides verbatim, never estimated."""
+        ``kind`` names which invocation produced ``output``; the adapter never infers it, and
+        ``model`` attributes it only when the harness reports none. ``None`` when no envelope.
+        Cost rides verbatim, its scope on ``cost_scope_tokens`` — neither estimated nor resolved."""
         ...
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:

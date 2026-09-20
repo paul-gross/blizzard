@@ -106,7 +106,9 @@ if args == ["--version"]:
 session = args[args.index("--session") + 1] if "--session" in args else None
 sid = session or "ses_selftest"
 
-if session is None:
+# Only a `run` performs the task. `export` carries no --session either, and is the one
+# call the runner makes without a workdir — acting on it commits into the runner's cwd.
+if session is None and args[:1] == ["run"]:
     with open("SELFTEST.txt", "w") as fh:
         fh.write("ok\\n")
     subprocess.run(["git", "add", "SELFTEST.txt"], check=True)

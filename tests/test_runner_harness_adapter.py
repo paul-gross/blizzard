@@ -1651,3 +1651,67 @@ def test_resume_command_appends_only_the_stamp_it_has() -> None:
     assert (
         adapter.resume_command("/ws/e1", "sess-a", effort="high") == "cd /ws/e1 && claude --resume sess-a --effort high"
     )
+
+
+@pytest.mark.unit
+def test_parse_usage_reads_the_cost_scope_off_the_model_breakdown() -> None:
+    # Claude Code's own shape: `usage` is this invocation, `modelUsage` is what the cost
+    # figure was charged for — and on a resumed session that is the session to date.
+    envelope = json.dumps(
+        {
+            "type": "result",
+            "result": "ok",
+            "session_id": "s1",
+            "usage": {
+                "input_tokens": 4,
+                "output_tokens": 1929,
+                "cache_read_input_tokens": 168903,
+                "cache_creation_input_tokens": 1494,
+            },
+            "total_cost_usd": 2.118976,
+            "modelUsage": {
+                "claude-opus-5": {
+                    "inputTokens": 56,
+                    "outputTokens": 21630,
+                    "cacheReadInputTokens": 1687112,
+                    "cacheCreationInputTokens": 73439,
+                    "costUSD": 2.118976,
+                }
+            },
+        }
+    )
+    sample = _adapter().parse_usage(envelope, "resume")
+    assert sample is not None
+    assert sample.token_total == 172330  # this invocation's own four counts
+    assert sample.cost_scope_tokens == 1782237  # what $2.118976 was charged for
+    assert sample.cost_usd == 2.118976
+
+
+@pytest.mark.unit
+def test_parse_usage_sums_every_model_the_breakdown_names() -> None:
+    # Sub-models the top-level `usage` omits are still inside the cost figure's scope.
+    envelope = json.dumps(
+        {
+            "type": "result",
+            "result": "ok",
+            "session_id": "s1",
+            "usage": {"input_tokens": 1, "output_tokens": 3, "cache_read_input_tokens": 0},
+            "total_cost_usd": 0.0314736,
+            "modelUsage": {
+                "claude-sonnet-5": {"inputTokens": 1, "outputTokens": 3, "cacheReadInputTokens": 18538},
+                "claude-haiku-4-5-20251001": {"inputTokens": 0, "outputTokens": 9},
+            },
+        }
+    )
+    sample = _adapter().parse_usage(envelope, "spawn")
+    assert sample is not None
+    assert sample.cost_scope_tokens == 18551
+
+
+@pytest.mark.unit
+def test_parse_usage_reports_no_cost_scope_when_the_envelope_breaks_out_no_models() -> None:
+    # The shape that preceded the breakdown: nothing to read, so the figure is this
+    # invocation's and rides verbatim.
+    sample = _adapter().parse_usage(_USAGE_ENVELOPE, "judge")
+    assert sample is not None
+    assert sample.cost_scope_tokens is None

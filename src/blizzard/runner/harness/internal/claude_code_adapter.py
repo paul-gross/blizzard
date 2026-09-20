@@ -102,6 +102,23 @@ class ResultEnvelope:
         cost = self.fields.get("total_cost_usd")
         return float(cost) if isinstance(cost, int | float) else None
 
+    @property
+    def cost_scope_tokens(self) -> int | None:
+        """The tokens ``total_cost_usd`` was charged for, summed across every model the
+        envelope's ``modelUsage`` breaks out — sub-models the top-level ``usage`` omits
+        included, since the cost figure covers them too. ``None`` when the envelope
+        carries no breakdown, which says the figure is this invocation's alone."""
+        breakdown = self.fields.get("modelUsage")
+        if not isinstance(breakdown, dict):
+            return None
+        fields = ("inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens")
+        total = 0
+        for entry in breakdown.values():
+            if not isinstance(entry, dict):
+                continue
+            total += sum(int(entry.get(field) or 0) for field in fields)
+        return total
+
 
 class ClaudeCodeAdapter:
     """The Claude Code binding. Dumb: translates the CLI surface, never decides."""
@@ -436,6 +453,7 @@ class ClaudeCodeAdapter:
             cache_read_tokens=int(usage.get("cache_read_input_tokens") or 0),
             cache_create_tokens=int(usage.get("cache_creation_input_tokens") or 0),
             cost_usd=envelope.cost_usd,
+            cost_scope_tokens=envelope.cost_scope_tokens,
         )
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:

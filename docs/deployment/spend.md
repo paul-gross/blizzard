@@ -1,8 +1,43 @@
 # Spend
 
 An unattended fleet spends against the operator's harness billing with no ceiling by default; two optional caps live in
-a `[cost]` table in `blizzard-runner.toml`, absent by default — no table, no cap. Cost figures are the harness's own
-`total_cost_usd`; blizzard maintains no pricing table and never fabricates a cost.
+a `[cost]` table in `blizzard-runner.toml`, absent by default — no table, no cap. Every cost blizzard records derives
+from the harness's own reported figure, by subtraction and never by pricing: blizzard maintains no pricing table and
+never fabricates a cost.
+
+## The two readings of a reported figure
+
+A harness is free to charge its figure against the whole session rather than the invocation that produced it. Claude
+Code does exactly this on a resume, so its figure already contains every earlier turn of that session — and because a
+session outlives the worker process running it, the figure reaches back across every worker the session was resumed
+into. Each recorded fact therefore carries only its own share: the harness's figure minus everything the session had
+already banked. Where an earlier invocation of that session recorded no cost at all, its dollars are not among what was
+banked, so the next fact absorbs them along with its own: the session's total still lands right, while that one fact
+reads high.
+
+Which reading applies is settled per envelope, from the token count the harness says its figure covers, and never from a
+version number. A version table would encode today's knowledge of a harness that updates itself underneath the runner,
+and go stale silently — as wrong dollars, which is the one failure mode nothing else on the board would reveal. The
+reading is whichever of two candidate counts the reported one sits nearer: the invocation's own tokens, or those plus
+everything the session has banked. The candidates are separated by exactly what the session has banked, so the choice is
+only as sharp as that separation is wide — and on a session's first invocation, with nothing banked, they coincide and
+no decision is needed. An envelope reporting no such count is charged verbatim, its figure being that invocation's by
+construction; one whose session total has gone meaningfully backwards — further than a rounding step — records no cost
+at all, landing as PARTIAL rather than as a fabricated zero.
+
+One shape cannot be separated: an invocation-scoped figure covering work the envelope's own token counts leave out — a
+harness billing subagent turns it does not report. Because the reading is nearest-of-two, that hidden work only has to
+reach **half** of everything the session has banked for the figure to be read as session-scoped; the subtraction that
+follows then charges the invocation short, or, where it runs backwards, records no cost for it at all. Claude Code's
+scope count does reach model work its per-invocation counts leave out, but its figure is session-scoped wherever that
+happens, so the reading still lands right; an adapter that was invocation-scoped and billed uncounted work would not.
+
+Nothing of this is visible while it goes right: a chunk's cost column and the fleet total simply read what the fleet
+spent. A rejected figure shows as the PARTIAL tilde, and the runner log carries one line naming the reported figure
+that read below its session — the one place the two causes of an absent cost separate, a crashed worker being the
+other. A session already running when a runner upgrades onto this reading keeps whatever its earlier facts banked:
+every invocation from the upgrade forward is charged its own share, while the dollars those earlier rows recorded stay
+as they were recorded, so that one session's lifetime total can read high until it ends.
 
 ## The two caps
 
@@ -25,7 +60,9 @@ When a worker dies before the harness emits its final usage envelope, the attemp
 transcript but its cost is genuinely unknown: an absent-cost row contributes its tokens and zero dollars, so every total
 is a lower bound flagged PARTIAL (a tilde on the board and in `hub status`). Both caps trip on that lower bound and
 surface PARTIAL on their own carrier — the escalation, or the recorded pause reason — so a crash-heavy chunk never
-silently reads cheap.
+silently reads cheap. A crash is not the only way a row lands cost-absent: a reported figure that runs backwards against
+what its session already banked records no cost either, for the reason
+[The two readings of a reported figure](#the-two-readings-of-a-reported-figure) gives.
 
 `blizzard hub status` shows the per-chunk cost column, the fleet total, and a paused runner's ceiling reason; the
 board's chunk cards and detail dock show the same figures live.
