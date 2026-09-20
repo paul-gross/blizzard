@@ -11,37 +11,6 @@ production adapter selection or a claim that a provider is available to a fleet.
 observed output and retained evidence, not by this page. Version preflight uses empty isolated XDG data and provisions
 disposable auth only after the observed version is admitted.
 
-## Admitting a candidate version
-
-This page's live diagnostic runs against a version already in the runner's admitted set. Admitting a new candidate
-version — joining `ADMITTED_OPENCODE_VERSIONS`
-(`src/blizzard/runner/harness/internal/opencode_probe.py`) — is a separate procedure with its own evidence obligation,
-owed before this page's diagnostic ever applies to the candidate:
-
-1. On that exact candidate version, pass every earlier tier first:
-   - `blizzard:unit-test` — the fixture suite: the committed `contracts/opencode/<version>/manifest.json` and its
-     captured probe fixtures classify cleanly for the candidate
-     (`tests/test_runner_harness_offline_compatibility.py`, `tests/test_runner_harness_opencode_compatibility.py`).
-   - `blizzard:component-test` — the generic OpenCode selftest: the runner's per-harness selftest checks
-     (`tests/test_runner_selftest.py`) pass against the candidate's CLI surface, independent of the live compatibility
-     diagnostic below.
-   - `blizzard:service-test` — service integration: the candidate is exercised through the runner's own HTTP API
-     (`tests/service/test_opencode_service.py`, `tests/service/test_opencode_compatibility_service.py`,
-     `tests/service/test_mixed_harness_dispatch_service.py`).
-   - `blizzard:crash-sweep` — crash verification: the candidate survives an unattended kill-9 at every registered
-     OpenCode crash point (the `_OPENCODE_GENERIC_SWEEP` and `_OPENCODE_RESUME_SWEEP` points in
-     `tests/crash/test_kill9_sweep.py`).
-2. Only once those four pass does `blizzard:manual-opencode-compatibility` — this page's own live diagnostic — apply to
-   the candidate. Run it per "Required invocation" below and read its result per "Read the result".
-3. Land the version string and its corpus fixture together. Declaring a version admitted is a two-part claim: the
-   version string in `ADMITTED_OPENCODE_VERSIONS` and a committed `contracts/opencode/<version>/manifest.json` corpus
-   fixture for it. `assert_admitted_versions_have_corpus` runs at import time and raises `CorpusConfigurationError`
-   naming any admitted version with no committed manifest — adding the version string alone, without the fixture, fails
-   loudly at import rather than silently misclassifying. Never land one half without the other.
-4. Record that the gates and the live diagnostic passed the same way any run of this page's diagnostic does — the
-   sanitized `report.json`/`runtime.json` evidence pair under a private evidence directory (see "Evidence and failure
-   handling" below). There is no separate record-keeping mechanism for the admission itself.
-
 ## Before you run
 
 Have these ready:
@@ -184,3 +153,47 @@ Treat the run as failed or unusable when:
 
 Do not infer success from an individual OpenCode process exit or from a partial report. Use the final classification,
 exit status, and the sanitized evidence together.
+
+## Admitting a candidate version
+
+This page's live diagnostic (above) runs against a version already in the runner's admitted set. Admitting a new
+candidate version — joining `ADMITTED_OPENCODE_VERSIONS`
+(`src/blizzard/runner/harness/internal/opencode_probe.py`) — is a separate procedure with its own evidence obligation,
+owed before this page's diagnostic ever applies to the candidate. Method ids below (`blizzard:unit-test` and so on) are
+defined in blizzard-context's
+[`verification/blizzard.md`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md).
+
+Admission is judged on the *normalized* observed version — the bare semantic version
+`normalize_opencode_version` (`src/blizzard/runner/harness/internal/harness_shared.py`) extracts from the binary's raw
+`--version` output — checked for membership in `ADMITTED_OPENCODE_VERSIONS`, never against the raw output text itself
+or as an equality check against one pinned literal.
+
+1. On that exact candidate version, pass every earlier tier first:
+   - `blizzard:unit-test` — the fixture suite: the committed
+     `src/blizzard/runner/harness/contracts/opencode/<version>/manifest.json` and its captured probe fixtures classify
+     cleanly for the candidate (`tests/test_runner_harness_offline_compatibility.py`,
+     `tests/test_runner_harness_opencode_compatibility.py`).
+   - `blizzard:component-test` — the generic OpenCode selftest: the runner's per-harness selftest checks
+     (`tests/test_runner_selftest.py`) pass against the candidate's CLI surface, independent of the live compatibility
+     diagnostic above.
+   - `blizzard:service-test` — service integration: the candidate is exercised through the runner's own HTTP API
+     (`tests/service/test_opencode_service.py`, `tests/service/test_opencode_compatibility_service.py`,
+     `tests/service/test_mixed_harness_dispatch_service.py`).
+   - `blizzard:crash-sweep` — crash verification: the candidate survives an unattended kill-9 at every registered
+     OpenCode crash point (the `_OPENCODE_GENERIC_SWEEP` and `_OPENCODE_RESUME_SWEEP` points in
+     `tests/crash/test_kill9_sweep.py`).
+2. Only once those four pass does `blizzard:manual-opencode-compatibility` — this page's own live diagnostic — apply to
+   the candidate. Run it per "Required invocation" above and read its result per "Read the result".
+3. Land the version string and its corpus fixture together. Declaring a version admitted is a two-part claim: the
+   version string in `ADMITTED_OPENCODE_VERSIONS` and a committed
+   `src/blizzard/runner/harness/contracts/opencode/<version>/manifest.json` corpus fixture for it. The runner checks
+   this pairing when it constructs the OpenCode health-probe binding, at daemon startup, and logs a warning naming any
+   admitted version with no committed manifest rather than raising — adding the version string alone, without the
+   fixture, degrades only the OpenCode binding's own health (`unknown_version`) rather than silently misclassifying or
+   taking the whole daemon down. Never land one half without the other regardless: an admitted version with no corpus
+   fixture can never actually pass this page's own offline classification.
+4. Each earlier tier's own pass/fail is evidenced by that tier's own run output (pytest's, or CI's) — `report.json` (see
+   "Evidence and failure handling" above) records only this page's own live diagnostic run: the observed version, its
+   final classification, and completeness/admissibility. It does not record whether the four earlier tiers passed; there
+   is no separate record-keeping mechanism for the admission decision as a whole beyond the commit that lands the
+   version string and its corpus fixture together.

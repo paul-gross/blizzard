@@ -241,62 +241,70 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
 # `test_kill9_at_resume_crash_point_under_opencode` sweep these against an OpenCode graph
 # instead — scoped to exactly these named windows, not the whole generic/resume families.
 
-# The two-phase spawn's windows (`spawn.py`), plus the transcript-boundary window that
-# brackets the fresh mint itself.
-_OPENCODE_GENERIC_POINTS = (
-    "spawn.after-boundary-record.before-spawn",
-    "spawn.after-launch.before-provisional-record",
-    "spawn.after-provisional-record.before-identity",
-    "spawn.after-identity.before-session-record",
-    "advance.after-judgement.before-buffer",
-)
-# The restart-resume re-attach (`dormant.py`'s `_restart`/`_wake`).
-_OPENCODE_RESUME_POINTS = (
-    "resume.wake.after-boundary-record.before-launch",
-    "resume.wake.after-launch.before-record",
-    "resume.wake.after-record",
-    "resume.after-kill.before-reattach",
-    "resume.after-reattach",
-)
-_OPENCODE_NAMED_POINTS = _OPENCODE_GENERIC_POINTS + _OPENCODE_RESUME_POINTS
+# The two-phase spawn's windows (`spawn.py`), the transcript-boundary window that brackets
+# the fresh mint itself, and the verdict-elicitation windows every judgement (a fresh
+# dispatch's own exit included) passes through — derived by prefix filter against
+# `_ALL_POINTS`, the same way every sibling family above is (`_GENERIC_POINTS`,
+# `_RESUME_POINTS`, etc.), so a newly-registered `spawn.*`/`advance.*` point is never
+# silently missing its OpenCode arm the way a hand-maintained literal tuple would leave it.
+_OPENCODE_GENERIC_POINTS = [p for p in _ALL_POINTS if p.startswith(("spawn.", "advance."))]
+# The restart-resume re-attach (`steps.py`'s `Resume`, `dormant.py`'s `_restart`/`_wake`) —
+# every `resume.*` point, derived the same way `_RESUME_POINTS` is above.
+_OPENCODE_RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 
-# Neither is in the CI-bounded profile (D6): the full local sweep is the declared method
-# that proves them (`BLIZZARD_CRASH_SWEEP=1`, not `BLIZZARD_CRASH_SWEEP_CI=1`).
+# Both intentionally empty (D6): the plan's own decision to leave OpenCode crash recovery —
+# including the resume-critical window — OUT of the CI-bounded profile is scoped HERE, in the
+# file a future reader will actually see, not left implicit as something to "fix" by filling
+# these in. The full local sweep (`BLIZZARD_CRASH_SWEEP=1`, never `BLIZZARD_CRASH_SWEEP_CI=1`)
+# is the declared method that proves these points; PR/push CI does not gate them.
 _OPENCODE_GENERIC_CI_SUBSET: tuple[str, ...] = ()
 _OPENCODE_RESUME_CI_SUBSET: tuple[str, ...] = ()
-_OPENCODE_GENERIC_SWEEP = _select(list(_OPENCODE_GENERIC_POINTS), _OPENCODE_GENERIC_CI_SUBSET)
-_OPENCODE_RESUME_SWEEP = _select(list(_OPENCODE_RESUME_POINTS), _OPENCODE_RESUME_CI_SUBSET)
+_OPENCODE_GENERIC_SWEEP = _select(_OPENCODE_GENERIC_POINTS, _OPENCODE_GENERIC_CI_SUBSET)
+_OPENCODE_RESUME_SWEEP = _select(_OPENCODE_RESUME_POINTS, _OPENCODE_RESUME_CI_SUBSET)
 
 
 def test_opencode_named_points_are_swept_under_both_harnesses(monkeypatch: pytest.MonkeyPatch) -> None:
     """Each window this phase closes under OpenCode is armed once per harness (D5) — a
     Claude Code pass through, say, ``spawn.after-launch.before-provisional-record`` must
     never be accepted as covering that same point's OpenCode reachability, or vice versa.
-    A future edit that silently drops one harness's leg (trims ``_OPENCODE_GENERIC_POINTS``
-    without noticing, or narrows a family's full-local-profile selection to exclude one of
-    these) must fail loudly here. Mirrors ``test_ci_subset_covers_every_family``'s style: a
-    real, checked assertion over the same tuples the parametrized tests above draw from."""
-    monkeypatch.delenv("BLIZZARD_CRASH_SWEEP_CI", raising=False)
-    for point in _OPENCODE_NAMED_POINTS:
-        assert point in _ALL_POINTS, f"{point} is no longer a registered crash point (renamed or removed?)"
 
-    # The Claude Code leg: every named point is in the UNNARROWED registry lists the generic/
-    # resume sweeps parametrize from under the full local sweep (`_select` only narrows under
-    # `BLIZZARD_CRASH_SWEEP_CI=1`, unset here) — `test_kill9_at_crash_point`/
-    # `test_kill9_at_resume_crash_point` reach each under Claude Code (the runner's default
-    # harness) there.
+    The "should be covered" set below is re-derived straight off the registry by the SAME
+    prefix filter ``_OPENCODE_GENERIC_POINTS``/``_OPENCODE_RESUME_POINTS`` are defined by,
+    rather than read back off those two tuples themselves — reusing them as their own oracle
+    would make this assertion trivially true by construction, unable to ever go red. A future
+    edit that narrows either back to a hand-picked subset, or empties one outright, is a
+    mismatch against this independently-recomputed set and fails loudly here. Mirrors
+    ``test_ci_subset_covers_every_family``'s style: a real, checked assertion over the same
+    tuples the parametrized tests above draw from — CI-subset narrowing is deliberately unset
+    (D6), since the OpenCode CI subsets are empty by design, not a gap this test should flag."""
+    monkeypatch.delenv("BLIZZARD_CRASH_SWEEP_CI", raising=False)
+    should_cover_generic = [p for p in _ALL_POINTS if p.startswith(("spawn.", "advance."))]
+    should_cover_resume = [p for p in _ALL_POINTS if p.startswith("resume.")]
+    should_cover = should_cover_generic + should_cover_resume
+    assert should_cover_generic and should_cover_resume, (
+        "the registry lost every spawn./advance. or every resume. point — nothing to sweep"
+    )
+
+    # The Claude Code leg: every point this phase closes under OpenCode is in the UNNARROWED
+    # registry lists the generic/resume sweeps parametrize from under the full local sweep
+    # (`_select` only narrows under `BLIZZARD_CRASH_SWEEP_CI=1`, unset here) —
+    # `test_kill9_at_crash_point`/`test_kill9_at_resume_crash_point` reach each under Claude
+    # Code (the runner's default harness) there.
     claude_generic = set(_select(_GENERIC_POINTS, _CI_SUBSET))
     claude_resume = set(_select(_RESUME_POINTS, _RESUME_CI_SUBSET))
-    missing_claude = [p for p in _OPENCODE_NAMED_POINTS if p not in claude_generic and p not in claude_resume]
-    assert not missing_claude, f"OpenCode-swept point(s) missing their Claude-Code leg: {missing_claude}"
+    missing_claude = [p for p in should_cover if p not in claude_generic and p not in claude_resume]
+    assert not missing_claude, f"OpenCode-lineage point(s) missing their Claude-Code leg: {missing_claude}"
 
-    # The OpenCode leg: every named point is in the tuples `test_kill9_at_crash_point_under_opencode`/
+    # The OpenCode leg: every point is in the tuples `test_kill9_at_crash_point_under_opencode`/
     # `test_kill9_at_resume_crash_point_under_opencode` actually parametrize from, under the same
-    # full-local-profile selection — no named point silently missing its OpenCode arm.
-    opencode_generic = set(_select(list(_OPENCODE_GENERIC_POINTS), _OPENCODE_GENERIC_CI_SUBSET))
-    opencode_resume = set(_select(list(_OPENCODE_RESUME_POINTS), _OPENCODE_RESUME_CI_SUBSET))
-    missing_opencode = [p for p in _OPENCODE_NAMED_POINTS if p not in opencode_generic and p not in opencode_resume]
-    assert not missing_opencode, f"OpenCode-named point(s) missing their own OpenCode sweep arm: {missing_opencode}"
+    # full-local-profile selection, recomputed fresh (not the module-level `_OPENCODE_*_SWEEP`,
+    # frozen at collection time under whatever env pytest started under) — no point silently
+    # missing its OpenCode arm, and emptying either `_OPENCODE_GENERIC_POINTS` or
+    # `_OPENCODE_RESUME_POINTS` outright fails this exactly as a genuine narrowing would.
+    opencode_generic = set(_select(_OPENCODE_GENERIC_POINTS, _OPENCODE_GENERIC_CI_SUBSET))
+    opencode_resume = set(_select(_OPENCODE_RESUME_POINTS, _OPENCODE_RESUME_CI_SUBSET))
+    missing_opencode = [p for p in should_cover if p not in opencode_generic and p not in opencode_resume]
+    assert not missing_opencode, f"registry point(s) missing their own OpenCode sweep arm: {missing_opencode}"
 
 
 def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str, after_recovery: bool) -> None:

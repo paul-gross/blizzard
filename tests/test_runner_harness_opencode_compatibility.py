@@ -73,7 +73,10 @@ from blizzard.runner.harness.internal.opencode_transcript import TranscriptExpor
 pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
-_CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
+# Keyed off the admitted set itself (blizzard#438, F19) — there is exactly one member today,
+# but this stays correct as the set grows.
+_AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
+_CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 
 
 def _manifest() -> dict[str, Any]:

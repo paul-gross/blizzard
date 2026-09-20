@@ -17,11 +17,14 @@ from blizzard.runner.harness.internal.opencode_cursor import (
     MessagePartIdentity,
     records_for_export,
 )
-from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS
 from blizzard.runner.harness.internal.opencode_shapes import parse_session_export
 
 pytestmark = pytest.mark.unit
 
+# Keyed off the admitted set itself (blizzard#438, F19) — there is exactly one member today,
+# but this stays correct as the set grows.
+_AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
 _CORPUS_DIR = (
     Path(__file__).resolve().parents[1]
     / "src"
@@ -30,7 +33,7 @@ _CORPUS_DIR = (
     / "harness"
     / "contracts"
     / "opencode"
-    / PINNED_OPENCODE_VERSION
+    / _AN_ADMITTED_OPENCODE_VERSION
 )
 
 

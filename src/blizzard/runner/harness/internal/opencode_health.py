@@ -7,40 +7,57 @@ opencode_adapter.OpenCodeAdapter` itself."""
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
+from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.internal import harness_shared
+from blizzard.runner.harness.internal.offline_compatibility import (
+    DEFAULT_CORPUS_ROOT,
+    CorpusConfigurationError,
+    assert_admitted_versions_have_corpus,
+)
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS
 
-# OpenCode 1.18.25's three known `DEGRADABLE_ABSENCES` members, declared statically rather than re-derived live.
-_OPENCODE_DEGRADATIONS: tuple[DeclaredDegradation, ...] = (
-    DeclaredDegradation(
-        probe=CompatibilityProbe.ROOT_HOOK,
-        summary=(
-            "OpenCode has no portable root-hook lifecycle signal to observe, so the runner can "
-            "never confirm whether its plugin's heartbeat nudge and per-tool identity forwarding "
-            "actually loaded (docs/deployment/worker-spawn.md)."
-        ),
-    ),
-    DeclaredDegradation(
-        probe=CompatibilityProbe.USAGE_COST,
-        summary=(
-            "a turn can export token usage with no cost figure attached, understating a session's "
-            "spend even though the turn itself completed."
-        ),
-    ),
-    DeclaredDegradation(
-        probe=CompatibilityProbe.CHILD_SESSIONS,
-        summary=(
-            "the pinned build denies the `task` tool for every agent, so no run can prove or "
-            "disprove that a spawned child session reports its parent linkage correctly."
-        ),
-    ),
-)
+_log = get_logger("blizzard.runner.harness.opencode")
+
+_HARNESS_ID = "opencode"
+
+
+def _degradations_from_manifest(version: str, *, corpus_root: Path) -> tuple[DeclaredDegradation, ...]:
+    """This ``version``'s own declared degradations, read from its committed corpus manifest
+    (blizzard#438, F5) — never a hardcoded Python literal describing only one version. A
+    missing or malformed manifest reads as "no declared degradations", the same fail-soft
+    posture :func:`~blizzard.runner.harness.internal.offline_compatibility.classify_offline`
+    already takes for a manifest it cannot read."""
+    manifest_path = corpus_root / _HARNESS_ID / version / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, ValueError):
+        return ()
+    if not isinstance(manifest, dict):
+        return ()
+    declared = manifest.get("declared_degradations")
+    if not isinstance(declared, list):
+        return ()
+    degradations: list[DeclaredDegradation] = []
+    for entry in declared:
+        if not isinstance(entry, dict):
+            continue
+        probe_value = entry.get("probe")
+        summary = entry.get("summary")
+        if not isinstance(probe_value, str) or not isinstance(summary, str) or not summary.strip():
+            continue
+        try:
+            probe = CompatibilityProbe(probe_value)
+        except ValueError:
+            continue
+        degradations.append(DeclaredDegradation(probe=probe, summary=summary))
+    return tuple(degradations)
 
 
 def _default_opencode_auth_path() -> Path:
@@ -55,11 +72,27 @@ class OpenCodeHealthProbe:
     """The OpenCode binding's :class:`~blizzard.runner.harness.adapter.IHarnessHealthProbe`.
     Dumb, like the adapter it stands beside: reports evidence, never decides availability."""
 
-    def __init__(self, binary: str = "opencode", *, auth_path: str | None = None) -> None:
+    def __init__(
+        self, binary: str = "opencode", *, auth_path: str | None = None, corpus_root: Path = DEFAULT_CORPUS_ROOT
+    ) -> None:
         self._binary = binary
         # Injectable for testability (`bzh:dependency-injection`); defaults to OpenCode's
         # own real credential-discovery path.
         self._auth_path = Path(auth_path) if auth_path is not None else _default_opencode_auth_path()
+        self._corpus_root = corpus_root
+        # Every admitted version owes a committed corpus manifest (D1) — checked here, at
+        # construction, rather than at this module's own import (F10): this class is built
+        # once, at daemon startup (`harness_registry.py`), and a missing manifest must degrade
+        # only the OpenCode binding's own health, never take the whole daemon's startup down.
+        # `supported_version`/`declared_degradations` both already read the corpus gracefully
+        # (a missing manifest reads as "unclassifiable"/"no declared degradations"), so this
+        # catch only needs to turn an otherwise-uncaught `CorpusConfigurationError` into a
+        # logged warning — the real-time health evaluation reports `unknown_version` for any
+        # admitted version this packaging defect actually observes.
+        try:
+            assert_admitted_versions_have_corpus(_HARNESS_ID, ADMITTED_OPENCODE_VERSIONS, corpus_root=corpus_root)
+        except CorpusConfigurationError as exc:
+            _log.warning("opencode admitted-version corpus is misconfigured", detail=str(exc))
 
     def binary_present(self) -> bool:
         return harness_shared.binary_present(self._binary)
@@ -81,7 +114,17 @@ class OpenCodeHealthProbe:
         return ADMITTED_OPENCODE_VERSIONS
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
-        return _OPENCODE_DEGRADATIONS
+        """The union of every admitted version's own declared degradations (blizzard#438,
+        F5) — read from each version's committed corpus manifest, never a hardcoded tuple
+        describing only one of them. This seam reports independent of any one observed
+        version (:class:`~blizzard.runner.harness.adapter.IHarnessHealthProbe`'s own
+        contract), so with more than one admitted version this is deliberately the union,
+        not one version's own list picked arbitrarily."""
+        seen: dict[CompatibilityProbe, DeclaredDegradation] = {}
+        for version in sorted(ADMITTED_OPENCODE_VERSIONS):
+            for degradation in _degradations_from_manifest(version, corpus_root=self._corpus_root):
+                seen.setdefault(degradation.probe, degradation)
+        return tuple(seen.values())
 
 
 def _conforms_harness_health_probe(x: OpenCodeHealthProbe) -> IHarnessHealthProbe:

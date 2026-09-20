@@ -61,15 +61,16 @@ def _tick_env() -> dict[str, str]:
 
 
 def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: float = 0.5) -> None:
-    prior = dict(os.environ)
-    os.environ.update(fenced)
-    try:
+    # A shared, non-test helper called many times per test (often interleaved with hub
+    # state changes) — the fixture-injected `monkeypatch` only reaches test functions, so
+    # this uses `MonkeyPatch`'s own documented standalone context-manager form instead,
+    # scoped to exactly this call rather than the whole test.
+    with pytest.MonkeyPatch.context() as mp:
+        for key, value in fenced.items():
+            mp.setenv(key, value)
         for _ in range(ticks):
             LoopWiring.of(config).tick_once()
             time.sleep(pause)
-    finally:
-        os.environ.clear()
-        os.environ.update(prior)
 
 
 def _status(hub: httpx.Client, chunk_id: str) -> str:
@@ -195,7 +196,9 @@ def _opencode_only_chunk_spec(work_ref: str) -> dict:
     return spec
 
 
-def test_claim_revalidates_against_a_regressed_registration_through_the_real_runner_loop(tmp_path: Path) -> None:
+def test_claim_revalidates_against_a_regressed_registration_through_the_real_runner_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """`Pull` (registration) and `Fill` (peek + claim) are the SAME two steps a real
     `tick_once()` runs in order — driven separately here only so a registration can be
     injected between them, standing in for the peek-then-claim skew window
@@ -212,36 +215,32 @@ def test_claim_revalidates_against_a_regressed_registration_through_the_real_run
         chunk_id = _seed(hub, _opencode_only_chunk_spec(_WORK_REF_URL))
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
-        prior = dict(os.environ)
-        os.environ.update(fenced)
-        try:
-            with httpx.Client(base_url=config.hub_url, timeout=30.0, headers=config.auth_headers()) as client:
-                wiring = LoopWiring.of(config)
-                ctx = wiring.context(HttpHubClient(client))
-                try:
-                    Pull(ctx).run()  # registers this runner's true set: claude_code + opencode
-                    # A stale registration for the SAME runner_id regresses the stored
-                    # capability set to claude_code only — landing after this tick's own
-                    # (truthful) registration, before this tick's own claim.
-                    regressed = hub.post(
-                        "/api/fleet/runners",
-                        json={
-                            "runner_id": config.runner_id,
-                            "workspace_id": config.workspace_id,
-                            "capabilities": [{"harness_id": "claude_code", "default": True}],
-                        },
-                    )
-                    assert regressed.status_code == 201, regressed.text
-                    # Peeks with THIS tick's true (opencode-capable) snapshot — freshly
-                    # computed, never memoized outside a real `tick()` — so the chunk
-                    # reads workable; the claim then revalidates server-side against the
-                    # now-regressed stored registration and is denied.
-                    Fill(ctx).run()
-                finally:
-                    ctx.usage_http_client.close()
-        finally:
-            os.environ.clear()
-            os.environ.update(prior)
+        for key, value in fenced.items():
+            monkeypatch.setenv(key, value)
+        with httpx.Client(base_url=config.hub_url, timeout=30.0, headers=config.auth_headers()) as client:
+            wiring = LoopWiring.of(config)
+            ctx = wiring.context(HttpHubClient(client))
+            try:
+                Pull(ctx).run()  # registers this runner's true set: claude_code + opencode
+                # A stale registration for the SAME runner_id regresses the stored
+                # capability set to claude_code only — landing after this tick's own
+                # (truthful) registration, before this tick's own claim.
+                regressed = hub.post(
+                    "/api/fleet/runners",
+                    json={
+                        "runner_id": config.runner_id,
+                        "workspace_id": config.workspace_id,
+                        "capabilities": [{"harness_id": "claude_code", "default": True}],
+                    },
+                )
+                assert regressed.status_code == 201, regressed.text
+                # Peeks with THIS tick's true (opencode-capable) snapshot — freshly
+                # computed, never memoized outside a real `tick()` — so the chunk
+                # reads workable; the claim then revalidates server-side against the
+                # now-regressed stored registration and is denied.
+                Fill(ctx).run()
+            finally:
+                ctx.usage_http_client.close()
 
         assert _status(hub, chunk_id) == "ready"  # denied — never claimed
         assert _lease_id_for_chunk(config, chunk_id) is None
@@ -338,33 +337,58 @@ def test_a_bare_node_with_no_declared_preference_resolves_through_this_runners_c
 def test_a_bare_node_still_honors_the_chunks_own_declared_default_at_claim_time(tmp_path: Path) -> None:
     """The chunk-level `default_harnesses` fallback the CLAIM endpoint's own eligibility
     check reads (`_effective_harnesses`, mirroring `blizzard.hub.domain.envelope.EffectiveSession`)
-    when the node itself declares nothing: this runner's real claim succeeds here ONLY
-    because it binds ``opencode`` — the chunk's OWN declared preference, not merely "any
-    default capability" — even though the node's own field is empty. (Peek itself never
-    reads this — see the section-1 docstring above for the mock's own matched-peek gap;
-    this is CLAIM-time compatibility, real regardless of that.)
+    when the node itself declares nothing — proven BOTH ways, so this can only pass by
+    genuinely reading the CHUNK'S declared default, never a fixed answer regardless of it:
+
+    A bare node under a chunk default this runner never binds (`_UNBOUND_HARNESS`) is
+    denied on every claim attempt — never leased — mirroring
+    `test_capability_denial_starves_a_workable_entry_behind_it_then_recovers_once_it_clears`'s
+    own node-level denial proof, but for the CHUNK-level fallback specifically; a compatible
+    entry queued behind it starves too, exactly as that test's node-level case does. Once
+    the incompatible one is stopped, the SAME runner loop reaches and lands the compatible
+    one — this runner's real claim succeeds there ONLY because it binds ``opencode``, the
+    OTHER chunk's OWN declared preference — proving the eligibility check tracks each
+    chunk's own declared value rather than "any default capability" or a hardcoded answer.
+    (Peek itself never reads this — see the section-1 docstring above for the mock's own
+    matched-peek gap; this is CLAIM-time compatibility, real regardless of that.)
 
     Honest limitation of the mock double: `blizzard-mock-hub`'s own `envelope()` route
     (unlike the real hub's `EffectiveSession.of`) never bakes the chunk's default back
     onto the node before handing the envelope to the runner, so once claimed the actual
     SPAWN still resolves through `Spawner.spawn`'s own no-`session_harnesses` fallback —
     this runner's OWN configured default (``claude_code``), not the chunk's declared
-    ``opencode`` preference. Both halves are asserted below, exactly as they behave."""
+    ``opencode`` preference. That half is asserted below too, exactly as it behaves."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     fenced = _tick_env()
 
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        spec = mock_hub_chunk_spec(_WORK_REF_URL)
-        spec["default_harnesses"] = ["opencode"]  # the node's own session_harnesses stays empty
-        chunk_id = _seed(hub, spec)
+        incompatible_spec = mock_hub_chunk_spec(_WORK_REF_URL)
+        incompatible_spec["default_harnesses"] = [_UNBOUND_HARNESS]  # the node's own field stays empty
+        compatible_spec = mock_hub_chunk_spec(_WORK_REF_URL)
+        compatible_spec["default_harnesses"] = ["opencode"]  # the node's own field stays empty
+        incompatible_id = _seed(hub, incompatible_spec)  # seeded first — the peek's head
+        compatible_id = _seed(hub, compatible_spec)
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
-        # Compatible at CLAIM (this runner binds opencode) — claimed and run to done.
-        landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
-        assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
-        harness_ids = {row["harness_id"] for row in _leases_for_chunk(config, chunk_id)}
+        _drive(config, fenced, ticks=5, pause=0.3)
+
+        # Denied every attempt — never claimed, never escalated (nothing was ever leased).
+        # A claim that silently ignored the chunk's own declared default would have
+        # admitted this bare node under this runner's own configured default instead.
+        assert _status(hub, incompatible_id) == "ready"
+        assert _lease_id_for_chunk(config, incompatible_id) is None
+        # Starved behind it — the runner never even reached the compatible entry.
+        assert _status(hub, compatible_id) == "ready"
+        assert _lease_id_for_chunk(config, compatible_id) is None
+
+        assert hub.post("/_seed/stop", json={"chunk_id": incompatible_id}).status_code == 200
+        # Once unblocked: compatible at CLAIM (this runner binds opencode) — claimed and
+        # run to done, the chunk's OWN declared preference, not merely "any default".
+        landed = poll_until(lambda: _run_and_check(config, fenced, hub, compatible_id, "done"), timeout=90.0)
+        assert landed, f"chunk did not land (status {_status(hub, compatible_id)!r})"
+        harness_ids = {row["harness_id"] for row in _leases_for_chunk(config, compatible_id)}
         # The mock's own envelope fidelity gap (see docstring): the actual spawn dispatch
         # still falls through to this runner's OWN default, not the chunk's declared one.
         assert harness_ids == {"claude_code"}, harness_ids
@@ -471,7 +495,9 @@ def _segment_turns(runner_client: httpx.Client, chunk_id: str, segments: list[di
     return turns
 
 
-def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk(tmp_path: Path) -> None:
+def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """One Claude Code lineage and one OpenCode lineage, seeded on the SAME mock hub,
     driven to done by ONE runner config's tick loop — proving the single dispatch loop
     correctly interleaves both with no cross-talk, at every seam: spawn, completion,
@@ -502,98 +528,90 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
         # subprocess needs `BZ_TRANSCRIPTS_ROOT` in `os.environ` at call time (it is
         # allowlisted through, `AllowlistedEnv.of(...).variables`), not merely at spawn time,
         # so the fenced env stays applied for this block's whole body, not just each `_drive`
-        # call's own narrower window.
-        prior_env = dict(os.environ)
-        os.environ.update(fenced)
-        try:
-            with _runner_api(config):
-                both_landed = poll_until(
-                    lambda: _tick_then(
-                        config,
-                        fenced,
-                        lambda: _status(hub, claude_id) == "done" and _status(hub, opencode_id) == "done",
-                    ),
-                    timeout=150.0,
-                )
-                assert both_landed, (
-                    f"both lineages never landed (claude {_status(hub, claude_id)!r}, "
-                    f"opencode {_status(hub, opencode_id)!r})"
-                )
+        # call's own narrower window — `monkeypatch` covers it just as well here since the
+        # whole span lives inside this one test function, restored at its own teardown.
+        for key, value in fenced.items():
+            monkeypatch.setenv(key, value)
+        with _runner_api(config):
+            both_landed = poll_until(
+                lambda: _tick_then(
+                    config,
+                    fenced,
+                    lambda: _status(hub, claude_id) == "done" and _status(hub, opencode_id) == "done",
+                ),
+                timeout=150.0,
+            )
+            assert both_landed, (
+                f"both lineages never landed (claude {_status(hub, claude_id)!r}, "
+                f"opencode {_status(hub, opencode_id)!r})"
+            )
 
-                # --- spawn + completion + harness provenance, per lineage — never crossed ---
-                claude_leases = _leases_for_chunk(config, claude_id)
-                opencode_leases = _leases_for_chunk(config, opencode_id)
-                assert claude_leases and opencode_leases
-                assert {row["harness_id"] for row in claude_leases} == {"claude_code"}
-                assert {row["harness_id"] for row in opencode_leases} == {"opencode"}
-                claude_lease_ids = {row["lease_id"] for row in claude_leases}
-                opencode_lease_ids = {row["lease_id"] for row in opencode_leases}
-                assert claude_lease_ids.isdisjoint(opencode_lease_ids)
+            # --- spawn + completion + harness provenance, per lineage — never crossed ---
+            claude_leases = _leases_for_chunk(config, claude_id)
+            opencode_leases = _leases_for_chunk(config, opencode_id)
+            assert claude_leases and opencode_leases
+            assert {row["harness_id"] for row in claude_leases} == {"claude_code"}
+            assert {row["harness_id"] for row in opencode_leases} == {"opencode"}
+            claude_lease_ids = {row["lease_id"] for row in claude_leases}
+            opencode_lease_ids = {row["lease_id"] for row in opencode_leases}
+            assert claude_lease_ids.isdisjoint(opencode_lease_ids)
 
-                # --- usage recorded (judgement resolved into a completion means both a spawn
-                # and a judge invocation earned their own facts), per lineage — never crossed ---
-                claude_usage = _usage_facts_for_chunk(config, claude_id)
-                opencode_usage = _usage_facts_for_chunk(config, opencode_id)
-                assert {u["kind"] for u in claude_usage} == {"spawn", "judge"}, claude_usage
-                assert {u["kind"] for u in opencode_usage} == {"spawn", "judge"}, opencode_usage
-                assert {u["lease_id"] for u in claude_usage} <= claude_lease_ids
-                assert {u["lease_id"] for u in opencode_usage} <= opencode_lease_ids
+            # --- usage recorded (judgement resolved into a completion means both a spawn
+            # and a judge invocation earned their own facts), per lineage — never crossed ---
+            claude_usage = _usage_facts_for_chunk(config, claude_id)
+            opencode_usage = _usage_facts_for_chunk(config, opencode_id)
+            assert {u["kind"] for u in claude_usage} == {"spawn", "judge"}, claude_usage
+            assert {u["kind"] for u in opencode_usage} == {"spawn", "judge"}, opencode_usage
+            assert {u["lease_id"] for u in claude_usage} <= claude_lease_ids
+            assert {u["lease_id"] for u in opencode_usage} <= opencode_lease_ids
 
-                # --- transcript pumping produced segments, correctly attributed, per lineage ---
-                runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
-                try:
-                    claude_segments = runner_client.get(f"/api/chunks/{claude_id}/transcripts").json()["segments"]
-                    opencode_segments = runner_client.get(f"/api/chunks/{opencode_id}/transcripts").json()["segments"]
-                    assert claude_segments, "expected at least one claude_code segment"
-                    assert opencode_segments, "expected at least one opencode segment"
-                    assert all(s["harness_id"] == "claude_code" for s in claude_segments), claude_segments
-                    assert all(s["harness_id"] == "opencode" for s in opencode_segments), opencode_segments
-                    assert all(s["normalizer_version"] == "claude-code-jsonl/2" for s in claude_segments), (
-                        claude_segments
-                    )
-                    assert all(s["normalizer_version"] == "opencode-export/1" for s in opencode_segments), (
-                        opencode_segments
-                    )
-                    # `harness_version` is read from the transcript itself, per dialect
-                    # (`claude_code_normalizer.py`'s own `record.version`, `opencode_normalizer.py`'s
-                    # own `export.info.raw["version"]`) — never side-channeled from the observed
-                    # binary version. Honest asymmetry of the mock double: `mock-opencode`'s own
-                    # session-info document carries a `"version"` field (`_opencode_transcript.py`'s
-                    # `_MOCK_VERSION`), so OpenCode segments carry it through; `mock-claude-code`'s
-                    # JSONL writer never emits one at all, so a mock-driven claude_code segment's
-                    # `harness_version` is genuinely always `None` — asserted as such, not invented.
-                    assert all(s["harness_version"] is None for s in claude_segments), claude_segments
-                    assert all(s["harness_version"] for s in opencode_segments), opencode_segments
+            # --- transcript pumping produced segments, correctly attributed, per lineage ---
+            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
+            try:
+                claude_segments = runner_client.get(f"/api/chunks/{claude_id}/transcripts").json()["segments"]
+                opencode_segments = runner_client.get(f"/api/chunks/{opencode_id}/transcripts").json()["segments"]
+                assert claude_segments, "expected at least one claude_code segment"
+                assert opencode_segments, "expected at least one opencode segment"
+                assert all(s["harness_id"] == "claude_code" for s in claude_segments), claude_segments
+                assert all(s["harness_id"] == "opencode" for s in opencode_segments), opencode_segments
+                assert all(s["normalizer_version"] == "claude-code-jsonl/2" for s in claude_segments), claude_segments
+                assert all(s["normalizer_version"] == "opencode-export/1" for s in opencode_segments), opencode_segments
+                # `harness_version` is read from the transcript itself, per dialect
+                # (`claude_code_normalizer.py`'s own `record.version`, `opencode_normalizer.py`'s
+                # own `export.info.raw["version"]`) — never side-channeled from the observed
+                # binary version. Honest asymmetry of the mock double: `mock-opencode`'s own
+                # session-info document carries a `"version"` field (`_opencode_transcript.py`'s
+                # `_MOCK_VERSION`), so OpenCode segments carry it through; `mock-claude-code`'s
+                # JSONL writer never emits one at all, so a mock-driven claude_code segment's
+                # `harness_version` is genuinely always `None` — asserted as such, not invented.
+                assert all(s["harness_version"] is None for s in claude_segments), claude_segments
+                assert all(s["harness_version"] for s in opencode_segments), opencode_segments
 
-                    # --- analytics derivation, per lineage's own proven dialect kind, with
-                    # cross-dialect isolation (bzh-shape: no lookup shared/ambiguous enough
-                    # to attribute one lineage's tool call to the other's dialect) ---
-                    claude_turns = [
-                        TurnSegmentView.model_validate(t)
-                        for t in _segment_turns(runner_client, claude_id, claude_segments)
-                    ]
-                    opencode_turns = [
-                        TurnSegmentView.model_validate(t)
-                        for t in _segment_turns(runner_client, opencode_id, opencode_segments)
-                    ]
+                # --- analytics derivation, per lineage's own proven dialect kind, with
+                # cross-dialect isolation (bzh-shape: no lookup shared/ambiguous enough
+                # to attribute one lineage's tool call to the other's dialect) ---
+                claude_turns = [
+                    TurnSegmentView.model_validate(t) for t in _segment_turns(runner_client, claude_id, claude_segments)
+                ]
+                opencode_turns = [
+                    TurnSegmentView.model_validate(t)
+                    for t in _segment_turns(runner_client, opencode_id, opencode_segments)
+                ]
 
-                    claude_events = extract_events(claude_turns, normalizer_version="claude-code-jsonl/2")
-                    opencode_events = extract_events(opencode_turns, normalizer_version="opencode-export/1")
+                claude_events = extract_events(claude_turns, normalizer_version="claude-code-jsonl/2")
+                opencode_events = extract_events(opencode_turns, normalizer_version="opencode-export/1")
 
-                    skill_events = [e for e in claude_events if e.kind == KIND_SKILL_INVOCATION]
-                    assert skill_events and skill_events[0].subject == "wf-commit", claude_events
+                skill_events = [e for e in claude_events if e.kind == KIND_SKILL_INVOCATION]
+                assert skill_events and skill_events[0].subject == "wf-commit", claude_events
 
-                    spawn_events = [e for e in opencode_events if e.kind == KIND_AGENT_SPAWN]
-                    assert spawn_events and spawn_events[0].subject == "reviewer", opencode_events
+                spawn_events = [e for e in opencode_events if e.kind == KIND_AGENT_SPAWN]
+                assert spawn_events and spawn_events[0].subject == "reviewer", opencode_events
 
-                    # Cross-dialect: neither lineage's own turns derive the OTHER dialect's kind —
-                    # the tool names ("Skill" vs "task") never collide across the two dialects.
-                    cross_on_claude_turns = extract_events(claude_turns, normalizer_version="opencode-export/1")
-                    assert not [e for e in cross_on_claude_turns if e.kind == KIND_AGENT_SPAWN]
-                    cross_on_opencode_turns = extract_events(opencode_turns, normalizer_version="claude-code-jsonl/2")
-                    assert not [e for e in cross_on_opencode_turns if e.kind == KIND_SKILL_INVOCATION]
-                finally:
-                    runner_client.close()
-        finally:
-            os.environ.clear()
-            os.environ.update(prior_env)
+                # Cross-dialect: neither lineage's own turns derive the OTHER dialect's kind —
+                # the tool names ("Skill" vs "task") never collide across the two dialects.
+                cross_on_claude_turns = extract_events(claude_turns, normalizer_version="opencode-export/1")
+                assert not [e for e in cross_on_claude_turns if e.kind == KIND_AGENT_SPAWN]
+                cross_on_opencode_turns = extract_events(opencode_turns, normalizer_version="claude-code-jsonl/2")
+                assert not [e for e in cross_on_opencode_turns if e.kind == KIND_SKILL_INVOCATION]
+            finally:
+                runner_client.close()

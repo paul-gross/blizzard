@@ -157,14 +157,35 @@ def test_a_raw_admitted_version_normalizes_and_classifies_against_the_real_corpu
     assert result.cause is None
 
 
-def test_a_raw_version_outside_the_admitted_set_is_unknown_even_with_a_stray_corpus_dir() -> None:
-    """A version genuinely outside the admitted set is `unknown_version`, never a corpus
-    hit — membership and the corpus-path lookup always agree (blizzard#438)."""
+def test_a_raw_version_outside_the_admitted_set_is_incompatible() -> None:
+    """A version genuinely outside the admitted set is `incompatible_version` (D2), reached
+    through the real evaluation path — `HarnessHealthCache.refresh` (capability_snapshot.py)
+    into `evaluate_harness_health` (health.py) — never a synthetic evidence construction.
+    Membership is checked before any corpus lookup, so this stays `incompatible_version`
+    whether or not a stray corpus entry happens to exist for it; that precedence is pinned
+    directly at the `classify_offline`/membership level in
+    ``test_runner_harness_offline_compatibility.py``."""
     clock = FixedClock(_NOW)
     probe = _FakeProbe(supported=ADMITTED_OPENCODE_VERSIONS)
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)
 
     result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.18.24")
+
+    assert result is not None
+    assert result.available is False
+    assert result.cause is HarnessHealthCause.INCOMPATIBLE_VERSION
+
+
+def test_an_admitted_version_with_no_corpus_manifest_is_unknown_not_incompatible() -> None:
+    """A version this fake probe declares admitted, but with no manifest anywhere under the
+    real committed corpus root, is `unknown_version` — distinct from a genuinely non-admitted
+    version above, reached through the same real evaluation path (blizzard#438, D2)."""
+    clock = FixedClock(_NOW)
+    unclassifiable_version = "9.9.9-not-a-real-corpus-entry"
+    probe = _FakeProbe(supported=frozenset({unclassifiable_version}))
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+
+    result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version=unclassifiable_version)
 
     assert result is not None
     assert result.available is False

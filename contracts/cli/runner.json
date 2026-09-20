@@ -465,7 +465,7 @@
     "opencode": {
       "commands": {
         "compatibility": {
-          "help": "Prove OpenCode 1.18.25 in a disposable git repository and retain sanitized evidence.",
+          "help": "Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence.",
           "params": [
             {
               "hidden": false,
@@ -525,13 +525,13 @@
             }
           ],
           "path": "runner opencode compatibility",
-          "short_help": "Prove OpenCode 1.18.25 in a disposable git repository and retain sanitized evidence."
+          "short_help": "Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence."
         }
       },
-      "help": "Read-only diagnostics for the pinned OpenCode compatibility contract.",
+      "help": "Read-only diagnostics for OpenCode's admitted-version compatibility contract.",
       "params": [],
       "path": "runner opencode",
-      "short_help": "Read-only diagnostics for the pinned OpenCode compatibility contract."
+      "short_help": "Read-only diagnostics for OpenCode's admitted-version compatibility contract."
     },
     "pause": {
       "help": "Declarative control: pause this runner \u2014 it starts no new workers (issue #45). This runner's\n**own** brake, a pure client of its local API, so it works with the hub unreachable: a stalled\nworker is not killed, and an exhausted retry budget does not escalate, until it is cleared. No\nretry is consumed, and a live worker is left alone \u2014 this is not a drain. Distinct from the hub's\nbrake, and each is cleared where it was set.",

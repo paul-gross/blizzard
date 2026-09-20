@@ -1,6 +1,12 @@
 """``classify_offline``'s corpus lookup (blizzard#438) — reads the committed fixture corpus
 rather than running a live probe. Mirrors `test_runner_harness_opencode_compatibility.py`'s
-own `_PACKAGE_ROOT`/corpus-path construction."""
+own `_PACKAGE_ROOT`/corpus-path construction.
+
+``classify_offline`` classifies a version already known to be admitted; it carries no
+membership concept of its own (D2) — a caller (`capability_snapshot.py`) checks admission
+itself, before consulting this classification. The two-facts-not-one distinction that
+membership check exists for is pinned at the evaluation-policy level instead
+(`tests/test_runner_harness_health.py`, `tests/test_runner_harness_health_cache.py`)."""
 
 from __future__ import annotations
 
@@ -10,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.harness.compatibility import CompatibilityClassification
-from blizzard.runner.harness.internal.harness_shared import normalize_harness_version
+from blizzard.runner.harness.internal.harness_shared import normalize_opencode_version
 from blizzard.runner.harness.internal.offline_compatibility import (
     DEFAULT_CORPUS_ROOT,
     CorpusConfigurationError,
@@ -22,7 +28,10 @@ from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VE
 pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
-_CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
+# Keyed off the admitted set itself (blizzard#438, F19), not the legacy single-version pin —
+# there is exactly one member today, but this stays correct as the set grows.
+_AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
+_CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 
 
 def test_default_corpus_root_is_the_harness_packages_own_contracts_tree() -> None:
@@ -73,24 +82,6 @@ def test_a_manifest_with_an_unrecognized_classification_label_is_unknown(tmp_pat
     assert classify_offline("widget", "1.0.0", corpus_root=tmp_path) is None
 
 
-def test_a_version_in_the_admitted_set_still_resolves_its_corpus_classification() -> None:
-    assert (
-        classify_offline("opencode", PINNED_OPENCODE_VERSION, admitted_versions=ADMITTED_OPENCODE_VERSIONS)
-        is CompatibilityClassification.DEGRADED
-    )
-
-
-def test_a_version_outside_the_admitted_set_is_unknown_even_with_a_committed_corpus_entry(tmp_path: Path) -> None:
-    """A stray corpus directory for a version this binding no longer admits must never resolve a
-    classification — membership and the corpus-path lookup must always agree (blizzard#438)."""
-    manifest_dir = tmp_path / "widget" / "1.0.0"
-    manifest_dir.mkdir(parents=True)
-    (manifest_dir / "manifest.json").write_text(json.dumps({"live_evidence": {"classification": "supported"}}))
-
-    assert classify_offline("widget", "1.0.0", corpus_root=tmp_path) is CompatibilityClassification.SUPPORTED
-    assert classify_offline("widget", "1.0.0", corpus_root=tmp_path, admitted_versions=frozenset({"2.0.0"})) is None
-
-
 def test_assert_admitted_versions_have_corpus_passes_when_every_version_has_a_manifest() -> None:
     assert_admitted_versions_have_corpus("opencode", ADMITTED_OPENCODE_VERSIONS)
 
@@ -100,12 +91,9 @@ def test_a_raw_prefixed_observed_version_normalizes_before_classification() -> N
     the corpus lookup, the same normalized form the live probe already stores
     (blizzard#438)."""
     raw = "opencode version 1.18.25\n"
-    normalized = normalize_harness_version(raw)
+    normalized = normalize_opencode_version(raw)
     assert normalized == PINNED_OPENCODE_VERSION
-    assert (
-        classify_offline("opencode", normalized, admitted_versions=ADMITTED_OPENCODE_VERSIONS)
-        is CompatibilityClassification.DEGRADED
-    )
+    assert classify_offline("opencode", normalized) is CompatibilityClassification.DEGRADED
 
 
 def test_assert_admitted_versions_have_corpus_raises_naming_the_missing_version(tmp_path: Path) -> None:

@@ -27,8 +27,9 @@ CHOICE_CLOSE = "</Choice>"
 # Bounds `observe_version`'s probe: a wedged binary costs one skipped read, not a hang.
 VERSION_PROBE_TIMEOUT_SECONDS = 5
 
-# Strips a leading binary-name/"version"/"v" prefix off one line of `--version` output (blizzard#438).
-HARNESS_VERSION_PATTERN = re.compile(
+# Strips a leading `opencode`/"version"/"v" prefix off one line of OpenCode's own `--version`
+# output (blizzard#438) — genuinely OpenCode-specific, unlike the rest of this module (F14).
+OPENCODE_VERSION_PATTERN = re.compile(
     r"^\s*(?:opencode(?:\s+version)?\s+)?(?:v)?"
     r"(?P<version>\d+\.\d+\.\d+(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
     r"\s*$",
@@ -36,18 +37,27 @@ HARNESS_VERSION_PATTERN = re.compile(
 )
 
 
-def normalize_harness_version(raw: str | None) -> str | None:
-    """The bare semantic version in one raw ``--version`` output, or ``None`` when it isn't
-    exactly one matching line — the one normalizer both the live OpenCode probe and the
-    health/capability-snapshot path route a membership check through, so the two paths can
-    never disagree about what was observed. The raw string itself, never this normalized
-    form, is what is stored and travels the wire."""
+def normalize_opencode_version(raw: str | None) -> str | None:
+    """The bare semantic version in one raw OpenCode ``--version`` output, or ``None`` when
+    it isn't exactly one matching line — the one normalizer both the live OpenCode probe and
+    the health/capability-snapshot path route a membership check through, so the two paths
+    can never disagree about what was observed. The raw string itself, never this normalized
+    form, is what is stored and travels the wire.
+
+    Named and scoped honestly to OpenCode (F14), unlike the rest of this otherwise
+    harness-neutral module: the pattern only understands OpenCode's own ``--version`` shape.
+    It still lives here, not beside OpenCode's other internals, because
+    ``capability_snapshot.py``'s per-binding loop calls it uniformly for every configured
+    harness — harmlessly, since a binding declaring no supported-version range (Claude Code)
+    never consults the normalized result at all (``bzh:seam-size-ceiling``). A second
+    version-declaring binding with its own ``--version`` shape needs its own normalizer, not
+    this one, and that loop's own per-binding dispatch to it."""
     if raw is None:
         return None
     lines = [line for line in raw.splitlines() if line.strip()]
     if len(lines) != 1:
         return None
-    match = HARNESS_VERSION_PATTERN.fullmatch(lines[0])
+    match = OPENCODE_VERSION_PATTERN.fullmatch(lines[0])
     return match.group("version") if match else None
 
 

@@ -29,6 +29,7 @@ def _harness_health_list(harnesses: IHarnessRegistry, health: HarnessHealthCache
     items: list[HarnessHealthViewWire] = []
     for harness_id in harnesses.known_harnesses:
         result = health.get(harness_id)
+        probe = health.probes.get(harness_id)
         items.append(
             HarnessHealthViewWire(
                 harness_id=harness_id,
@@ -36,6 +37,7 @@ def _harness_health_list(harnesses: IHarnessRegistry, health: HarnessHealthCache
                 available=result.available if result is not None else True,
                 cause=result.cause.value if result is not None and result.cause is not None else None,
                 degradations=[d.summary for d in result.degradations] if result is not None else [],
+                admitted_versions=sorted(probe.supported_version()) if probe is not None else [],
             )
         )
     return HarnessHealthListResponse(items=items)

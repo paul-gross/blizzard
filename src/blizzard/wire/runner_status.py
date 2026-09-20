@@ -158,6 +158,9 @@ class HarnessHealthView(BaseModel):
     available: bool
     cause: str | None = None
     degradations: list[str] = []
+    #: This binding's own declared admitted-version set (D3), regardless of the outcome
+    #: above — empty for a binding (Claude Code) that declares no supported-version range.
+    admitted_versions: list[str] = []
 
 
 class HarnessHealthListResponse(BaseModel):

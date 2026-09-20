@@ -13,6 +13,7 @@ these red."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -25,6 +26,7 @@ from blizzard.runner.domain.takeover import TakeoverOpenScope, TakeoverService
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry, UnknownHarnessError
+from blizzard.runner.loop.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
 from blizzard.wire.chunk import ChunkStatusView
 from tests.runner_fakes import (
@@ -221,7 +223,7 @@ def _judgement_ctx(store, *, harness_a: FakeHarness, harness_b: FakeHarness, pro
         harness=harness_a,
         probe=probe,
     )
-    return _swap_registry(ctx, _two_harness_registry(harness_a, harness_b))
+    return _swap_registry(ctx, _two_harness_registry(harness_a, harness_b)), envelope_a, envelope_b
 
 
 def test_judgement_launch_and_collect_dispatch_each_lease_to_its_own_harness(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -239,13 +241,18 @@ def test_judgement_launch_and_collect_dispatch_each_lease_to_its_own_harness(tmp
     harness_a = FakeHarness(handle=handle_a, verdict="pass", judge_pid=8801)
     harness_b = FakeHarness(handle=handle_b, verdict="fail", judge_pid=8802)
     probe = FakeProbe()  # neither worker pid (100/200) is alive — both read as exited
-    ctx = _judgement_ctx(store, harness_a=harness_a, harness_b=harness_b, probe=probe)
+    ctx, envelope_a, envelope_b = _judgement_ctx(store, harness_a=harness_a, harness_b=harness_b, probe=probe)
 
     Advance(ctx).run()  # launch pass — elicits both verdicts
 
-    # Each fake's OWN judge log carries exactly its own lease's session — never the sibling's.
-    assert harness_a.judged == [("/ws/lease_a", _SHARED_SESSION_ID, harness_a.judged[0][2])]
-    assert harness_b.judged == [("/ws/lease_b", _SHARED_SESSION_ID, harness_b.judged[0][2])]
+    # Each fake's OWN judge log carries exactly its own lease's session — never the
+    # sibling's — and the prompt text, rendered independently from each lease's OWN
+    # envelope (no checks declared, so an empty check-results list), not read back off
+    # the fake's own recorded call.
+    expected_prompt_a = JudgementPrompt(envelope_a, []).render()
+    expected_prompt_b = JudgementPrompt(envelope_b, []).render()
+    assert harness_a.judged == [("/ws/lease_a", _SHARED_SESSION_ID, expected_prompt_a)]
+    assert harness_b.judged == [("/ws/lease_b", _SHARED_SESSION_ID, expected_prompt_b)]
     assert store.in_flight_elicitation("lease_a", 1) is not None
     assert store.in_flight_elicitation("lease_b", 1) is not None
 
@@ -254,9 +261,14 @@ def test_judgement_launch_and_collect_dispatch_each_lease_to_its_own_harness(tmp
     assert store.in_flight_elicitation("lease_a", 1) is None
     assert store.in_flight_elicitation("lease_b", 1) is None
     outbound = {b.chunk_id: b for b in store.pending_outbound() if b.kind == "completion.submitted"}
-    # lease_a's own "pass" verdict landed lease_a's completion; lease_b's own "fail" landed
-    # lease_b's — never the other way around, which a raw-id-only lookup would risk.
     assert "ch_a" in outbound and "ch_b" in outbound
+    choice_a = json.loads(outbound["ch_a"].payload)["submission"]["choice"]
+    choice_b = json.loads(outbound["ch_b"].payload)["submission"]["choice"]
+    # lease_a's own "pass" verdict landed lease_a's completion; lease_b's own "fail" landed
+    # lease_b's — never the other way around (a cross-wired collect reading the sibling's
+    # verdict back would flip these), which a raw-id-only lookup would risk.
+    assert choice_a == "pass"
+    assert choice_b == "fail"
 
 
 def test_judgement_owner_failure_on_one_lease_never_blocks_the_others_collect(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -290,8 +302,11 @@ def test_judgement_owner_failure_on_one_lease_never_blocks_the_others_collect(tm
 
     Advance(ctx).run()
 
-    # lease_a's own adapter was reached and elicited a verdict.
-    assert harness_a.judged == [("/ws/lease_a", _SHARED_SESSION_ID, harness_a.judged[0][2])]
+    # lease_a's own adapter was reached and elicited a verdict, with the prompt text
+    # rendered independently from lease_a's OWN envelope (no checks declared), not read
+    # back off the fake's own recorded call.
+    expected_prompt_a = JudgementPrompt(envelope_a, []).render()
+    assert harness_a.judged == [("/ws/lease_a", _SHARED_SESSION_ID, expected_prompt_a)]
     # lease_b never got a launch call on ANY adapter — no in-flight elicitation for it.
     assert store.in_flight_elicitation("lease_b", 1) is None
     escalations = [e for e in store.open_escalations() if e.chunk_id == "ch_b"]

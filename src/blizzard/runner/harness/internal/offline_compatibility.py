@@ -50,17 +50,15 @@ def classify_offline(
     observed_version: str | None,
     *,
     corpus_root: Path = DEFAULT_CORPUS_ROOT,
-    admitted_versions: frozenset[str] | None = None,
 ) -> CompatibilityClassification | None:
     """The pinned classification a committed corpus fixture records for ``observed_version``,
-    or ``None`` when no version was observed, no fixture manifest proves it, or
-    ``admitted_versions`` is supplied and excludes it — the same "unknown" outcome either way,
-    so a stray directory for a version this binding no longer admits can never resolve a
-    classification. ``corpus_root`` defaults to this repo's own ``contracts/`` tree."""
+    or ``None`` when no version was observed or no fixture manifest proves it. Classifies
+    ``observed_version`` on its own terms — it does not decide whether ``observed_version``
+    is one this binding actually admits; a caller that needs that distinct fact (D2) checks
+    membership itself, against its own admitted-version set, before or after calling this.
+    ``corpus_root`` defaults to this repo's own ``contracts/`` tree."""
 
     if observed_version is None:
-        return None
-    if admitted_versions is not None and observed_version not in admitted_versions:
         return None
     manifest_path = corpus_root / harness_id / observed_version / "manifest.json"
     if not manifest_path.is_file():

@@ -23,12 +23,15 @@ Either shows up as an `owner-unresolvable` event, which [observability.md](./obs
 resolving.
 
 OpenCode's own plugin channel — a soft heartbeat nudge after every tool call, and forwarding the lease's identity into
-tool subprocesses through `shell.env` — is classified `degraded` on every OpenCode version the runner admits: the
+tool subprocesses through `shell.env` — is classified `degraded` on every OpenCode version the runner admits today: the
 compatibility proof's `root_hook` and `child_sessions` probes both report absent, so the plugin's loading at all is
 never something a deployment can prove or depend on ([opencode-compatibility.md](./opencode-compatibility.md) owns the
-full probe table and its classification policy). Nothing about a turn's completion or a lease's correctness rests on it
-— process liveness is the sole signal for both harnesses alike — so a runner whose OpenCode plugin never loads still
-executes work correctly and merely goes quiet between tool calls.
+full probe table and its classification policy). This is a fact of each admitted version's own committed corpus, not a
+blanket guarantee — a future admitted version's own declared degradations (`OpenCodeHealthProbe.declared_degradations`,
+`src/blizzard/runner/harness/internal/opencode_health.py`) are read from that version's own manifest and can differ.
+Nothing about a turn's completion or a lease's correctness rests on it — process liveness is the sole signal for both
+harnesses alike — so a runner whose OpenCode plugin never loads still executes work correctly and merely goes quiet
+between tool calls.
 
 ## The three prompt layers
 

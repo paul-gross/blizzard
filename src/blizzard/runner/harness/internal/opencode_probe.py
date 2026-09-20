@@ -26,7 +26,6 @@ from blizzard.runner.harness.compatibility import (
     ProbeObservation,
 )
 from blizzard.runner.harness.internal import harness_shared
-from blizzard.runner.harness.internal.offline_compatibility import assert_admitted_versions_have_corpus
 from blizzard.runner.harness.internal.opencode_attach import IAttachProxyFactory
 from blizzard.runner.harness.internal.opencode_compaction import (
     IOpenCodeCompactor,
@@ -100,12 +99,17 @@ from blizzard.runner.harness.internal.opencode_transcript import (
 )
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 60.0
-# The currently-admitted version; most callers (corpus paths, fixtures) only need this one.
+# One concrete, always-admitted version this module's own corpus fixture and live diagnostic
+# are authored against — a fixture/test convenience naming one member of the set below, never
+# itself the runtime admission mechanism (that membership check is ADMITTED_OPENCODE_VERSIONS's
+# own job, D2).
 PINNED_OPENCODE_VERSION = "1.18.25"
 # The declared admitted-version set (blizzard#438): membership, never a pin equality check.
 ADMITTED_OPENCODE_VERSIONS: frozenset[str] = frozenset({PINNED_OPENCODE_VERSION})
-# Every admitted version owes a committed corpus manifest, checked (and raised on) at import time.
-assert_admitted_versions_have_corpus("opencode", ADMITTED_OPENCODE_VERSIONS)
+# Every admitted version owes a committed corpus manifest — checked at `OpenCodeHealthProbe`
+# construction (opencode_health.py), not here at this module's own import (F10): this module
+# is imported transitively at daemon startup (`harness_registry.py`), and a missing manifest
+# must degrade only the OpenCode binding's own health, never take the whole daemon's import down.
 SHAPE_FAULT_SUMMARY = "OpenCode emitted an unsupported or malformed required shape"
 INTERNAL_FAULT_SUMMARY = "the compatibility probe failed before it could observe OpenCode"
 BOUNDARY_FAULT_SUMMARY = "the runner could not establish the fail-closed filesystem boundary"
@@ -388,7 +392,7 @@ class OpenCodeCompatibilityProbe:
         result = self._invoke("version", [self.binary, "--version"], cwd=cwd, env=env)
         if result.returncode != 0:
             return "unknown"
-        normalized = harness_shared.normalize_harness_version(result.stdout)
+        normalized = harness_shared.normalize_opencode_version(result.stdout)
         return normalized if normalized is not None else "unknown"
 
     def _fresh_turn(self, cwd: Path, env: Mapping[str, str]) -> _TurnResult:

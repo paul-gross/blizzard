@@ -15,7 +15,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.health import HarnessHealthEvidence, HarnessHealthResult, evaluate_harness_health
-from blizzard.runner.harness.internal.harness_shared import normalize_harness_version
+from blizzard.runner.harness.internal.harness_shared import normalize_opencode_version
 from blizzard.runner.harness.internal.offline_compatibility import classify_offline
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.wire.runner import RunnerCapability
@@ -107,16 +107,20 @@ class HarnessHealthCache:
         if not stale and not changed and harness_id in self._results:
             return self._results[harness_id]
         supported_version = probe.supported_version()
-        normalized_version = normalize_harness_version(observed_version)
+        normalized_version = normalize_opencode_version(observed_version)
+        # D2: membership against the admitted set is this caller's own job, checked directly
+        # off the normalized observation — `classify_offline` no longer filters by admission,
+        # only classifies a version already known to be admitted. `None` (no version observed
+        # at all) stays distinct from a genuine, observed-but-not-admitted non-member.
+        version_admitted = None if normalized_version is None else normalized_version in supported_version
         result = evaluate_harness_health(
             HarnessHealthEvidence(
                 harness_id=harness_id,
                 binary_present=probe.binary_present(),
                 version_declared=bool(supported_version),
+                version_admitted=version_admitted,
                 version_classification=(
-                    classify_offline(harness_id, normalized_version, admitted_versions=supported_version)
-                    if supported_version
-                    else None
+                    classify_offline(harness_id, normalized_version) if supported_version else None
                 ),
                 authenticated=probe.probe_authentication(),
                 unmapped_tiers=_unmapped_tiers(adapter, self.configured_tiers.get(harness_id, ())),

@@ -21,8 +21,18 @@ relaunch unarmed) — no crash point armed, since that recovery proof already be
    BEFORE that first turn even starts therefore needs a real gap, not a race against the
    runner's own next tick. The FIRST start below runs on a deliberately long tick
    interval (`_start_runner`, `_BOUNDARY_TICK_SECONDS`) for exactly this reason — this
-   test's own poll of the hub's `current_node_name` has seconds, not milliseconds, of
-   slack to observe the flip and restart before that slow tick ever reaches ADVANCE.
+   test's own poll is of the RUNNER's own local store (`_wait_build_judged`, never the
+   hub's `current_node_name` — see that helper's own docstring for why that read is too
+   late), which lands mid-tick, well before the SAME tick's own remaining steps and the
+   NEXT tick's own PULL/FILL would otherwise close `build`'s lease and spawn the OpenCode
+   worker. The margin this affords is not a bare wall-clock guess: `PeriodicDriver._run`
+   sleeps BETWEEN ticks on an interruptible `threading.Event.wait(interval)`, woken the
+   instant a graceful SIGTERM sets it — so as long as this restart's own `terminate()`
+   call is delivered and processed at any point before the full `_BOUNDARY_TICK_SECONDS`
+   interval elapses (typically milliseconds after the SIGTERM lands, not a fixed-sleep
+   coin flip), the next tick never starts at all, rather than racing to interrupt one
+   already underway. `_BOUNDARY_TICK_SECONDS` is kept wide regardless, as defensive slack
+   against a genuinely overloaded machine.
 2. Mid-way through the OpenCode lineage's own session — the `opencode-review` worker
    commits, declares, and hangs; the runner is stopped gracefully (marking a
    resume-intent) and relaunched, which must RESUME the same lease/epoch/session rather
@@ -132,7 +142,10 @@ _GIT_COMMIT_PRODUCES = [{"name": "commit", "kind": "git_commit"}]
 #: The FIRST runner start's own tick interval — deliberately wide (seconds, not
 #: `tests.crash.support.TICK_SECONDS`'s brisk 0.3s) so restart #1 has a real gap to land
 #: in, rather than racing the runner's own next tick (see the module docstring's own D1).
-_BOUNDARY_TICK_SECONDS = "5"
+#: Widened defensively past the minimum that machine ever needed, purely as slack against
+#: an overloaded one — `PeriodicDriver`'s own interruptible between-tick wait (D1) is what
+#: actually makes this non-racy; this constant only bounds how long that slack is.
+_BOUNDARY_TICK_SECONDS = "8"
 
 
 def _start_runner(runner_dir: Path, *, tick_seconds: str) -> subprocess.Popen[str]:
@@ -348,7 +361,9 @@ def _wait_build_judged(runner_dir: Path, chunk_id: str, build_node_id: str, *, t
     raise AssertionError(f"build's own judge usage fact never landed for chunk {chunk_id}")
 
 
-def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_restarts(tmp_path: Path) -> None:
+def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_restarts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """One chunk's one traversal crosses from Claude Code into OpenCode; the runner
     daemon is cleanly restarted once at the lineage boundary and once more mid-session
     inside the OpenCode lineage, and every dispatch, the board, and analytics all
@@ -383,8 +398,7 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
     (workspace / ".blizzard-mock-harness-fence").write_text("mixed-harness e2e fence marker\n")
 
     transcripts_root = tmp_path / "transcripts"
-    prior_transcripts_root = os.environ.get(ENV_TRANSCRIPTS_ROOT)
-    os.environ[ENV_TRANSCRIPTS_ROOT] = str(transcripts_root)
+    monkeypatch.setenv(ENV_TRANSCRIPTS_ROOT, str(transcripts_root))
 
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     forge_port, hub_port, runner_port = free_port(), free_port(), free_port()
@@ -558,9 +572,18 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
                 assert ground_truth, f"the runner itself recorded no usage_facts for {node_label}"
                 assert {u["harness_id"] for u in board_rows} == {r["harness_id"] for r in ground_truth}, node_label
                 assert {u["model"] for u in board_rows} == {r["model"] for r in ground_truth}, node_label
-                assert {u["harness_version"] for u in board_rows} == {r["harness_version"] for r in ground_truth}, (
-                    node_label
-                )
+                board_versions = {u["harness_version"] for u in board_rows}
+                ground_truth_versions = {r["harness_version"] for r in ground_truth}
+                assert board_versions == ground_truth_versions, node_label
+                if expected_harness == "opencode":
+                    # A mirror-compare alone can't tell "both sides genuinely agree on
+                    # {'1.18.25'}" apart from "both sides silently dropped version capture
+                    # and agree on {None}" — OpenCode's own mock session-info document
+                    # always carries a version (`_opencode_transcript.py`'s `_MOCK_VERSION`,
+                    # confirmed by the dispatch-service test's own honest-asymmetry
+                    # comment), so this side additionally pins a genuinely non-empty
+                    # value, not merely one that agrees with the other side.
+                    assert board_versions - {None, ""}, (node_label, board_versions)
 
             # --- Analytics: derive, then read the real events back per node.
 
@@ -604,7 +627,3 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
         runner_client.close()
         terminate(runner_proc)
         terminate(hub_proc)
-        if prior_transcripts_root is None:
-            os.environ.pop(ENV_TRANSCRIPTS_ROOT, None)
-        else:
-            os.environ[ENV_TRANSCRIPTS_ROOT] = prior_transcripts_root
