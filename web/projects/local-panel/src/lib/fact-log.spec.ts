@@ -30,6 +30,7 @@ function dashboardBody(facts: readonly runnerApi.FactView[]): runnerApi.Dashboar
     takeovers: { items: [] },
     fleet_summary: null,
     facts: { items: [...facts] },
+    harness_health: { items: [] },
   };
 }
 

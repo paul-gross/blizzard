@@ -41,7 +41,11 @@ from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.loop.attempt import Attempt
-from blizzard.runner.loop.capability_snapshot import HARNESS_VERSION_REFRESH_SECONDS, HarnessVersionCache
+from blizzard.runner.loop.capability_snapshot import (
+    HARNESS_VERSION_REFRESH_SECONDS,
+    HarnessHealthCache,
+    HarnessVersionCache,
+)
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.produces import ProducesReconciler
@@ -436,6 +440,53 @@ def test_harness_selection_skips_unresolvable_and_untiered_members_in_order():  
             SkippedHarness("h_no_tier", "no-authored-tier"),
         ),
     )
+
+
+@pytest.mark.unit
+def test_harness_selection_skips_a_member_health_has_withdrawn():  # type: ignore[no-untyped-def]
+    """A member health has marked unavailable (blizzard#438) is skipped with its own
+    reason, distinct from ``"unavailable"``'s no-binding-at-all meaning — and the check
+    reads the cache's last-computed result only, never triggering a probe mid-selection."""
+    h_unhealthy = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
+    h_ok = FakeHarness(handle=WorkerHandle(session_id="s", pid=2, process_start_time="t", pgid=2), verdict=None)
+    registry = HarnessRegistry(
+        {
+            "h_unhealthy": HarnessBinding(adapter=h_unhealthy, transcript_source=h_unhealthy.transcript_source()),
+            "h_ok": HarnessBinding(adapter=h_ok, transcript_source=h_ok.transcript_source()),
+        }
+    )
+
+    class _NeverBinaryProbe:
+        def binary_present(self) -> bool:
+            return False
+
+        def probe_authentication(self) -> bool:
+            return True
+
+        def supported_version(self) -> str | None:
+            return None
+
+        def declared_degradations(self) -> tuple[()]:
+            return ()
+
+    class _NoSelftestResults:
+        def latest_selftest_result(self, harness_id: str):  # type: ignore[no-untyped-def]
+            del harness_id
+            return None
+
+    health = HarnessHealthCache(
+        clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
+        probes={"h_unhealthy": _NeverBinaryProbe()},
+        selftest_results=_NoSelftestResults(),
+    )
+    health.refresh("h_unhealthy", adapter=h_unhealthy, observed_version=None)
+    envelope = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, session_harnesses=["h_unhealthy", "h_ok"]
+    )
+
+    selection = HarnessSelector(harnesses=registry, health=health).select(envelope.node)
+
+    assert selection == HarnessSelection(harness_id="h_ok", skipped=(SkippedHarness("h_unhealthy", "unhealthy"),))
 
 
 @pytest.mark.unit

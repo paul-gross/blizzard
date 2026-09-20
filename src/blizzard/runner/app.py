@@ -42,6 +42,7 @@ from blizzard.runner.api.finding import router as finding_router
 from blizzard.runner.api.fleet_summary import router as fleet_summary_router
 from blizzard.runner.api.garden import router as garden_router
 from blizzard.runner.api.git_commits import router as git_commits_router
+from blizzard.runner.api.harness_health import router as harness_health_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
@@ -80,10 +81,15 @@ from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
+from blizzard.runner.harness.internal.harness_registry import (
+    build_production_harness_health_probes,
+    build_production_harness_registry,
+)
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.loop.build import ResumeMarking
+from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
@@ -144,6 +150,7 @@ _HUMAN = (
     escalations_router,
     facts_router,
     takeovers_router,
+    harness_health_router,
     dashboard_router,
     requeues_router,
     events_router,
@@ -174,6 +181,7 @@ def create_app(
     takeover: TakeoverService | None = None,
     requeue: RequeueService | None = None,
     selftests: SelfTestService | None = None,
+    harness_health: HarnessHealthCache | None = None,
     attachments: AttachmentService | None = None,
     git_commit_declarations: GitCommitDeclarationService | None = None,
     asks: AskService | None = None,
@@ -237,12 +245,28 @@ def create_app(
     app.state.workspace_prompts = workspace_prompts or (
         WorkspacePromptService(runner_stores.workspace_prompt, SystemClock()) if runner_stores else None
     )
-    # The adapter-drift canary (issue #54): store-free, so wired unconditionally.
+    # The adapter-drift canary (issue #54): wired unconditionally regardless of `runner_stores` —
+    # only `results` needs one, and stays `None` (no durable outcome) without it (blizzard#438).
     app.state.selftests = selftests or SelfTestService(
         harnesses=resolved_harnesses,
         scratch_git=SubprocessScratchGit(),
         process=LinuxProcessProbe(),
         clock=SystemClock(),
+        results=runner_stores.selftest_results if runner_stores else None,
+    )
+    # The runner's own health diagnostics (blizzard#438): `build_hosted_app` passes the one
+    # instance it also hands the loop (`HostedApp.harness_health`), so a dashboard read and
+    # the loop's own registered availability can never disagree. A caller with no shared
+    # instance to give (a standalone `create_app`, a unit test) falls back to a private one
+    # that nothing ever refreshes but this route's own reads — never a live probe either way.
+    app.state.harness_health = harness_health or HarnessHealthCache(
+        clock=SystemClock(),
+        probes=build_production_harness_health_probes(config),
+        selftest_results=runner_stores.selftest_results if runner_stores else None,
+        configured_tiers={
+            CLAUDE_CODE_HARNESS_ID: config.model_aliases,
+            OPENCODE_HARNESS_ID: config.opencode_model_aliases,
+        },
     )
     # This default must **not** reach the network (issue #95) — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
@@ -307,6 +331,10 @@ class HostedApp:
     app: FastAPI
     resume: ResumeMarking
     engine: Engine
+    #: The one `HarnessHealthCache` this process's `host` command hands to `PeriodicDriver`
+    #: too (blizzard#438) — one instance, not two independently-refreshing ones, so a
+    #: dashboard read and the availability actually registered to the hub can never disagree.
+    harness_health: HarnessHealthCache
 
 
 def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None) -> HostedApp:
@@ -318,13 +346,25 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
 
     Kept separate from the loop's own engine (``runner/loop/build.py::LoopWiring``, D4):
     every CLI verb is already its own process on the same store, so sqlite contention is
-    between connections, not engines, and WAL plus ``busy_timeout`` handles that directly."""
+    between connections, not engines, and WAL plus ``busy_timeout`` handles that directly.
+    The one exception is ``harness_health`` (blizzard#438): built here, over this engine's
+    own store, and handed back on :class:`HostedApp` so ``host`` can inject the same
+    instance into the loop's own context instead of it building a second one."""
     engine = create_engine_from_url(config.db_url)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
     errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
     runner_stores, connections = build_stores_and_connections(engine, errors=errors)
+    harness_health = HarnessHealthCache(
+        clock=SystemClock(),
+        probes=build_production_harness_health_probes(config),
+        selftest_results=runner_stores.selftest_results,
+        configured_tiers={
+            CLAUDE_CODE_HARNESS_ID: config.model_aliases,
+            OPENCODE_HARNESS_ID: config.opencode_model_aliases,
+        },
+    )
     workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(
         workspace_root=config.workspace_root or str(config.root),
         env_pool=config.workspace_envs,
@@ -399,13 +439,14 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         requeue=requeue,
         attachments=attachments,
         git_commit_declarations=git_commit_declarations,
+        harness_health=harness_health,
         jti_cache=jti_cache,
         hub_http_client=hub_http_client,
         hub_proxy_client=hub_proxy_client,
         events=events,
     )
     resume = ResumeMarking(runner_stores, SystemClock(), LinuxProcessProbe())
-    return HostedApp(app=app, resume=resume, engine=engine)
+    return HostedApp(app=app, resume=resume, engine=engine, harness_health=harness_health)
 
 
 def create_app_for_export() -> FastAPI:

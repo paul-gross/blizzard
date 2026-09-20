@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
@@ -307,9 +308,50 @@ class IHarnessUsageAccounting(Protocol):
         ...
 
 
+class IHarnessHealthProbe(Protocol):
+    """The evidence a harness-health evaluation needs that no other adapter seam supplies —
+    binary discovery, provider authentication, the binding's supported-version declaration,
+    and its declared degradations. Narrow and separate from IHarnessWorkerLifecycle: the
+    evaluator (runner/harness/health.py) is this seam's only consumer."""
+
+    def binary_present(self) -> bool:
+        """Whether the configured binary resolves right now — bounded and non-raising,
+        the standalone half of :meth:`IHarnessWorkerLifecycle.observe_version`'s own
+        presence check, for a caller that needs presence without paying for a version probe."""
+        ...
+
+    def probe_authentication(self) -> bool:
+        """Whether this binding's provider credentials are present and usable, observed
+        right now — bounded and non-raising, never a network round trip that could delay
+        a health check indefinitely."""
+        ...
+
+    def supported_version(self) -> str | None:
+        """This binding's declared supported version, or ``None`` when it declares no
+        supported-version range at all (Claude Code) — distinct from
+        :meth:`IHarnessWorkerLifecycle.observe_version`'s live observation, which this
+        pins against instead."""
+        ...
+
+    def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
+        """Every known, non-blocking compatibility gap this binding declares about
+        itself — reported diagnostics only, never a spawn-time decision."""
+        ...
+
+
 class IHarnessLifecycleAndVerdict(IHarnessWorkerLifecycle, IHarnessVerdictParsing, Protocol):
     """Worker lifecycle plus verdict parsing, combined into the one slice a consumer
     needing both takes rather than the full adapter (``bzh:seam-size-ceiling``)."""
+
+
+class IHarnessSelfTestSeam(IHarnessWorkerLifecycle, IHarnessVerdictParsing, IHarnessUsageAccounting, Protocol):
+    """The selftest canary's own composed slice (``bzh:seam-size-ceiling``, blizzard#438):
+    :class:`IHarnessLifecycleAndVerdict`'s pair plus usage accounting, its widened roster's
+    ``UsageParsing``/``TranscriptReadability`` checks needing ``parse_usage`` and
+    ``transcript_source`` too — still narrower than the full adapter, which it takes no
+    model-resolution slice from at all."""
+
+    def transcript_source(self) -> IHarnessTranscriptSource: ...
 
 
 class IHarnessAdapter(

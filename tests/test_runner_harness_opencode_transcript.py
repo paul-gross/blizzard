@@ -23,7 +23,8 @@ from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
 from tests.runner_fakes import FakeProbe
 
-_CORPUS_DIR = Path(__file__).resolve().parent.parent / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
+_PACKAGE_ROOT = Path(__file__).resolve().parent.parent / "src" / "blizzard" / "runner" / "harness"
+_CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
 
 
 def _error_factory() -> TranscriptErrorFactory:

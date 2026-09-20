@@ -72,8 +72,8 @@ from blizzard.runner.harness.internal.opencode_transcript import TranscriptExpor
 
 pytestmark = pytest.mark.unit
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_CORPUS_DIR = _REPO_ROOT / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
+_PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
+_CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
 
 
 def _manifest() -> dict[str, Any]:

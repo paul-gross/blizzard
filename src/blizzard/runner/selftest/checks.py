@@ -1,4 +1,4 @@
-"""The selftest's five checks — deterministic orchestration (``bzh:deterministic-shell``)
+"""The selftest's seven checks — deterministic orchestration (``bzh:deterministic-shell``)
 over the harness and scratch-git seams (``bzh:pluggable-seams``), issue #54.
 
 Every op runs against one throwaway scratch repo the ``IScratchGit`` seam mints and
@@ -11,12 +11,13 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import (
     DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
-    IHarnessLifecycleAndVerdict,
+    IHarnessSelfTestSeam,
     WorkerHandle,
     WorkerPreamble,
 )
@@ -27,6 +28,8 @@ from blizzard.runner.selftest.model import (
     END_TO_END_EDIT_COMMIT,
     RESUME_COMMAND,
     SPAWN_SESSION_ID,
+    TRANSCRIPT_READABILITY,
+    USAGE_PARSING,
     VERDICT_ELICITATION,
     SelfTestCheck,
 )
@@ -52,6 +55,8 @@ _JUDGEMENT_PROMPT = (
     "<Choice>pass</Choice> if it did, else <Choice>fail</Choice>."
 )
 _RESUME_MESSAGE = "selftest: automated follow-up resume — no action needed, just acknowledge."
+#: Shared between `Resume` (which writes it) and `UsageParsing` (which reads it back).
+_RESUME_STDOUT_FILENAME = ".selftest-resume-stdout"
 
 
 @dataclass(frozen=True)
@@ -84,7 +89,7 @@ class Scratch:
     """The throwaway repo a run is performed against, the seams its checks drive it
     through, and the session id they drive it under."""
 
-    adapter: IHarnessLifecycleAndVerdict
+    adapter: IHarnessSelfTestSeam
     scratch_git: IScratchGit
     process: IProcessProbe
     workdir: str
@@ -199,7 +204,7 @@ class Resume(Check):
         scratch = self.scratch
         try:
             # Never the bare `""` default: it would inherit the daemon's own stdout.
-            stdout_path = os.path.join(scratch.workdir, ".selftest-resume-stdout")
+            stdout_path = os.path.join(scratch.workdir, _RESUME_STDOUT_FILENAME)
             resumed = scratch.adapter.resume_with_message(
                 scratch.workdir, scratch.session_id, _RESUME_MESSAGE, stdout_path=stdout_path
             )
@@ -210,9 +215,15 @@ class Resume(Check):
             return SelfTestCheck(
                 AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({resumed.pid})"
             )
+        worker = Worker(scratch.process, resumed.pid)
+        # Bounded wait first, so a fast-finishing resume actually flushes its own output —
+        # `UsageParsing` reads this same file, and reaping (killing) immediately here left
+        # it always empty, unable to catch a real parse-usage regression (blizzard#438,
+        # review F6). A hung resume still gets killed by `reap()` below, exactly as before.
+        worker.wait_for_exit(resumed.process_start_time)
         # Reaped here so no live process outlives the scratch dir it is cwd'd into
         # (tests/test_runner_selftest.py).
-        Worker(scratch.process, resumed.pid).reap()
+        worker.reap()
         return SelfTestCheck(AUTOMATED_RESUME, True, f"resumed session {scratch.session_id!r} as pid {resumed.pid}")
 
 
@@ -228,11 +239,55 @@ class ResumeCommand(Check):
         return SelfTestCheck(RESUME_COMMAND, True, command)
 
 
+class UsageParsing(Check):
+    """Whether ``parse_usage`` can be handed the resume check's captured stdout without
+    raising (blizzard#438). A missing usage envelope is a legitimate answer here (a canary
+    harness may never emit real provider usage), so this only asserts the parse path stays
+    exception-free — not that a sample was actually found."""
+
+    def run(self) -> SelfTestCheck:
+        scratch = self.scratch
+        stdout_path = os.path.join(scratch.workdir, _RESUME_STDOUT_FILENAME)
+        try:
+            output = Path(stdout_path).read_text(encoding="utf-8") if os.path.exists(stdout_path) else ""
+        except OSError as exc:
+            return SelfTestCheck(USAGE_PARSING, False, f"could not read the resume check's own stdout: {exc}")
+        try:
+            sample = scratch.adapter.parse_usage(output, "resume", model=None)
+        except Exception as exc:
+            return SelfTestCheck(USAGE_PARSING, False, f"parse_usage raised: {exc}")
+        detail = (
+            f"parsed a usage sample ({sample.input_tokens} in / {sample.output_tokens} out)"
+            if sample is not None
+            else "no usage envelope in the resume output — parse_usage's own documented answer for one, not a fault"
+        )
+        return SelfTestCheck(USAGE_PARSING, True, detail)
+
+
+class TranscriptReadability(Check):
+    """Whether the adapter's transcript source can be queried without raising. No null
+    check of its own: a :class:`~blizzard.runner.harness.transcript.NullTranscriptSource`
+    binding already reads back as an absent-but-healthy transcript by its own contract, and
+    a canary session may leave no real transcript behind either — only an actual exception
+    fails this check, sniffing no concrete source class to decide whether to run it."""
+
+    def run(self) -> SelfTestCheck:
+        scratch = self.scratch
+        source = scratch.adapter.transcript_source()
+        try:
+            lines = source.read_raw_lines(scratch.session_id, spawn_cwd=scratch.workdir)
+            position = source.tail_position(scratch.session_id, spawn_cwd=scratch.workdir)
+        except Exception as exc:
+            return SelfTestCheck(TRANSCRIPT_READABILITY, False, f"transcript source raised: {exc}")
+        detail = f"read {len(lines)} raw line(s); tail position {position!r}"
+        return SelfTestCheck(TRANSCRIPT_READABILITY, True, detail)
+
+
 @dataclass(frozen=True)
 class SelfTest:
-    """The five adapter-drift checks against a single throwaway scratch repo."""
+    """The seven adapter-drift checks against a single throwaway scratch repo."""
 
-    adapter: IHarnessLifecycleAndVerdict
+    adapter: IHarnessSelfTestSeam
     scratch_git: IScratchGit
     process: IProcessProbe
 
@@ -253,6 +308,8 @@ class SelfTest:
                 checks.append(SelfTestCheck(VERDICT_ELICITATION, False, skipped))
                 checks.append(SelfTestCheck(AUTOMATED_RESUME, False, skipped))
                 checks.append(SelfTestCheck(RESUME_COMMAND, False, skipped))
+                checks.append(SelfTestCheck(USAGE_PARSING, False, skipped))
+                checks.append(SelfTestCheck(TRANSCRIPT_READABILITY, False, skipped))
                 return checks
 
             # The id the adapter actually returned, which a failed gate check may leave
@@ -262,4 +319,6 @@ class SelfTest:
             checks.append(Judge(spawned).run())
             checks.append(Resume(spawned).run())
             checks.append(ResumeCommand(spawned).run())
+            checks.append(UsageParsing(spawned).run())
+            checks.append(TranscriptReadability(spawned).run())
             return checks

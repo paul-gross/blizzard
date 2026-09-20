@@ -32,7 +32,16 @@ from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, Skip
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.support_opencode_binary import worker_binary
 
-_CORPUS_DIR = Path(__file__).resolve().parents[1] / "contracts" / "opencode" / PINNED_OPENCODE_VERSION
+_CORPUS_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "blizzard"
+    / "runner"
+    / "harness"
+    / "contracts"
+    / "opencode"
+    / PINNED_OPENCODE_VERSION
+)
 
 
 def _manifest() -> dict[str, Any]:

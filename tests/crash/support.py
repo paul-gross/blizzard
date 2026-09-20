@@ -22,7 +22,7 @@ import httpx
 from blizzard.hub.config import WorkSourceConfig
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import init_environment as init_runner_environment
-from tests.support import daemon_log_sink, write_work_sources
+from tests.support import daemon_log_sink, write_mock_harness_credentials, write_work_sources
 
 OWNER = "blizzard"
 REPO_NAME = "toy-api"
@@ -569,6 +569,7 @@ def start_hub(
 def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub_port: int, port: int) -> RunnerConfig:
     """Scaffold + persist a runner config pointed at the fixture workspace and mock harness."""
     base = init_runner_environment(runner_dir)
+    claude_credentials, opencode_auth = write_mock_harness_credentials(runner_dir)
     config = dataclasses.replace(
         base,
         host="127.0.0.1",
@@ -580,6 +581,10 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
         # omitted here — ``None`` omits it.
         harness_permission_mode=None,
+        # Both health probes read a fixture-written credential file (blizzard#438) — neither
+        # mock binary is a real, logged-in provider CLI.
+        claude_code_credentials_path=claude_credentials,
+        opencode_auth_path=opencode_auth,
         # Unset on purpose: the external-usage sampler's first soft-failure check (a
         # missing credentials file) trips before any request is built (issue #218).
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),

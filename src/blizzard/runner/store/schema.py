@@ -682,3 +682,15 @@ graph_artifacts = Table(
     Column("content", Text, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
+
+# --- Selftest results (blizzard#438) — latest-wins-per-harness_id (bzh:facts-not-status) ---
+
+selftest_results = Table(
+    "selftest_results",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("harness_id", String, nullable=False),
+    Column("status", String, nullable=False),  # "passed" / "failed" — SelfTestStatus's terminal values
+    Column("error", Text, nullable=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+)

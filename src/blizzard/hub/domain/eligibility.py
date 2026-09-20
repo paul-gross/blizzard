@@ -34,6 +34,12 @@ class EligibilityCheck:
     def eligible(self) -> bool:
         return all(self._lineage_satisfied(runner_node) for runner_node in self._reachable_runner_nodes())
 
+    @property
+    def _available_capabilities(self) -> list[RunnerCapability]:
+        """Capabilities health has withdrawn from selection (blizzard#438) satisfy no
+        lineage — a runner's own diagnostics still see them; a claim or peek never does."""
+        return [capability for capability in self.capabilities if capability.available]
+
     def _reachable_runner_nodes(self) -> list[Node]:
         """Every runner-owned node reached from :attr:`node`, DFS over the graph's edges,
         visiting each node id at most once (cycle-safe). A hub node is traversed through but
@@ -64,13 +70,14 @@ class EligibilityCheck:
         acceptable harness skips the model check only when nothing in ``session.model`` is
         an authored (``blizzard:``-namespaced) tier, never a guessed native name."""
         session = EffectiveSession.of(self.chunk, self.graph, node)
+        available = self._available_capabilities
         if not session.harnesses:
-            return any(capability.default for capability in self.capabilities)
+            return any(capability.default for capability in available)
         strict = bool(session.model) and (
             len(session.harnesses) > 1 or any(tier.startswith(TIER_PREFIX) for tier in session.model)
         )
         for harness_id in session.harnesses:
-            capability = next((c for c in self.capabilities if c.harness_id == harness_id), None)
+            capability = next((c for c in available if c.harness_id == harness_id), None)
             if capability is None:
                 continue
             if strict and not any(tier in capability.tiers for tier in session.model):

@@ -602,9 +602,9 @@ export type CreateWorkItemProposal = {
 /**
  * DashboardView
  *
- * ``GET /api/dashboard`` — seven status reads composed into one response.
+ * ``GET /api/dashboard`` — eight status reads composed into one response.
  * ``fleet_summary`` alone is a hub pass-through and the only nullable section —
- * ``None`` on a hub failure or an unwired runner, while the six local sections
+ * ``None`` on a hub failure or an unwired runner, while the seven local sections
  * still populate.
  */
 export type DashboardView = {
@@ -613,6 +613,7 @@ export type DashboardView = {
     escalations: EscalationListResponse;
     facts: FactListResponse;
     fleet_summary: FleetSummaryView | null;
+    harness_health: HarnessHealthListResponse;
     runner: RunnerStatusView;
     takeovers: OpenTakeoverListResponse;
 };
@@ -1123,6 +1124,50 @@ export type HttpValidationError = {
      * Detail
      */
     detail?: Array<ValidationError>;
+};
+
+/**
+ * HarnessHealthListResponse
+ *
+ * Every configured harness binding's own computed health.
+ */
+export type HarnessHealthListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<HarnessHealthView>;
+};
+
+/**
+ * HarnessHealthView
+ *
+ * One configured harness binding's own computed health (blizzard#438) —
+ * ``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of
+ * ``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,
+ * ``unmapped_tier``, or ``selftest_failure`` when unavailable; ``declared_degradation`` when
+ * available but degraded; ``None`` only when available with no declared degradation either.
+ */
+export type HarnessHealthView = {
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Cause
+     */
+    cause?: string | null;
+    /**
+     * Degradations
+     */
+    degradations?: Array<string>;
+    /**
+     * Harness Id
+     */
+    harness_id: string;
+    /**
+     * Version
+     */
+    version?: string | null;
 };
 
 /**
@@ -3020,6 +3065,22 @@ export type GetFleetSummaryApiFleetSummaryGetResponses = {
 };
 
 export type GetFleetSummaryApiFleetSummaryGetResponse = GetFleetSummaryApiFleetSummaryGetResponses[keyof GetFleetSummaryApiFleetSummaryGetResponses];
+
+export type ListHarnessHealthApiHarnessHealthGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/harness-health';
+};
+
+export type ListHarnessHealthApiHarnessHealthGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HarnessHealthListResponse;
+};
+
+export type ListHarnessHealthApiHarnessHealthGetResponse = ListHarnessHealthApiHarnessHealthGetResponses[keyof ListHarnessHealthApiHarnessHealthGetResponses];
 
 export type HealthApiHealthGetData = {
     body?: never;

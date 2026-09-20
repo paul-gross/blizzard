@@ -1,9 +1,9 @@
 """The selftest job resource's in-memory service — the adapter-drift canary (issue #54).
 
 Mints and runs a selftest against a chosen coding harness off the request thread, in a
-throwaway scratch repo the ``IScratchGit`` seam owns. Deliberately store-free: run state
-is process-local and gone on daemon restart.
-"""
+throwaway scratch repo the ``IScratchGit`` seam owns. Run *state* stays process-local, gone
+on restart; a run's *terminal outcome* also lands as a durable per-harness fact (blizzard#438)
+when a result repository is wired."""
 
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ from dataclasses import replace
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import SELFTEST_PREFIX, Id
-from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
+from blizzard.runner.domain.selftest_result import IWriteSelfTestResultRepository
+from blizzard.runner.harness.adapter import IHarnessSelfTestSeam
 from blizzard.runner.harness.registry import IHarnessRegistry, UnknownHarnessError
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
@@ -40,12 +41,14 @@ class SelfTestService:
         process: IProcessProbe,
         clock: IClock,
         run_budget_seconds: float = _DEFAULT_RUN_BUDGET_SECONDS,
+        results: IWriteSelfTestResultRepository | None = None,
     ) -> None:
         self._harnesses = harnesses
         self._scratch_git = scratch_git
         self._process = process
         self._clock = clock
         self._run_budget_seconds = run_budget_seconds
+        self._results = results
         self._lock = threading.Lock()
         self._runs: dict[str, SelfTestRun] = {}
 
@@ -74,7 +77,7 @@ class SelfTestService:
                 return None
             return replace(run, checks=list(run.checks))
 
-    def _execute(self, selftest_id: str, adapter: IHarnessLifecycleAndVerdict) -> None:
+    def _execute(self, selftest_id: str, adapter: IHarnessSelfTestSeam) -> None:
         # Joined against the budget in its own thread: an overrun cannot be killed, so it
         # is abandoned as a daemon thread and the run resolves anyway (issue #54).
         outcome: list[tuple[list[SelfTestCheck], str | None]] = []
@@ -110,3 +113,11 @@ class SelfTestService:
             run.checks = checks
             run.status = status
             run.error = error
+            harness = run.harness
+        if self._results is not None:
+            self._results.record_selftest_result(
+                harness_id=harness,
+                status=status,
+                error=error,
+                recorded_at=self._clock.now(),
+            )

@@ -30,6 +30,7 @@ function dashboardBody(asks: readonly runnerApi.AskView[]): runnerApi.DashboardV
     takeovers: { items: [] },
     fleet_summary: null,
     facts: { items: [] },
+    harness_health: { items: [] },
   };
 }
 

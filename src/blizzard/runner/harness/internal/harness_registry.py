@@ -12,9 +12,12 @@ from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
+from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
 from blizzard.runner.harness.internal.opencode_registry import build_opencode_binding
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -55,3 +58,16 @@ def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
             OPENCODE_HARNESS_ID: build_opencode_binding(config, process=process, launcher=launcher),
         }
     )
+
+
+def build_production_harness_health_probes(config: RunnerConfig) -> dict[str, IHarnessHealthProbe]:
+    """Every configured harness binding's own :class:`~blizzard.runner.harness.adapter.
+    IHarnessHealthProbe` (blizzard#438), this module's own approved wiring site for the
+    health-probe seam, symmetric with :func:`build_production_harness_registry`'s own
+    adapter construction — the composition root reaches both only through this module."""
+    return {
+        CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(
+            binary=config.harness_binary, credentials_path=config.claude_code_credentials_path
+        ),
+        OPENCODE_HARNESS_ID: OpenCodeHealthProbe(binary=config.opencode_binary, auth_path=config.opencode_auth_path),
+    }

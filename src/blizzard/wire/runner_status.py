@@ -143,10 +143,30 @@ class FactListResponse(BaseModel):
     items: list[FactView] = []
 
 
+class HarnessHealthView(BaseModel):
+    """One configured harness binding's own computed health (blizzard#438) —
+    ``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of
+    ``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,
+    ``unmapped_tier``, or ``selftest_failure`` when unavailable; ``declared_degradation`` when
+    available but degraded; ``None`` only when available with no declared degradation either."""
+
+    harness_id: str
+    version: str | None = None
+    available: bool
+    cause: str | None = None
+    degradations: list[str] = []
+
+
+class HarnessHealthListResponse(BaseModel):
+    """Every configured harness binding's own computed health."""
+
+    items: list[HarnessHealthView] = []
+
+
 class DashboardView(BaseModel):
-    """``GET /api/dashboard`` — seven status reads composed into one response.
+    """``GET /api/dashboard`` — eight status reads composed into one response.
     ``fleet_summary`` alone is a hub pass-through and the only nullable section —
-    ``None`` on a hub failure or an unwired runner, while the six local sections
+    ``None`` on a hub failure or an unwired runner, while the seven local sections
     still populate."""
 
     runner: RunnerStatusView
@@ -155,4 +175,5 @@ class DashboardView(BaseModel):
     escalations: EscalationListResponse
     takeovers: OpenTakeoverListResponse
     facts: FactListResponse
+    harness_health: HarnessHealthListResponse
     fleet_summary: FleetSummaryView | None

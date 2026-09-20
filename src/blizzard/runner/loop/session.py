@@ -15,6 +15,7 @@ from blizzard.runner.harness.adapter import IHarnessModelResolution
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
+from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.wire.envelope import TIER_PREFIX, NodeConfig
 
 _log = get_logger("blizzard.runner.loop")
@@ -233,7 +234,7 @@ class SkippedHarness:
     the account an exhausted selection escalates with."""
 
     harness_id: str
-    reason: str  # "unknown" | "unavailable" | "no-authored-tier"
+    reason: str  # "unknown" | "unavailable" | "unhealthy" | "no-authored-tier" | "not-a-member"
 
 
 @dataclass(frozen=True)
@@ -254,13 +255,15 @@ class HarnessSelector:
     is its only caller: a resume or a forced continuation never reaches selection at all."""
 
     harnesses: IHarnessRegistry
+    #: This runner's own cross-tick health cache (blizzard#438); ``None`` skips the health gate entirely.
+    health: HarnessHealthCache | None = None
 
     def select(self, node: NodeConfig) -> HarnessSelection:
         """The earliest member of ``node.session_harnesses`` this runner can dispatch to, in
-        declared order — a member the registry cannot serve is skipped and recorded. A single
-        member skips the model check only when nothing in ``node.session_model`` is an
-        authored (``blizzard:``-namespaced) tier; an authored tier this harness cannot map is
-        never silently substituted (worker-spawn.md) — skipped like a larger set's own member."""
+        declared order — a member the registry cannot serve, or one health has withdrawn
+        (blizzard#438), is skipped and recorded. A single member skips the model check only
+        when nothing in ``node.session_model`` is an authored (``blizzard:``-namespaced) tier;
+        an authored tier this harness cannot map is never silently substituted (worker-spawn.md)."""
         members = node.session_harnesses
         strict = bool(node.session_model) and (
             len(members) > 1 or any(preference.startswith(TIER_PREFIX) for preference in node.session_model)
@@ -274,6 +277,10 @@ class HarnessSelector:
                 continue
             except UnavailableHarnessError:
                 skipped.append(SkippedHarness(harness_id, "unavailable"))
+                continue
+            health = self.health.get(harness_id) if self.health is not None else None
+            if health is not None and not health.available:
+                skipped.append(SkippedHarness(harness_id, "unhealthy"))
                 continue
             if strict and adapter.resolve_model_strict(node.session_model) is None:
                 skipped.append(SkippedHarness(harness_id, "no-authored-tier"))

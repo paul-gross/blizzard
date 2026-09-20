@@ -6447,8 +6447,13 @@
         "type": "object"
       },
       "RunnerCapability": {
-        "description": "One harness binding this runner can execute (blizzard#433) \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding.",
+        "description": "One harness binding this runner can execute (blizzard#433) \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding. ``available`` (blizzard#438) defaults\n``True`` so a runner asserting none matches exactly as it did before this field\nexisted \u2014 never a reason to strand a pre-upgrade runner.",
         "properties": {
+          "available": {
+            "default": true,
+            "title": "Available",
+            "type": "boolean"
+          },
           "default": {
             "default": false,
             "title": "Default",

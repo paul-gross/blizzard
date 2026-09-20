@@ -2,7 +2,7 @@
 
 :class:`SelfTestRun` is a resource with a result, not an RPC verb. Check names are
 module constants rather than free-form strings, so every reader agrees on the same
-five identifiers."""
+seven identifiers."""
 
 from __future__ import annotations
 
@@ -11,12 +11,14 @@ from typing import Literal
 
 SelfTestStatus = Literal["running", "passed", "failed"]
 
-# The five adapter-drift checks, in the order a run performs them.
+# The seven adapter-drift checks, in the order a run performs them (blizzard#438 added the last two).
 SPAWN_SESSION_ID = "spawn_session_id"
 END_TO_END_EDIT_COMMIT = "end_to_end_edit_commit"
 VERDICT_ELICITATION = "verdict_elicitation"
 AUTOMATED_RESUME = "automated_resume"
 RESUME_COMMAND = "resume_command"
+USAGE_PARSING = "usage_parsing"
+TRANSCRIPT_READABILITY = "transcript_readability"
 
 
 @dataclass(frozen=True)
