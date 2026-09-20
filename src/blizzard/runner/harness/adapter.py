@@ -326,11 +326,12 @@ class IHarnessHealthProbe(Protocol):
         a health check indefinitely."""
         ...
 
-    def supported_version(self) -> str | None:
-        """This binding's declared supported version, or ``None`` when it declares no
+    def supported_version(self) -> frozenset[str]:
+        """This binding's declared admitted-version set, or an empty set when it declares no
         supported-version range at all (Claude Code) — distinct from
         :meth:`IHarnessWorkerLifecycle.observe_version`'s live observation, which this
-        pins against instead."""
+        checks membership against instead. A set, not a semver interval or single pin: an
+        admitted version is membership, never an equality check against one literal."""
         ...
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:

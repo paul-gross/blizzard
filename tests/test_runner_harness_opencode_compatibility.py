@@ -54,7 +54,7 @@ from blizzard.runner.harness.internal.opencode_loopback import (
     LoopbackTransportError,
     UrllibLoopbackTransport,
 )
-from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS, PINNED_OPENCODE_VERSION
 from blizzard.runner.harness.internal.opencode_sanitizer import REDACTED, sanitize_json, sanitize_value
 from blizzard.runner.harness.internal.opencode_shapes import (
     OpenCodeRunEvent,
@@ -132,7 +132,7 @@ def test_classification_policy_is_deterministic(
 
 def test_complete_report_has_every_probe_in_roster_order() -> None:
     report = CompatibilityReport.from_observations(
-        PINNED_OPENCODE_VERSION, PINNED_OPENCODE_VERSION, _all_observations()
+        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, _all_observations()
     )
 
     assert report.complete is True
@@ -140,23 +140,24 @@ def test_complete_report_has_every_probe_in_roster_order() -> None:
     assert report.admissible is True
     assert tuple(result.probe for result in report.results) == PROBE_ROSTER
     assert report.to_payload()["classification"] == "supported"
+    assert report.to_payload()["admitted_versions"] == sorted(ADMITTED_OPENCODE_VERSIONS)
 
 
 def test_diagnostic_requires_the_probe_to_declare_its_observed_version() -> None:
     class ProbeWithoutVersion:
-        expected_version = PINNED_OPENCODE_VERSION
+        admitted_versions = ADMITTED_OPENCODE_VERSIONS
 
         def run(self) -> list[ProbeObservation]:
             return _all_observations()
 
-    with pytest.raises(CompatibilityContractError, match="did not report both versions"):
+    with pytest.raises(CompatibilityContractError, match="did not report its observed version"):
         CompatibilityDiagnostic(ProbeWithoutVersion()).run()  # pyright: ignore[reportArgumentType]
 
 
 def test_report_rejects_a_missing_probe_instead_of_publishing_an_incomplete_result() -> None:
     with pytest.raises(IncompleteProbeReportError, match="missing probes"):
         CompatibilityReport.from_observations(
-            PINNED_OPENCODE_VERSION, PINNED_OPENCODE_VERSION, _all_observations()[:-1]
+            PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, _all_observations()[:-1]
         )
 
 
@@ -164,16 +165,16 @@ def test_report_rejects_a_duplicate_probe() -> None:
     observations = [*_all_observations(), ProbeObservation.observed(CompatibilityProbe.FRESH_TURN, "again")]
 
     with pytest.raises(IncompleteProbeReportError, match="duplicate"):
-        CompatibilityReport.from_observations(PINNED_OPENCODE_VERSION, PINNED_OPENCODE_VERSION, observations)
+        CompatibilityReport.from_observations(PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, observations)
 
 
 def test_a_version_mismatch_is_blocking_even_with_successful_probe_evidence() -> None:
-    report = CompatibilityReport.from_observations("1.18.24", PINNED_OPENCODE_VERSION, _all_observations())
+    report = CompatibilityReport.from_observations("1.18.24", ADMITTED_OPENCODE_VERSIONS, _all_observations())
 
-    assert report.version_matches_pin is False
+    assert report.version_admitted is False
     assert report.classification is BLOCKING
     assert report.admissible is False
-    assert report.blocking_reasons == ("observed '1.18.24', expected '1.18.25'",)
+    assert report.blocking_reasons == ("observed '1.18.24', admitted versions: '1.18.25'",)
 
 
 def test_corpus_manifest_closes_categories_and_parser_shape_coverage() -> None:
@@ -756,7 +757,7 @@ def test_sanitizer_redacts_arbitrary_host_paths_in_nested_structured_values() ->
 
 def test_evidence_redacts_binary_workdir_and_nested_host_paths(tmp_path: Path) -> None:
     report = CompatibilityReport.from_observations(
-        PINNED_OPENCODE_VERSION, PINNED_OPENCODE_VERSION, _all_observations()
+        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, _all_observations()
     )
     binary = "/srv/tools/opencode/bin/opencode"
     workdir = "/home/operator/blizzard"
@@ -788,7 +789,7 @@ def test_evidence_redacts_binary_workdir_and_nested_host_paths(tmp_path: Path) -
 
 def test_evidence_replaces_raw_external_ids_with_stable_aliases(tmp_path: Path) -> None:
     report = CompatibilityReport.from_observations(
-        PINNED_OPENCODE_VERSION, PINNED_OPENCODE_VERSION, _all_observations()
+        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, _all_observations()
     )
     runtime = {
         "operations": [
@@ -818,7 +819,7 @@ def test_evidence_replaces_raw_external_ids_with_stable_aliases(tmp_path: Path) 
 
 def test_evidence_aliases_observed_identifiers_without_vendor_prefixes(tmp_path: Path) -> None:
     report = CompatibilityReport.from_observations(
-        PINNED_OPENCODE_VERSION, PINNED_OPENCODE_VERSION, _all_observations()
+        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, _all_observations()
     )
     runtime = {
         "operations": [

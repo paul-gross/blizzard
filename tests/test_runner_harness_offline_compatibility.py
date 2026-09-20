@@ -10,8 +10,14 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.harness.compatibility import CompatibilityClassification
-from blizzard.runner.harness.internal.offline_compatibility import DEFAULT_CORPUS_ROOT, classify_offline
-from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.internal.harness_shared import normalize_harness_version
+from blizzard.runner.harness.internal.offline_compatibility import (
+    DEFAULT_CORPUS_ROOT,
+    CorpusConfigurationError,
+    assert_admitted_versions_have_corpus,
+    classify_offline,
+)
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS, PINNED_OPENCODE_VERSION
 
 pytestmark = pytest.mark.unit
 
@@ -65,3 +71,47 @@ def test_a_manifest_with_an_unrecognized_classification_label_is_unknown(tmp_pat
     (manifest_dir / "manifest.json").write_text(json.dumps({"live_evidence": {"classification": "mystifying"}}))
 
     assert classify_offline("widget", "1.0.0", corpus_root=tmp_path) is None
+
+
+def test_a_version_in_the_admitted_set_still_resolves_its_corpus_classification() -> None:
+    assert (
+        classify_offline("opencode", PINNED_OPENCODE_VERSION, admitted_versions=ADMITTED_OPENCODE_VERSIONS)
+        is CompatibilityClassification.DEGRADED
+    )
+
+
+def test_a_version_outside_the_admitted_set_is_unknown_even_with_a_committed_corpus_entry(tmp_path: Path) -> None:
+    """A stray corpus directory for a version this binding no longer admits must never resolve a
+    classification — membership and the corpus-path lookup must always agree (blizzard#438)."""
+    manifest_dir = tmp_path / "widget" / "1.0.0"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "manifest.json").write_text(json.dumps({"live_evidence": {"classification": "supported"}}))
+
+    assert classify_offline("widget", "1.0.0", corpus_root=tmp_path) is CompatibilityClassification.SUPPORTED
+    assert classify_offline("widget", "1.0.0", corpus_root=tmp_path, admitted_versions=frozenset({"2.0.0"})) is None
+
+
+def test_assert_admitted_versions_have_corpus_passes_when_every_version_has_a_manifest() -> None:
+    assert_admitted_versions_have_corpus("opencode", ADMITTED_OPENCODE_VERSIONS)
+
+
+def test_a_raw_prefixed_observed_version_normalizes_before_classification() -> None:
+    """A raw, prefixed ``--version`` output must route through the shared normalizer before
+    the corpus lookup, the same normalized form the live probe already stores
+    (blizzard#438)."""
+    raw = "opencode version 1.18.25\n"
+    normalized = normalize_harness_version(raw)
+    assert normalized == PINNED_OPENCODE_VERSION
+    assert (
+        classify_offline("opencode", normalized, admitted_versions=ADMITTED_OPENCODE_VERSIONS)
+        is CompatibilityClassification.DEGRADED
+    )
+
+
+def test_assert_admitted_versions_have_corpus_raises_naming_the_missing_version(tmp_path: Path) -> None:
+    manifest_dir = tmp_path / "widget" / "1.0.0"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "manifest.json").write_text(json.dumps({"live_evidence": {"classification": "supported"}}))
+
+    with pytest.raises(CorpusConfigurationError, match=r"2\.0\.0"):
+        assert_admitted_versions_have_corpus("widget", frozenset({"1.0.0", "2.0.0"}), corpus_root=tmp_path)

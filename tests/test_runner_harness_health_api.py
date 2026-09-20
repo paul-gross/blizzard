@@ -42,8 +42,8 @@ class _HealthyWithDegradationProbe:
     def probe_authentication(self) -> bool:
         return True
 
-    def supported_version(self) -> str | None:
-        return None
+    def supported_version(self) -> frozenset[str]:
+        return frozenset()
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
         return (DeclaredDegradation(probe=CompatibilityProbe.USAGE_COST, summary="no cost figure on some turns"),)

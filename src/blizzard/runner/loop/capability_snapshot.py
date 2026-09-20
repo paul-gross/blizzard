@@ -15,6 +15,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.health import HarnessHealthEvidence, HarnessHealthResult, evaluate_harness_health
+from blizzard.runner.harness.internal.harness_shared import normalize_harness_version
 from blizzard.runner.harness.internal.offline_compatibility import classify_offline
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.wire.runner import RunnerCapability
@@ -106,13 +107,16 @@ class HarnessHealthCache:
         if not stale and not changed and harness_id in self._results:
             return self._results[harness_id]
         supported_version = probe.supported_version()
+        normalized_version = normalize_harness_version(observed_version)
         result = evaluate_harness_health(
             HarnessHealthEvidence(
                 harness_id=harness_id,
                 binary_present=probe.binary_present(),
-                version_declared=supported_version is not None,
+                version_declared=bool(supported_version),
                 version_classification=(
-                    classify_offline(harness_id, observed_version) if supported_version is not None else None
+                    classify_offline(harness_id, normalized_version, admitted_versions=supported_version)
+                    if supported_version
+                    else None
                 ),
                 authenticated=probe.probe_authentication(),
                 unmapped_tiers=_unmapped_tiers(adapter, self.configured_tiers.get(harness_id, ())),

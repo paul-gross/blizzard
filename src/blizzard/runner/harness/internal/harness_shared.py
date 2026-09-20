@@ -8,6 +8,7 @@ model-resolution skeleton."""
 from __future__ import annotations
 
 import contextlib
+import re
 import shutil
 import subprocess
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -25,6 +26,29 @@ CHOICE_CLOSE = "</Choice>"
 
 # Bounds `observe_version`'s probe: a wedged binary costs one skipped read, not a hang.
 VERSION_PROBE_TIMEOUT_SECONDS = 5
+
+# Strips a leading binary-name/"version"/"v" prefix off one line of `--version` output (blizzard#438).
+HARNESS_VERSION_PATTERN = re.compile(
+    r"^\s*(?:opencode(?:\s+version)?\s+)?(?:v)?"
+    r"(?P<version>\d+\.\d+\.\d+(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
+    r"\s*$",
+    re.IGNORECASE,
+)
+
+
+def normalize_harness_version(raw: str | None) -> str | None:
+    """The bare semantic version in one raw ``--version`` output, or ``None`` when it isn't
+    exactly one matching line — the one normalizer both the live OpenCode probe and the
+    health/capability-snapshot path route a membership check through, so the two paths can
+    never disagree about what was observed. The raw string itself, never this normalized
+    form, is what is stored and travels the wire."""
+    if raw is None:
+        return None
+    lines = [line for line in raw.splitlines() if line.strip()]
+    if len(lines) != 1:
+        return None
+    match = HARNESS_VERSION_PATTERN.fullmatch(lines[0])
+    return match.group("version") if match else None
 
 
 def binary_present(binary: str) -> bool:

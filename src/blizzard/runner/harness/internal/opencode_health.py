@@ -14,7 +14,7 @@ from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.internal import harness_shared
-from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS
 
 # OpenCode 1.18.25's three known `DEGRADABLE_ABSENCES` members, declared statically rather than re-derived live.
 _OPENCODE_DEGRADATIONS: tuple[DeclaredDegradation, ...] = (
@@ -77,8 +77,8 @@ class OpenCodeHealthProbe:
         except OSError:
             return False
 
-    def supported_version(self) -> str | None:
-        return PINNED_OPENCODE_VERSION
+    def supported_version(self) -> frozenset[str]:
+        return ADMITTED_OPENCODE_VERSIONS
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
         return _OPENCODE_DEGRADATIONS

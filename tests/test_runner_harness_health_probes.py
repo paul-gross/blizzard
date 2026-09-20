@@ -13,7 +13,7 @@ import pytest
 from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
-from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS, PINNED_OPENCODE_VERSION
 
 pytestmark = pytest.mark.component
 
@@ -29,7 +29,8 @@ def test_opencode_health_probe_declares_the_pinned_versions_absences() -> None:
     probe = OpenCodeHealthProbe("opencode")
 
     manifest = _manifest()
-    assert probe.supported_version() == manifest["version"] == PINNED_OPENCODE_VERSION
+    assert probe.supported_version() == ADMITTED_OPENCODE_VERSIONS == frozenset({PINNED_OPENCODE_VERSION})
+    assert manifest["version"] in probe.supported_version()
 
     degradations = probe.declared_degradations()
     declared_probes = {degradation.probe for degradation in degradations}
@@ -50,5 +51,5 @@ def test_opencode_health_probe_declares_the_pinned_versions_absences() -> None:
 def test_claude_code_health_probe_declares_no_version_or_degradations() -> None:
     probe = ClaudeCodeHealthProbe("claude")
 
-    assert probe.supported_version() is None
+    assert probe.supported_version() == frozenset()
     assert probe.declared_degradations() == ()
