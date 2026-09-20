@@ -6704,6 +6704,14 @@
       "RunnerView": {
         "description": "One fleet-registry row \u2014 derived liveness, both brakes, and advisory subscription usage.\n\nThe two brakes stay separate (issues #43, #45): ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". Subscription usage is advisory.",
         "properties": {
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerCapability"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
           "env_capacity": {
             "anyOf": [
               {

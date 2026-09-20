@@ -44,6 +44,14 @@
             <div class="r2">
               <span class="wid">{{ row.workspace_id }}</span>
             </div>
+            <!-- Every harness this runner reported it can execute (blizzard#441) — one
+                 distinct badge per binding, rendered whether the list is populated or
+                 reported empty. -->
+            <fleet-capability-badge-group
+              data-testid="runner-capabilities-group"
+              [attr.data-runner-capabilities]="row.runner_id"
+              [capabilities]="row.capabilities ?? []"
+            />
             <!-- The chunks this runner currently holds a route on, the node each
                  sits at, and how it is doing there — folded in by the container from
                  the board's own chunk list, so the registry and the board can never

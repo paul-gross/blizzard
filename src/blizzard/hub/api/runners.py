@@ -25,6 +25,7 @@ from blizzard.hub.domain.registry import (
 )
 from blizzard.wire.runner import (
     ExternalSubscriptionUsageWindowView,
+    RunnerCapability as RunnerCapabilityWire,
     RunnerEnrollmentResponse,
     RunnerListResponse,
     RunnerPauseRequest,
@@ -105,6 +106,16 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
                 ],
             )
             for view in PerSubscriptionUsageView.every(r, now=now)
+        ],
+        capabilities=[
+            RunnerCapabilityWire(
+                harness_id=c.harness_id,
+                version=c.version,
+                tiers=list(c.tiers),
+                default=c.default,
+                available=c.available,
+            )
+            for c in r.capabilities
         ],
     )
 

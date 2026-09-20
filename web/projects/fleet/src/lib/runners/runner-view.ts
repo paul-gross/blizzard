@@ -8,6 +8,7 @@ import { KitPanel } from '../kit/kit-panel';
 import { KitSlotBar } from '../kit/kit-slot-bar';
 import type { Tone } from '../kit/tone';
 import { formatSeenAgo } from '../when';
+import { CapabilityBadgeGroup } from './capability-badge-group';
 import { localPauseHint, runnerToggleHint, type RunnerRow } from './runner-rows';
 import { SubscriptionPaceGroup } from './subscription-pace-group';
 
@@ -20,7 +21,7 @@ import { SubscriptionPaceGroup } from './subscription-pace-group';
 @Component({
   selector: 'fleet-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitPanel, KitSlotBar, SubscriptionPaceGroup],
+  imports: [CapabilityBadgeGroup, KitAsyncState, KitBadge, KitPanel, KitSlotBar, SubscriptionPaceGroup],
   templateUrl: './runner-view.html',
   styleUrl: './runner-view.css',
 })

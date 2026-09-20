@@ -1,0 +1,22 @@
+@if (capabilities().length > 0) {
+  <ul class="capabilities" data-testid="runner-capabilities">
+    @for (capability of capabilities(); track capability.harness_id) {
+      <li>
+        <fleet-kit-badge
+          data-testid="runner-capability-badge"
+          variant="soft"
+          [attr.data-harness-id]="capability.harness_id"
+          [attr.data-available]="capability.available"
+          [tone]="toneFor(capability)"
+          [attr.aria-label]="ariaLabel(capability)"
+        >
+          {{ capability.harness_id }}{{ capability.version ? ' ' + capability.version : '' }}
+        </fleet-kit-badge>
+      </li>
+    }
+  </ul>
+} @else {
+  <div class="no-capabilities" data-testid="runner-capabilities-empty" aria-label="No harness capabilities reported">
+    NO CAPABILITIES REPORTED
+  </div>
+}

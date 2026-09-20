@@ -98,6 +98,24 @@ const SUBSCRIPTION_ROW: RunnerRow = {
   ],
 };
 
+const MULTI_HARNESS_ROW: RunnerRow = {
+  runner_id: 'rn_multi_harness',
+  workspace_id: 'ws_a',
+  registered_at: NOW,
+  last_seen_at: NOW,
+  online: true,
+  hub_paused: false,
+  locally_paused: false,
+  env_capacity: 4,
+  claims: [{ chunkId: 'ch_01ABCDEF', shortId: 'C-01', node: 'build', status: 'running' }],
+  used: 1,
+  subscriptionPaces: [],
+  capabilities: [
+    { harness_id: 'claude', version: '1.2.3', tiers: ['sonnet'], default: true, available: true },
+    { harness_id: 'codex', version: '4.5.6', tiers: ['sonnet'], default: false, available: false },
+  ],
+};
+
 const EMPTY_SAMPLE_ROW: RunnerRow = {
   runner_id: 'rn_empty_sample',
   workspace_id: 'ws_a',
@@ -289,5 +307,67 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
     } finally {
       root.remove();
     }
+  });
+
+  it('keeps a mixed healthy/unhealthy multi-harness runner distinct with no page errors or horizontal overflow at ~390px, and leaves pause/capacity/claim controls reachable (blizzard#441)', async () => {
+    const pageErrors: string[] = [];
+    const onError = (e: ErrorEvent) => pageErrors.push(e.message);
+    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+
+    await TestBed.configureTestingModule({
+      imports: [RunnerPanelView],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [MULTI_HARNESS_ROW]);
+    fixture.componentRef.setInput('canPause', true);
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
+      expect(panel).not.toBeNull();
+
+      const host = root.querySelector<HTMLElement>('[data-runner-capabilities="rn_multi_harness"]')!;
+      const badges = [...host.querySelectorAll<HTMLElement>('[data-testid="runner-capability-badge"]')];
+      expect(badges).toHaveLength(2);
+
+      // The two harnesses sit at distinct positions, not overlapping.
+      const lefts = badges.map((b) => b.getBoundingClientRect().left);
+      const tops = badges.map((b) => b.getBoundingClientRect().top);
+      expect(lefts[0] === lefts[1] && tops[0] === tops[1]).toBe(false);
+
+      // Mixed availability reads distinguishably.
+      const available = host.querySelector('[data-harness-id="claude"]')!;
+      const unavailable = host.querySelector('[data-harness-id="codex"]')!;
+      expect(available.getAttribute('data-available')).toBe('true');
+      expect(unavailable.getAttribute('data-available')).toBe('false');
+      expect(available.getAttribute('aria-label')).not.toBe(unavailable.getAttribute('aria-label'));
+
+      // The existing pause, capacity, and claim controls stay reachable alongside the
+      // new capability badges — nothing about this render displaces them.
+      expect(root.querySelector('[data-testid="runner-toggle"]')).not.toBeNull();
+      expect(root.querySelector('[data-runner-slot-bar="rn_multi_harness"]')).not.toBeNull();
+      expect(root.querySelector('[data-runner="rn_multi_harness"] [data-testid="runner-claim"]')).not.toBeNull();
+
+      expect(
+        panel.scrollWidth,
+        `panel overflows horizontally at 390px (${panel.scrollWidth} > ${panel.clientWidth})`,
+      ).toBeLessThanOrEqual(panel.clientWidth);
+    } finally {
+      root.remove();
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    }
+
+    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
 });

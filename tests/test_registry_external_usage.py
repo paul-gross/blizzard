@@ -6,6 +6,7 @@ Unit tier: the pure domain derivation in isolation, then its rendering through
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -15,6 +16,7 @@ from blizzard.hub.domain.registry import (
     EXTERNAL_USAGE_STALE_AFTER,
     ExternalSubscriptionUsageWindow,
     PerSubscriptionUsageView,
+    RunnerCapability,
     RunnerLiveness,
     RunnerRegistration,
     SubscriptionUsageRecord,
@@ -128,6 +130,28 @@ def test_the_rendered_view_has_no_subscriptions_when_the_sample_is_stale() -> No
     registration = _registration(records=(_record("anthropic", _NOW - timedelta(minutes=16)),))
     view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
     assert view.subscriptions == []
+
+
+def test_the_rendered_view_carries_every_registered_capability() -> None:
+    registration = _registration(records=())
+    capabilities = (
+        RunnerCapability(harness_id="claude", version="1.2.3", tiers=("sonnet",), default=True, available=True),
+        RunnerCapability(harness_id="codex", version=None, tiers=(), default=False, available=False),
+    )
+    registration = replace(registration, capabilities=capabilities)
+    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
+
+    assert [c.harness_id for c in view.capabilities] == ["claude", "codex"]
+    assert view.capabilities[0].version == "1.2.3"
+    assert view.capabilities[0].tiers == ["sonnet"]
+    assert view.capabilities[0].default is True
+    assert view.capabilities[1].available is False
+
+
+def test_the_rendered_view_has_no_capabilities_when_none_were_registered() -> None:
+    registration = _registration(records=())
+    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
+    assert view.capabilities == []
 
 
 def test_the_rendered_view_omits_a_stale_sibling_without_affecting_a_healthy_subscription() -> None:

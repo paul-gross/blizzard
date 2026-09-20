@@ -4346,6 +4346,10 @@ export type RunnerRegistrationResponse = {
  */
 export type RunnerView = {
     /**
+     * Capabilities
+     */
+    capabilities?: Array<RunnerCapability>;
+    /**
      * Env Capacity
      */
     env_capacity?: number | null;

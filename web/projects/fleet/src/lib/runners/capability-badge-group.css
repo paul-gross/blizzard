@@ -1,0 +1,17 @@
+:host {
+  display: block;
+  margin-top: 3px;
+}
+.capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.no-capabilities {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+}
