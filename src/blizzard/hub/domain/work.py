@@ -490,6 +490,10 @@ class UsageFact:
     cache_create_tokens: int
     cost_usd: float | None
     recorded_at: datetime
+    #: The invocation's own recorded harness identity (blizzard#441) — ``None`` recorded
+    #: and un-backfilled (D4), never a fresh resolution or a guess from ``model``.
+    harness_id: str | None = None
+    harness_version: str | None = None
 
 
 @dataclass(frozen=True)

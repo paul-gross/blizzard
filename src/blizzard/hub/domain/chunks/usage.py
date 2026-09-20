@@ -33,6 +33,8 @@ class IWriteChunkUsageRepository(IReadChunkUsageRepository, Protocol):
         runner_id: str,
         kind: str,
         model: str,
+        harness_id: str | None = None,
+        harness_version: str | None = None,
         input_tokens: int,
         output_tokens: int,
         cache_read_tokens: int,
@@ -44,5 +46,7 @@ class IWriteChunkUsageRepository(IReadChunkUsageRepository, Protocol):
 
         Deliberately **not** epoch-fenced: called for every landed usage fact regardless
         of whether ``epoch`` is the chunk's latest, since it is real spend either way.
-        Idempotency rides the caller's own applied-seq high-water mark."""
+        Idempotency rides the caller's own applied-seq high-water mark. ``harness_id``/
+        ``harness_version`` (blizzard#441) are recorded, never derived — ``None`` from a
+        runner that predates them (A10) or a generation that recorded no version (D4)."""
         ...

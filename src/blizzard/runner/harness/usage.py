@@ -33,6 +33,13 @@ class UsageSample:
     cost_usd: float | None
     #: What ``cost_usd`` covers; ``None`` says the figure is this invocation's alone.
     cost_scope_tokens: int | None = None
+    #: The invocation's own recorded harness identity (blizzard#441, D5) — stamped by the
+    #: caller from the lease's own session/spawn-generation records (D4), never resolved
+    #: by the parser itself. ``None`` on a sample no caller has stamped yet.
+    harness_id: str | None = None
+    #: The generation's own recorded harness build version, alongside ``harness_id``.
+    #: ``None`` when the generation recorded none.
+    harness_version: str | None = None
 
     @property
     def token_total(self) -> int:

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.escalations import EscalationRecord, IWriteEscalationRepository
 from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION, RunnerStoreConnections
-from blizzard.runner.store.schema import escalation_closures, lease_closures, lease_context, leases
+from blizzard.runner.store.schema import escalation_closures, lease_closures, lease_context, lease_spawns, leases
 
 _log = get_logger("blizzard.runner.store")
 
@@ -50,6 +50,17 @@ class EscalationStore:
 
     @staticmethod
     def _escalation_select():  # type: ignore[no-untyped-def]
+        # The lease's current generation's own recorded version (blizzard#441) — `id`
+        # orders "newest generation" here exactly as the liveness store's own
+        # `latest_spawn_harness_version` does: insertion order, not `spawned_at`.
+        latest_harness_version = (
+            select(lease_spawns.c.harness_version)
+            .where(lease_spawns.c.lease_id == leases.c.lease_id)
+            .order_by(lease_spawns.c.id.desc())
+            .limit(1)
+            .correlate(leases)
+            .scalar_subquery()
+        )
         return (
             select(
                 lease_closures.c.lease_id,
@@ -64,6 +75,7 @@ class EscalationStore:
                 lease_context.c.session_name,
                 lease_context.c.resolved_model,
                 lease_context.c.resolved_effort,
+                latest_harness_version.label("harness_version"),
             )
             .select_from(
                 lease_closures.join(leases, leases.c.lease_id == lease_closures.c.lease_id).join(
@@ -86,6 +98,7 @@ class EscalationStore:
             session_name=r.session_name,
             resolved_model=r.resolved_model,
             resolved_effort=r.resolved_effort,
+            harness_version=r.harness_version,
         )
 
 

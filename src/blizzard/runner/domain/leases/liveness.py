@@ -41,6 +41,13 @@ class IReadLeaseLivenessRepository(Protocol):
         generation 1 is a ``spawn``, every later generation a ``resume``."""
         ...
 
+    def latest_spawn_harness_version(self, lease_id: str) -> str | None:
+        """The current generation's own recorded ``harness_version`` (blizzard#441) — the
+        newest ``lease_spawns`` row's own stamp, read as recorded and never re-resolved
+        (D4). ``None`` when the lease never spawned, or its newest generation recorded no
+        version — never a guess at what version is running now."""
+        ...
+
 
 class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
     """Read-write liveness store — held only by the domain (the loop steps)."""

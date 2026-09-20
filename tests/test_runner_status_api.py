@@ -438,7 +438,38 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         "model": None,
         "effort": None,
         "harness_id": "claude_code",
+        "harness_version": None,
     }
+
+
+@pytest.mark.component
+def test_an_escalated_leases_harness_version_reads_the_generations_own_recorded_stamp(tmp_path: Path) -> None:
+    """blizzard#441 — the escalation reports the escalated generation's own recorded
+    ``harness_version`` beside ``harness_id``, read never re-resolved (D4)."""
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+        harness_version="1.2.3",
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_closure(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason="escalated",
+        closed_at=_NOW + timedelta(minutes=5),
+    )
+
+    with TestClient(app) as client:
+        item = client.get("/api/escalations").json()["items"][0]
+
+    assert item["harness_id"] == "claude_code"
+    assert item["harness_version"] == "1.2.3"
 
 
 @pytest.mark.component

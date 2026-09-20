@@ -110,6 +110,7 @@ class EscalationView:
     model: str | None = None
     effort: str | None = None
     harness_id: str | None = None
+    harness_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -264,6 +265,7 @@ class RunnerStatusService:
                     model=escalation.resolved_model,
                     effort=escalation.resolved_effort,
                     harness_id=escalation.harness_id,
+                    harness_version=escalation.harness_version,
                 )
             )
         return views

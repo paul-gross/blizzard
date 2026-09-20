@@ -344,6 +344,8 @@ class ChunkView:
                 cache_read_tokens=u.cache_read_tokens,
                 cache_create_tokens=u.cache_create_tokens,
                 cost_usd=u.cost_usd,
+                harness_id=u.harness_id,
+                harness_version=u.harness_version,
             )
             for u in sorted(self.facts.usage, key=lambda u: u.recorded_at)
         ]

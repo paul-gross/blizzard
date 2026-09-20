@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -70,7 +70,16 @@ class UsageRecorder:
             self.record_sample(lease, generation=generation, sample=judge_sample)
 
     def record_sample(self, lease: LeaseRecord, *, generation: int, sample: UsageSample) -> None:
-        """Make one already-parsed sample durable against this lease's generation."""
+        """Make one already-parsed sample durable against this lease's generation, stamped
+        with the lease's own recorded harness identity (blizzard#441, D4) — never a fresh
+        resolution that may since have changed."""
+        session = lease.session
+        if session is not None:
+            sample = replace(
+                sample,
+                harness_id=session.harness_id,
+                harness_version=self.leases.latest_spawn_harness_version(lease.lease_id),
+            )
         seq = self.usage.record_usage(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,

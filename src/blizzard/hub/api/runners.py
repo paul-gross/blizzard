@@ -25,11 +25,13 @@ from blizzard.hub.domain.registry import (
 )
 from blizzard.wire.runner import (
     ExternalSubscriptionUsageWindowView,
-    RunnerCapability as RunnerCapabilityWire,
     RunnerEnrollmentResponse,
     RunnerListResponse,
     RunnerPauseRequest,
     RunnerView,
+)
+from blizzard.wire.runner import (
+    RunnerCapability as RunnerCapabilityWire,
 )
 from blizzard.wire.runner import (
     SubscriptionUsageView as SubscriptionUsageViewWire,

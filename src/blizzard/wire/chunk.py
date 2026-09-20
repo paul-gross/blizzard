@@ -112,6 +112,10 @@ class ChunkUsageView(BaseModel):
     cache_read_tokens: int
     cache_create_tokens: int
     cost_usd: float | None
+    #: The invocation's own recorded harness identity (blizzard#441) — ``None`` recorded
+    #: and un-backfilled, never a guess from ``model``.
+    harness_id: str | None = None
+    harness_version: str | None = None
 
 
 class ChunkSummary(BaseModel):

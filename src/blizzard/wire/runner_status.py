@@ -98,6 +98,9 @@ class EscalationView(BaseModel):
     model: str | None = None
     effort: str | None = None
     harness_id: str | None = None
+    #: The escalated generation's own recorded harness build version (blizzard#441),
+    #: beside ``harness_id``. ``None`` when the generation recorded none.
+    harness_version: str | None = None
 
 
 class EscalationListResponse(BaseModel):

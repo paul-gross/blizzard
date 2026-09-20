@@ -285,6 +285,8 @@ class FactIngestService:
                 runner_id=runner_id,
                 kind=fact.require_text("kind"),
                 model=fact.require_text("model"),
+                harness_id=fact.text("harness_id"),
+                harness_version=fact.text("harness_version"),
                 input_tokens=fact.require_number("input_tokens"),
                 output_tokens=fact.require_number("output_tokens"),
                 cache_read_tokens=fact.require_number("cache_read_tokens"),

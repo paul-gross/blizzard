@@ -362,6 +362,8 @@ class ChunkFactsStore:
                         cache_create_tokens=u.cache_create_tokens,
                         cost_usd=u.cost_usd,
                         recorded_at=u.recorded_at,
+                        harness_id=u.harness_id,
+                        harness_version=u.harness_version,
                     )
                 )
 

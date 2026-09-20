@@ -7,6 +7,7 @@ derived per-node-step usage + chunk total round-trip the live API, idempotent on
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from pathlib import Path
@@ -73,6 +74,19 @@ def _pending_usage(config: RunnerConfig) -> int:
         engine.dispose()
 
 
+def _pending_usage_payloads(config: RunnerConfig) -> list[dict]:
+    """Every buffered ``usage.recorded`` fact's own JSON payload, oldest first."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        return [
+            json.loads(b.payload)
+            for b in SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_outbound()
+            if b.kind == USAGE_RECORDED
+        ]
+    finally:
+        engine.dispose()
+
+
 def _pending_total(config: RunnerConfig) -> int:
     engine = create_engine_from_url(config.db_url)
     try:
@@ -116,6 +130,11 @@ def test_runner_buffers_usage_facts_through_a_hub_outage_and_flushes_once(tmp_pa
         buffered = poll_until(lambda: _tick_then_usage_buffered(config, fenced), timeout=60.0)
         assert buffered, "no usage.recorded fact ever buffered (the worker did not run to completion)"
         assert _status(hub, chunk_id) != "done", "the chunk landed before the outage could be staged"
+
+        # blizzard#441 — the buffered payload carries the lease's own harness stamp
+        # (D4), stamped from the real spawn's own recorded identity, never fabricated.
+        payloads = _pending_usage_payloads(config)
+        assert payloads and payloads[0]["harness_id"] == "claude_code", payloads
 
         # The hub goes unreachable: every flush attempt fails, so the usage facts stay
         # store-and-forward buffered — they do not vanish and are not double-counted.
@@ -176,8 +195,16 @@ def _ingest(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
     return chunk_id
 
 
-def _usage_payload(chunk_id: str, node_id: str, *, epoch: int, cost_usd: float | None) -> dict:
-    return {
+def _usage_payload(
+    chunk_id: str,
+    node_id: str,
+    *,
+    epoch: int,
+    cost_usd: float | None,
+    harness_id: str | None = "claude_code",
+    harness_version: str | None = "1.2.3",
+) -> dict:
+    payload = {
         "chunk_id": chunk_id,
         "node_id": node_id,
         "epoch": epoch,
@@ -189,6 +216,13 @@ def _usage_payload(chunk_id: str, node_id: str, *, epoch: int, cost_usd: float |
         "cache_create_tokens": 5,
         "cost_usd": cost_usd,
     }
+    # An N-1 runner (blizzard#441, A10) omits the provenance keys entirely, rather than
+    # sending them explicitly null — the hub must ingest either shape identically.
+    if harness_id is not None:
+        payload["harness_id"] = harness_id
+    if harness_version is not None:
+        payload["harness_version"] = harness_version
+    return payload
 
 
 def _push_usage(hub: httpx.Client, *, runner_id: str, seq: int, payload: dict) -> dict:
@@ -222,33 +256,51 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         epoch = detail["latest_epoch"] or 1
 
-        # Push two usage facts on the runner's store-and-forward endpoint: one carrying a
-        # cost, one with cost absent (the envelope-less transcript-summation fallback).
+        # Push three usage facts on the runner's store-and-forward endpoint: one carrying a
+        # cost, one with cost absent (the envelope-less transcript-summation fallback), and
+        # one from a runner predating harness provenance (blizzard#441, A10) — no
+        # provenance keys at all, never rejected and never defaulted.
         assert _push_usage(
             hub, runner_id="usage-pusher", seq=1, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=0.10)
         )["applied"] == [1]
         assert _push_usage(
             hub, runner_id="usage-pusher", seq=2, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=None)
         )["applied"] == [2]
+        assert _push_usage(
+            hub,
+            runner_id="usage-pusher",
+            seq=3,
+            payload=_usage_payload(
+                chunk_id, node_id, epoch=epoch, cost_usd=0.05, harness_id=None, harness_version=None
+            ),
+        )["applied"] == [3]
 
         # Per-node-step usage + the derived chunk total, read off the LIVE detail API.
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
-        assert len(detail["usage"]) == 2, detail["usage"]
+        assert len(detail["usage"]) == 3, detail["usage"]
         step = detail["usage"][0]
         assert step["node_id"] == node_id
         assert step["epoch"] == epoch
         assert step["input_tokens"] == 100
         assert step["cache_create_tokens"] == 5
+        # blizzard#441 — the pushed harness stamp reads back verbatim.
+        assert step["harness_id"] == "claude_code"
+        assert step["harness_version"] == "1.2.3"
+        # The N-1 runner's fact ingested with no provenance keys reads back null, never
+        # rejected and never defaulted to the sibling rows' stamp.
+        legacy_step = detail["usage"][2]
+        assert legacy_step["harness_id"] is None
+        assert legacy_step["harness_version"] is None
 
         total = detail["cost"]
-        assert total["input_tokens"] == 200  # both rows summed by class
-        assert total["output_tokens"] == 100
-        assert total["cost_usd"] == pytest.approx(0.10)  # only the cost-bearing row — the lower bound
+        assert total["input_tokens"] == 300  # all three rows summed by class
+        assert total["output_tokens"] == 150
+        assert total["cost_usd"] == pytest.approx(0.15)  # the two cost-bearing rows — the lower bound
         assert total["cost_partial"] is True  # a cost-absent row flags the total partial
 
         # The summary listing carries the derived cost total too.
         row = next(c for c in hub.get("/api/chunks").json()["chunks"] if c["chunk_id"] == chunk_id)
-        assert row["cost"]["cost_usd"] == pytest.approx(0.10)
+        assert row["cost"]["cost_usd"] == pytest.approx(0.15)
         assert row["cost"]["cost_partial"] is True
 
         # Idempotent replay: a re-pushed seq lands nothing twice — the total is unchanged.
@@ -257,5 +309,5 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
         )
         assert replay["applied"] == [] and replay["already_applied"] == [2], replay
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
-        assert len(detail["usage"]) == 2, "the replayed usage fact was applied twice"
-        assert detail["cost"]["input_tokens"] == 200
+        assert len(detail["usage"]) == 3, "the replayed usage fact was applied twice"
+        assert detail["cost"]["input_tokens"] == 300

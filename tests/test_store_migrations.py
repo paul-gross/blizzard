@@ -103,6 +103,52 @@ def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: 
     assert _has_column()
 
 
+def test_hub_usage_facts_harness_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
+    """``usage_facts.harness_id``/``harness_version`` (blizzard#441) — downgrades to this
+    revision's own parent by id, so the drop half is asserted rather than inferred from a
+    revision marker, which a ``downgrade()`` that dropped nothing would satisfy just as well."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _columns() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return {c["name"] for c in sa.inspect(engine).get_columns("usage_facts")}
+        finally:
+            engine.dispose()
+
+    assert {"harness_id", "harness_version"} <= _columns()
+
+    runner.downgrade("20260919_1000_hub_transcript_provenance")
+    assert not ({"harness_id", "harness_version"} & _columns())
+
+    runner.upgrade("head")
+    assert {"harness_id", "harness_version"} <= _columns()
+
+
+def test_runner_usage_facts_harness_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
+    """``usage_facts.harness_id``/``harness_version`` (blizzard#441), the runner's own
+    durable row — downgrades to this revision's own parent by id, so the drop half is
+    asserted rather than inferred from a revision marker."""
+    config = runner_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = runner_runtime.migration_runner(config)
+
+    def _columns() -> set[str]:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return {c["name"] for c in sa.inspect(engine).get_columns("usage_facts")}
+        finally:
+            engine.dispose()
+
+    assert {"harness_id", "harness_version"} <= _columns()
+
+    runner.downgrade("20260920_0200_usage_cost_is_share")
+    assert not ({"harness_id", "harness_version"} & _columns())
+
+    runner.upgrade("head")
+    assert {"harness_id", "harness_version"} <= _columns()
+
+
 def test_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
     """Hub-only (the graph mint's own child table) — downgrades to this revision's own
     parent by id, so the drop half is asserted rather than inferred from a revision

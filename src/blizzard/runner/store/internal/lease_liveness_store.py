@@ -151,6 +151,18 @@ class LeaseLivenessStore:
         with self._store.connect() as conn:
             return int(conn.execute(stmt).scalar_one())
 
+    def latest_spawn_harness_version(self, lease_id: str) -> str | None:
+        # `id` orders "newest generation" here exactly as `_open_provisional_spawn_id`
+        # does — insertion order is the ordering fact, not `spawned_at`.
+        stmt = (
+            select(lease_spawns.c.harness_version)
+            .where(lease_spawns.c.lease_id == lease_id)
+            .order_by(lease_spawns.c.id.desc())
+            .limit(1)
+        )
+        with self._store.connect() as conn:
+            return conn.execute(stmt).scalar_one_or_none()
+
     # --- writes -------------------------------------------------------------
 
     def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:

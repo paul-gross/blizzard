@@ -2115,6 +2115,28 @@
             "title": "Epoch",
             "type": "integer"
           },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
+          "harness_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Version"
+          },
           "input_tokens": {
             "title": "Input Tokens",
             "type": "integer"

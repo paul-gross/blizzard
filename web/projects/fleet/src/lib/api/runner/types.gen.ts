@@ -557,6 +557,14 @@ export type ChunkUsageView = {
      */
     epoch: number;
     /**
+     * Harness Id
+     */
+    harness_id?: string | null;
+    /**
+     * Harness Version
+     */
+    harness_version?: string | null;
+    /**
      * Input Tokens
      */
     input_tokens: number;
@@ -811,6 +819,10 @@ export type EscalationView = {
      * Harness Id
      */
     harness_id?: string | null;
+    /**
+     * Harness Version
+     */
+    harness_version?: string | null;
     /**
      * Lease Id
      */
