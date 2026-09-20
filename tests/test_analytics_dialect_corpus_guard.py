@@ -1,8 +1,8 @@
 """D5's registration guard: every tool name a dialect registers for a kind must
 actually occur in that dialect's own pinned compatibility corpus — the one test
-in the analytics-extraction lane that reads ``contracts/opencode/<version>/``
-directly, where the corpus files are the subject, not an in-file builder
-(blizzard#439)."""
+in the analytics-extraction lane that reads
+``src/blizzard/runner/harness/contracts/opencode/<version>/`` directly, where the corpus
+files are the subject, not an in-file builder (blizzard#439)."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ from blizzard.runner.harness.internal.opencode_normalizer import NORMALIZER_VERS
 
 pytestmark = pytest.mark.unit
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
 
 #: Every dialect with a pinned compatibility corpus — Claude Code has none (D5).
 _CORPUS_DIRS: dict[str, Path] = {
-    "opencode-export/1": _REPO_ROOT / "contracts" / "opencode" / "1.18.25",
+    "opencode-export/1": _PACKAGE_ROOT / "contracts" / "opencode" / "1.18.25",
 }
 
 
