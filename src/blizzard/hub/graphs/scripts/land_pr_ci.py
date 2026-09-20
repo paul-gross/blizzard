@@ -28,9 +28,19 @@ _PENDING = "pending"
 # The graph's authored `failure` choice (issue #232) — printed as an outcome, unlike
 # `_FAILED` below, which is an internal per-repo decision.
 _CI_FAILURE = "failure"
+# The graph's authored `inherited-failure` choice: every remaining check failure is
+# inherited from the base branch and survived a one-time re-run — not this chunk's
+# defect, so it routes straight to a repair node rather than through `resolve`.
+_INHERITED_FAILURE = "inherited-failure"
 
 # The marker name a terminal-CI-failure or a substantive wait writes its findings under.
 _FINDINGS_NAME = "delivery-findings"
+
+# The re-run signature marker's name prefix: one per (repo, check name, head sha) a
+# base-inherited failure was re-requested under, so a re-entry to `deliver` can tell
+# "already re-run once at this head" from "seeing this for the first time" without any
+# state but the marker names `BZ_HUB_ARTIFACT_NAMES` carries in.
+_RERUN_MARKER_PREFIX = "ci-rerun/"
 
 # Pure routing decisions (what to do with one repo after reading its live PR).
 _PUSH = "push"  # clean (or already merged) — eligible for the merge stage
@@ -40,8 +50,18 @@ _BOUNCE = "bounce"  # dirty — a real content conflict, kick back to build
 _FAILED = "failed"  # a check run completed with a terminal conclusion — never re-poll
 
 # A completed check run in any of these is never going to turn green on its own, so
-# polling on out to `poll_timeout` only burns the slot (issue #232).
-_TERMINAL_CONCLUSIONS = {"failure", "timed_out", "cancelled", "action_required"}
+# polling on out to `poll_timeout` only burns the slot (issue #232). `cancelled` is NOT
+# one of these: a concurrency-group cancellation is not a failed job, and a check run's
+# payload alone cannot tell the two apart, so it is re-polled instead — bounded, same as
+# any other non-terminal status, by `poll_timeout`.
+_TERMINAL_CONCLUSIONS = {"failure", "timed_out", "action_required"}
+
+# Whether a head-failing check is inherited from the base, or the chunk's own. Kept off
+# `Verdict` itself: the classification is a pure function of TWO readings — the head's own
+# terminal conclusion (already established) and the base's reading of that same check
+# name — not a property either reading carries alone.
+_OWN = "own"
+_INHERITED = "inherited"
 
 
 @dataclass(frozen=True)
@@ -144,6 +164,21 @@ class Verdict:
         ]
 
 
+def _inheritance(base_red: bool | None) -> str:
+    """Whether a head-failing check is inherited from the base, given the base's own
+    reading of that same check name. A degraded base read (``None``) is conservative:
+    unknown counts as base-green, so the failure is charged to this chunk exactly like a
+    clean base-green read, never silently waived."""
+    return _INHERITED if base_red is True else _OWN
+
+
+def _rerun_marker(repo: str, name: str, head_sha: str) -> str:
+    """The re-run signature marker name for one (repo, check name, head sha) triple — the
+    unit both the one-time re-run and the repeat-bounce refusal a later `build`/`iterate`
+    visit reads from `delivery-findings` key on."""
+    return f"{_RERUN_MARKER_PREFIX}{repo}/{name}/{head_sha}"
+
+
 @dataclass(frozen=True)
 class Findings:
     """The ``delivery-findings`` marker body — plain markdown a resolve worker reads, not
@@ -165,7 +200,11 @@ class _Section:
 
     @classmethod
     def of(cls, record: dict[str, Any]) -> _Section:
-        return (_Failed if record["decision"] == _FAILED else _Running)(record)
+        if record["decision"] == _FAILED:
+            return _Failed(record)
+        if record["decision"] == _INHERITED_FAILURE:
+            return _InheritedFailed(record)
+        return _Running(record)
 
     def rows(self) -> Iterator[str]:
         raise NotImplementedError
@@ -188,6 +227,16 @@ class _Failed(_Section):
                 yield f"    base branch: {check['name']} is clean — this change broke CI"
 
 
+class _InheritedFailed(_Section):
+    label = "Inherited from the base — re-run once, still failing (not this change):"
+
+    def rows(self) -> Iterator[str]:
+        for check in self.record["checks"]:
+            yield f"  - {check['name']}: {check['conclusion']} — {check['details_url']}"
+            yield f"    signature: {check['signature']}"
+        yield f"  base branch: {self.record['base_branch']}"
+
+
 class _Running(_Section):
     label = "Still running:"
 
@@ -198,6 +247,26 @@ class _Running(_Section):
 
 class _Conflict(Exception):
     """Raised to abort the check stage as a real conflict — nothing has been merged."""
+
+
+def _rerequest_once(run: LandRun, repo: str, check: dict[str, Any], head_sha: str) -> None:
+    """Fire GitHub's check-run rerequest route once for ``check``, then record its
+    signature marker — side effect first, exactly like
+    :meth:`land_common.MarkerWriter.record`: a crash before the marker is durable just
+    re-fires the rerequest on the next poll, which is harmless to repeat. Neither the
+    forge call nor the marker write is fatal to the run: a re-request that never fires
+    just leaves the same failure to be re-read, and re-attempted, on the next poll."""
+    check_id = check.get("id")
+    if check_id is None:
+        return
+    try:
+        run.api("POST", f"/repos/{repo}/check-runs/{check_id}/rerequest")
+    except Exception:
+        return
+    try:
+        run.markers.post(_rerun_marker(repo, check.get("name", ""), head_sha), head_sha)
+    except MarkerWriteError as exc:
+        print(f"re-run signature marker write failed (non-fatal): {exc}", file=sys.stderr)
 
 
 def main() -> int:
@@ -220,6 +289,7 @@ def _land() -> int:
     #     the loop never short-circuits on a failure, so findings accumulate together.
     to_merge: list[tuple[PullRequest, str]] = []
     failures: list[dict[str, Any]] = []
+    inherited: list[dict[str, Any]] = []
     wait_records: list[dict[str, Any]] = []
     wait = False
     try:
@@ -258,16 +328,64 @@ def _land() -> int:
                     verdict = Verdict.of(run, pull.repo, head_sha)
                     if verdict.decision == _FAILED:
                         base = Verdict.of(run, pull.repo, run.base_branch)
-                        failures.append(
+                        checks = verdict.failure_rows(base)
+                        if any(_inheritance(check["base_red"]) == _OWN for check in checks):
+                            # At least one failing check is this chunk's own — chargeable
+                            # now, exactly as before. Any OTHER, inherited check on this
+                            # same repo rides along in the same `resolve` diagnosis rather
+                            # than forking the outcome.
+                            failures.append(
+                                {
+                                    "repo": pull.repo,
+                                    "number": pull.number,
+                                    "url": pull.url,
+                                    "decision": _FAILED,
+                                    "checks": checks,
+                                }
+                            )
+                            print(f"{pull} has a terminal CI check failure — will not re-poll", file=sys.stderr)
+                            continue
+                        # Every failing check is inherited from the base. Re-run each once
+                        # before charging a repair: one not yet re-requested at this head
+                        # sha fires the re-run and waits; one already re-requested and
+                        # still red is confirmed inherited.
+                        unsigned = [
+                            check
+                            for check in verdict.failing
+                            if _rerun_marker(pull.repo, check.get("name", ""), head_sha) not in run.already
+                        ]
+                        if unsigned:
+                            for check in unsigned:
+                                _rerequest_once(run, pull.repo, check, head_sha)
+                            print(
+                                f"{pull}'s failing checks are inherited from the base — re-requested once; re-polling",
+                                file=sys.stderr,
+                            )
+                            wait = True
+                            continue
+                        inherited.append(
                             {
                                 "repo": pull.repo,
                                 "number": pull.number,
                                 "url": pull.url,
-                                "decision": _FAILED,
-                                "checks": verdict.failure_rows(base),
+                                "decision": _INHERITED_FAILURE,
+                                "base_branch": run.base_branch,
+                                "checks": [
+                                    {
+                                        "name": check.get("name"),
+                                        "conclusion": check.get("conclusion"),
+                                        "details_url": check.get("details_url"),
+                                        "signature": _rerun_marker(pull.repo, check.get("name", ""), head_sha),
+                                    }
+                                    for check in verdict.failing
+                                ],
                             }
                         )
-                        print(f"{pull} has a terminal CI check failure — will not re-poll", file=sys.stderr)
+                        print(
+                            f"{pull}'s failing checks are still inherited from the base after a re-run "
+                            "— not this chunk's defect; routing to repair the base",
+                            file=sys.stderr,
+                        )
                         continue
                     if verdict.substantive:
                         wait_records.append(
@@ -294,6 +412,13 @@ def _land() -> int:
         # the wait path below: unwritten findings leave `resolve` nothing to read (#243).
         run.markers.post(_FINDINGS_NAME, Findings(failures).render())
         print(_CI_FAILURE)
+        return 0
+
+    if inherited:
+        # Nothing merges (chunk atomicity), same as `failures` above: unwritten findings
+        # leave the repair charge nothing to read, so this write is unguarded too.
+        run.markers.post(_FINDINGS_NAME, Findings(inherited).render())
+        print(_INHERITED_FAILURE)
         return 0
 
     if wait:
@@ -377,8 +502,10 @@ class _CheckTable(_Table):
     cases: ClassVar[list[tuple[Any, str]]] = [
         ([{"status": "completed", "conclusion": "failure"}], _FAILED),
         ([{"status": "completed", "conclusion": "timed_out"}], _FAILED),
-        ([{"status": "completed", "conclusion": "cancelled"}], _FAILED),
         ([{"status": "completed", "conclusion": "action_required"}], _FAILED),
+        # `cancelled` is NOT terminal: a concurrency-group cancellation is not a failed
+        # job, and the payload alone can't tell the two apart, so it waits.
+        ([{"status": "completed", "conclusion": "cancelled"}], _WAIT),
         ([{"status": "queued", "conclusion": None}], _WAIT),
         ([{"status": "in_progress", "conclusion": None}], _WAIT),
         ([{"status": "waiting", "conclusion": None}], _WAIT),
@@ -394,9 +521,28 @@ class _CheckTable(_Table):
         return Verdict(case).decision
 
 
+class _InheritanceTable(_Table):
+    """Whether a head-failing check is inherited from the base — pure, given only the
+    base's own reading of that check name."""
+
+    label = "inheritance cases"
+    cases: ClassVar[list[tuple[Any, str]]] = [
+        (True, _INHERITED),  # head red, base red on the same check — inherited
+        (False, _OWN),  # head red, base green — this chunk's own failure
+        (None, _OWN),  # head red, base unreadable — conservative: charged, not waived
+    ]
+
+    def subject(self, case: Any) -> str:
+        return f"base_red={case!r}"
+
+    def decide(self, case: Any) -> str:
+        return _inheritance(case)
+
+
 def _selftest() -> int:
     """Assert the pure routing tables — no network. The classification is the risk."""
-    return 1 if sum(table.run() for table in (_RouteTable(), _CheckTable())) else 0
+    tables: tuple[_Table, ...] = (_RouteTable(), _CheckTable(), _InheritanceTable())
+    return 1 if sum(table.run() for table in tables) else 0
 
 
 if __name__ == "__main__":

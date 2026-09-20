@@ -14,7 +14,9 @@ environment: delivery refuses a repo arriving with two branches, so an un-rolled
 landing half of itself. An already-rebased-and-pushed repo needs no second rebase, but still needs its tip declared.
 
 Resolve every conflict inside the rebase — never abandon it for a merge, never skip a commit. Keep each resolution
-minimal and faithful to both sides' intent, and note every file a resolution touched.
+minimal and faithful to both sides' intent, and note every file a resolution touched. The one exception: a commit that
+repaired a base failure another chunk already landed the same fix for rebases to an empty diff — drop it and report it
+as a success, not a lost or skipped commit.
 
 ## Verify the rebased result
 

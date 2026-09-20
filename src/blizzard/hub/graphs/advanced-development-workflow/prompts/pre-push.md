@@ -19,6 +19,8 @@ that arrives with two.
 **Every ahead repo is rebased onto the current base** — `origin/master` unless the repo records another. Where a repo
 has work in more than one environment, rebase those onto each other first, then onto the base. Resolve every conflict
 **inside the rebase** — never abandon it for a merge, never skip a commit — and note every file a resolution touched.
+The one exception: a commit that repaired a base failure another chunk already landed the same fix for rebases to an
+empty diff — drop it and report it as a success, not a lost or skipped commit.
 
 **The procedural checks are green on the rebased result.** Run the project's linter and the unit tests covering what the
 change — and any conflict resolution — touched. Targeted, not the entire suite.

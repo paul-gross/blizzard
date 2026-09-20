@@ -91,7 +91,12 @@ def test_bas_hwf_target_routing_table() -> None:
     assert routes("review") == {"pass": "pre-push", "fail": "iterate"}
     assert routes("iterate") == {"pass": "review", "fail": "iterate"}
     assert routes("pre-push") == {"clean": "deliver", "insignificant": "review", "significant": "iterate"}
-    assert routes("deliver") == {"landed": "retrospective", "conflict": "pre-push", "failure": "pre-push"}
+    assert routes("deliver") == {
+        "landed": "retrospective",
+        "conflict": "pre-push",
+        "failure": "pre-push",
+        "inherited-failure": "iterate",
+    }
     assert routes("retrospective") == {"recorded": "done"}
 
 

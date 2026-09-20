@@ -52,9 +52,9 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     assert targets == {"review", "build"}
 
     # The deliver hub node authors its own judgement (#67) exactly like a worker node's.
-    assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure"}
+    assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure", "inherited-failure"}
     deliver_targets = {e.to_node_name for e in graph.edges_from(deliver.node_id)}
-    assert deliver_targets == {"retrospective", "pre-push"}
+    assert deliver_targets == {"retrospective", "pre-push", "build"}
     assert deliver.run and deliver.run[0].command == "python3 -m blizzard.hub.graphs.scripts.land_ff"
     # The lane authors no bounce_cap (#64) — it reifies as None, so the
     # executor falls back to the fleet-wide default.
@@ -86,13 +86,41 @@ def test_adv_dwf_deliver_authors_the_conflict_edge() -> None:
     graph = Reification.of(doc, _clock()).graph
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
-    assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure"}
+    assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure", "inherited-failure"}
     choices_by_name = {c.name: c for c in deliver.choices}
     conflict_edges = [
         e for e in graph.edges_from(deliver.node_id) if e.choice_id == choices_by_name["conflict"].choice_id
     ]
     assert len(conflict_edges) == 1
     assert conflict_edges[0].to_node_name == "resolve"
+
+
+@pytest.mark.parametrize(
+    "graph_name, to_node",
+    [
+        ("advanced-development-workflow", "build"),
+        ("basic-development-workflow", "build"),
+        ("basic-harness-workflow", "iterate"),
+    ],
+)
+def test_every_lane_authors_the_inherited_failure_edge_with_its_own_addendum(graph_name: str, to_node: str) -> None:
+    """Every lane's `deliver` gains an `inherited-failure` choice routed straight to its
+    own repair node — `build` on the two development lanes, `iterate` on the harness lane,
+    whose `build` is its entry node — each carrying its own prompt addendum naming the
+    repair charge and the loop bound."""
+    doc = PACKAGED.named(graph_name).doc
+    graph = Reification.of(doc, _clock()).graph
+    deliver = graph.node_by_name("deliver")
+    assert deliver is not None
+    choices_by_name = {c.name: c for c in deliver.choices}
+    assert "inherited-failure" in choices_by_name
+    edges = [
+        e for e in graph.edges_from(deliver.node_id) if e.choice_id == choices_by_name["inherited-failure"].choice_id
+    ]
+    assert len(edges) == 1
+    assert edges[0].to_node_name == to_node
+    assert edges[0].prompt_addendum
+    assert "loop bound" in edges[0].prompt_addendum.lower()
 
 
 def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node() -> None:
@@ -104,7 +132,12 @@ def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node() -> N
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
     authored = {c.name for c in deliver.choices}
-    non_reserved_outcomes = {land_pr_ci._LANDED, land_pr_ci._CONFLICT, land_pr_ci._CI_FAILURE}
+    non_reserved_outcomes = {
+        land_pr_ci._LANDED,
+        land_pr_ci._CONFLICT,
+        land_pr_ci._CI_FAILURE,
+        land_pr_ci._INHERITED_FAILURE,
+    }
     assert non_reserved_outcomes <= authored
 
 

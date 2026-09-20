@@ -19,9 +19,9 @@ required a **semantic choice** or every conflict was mechanical.
 
 ### 2. Real defect
 
-CI on the PR is red because the change itself fails on the current base. Do not fix it here: capture exactly which check
-failed and why in the `resolve-report`; your findings route back to build. If `delivery-findings` says the base branch's
-own gate fails the same check, the base was already broken — treat it as case 3.
+CI on the PR is red on a check the base branch does not also fail — `deliver` already excludes a check failing on both
+head and base, re-running it once before ever reaching here, so anything routed to you is this chunk's own. Do not fix
+it here: capture exactly which check failed and why in the `resolve-report`; your findings route back to build.
 
 ### 3. Transient or infra failure
 

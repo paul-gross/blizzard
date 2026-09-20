@@ -167,12 +167,15 @@ def _forge_with_state(
     head_check_runs_status: int = 200,
     base_check_runs: list[dict[str, Any]] | None = None,
     base_check_runs_status: int = 200,
+    rerequest_status: int = 201,
 ):
     """A double whose one already-open PR reads ``mergeable_state``. Records every call.
 
     ``head_check_runs``/``base_check_runs`` (issue #232), when given, stub the head/base
     check-runs routes; left unstubbed, a route raises ``KeyError``, so the degradation
-    path reacts to the same real failure mode ``forge_request`` surfaces."""
+    path reacts to the same real failure mode ``forge_request`` surfaces. Every
+    ``head_check_runs`` entry also gets its own rerequest route stubbed, keyed by its
+    ``id``."""
     base = f"http://forge/repos/{_REPO}"
     pull = {
         "number": 1,
@@ -192,6 +195,10 @@ def _forge_with_state(
             head_check_runs_status,
             {"total_count": len(head_check_runs), "check_runs": head_check_runs},
         )
+        for check in head_check_runs:
+            check_id = check.get("id")
+            if check_id is not None:
+                responses[("POST", f"{base}/check-runs/{check_id}/rerequest")] = (rerequest_status, {})
     if base_check_runs is not None:
         responses[("GET", f"{base}/commits/main/check-runs")] = (
             base_check_runs_status,
@@ -288,7 +295,11 @@ def _check_runs_urls(calls: list[tuple[str, str, dict[str, Any] | None]]) -> lis
 
 
 def _findings_posts(calls: list[tuple[str, str, dict[str, Any] | None]]) -> list[dict[str, Any]]:
-    return [body for m, url, body in calls if m == "POST" and url == _CALLBACK_URL and body is not None]
+    return [
+        body
+        for m, url, body in calls
+        if m == "POST" and url == _CALLBACK_URL and body is not None and body["name"] == "delivery-findings"
+    ]
 
 
 @pytest.mark.parametrize("state", ["blocked", "unstable"])
@@ -324,9 +335,45 @@ def test_a_terminal_check_failure_prints_the_failure_edge_and_writes_findings(
     assert "https://forge/build/1" in content  # the check's details_url
 
 
-def test_a_base_branch_also_red_names_the_change_as_not_at_fault(
+def test_a_base_red_check_alongside_an_own_failure_still_fails_and_names_both(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """A base-inherited check alone must not produce `_FAILED`, but one
+    among SEVERAL failing checks on the same repo does not waive the repo — the OTHER,
+    own failure is still this chunk's defect, so the repo still fails outright, with no
+    re-run fired for either check."""
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_with_state(
+            calls,
+            mergeable_state="blocked",
+            head_check_runs=[
+                _check_run("completed", "failure", name="build", check_id=1),
+                _check_run("completed", "failure", name="lint", check_id=2),
+            ],
+            base_check_runs=[_check_run("completed", "failure", name="build", check_id=1)],
+        ),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "failure"
+    assert not any(url.endswith("rerequest") for url in _urls(calls, "POST"))
+
+    posts = _findings_posts(calls)
+    assert len(posts) == 1
+    content = posts[0]["content"]
+    assert "not this change" in content  # build: inherited from the base
+    assert "this change broke CI" in content  # lint: this chunk's own
+
+
+def test_an_inherited_only_failure_fires_a_rerequest_once_and_pends(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A check failing at the head AND at the base is re-run once
+    before anything is charged — not routed as this chunk's own `failure`."""
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setattr(
@@ -341,11 +388,67 @@ def test_a_base_branch_also_red_names_the_change_as_not_at_fault(
     )
 
     assert land_pr_ci.main() == 0
-    assert _last_line(capsys) == "failure"
+    assert _last_line(capsys) == "pending"
+    assert not _findings_posts(calls)
+
+    rerequests = [url for url in _urls(calls, "POST") if url.endswith("/check-runs/1/rerequest")]
+    assert rerequests == [f"http://forge/repos/{_REPO}/check-runs/1/rerequest"]
+
+    signature_posts = [
+        body
+        for m, url, body in calls
+        if m == "POST" and url == _CALLBACK_URL and body is not None and body["name"].startswith("ci-rerun/")
+    ]
+    assert len(signature_posts) == 1
+    assert signature_posts[0]["name"] == f"ci-rerun/{_REPO}/build/headsha"
+
+
+def test_a_re_requested_check_still_red_routes_the_inherited_failure_outcome(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Once the signature marker shows the re-run already fired at this
+    head sha, a still-red check routes the new `inherited-failure` outcome — never
+    `resolve`'s `failure` — with no second rerequest fired."""
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"ci-rerun/{_REPO}/build/headsha"]))
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_with_state(
+            calls,
+            mergeable_state="blocked",
+            head_check_runs=[_check_run("completed", "failure")],
+            base_check_runs=[_check_run("completed", "failure")],
+        ),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == land_pr_ci._INHERITED_FAILURE
+    assert not any(url.endswith("rerequest") for url in _urls(calls, "POST"))
+    assert not any(url.endswith(("/merge", "/update-branch")) for url in _urls(calls, "PUT"))
 
     posts = _findings_posts(calls)
     assert len(posts) == 1
-    assert "not this change" in posts[0]["content"]
+    content = posts[0]["content"]
+    assert _REPO in content
+    assert "build" in content
+    assert "main" in content  # the base branch named
+    assert f"ci-rerun/{_REPO}/build/headsha" in content  # the signature, for the loop bound
+
+
+def test_a_green_re_run_is_simply_not_failing_on_the_next_poll(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A re-run that turned green shows up as a non-terminal (or absent) check on the next
+    read — no special-casing needed, delivery just resumes."""
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"ci-rerun/{_REPO}/build/headsha"]))
+    monkeypatch.setattr(land_common, "forge_request", _forge_with_state(calls, mergeable_state="clean"))
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "landed"
 
 
 def test_a_check_runs_read_failure_degrades_to_a_plain_pending_not_the_failure_edge(
@@ -734,20 +837,27 @@ def test_an_empty_callback_url_with_a_pending_repo_fails_instead_of_landing_sile
 # never be polled out to `poll_timeout` — pure, network-free objects.
 
 
-def _check_run(status: str, conclusion: str | None = None) -> dict[str, Any]:
+def _check_run(status: str, conclusion: str | None = None, *, name: str = "build", check_id: int = 1) -> dict[str, Any]:
     return {
-        "id": 1,
-        "name": "build",
+        "id": check_id,
+        "name": name,
         "status": status,
         "conclusion": conclusion,
-        "details_url": "https://forge/build/1",
+        "details_url": f"https://forge/{name}/{check_id}",
         "head_sha": "headsha",
     }
 
 
-@pytest.mark.parametrize("conclusion", ["failure", "timed_out", "cancelled", "action_required"])
+@pytest.mark.parametrize("conclusion", ["failure", "timed_out", "action_required"])
 def test_verdict_is_failed_for_every_terminal_conclusion(conclusion: str) -> None:
     assert land_pr_ci.Verdict([_check_run("completed", conclusion)]).decision == land_pr_ci._FAILED
+
+
+def test_verdict_waits_on_a_cancelled_conclusion() -> None:
+    """A concurrency-group cancellation is not a failed job, and the
+    check-run payload alone can't tell the two apart, so `cancelled` is re-polled rather
+    than classified terminal."""
+    assert land_pr_ci.Verdict([_check_run("completed", "cancelled")]).decision == land_pr_ci._WAIT
 
 
 @pytest.mark.parametrize("status", ["queued", "in_progress", "waiting", "requested"])
@@ -1007,3 +1117,9 @@ def test_a_refusal_that_is_not_an_empty_branch_still_waits_rather_than_landing(
     assert _last_line(capsys) == "pending"
     assert f"merged/{other_repo}" not in _marker_posts(calls)
     assert not any(url.endswith("/merge") for url in _urls(calls, "PUT")), "chunk atomicity: nothing merges"
+
+
+def test_land_pr_ci_selftest_passes() -> None:
+    """Binds `land_pr_ci --selftest`'s pure routing/check/inheritance tables to the unit
+    tier — previously reachable only by hand via the CLI flag."""
+    assert land_pr_ci._selftest() == 0
