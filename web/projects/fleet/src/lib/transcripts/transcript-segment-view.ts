@@ -48,6 +48,13 @@ export class TranscriptSegmentView {
    * open segment is the step's last (or the step's only) segment. */
   readonly continuesIn = input<TranscriptSegmentIndexEntry | null>(null);
 
+  /** The open segment's own recorded harness identity (blizzard#441) — `null` renders
+   * no harness affordance at all, never a guess from the turns it holds. */
+  readonly harnessId = input<string | null>(null);
+
+  /** The open segment's own recorded harness build version, beside {@link harnessId}. */
+  readonly harnessVersion = input<string | null>(null);
+
   /** Emitted with a seam's target segment id when the operator follows it. */
   readonly pickSegment = output<string>();
 
@@ -65,6 +72,15 @@ export class TranscriptSegmentView {
   });
 
   protected readonly turnsCapped = computed(() => this.turns().length > MAX_RENDERED_TURNS);
+
+  /** {@link harnessId}/{@link harnessVersion}, named explicitly for the badge's
+   * accessible name — a plain `<span>` here carries no label of its own. */
+  protected readonly harnessLabel = computed(() => {
+    const id = this.harnessId();
+    if (id === null) return '';
+    const version = this.harnessVersion();
+    return version ? `${id} version ${version}` : id;
+  });
 
   protected readonly MAX_RENDERED_TURNS = MAX_RENDERED_TURNS;
 }

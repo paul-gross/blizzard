@@ -67,3 +67,14 @@
   font-size: var(--fs-sm);
   user-select: all;
 }
+.resume-harness {
+  display: inline-block;
+  margin-top: 4px;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

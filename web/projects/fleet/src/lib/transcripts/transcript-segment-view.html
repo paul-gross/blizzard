@@ -1,3 +1,12 @@
+@if (harnessId(); as id) {
+  <span
+    class="tag"
+    data-testid="transcript-segment-harness"
+    [attr.data-harness-id]="id"
+    [attr.aria-label]="harnessLabel()"
+    >{{ id }}{{ harnessVersion() ? ' ' + harnessVersion() : '' }}</span
+  >
+}
 @if (continuedFrom(); as prev) {
   <button type="button" class="seam" data-testid="transcript-continued-from" (click)="pickSegment.emit(prev.segment_id)">
     ← Continued from segment {{ prev.spawn_generation + 1 }}

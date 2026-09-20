@@ -18,6 +18,15 @@
         <div class="resume-box" data-testid="detail-resume">
           <span class="resume-tag">escalated — resume session</span>
           <code>{{ esc.resume_command || '(no session to resume)' }}</code>
+          @if (esc.harness_id; as harnessId) {
+            <span
+              class="resume-harness"
+              data-testid="detail-resume-harness"
+              [attr.data-harness-id]="harnessId"
+              [attr.aria-label]="harnessLabel(esc)"
+              >{{ harnessId }}{{ esc.harness_version ? ' ' + esc.harness_version : '' }}</span
+            >
+          }
         </div>
       }
     </div>

@@ -98,6 +98,26 @@ export class ChunkTranscriptsTab {
 
   protected readonly continuesIn = computed<TranscriptSegmentIndexEntry | null>(() => this.seams().continuesIn);
 
+  /** The open segment's own index entry (blizzard#441) — carries the recorded
+   * `harness_id`/`harness_version` {@link TranscriptSegmentView} renders; `null` while
+   * nothing is open or the id names none of {@link steps}' own segments. */
+  protected readonly openSegmentEntry = computed<TranscriptSegmentIndexEntry | null>(() => {
+    const id = this.segmentId();
+    if (id === null) return null;
+    for (const step of this.steps()) {
+      const found = step.segments.find((s) => s.segment_id === id);
+      if (found) return found;
+    }
+    return null;
+  });
+
+  /** Names harness and version explicitly for the segment-list badge's accessible name
+   * (`bzh:frontend-kit-floor`'s computed-label form) — a plain `<span class="tag">` here
+   * carries no label of its own. */
+  protected harnessLabel(seg: TranscriptSegmentIndexEntry): string {
+    return seg.harness_version ? `${seg.harness_id} version ${seg.harness_version}` : `${seg.harness_id}`;
+  }
+
   /** {@link segmentData}'s turns with every late link folded onto its call (blizzard#338).
    * Derived ONCE, shared between {@link TranscriptSegmentView} (which caps and renders
    * it) and the standalone path resolver below: merging fewer turns than the path is

@@ -78,6 +78,15 @@
                   >PARTIAL</span
                 >
               }
+              @if (u.harnessId; as harnessId) {
+                <span
+                  class="harness-badge"
+                  data-testid="history-step-harness"
+                  [attr.data-harness-id]="harnessId"
+                  [attr.aria-label]="harnessLabel(u)"
+                  >{{ harnessId }}{{ u.harnessVersion ? ' ' + u.harnessVersion : '' }}</span
+                >
+              }
             </span>
           }
         </div>
