@@ -1161,6 +1161,10 @@ export type HarnessHealthListResponse = {
  */
 export type HarnessHealthView = {
     /**
+     * Admitted Versions
+     */
+    admitted_versions?: Array<string>;
+    /**
      * Available
      */
     available: boolean;
