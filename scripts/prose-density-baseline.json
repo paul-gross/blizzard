@@ -241,10 +241,10 @@
    "total": 6
   },
   "blizzard_mock/harness/engine.py": {
-   "comments": 37,
+   "comments": 39,
    "docstrings": 102,
    "over_cap": 6,
-   "total": 589
+   "total": 597
   },
   "blizzard_mock/harness/facades/__init__.py": {
    "comments": 0,
@@ -301,16 +301,16 @@
    "total": 104
   },
   "blizzard_mock/harness/facades/opencode.py": {
-   "comments": 12,
+   "comments": 15,
    "docstrings": 45,
    "over_cap": 0,
-   "total": 341
+   "total": 347
   },
   "blizzard_mock/harness/helpers.py": {
-   "comments": 0,
-   "docstrings": 48,
+   "comments": 2,
+   "docstrings": 65,
    "over_cap": 0,
-   "total": 136
+   "total": 219
   },
   "blizzard_mock/harness/internal/__init__.py": {
    "comments": 0,
@@ -493,10 +493,10 @@
    "total": 98
   },
   "blizzard_mock/harness_identity.py": {
-   "comments": 1,
+   "comments": 2,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 11
+   "total": 13
   },
   "blizzard_mock/idp/__init__.py": {
    "comments": 0,
@@ -944,15 +944,15 @@
   },
   "blizzard_mock/mock_runner/domain/models.py": {
    "comments": 8,
-   "docstrings": 59,
+   "docstrings": 60,
    "over_cap": 3,
-   "total": 217
+   "total": 220
   },
   "blizzard_mock/mock_runner/domain/service.py": {
    "comments": 21,
-   "docstrings": 66,
+   "docstrings": 68,
    "over_cap": 1,
-   "total": 505
+   "total": 515
   },
   "blizzard_mock/mock_runner/internal/__init__.py": {
    "comments": 0,
