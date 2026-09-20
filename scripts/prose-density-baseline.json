@@ -301,16 +301,16 @@
    "total": 104
   },
   "blizzard_mock/harness/facades/opencode.py": {
-   "comments": 15,
+   "comments": 16,
    "docstrings": 45,
    "over_cap": 0,
-   "total": 347
+   "total": 349
   },
   "blizzard_mock/harness/helpers.py": {
    "comments": 2,
    "docstrings": 65,
    "over_cap": 0,
-   "total": 219
+   "total": 226
   },
   "blizzard_mock/harness/internal/__init__.py": {
    "comments": 0,
@@ -944,15 +944,15 @@
   },
   "blizzard_mock/mock_runner/domain/models.py": {
    "comments": 8,
-   "docstrings": 60,
+   "docstrings": 61,
    "over_cap": 3,
-   "total": 220
+   "total": 221
   },
   "blizzard_mock/mock_runner/domain/service.py": {
    "comments": 21,
-   "docstrings": 68,
+   "docstrings": 67,
    "over_cap": 1,
-   "total": 515
+   "total": 514
   },
   "blizzard_mock/mock_runner/internal/__init__.py": {
    "comments": 0,
@@ -5261,16 +5261,16 @@
    "total": 74
   },
   "crash/support.py": {
-   "comments": 29,
+   "comments": 31,
    "docstrings": 76,
    "over_cap": 8,
-   "total": 736
+   "total": 742
   },
   "crash/test_kill9_sweep.py": {
-   "comments": 283,
-   "docstrings": 191,
-   "over_cap": 33,
-   "total": 2945
+   "comments": 269,
+   "docstrings": 185,
+   "over_cap": 26,
+   "total": 2916
   },
   "crash_points.py": {
    "comments": 1,
@@ -5393,10 +5393,10 @@
    "total": 233
   },
   "e2e/test_mixed_harness_e2e.py": {
-   "comments": 85,
-   "docstrings": 81,
+   "comments": 90,
+   "docstrings": 91,
    "over_cap": 16,
-   "total": 610
+   "total": 624
   },
   "e2e/test_post_merge_node_e2e.py": {
    "comments": 12,
@@ -5567,10 +5567,10 @@
    "total": 314
   },
   "service/test_mixed_harness_dispatch_service.py": {
-   "comments": 79,
-   "docstrings": 55,
-   "over_cap": 14,
-   "total": 599
+   "comments": 47,
+   "docstrings": 31,
+   "over_cap": 0,
+   "total": 540
   },
   "service/test_mock_chunk_findings_service.py": {
    "comments": 1,
@@ -7439,10 +7439,10 @@
    "total": 636
   },
   "test_resume_judgement_takeover_harness_isolation.py": {
-   "comments": 37,
-   "docstrings": 38,
-   "over_cap": 4,
-   "total": 389
+   "comments": 38,
+   "docstrings": 32,
+   "over_cap": 3,
+   "total": 393
   },
   "test_review_cycle.py": {
    "comments": 19,

@@ -576,13 +576,8 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
                 ground_truth_versions = {r["harness_version"] for r in ground_truth}
                 assert board_versions == ground_truth_versions, node_label
                 if expected_harness == "opencode":
-                    # A mirror-compare alone can't tell "both sides genuinely agree on
-                    # {'1.18.25'}" apart from "both sides silently dropped version capture
-                    # and agree on {None}" — OpenCode's own mock session-info document
-                    # always carries a version (`_opencode_transcript.py`'s `_MOCK_VERSION`,
-                    # confirmed by the dispatch-service test's own honest-asymmetry
-                    # comment), so this side additionally pins a genuinely non-empty
-                    # value, not merely one that agrees with the other side.
+                    # A mirror-compare alone can't distinguish genuine agreement from both
+                    # sides silently dropping version capture and agreeing on {None}.
                     assert board_versions - {None, ""}, (node_label, board_versions)
 
             # --- Analytics: derive, then read the real events back per node.

@@ -1,15 +1,9 @@
 """Two harnesses sharing one raw session-id text never collide in RESUME, JUDGEMENT, or
-TAKEOVER — each dispatches its resumed/judged/taken-over session through its own recorded
-owner, keyed by the FULL ``SessionReference`` (harness + raw id), never the raw id alone.
-
-Same shape as ``tests/test_usage_recorder_harness_isolation.py`` and
-``tests/test_transcript_harness_isolation.py``: two leases seeded under the SAME raw session
-id but different ``harness_id``, each bound to its OWN fake adapter in one
-``HarnessRegistry`` — every assertion below reads a specific fake's own call log, never the
-sibling's, so dropping ``harness_id`` from any of the three lookups this file targets
-(``DormantSession._resolve_harness`` in ``dormant.py``, ``Judgement._resolve_harness`` in
-``judgement.py``, ``TakeoverService._resolved_harness`` in ``takeover.py``) turns one of
-these red."""
+TAKEOVER — each dispatches through its own recorded owner, keyed by the FULL
+``SessionReference`` (harness + raw id), never the raw id alone. Same shape as
+``tests/test_usage_recorder_harness_isolation.py``: two leases seeded under the same raw
+session id but different ``harness_id``, each bound to its own fake adapter, so dropping
+``harness_id`` from any of the three resolvers this file targets turns one assertion red."""
 
 from __future__ import annotations
 
@@ -245,10 +239,8 @@ def test_judgement_launch_and_collect_dispatch_each_lease_to_its_own_harness(tmp
 
     Advance(ctx).run()  # launch pass — elicits both verdicts
 
-    # Each fake's OWN judge log carries exactly its own lease's session — never the
-    # sibling's — and the prompt text, rendered independently from each lease's OWN
-    # envelope (no checks declared, so an empty check-results list), not read back off
-    # the fake's own recorded call.
+    # Each fake's OWN judge log carries its own lease's session and prompt, rendered
+    # independently from its own envelope, never read back off the fake's own call.
     expected_prompt_a = JudgementPrompt(envelope_a, []).render()
     expected_prompt_b = JudgementPrompt(envelope_b, []).render()
     assert harness_a.judged == [("/ws/lease_a", _SHARED_SESSION_ID, expected_prompt_a)]
@@ -264,9 +256,8 @@ def test_judgement_launch_and_collect_dispatch_each_lease_to_its_own_harness(tmp
     assert "ch_a" in outbound and "ch_b" in outbound
     choice_a = json.loads(outbound["ch_a"].payload)["submission"]["choice"]
     choice_b = json.loads(outbound["ch_b"].payload)["submission"]["choice"]
-    # lease_a's own "pass" verdict landed lease_a's completion; lease_b's own "fail" landed
-    # lease_b's — never the other way around (a cross-wired collect reading the sibling's
-    # verdict back would flip these), which a raw-id-only lookup would risk.
+    # lease_a's own "pass" landed lease_a's completion, lease_b's "fail" landed lease_b's
+    # — never flipped, which a raw-id-only lookup (no cross-wired collect) would risk.
     assert choice_a == "pass"
     assert choice_b == "fail"
 
@@ -302,9 +293,7 @@ def test_judgement_owner_failure_on_one_lease_never_blocks_the_others_collect(tm
 
     Advance(ctx).run()
 
-    # lease_a's own adapter was reached and elicited a verdict, with the prompt text
-    # rendered independently from lease_a's OWN envelope (no checks declared), not read
-    # back off the fake's own recorded call.
+    # lease_a's own adapter elicited a verdict, prompt rendered off its own envelope.
     expected_prompt_a = JudgementPrompt(envelope_a, []).render()
     assert harness_a.judged == [("/ws/lease_a", _SHARED_SESSION_ID, expected_prompt_a)]
     # lease_b never got a launch call on ANY adapter — no in-flight elicitation for it.

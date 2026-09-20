@@ -231,32 +231,16 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
 
 
-# --- The OpenCode-lineage windows (D5, `bzh:crash-sweep` phase 4) --------------------------
-#
-# The following are NOT a new `opencode.*` crash-point family — declaring one would create
-# registry entries whose windows are the same windows as the ones below (D5). Each is an
-# already-declared, harness-neutral `spawn.*`/`resume.*`/`advance.*` point the Claude-Code-
-# shaped generic/resume sweeps above already reach, but which a Claude-Code-shaped graph can
-# never reach under an OpenCode lineage. `test_kill9_at_crash_point_under_opencode` and
-# `test_kill9_at_resume_crash_point_under_opencode` sweep these against an OpenCode graph
-# instead — scoped to exactly these named windows, not the whole generic/resume families.
+# --- The OpenCode-lineage windows (D5) — already-declared harness-neutral points a
+# Claude-Code-shaped graph never reaches under an OpenCode lineage, not a new family. ---
 
-# The two-phase spawn's windows (`spawn.py`), the transcript-boundary window that brackets
-# the fresh mint itself, and the verdict-elicitation windows every judgement (a fresh
-# dispatch's own exit included) passes through — derived by prefix filter against
-# `_ALL_POINTS`, the same way every sibling family above is (`_GENERIC_POINTS`,
-# `_RESUME_POINTS`, etc.), so a newly-registered `spawn.*`/`advance.*` point is never
-# silently missing its OpenCode arm the way a hand-maintained literal tuple would leave it.
+# Derived by prefix filter against `_ALL_POINTS`, like every sibling family above, so a
+# newly-registered point is never silently missing its OpenCode arm.
 _OPENCODE_GENERIC_POINTS = [p for p in _ALL_POINTS if p.startswith(("spawn.", "advance."))]
-# The restart-resume re-attach (`steps.py`'s `Resume`, `dormant.py`'s `_restart`/`_wake`) —
-# every `resume.*` point, derived the same way `_RESUME_POINTS` is above.
 _OPENCODE_RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 
-# Both intentionally empty (D6): the plan's own decision to leave OpenCode crash recovery —
-# including the resume-critical window — OUT of the CI-bounded profile is scoped HERE, in the
-# file a future reader will actually see, not left implicit as something to "fix" by filling
-# these in. The full local sweep (`BLIZZARD_CRASH_SWEEP=1`, never `BLIZZARD_CRASH_SWEEP_CI=1`)
-# is the declared method that proves these points; PR/push CI does not gate them.
+# Both intentionally empty (D6): the full local sweep, not CI, is the declared method
+# proving these points — PR/push CI does not gate them.
 _OPENCODE_GENERIC_CI_SUBSET: tuple[str, ...] = ()
 _OPENCODE_RESUME_CI_SUBSET: tuple[str, ...] = ()
 _OPENCODE_GENERIC_SWEEP = _select(_OPENCODE_GENERIC_POINTS, _OPENCODE_GENERIC_CI_SUBSET)
@@ -264,19 +248,9 @@ _OPENCODE_RESUME_SWEEP = _select(_OPENCODE_RESUME_POINTS, _OPENCODE_RESUME_CI_SU
 
 
 def test_opencode_named_points_are_swept_under_both_harnesses(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Each window this phase closes under OpenCode is armed once per harness (D5) — a
-    Claude Code pass through, say, ``spawn.after-launch.before-provisional-record`` must
-    never be accepted as covering that same point's OpenCode reachability, or vice versa.
-
-    The "should be covered" set below is re-derived straight off the registry by the SAME
-    prefix filter ``_OPENCODE_GENERIC_POINTS``/``_OPENCODE_RESUME_POINTS`` are defined by,
-    rather than read back off those two tuples themselves — reusing them as their own oracle
-    would make this assertion trivially true by construction, unable to ever go red. A future
-    edit that narrows either back to a hand-picked subset, or empties one outright, is a
-    mismatch against this independently-recomputed set and fails loudly here. Mirrors
-    ``test_ci_subset_covers_every_family``'s style: a real, checked assertion over the same
-    tuples the parametrized tests above draw from — CI-subset narrowing is deliberately unset
-    (D6), since the OpenCode CI subsets are empty by design, not a gap this test should flag."""
+    """Each window this phase closes under OpenCode is armed once per harness (D5). The
+    expected set is re-derived off the registry, never read back off the two tuples
+    under test, so narrowing either fails loudly instead of passing by construction."""
     monkeypatch.delenv("BLIZZARD_CRASH_SWEEP_CI", raising=False)
     should_cover_generic = [p for p in _ALL_POINTS if p.startswith(("spawn.", "advance."))]
     should_cover_resume = [p for p in _ALL_POINTS if p.startswith("resume.")]
@@ -285,22 +259,15 @@ def test_opencode_named_points_are_swept_under_both_harnesses(monkeypatch: pytes
         "the registry lost every spawn./advance. or every resume. point — nothing to sweep"
     )
 
-    # The Claude Code leg: every point this phase closes under OpenCode is in the UNNARROWED
-    # registry lists the generic/resume sweeps parametrize from under the full local sweep
-    # (`_select` only narrows under `BLIZZARD_CRASH_SWEEP_CI=1`, unset here) —
-    # `test_kill9_at_crash_point`/`test_kill9_at_resume_crash_point` reach each under Claude
-    # Code (the runner's default harness) there.
+    # The Claude Code leg: every point is in the unnarrowed registry lists the generic/
+    # resume sweeps parametrize from, reached under Claude Code there.
     claude_generic = set(_select(_GENERIC_POINTS, _CI_SUBSET))
     claude_resume = set(_select(_RESUME_POINTS, _RESUME_CI_SUBSET))
     missing_claude = [p for p in should_cover if p not in claude_generic and p not in claude_resume]
     assert not missing_claude, f"OpenCode-lineage point(s) missing their Claude-Code leg: {missing_claude}"
 
-    # The OpenCode leg: every point is in the tuples `test_kill9_at_crash_point_under_opencode`/
-    # `test_kill9_at_resume_crash_point_under_opencode` actually parametrize from, under the same
-    # full-local-profile selection, recomputed fresh (not the module-level `_OPENCODE_*_SWEEP`,
-    # frozen at collection time under whatever env pytest started under) — no point silently
-    # missing its OpenCode arm, and emptying either `_OPENCODE_GENERIC_POINTS` or
-    # `_OPENCODE_RESUME_POINTS` outright fails this exactly as a genuine narrowing would.
+    # The OpenCode leg: every point is in the tuples the OpenCode-lineage tests actually
+    # parametrize from, recomputed fresh rather than read off the frozen module sweeps.
     opencode_generic = set(_select(_OPENCODE_GENERIC_POINTS, _OPENCODE_GENERIC_CI_SUBSET))
     opencode_resume = set(_select(_OPENCODE_RESUME_POINTS, _OPENCODE_RESUME_CI_SUBSET))
     missing_opencode = [p for p in should_cover if p not in opencode_generic and p not in opencode_resume]
@@ -1580,10 +1547,9 @@ def _lease_harness_ids_for_chunk(runner_dir: Path, chunk_id: str) -> set[str | N
 
 @pytest.mark.parametrize("point", _OPENCODE_GENERIC_SWEEP)
 def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """:func:`test_kill9_at_crash_point`'s twin under an OpenCode lineage (D5,
-    ``bzh:crash-sweep`` phase 4) — the SAME already-declared, harness-neutral
-    ``spawn.*``/``advance.*`` windows a Claude-Code-shaped graph never once reached under
-    OpenCode, armed here against :func:`opencode_graph_yaml`'s ``build`` node instead."""
+    """:func:`test_kill9_at_crash_point`'s twin under an OpenCode lineage (D5) — the same
+    ``spawn.*``/``advance.*`` windows a Claude-Code graph never reaches under OpenCode,
+    armed here against :func:`opencode_graph_yaml`'s ``build`` node instead."""
     landed_file = f"LANDED-OPENCODE-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1619,10 +1585,8 @@ def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path
 
         _assert_invariants(runner_dir, hub_dir, when=f"after OpenCode convergence past {point}", after_recovery=True)
 
-        # Convergence landed under the OpenCode lineage specifically — a bug that silently fell
-        # back to Claude Code would still land the file; only this catches it. A generic point's
-        # own recovery may re-mint a fresh lease (a retry, not a resume) — every lease recorded
-        # for this chunk, not just the last, must carry the OpenCode harness.
+        # Every lease recorded for this chunk, not just the last, must carry the OpenCode
+        # harness — a silent fall-back to Claude Code would still land the file.
         assert _lease_harness_ids_for_chunk(runner_dir, chunk_id) == {OPENCODE_HARNESS_ID}, (
             f"a lease that converged past {point} was not recorded under the OpenCode harness"
         )
@@ -1697,10 +1661,9 @@ def _ingest_opencode_hanging_chunk(hub: httpx.Client, forge: httpx.Client, lande
 
 @pytest.mark.parametrize("point", _OPENCODE_RESUME_SWEEP)
 def test_kill9_at_resume_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """:func:`test_kill9_at_resume_crash_point`'s twin under an OpenCode lineage (D5,
-    ``bzh:crash-sweep`` phase 4) — a ``kill -9`` at a RESUME boundary armed on the restart
-    of an OpenCode-lineage session still re-attaches exactly once, converging under the SAME
-    lease/epoch/session and the SAME (OpenCode) harness."""
+    """:func:`test_kill9_at_resume_crash_point`'s twin under an OpenCode lineage (D5) — a
+    kill at a resume boundary still re-attaches exactly once, converging under the same
+    lease/epoch/session and the same (OpenCode) harness."""
     landed_file = f"LANDED-OPENCODE-resume-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()

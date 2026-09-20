@@ -81,10 +81,8 @@ def mock_bin_dir() -> Path | None:
     if (
         (bin_dir / "blizzard-mock-fixture").is_file()
         and (bin_dir / "mock-claude-code").is_file()
-        # `write_runner_config` wires `mock-opencode` unconditionally (bzh:crash-sweep phase
-        # 4) — an older-provisioned sibling worktree that predates it must fail the whole
-        # tier cleanly here (`crash_env`'s existing "no provisioned sibling" skip), not
-        # obscurely deep inside an OpenCode-lineage scenario's own crash-armed subprocess.
+        # An older-provisioned sibling predating `mock-opencode` should skip here, not
+        # fail obscurely inside an OpenCode-lineage scenario's crash-armed subprocess.
         and (bin_dir / "mock-opencode").is_file()
     ):
         return bin_dir
