@@ -32,7 +32,7 @@ def test_selftest_result_table_survives_a_downgrade_upgrade_roundtrip(tmp_path: 
     config = runner_runtime.init_environment(tmp_path)
     runner = runner_runtime.migration_runner(config)
 
-    runner.downgrade("20260918_1000_invocation_boundaries")
+    runner.downgrade("20260919_1000_transcript_segment_provenance")
     tables = _table_names(config.db_url)
     assert "selftest_results" not in tables
 

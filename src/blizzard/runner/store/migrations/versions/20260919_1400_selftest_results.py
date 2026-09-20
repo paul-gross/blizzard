@@ -1,7 +1,7 @@
 """Add the durable selftest-result table (blizzard#438).
 
 Revision ID: 20260919_1400_selftest_results
-Revises: 20260918_1000_invocation_boundaries
+Revises: 20260919_1000_transcript_segment_provenance
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from alembic import op
 from blizzard.foundation.store.utc import UtcDateTime
 
 revision = "20260919_1400_selftest_results"
-down_revision = "20260918_1000_invocation_boundaries"
+down_revision = "20260919_1000_transcript_segment_provenance"
 branch_labels = None
 depends_on = None
 
