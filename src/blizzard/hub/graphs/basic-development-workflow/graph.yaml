@@ -167,6 +167,10 @@ nodes:
           description: land_ff itself failed or crashed (a missing env var, an unauthorized or failed marker write) rather than reporting a clean outcome; this lane has no resolve node, so it returns to pre-push — the same recovery point as conflict — to diagnose and retry without discarding the validated spine.
           to: pre-push
           prompt_addendum: ./prompts/pre-push.from-deliver.md
+        inherited-failure:
+          description: Every remaining check failure is inherited from the base branch and survived a one-time re-run; not this chunk's defect, so it routes straight to build to repair the base as its own commit. land_ff reads no check runs, so this lane's script cannot print it yet.
+          to: build
+          prompt_addendum: ./prompts/build.from-deliver.md
 
   retrospective:
     executor: runner

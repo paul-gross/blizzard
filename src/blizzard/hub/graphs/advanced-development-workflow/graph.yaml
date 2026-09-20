@@ -293,11 +293,16 @@ nodes:
     # A repo's PR reading `dirty` — a real merge conflict — routes the authored `conflict`
     # edge immediately, without waiting out poll_timeout, straight to `resolve`, which is
     # written for exactly this case, rather than to `build`.
-    # A PR that NEVER goes clean within poll_timeout, a crash of the land script itself,
-    # or a `blocked`/`unstable` PR whose check run has already completed with a terminal
-    # conclusion (routed immediately, without waiting out poll_timeout — issue #232) all
-    # route the authored `failure` edge, and that lands on `resolve`, not `build`: a merge
-    # conflict invalidates none of verify/review/pre-push.
+    # A `blocked`/`unstable` PR whose check run has completed with a terminal conclusion
+    # the base branch does NOT share on that same check routes immediately (without
+    # waiting out poll_timeout — issue #232) via the authored `failure` edge to `resolve`.
+    # A conclusion the base branch ALSO carries on that same check is re-run once instead:
+    # a green re-run resumes delivery with nothing charged, and a re-run that stays red
+    # routes the authored `inherited-failure` edge straight to `build` — the
+    # change did not cause it, so `resolve` has nothing to diagnose. A PR that never goes
+    # cleanly mergeable within poll_timeout, or a crash of the land script itself, also
+    # routes `failure` to `resolve`. `cancelled` is never treated as terminal on its own —
+    # a concurrency-group cancellation is not a failed job, so it is re-polled instead.
     poll_interval: 30
     poll_timeout: 1800
     judgement:
@@ -309,8 +314,12 @@ nodes:
           description: A repo's PR read dirty — a real merge conflict — routed immediately, without waiting out poll_timeout; sent to resolve to base-merge without discarding the validated verify/review/pre-push spine.
           to: resolve
         failure:
-          description: A repo's check run completed with a terminal conclusion (routed immediately, without waiting out poll_timeout), poll_timeout exceeded with a repo never going cleanly mergeable, or the land script crashed; routed to resolve to diagnose and repair without discarding the validated spine.
+          description: A repo's check run completed with a terminal conclusion the base branch does not share on that check, poll_timeout exceeded with a repo never going cleanly mergeable, or the land script crashed; routed to resolve to diagnose and repair without discarding the validated spine.
           to: resolve
+        inherited-failure:
+          description: Every remaining check failure is inherited from the base branch and survived a one-time re-run; not this chunk's defect, so it routes straight to build to repair the base as its own commit, bypassing resolve entirely.
+          to: build
+          prompt_addendum: ./prompts/build.from-deliver.md
 
   resolve:
     executor: runner
