@@ -40,6 +40,12 @@ class IProcessProbe(Protocol):
         spawn recorded, never one inferred from a bare pid. Never raises if already gone."""
         ...
 
+    def interrupt_group(self, pgid: int) -> None:
+        """Best-effort SIGINT to an entire owned process group — the graceful-shutdown
+        drain's own signal, distinct from :meth:`kill_group`'s SIGKILL. Never raises if
+        already gone."""
+        ...
+
 
 class LinuxProcessProbe:
     """``/proc``-backed probe: field-22 ``starttime`` is the reuse-proof identity."""
@@ -73,6 +79,12 @@ class LinuxProcessProbe:
     def kill_group(self, pgid: int) -> None:
         try:
             os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            return
+
+    def interrupt_group(self, pgid: int) -> None:
+        try:
+            os.killpg(pgid, signal.SIGINT)
         except (ProcessLookupError, PermissionError):
             return
 

@@ -1029,6 +1029,7 @@ class FakeProbe:
         self.groups_alive = groups_alive if groups_alive is not None else set()
         self.killed: list[int] = []
         self.killed_groups: list[int] = []
+        self.interrupted_groups: list[int] = []
         # F14: every call, counted — a test proving a caller never re-probes a launcher's
         # own already-recorded start time (e.g. `dormant.py::_wake`) reads this directly.
         self.start_time_calls: list[int] = []
@@ -1053,6 +1054,9 @@ class FakeProbe:
     def kill_group(self, pgid: int) -> None:
         self.killed_groups.append(pgid)
         self.groups_alive.discard(pgid)
+
+    def interrupt_group(self, pgid: int) -> None:
+        self.interrupted_groups.append(pgid)
 
 
 class FakeWorktreeGit:

@@ -8,6 +8,20 @@ each marked session in place — same lease, epoch, and session, only the pid re
 agent context is preserved, not merely "not worked twice". The graceful shutdown marks resume-intents without probing
 health, since it knows the sessions were running a moment ago; the crash path must infer that after the fact.
 
+Right after marking, the shutdown drains its own workers: SIGINT each marked lease's process group, wait up to 60s total
+(one shared budget across every marked worker, not 60s each), then SIGKILL whatever is still alive. Claude Code answers
+SIGINT with an `error_during_execution` envelope that still carries a real `total_cost_usd`, so the next startup's
+restart-resume path records that generation's real spend rather than falling back to a NULL-cost transcript sum. A
+worker that ignores SIGINT is SIGKILLed at the deadline and falls back the same way a crash-killed one always has —
+shutdown never hangs waiting on it. The drain makes no durable write of its own: it only waits long enough for the
+envelope to reach the worker's stdout file, which the restart's own usage recording already reads.
+
+The unit declares `KillMode=mixed` and `TimeoutStopSec=120` so this stays the *only* thing that ever signals a worker:
+under the default `control-group` mode systemd would SIGTERM every worker in the daemon's cgroup right alongside it,
+racing the drain's own SIGINT and losing the real-cost envelope it exists to capture. `TimeoutStopSec=120` covers the
+60s drain budget plus the rest of an orderly shutdown (the unbounded loop-thread join, the outbound buffer's last
+flush); past it systemd SIGKILLs the whole cgroup — the same NULL-cost outcome a SIGKILLed worker already has.
+
 A clean `systemctl stop` (or the stop half of a restart) still runs the shutdown pass and is exempt from `Restart=` —
 only a failure or a boot brings a daemon back — so the machine can be taken down deliberately without a restart fight,
 with in-flight leases still marked for restart-resume; the supervisor echoes "marked N in-flight lease(s) for

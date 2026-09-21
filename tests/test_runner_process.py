@@ -7,6 +7,7 @@ reads as dead even when the pid is live.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import time
@@ -59,6 +60,30 @@ def test_exited_but_unreaped_worker_reads_dead() -> None:
     assert ProcStat.of(proc.pid).zombie, "child did not become a zombie"
     assert not probe.is_alive(proc.pid, start)
     proc.wait()  # reap it so the test process leaves no zombie behind
+
+
+@pytest.mark.unit
+def test_interrupt_group_signals_a_real_process_group() -> None:
+    """``interrupt_group`` reaches a real throwaway process group: a child with no SIGINT
+    handler dies on it, exactly the graceful-shutdown drain's own signal (issue #12)."""
+    probe = LinuxProcessProbe()
+    proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
+    try:
+        probe.interrupt_group(proc.pid)  # `start_new_session` makes pgid == pid
+        proc.wait(timeout=5)
+        assert proc.returncode == -2  # killed by SIGINT
+    finally:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(proc.pid, 9)
+        proc.wait()
+
+
+@pytest.mark.unit
+def test_interrupt_group_of_an_already_gone_group_is_a_noop() -> None:
+    probe = LinuxProcessProbe()
+    proc = subprocess.Popen(["true"], start_new_session=True)
+    proc.wait()
+    probe.interrupt_group(proc.pid)  # no live group left — must not raise
 
 
 # `kill_owned_process` — the one shared, liveness-checked, pgid-preferring teardown every

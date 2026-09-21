@@ -181,6 +181,36 @@ def opencode_build_script(landed_file: str) -> str:
     )
 
 
+def sigint_trap_hang_script() -> str:
+    """A ``hang()`` that traps SIGINT and ends the turn with a real ``error_during_execution``
+    envelope, rather than dying to the interpreter's default SIGINT handling — the exact
+    shape Claude Code itself writes on the graceful-shutdown drain's own signal (issue #12).
+    Exits 0, matching a real interrupted Claude Code invocation, not a crash."""
+    return (
+        "import signal\n"
+        "from blizzard_mock.harness.engine import RunResult, current_context\n"
+        "\n"
+        "class _Interrupted(Exception):\n"
+        "    pass\n"
+        "\n"
+        "def _on_sigint(signum, frame):\n"
+        "    raise _Interrupted()\n"
+        "\n"
+        "signal.signal(signal.SIGINT, _on_sigint)\n"
+        "try:\n"
+        "    hang()\n"
+        "except _Interrupted:\n"
+        "    _ctx = current_context()\n"
+        "    _ctx.result = RunResult(\n"
+        "        session_id=_ctx.session.session_id,\n"
+        "        is_error=True,\n"
+        "        subtype='error_during_execution',\n"
+        "        text='interrupted by SIGINT',\n"
+        "        exit_code=0,\n"
+        "    )\n"
+    )
+
+
 def pre_declare_build_script(landed_file: str, pushed_marker: Path, go_marker: Path) -> str:
     """:func:`build_script`'s commit + push, then an in-test fence (``bzh:crash-sweep`` D2):
     write ``pushed_marker`` once pushed, then block on ``go_marker`` before declaring — pinning

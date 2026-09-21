@@ -305,6 +305,9 @@ class _NeverAliveProcessProbe:
     def kill_group(self, pgid: int) -> None:
         return None
 
+    def interrupt_group(self, pgid: int) -> None:
+        return None
+
 
 class _HangingAdapter:
     """A fake coding-harness adapter whose ``spawn`` never returns — the wedged-harness
@@ -589,6 +592,9 @@ class _RecordingProcessProbe:
         self.killed.append(pid)
 
     def kill_group(self, pgid: int) -> None:
+        return None
+
+    def interrupt_group(self, pgid: int) -> None:
         return None
 
 

@@ -51,6 +51,7 @@ from tests.crash.support import (
     opencode_build_script,
     opencode_graph_yaml,
     pre_declare_build_script,
+    sigint_trap_hang_script,
     start_hub,
     start_runner,
     terminate,
@@ -1243,6 +1244,79 @@ def _ingest_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
     return chunk_id
 
 
+def _sigint_drain_graph_yaml(landed_file: str) -> str:
+    """:func:`_hanging_graph_yaml`'s twin (issue #12): the build node hangs behind
+    :func:`~tests.crash.support.sigint_trap_hang_script` instead of a bare ``hang()``, so a
+    graceful shutdown's own SIGINT lands on a script that answers it with a real envelope
+    rather than dying to the interpreter's default handling."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": build_script(landed_file) + sigint_trap_hang_script(),
+                "judgement": {
+                    "prompt": "verdict('pass', 'committed before the restart; checks are green')\n",
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _ingest_sigint_drain_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+    """Mint the SIGINT-trapping graph and ingest a fresh issue against it to a ready chunk."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": _sigint_drain_graph_yaml(landed_file)})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a shutdown-drain chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id
+
+
+def _usage_fact_cost(runner_dir: Path, lease_id: str, generation: int) -> float | None:
+    """The recorded ``cost_usd`` for ``lease_id``'s ``generation``-th spawn/resume usage
+    fact — asserts exactly one such fact exists."""
+    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(runner_schema.usage_facts.c.cost_usd)
+                .where(runner_schema.usage_facts.c.lease_id == lease_id)
+                .where(runner_schema.usage_facts.c.generation == generation)
+                .where(runner_schema.usage_facts.c.kind.in_(("spawn", "resume")))
+            ).all()
+        assert len(rows) == 1, f"expected exactly one spawn/resume usage fact for {lease_id} gen {generation}: {rows}"
+        return rows[0][0]
+    finally:
+        engine.dispose()
+
+
 def _runner_store(runner_dir: Path) -> tuple[SqlAlchemyRunnerStore, Engine]:
     """A read store over the runner's sqlite plus its engine (dispose after use)."""
     engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
@@ -1345,8 +1419,8 @@ def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeo
 
 def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: Path) -> None:
     """A graceful runner restart re-attaches to its in-flight session in place (issue #12) —
-    same lease/epoch/session, only the pid rewritten, no retry consumed, and the chunk lands
-    exactly once."""
+    same lease/epoch/session, only the pid rewritten, no retry consumed, the chunk lands
+    once, and the drain-interrupted generation records a real (non-NULL) usage cost."""
     landed_file = "LANDED-restart-resume.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1356,7 +1430,7 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
-        chunk_id = _ingest_hanging_chunk(hub, crash_env.forge, landed_file)
+        chunk_id = _ingest_sigint_drain_chunk(hub, crash_env.forge, landed_file)
         write_runner_config(
             runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
         )
@@ -1366,17 +1440,25 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
         assert wait_status(hub, chunk_id, {"running"}) == "running"
         _await_committed(runner_dir, chunk_id, landed_file)
 
-        # Gracefully stop the runner (SIGTERM): the shutdown hook marks the in-flight lease.
+        # Gracefully stop the runner: the shutdown hook marks the lease, then the drain
+        # SIGINTs its worker group — `terminate` blocks until that's done, worker included.
         terminate(runner_proc)
         before = _leases_for_chunk(runner_dir, chunk_id)
         assert len(before) == 1, f"expected one lease before restart, got {before}"
         lease_id, epoch, session_id, pid_before = before[0]
         assert session_id and pid_before is not None
         assert _open_resume_intents(runner_dir) == {lease_id}, "graceful shutdown did not mark a resume-intent"
+        _wait_pid_gone(pid_before, timeout=5)  # the drain's own SIGINT, not a leftover orphan
 
-        # Restart the runner: its first tick RESUMEs the marked session in place.
+        # Restart: its first tick RESUMEs the session, recording the interrupted generation's
+        # usage fact off the stdout file the SIGINT trap wrote before minting the new one.
         runner_proc = start_runner(runner_dir, crash_point=None)
         assert wait_status(hub, chunk_id, {"done"}) == "done", "chunk did not converge after graceful restart"
+
+        # A real cost, parsed from the SIGINT trap's envelope — not the NULL-cost fallback.
+        assert _usage_fact_cost(runner_dir, lease_id, 1) is not None, (
+            "the SIGINT-interrupted generation recorded no cost — the drain's envelope was lost"
+        )
 
         after = _leases_for_chunk(runner_dir, chunk_id)
         # Nothing worked twice: still exactly one lease, same lease/epoch/session — a same-lease
