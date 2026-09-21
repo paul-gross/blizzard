@@ -61,28 +61,46 @@ _ARTIFACTS_PAYLOAD = [
 ]
 
 
+def _fake_get_by_suffix(routes: dict[str, _FakeResponse], calls: list[tuple[str, dict, dict | None]] | None = None):
+    """A stub ``httpx.get`` that answers by the request URL's trailing path segment — ``list``
+    now makes two calls (``artifacts`` then ``attachments``), so a single canned response no
+    longer distinguishes them."""
+
+    def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
+        if calls is not None:
+            calls.append((url, headers, params))
+        return routes[url.rsplit("/", 1)[-1]]
+
+    return fake_get
+
+
 @pytest.mark.unit
 def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[str, dict]] = []
+    calls: list[tuple[str, dict, dict | None]] = []
+    routes = {"artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD), "attachments": _FakeResponse(payload=[])}
 
-    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
-        calls.append((url, headers))
-        return _FakeResponse(payload=_ARTIFACTS_PAYLOAD)
-
-    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "get", _fake_get_by_suffix(routes, calls))
     result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
-    assert calls == [
-        ("http://127.0.0.1:8431/api/leases/lease_9/artifacts", {"X-Blizzard-Lease-Token": "the-lease-token"})
-    ]
+    assert (
+        "http://127.0.0.1:8431/api/leases/lease_9/artifacts",
+        {"X-Blizzard-Lease-Token": "the-lease-token"},
+        None,
+    ) in calls
+    assert (
+        "http://127.0.0.1:8431/api/leases/lease_9/attachments",
+        {"X-Blizzard-Lease-Token": "the-lease-token"},
+        None,
+    ) in calls
 
 
 @pytest.mark.unit
 def test_list_elides_content_by_default_and_reports_byte_length(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(payload=_ARTIFACTS_PAYLOAD))
+    routes = {"artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD), "attachments": _FakeResponse(payload=[])}
+    monkeypatch.setattr(httpx, "get", _fake_get_by_suffix(routes))
     result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
@@ -90,6 +108,7 @@ def test_list_elides_content_by_default_and_reports_byte_length(monkeypatch: pyt
     assert "content" not in body[0] and "content" not in body[1]
     asset = next(a for a in body if a["name"] == "plan")
     assert asset["bytes"] == len(b"the plan text")
+    assert asset["staged"] is False
     git_commit = next(a for a in body if a["name"] == "build-branch")
     # No content to have a length: elided to None rather than 0, which would read as
     # "empty content" instead of "not this kind".
@@ -99,11 +118,34 @@ def test_list_elides_content_by_default_and_reports_byte_length(monkeypatch: pyt
 
 @pytest.mark.unit
 def test_list_content_flag_restores_the_full_raw_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(text=json.dumps(_ARTIFACTS_PAYLOAD)))
+    routes = {"artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD), "attachments": _FakeResponse(payload=[])}
+    monkeypatch.setattr(httpx, "get", _fake_get_by_suffix(routes))
     result = CliRunner().invoke(runner_group, ["artifact", "list", "--content"], env=_ENV)
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == _ARTIFACTS_PAYLOAD
+    body = json.loads(result.output)
+    assert [{k: v for k, v in a.items() if k != "staged"} for a in body] == _ARTIFACTS_PAYLOAD
+    assert all(a["staged"] is False for a in body)
+
+
+@pytest.mark.unit
+def test_list_includes_staged_submissions_marked_as_such(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #584: a worker listing its own node's artifacts must see what it just staged,
+    not just what has published into the envelope."""
+    routes = {
+        "artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD),
+        "attachments": _FakeResponse(payload=[{"name": "review-findings", "content": "looks good"}]),
+    }
+    monkeypatch.setattr(httpx, "get", _fake_get_by_suffix(routes))
+    result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    body = json.loads(result.output)
+    staged_entry = next(a for a in body if a["name"] == "review-findings")
+    assert staged_entry["staged"] is True
+    assert staged_entry["bytes"] == len(b"looks good")
+    published_entry = next(a for a in body if a["name"] == "plan")
+    assert published_entry["staged"] is False
 
 
 @pytest.mark.unit
@@ -119,7 +161,7 @@ def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch
     result = CliRunner().invoke(runner_group, ["artifact", "list"], env=env)
 
     assert result.exit_code == 0, result.output
-    assert calls == [{}]
+    assert calls == [{}, {}]
 
 
 @pytest.mark.unit
@@ -134,6 +176,7 @@ def test_list_scope_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPa
     result = CliRunner().invoke(runner_group, ["artifact", "list", "--scope", "graph"], env=_ENV)
 
     assert result.exit_code == 0, result.output
+    # `graph` scope excludes staged (node-only), so only the `artifacts` call carries params.
     assert calls == [{"scope": "graph"}]
 
 
@@ -153,20 +196,37 @@ def test_list_scope_system_is_accepted_and_passed_as_a_query_param(monkeypatch: 
 
 
 @pytest.mark.unit
+def test_list_scope_node_still_fetches_staged(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, dict | None]] = []
+    routes = {"artifacts": _FakeResponse(payload=[]), "attachments": _FakeResponse(payload=[])}
+
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        calls.append((url, params))
+        return routes[url.rsplit("/", 1)[-1]]
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "list", "--scope", "node"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert ("http://127.0.0.1:8431/api/leases/lease_9/attachments", None) in calls
+
+
+@pytest.mark.unit
 def test_list_omits_the_scope_param_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     """A bare ``list`` sends no ``scope`` at all — never an empty string a route would have
     to special-case — so the hub-proxied node half and the store-read graph half both run."""
     calls: list[dict | None] = []
+    routes = {"artifacts": _FakeResponse(payload=[]), "attachments": _FakeResponse(payload=[])}
 
     def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
         calls.append(params)
-        return _FakeResponse(payload=[])
+        return routes[url.rsplit("/", 1)[-1]]
 
     monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
-    assert calls == [None]
+    assert calls == [None, None]
 
 
 @pytest.mark.unit
@@ -340,6 +400,104 @@ def test_get_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -
 
     assert result.exit_code != 0
     assert "could not read" in result.output
+
+
+class _NotFoundResponse:
+    """A genuine ``404`` — carries ``status_code`` so ``artifact get`` can tell it apart from
+    an ambiguity ``409`` or an auth ``403`` and consult the staged set."""
+
+    status_code = 404
+
+    def raise_for_status(self) -> None:
+        raise httpx.HTTPStatusError("404 not found", request=object(), response=self)  # type: ignore[arg-type]
+
+    def json(self) -> object:
+        return {"detail": "no such artifact"}
+
+
+@pytest.mark.unit
+def test_get_names_artifact_staged_when_the_404d_name_is_staged(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #584: a worker that submitted `X` and reads it straight back gets a legitimate
+    404 on its own work — the not-found path must name `artifact staged`, not leave the
+    worker to guess it exists from `--help`."""
+
+    def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
+        if url.endswith("/attachments"):
+            return _FakeResponse(payload=[{"name": "plan", "content": "the plan text"}])
+        return _NotFoundResponse()
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "get", "plan"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "staged" in result.output
+    assert "artifact staged" in result.output
+    assert "plan" in result.output
+
+
+@pytest.mark.unit
+def test_get_404_with_no_staged_match_keeps_the_plain_not_found_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
+        if url.endswith("/attachments"):
+            return _FakeResponse(payload=[])
+        return _NotFoundResponse()
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "get", "ghost"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "could not read" in result.output
+    assert "artifact staged" not in result.output
+
+
+@pytest.mark.unit
+def test_get_ambiguous_409_is_not_treated_as_a_staged_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A `409` ambiguity already names its own cause — it must not detour through the
+    staged set even when a same-named submission happens to be staged elsewhere."""
+    calls: list[str] = []
+
+    def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
+        calls.append(url)
+        return _RejectingResponse({"detail": "artifact 'retrospective' is ambiguous"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "get", "retrospective"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "ambiguous" in result.output
+    # Only the one call — no follow-up read of the staged set.
+    assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/artifacts/retrospective"]
+
+
+@pytest.mark.unit
+def test_get_name_option_is_an_alias_for_the_positional_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "get", "--name", "plan"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/artifacts/plan"]
+
+
+@pytest.mark.unit
+def test_get_rejects_both_positional_and_conflicting_name_option(monkeypatch: pytest.MonkeyPatch) -> None:
+    result = CliRunner().invoke(runner_group, ["artifact", "get", "plan", "--name", "other"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "pick one" in result.output
+
+
+@pytest.mark.unit
+def test_get_requires_a_name_from_somewhere() -> None:
+    result = CliRunner().invoke(runner_group, ["artifact", "get"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "NAME is required" in result.output
 
 
 @pytest.mark.unit

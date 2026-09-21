@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from urllib.parse import quote
 
 import click
+import httpx
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.runner.cli.worker_call import WorkerCall
@@ -54,6 +55,15 @@ def _refuse_read_only_scope(verb: str, scope: str | None) -> None:
 _SCOPE_CHOICE = click.Choice([s.value for s in ArtifactScope])
 
 
+def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict]:
+    """This node-step's own staged (not-yet-published) submissions, or ``[]`` for a SCOPE that
+    excludes node — ``graph`` and ``system`` never have one, so no read is worth making."""
+    if scope not in (None, ArtifactScope.NODE.value):
+        return []
+    resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
+    return resp.json()
+
+
 @artifact_group.command("list")
 @click.option(
     "--content",
@@ -75,21 +85,51 @@ def artifact_list(content: bool, scope: str | None) -> None:
     """Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,
     plus the graph mint's own baked-in declarations and blizzard's published system-artifact
     set — ``--scope`` narrows to one. Content is elided by default (issue #169), since inlining
-    every upstream asset's full text has overflowed tool output; ``--content`` restores it."""
+    every upstream asset's full text has overflowed tool output; ``--content`` restores it.
+    Also includes this node-step's own staged, not-yet-published submissions (issue #584),
+    each carrying ``"staged": true`` — everything published carries ``"staged": false``."""
     worker = WorkerCall.of("artifact list")
     resp = worker.get(
         worker.leased("artifacts"),
         failure="could not read the artifacts",
         params={"scope": scope} if scope else None,
     )
+    staged = _staged_for_scope(worker, scope)
+    entries = [{**a, "staged": False} for a in resp.json()] + [{**a, "staged": True} for a in staged]
     if content:
-        click.echo(resp.text)
+        click.echo(json.dumps(entries))
         return
-    click.echo(json.dumps([ArtifactEntry(a).summary for a in resp.json()]))
+    click.echo(json.dumps([ArtifactEntry(e).summary for e in entries]))
+
+
+def _staged_names(worker: WorkerCall) -> set[str] | None:
+    """The names of this node-step's own staged submissions, or ``None`` on a failed read — a
+    failed staged-check must never mask the original not-found error."""
+    try:
+        resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
+    except click.ClickException:
+        return None
+    return {a["name"] for a in resp.json()}
+
+
+def _is_not_found(exc: click.ClickException) -> bool:
+    """Only a genuine ``404`` is worth a second, staged-set lookup — any other rejection (a
+    ``409`` ambiguity, a ``403``) already names its own cause and gets no staged detour."""
+    cause = exc.__cause__
+    if not isinstance(cause, httpx.HTTPStatusError):
+        return False
+    return getattr(cause.response, "status_code", None) == httpx.codes.NOT_FOUND
 
 
 @artifact_group.command("get")
-@click.argument("name")
+@click.argument("name_arg", metavar="[NAME]", required=False, default=None)
+@click.option(
+    "--name",
+    "name_opt",
+    default=None,
+    help="Alias for the positional NAME, accepted since node prompts spell required artifacts "
+    "as `--name` (issue #584).",
+)
 @click.option(
     "--node",
     "node",
@@ -115,23 +155,47 @@ def artifact_list(content: bool, scope: str | None) -> None:
     default=False,
     help="Print the raw asset text to stdout instead of JSON (errors on a git-commit artifact).",
 )
-def artifact_get(name: str, node: str | None, scope: str | None, content: bool) -> None:
+def artifact_get(
+    name_arg: str | None, name_opt: str | None, node: str | None, scope: str | None, content: bool
+) -> None:
     """Worker: read one artifact by NAME — a ``produces:`` name (node scope), a baked-in graph
     declaration (graph scope), or one of blizzard's own published documents (system scope);
     unknown is a ``404``, more than one candidate a ``409`` naming them. ``--content`` prints
-    raw asset text, and errors on the ``git_commit`` kind, which carries none. NAME is
-    percent-encoded (issue #233)."""
+    raw asset text, and errors on the ``git_commit`` kind, which carries none.
+
+    Serves the last *published* epoch only — a node-step's own just-submitted content is not
+    published until the node-step completes; a not-yet-published NAME 404s naming
+    ``artifact staged`` instead. Read it back before completion with that verb.
+
+    NAME is passed literally: the CLI percent-encodes it itself (issue #233), slashes
+    included, so a slashed name (e.g. a ``merged/<owner>/<repo>`` delivery marker) is passed
+    as-is, not pre-encoded."""
+    name = name_opt if name_opt is not None else name_arg
+    if name_arg is not None and name_opt is not None and name_arg != name_opt:
+        raise click.ClickException("artifact get: NAME given both positionally and via --name — pick one")
+    if not name:
+        raise click.ClickException("artifact get: NAME is required, positionally or via --name")
     worker = WorkerCall.of("artifact get")
     params: dict[str, str] = {}
     if node:
         params["node"] = node
     if scope:
         params["scope"] = scope
-    resp = worker.get(
-        worker.leased(f"artifacts/{quote(name, safe='/')}"),
-        failure=f"could not read {name!r}",
-        params=params or None,
-    )
+    try:
+        resp = worker.get(
+            worker.leased(f"artifacts/{quote(name, safe='/')}"),
+            failure=f"could not read {name!r}",
+            params=params or None,
+        )
+    except click.ClickException as exc:
+        staged_scope = scope in (None, ArtifactScope.NODE.value)
+        if _is_not_found(exc) and staged_scope and name in (_staged_names(worker) or set()):
+            raise click.ClickException(
+                f"artifact get: {name!r} is staged but not yet published for this node-step — "
+                "read it with `artifact staged` (it publishes into `artifact get` only once "
+                "this node-step completes)"
+            ) from exc
+        raise
     if not content:
         click.echo(resp.text)
         return
@@ -243,7 +307,9 @@ def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_s
     """Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``
     kind only — an asset is declared through ``artifact create``. Node scope only. Deliberately no
     ``--forge``: the origin comes from the environment's repo manifest (pinned by
-    tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag)."""
+    tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag). Echoes a
+    confirmation naming REPO, BRANCH, and the sha on success (issue #584) — a silent exit 0 was
+    indistinguishable from a no-op."""
     _refuse_read_only_scope("commit", scope)
     worker = WorkerCall.of("artifact commit")
     body: dict[str, str] = {"repo": repo, "branch": branch, "commit": commit_sha}
@@ -255,3 +321,4 @@ def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_s
         rejected=f"{repo!r} rejected",
         json_body=body,
     )
+    click.echo(f"recorded {repo!r} at {branch!r} ({commit_sha})")

@@ -50,6 +50,23 @@ def test_commit_verb_posts_inherited_identity_and_declaration_body(monkeypatch: 
 
 
 @pytest.mark.unit
+def test_commit_verb_echoes_a_confirmation_naming_repo_branch_and_sha(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #584: a silent exit 0 was indistinguishable from a no-op — the worker must see
+    what was recorded without a second call."""
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResponse())
+    result = CliRunner().invoke(
+        runner_group,
+        ["artifact", "commit", "--repo", "blizzard", "--branch", "feat/x", "--commit", "abc123"],
+        env=_ENV,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "blizzard" in result.output
+    assert "feat/x" in result.output
+    assert "abc123" in result.output
+
+
+@pytest.mark.unit
 def test_commit_verb_omits_the_environment_key_when_not_named(monkeypatch: pytest.MonkeyPatch) -> None:
     """No ``--env`` sends no ``environment_id`` key at all, rather than an explicit null."""
     calls: list[dict] = []
