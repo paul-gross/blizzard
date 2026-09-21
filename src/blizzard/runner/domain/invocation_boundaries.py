@@ -83,6 +83,25 @@ class IWriteInvocationBoundaryRepository(IReadInvocationBoundaryRepository, Prot
         never the fresh-session sentinel."""
         ...
 
+    def advance_boundary(
+        self,
+        *,
+        lease_id: str,
+        generation: int,
+        kind: InvocationBoundaryKind,
+        start_position: str | None,
+        opened_at: datetime,
+        start_unreadable: bool = False,
+    ) -> None:
+        """Move an already-open ``(lease, generation, kind)`` boundary's own start forward in
+        place, rather than opening a second row (blizzard#594): a judge-usage-limit park's
+        resume reuses the SAME judge boundary for its fresh elicitation, since
+        ``record_boundary_open``'s check-then-insert never mints a second row for one
+        ``(lease, generation, kind)`` — the transcript range a still-standing boundary bounds
+        must itself move past the limited elicitation's own signal, or every later
+        classification re-reads it forever. A no-op when the boundary was never opened."""
+        ...
+
     def close_boundaries_for_lease(self, lease_id: str, *, reason: str, at: datetime) -> None:
         """Close every one of this lease's still-open boundaries (``bzh:open-facts-declare-closure``,
         D11) — called once, from the one funnel every lease closure path shares

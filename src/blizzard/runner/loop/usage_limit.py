@@ -15,7 +15,6 @@ from datetime import datetime
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
-from blizzard.runner.domain.elicitation import ElicitationRecord
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.harness.adapter import IHarnessAdapter
@@ -69,6 +68,7 @@ def engage_and_park_worker(ctx: LoopContext, lease: LeaseRecord, limit: UsageLim
         chunk_id=lease.chunk_id,
         lease_id=lease.lease_id,
         harness_id=session.harness_id,
+        detail=limit.detail,
     )
 
 
@@ -88,29 +88,25 @@ def classify_judge_usage_limit(
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
 
 
-def engage_and_park_judge(
-    ctx: LoopContext, lease: LeaseRecord, elicitation: ElicitationRecord, limit: UsageLimit
-) -> None:
-    """Engage the brake for a limited judge elicitation, park the lease in place (the process
-    has already exited — nothing to kill), then clear its record and output files. The park
-    comes before the clear on purpose (D2): a crash between them leaves the elicitation record
-    standing, so a re-armed pass's own `Judgement.collect` re-derives and re-attempts this same
-    park idempotently; clearing first would erase the only durable signal recovery has, since a
-    usage-limit park carries no hub-side pause fact to fall back on. Never routed through
-    ``Judgement._lost``: that path's staleness bound would eventually fail the attempt, exactly
-    what a usage-limit pause must not do."""
+def engage_and_park_judge(ctx: LoopContext, lease: LeaseRecord, limit: UsageLimit) -> None:
+    """Engage the brake for a limited judge elicitation, then park the lease in place (the
+    process has already exited — nothing to kill). The elicitation record is left standing,
+    on purpose: :meth:`~blizzard.runner.loop.dormant.DormantSession.on_unpause` reads it back
+    to tell a judge-side park from a worker-side one, and re-runs `Judgement` (a fresh
+    elicitation) rather than waking a worker whose own turn already finished — clearing here
+    would erase that signal. Never routed through ``Judgement._lost``: that path's staleness
+    bound would eventually fail the attempt, exactly what a usage-limit pause must not do."""
     session = lease.session
     assert session is not None  # only reached from a limit `classify_judge_usage_limit` returned
     _engage(ctx, session.harness_id, limit)
     _CP_JUDGE_AFTER_BRAKE.reached()
     Attempt(ctx, lease).park_usage_limited()
-    ctx.stores.elicitations.clear_elicitation(lease.lease_id, lease.epoch)
-    ctx.elicitation_files.cleanup(lease.lease_id, lease.epoch, through_attempt=elicitation.relaunch_count)
     _log.warning(
         "usage-limit pause — judge elicitation parked, no retry consumed",
         chunk_id=lease.chunk_id,
         lease_id=lease.lease_id,
         harness_id=session.harness_id,
+        detail=limit.detail,
     )
 
 

@@ -15,6 +15,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.judgement import ELICITATION_STALENESS_THRESHOLD
@@ -212,6 +213,31 @@ def test_a_hung_elicitation_past_staleness_fails_even_while_alive(tmp_path):  # 
     assert elicitation.pgid in probe.killed_groups  # the hung process is killed, not merely ignored
     assert store.in_flight_elicitation("lease_1", 1) is None
     assert store.active_lease("lease_1") is None  # closed
+
+
+def test_usage_limited_judge_elicitation_observed_past_staleness_still_pauses_not_fails(tmp_path):  # type: ignore[no-untyped-def]
+    """blizzard#594, review F1: an exited elicitation is classified for a usage limit AHEAD
+    of the staleness bound — a delayed tick or a runner outage that only gets around to
+    observing the exit after the 15-minute bound must still pause, never fail the attempt,
+    exactly the regression D2 exists to prevent."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    limit = UsageLimit(resets_at=None, detail="You've hit your session limit")
+    # 1st classify call: the worker's own, must read unlimited so the judge launches; 2nd: the judge's.
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit, usage_limit_from_call=2)
+    clock = FixedClock(_NOW)
+    ctx = _ctx(store, harness=harness, probe=FakeProbe(), clock=clock)
+
+    Advance(ctx).run()  # launch
+    clock.advance(ELICITATION_STALENESS_THRESHOLD + timedelta(seconds=1))
+    Advance(ctx).run()  # collect — exited long ago, but classified before the staleness check
+
+    assert store.local_paused("r1") is True
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+    assert store.in_flight_elicitation("lease_1", 1) is not None  # left standing for on_unpause
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.epoch == 1  # not closed, not failed, no retry consumed
+    assert store.attempt_count("ch_1", "nd_build") == 1
 
 
 def test_a_judge_launch_records_its_own_process_group_and_is_group_killed(tmp_path):  # type: ignore[no-untyped-def]

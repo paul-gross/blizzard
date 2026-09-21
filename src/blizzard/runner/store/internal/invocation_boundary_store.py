@@ -91,6 +91,30 @@ class InvocationBoundaryStore:
             )
         _log.info("invocation boundary opened", lease_id=lease_id, generation=generation, kind=kind, chunk_id=chunk_id)
 
+    def advance_boundary(
+        self,
+        *,
+        lease_id: str,
+        generation: int,
+        kind: InvocationBoundaryKind,
+        start_position: str | None,
+        opened_at: datetime,
+        start_unreadable: bool = False,
+    ) -> None:
+        with self._store.begin() as conn:
+            conn.execute(
+                invocation_boundaries.update()
+                .where(
+                    and_(
+                        invocation_boundaries.c.lease_id == lease_id,
+                        invocation_boundaries.c.generation == generation,
+                        invocation_boundaries.c.kind == kind,
+                    )
+                )
+                .values(start_position=start_position, start_unreadable=start_unreadable, opened_at=opened_at)
+            )
+        _log.info("invocation boundary advanced", lease_id=lease_id, generation=generation, kind=kind)
+
     def close_boundaries_for_lease(self, lease_id: str, *, reason: str, at: datetime) -> None:
         # An UPDATE over `closed_at IS NULL` — naturally idempotent under a crash-and-retry
         # of the closure path that calls it (`Attempt.close`).

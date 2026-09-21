@@ -1335,10 +1335,39 @@ def test_usage_limited_worker_generation_engages_the_brake_and_parks_no_retry_no
     assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"  # unmoved
 
 
-def test_usage_limited_judge_elicitation_engages_the_brake_clears_the_record_and_parks(tmp_path):  # type: ignore[no-untyped-def]
-    """A judge elicitation's own exit, classified usage-limited: no failed attempt, and
-    the elicitation record is cleared rather than left for `_lost`'s staleness-bound
-    relaunching — which would eventually fail the attempt over an hours-long limit."""
+def test_usage_limited_worker_generation_logs_the_harnesss_own_detail(tmp_path):  # type: ignore[no-untyped-def]
+    """blizzard#594 review F5: the harness's own free-text explanation must not be silently
+    dropped at engagement, even though it never rides the brake's fixed reason string (D3)."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    limit = UsageLimit(resets_at=None, detail="You've hit your session limit · resets 5:40pm")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    with capture_logs() as logs:
+        Advance(ctx).run()
+
+    warnings = [e for e in logs if "worker generation parked" in e["event"]]
+    assert len(warnings) == 1
+    assert warnings[0]["detail"] == limit.detail
+
+
+def test_usage_limited_judge_elicitation_engages_the_brake_and_parks(tmp_path):  # type: ignore[no-untyped-def]
+    """A judge elicitation's own exit, classified usage-limited: no failed attempt, and the
+    elicitation record is left standing rather than cleared or left for `_lost`'s
+    staleness-bound relaunching (blizzard#594, D2) — `on_unpause` reads it back to tell a
+    judge-side park from a worker-side one, and clearing here would erase that signal for a
+    crash landing before a fresh elicitation launches."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
 
@@ -1368,10 +1397,58 @@ def test_usage_limited_judge_elicitation_engages_the_brake_clears_the_record_and
     payload = json.loads(reports[0].payload)
     assert payload["by"] == "usage-limit"
     assert payload["reason"] == f"usage limit: {CLAUDE_CODE_HARNESS_ID}"  # no reset time known
-    assert store.in_flight_elicitation("lease_1", 1) is None  # cleared, not left standing
+    assert store.in_flight_elicitation("lease_1", 1) is not None  # left standing, not cleared
     assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
     assert store.pause_parked_lease_ids() == {"lease_1"}
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
+
+
+def test_usage_limited_judge_park_relaunches_a_fresh_elicitation_after_unpause(tmp_path):  # type: ignore[no-untyped-def]
+    """blizzard#594, F2/F3: unpausing a judge-usage-limit park must re-run `Judgement` — a
+    fresh elicitation — never the ordinary worker wake, since the worker's own turn already
+    finished before its verdict elicitation hit the limit; there is nothing left for a
+    "continue your task" message to say."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    limit = UsageLimit(resets_at=None, detail="You've hit your session limit")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit, usage_limit_from_call=2)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation — not usage-limited yet
+    Advance(ctx).run()  # collects it — usage-limited, parks with the record left standing
+    assert store.local_paused("r1") is True
+    assert len(harness.judged) == 1  # the first (limited) elicitation launch
+
+    Advance(ctx).run()  # still paused — re-polled, nothing changes
+    assert harness.resumed == []
+    assert len(harness.judged) == 1
+
+    # The harness recovered: a resumed classify call must read unlimited now.
+    harness.usage_limit = None
+    _pause_locally(store, ctx, paused=False)
+    Advance(ctx).run()  # unpauses — re-runs Judgement, launching a fresh elicitation
+
+    assert harness.resumed == []  # never the plain worker wake — nothing left to "continue"
+    assert len(harness.judged) == 2  # a fresh elicitation, not a relaunch of the stale one
+    assert store.pause_parked_lease_ids() == set()
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"  # unmoved
+
+    Advance(ctx).run()  # collects the fresh elicitation — a real verdict this time
+
+    completions = [f for f in store.pending_outbound() if f.kind == "completion.submitted"]
+    assert len(completions) == 1
+    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed across the whole cycle
 
 
 def test_usage_limit_pause_resumes_the_same_lease_in_place_after_unpause(tmp_path):  # type: ignore[no-untyped-def]
@@ -1496,6 +1573,62 @@ def test_usage_limit_reason_falls_back_to_the_sampled_resets_at(tmp_path):  # ty
     reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
     payload = json.loads(reports[0].payload)
     # The 100%-utilized 5h window's own reset, never the 7d window's earlier-but-partial one.
+    assert payload["reason"] == f"usage limit: {CLAUDE_CODE_HARNESS_ID} (resets 2026-07-13T15:00Z)"
+
+
+def test_usage_limit_reason_fallback_skips_a_failed_samples_null_payload(tmp_path):  # type: ignore[no-untyped-def]
+    """blizzard#594 review F4: the newest sample row can be a recorded failed-sample attempt
+    (a NULL payload, e.g. a missing-credentials soft failure) — the fallback must read past
+    it to an older, still-valid 100%-utilized window rather than going reset-less."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    store.record_external_usage_attempt(
+        slug="anthropic",
+        sampled_at=_NOW - timedelta(minutes=5),
+        payload=json.dumps(
+            {
+                "slug": "anthropic",
+                "name": "Anthropic",
+                "sampled_at": (_NOW - timedelta(minutes=5)).isoformat(),
+                "windows": [
+                    {
+                        "window": "5h",
+                        "utilization_pct": 100.0,
+                        "resets_at": (_NOW + timedelta(hours=3)).isoformat(),
+                        "window_seconds": 18000,
+                    },
+                ],
+            }
+        ),
+        report_kind="",
+        report_payload="",
+    )
+    # The newest attempt is a failed sample — no payload — and must not shadow the older,
+    # still-valid window recorded just above.
+    store.record_external_usage_attempt(
+        slug="anthropic", sampled_at=_NOW, payload=None, report_kind="", report_payload=""
+    )
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    limit = UsageLimit(resets_at=None, detail="limited")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+        subscriptions=(
+            ResolvedSubscription(slug="anthropic", name="Anthropic", sample_interval_seconds=60, sampler=None),
+        ),
+    )
+
+    Advance(ctx).run()
+
+    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
+    payload = json.loads(reports[0].payload)
     assert payload["reason"] == f"usage limit: {CLAUDE_CODE_HARNESS_ID} (resets 2026-07-13T15:00Z)"
 
 

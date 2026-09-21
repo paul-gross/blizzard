@@ -151,6 +151,66 @@ def test_open_boundaries_for_lease_excludes_closed_rows() -> None:
     assert closed.closed_reason == "failed"
 
 
+def test_advance_boundary_moves_an_open_boundarys_start_in_place() -> None:
+    """blizzard#594: a judge-usage-limit park's resume reuses the standing ``"judge"``
+    boundary for its fresh elicitation, rather than opening a second row — ``advance_boundary``
+    is the UPDATE that lets it move that row's own start forward, one row throughout."""
+    store = make_store("sqlite://")
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        kind="judge",
+        start_position="pos-original",
+        opened_at=_T0,
+    )
+
+    later = _T0.replace(hour=1)
+    store.advance_boundary(
+        lease_id="lease_1", generation=1, kind="judge", start_position="pos-advanced", opened_at=later
+    )
+
+    boundary = store.boundary("lease_1", 1, "judge")
+    assert boundary is not None
+    assert boundary.start_position == "pos-advanced"
+    assert boundary.opened_at == later
+    assert boundary.start_unreadable is False
+    # Still exactly one row for this (lease, generation, kind) — an UPDATE, never an INSERT.
+    assert len(store.open_boundaries_for_lease("lease_1")) == 1
+
+
+def test_advance_boundary_persists_start_unreadable() -> None:
+    store = make_store("sqlite://")
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        kind="judge",
+        start_position="pos-original",
+        opened_at=_T0,
+    )
+
+    store.advance_boundary(
+        lease_id="lease_1", generation=1, kind="judge", start_position=None, start_unreadable=True, opened_at=_T0
+    )
+
+    boundary = store.boundary("lease_1", 1, "judge")
+    assert boundary is not None
+    assert boundary.start_position is None
+    assert boundary.start_unreadable is True
+
+
+def test_advance_boundary_on_an_unopened_boundary_is_a_no_op() -> None:
+    store = make_store("sqlite://")
+    store.advance_boundary(lease_id="lease_1", generation=1, kind="judge", start_position="pos-a", opened_at=_T0)
+
+    assert store.boundary("lease_1", 1, "judge") is None
+
+
 def test_close_boundaries_for_lease_is_idempotent_under_replay() -> None:
     store = make_store("sqlite://")
     store.record_boundary_open(

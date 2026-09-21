@@ -57,7 +57,9 @@ class UsageLimit:
 
     ``resets_at`` is ``None`` when the classifier could not parse a reset time from the
     harness's own report — never a guess, never a raise. ``detail`` is the harness's own
-    free-text report, carried through for the brake's reason and for diagnosis."""
+    free-text report, carried through and logged at engagement for diagnosis — the brake's
+    own reason string (D3) stays the fixed ``usage limit: <harness> (resets <time>)`` shape
+    and never repeats it."""
 
     resets_at: datetime | None
     detail: str
