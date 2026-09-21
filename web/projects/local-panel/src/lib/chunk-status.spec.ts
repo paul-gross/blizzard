@@ -36,6 +36,10 @@ describe('deriveMachineChunkStatus', () => {
       tone: 'running',
     });
     expect(deriveMachineChunkStatus(lease({ state: 'stale' }), NO_FACTS)).toEqual({ label: 'STALE', tone: 'stale' });
+    expect(deriveMachineChunkStatus(lease({ state: 'backing-off' }), NO_FACTS)).toEqual({
+      label: 'BACKING OFF',
+      tone: 'waiting',
+    });
     expect(deriveMachineChunkStatus(lease({ state: 'spawning' }), NO_FACTS)).toEqual({
       label: 'SPAWNING',
       tone: 'spawning',

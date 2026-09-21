@@ -30,6 +30,7 @@ from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPr
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
+from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
@@ -411,6 +412,9 @@ class _HangingAdapter:
     def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
         raise AssertionError("unreachable — spawn never returns")
 
+    def classify_provider_overload(self, output: str, lines: Sequence[str]) -> ProviderOverload | None:
+        raise AssertionError("unreachable — spawn never returns")
+
     def transcript_source(self) -> IHarnessTranscriptSource:
         return NullTranscriptSource()
 
@@ -572,6 +576,9 @@ class _FixedPidAdapter:
         )
 
     def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
+        return None
+
+    def classify_provider_overload(self, output: str, lines: Sequence[str]) -> ProviderOverload | None:
         return None
 
     def transcript_source(self) -> IHarnessTranscriptSource:

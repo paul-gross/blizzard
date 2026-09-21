@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.checks import CheckResultRecord
 from blizzard.runner.domain.elicitation import ElicitationRecord
 from blizzard.runner.domain.leases import LeaseRecord, as_utc
@@ -23,6 +24,7 @@ from blizzard.runner.loop.git_commits import DeclaredCommits
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.outbound import OutboundFacts
+from blizzard.runner.loop.overload import classify_judge_overload, record_judge_overload, reset_if_streak_open
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.usage_limit import classify_judge_usage_limit, engage_and_park_judge
@@ -226,6 +228,20 @@ class Judgement:
             if limit is not None:
                 engage_and_park_judge(self.ctx, lease, limit)
                 return
+            # A provider-overloaded elicitation is classified right alongside the usage
+            # limit (blizzard#595) — the two are mutually exclusive exit reasons for the
+            # one exit, same as the worker's own classification order in steps.py.
+            overload = classify_judge_overload(self.ctx, lease, output, generation=generation)
+            if overload is not None:
+                identity = iso_utc(elicitation.first_launched_at)
+                backing_off = record_judge_overload(
+                    self.ctx, lease, overload, generation=generation, invocation_identity=identity
+                )
+                if backing_off:
+                    return  # backing off in place — the next tick's `backing_off_facts` picks it up
+                # Streak limit reached: fall through to today's ordinary path below.
+            else:
+                reset_if_streak_open(self.ctx, lease)
         if _elicitation_stale(self.ctx, elicitation):
             _log.warning(
                 "elicitation past its staleness bound — failing attempt",

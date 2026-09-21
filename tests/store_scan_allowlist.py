@@ -80,6 +80,8 @@ RUNNER_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     TableWideAllowance("env_bindings", 200, _ENV_SCOPED_HISTORY_REASON),
     TableWideAllowance("nudge_facts", 200, _ENV_SCOPED_HISTORY_REASON),
     TableWideAllowance("selftest_results", 200, _ENV_SCOPED_HISTORY_REASON),
+    TableWideAllowance("overload_facts", 200, _ENV_SCOPED_HISTORY_REASON),
+    TableWideAllowance("overload_resets", 200, _ENV_SCOPED_HISTORY_REASON),
     # --- rare operator-triggered events -------------------------------------------------
     TableWideAllowance("resume_intents", 50, _RARE_OPERATOR_EVENT_REASON),
     TableWideAllowance("resume_clears", 50, _RARE_OPERATOR_EVENT_REASON),

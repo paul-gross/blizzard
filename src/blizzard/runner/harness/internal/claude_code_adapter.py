@@ -27,6 +27,7 @@ from blizzard.runner.harness.adapter import (
 )
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal import harness_shared
+from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
@@ -64,6 +65,10 @@ _COMPACTION_WINDOW_RE = re.compile(r"auto|[0-9]+[kK]?")
 # The synthetic record's own reset-time phrasing (blizzard#594, the 2026-09-05 shape):
 # "resets 5:40pm (America/Chicago)" — a clock time in an IANA zone, never a duration.
 _RATE_LIMIT_RESET_RE = re.compile(r"resets\s+(\d{1,2}):(\d{2})\s*([ap]m)\s*\(([^)]+)\)", re.IGNORECASE)
+
+# An overloaded synthetic record's own text names the status or the provider's own error
+# name (blizzard#595) — never a generic 5xx: any other server error stays unclassified.
+_OVERLOAD_TEXT_RE = re.compile(r"529|overloaded", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -526,12 +531,39 @@ class ClaudeCodeAdapter:
                 continue
             if record.get("isApiErrorMessage") is not True or record.get("error") != "rate_limit":
                 continue
-            text = self._rate_limit_text(record)
+            text = self._api_error_text(record)
             return UsageLimit(resets_at=self._parse_rate_limit_reset(text, now), detail=text or "rate_limit")
         return None
 
+    def classify_provider_overload(self, output: str, lines: Sequence[str]) -> ProviderOverload | None:
+        # Only the LAST assistant record in the range decides (blizzard#595): a relaunched
+        # judge reuses its first judge boundary, so its own range can hold an earlier
+        # overload record followed by a real reply — that generation completed, it did not
+        # overload. `output`'s `-p` envelope shape on a 529 is unobserved, so it plays no
+        # part here, mirroring `classify_usage_limit`.
+        del output
+        last_assistant: dict[str, Any] | None = None
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict) and record.get("type") == "assistant":
+                last_assistant = record
+        if last_assistant is None:
+            return None
+        if last_assistant.get("isApiErrorMessage") is not True or last_assistant.get("error") != "server_error":
+            return None
+        text = self._api_error_text(last_assistant)
+        if not _OVERLOAD_TEXT_RE.search(text):
+            return None
+        return ProviderOverload(detail=text or "server_error")
+
     @staticmethod
-    def _rate_limit_text(record: Mapping[str, Any]) -> str:
+    def _api_error_text(record: Mapping[str, Any]) -> str:
         message = record.get("message")
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, list):

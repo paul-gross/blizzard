@@ -89,6 +89,30 @@ def rate_limit_record(*, text: str = "You've hit your session limit · resets 5:
     )
 
 
+def overload_record(*, text: str = 'Overloaded: 529 {"type":"error","error":{"type":"overloaded_error"}}') -> str:
+    """The synthetic assistant record a Claude Code invocation writes in place of a model
+    reply once the provider reports itself overloaded (blizzard#595) — the same
+    no-result-envelope, zeroed-usage shape ``rate_limit_record`` uses, distinguished by
+    ``error: "server_error"`` and text naming 529/Overloaded."""
+    return _line(
+        {
+            "type": "assistant",
+            "isApiErrorMessage": True,
+            "error": "server_error",
+            "message": {
+                "model": "<synthetic>",
+                "usage": {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                },
+                "content": [{"type": "text", "text": text}],
+            },
+        }
+    )
+
+
 def assistant_tool_use(
     tool_use_id: str,
     name: str,

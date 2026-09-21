@@ -702,3 +702,32 @@ selftest_results = Table(
     Column("error", Text, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
+
+# --- Provider-overload backoff facts (blizzard#595) --------------------------
+# Append-only, one row per exit classified overloaded; `overload_resets` closes a streak on
+# a later clean exit — mirrors `pause_parks`/`pause_park_resumes`'s own open/close pair.
+# Deliberately unindexed — see `asks`'s own comment above for why (issue #520).
+
+overload_facts = Table(
+    "overload_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("generation", Integer, nullable=False),
+    Column("invocation_kind", String, nullable=False),  # "worker" | "judge"
+    Column("invocation_identity", String, nullable=False),
+    Column("streak_ordinal", Integer, nullable=False),
+    Column("observed_at", UtcDateTime, nullable=False),
+    Column("resume_after", UtcDateTime, nullable=True),  # NULL = a recorded fall-through
+)
+
+overload_resets = Table(
+    "overload_resets",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("reset_at", UtcDateTime, nullable=False),
+)

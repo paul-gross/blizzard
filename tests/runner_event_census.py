@@ -133,6 +133,17 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         _INTERNAL_BOOKKEEPING + " (blizzard#594 — moving a standing judge boundary's own start forward"
         " across a judge-usage-limit park's resume, in place of a second row)"
     ),
+    "record_overload": Published(
+        LEASE_CHANGED,
+        "loop/overload.py's _record (blizzard#595) — cause='dormant', the same LeaseActivity.state "
+        "flip record_park/record_pause_park already publish, reached on the streak entering a "
+        "backoff wait. Silent on a fall-through: the streak limit is reached, not a new dormancy.",
+    ),
+    "record_reset": Silent(
+        _INTERNAL_BOOKKEEPING + " (blizzard#595 — closing an open overload streak on a clean exit;"
+        " a lease already reads as not-backing-off the moment its own overload facts are all closed"
+        " or superseded, so this write flips no LeaseActivity.state a client has not already re-read)"
+    ),
     # --- asks ----------------------------------------------------------------
     "record_ask": Published(ASK_CHANGED, "POST /api/leases/{lease_id}/asks (runner/api/asks.py) — cause='asked'"),
     "record_park": Published(

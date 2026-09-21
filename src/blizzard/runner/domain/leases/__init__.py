@@ -34,6 +34,7 @@ from blizzard.runner.domain.leases.session import (
     IReadLeaseSessionRepository,
     IWriteLeaseSessionRepository,
 )
+from blizzard.runner.domain.overload import backing_off_facts
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.identity import SessionReference
 
@@ -161,9 +162,10 @@ HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
 #: are returned, never how long a closure fact lives (issue #29).
 RECENT_LEASE_LIMIT = 20
 
-#: The panel's derived state (issue #28; ``closed`` added issue #29)
-#: — one of six, computed at read time and never stored (``bzh:facts-not-status``).
-LeaseState = Literal["running", "stale", "parked", "spawning", "exited", "closed"]
+#: The panel's derived state (issue #28; ``closed`` added issue #29; ``backing-off``
+#: added blizzard#595) — one of seven, computed at read time and never stored
+#: (``bzh:facts-not-status``).
+LeaseState = Literal["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
 
 
 class _Unread:
@@ -217,6 +219,7 @@ class LeaseActivity:
     parked: bool
     alive: bool
     stale: bool
+    backing_off: bool = False
     environment_id: str | None = None
     workdir: str | None = None
     last_heartbeat_at: datetime | None = None
@@ -228,12 +231,16 @@ class LeaseActivity:
         """The lease's state, derived from the resolved facts — pure, no store, no I/O.
 
         The precedence is the point: ``closed`` outranks ``alive`` because a closed
-        lease's pid may have been reused, and ``parked`` outranks ``stale`` because
-        parking stops the reap clock."""
+        lease's pid may have been reused, ``parked`` outranks ``stale`` because parking
+        stops the reap clock, and ``backing-off`` ranks below ``parked`` but above
+        ``spawning`` (blizzard#595) — a backing-off lease's exited worker/judge already
+        left ``pid``/``session_id`` set, so it would otherwise misread as ``exited``."""
         if self.closed:
             return "closed"
         if self.parked:
             return "parked"
+        if self.backing_off:
+            return "backing-off"
         if self.lease.pid is None or self.lease.session_id is None:
             return "spawning"
         if not self.alive:
@@ -280,6 +287,7 @@ class LocalLeaseService:
         share one heartbeat read. The remaining per-lease N+1 is accepted."""
         now = self._clock.now()
         parked = self._stores.asks.parked_lease_ids()
+        backing_off = backing_off_facts(self._stores.overload, self._stores.liveness, self._stores.elicitations)
         activities: list[LeaseActivity] = []
         for lease in self._stores.lease_record.list_active_leases():
             last_heartbeat = self._stores.liveness.latest_heartbeat(lease.lease_id)
@@ -293,6 +301,7 @@ class LocalLeaseService:
                     parked=lease.lease_id in parked,
                     alive=alive,
                     stale=liveness.stale(now, threshold=self._stale_after),
+                    backing_off=lease.lease_id in backing_off,
                     environment_id=binding.environment_id if binding else None,
                     workdir=binding.workdir if binding else None,
                     last_heartbeat_at=last_heartbeat,

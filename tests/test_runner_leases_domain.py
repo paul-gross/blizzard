@@ -49,7 +49,7 @@ def _lease_record(**overrides: object) -> LeaseRecord:
     return LeaseRecord(**fields)  # type: ignore[arg-type]
 
 
-# LeaseActivity.state — pure, all six states + precedence
+# LeaseActivity.state — pure, all seven states + precedence
 
 
 @pytest.mark.unit
@@ -138,6 +138,45 @@ def test_state_closed_wins_over_parked() -> None:
     same way parked outranks stale."""
     lease = _lease_record()
     assert LeaseActivity(lease, closed=True, parked=True, alive=True, stale=False).state == "closed"
+
+
+@pytest.mark.unit
+def test_state_backing_off_when_flagged() -> None:
+    """blizzard#595: a lease with an open, un-elapsed provider-overload backoff derives
+    ``backing-off``, distinct from ``exited`` even though its worker's process is gone."""
+    lease = _lease_record()
+    assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=False, backing_off=True).state == (
+        "backing-off"
+    )
+
+
+@pytest.mark.unit
+def test_state_backing_off_wins_over_exited() -> None:
+    """Precedence: a backing-off lease's exited worker would otherwise misread as
+    ``exited`` (its pid/session are still set from the generation that overloaded) —
+    the backoff fact must win."""
+    lease = _lease_record()
+    assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=True, backing_off=True).state == (
+        "backing-off"
+    )
+
+
+@pytest.mark.unit
+def test_state_parked_wins_over_backing_off() -> None:
+    """Precedence: parked outranks backing-off — a lease cannot be both in practice, but
+    the ranking still holds if it were."""
+    lease = _lease_record()
+    assert LeaseActivity(lease, closed=False, parked=True, alive=False, stale=False, backing_off=True).state == (
+        "parked"
+    )
+
+
+@pytest.mark.unit
+def test_state_closed_wins_over_backing_off() -> None:
+    lease = _lease_record()
+    assert LeaseActivity(lease, closed=True, parked=False, alive=False, stale=False, backing_off=True).state == (
+        "closed"
+    )
 
 
 # Liveness.stale — the staleness-boundary pin (Phase 1 escalation #2)
@@ -379,6 +418,38 @@ def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path) -> None
 
     assert len(activities) == 2
     assert store.parked_lease_ids_calls == 1
+
+
+@pytest.mark.component
+def test_list_active_renders_a_backing_off_lease(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """blizzard#595: an open, un-elapsed overload fact renders ``backing-off`` — not
+    ``exited``, even though the process the fact records has already exited (no probe entry)."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    store.record_overload(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        epoch=1,
+        generation=1,
+        invocation_kind="worker",
+        invocation_identity="1",
+        streak_ordinal=1,
+        observed_at=_NOW,
+        resume_after=_NOW + timedelta(seconds=60),
+    )
+    service = LocalLeaseService(make_read_stores(store), FixedClock(_NOW), FakeProbe())
+
+    activities = service.list_active()
+
+    assert len(activities) == 1
+    assert activities[0].state == "backing-off"
 
 
 # LocalLeaseService.list_recent() — active + recent-closed (issue #29)

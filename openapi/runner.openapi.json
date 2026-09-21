@@ -2235,6 +2235,7 @@
               "running",
               "stale",
               "parked",
+              "backing-off",
               "spawning",
               "exited",
               "closed"

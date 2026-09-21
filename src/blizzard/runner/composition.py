@@ -27,6 +27,7 @@ from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
 from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
 from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
 from blizzard.runner.store.internal.outbound_store import OutboundStore
+from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
@@ -65,6 +66,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         tokens=TokenStore(connections),
         workspace_prompt=WorkspacePromptStore(connections),
         outbound=OutboundStore(connections),
+        overload=OverloadStore(connections),
         asks=AskStore(connections),
         pause=PauseStore(connections),
         takeover=TakeoverStore(connections),

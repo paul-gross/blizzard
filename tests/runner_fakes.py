@@ -38,6 +38,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
@@ -70,6 +71,7 @@ from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
 from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
 from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
 from blizzard.runner.store.internal.outbound_store import OutboundStore
+from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
 from blizzard.runner.store.internal.requeue_store import RequeueStore
 from blizzard.runner.store.internal.selftest_result_store import SelfTestResultStore
@@ -119,6 +121,7 @@ class SqlAlchemyRunnerStore(
     TokenStore,
     WorkspacePromptStore,
     OutboundStore,
+    OverloadStore,
     AskStore,
     PauseStore,
     TakeoverStore,
@@ -137,7 +140,7 @@ class SqlAlchemyRunnerStore(
     production composes the extracted concept adapters individually via
     :func:`~blizzard.runner.composition.build_stores`, never this class. Kept here because a
     test fixture wants one object standing in for every concept at once, structurally
-    satisfying every one of the eighteen concept Protocols by inheritance."""
+    satisfying every one of the nineteen concept Protocols by inheritance."""
 
     def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
         store = RunnerStoreConnections(engine, errors)
@@ -150,6 +153,7 @@ class SqlAlchemyRunnerStore(
         TokenStore.__init__(self, store)
         WorkspacePromptStore.__init__(self, store)
         OutboundStore.__init__(self, store)
+        OverloadStore.__init__(self, store)
         AskStore.__init__(self, store)
         PauseStore.__init__(self, store)
         TakeoverStore.__init__(self, store)
@@ -231,6 +235,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         tokens=store,
         workspace_prompt=store,
         outbound=store,
+        overload=store,
         asks=store,
         pause=store,
         takeover=store,
@@ -713,6 +718,8 @@ class FakeHarness:
         resume_process_start_time: str = "resume-start",
         usage_limit: UsageLimit | None = None,
         usage_limit_from_call: int = 1,
+        overload: ProviderOverload | None = None,
+        overload_from_call: int = 1,
     ) -> None:
         self._handle = handle
         self.verdict = verdict
@@ -800,6 +807,11 @@ class FakeHarness:
         self.usage_limit = usage_limit
         self.usage_limit_from_call = usage_limit_from_call
         self.usage_limit_calls: list[tuple[str, tuple[str, ...]]] = []
+        # Scripted `classify_provider_overload` reply (blizzard#595) — `None` (the default)
+        # classifies every invocation as not overloaded, mirroring `usage_limit` above.
+        self.overload = overload
+        self.overload_from_call = overload_from_call
+        self.overload_calls: list[tuple[str, tuple[str, ...]]] = []
 
     def spawn(
         self,
@@ -985,6 +997,12 @@ class FakeHarness:
         if len(self.usage_limit_calls) < self.usage_limit_from_call:
             return None
         return self.usage_limit
+
+    def classify_provider_overload(self, output: str, lines: Sequence[str]) -> ProviderOverload | None:
+        self.overload_calls.append((output, tuple(lines)))
+        if len(self.overload_calls) < self.overload_from_call:
+            return None
+        return self.overload
 
 
 class TieredFakeHarness(FakeHarness):

@@ -36,6 +36,7 @@ from blizzard.runner.harness.internal.opencode_shapes import (
     parse_model_reference,
     parse_run_event,
 )
+from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
@@ -67,6 +68,12 @@ _USAGE_LIMIT_MESSAGE_RE = re.compile(r"usage limit", re.IGNORECASE)
 _RESET_DURATION_RE = re.compile(
     r"reset\w*\s+in\s+(?:(\d+)\s*day[s]?\s*)?(?:(\d+)\s*hour[s]?\s*)?(?:(\d+)\s*minute[s]?\s*)?", re.IGNORECASE
 )
+
+# blizzard#595: `_PROVIDER_REFUSAL_STATUSES` (opencode_facts.py) excludes 529, so it never
+# collides with the usage-limit/refusal statuses above. The name match is a secondary
+# guard only — the status check above is the one known-shape signal.
+_OVERLOAD_STATUS_CODE = 529
+_OVERLOAD_NAME_RE = re.compile(r"overloaded", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -651,6 +658,20 @@ class OpenCodeAdapter:
         if days == 0 and hours == 0 and minutes == 0:
             return None
         return now + timedelta(days=days, hours=hours, minutes=minutes)
+
+    def classify_provider_overload(self, output: str, lines: Sequence[str]) -> ProviderOverload | None:
+        # Output only, like `classify_usage_limit` (blizzard#595): a root `error` event
+        # carries the provider's own status, never OpenCode's session-export transcript.
+        del lines
+        for event in self._parse_events(output):
+            if event.type != "error" or event.error is None:
+                continue
+            if event.error.status_code == _OVERLOAD_STATUS_CODE:
+                return ProviderOverload(detail=event.error.message)
+            # Secondary guard: only the status check above rests on a known parsed shape.
+            if _OVERLOAD_NAME_RE.search(event.error.name):
+                return ProviderOverload(detail=event.error.message)
+        return None
 
 
 def _conforms_harness_adapter(x: OpenCodeAdapter) -> IHarnessAdapter:

@@ -14,6 +14,7 @@ from typing import Protocol
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.health import DeclaredDegradation
+from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
@@ -324,6 +325,20 @@ class IHarnessUsageLimits(Protocol):
         ...
 
 
+class IHarnessProviderOverload(Protocol):
+    """Classifying an invocation's own exit as a provider-overloaded (529) one
+    (``bzh:seam-size-ceiling``, blizzard#595) — its own slice for the same reason
+    ``IHarnessUsageLimits`` is: a fact the loop decides what to do with
+    (``bzh:deterministic-shell``), not a ``UsageSample``."""
+
+    def classify_provider_overload(self, output: str, lines: Sequence[str]) -> ProviderOverload | None:
+        """``None`` when this invocation did not exit on a provider overload. ``output`` is
+        the invocation's own captured stdout; ``lines`` is its transcript range (generation
+        boundary to judge boundary or tail) — which one carries the harness's own signal is
+        this adapter's to know. Never raises."""
+        ...
+
+
 class IHarnessHealthProbe(Protocol):
     """The evidence a harness-health evaluation needs that no other adapter seam supplies —
     binary discovery, provider authentication, the binding's supported-version declaration,
@@ -377,9 +392,10 @@ class IHarnessAdapter(
     IHarnessVerdictParsing,
     IHarnessUsageAccounting,
     IHarnessUsageLimits,
+    IHarnessProviderOverload,
     Protocol,
 ):
-    """The coding-harness seam: its five narrower slices (``bzh:seam-size-ceiling``) plus
+    """The coding-harness seam: its six narrower slices (``bzh:seam-size-ceiling``) plus
     ``transcript_source``, unsliced since no consumer needs it alone. Dumb: translates, never
     decides. A genuine pass-through — threading the adapter on rather than calling it —
     takes this alias; a caller takes the narrowest slice its job needs."""
