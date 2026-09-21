@@ -60,5 +60,5 @@ under them both daemons survive a crash or reboot with nothing lost and nothing 
 
 | File                                                           | When to read                                                                                                           |
 | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| [`deployment/observability.md`](./deployment/observability.md) | A chunk is stuck and its status won't say why: the operational event log, and the kiosk board for a wall screen        |
+| [`deployment/observability.md`](./deployment/observability.md) | A chunk is stuck and its status won't say why: the operational event log, the kiosk board for a wall screen, and a worker's raw captured stdout/stderr |
 | [`deployment/analytics.md`](./deployment/analytics.md)         | You are querying the event stream derived from shipped transcripts, or the duration/spend/outcome datasets built on it |

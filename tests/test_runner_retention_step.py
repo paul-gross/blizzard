@@ -2,13 +2,16 @@
 
 Each of outbound/heartbeat/external-usage-sample retention is its own store-level
 derivation, already proven against a real store in ``tests/test_runner_store.py``. This
-file pins only the step's own contract over that: it calls all three every tick, and one
-lane's prune raising never costs the other two theirs.
+file pins only the step's own contract over that: it calls every lane every tick, and one
+lane's prune raising never costs the others theirs. The worker-stdout lane (issue #58) is
+filesystem- rather than store-backed, so its own age-based sweep is proven directly here
+too, rather than in ``tests/test_runner_store.py``.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -50,7 +53,7 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _ctx(store):  # type: ignore[no-untyped-def]
+def _ctx(store, *, config: LoopConfig | None = None):  # type: ignore[no-untyped-def]
     return make_context(
         store,
         hub=FakeHub(),
@@ -58,7 +61,7 @@ def _ctx(store):  # type: ignore[no-untyped-def]
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        config=config or LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
     )
 
 
@@ -140,3 +143,46 @@ def test_one_lanes_prune_failure_does_not_cost_the_others_theirs(tmp_path) -> No
     assert stale_outbound_seq not in {f.seq for f in store.recent_outbound(10)}  # outbound still pruned
     assert _usage_sample_row_count(store) == 1  # usage still pruned
     assert _heartbeat_row_count(store) == 2  # the raising lane's own prune never landed
+
+
+@pytest.mark.unit
+def test_retention_sweeps_worker_stdout_and_stderr_past_the_retention_window(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Both streams, past a configured retention window, are pruned; anything inside the
+    window — including a still-fresh file from an unrelated lease/generation — is left."""
+    store = _store(tmp_path)
+    stdout_dir = tmp_path / "worker-stdout"
+    stdout_dir.mkdir()
+    old_stdout = stdout_dir / "lease_a.1.stdout"
+    old_stderr = stdout_dir / "lease_a.1.stderr"
+    fresh_stdout = stdout_dir / "lease_b.1.stdout"
+    for f in (old_stdout, old_stderr, fresh_stdout):
+        f.write_text("envelope")
+    stale_mtime = (_NOW - timedelta(days=15)).timestamp()  # past the 14-day default
+    os.utime(old_stdout, (stale_mtime, stale_mtime))
+    os.utime(old_stderr, (stale_mtime, stale_mtime))
+    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, worker_stdout_dir=str(stdout_dir))
+    ctx = _ctx(store, config=config)
+
+    Retention(ctx).run()
+
+    assert not old_stdout.exists()
+    assert not old_stderr.exists()
+    assert fresh_stdout.exists()
+
+
+@pytest.mark.unit
+def test_worker_stdout_sweep_failure_does_not_cost_the_others_theirs(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    old = _NOW - timedelta(days=8)
+    stale_outbound_seq = _seed_a_stale_and_a_pending_outbound_fact(store, old=old)
+    _seed_a_superseded_and_a_newest_heartbeat(store, old=old)
+    _seed_a_superseded_and_a_newest_usage_sample(store, old=old)
+    ctx = _ctx(store)
+    failing_worker_files = _RaisingOnCall(ctx.worker_files, "sweep")
+    ctx = dataclasses.replace(ctx, worker_files=failing_worker_files)
+
+    Retention(ctx).run()  # must not raise
+
+    assert stale_outbound_seq not in {f.seq for f in store.recent_outbound(10)}  # outbound still pruned
+    assert _heartbeat_row_count(store) == 1  # heartbeat still pruned
+    assert _usage_sample_row_count(store) == 1  # usage still pruned

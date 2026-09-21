@@ -148,10 +148,8 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         harness_selector=HarnessSelector(harnesses=_harnesses),
         env_release=EnvironmentRelease(
             environments=store,
-            leases=store,
             clock=hub.clock,
             provider=provider,
-            worker_files=WorkerStdoutFiles("", store),
         ),
         harnesses=_harnesses,
     )
@@ -241,10 +239,8 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         harness_selector=HarnessSelector(harnesses=_harnesses),
         env_release=EnvironmentRelease(
             environments=store,
-            leases=store,
             clock=hub.clock,
             provider=provider,
-            worker_files=WorkerStdoutFiles("", store),
         ),
         harnesses=_harnesses,
     )

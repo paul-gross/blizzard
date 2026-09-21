@@ -305,6 +305,40 @@ def test_transcripts_ship_rejects_a_non_boolean_typo_rather_than_coercing_it(tmp
 
 
 @pytest.mark.unit
+def test_worker_stdout_retention_days_defaults_to_fourteen(tmp_path: Path) -> None:
+    # issue #58 — long enough to investigate a stalled or rate-limited invocation days later.
+    assert RunnerConfig.scaffold(tmp_path).worker_stdout_retention_days == 14
+
+
+@pytest.mark.unit
+def test_worker_stdout_retention_days_absent_when_table_omits_the_key(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[worker_stdout]\n')
+    assert RunnerConfig.load(root).worker_stdout_retention_days == 14
+
+
+@pytest.mark.unit
+def test_worker_stdout_retention_days_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    edited = RunnerConfig(root=root, db_url=RunnerConfig.default_db_url(root), worker_stdout_retention_days=30)
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.worker_stdout_retention_days == 30
+
+
+@pytest.mark.unit
+def test_worker_stdout_retention_days_parses_from_a_hand_written_table(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[worker_stdout]\nretention_days = 3\n'
+    )
+    assert RunnerConfig.load(root).worker_stdout_retention_days == 3
+
+
+@pytest.mark.unit
 def test_queue_strict_defaults_false(tmp_path: Path) -> None:
     # Off by default (blizzard#459) — a fresh scaffold reaches past a marked head.
     assert RunnerConfig.scaffold(tmp_path).queue_strict is False

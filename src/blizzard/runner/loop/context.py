@@ -80,6 +80,10 @@ class LoopConfig:
     #: The directory the per-lease harness-stdout files live in (issue #58); empty means
     #: no redirect. A worker's envelope survives the process there for later read-back.
     worker_stdout_dir: str = ""
+    #: How long (days) a worker's captured stdout/stderr survive after being written, before
+    #: the periodic `Retention` sweep prunes them (issue #58) — unrelated to release, which
+    #: leaves them in place.
+    worker_stdout_retention_days: int = 14
     #: The per-chunk spend cap (issue #61a); ``None`` means no cap.
     chunk_cap_usd: float | None = None
     #: The runner-wide spend ceiling (issue #61b); ``None`` means no ceiling.

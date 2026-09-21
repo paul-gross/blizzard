@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import os
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, LeaseRecord
 
@@ -45,17 +46,28 @@ class WorkerStdoutFiles:
         text = self._read(self.stderr_path(lease.lease_id, generation))
         return text[-limit:] if text else ""
 
-    def cleanup(self, lease_id: str) -> None:
-        """Remove every one of a lease's per-generation stdout files, if any.
-
-        Bounded to the durably recorded generation count plus one: the un-armable spawn-record
-        gap can leave a file for a generation whose own ``record_spawn`` never landed. A missing
-        file at any of those generations is a no-op."""
+    def sweep(self, *, now: datetime, retention: timedelta) -> int:
+        """Remove every captured stdout/stderr file older than ``retention``, judged by its
+        own mtime — the periodic prune that bounds ``root``'s growth now that a lease's files
+        outlive its release (issue #58). Scans the whole directory rather than any one lease's
+        files, so it reaches generations whose owning lease is long gone. Returns the count
+        removed; a file that vanishes mid-sweep is a no-op, not a fault."""
         if not self.root:
-            return
-        for generation in range(1, self.leases.lease_generation(lease_id) + 2):
+            return 0
+        cutoff = (now - retention).timestamp()
+        removed = 0
+        try:
+            entries = list(os.scandir(self.root))
+        except OSError:
+            return 0
+        for entry in entries:
+            if not (entry.name.endswith(".stdout") or entry.name.endswith(".stderr")):
+                continue
             with contextlib.suppress(OSError):
-                os.remove(self.stdout_path(lease_id, generation))
+                if entry.stat().st_mtime < cutoff:
+                    os.remove(entry.path)
+                    removed += 1
+        return removed
 
     def _path(self, lease_id: str, generation: int, stream: str) -> str:
         if not self.root:

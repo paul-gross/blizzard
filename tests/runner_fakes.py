@@ -1161,9 +1161,7 @@ def make_context(
             transcripts_wired=_transcripts_wired,
         ),
         harness_selector=HarnessSelector(harnesses=_harnesses),
-        env_release=EnvironmentRelease(
-            environments=store, leases=store, clock=_clock, provider=_provider, worker_files=_files, events=events
-        ),
+        env_release=EnvironmentRelease(environments=store, clock=_clock, provider=_provider, events=events),
         # Mirrors `LoopWiring.context`'s own composition: wired exactly when `harness`
         # itself holds a transcript source, resolved once here.
         transcripts_wired=_transcripts_wired,

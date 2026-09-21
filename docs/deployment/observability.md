@@ -39,6 +39,21 @@ Escalations appear in the same feed as a needs-human event kind — one row, one
 is superseded by any of a requeue, an operator `chunk restart`, the next attempt's lease, or the chunk ending `stopped`
 or `done`.
 
+## Worker stdout and stderr
+
+Every worker invocation's raw stdout and stderr are captured to the runner's own runtime directory, under
+`worker-stdout/<lease_id>.<generation>.{stdout,stderr}` — one pair of files per spawn or resume attempt. `stdout` carries
+the harness result envelope (cost, usage, `subtype`, `is_error`, the final result text); `stderr` is what the process
+wrote before a crash, and is what a `worker-lost` event's stderr tail is drawn from. An operator with a lease id and
+generation number (both visible on the chunk's own attempt history) can open the file directly — the layout needs no
+lookup elsewhere.
+
+These files outlive the lease: releasing an environment does not delete them (issue #58), so an invocation's envelope
+stays readable well after the chunk that spawned it has moved on — the one place to see exactly what a harness returned
+after something has gone wrong (a usage-limit hit, an interrupted worker, a premature exit). They are not durable
+forever, though — a periodic sweep prunes both streams once they age past `[worker_stdout] retention_days` in
+`blizzard-runner.toml` (default 14 days); a file inside the window is left alone regardless of its lease's own state.
+
 ## Reading the feed
 
 `GET /api/events` returns the log newest-and-most-severe first, filterable by severity, runner_id, chunk_id, and since,

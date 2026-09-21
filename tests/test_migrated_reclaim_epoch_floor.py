@@ -141,10 +141,8 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         harness_selector=HarnessSelector(harnesses=_harnesses),
         env_release=EnvironmentRelease(
             environments=store,
-            leases=store,
             clock=hub.clock,
             provider=provider,
-            worker_files=WorkerStdoutFiles("", store),
         ),
         harnesses=_harnesses,
     )

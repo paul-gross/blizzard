@@ -556,10 +556,10 @@ class Advance(Step):
 
 
 class Retention(Step):
-    """Prune the runner store's append-only observation/report lanes every tick, so none
-    grows without bound (issue #520) — each lane's own retention/pending-floor contract
-    lives at its own store method (`IWriteOutboundRepository.prune_outbound` and its
-    usage/liveness siblings), each prune its own single transaction."""
+    """Prune every append-only observation/report lane every tick, so none grows without
+    bound (issue #520) — each lane's own retention contract lives at its own method (the
+    store's `IWriteOutboundRepository.prune_outbound` and its siblings, or the filesystem
+    sweep of `WorkerStdoutFiles.sweep`, issue #58), each its own isolated prune."""
 
     def run(self) -> None:
         """One prune per lane, each isolated (mirrors ExternalUsageSample's own per-item
@@ -571,6 +571,12 @@ class Retention(Step):
             ("outbound buffer", lambda: ctx.stores.outbound.prune_outbound(now=now)),
             ("heartbeat", lambda: ctx.stores.liveness.prune_heartbeats(now=now)),
             ("external usage sample", lambda: ctx.stores.usage.prune_external_usage_samples(now=now)),
+            (
+                "worker stdout",
+                lambda: ctx.worker_files.sweep(
+                    now=now, retention=timedelta(days=ctx.config.worker_stdout_retention_days)
+                ),
+            ),
         )
         for label, prune in lanes:
             try:

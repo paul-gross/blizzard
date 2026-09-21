@@ -88,6 +88,10 @@ _REQUIRED_SUBSCRIPTION_KEYS = ("slug", "name", "provider")
 # Well under the minutes a context takes to move; each read is a bounded tail read.
 DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS = 60
 DEFAULT_AUTH_HUB_ROLE = "mirror"
+# How long a worker's captured stdout/stderr survive after release before the periodic
+# sweep prunes them (issue #58) — long enough to investigate a stalled or rate-limited
+# invocation days after the fact.
+DEFAULT_WORKER_STDOUT_RETENTION_DAYS = 14
 
 
 class ConfigError(RuntimeError):
@@ -323,6 +327,22 @@ class Queue:
 
 
 @dataclass(frozen=True)
+class WorkerStdout:
+    """The ``[worker_stdout]`` table (issue #58) — the periodic sweep's own retention window
+    over ``worker-stdout/``, independent of lease release."""
+
+    table: Table
+
+    @classmethod
+    def of(cls, raw: object) -> WorkerStdout:
+        return cls(Table.of(raw))
+
+    @property
+    def retention_days(self) -> int:
+        return self.table.count("retention_days", DEFAULT_WORKER_STDOUT_RETENTION_DAYS)
+
+
+@dataclass(frozen=True)
 class Transcripts:
     """The ``[transcripts]`` table (issue #246) — the dedicated outbound lane's own switch,
     distinct from the top-level ``transcripts_root`` (the harness source's read location)."""
@@ -498,6 +518,10 @@ class RunnerConfig:
     #: The reverse-proxy trust set (issue #130) — addresses or CIDRs whose
     #: `X-Forwarded-Proto` is honored; empty ignores the header from every peer.
     trusted_proxies: tuple[str, ...] = ()
+    #: How long (days) a worker's captured stdout/stderr survive after being written, before
+    #: the periodic sweep prunes them (``[worker_stdout] retention_days``, issue #58) —
+    #: independent of lease release, which leaves them in place.
+    worker_stdout_retention_days: int = DEFAULT_WORKER_STDOUT_RETENTION_DAYS
 
     @property
     def public_origins(self) -> PublicOrigins:
@@ -759,6 +783,13 @@ class RunnerConfig:
             "# at a marked head instead and idles rather than falling through.\n"
             "[queue]\n"
             f"strict = {'true' if self.queue_strict else 'false'}\n"
+            + "\n# How long (days) a worker's captured stdout/stderr (issue #58) survive after being\n"
+            "# written, before the periodic sweep prunes them. A released lease's files are NOT\n"
+            "# deleted at release — only this age-based sweep removes them, both streams alike.\n"
+            "# Look up one invocation's own output at\n"
+            "# worker-stdout/<lease_id>.<generation>.{stdout,stderr}.\n"
+            "[worker_stdout]\n"
+            f"retention_days = {self.worker_stdout_retention_days}\n"
             + "\n# Spend controls (epic #57); absent = no cap. `chunk_cap_usd` parks a chunk\n"
             "# needs_human at its next step boundary once its derived spend reaches this cap.\n"
             "# `runner_ceiling_usd` engages this runner's own local pause brake (the same one\n"
@@ -874,6 +905,7 @@ class RunnerConfig:
         auth = Auth.of(raw.get("auth"))
         transcripts = Transcripts.of(raw.get("transcripts"))
         queue = Queue.of(raw.get("queue"))
+        worker_stdout = WorkerStdout.of(raw.get("worker_stdout"))
         # Authored `[[subscription]]` entries, verbatim — never synthesized here;
         # `resolved_subscriptions()` is where declarations-win-over-the-legacy-table
         # (blizzard#436) actually happens, from this config's own resolved fields.
@@ -930,6 +962,7 @@ class RunnerConfig:
             model_aliases=Table.of(raw.get("models")).pairs("aliases"),
             effort_aliases=Table.of(raw.get("effort")).pairs("aliases"),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
+            worker_stdout_retention_days=worker_stdout.retention_days,
             opencode_binary=opencode.word("binary") or DEFAULT_OPENCODE_BINARY,
             opencode_auth_path=opencode.word("auth_path"),
             opencode_model_aliases=Table.of(opencode.body.get("models")).pairs("aliases"),

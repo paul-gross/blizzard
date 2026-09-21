@@ -586,13 +586,13 @@ def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path
 
 
 @pytest.mark.unit
-def test_release_all_cleans_up_every_lease_stdout_file(tmp_path):  # type: ignore[no-untyped-def]
-    """Tenure-end release removes every per-generation stdout file for every lease
-    this chunk ever minted — bounded, one file per attempt ever made under each
-    lease, no longer needed once its usage facts are durable."""
+def test_release_all_leaves_every_lease_stdout_file_in_place(tmp_path):  # type: ignore[no-untyped-def]
+    """Tenure-end release no longer removes any lease's per-generation stdout file
+    (issue #58) — only the periodic age-based sweep prunes it now
+    (`tests/test_runner_retention_step.py`)."""
     store = _store(tmp_path)
     _seed_running_lease(store, lease="lease_1", epoch=1)
-    # lease_1 resumed once (generation 2) before it closed — both its files must go.
+    # lease_1 resumed once (generation 2) before it closed.
     store.record_spawn(
         "lease_1",
         pid=100,
@@ -618,14 +618,14 @@ def test_release_all_cleans_up_every_lease_stdout_file(tmp_path):  # type: ignor
 
     ctx.env_release.release_chunk("ch_1")
 
-    assert not (stdout_dir / "lease_1.1.stdout").exists()
-    assert not (stdout_dir / "lease_1.2.stdout").exists()
-    assert not (stdout_dir / "lease_2.1.stdout").exists()
+    assert (stdout_dir / "lease_1.1.stdout").exists()
+    assert (stdout_dir / "lease_1.2.stdout").exists()
+    assert (stdout_dir / "lease_2.1.stdout").exists()
 
 
 @pytest.mark.unit
 def test_release_all_is_a_noop_when_no_stdout_dir_configured(tmp_path):  # type: ignore[no-untyped-def]
-    """No ``worker_stdout_dir`` (Phase 1's default) — release touches no filesystem path."""
+    """No ``worker_stdout_dir`` (Phase 1's default) — release still runs cleanly."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     ctx = make_context(

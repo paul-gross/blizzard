@@ -164,6 +164,7 @@ class LoopWiring:
             workspace_prompt=self.workspace_prompt,
             runner_prompt=self.runner_prompt,
             worker_stdout_dir=str(worker_stdout_dir),
+            worker_stdout_retention_days=config.worker_stdout_retention_days,
             elicitation_output_dir=str(elicitation_output_dir),
             chunk_cap_usd=config.chunk_cap_usd,
             runner_ceiling_usd=config.runner_ceiling_usd,
@@ -213,10 +214,8 @@ class LoopWiring:
             harness_selector=HarnessSelector(harnesses=harnesses, health=health_cache),
             env_release=EnvironmentRelease(
                 environments=stores.environments,
-                leases=stores.lease_record,
                 clock=_clock,
                 provider=provider,
-                worker_files=_worker_files,
                 events=self.events,
             ),
             # The startup guard above already resolved the default harness's transcript
