@@ -256,11 +256,11 @@ class FindingStore:
                 .where(findings.c.routine_name == routine_name, findings.c.class_ == class_)
             ).scalar_one()
 
-    def has_resolution_for_proposal(self, proposal_id: str) -> bool:
-        with self._store.read("has_resolution_for_proposal") as conn:
+    def has_delivery_for_proposal(self, proposal_id: str) -> bool:
+        with self._store.read("has_delivery_for_proposal") as conn:
             row = conn.execute(
                 select(finding_facts.c.id)
-                .where(finding_facts.c.proposal_id == proposal_id, finding_facts.c.kind == "resolved")
+                .where(finding_facts.c.proposal_id == proposal_id, finding_facts.c.kind == "delivered")
                 .limit(1)
             ).first()
         return row is not None
@@ -319,6 +319,7 @@ class FindingStore:
             note=state.note,
             last_seen_at=state.last_seen_at,
             observed_count=state.observed_count,
+            actor=state.actor,
         )
 
 

@@ -616,7 +616,7 @@ def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str
     return proposal_id
 
 
-def test_close_resolves_the_accepted_proposals_live_finding_attributed_to_it(tmp_path: Path) -> None:
+def test_close_delivers_the_accepted_proposals_live_finding_attributed_to_it(tmp_path: Path) -> None:
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
@@ -632,18 +632,21 @@ def test_close_resolves_the_accepted_proposals_live_finding_attributed_to_it(tmp
 
     finding = FindingStore(hub_store_connections(engine)).get("fin_1")
     assert finding is not None
-    assert finding.state == "resolved"
+    assert finding.state == "delivered"
     with engine.connect() as conn:
         fact = conn.execute(
-            select(s.finding_facts).where(s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "resolved")
+            select(s.finding_facts).where(
+                s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered"
+            )
         ).one()
     assert fact.proposal_id == proposal_id
     assert fact.actor == "u_1"
 
 
-def test_close_run_twice_appends_only_one_resolution(tmp_path: Path) -> None:
+def test_close_run_twice_appends_only_one_delivery(tmp_path: Path) -> None:
     """`close()` is safe to repeat — a redelivered close-intent drain sweep, or any
-    other retry, must not append a second `resolved` fact (blizzard#394 Phase 3)."""
+    other retry, must not append a second `delivered` fact (blizzard#394 Phase 3,
+    blizzard#583)."""
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(
@@ -660,7 +663,9 @@ def test_close_run_twice_appends_only_one_resolution(tmp_path: Path) -> None:
 
     with engine.connect() as conn:
         count = conn.execute(
-            select(s.finding_facts).where(s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "resolved")
+            select(s.finding_facts).where(
+                s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered"
+            )
         ).all()
     assert len(count) == 1
 

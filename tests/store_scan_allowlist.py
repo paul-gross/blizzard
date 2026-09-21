@@ -260,12 +260,12 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     # --- deliberate whole-table read of an otherwise-indexed table ---------------------
     MethodScopedAllowance(
         IReadFindingRepository,
-        "has_resolution_for_proposal",
+        "has_delivery_for_proposal",
         "finding_facts",
         200,
         "filters on proposal_id, a column ix_finding_facts_finding_id_id and "
         "ix_finding_facts_finding_set_id don't cover — finding_facts's OTHER reads (by "
         "finding_id or finding_set_id) do hit an index; this one deliberately checks a "
-        "rare, one-per-proposal resolution fact those indexes don't serve.",
+        "rare, one-per-proposal delivery fact those indexes don't serve.",
     ),
 ]

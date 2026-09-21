@@ -25,9 +25,11 @@ import { shortSha } from './short-sha';
  *
  * The three ops' own semantics (`src/blizzard/wire/finding.py`) shape what each
  * group shows: `observed` carries no payload beyond its id — "it was true
- * when recorded and is true now" — so its entry is the id alone; `gone` does not
- * close the finding, it flags it for a person, which is why it renders beside
- * `added` rather than looking like a resolution.
+ * when recorded and is true now" — so its entry is the id alone; `gone` ordinarily does
+ * not close the finding, it flags it for a person (except against a `delivered`
+ * finding, which it settles outright — blizzard#583 D3, invisible to this raw-ops
+ * render either way), which is why it renders beside `added` rather than looking like a
+ * resolution.
  *
  * An `add` op's own body is {@link ChunkFindingEntry}, shared with the survey
  * artifact's candidates — the same fields, published by the same run, read in the

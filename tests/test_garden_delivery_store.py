@@ -118,6 +118,47 @@ def _full_plan(*, at: datetime = _NOW) -> DeliveryPlan:
     )
 
 
+def test_deliver_writes_a_facts_own_actor_column(tmp_path: Path) -> None:
+    """blizzard#583 D3: the `resolved` fact a `gone` op settles a `delivered` finding to
+    carries the actor `GardenDelivery` threaded onto `FindingFactRecord`."""
+    store, engine = _store_and_engine(tmp_path)
+    plan = DeliveryPlan(
+        chunk_id="ch_1",
+        node_id="nd_1",
+        node_name="garden-deliver",
+        epoch=1,
+        at=_NOW,
+        run=_RUN,
+        deltas=[
+            DeltaMaterialization(
+                finding_set=NewFindingSet(
+                    finding_set_id="fins_1",
+                    artifact_id="art_placeholder",
+                    scope_slug="blizzard",
+                    revisions={},
+                    measurement=None,
+                ),
+                facts=[
+                    FindingFactRecord(
+                        finding_id="fin_1",
+                        kind="resolved",
+                        finding_set_id="fins_1",
+                        note="no longer reproduces",
+                        actor="u_1",
+                    )
+                ],
+            )
+        ],
+        proposals=[],
+    )
+
+    store.deliver(plan)
+
+    with engine.connect() as conn:
+        (fact,) = conn.execute(sa.select(finding_facts)).all()
+    assert (fact.kind, fact.note, fact.actor) == ("resolved", "no longer reproduces", "u_1")
+
+
 def test_deliver_writes_every_row(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
     plan = _full_plan()

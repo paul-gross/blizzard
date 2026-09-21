@@ -54,7 +54,12 @@ def _live(*, in_scope: bool = True) -> dict[str, str]:
 
 
 def _finding(
-    finding_id: str, *, scope_slug: str = _RUN.scope_slug, live: bool = True, state: str | None = None
+    finding_id: str,
+    *,
+    scope_slug: str = _RUN.scope_slug,
+    live: bool = True,
+    state: str | None = None,
+    actor: str | None = None,
 ) -> Finding:
     resolved_state = state if state is not None else ("live" if live else "gone")
     return Finding(
@@ -72,6 +77,7 @@ def _finding(
         note=None,
         last_seen_at=_T0,
         observed_count=1,
+        actor=actor,
     )
 
 
@@ -583,6 +589,22 @@ def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> N
     )
 
     assert result.deltas == [delta]
+
+
+def test_validate_delivery_collects_delivered_findings_by_actor() -> None:
+    """blizzard#583 D3: a `delivered` finding is a valid delta target (D1 — `delivered`
+    is outside `EXIT_KINDS`) and its closer's actor rides on the result for
+    materialization to settle a later `gone` op with."""
+    delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id=_FIN1, note="no longer reproduces")])
+
+    result = validate_delivery(
+        run=_RUN,
+        delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
+        proposal_artifacts={},
+        known_findings=[_finding(_FIN1, live=False, state="delivered", actor="u_1")],
+    )
+
+    assert result.delivered_findings == {_FIN1: "u_1"}
 
 
 def test_validate_delivery_rejects_an_op_naming_an_exited_finding() -> None:

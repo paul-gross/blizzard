@@ -1758,8 +1758,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFindingRepository, "count_by_class"): lambda w: w.hub.services.findings.count_by_class(
         "gardening", "stale-docstring"
     ),
-    (IReadFindingRepository, "has_resolution_for_proposal"): lambda w: (
-        w.hub.services.findings.has_resolution_for_proposal(w.garden_proposal_2)
+    (IReadFindingRepository, "has_delivery_for_proposal"): lambda w: w.hub.services.findings.has_delivery_for_proposal(
+        w.garden_proposal_2
     ),
     (IReadFindingSetRepository, "get"): lambda w: w.hub.services.finding_sets.get("fins_hub_1"),
     (IReadFindingSetRepository, "list_for_chunk"): lambda w: w.hub.services.finding_sets.list_for_chunk(w.run_chunk_1),

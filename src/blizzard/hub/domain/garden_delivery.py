@@ -64,6 +64,8 @@ class ValidatedDelivery:
     #: `(repo, sha)`'s resolved authored instant — `None` when unresolved, absent when
     #: never attempted; materialization must not re-resolve to fill the gap (no backfill).
     introduced_at: dict[tuple[str, str], datetime | None] = field(default_factory=dict)
+    #: Every finding currently `delivered`, valued by the actor who closed it (blizzard#583 D3).
+    delivered_findings: dict[str, str] = field(default_factory=dict)
 
 
 def parse_delta(artifact_name: str, raw: str) -> FindingDelta:
@@ -226,6 +228,7 @@ def validate_delivery(
     the first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in known_findings if f.state not in EXIT_KINDS}
     exited_ids = frozenset(f.finding_id for f in known_findings if f.state in EXIT_KINDS)
+    delivered_findings = {f.finding_id: f.actor for f in known_findings if f.state == "delivered" and f.actor}
     deltas = [parse_delta(name, raw) for name, raw in delta_artifacts.items()]
     proposals: list[GardenProposalCandidate] = []
     proposal_sources: list[str] = []
@@ -257,6 +260,7 @@ def validate_delivery(
         proposals=proposals,
         proposal_sources=proposal_sources,
         introduced_at=introduced_at,
+        delivered_findings=delivered_findings,
     )
 
 

@@ -15,7 +15,18 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 
 FACT_KINDS = frozenset(
-    {"add", "observed", "gone", "resolved", "gone-confirmed", "wont-fix", "not-a-finding", "superseded", "reopened"}
+    {
+        "add",
+        "observed",
+        "gone",
+        "delivered",
+        "resolved",
+        "gone-confirmed",
+        "wont-fix",
+        "not-a-finding",
+        "superseded",
+        "reopened",
+    }
 )
 
 #: The human-driven verbs that exit a finding for good; `reopened` is excluded since it undoes one (blizzard#394 D2).
@@ -60,25 +71,27 @@ class Finding:
     first_observed_at: datetime | None
     #: schema.py's `findings` table carries no such column (D2-D4).
     live: bool
-    #: "live", "gone", or one of `EXIT_KINDS` — the newest fact's own kind (blizzard#394).
+    #: "live", "gone", "delivered", or one of `EXIT_KINDS` — the newest fact's own kind (blizzard#583).
     state: str
     #: The newest fact's own note; `None` for a kind that carries none (blizzard#394).
     note: str | None
     last_seen_at: datetime | None
     observed_count: int
+    #: The newest fact's own actor — a `delivered` finding's own closer, read for D3 (blizzard#583).
+    actor: str | None = None
 
 
 @dataclass(frozen=True)
 class FindingFact:
-    """One `add`/`observed`/`gone`/exit/`reopened` transformation (D2, blizzard#394) —
-    append-only, oldest first."""
+    """One `add`/`observed`/`gone`/`delivered`/exit/`reopened` transformation (D2,
+    blizzard#394, blizzard#583) — append-only, oldest first."""
 
     kind: str
     recorded_at: datetime
     note: str | None = None
     #: Who recorded a human-driven fact; `None` for a run-driven `add`/`observed`/`gone` (blizzard#394).
     actor: str | None = None
-    #: The proposal a `resolved` fact answered, when the drain recorded it; `None` for a hand resolution (blizzard#394).
+    #: The proposal a `delivered` fact answered, when the drain recorded it (blizzard#394, blizzard#583 D3).
     proposal_id: str | None = None
     #: The absorbing finding, set only on a `superseded` fact (blizzard#394).
     superseded_by: str | None = None
@@ -95,14 +108,15 @@ class FindingLiveness:
     first_observed_at: datetime | None
     last_seen_at: datetime | None
     observed_count: int
+    actor: str | None = None
 
 
 def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
     """The newest-fact-wins read over a finding's facts (D1-D3, blizzard#394): any later
-    fact reverses `gone`, but only `reopened` reverses an `EXIT_KINDS` verb.
-    `first_observed_at`/`last_seen_at` are the min/max of the same `add`/`observed` span
-    and use `recorded_at`, not insertion order, so out-of-order ingestion still derives
-    correctly."""
+    fact reverses `gone` or `delivered` (blizzard#583), but only `reopened` reverses an
+    `EXIT_KINDS` verb. `first_observed_at`/`last_seen_at` are the min/max of the same
+    `add`/`observed` span and use `recorded_at`, not insertion order, so out-of-order
+    ingestion still derives correctly."""
     if not facts:
         return FindingLiveness(
             state="live", live=True, note=None, first_observed_at=None, last_seen_at=None, observed_count=0
@@ -125,6 +139,7 @@ def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
         first_observed_at=min((f.recorded_at for f in seen), default=None),
         last_seen_at=max((f.recorded_at for f in seen), default=None),
         observed_count=sum(1 for f in facts if f.kind == "observed"),
+        actor=newest.actor,
     )
 
 
@@ -199,10 +214,11 @@ class IReadFindingRepository(Protocol):
         other raises :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
         ...
 
-    def has_resolution_for_proposal(self, proposal_id: str) -> bool:
-        """Whether any `resolved` fact already carries `proposal_id` — delivery-triggered
-        resolution's own once-only gate (blizzard#394), independent of any one finding's
-        current state so a later reopen of a resolved finding is never silently redone."""
+    def has_delivery_for_proposal(self, proposal_id: str) -> bool:
+        """Whether any `delivered` fact already carries `proposal_id` — delivery-triggered
+        closure's own once-only gate (blizzard#394, blizzard#583), independent of any one
+        finding's current state so a later reopen of a delivered finding is never silently
+        redone."""
         ...
 
 
@@ -259,11 +275,11 @@ class FactEntry:
 
 
 class IFindingExitResolver(Protocol):
-    """`FindingExitService.resolve`'s own shape — the one exit verb delivery-triggered
-    resolution calls, narrowed so that collaborator depends on a Protocol like every
-    other one it takes (blizzard#394)."""
+    """`FindingExitService.deliver`'s own shape — the one exit verb delivery-triggered
+    closure calls, narrowed so that collaborator depends on a Protocol like every other
+    one it takes (blizzard#394, blizzard#583)."""
 
-    def resolve(
+    def deliver(
         self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None
     ) -> None: ...
 
@@ -279,6 +295,13 @@ class FindingExitService:
 
     def resolve(self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None) -> None:
         self._apply(findings, kind="resolved", note=note, actor=actor, proposal_id=proposal_id)
+
+    def deliver(self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None) -> None:
+        """Delivery-triggered closure (blizzard#583) — `resolved`'s provisional sibling:
+        the owning routine's next run re-checks a `delivered` finding, settling it to
+        `resolved` if it still holds or reviving it to `live` if it does not, rather than
+        a delivery alone declaring the ground changed."""
+        self._apply(findings, kind="delivered", note=note, actor=actor, proposal_id=proposal_id)
 
     def confirm_gone(self, findings: Sequence[Finding], *, note: str, actor: str) -> None:
         self._apply(findings, kind="gone-confirmed", note=note, actor=actor)

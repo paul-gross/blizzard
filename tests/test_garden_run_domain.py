@@ -137,7 +137,7 @@ class _FakeFindings:
     def count_by_class(self, routine_name: str, class_: str) -> int:
         raise NotImplementedError
 
-    def has_resolution_for_proposal(self, proposal_id: str) -> bool:
+    def has_delivery_for_proposal(self, proposal_id: str) -> bool:
         raise NotImplementedError
 
 

@@ -86,6 +86,35 @@ def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(
     assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1", "fin_4"}
 
 
+def test_list_reads_a_delivered_finding_only_with_include_gone(tmp_path: Path) -> None:
+    """blizzard#583: `delivered` is neither `live` nor absent from the read verb — it
+    behaves like every other exited state on `GET /api/findings`, unlike the fleet-scoped
+    bucket route, which surfaces it unconditionally."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+    findings = FindingStore(hub_store_connections(hub.engine))
+    findings.add(
+        "fin_1",
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s1",
+        introduced=None,
+        at=_NOW,
+    )
+    findings.record_fact("fin_1", kind="delivered", at=_NOW, note="delivered by hub:1", actor="u_1")
+
+    resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["findings"] == []
+
+    resp = hub.client.get("/api/findings", params={"routine": "nightly", "scope": "blizzard", "include_gone": True})
+    assert resp.status_code == 200, resp.text
+    (row,) = resp.json()["findings"]
+    assert (row["finding_id"], row["state"], row["live"]) == ("fin_1", "delivered", False)
+
+
 def test_list_widens_across_the_four_routine_scope_combinations(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub, "blizzard")

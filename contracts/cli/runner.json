@@ -341,10 +341,10 @@
     "garden": {
       "commands": {
         "findings": {
-          "help": "Worker: list this run's live finding bucket as JSON.",
+          "help": "Worker: list this run's live-plus-``delivered`` finding bucket as JSON.",
           "params": [],
           "path": "runner garden findings",
-          "short_help": "Worker: list this run's live finding bucket as JSON."
+          "short_help": "Worker: list this run's live-plus-``delivered`` finding bucket as JSON."
         },
         "proposals": {
           "help": "Worker: list this run's own routine's open garden proposals as JSON, closed ones\nexcluded.",

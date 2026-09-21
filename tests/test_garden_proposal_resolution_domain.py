@@ -125,7 +125,7 @@ class _FakeProposals:
 @dataclass
 class _FakeFindings:
     by_id: dict[str, Finding] = field(default_factory=dict)
-    resolved_proposal_ids: frozenset[str] = frozenset()
+    delivered_proposal_ids: frozenset[str] = frozenset()
 
     def get(self, finding_id: str) -> Finding | None:
         return self.by_id.get(finding_id)
@@ -159,8 +159,8 @@ class _FakeFindings:
     def count_by_class(self, routine_name: str, class_: str) -> int:
         raise NotImplementedError
 
-    def has_resolution_for_proposal(self, proposal_id: str) -> bool:
-        return proposal_id in self.resolved_proposal_ids
+    def has_delivery_for_proposal(self, proposal_id: str) -> bool:
+        return proposal_id in self.delivered_proposal_ids
 
 
 @dataclass
@@ -285,17 +285,17 @@ def test_resolves_exactly_the_proposals_live_findings_attributed_to_it() -> None
     entries = repo.batches[0]
     assert {e.finding_id for e in entries} == {"fin_1", "fin_3"}
     for entry in entries:
-        assert entry.kind == "resolved"
+        assert entry.kind == "delivered"
         assert entry.actor == "u_1"
         assert entry.proposal_id == "gprop_1"
         assert entry.note
 
 
-def test_a_proposal_already_resolved_once_is_never_resolved_again_even_after_a_reopen() -> None:
-    """blizzard#394 review F1/F13: a person's `reopened` fact folds a resolved finding
+def test_a_proposal_already_delivered_once_is_never_delivered_again_even_after_a_reopen() -> None:
+    """blizzard#394 review F1/F13: a person's `reopened` fact folds a delivered finding
     back to `live` (`derive_liveness`) — a stray repeat call must not read that as "still
     unresolved" and silently redo what the person undid. Gating on
-    `has_resolution_for_proposal` rather than each finding's own state closes that hole."""
+    `has_delivery_for_proposal` rather than each finding's own state closes that hole."""
     closures = _FakeClosures(
         by_item={
             (_POINTER.source, _POINTER.ref): _closure(
@@ -304,10 +304,10 @@ def test_a_proposal_already_resolved_once_is_never_resolved_again_even_after_a_r
         }
     )
     proposals = _FakeProposals(by_id={"gprop_1": _proposal(findings=["fin_1"])})
-    # Reopened after an earlier resolution: `state` reads "live" again, exactly like a
-    # never-yet-resolved finding — only the proposal-level marker tells them apart.
+    # Reopened after an earlier delivery: `state` reads "live" again, exactly like a
+    # never-yet-delivered finding — only the proposal-level marker tells them apart.
     findings = _FakeFindings(
-        by_id={"fin_1": _finding("fin_1", state="live")}, resolved_proposal_ids=frozenset({"gprop_1"})
+        by_id={"fin_1": _finding("fin_1", state="live")}, delivered_proposal_ids=frozenset({"gprop_1"})
     )
     repo = _RecordingWriteRepo()
     resolution = _resolution(closures=closures, proposals=proposals, findings=findings, repo=repo)

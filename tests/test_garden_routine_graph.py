@@ -110,6 +110,22 @@ def test_garden_routine_survey_states_reusable_class_spelling_guidance() -> None
     assert "stable, reusable kind of thing" in prompt  # type: ignore[operator]
 
 
+def test_garden_routine_reconcile_re_checks_delivered_findings_before_matching_the_survey() -> None:
+    """blizzard#583 Phase 3: a `delivered` finding's own recheck is the reconcile node's
+    first instruction, ahead of matching survey candidates."""
+    prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
+    assert "Re-check every delivered finding first" in prompt  # type: ignore[operator]
+    assert "settles it rather than merely" in prompt  # type: ignore[operator]
+
+
+def test_garden_routine_reconcile_bucket_is_live_plus_delivered() -> None:
+    """The bucket reconcile reads is no longer a live-only read (blizzard#583 D2) — the
+    prompt says so up front, and the closing id-membership rule names both states."""
+    prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
+    assert "not live findings alone" in prompt  # type: ignore[operator]
+    assert "actually in this routine's bucket" in prompt  # type: ignore[operator]
+
+
 def test_garden_routine_reconcile_states_class_reuse_against_the_bucket() -> None:
     """Reconcile, unlike survey, already holds the live bucket when it decides an `add`,
     so it is the node positioned to reuse an existing class rather than mint a

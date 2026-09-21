@@ -539,13 +539,13 @@ def test_retiring_a_scope_does_not_hide_its_already_delivered_findings(tmp_path:
         assert after_findings[0]["state"] == before[0]["state"]
 
 
-# --- Phase 3 — an accepted proposal's delivered item resolves its findings ---- #
+# --- Phase 3 — an accepted proposal's delivered item closes its findings ---- #
 
 
-def test_delivering_an_accepted_proposals_minted_item_resolves_its_findings(tmp_path: Path) -> None:
-    """The Phase 3 hook, driven live: a proposal delivered by a run, accepted over HTTP
-    into a minted hub item, and that item closed by the daemon's own close-intent drain —
-    the findings the proposal named come back `resolved`, attributed to it."""
+def test_delivering_an_accepted_proposals_minted_item_closes_its_findings_to_delivered(tmp_path: Path) -> None:
+    """The Phase 3 hook, driven live: a proposal delivered, accepted, and closed by the
+    daemon's own close-intent drain comes back `delivered`, not `resolved` (blizzard#583)
+    — the owning routine's next run is what settles it for good."""
     with garden_stack(tmp_path) as g:
         first, second = seed(g, 2)
 
@@ -586,10 +586,10 @@ def test_delivering_an_accepted_proposals_minted_item_resolves_its_findings(tmp_
         )
         assert marked.status_code == 200, marked.text
 
-        assert poll_until(lambda: read_back(g, first)["state"] == "resolved", timeout=90.0), (
-            f"the close drain never resolved the proposal's findings: {read_back(g, first)}"
+        assert poll_until(lambda: read_back(g, first)["state"] == "delivered", timeout=90.0), (
+            f"the close drain never closed the proposal's findings: {read_back(g, first)}"
         )
         for finding_id in (first, second):
             row = read_back(g, finding_id)
-            assert row["state"] == "resolved", row
-            assert row["note"] == f"resolved by delivery of {pointer}", row
+            assert row["state"] == "delivered", row
+            assert row["note"] == f"delivered by {pointer}", row

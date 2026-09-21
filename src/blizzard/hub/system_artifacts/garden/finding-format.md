@@ -117,6 +117,8 @@ revision.
 }
 ```
 
-The run looked and could not find the finding named by `id`. This does not close the finding — it flags it for a person,
-because a finding leaves the live set on human judgment and never on a pass's word alone. `note` says why the run
-believes it is gone.
+The run looked and could not find the finding named by `id`. Ordinarily this does not close the finding — it flags it
+for a person, because a finding leaves the live set on human judgment and never on a pass's word alone. The one
+exception: a finding a delivery already closed to `delivered` is a person's own claim that the ground moved, so a
+`gone` op naming one settles it to `resolved` outright rather than flagging it again. `note` says why the run believes
+it is gone.

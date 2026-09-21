@@ -26,6 +26,7 @@ export const FACT_KIND_LABELS: Record<string, string> = {
   add: 'Added',
   observed: 'Observed',
   gone: 'Gone',
+  delivered: 'Delivered',
   resolved: 'Resolved',
   'gone-confirmed': 'Confirmed gone',
   'wont-fix': "Won't fix",
