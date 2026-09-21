@@ -378,6 +378,36 @@ def test_resume_marking_on_shutdown_marks_via_its_injected_clock(tmp_path: Path)
 
 
 @pytest.mark.unit
+def test_resume_marking_on_shutdown_drains_the_marked_leases_recorded_group(tmp_path: Path) -> None:
+    """`on_shutdown` doesn't just mark — it SIGINTs the marked lease's own recorded group
+    right after, through the same injected clock and an injected sleep (issue #12)."""
+    store = _seeded_running_lease_store(tmp_path)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+        pgid=100,
+    )
+    probe = FakeProbe(alive={(100, "start-100")}, groups_alive={100})
+    sleeps: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        probe.groups_alive.discard(100)  # the worker exits on the SIGINT this drain just sent
+
+    marking = ResumeMarking(make_stores(store), FixedClock(_NOW), probe, sleep)
+
+    marked = marking.on_shutdown()
+
+    assert marked == 1
+    assert probe.interrupted_groups == [100]
+    assert probe.killed_groups == []  # exited on its own — never reached the SIGKILL fallback
+    assert sleeps == [0.5]
+
+
+@pytest.mark.unit
 def test_resume_marking_on_startup_marks_via_its_injected_clock_and_probe(tmp_path: Path) -> None:
     store = _seeded_running_lease_store(tmp_path)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # was actively working when killed

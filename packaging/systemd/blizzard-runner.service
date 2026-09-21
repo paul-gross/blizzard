@@ -34,17 +34,29 @@ WorkingDirectory=/var/lib/blizzard/runner
 # worked twice (proven by tests/crash/test_kill9_sweep.py::test_kill9_runner_daemon_after_session_end).
 #
 # A GRACEFUL restart (`systemctl restart`, or stop→start on a wheel upgrade) is stronger:
-# the SIGTERM lets the daemon run its shutdown path, which marks every in-flight lease
-# with a durable resume-intent. Its first startup tick then RESUMEs each marked
-# session in place — same lease/epoch/session, only the pid rewritten, no retry consumed —
-# so adopting a newly-merged runner build no longer discards in-flight agent context. The
-# default KillMode (control-group) SIGTERMs the workers alongside the daemon; RESUME kills
-# the marked worker first so it never runs two processes on one session. A `kill -9`
-# during the re-attach itself still degrades to the ordinary crash contract above (REAP
-# requeues) — the recovery boundaries are the crash-point sweep's, not a stronger claim than
-# it arms; see steps.py `_resume_in_place`.
+# the SIGTERM lets the daemon run its shutdown path, which marks every in-flight lease with
+# a durable resume-intent, then drains its own workers: SIGINT each marked lease's process
+# group, wait up to 60s total (one shared budget, not 60s each), SIGKILL whatever is still
+# alive. Claude Code answers SIGINT with an `error_during_execution` envelope that still
+# carries a real `total_cost_usd`, so an interrupted invocation's spend is recorded, not
+# lost to the NULL-cost fallback. Its first startup tick then RESUMEs each marked session
+# in place — same lease/epoch/session, only the pid rewritten, no retry consumed — so
+# adopting a newly-merged runner build no longer discards in-flight agent context. A
+# `kill -9` during the re-attach itself still degrades to the ordinary crash contract above
+# (REAP requeues) — the recovery boundaries are the crash-point sweep's, not a stronger
+# claim than it arms; see steps.py `_resume_in_place`.
+#
+# KillMode=mixed: systemd signals only the daemon itself on stop, never the workers in its
+# cgroup — the drain above is the one and only thing that ever signals a worker. Under the
+# default `control-group` mode systemd would SIGTERM every worker alongside the daemon,
+# racing the drain's own SIGINT and losing the real-cost envelope the drain exists for.
+# TimeoutStopSec=120 covers the 60s drain budget plus the rest of an orderly shutdown
+# (the unbounded loop-thread join, the outbound buffer's last flush); past it systemd
+# SIGKILLs the whole cgroup, the same NULL-cost outcome a SIGKILLed worker already has.
 Restart=always
 RestartSec=2
+KillMode=mixed
+TimeoutStopSec=120
 
 [Install]
 WantedBy=multi-user.target

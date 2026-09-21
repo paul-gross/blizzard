@@ -920,6 +920,44 @@ def test_parse_usage_extracts_tokens_and_cost_from_json_envelope() -> None:
     assert sample.cost_usd == 0.042
 
 
+_SIGINT_ENVELOPE = json.dumps(
+    {
+        "type": "result",
+        "subtype": "error_during_execution",
+        "is_error": True,
+        "result": "",
+        "session_id": "s1",
+        "model": "claude-opus-4-8",
+        "usage": {
+            "input_tokens": 80,
+            "output_tokens": 12,
+            "cache_read_input_tokens": 5,
+            "cache_creation_input_tokens": 0,
+        },
+        "total_cost_usd": 0.019,
+        "modelUsage": {
+            "claude-opus-4-8": {
+                "inputTokens": 80,
+                "outputTokens": 12,
+                "cacheReadInputTokens": 5,
+                "cacheCreationInputTokens": 0,
+            }
+        },
+    }
+)
+
+
+@pytest.mark.unit
+def test_parse_usage_extracts_a_real_cost_from_a_sigint_error_during_execution_envelope() -> None:
+    """The drain's own SIGINT (issue #12) leaves this exact envelope shape — `parse_usage`
+    gates on neither `is_error` nor `subtype`, so the real `total_cost_usd` still lands."""
+    sample = _adapter().parse_usage(_SIGINT_ENVELOPE, "spawn")
+    assert sample is not None
+    assert sample.cost_usd == 0.019
+    assert sample.input_tokens == 80
+    assert sample.output_tokens == 12
+
+
 @pytest.mark.unit
 def test_parse_usage_returns_none_without_a_result_envelope() -> None:
     assert _adapter().parse_usage("not json at all", "spawn") is None

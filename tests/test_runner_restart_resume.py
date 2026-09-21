@@ -381,6 +381,34 @@ def test_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore[no-un
     assert lease is not None and lease.pid == 4321
 
 
+@pytest.mark.unit
+def test_resumed_lease_with_a_durable_session_end_is_still_resumed_not_judged(tmp_path):  # type: ignore[no-untyped-def]
+    """A durable `SessionEnd` for the marked lease's own generation must not route it to
+    ADVANCE as exited work — the open resume intent is checked first, so RESUME still
+    re-attaches it in place, same lease/epoch/session, no retry consumed."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_session_end(lease_id="lease_1", ended_at=_NOW)
+    ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", resume_process_start_time="start-4321")
+    harness.resume_pid = 4321
+    probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+
+    tick(ctx)
+
+    # No verdict elicited, no completion buffered — the stale SessionEnd never reached
+    # ADVANCE's judging path at all.
+    assert harness.judged == []
+    assert [f for f in store.pending_outbound() if f.kind == "completion.submitted"] == []
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.pid == 4321 and lease.epoch == 1  # same lease, no retry, no epoch bump
+    assert store.resume_intent_lease_ids() == set()
+
+
 # --- RESUME — abandon a reassigned / detached chunk (no epoch bump) ---
 
 

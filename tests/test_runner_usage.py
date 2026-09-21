@@ -13,14 +13,20 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.process_launch import ProcessLauncher
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.dormant import DormantSession
 from blizzard.runner.loop.steps import Advance, Resume, ResumeIntents
+from blizzard.runner.loop.usage import UsageRecorder
+from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import USAGE_RECORDED
 from tests.runner_fakes import (
@@ -144,6 +150,59 @@ def test_advance_records_spawn_and_judge_usage_facts(tmp_path):  # type: ignore[
     totals = store.usage_since(_NOW)
     assert totals.input_tokens == 110  # 100 (spawn) + 10 (judge)
     assert totals.cost_partial is False
+
+
+_SIGINT_ENVELOPE = json.dumps(
+    {
+        "type": "result",
+        "subtype": "error_during_execution",
+        "is_error": True,
+        "result": "",
+        "session_id": "sess-a",
+        "model": "claude-opus-4-8",
+        "usage": {
+            "input_tokens": 80,
+            "output_tokens": 12,
+            "cache_read_input_tokens": 5,
+            "cache_creation_input_tokens": 0,
+        },
+        "total_cost_usd": 0.019,
+    }
+)
+
+
+@pytest.mark.unit
+def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_envelope(tmp_path):  # type: ignore[no-untyped-def]
+    """The drain's own SIGINT (issue #12) leaves this envelope on stdout — through the REAL
+    adapter, `record_worker` still reads its real cost, not the NULL-cost fallback."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 1, _SIGINT_ENVELOPE)
+    worker_files = WorkerStdoutFiles(str(stdout_dir), store)
+    adapter = ClaudeCodeAdapter(process=FakeProbe(), launcher=ProcessLauncher(FakeProbe()))
+    registry = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source())}
+    )
+    recorder = UsageRecorder(
+        leases=store,
+        usage=store,
+        clock=FixedClock(_NOW),
+        worker_files=worker_files,
+        workspace_root="/ws",
+        harnesses=registry,
+        invocation_boundaries=store,
+    )
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    recorder.record_worker(lease, bindings=[])
+
+    payloads = _usage_payloads(store)
+    assert len(payloads) == 1
+    assert payloads[0]["cost_usd"] == 0.019
+    assert payloads[0]["input_tokens"] == 80
 
 
 @pytest.mark.unit

@@ -62,7 +62,10 @@ is a lower bound flagged PARTIAL (a tilde on the board and in `hub status`). Bot
 surface PARTIAL on their own carrier — the escalation, or the recorded pause reason — so a crash-heavy chunk never
 silently reads cheap. A crash is not the only way a row lands cost-absent: a reported figure that runs backwards against
 what its session already banked records no cost either, for the reason
-[The two readings of a reported figure](#the-two-readings-of-a-reported-figure) gives.
+[The two readings of a reported figure](#the-two-readings-of-a-reported-figure) gives. A graceful restart no longer
+produces a PARTIAL row on its own: the shutdown drain (see
+[Graceful restart](./recovery.md#graceful-restart)) waits out each marked worker's own SIGINT-triggered envelope, so
+only a worker SIGKILLed at the drain's deadline — or an outright crash — still lands cost-absent.
 
 `blizzard hub status` shows the per-chunk cost column, the fleet total, and a paused runner's ceiling reason; the
 board's chunk cards and detail dock show the same figures live.

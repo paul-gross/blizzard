@@ -181,6 +181,37 @@ def opencode_build_script(landed_file: str) -> str:
     )
 
 
+def sigint_trap_hang_script(body: str) -> str:
+    """``body`` (typically :func:`build_script`) then ``hang()``, both guarded by a SIGINT
+    trap installed before ``body`` runs — a caller's readiness poll can observe ``body``'s
+    last ``subprocess.run`` durable before that call itself returns, so trapping only
+    around the hang would race a signal landing mid ``body`` (issue #12)."""
+    indented = "".join(f"    {line}\n" if line else "\n" for line in (body + "hang()\n").splitlines())
+    return (
+        "import signal\n"
+        "from blizzard_mock.harness.engine import RunResult, current_context\n"
+        "\n"
+        "class _Interrupted(Exception):\n"
+        "    pass\n"
+        "\n"
+        "def _on_sigint(signum, frame):\n"
+        "    raise _Interrupted()\n"
+        "\n"
+        "signal.signal(signal.SIGINT, _on_sigint)\n"
+        "try:\n"
+        f"{indented}"
+        "except _Interrupted:\n"
+        "    _ctx = current_context()\n"
+        "    _ctx.result = RunResult(\n"
+        "        session_id=_ctx.session.session_id,\n"
+        "        is_error=True,\n"
+        "        subtype='error_during_execution',\n"
+        "        text='interrupted by SIGINT',\n"
+        "        exit_code=0,\n"
+        "    )\n"
+    )
+
+
 def pre_declare_build_script(landed_file: str, pushed_marker: Path, go_marker: Path) -> str:
     """:func:`build_script`'s commit + push, then an in-test fence (``bzh:crash-sweep`` D2):
     write ``pushed_marker`` once pushed, then block on ``go_marker`` before declaring — pinning

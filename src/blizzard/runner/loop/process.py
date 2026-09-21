@@ -7,6 +7,7 @@ recorded process start time together**. It is a seam (``bzh:pluggable-seams``); 
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 from typing import Protocol
@@ -40,6 +41,12 @@ class IProcessProbe(Protocol):
         spawn recorded, never one inferred from a bare pid. Never raises if already gone."""
         ...
 
+    def interrupt_group(self, pgid: int) -> None:
+        """Best-effort SIGINT to an entire owned process group — the graceful-shutdown
+        drain's own signal, distinct from :meth:`kill_group`'s SIGKILL. Never raises if
+        already gone."""
+        ...
+
 
 class LinuxProcessProbe:
     """``/proc``-backed probe: field-22 ``starttime`` is the reuse-proof identity."""
@@ -56,6 +63,10 @@ class LinuxProcessProbe:
         return current is not None and current == process_start_time
 
     def group_alive(self, pgid: int) -> bool:
+        # `pgid` is the leader's own pid (D3): reap it first, or an exited-but-unreaped
+        # leader is a zombie `killpg`'s probe below still reaches as "alive".
+        with contextlib.suppress(ChildProcessError):
+            os.waitpid(pgid, os.WNOHANG)
         try:
             os.killpg(pgid, 0)
         except ProcessLookupError:
@@ -73,6 +84,12 @@ class LinuxProcessProbe:
     def kill_group(self, pgid: int) -> None:
         try:
             os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            return
+
+    def interrupt_group(self, pgid: int) -> None:
+        try:
+            os.killpg(pgid, signal.SIGINT)
         except (ProcessLookupError, PermissionError):
             return
 

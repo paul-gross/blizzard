@@ -7,6 +7,8 @@ injected into a :class:`LoopContext`. Both :meth:`LoopWiring.tick_once` and
 from __future__ import annotations
 
 import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import httpx
@@ -35,6 +37,7 @@ from blizzard.runner.loop.internal.subprocess_check_runner import SubprocessChec
 from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
 from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
 from blizzard.runner.loop.session import HarnessSelector, SessionResolver
+from blizzard.runner.loop.shutdown_drain import ShutdownDrain
 from blizzard.runner.loop.steps import ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.transcript_backfill import (
@@ -271,11 +274,23 @@ class ResumeMarking:
     stores: RunnerStores
     clock: IClock
     process: IProcessProbe
+    #: The drain's injected wait (``bzh:injected-clock``) — a test steps `clock` from here.
+    sleep: Callable[[float], None] = time.sleep
 
     def on_shutdown(self) -> int:
-        """Mark in-flight leases as the daemon exits gracefully; an ungraceful ``kill -9``
-        never reaches this path, which is the intended scope boundary."""
-        return ResumeIntents(self.stores).mark_graceful(now=self.clock.now())
+        """Mark in-flight leases as the daemon exits gracefully, then drain their workers:
+        SIGINT each marked lease's process group, wait out the shared deadline, SIGKILL any
+        survivor. An ungraceful ``kill -9`` never reaches this path, which is the intended
+        scope boundary."""
+        marked = ResumeIntents(self.stores).mark_graceful(now=self.clock.now())
+        if marked:
+            self._drain()
+        return marked
+
+    def _drain(self) -> None:
+        marked_ids = self.stores.resume_intent.resume_intent_lease_ids()
+        leases = [lease for lease in self.stores.lease_record.list_active_leases() if lease.lease_id in marked_ids]
+        ShutdownDrain(process=self.process, clock=self.clock, sleep=self.sleep).run(leases)
 
     def on_startup(self) -> int:
         """Mark the sessions a crash orphaned, before the loop starts — the ungraceful
