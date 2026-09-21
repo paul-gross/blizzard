@@ -149,6 +149,27 @@ def test_list_includes_staged_submissions_marked_as_such(monkeypatch: pytest.Mon
 
 
 @pytest.mark.unit
+def test_list_degrades_to_no_staged_entries_when_the_staged_read_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient failure reading the runner's own local `attachments` store must not take
+    down a `list` call whose primary `artifacts` read already succeeded — staged visibility is
+    a value-add on top of a call that worked standalone before this feature existed."""
+
+    def fake_get(url: str, *, headers: dict, timeout: float, params: dict | None = None, **_: object):
+        if url.endswith("/attachments"):
+            return _RejectingResponse()
+        return _FakeResponse(payload=_ARTIFACTS_PAYLOAD)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "list"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    body = json.loads(result.stdout)
+    assert {a["name"] for a in body} == {"plan", "build-branch"}
+    assert all(a["staged"] is False for a in body)
+    assert "omitting staged entries" in result.stderr
+
+
+@pytest.mark.unit
 def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 

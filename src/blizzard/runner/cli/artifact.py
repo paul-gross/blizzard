@@ -57,10 +57,17 @@ _SCOPE_CHOICE = click.Choice([s.value for s in ArtifactScope])
 
 def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict]:
     """This node-step's own staged (not-yet-published) submissions, or ``[]`` for a SCOPE that
-    excludes node — ``graph`` and ``system`` never have one, so no read is worth making."""
+    excludes node — ``graph`` and ``system`` never have one, so no read is worth making. Also
+    ``[]`` on a failed read: by the time this runs, ``list``'s primary ``artifacts`` call has
+    already succeeded, and a value-add feature (staged visibility) must never take that
+    already-successful read down with it."""
     if scope not in (None, ArtifactScope.NODE.value):
         return []
-    resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
+    try:
+        resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
+    except click.ClickException as exc:
+        click.echo(f"artifact list: {exc.message}; omitting staged entries", err=True)
+        return []
     return resp.json()
 
 
