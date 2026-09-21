@@ -191,7 +191,10 @@ or as an equality check against one pinned literal.
    admitted version with no committed manifest rather than raising — adding the version string alone, without the
    fixture, degrades only the OpenCode binding's own health (`unknown_version`) rather than silently misclassifying or
    taking the whole daemon down. Never land one half without the other regardless: an admitted version with no corpus
-   fixture can never actually pass this page's own offline classification.
+   fixture can never actually pass this page's own offline classification. If this candidate has any known, non-blocking
+   compatibility gap, declare it in the manifest's own `declared_degradations` key (each entry a `probe`/`summary`
+   pair) — this is read gracefully, so a missing key means "none declared" and a malformed entry is dropped silently,
+   with no separate warning either way; review the manifest by eye rather than relying on a failure to catch the gap.
 4. Each earlier tier's own pass/fail is evidenced by that tier's own run output (pytest's, or CI's) — `report.json` (see
    "Evidence and failure handling" above) records only this page's own live diagnostic run: the observed version, its
    final classification, and completeness/admissibility. It does not record whether the four earlier tiers passed; there

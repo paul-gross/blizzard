@@ -327,8 +327,8 @@ def test_a_bare_node_still_honors_the_chunks_own_declared_default_at_claim_time(
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, compatible_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land (status {_status(hub, compatible_id)!r})"
         harness_ids = {row["harness_id"] for row in _leases_for_chunk(config, compatible_id)}
-        # The mock's own envelope fidelity gap (see docstring): the actual spawn dispatch
-        # still falls through to this runner's OWN default, not the chunk's declared one.
+        # Mock-double limitation: `blizzard-mock-hub`'s `envelope()` never bakes the chunk's
+        # default onto the node, so SPAWN falls through to this runner's own default instead.
         assert harness_ids == {"claude_code"}, harness_ids
 
 

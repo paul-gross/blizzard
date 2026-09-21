@@ -3402,7 +3402,7 @@
    "comments": 0,
    "docstrings": 7,
    "over_cap": 0,
-   "total": 41
+   "total": 42
   },
   "blizzard/runner/api/health.py": {
    "comments": 0,
@@ -3897,10 +3897,10 @@
    "total": 21
   },
   "blizzard/runner/harness/health.py": {
-   "comments": 10,
-   "docstrings": 31,
-   "over_cap": 4,
-   "total": 131
+   "comments": 5,
+   "docstrings": 26,
+   "over_cap": 1,
+   "total": 121
   },
   "blizzard/runner/harness/identity.py": {
    "comments": 2,
@@ -3945,16 +3945,16 @@
    "total": 73
   },
   "blizzard/runner/harness/internal/harness_shared.py": {
-   "comments": 4,
-   "docstrings": 58,
-   "over_cap": 2,
-   "total": 205
+   "comments": 3,
+   "docstrings": 49,
+   "over_cap": 0,
+   "total": 195
   },
   "blizzard/runner/harness/internal/offline_compatibility.py": {
    "comments": 3,
-   "docstrings": 19,
-   "over_cap": 2,
-   "total": 89
+   "docstrings": 17,
+   "over_cap": 1,
+   "total": 87
   },
   "blizzard/runner/harness/internal/opencode_adapter.py": {
    "comments": 44,
@@ -4011,10 +4011,10 @@
    "total": 188
   },
   "blizzard/runner/harness/internal/opencode_health.py": {
-   "comments": 11,
-   "docstrings": 27,
-   "over_cap": 2,
-   "total": 134
+   "comments": 4,
+   "docstrings": 25,
+   "over_cap": 0,
+   "total": 125
   },
   "blizzard/runner/harness/internal/opencode_landlock.py": {
    "comments": 0,
@@ -4041,10 +4041,10 @@
    "total": 99
   },
   "blizzard/runner/harness/internal/opencode_probe.py": {
-   "comments": 13,
+   "comments": 7,
    "docstrings": 24,
-   "over_cap": 3,
-   "total": 1363
+   "over_cap": 1,
+   "total": 1357
   },
   "blizzard/runner/harness/internal/opencode_process.py": {
    "comments": 4,
@@ -4197,10 +4197,10 @@
    "total": 352
   },
   "blizzard/runner/loop/capability_snapshot.py": {
-   "comments": 8,
-   "docstrings": 43,
-   "over_cap": 1,
-   "total": 204
+   "comments": 6,
+   "docstrings": 50,
+   "over_cap": 0,
+   "total": 217
   },
   "blizzard/runner/loop/checks.py": {
    "comments": 2,
@@ -5177,7 +5177,7 @@
   "blizzard/wire/runner_status.py": {
    "comments": 6,
    "docstrings": 37,
-   "over_cap": 4,
+   "over_cap": 3,
    "total": 185
   },
   "blizzard/wire/scope.py": {
@@ -5267,10 +5267,10 @@
    "total": 742
   },
   "crash/test_kill9_sweep.py": {
-   "comments": 269,
+   "comments": 272,
    "docstrings": 185,
-   "over_cap": 26,
-   "total": 2916
+   "over_cap": 27,
+   "total": 2919
   },
   "crash_points.py": {
    "comments": 1,
@@ -5396,7 +5396,7 @@
    "comments": 90,
    "docstrings": 91,
    "over_cap": 16,
-   "total": 624
+   "total": 623
   },
   "e2e/test_post_merge_node_e2e.py": {
    "comments": 12,
@@ -7776,9 +7776,9 @@
   },
   "test_runner_harness_health_cache.py": {
    "comments": 3,
-   "docstrings": 16,
+   "docstrings": 17,
    "over_cap": 1,
-   "total": 206
+   "total": 207
   },
   "test_runner_harness_health_probes.py": {
    "comments": 4,

@@ -99,17 +99,11 @@ from blizzard.runner.harness.internal.opencode_transcript import (
 )
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 60.0
-# One concrete, always-admitted version this module's own corpus fixture and live diagnostic
-# are authored against — a fixture/test convenience naming one member of the set below, never
-# itself the runtime admission mechanism (that membership check is ADMITTED_OPENCODE_VERSIONS's
-# own job, D2).
+# One concrete version this module's corpus/diagnostic fixtures are authored against — never the admission mechanism.
 PINNED_OPENCODE_VERSION = "1.18.25"
-# The declared admitted-version set (blizzard#438): membership, never a pin equality check.
+# The declared admitted-version set (blizzard#438), currently one member: membership, never a pin equality check.
 ADMITTED_OPENCODE_VERSIONS: frozenset[str] = frozenset({PINNED_OPENCODE_VERSION})
-# Every admitted version owes a committed corpus manifest — checked at `OpenCodeHealthProbe`
-# construction (opencode_health.py), not here at this module's own import (F10): this module
-# is imported transitively at daemon startup (`harness_registry.py`), and a missing manifest
-# must degrade only the OpenCode binding's own health, never take the whole daemon's import down.
+# Every admitted version owes a corpus manifest — checked at `OpenCodeHealthProbe` construction, degrading only it.
 SHAPE_FAULT_SUMMARY = "OpenCode emitted an unsupported or malformed required shape"
 INTERNAL_FAULT_SUMMARY = "the compatibility probe failed before it could observe OpenCode"
 BOUNDARY_FAULT_SUMMARY = "the runner could not establish the fail-closed filesystem boundary"

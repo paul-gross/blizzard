@@ -30,7 +30,7 @@ _HARNESS_ID = "opencode"
 
 def _degradations_from_manifest(version: str, *, corpus_root: Path) -> tuple[DeclaredDegradation, ...]:
     """This ``version``'s own declared degradations, read from its committed corpus manifest
-    (blizzard#438, F5) — never a hardcoded Python literal describing only one version. A
+    (blizzard#438) — never a hardcoded Python literal describing only one version. A
     missing or malformed manifest reads as "no declared degradations", the same fail-soft
     posture :func:`~blizzard.runner.harness.internal.offline_compatibility.classify_offline`
     already takes for a manifest it cannot read."""
@@ -80,15 +80,8 @@ class OpenCodeHealthProbe:
         # own real credential-discovery path.
         self._auth_path = Path(auth_path) if auth_path is not None else _default_opencode_auth_path()
         self._corpus_root = corpus_root
-        # Every admitted version owes a committed corpus manifest (D1) — checked here, at
-        # construction, rather than at this module's own import (F10): this class is built
-        # once, at daemon startup (`harness_registry.py`), and a missing manifest must degrade
-        # only the OpenCode binding's own health, never take the whole daemon's startup down.
-        # `supported_version`/`declared_degradations` both already read the corpus gracefully
-        # (a missing manifest reads as "unclassifiable"/"no declared degradations"), so this
-        # catch only needs to turn an otherwise-uncaught `CorpusConfigurationError` into a
-        # logged warning — the real-time health evaluation reports `unknown_version` for any
-        # admitted version this packaging defect actually observes.
+        # Every admitted version owes a committed corpus manifest (D1) — checked here rather than
+        # at import, so a missing manifest only logs and degrades this binding, never daemon startup.
         try:
             assert_admitted_versions_have_corpus(_HARNESS_ID, ADMITTED_OPENCODE_VERSIONS, corpus_root=corpus_root)
         except CorpusConfigurationError as exc:
@@ -114,12 +107,10 @@ class OpenCodeHealthProbe:
         return ADMITTED_OPENCODE_VERSIONS
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
-        """The union of every admitted version's own declared degradations (blizzard#438,
-        F5) — read from each version's committed corpus manifest, never a hardcoded tuple
-        describing only one of them. This seam reports independent of any one observed
-        version (:class:`~blizzard.runner.harness.adapter.IHarnessHealthProbe`'s own
-        contract), so with more than one admitted version this is deliberately the union,
-        not one version's own list picked arbitrarily."""
+        """The union of every admitted version's own declared degradations (blizzard#438),
+        read from each version's committed corpus manifest — never a hardcoded tuple
+        describing only one of them, and never one version's list picked arbitrarily, since
+        this seam reports independent of any one observed version."""
         seen: dict[CompatibilityProbe, DeclaredDegradation] = {}
         for version in sorted(ADMITTED_OPENCODE_VERSIONS):
             for degradation in _degradations_from_manifest(version, corpus_root=self._corpus_root):

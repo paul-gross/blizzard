@@ -24,7 +24,7 @@ from blizzard.runner.harness.transcript import TranscriptErrorFactory, Transcrip
 from tests.runner_fakes import FakeProbe
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent.parent / "src" / "blizzard" / "runner" / "harness"
-# Keyed off the admitted set itself (blizzard#438, F19) — there is exactly one member today,
+# Keyed off the admitted set itself (blizzard#438) — there is exactly one member today,
 # but this stays correct as the set grows.
 _AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION

@@ -53,14 +53,9 @@ class HarnessHealthEvidence:
     binary_present: bool
     #: Whether this binding declares a supported-version range at all; absent is not itself a failure.
     version_declared: bool
-    #: Meaningful only when declared (D2): whether the normalized observed version is a member of
-    #: this binding's own admitted-version set — computed by the caller, never by this evaluator.
-    #: ``True``/``False`` only when a version was actually observed; ``None`` when it wasn't (no
-    #: observation to judge membership of at all — distinct from a genuinely non-admitted one).
+    #: Meaningful only when declared (D2): membership per the caller; ``None`` means nothing was observed.
     version_admitted: bool | None
-    #: Meaningful only when declared and admitted: ``None`` means an admitted version's own corpus
-    #: fixture could not classify it (no manifest, or a malformed/unrecognized one) — never what a
-    #: non-admitted version's classification happens to be, since membership is checked first.
+    #: Meaningful only when declared and admitted: ``None`` means the corpus fixture couldn't classify it.
     version_classification: CompatibilityClassification | None
     authenticated: bool
     #: Non-empty means a tier this runner is configured for that this harness can't actually resolve.
@@ -84,16 +79,11 @@ class HarnessHealthResult:
 
 
 def evaluate_harness_health(evidence: HarnessHealthEvidence) -> HarnessHealthResult:
-    """Apply the closed priority policy to one binding's already-collected evidence.
-
-    First match wins, in :class:`HarnessHealthCause`'s own declared order: missing binary,
-    then version, then authentication, and so on. A declared degradation never makes the
-    result unavailable, surfaced only once every prior check passes.
-
-    The version check itself has its own priority within it (D2): membership is checked
-    before classification, so a genuinely non-admitted version is always
-    ``incompatible_version``, never ``unknown_version`` — that cause is reserved for an
-    admitted version the corpus itself cannot classify (or no version observed at all)."""
+    """Apply the closed priority policy to one binding's already-collected evidence: first
+    match wins, in :class:`HarnessHealthCause`'s own declared order. Within the version
+    check (D2), membership is checked before classification, so a non-admitted version is
+    always ``incompatible_version``, never ``unknown_version`` — that cause is reserved for
+    an admitted version the corpus can't classify, or none observed at all."""
 
     if not evidence.binary_present:
         return _unavailable(evidence, HarnessHealthCause.MISSING_BINARY)

@@ -239,10 +239,10 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
 _OPENCODE_GENERIC_POINTS = [p for p in _ALL_POINTS if p.startswith(("spawn.", "advance."))]
 _OPENCODE_RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 
-# Both intentionally empty (D6): the full local sweep, not CI, is the declared method
-# proving these points — PR/push CI does not gate them.
-_OPENCODE_GENERIC_CI_SUBSET: tuple[str, ...] = ()
-_OPENCODE_RESUME_CI_SUBSET: tuple[str, ...] = ()
+# Each mirrors its Claude-Code sibling's own CI representative (`_CI_SUBSET`/`_RESUME_CI_SUBSET`)
+# — the same harness-neutral point, proven recoverable under an OpenCode lineage in CI too.
+_OPENCODE_GENERIC_CI_SUBSET: tuple[str, ...] = ("spawn.after-lease-mint.before-spawn",)
+_OPENCODE_RESUME_CI_SUBSET: tuple[str, ...] = ("resume.after-kill.before-reattach",)
 _OPENCODE_GENERIC_SWEEP = _select(_OPENCODE_GENERIC_POINTS, _OPENCODE_GENERIC_CI_SUBSET)
 _OPENCODE_RESUME_SWEEP = _select(_OPENCODE_RESUME_POINTS, _OPENCODE_RESUME_CI_SUBSET)
 
@@ -252,8 +252,11 @@ def test_opencode_named_points_are_swept_under_both_harnesses(monkeypatch: pytes
     expected set is re-derived off the registry, never read back off the two tuples
     under test, so narrowing either fails loudly instead of passing by construction."""
     monkeypatch.delenv("BLIZZARD_CRASH_SWEEP_CI", raising=False)
-    should_cover_generic = [p for p in _ALL_POINTS if p.startswith(("spawn.", "advance."))]
-    should_cover_resume = [p for p in _ALL_POINTS if p.startswith("resume.")]
+    # Derived off `_GENERIC_POINTS`/`_RESUME_POINTS` — the Claude-Code sweep's own
+    # already-established family lists — never off the same `_ALL_POINTS` filter
+    # `_OPENCODE_GENERIC_POINTS`/`_OPENCODE_RESUME_POINTS` themselves use.
+    should_cover_generic = [p for p in _GENERIC_POINTS if p.startswith(("spawn.", "advance."))]
+    should_cover_resume = list(_RESUME_POINTS)
     should_cover = should_cover_generic + should_cover_resume
     assert should_cover_generic and should_cover_resume, (
         "the registry lost every spawn./advance. or every resume. point — nothing to sweep"

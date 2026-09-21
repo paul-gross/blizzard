@@ -22,7 +22,7 @@ from blizzard.runner.harness.internal.opencode_shapes import parse_session_expor
 
 pytestmark = pytest.mark.unit
 
-# Keyed off the admitted set itself (blizzard#438, F19) — there is exactly one member today,
+# Keyed off the admitted set itself (blizzard#438) — there is exactly one member today,
 # but this stays correct as the set grows.
 _AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
 _CORPUS_DIR = (

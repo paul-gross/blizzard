@@ -162,9 +162,10 @@ def test_a_raw_version_outside_the_admitted_set_is_incompatible() -> None:
     through the real evaluation path — `HarnessHealthCache.refresh` (capability_snapshot.py)
     into `evaluate_harness_health` (health.py) — never a synthetic evidence construction.
     Membership is checked before any corpus lookup, so this stays `incompatible_version`
-    whether or not a stray corpus entry happens to exist for it; that precedence is pinned
-    directly at the `classify_offline`/membership level in
-    ``test_runner_harness_offline_compatibility.py``."""
+    whether or not a stray corpus entry happens to exist for it; `classify_offline` itself
+    carries no membership concept (it classifies whatever version it is given), so that
+    precedence is pinned at the evaluation-policy level instead, synthetically, in
+    ``test_runner_harness_health.py::test_a_non_admitted_version_is_incompatible_regardless_of_classification``."""
     clock = FixedClock(_NOW)
     probe = _FakeProbe(supported=ADMITTED_OPENCODE_VERSIONS)
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)

@@ -575,10 +575,9 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
                 board_versions = {u["harness_version"] for u in board_rows}
                 ground_truth_versions = {r["harness_version"] for r in ground_truth}
                 assert board_versions == ground_truth_versions, node_label
-                if expected_harness == "opencode":
-                    # A mirror-compare alone can't distinguish genuine agreement from both
-                    # sides silently dropping version capture and agreeing on {None}.
-                    assert board_versions - {None, ""}, (node_label, board_versions)
+                # A mirror-compare alone can't distinguish genuine agreement from both
+                # sides silently dropping version capture and agreeing on {None}.
+                assert board_versions - {None, ""}, (node_label, board_versions)
 
             # --- Analytics: derive, then read the real events back per node.
 

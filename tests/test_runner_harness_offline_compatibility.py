@@ -28,7 +28,7 @@ from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VE
 pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
-# Keyed off the admitted set itself (blizzard#438, F19), not the legacy single-version pin —
+# Keyed off the admitted set itself (blizzard#438), not the legacy single-version pin —
 # there is exactly one member today, but this stays correct as the set grows.
 _AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
@@ -41,7 +41,7 @@ def test_default_corpus_root_is_the_harness_packages_own_contracts_tree() -> Non
 def test_the_pinned_opencode_corpus_classifies_degraded() -> None:
     """`contracts/opencode/1.18.25/manifest.json`'s own `live_evidence.classification`
     is `"degraded"` — pinned here so a corpus edit that silently changes it is caught."""
-    assert classify_offline("opencode", PINNED_OPENCODE_VERSION) is CompatibilityClassification.DEGRADED
+    assert classify_offline("opencode", _AN_ADMITTED_OPENCODE_VERSION) is CompatibilityClassification.DEGRADED
 
 
 def test_no_observed_version_is_unknown() -> None:
@@ -63,7 +63,7 @@ def test_corpus_root_is_injectable(tmp_path: Path) -> None:
 
     assert classify_offline("widget", "2.0.0", corpus_root=tmp_path) is CompatibilityClassification.SUPPORTED
     # The real corpus is never consulted when a root override is supplied.
-    assert classify_offline("opencode", PINNED_OPENCODE_VERSION, corpus_root=tmp_path) is None
+    assert classify_offline("opencode", _AN_ADMITTED_OPENCODE_VERSION, corpus_root=tmp_path) is None
 
 
 def test_a_malformed_manifest_is_unknown_rather_than_raising(tmp_path: Path) -> None:

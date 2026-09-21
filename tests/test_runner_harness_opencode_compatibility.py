@@ -73,7 +73,7 @@ from blizzard.runner.harness.internal.opencode_transcript import TranscriptExpor
 pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
-# Keyed off the admitted set itself (blizzard#438, F19) — there is exactly one member today,
+# Keyed off the admitted set itself (blizzard#438) — there is exactly one member today,
 # but this stays correct as the set grows.
 _AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
@@ -191,7 +191,7 @@ def test_corpus_manifest_closes_categories_and_parser_shape_coverage() -> None:
         "child_session",
     }
     assert manifest["harness"] == "opencode"
-    assert manifest["version"] == PINNED_OPENCODE_VERSION
+    assert manifest["version"] == _AN_ADMITTED_OPENCODE_VERSION
     assert manifest["sanitized"] is True
     assert tuple(manifest["required_probes"]) == REQUIRED_PROBES
     assert {entry["category"] for entry in manifest["fixtures"]} == expected_categories
@@ -264,7 +264,7 @@ def test_manifest_retains_sanitized_live_diagnostic_summary() -> None:
     path = _CORPUS_DIR / manifest["live_evidence"]["fixtures"]["diagnostic"]["path"]
     payload = json.loads(path.read_text())
 
-    assert payload["version"] == PINNED_OPENCODE_VERSION
+    assert payload["version"] == _AN_ADMITTED_OPENCODE_VERSION
     assert payload["model"] == {"provider": "openai", "model": "gpt-5.6-luna", "variant": "max"}
     assert payload["classification"] == "degraded"
     assert payload["admissible"] is True

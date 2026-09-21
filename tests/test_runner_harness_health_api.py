@@ -100,7 +100,7 @@ def test_reports_available_with_a_declared_degradation(tmp_path: Path) -> None:
 
 def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path) -> None:
     """A missing corpus manifest for an admitted OpenCode version degrades that binding
-    alone (blizzard#438, F10) — `OpenCodeHealthProbe` construction never raises over it, and
+    alone (blizzard#438) — `OpenCodeHealthProbe` construction never raises over it, and
     it neither prevents Claude Code's own entry, in the same registry and cache, from
     reporting healthy, nor the route from responding at all. An unresolvable binary path
     (mirroring `test_reports_missing_binary_for_an_unresolvable_configured_path` above) keeps
@@ -118,7 +118,7 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path) 
             OPENCODE_HARNESS_ID: HarnessBinding(adapter=opencode_adapter),
         }
     )
-    # `corpus_root=tmp_path` (empty) never raises out of construction (F10) — the whole
+    # `corpus_root=tmp_path` (empty) never raises out of construction — the whole
     # point being proven here.
     health = HarnessHealthCache(
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
@@ -143,7 +143,7 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path) 
 
 
 def test_admitted_versions_surface_per_binding(tmp_path: Path) -> None:
-    """``admitted_versions`` (blizzard#438, F20) is populated from each binding's own
+    """``admitted_versions`` (blizzard#438) is populated from each binding's own
     `supported_version()` — non-empty for OpenCode, empty for a binding (Claude Code) that
     declares no supported-version range at all."""
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")

@@ -21,9 +21,9 @@ DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parent.parent / "contracts"
 
 class CorpusConfigurationError(RuntimeError):
     """A binding declared an admitted version with no committed corpus manifest under
-    ``corpus_root`` — a configuration error raised at construction/import time, never a
-    silently-unclassifiable runtime case. The two-part admitted-version claim (declared
-    *and* backed by a corpus fixture) must land together."""
+    ``corpus_root`` — the two-part admitted-version claim (declared *and* backed by a
+    corpus fixture) must land together. Signals the defect only: its one caller
+    (``OpenCodeHealthProbe.__init__``) catches and logs it rather than raising further."""
 
 
 def assert_admitted_versions_have_corpus(
@@ -52,10 +52,8 @@ def classify_offline(
     corpus_root: Path = DEFAULT_CORPUS_ROOT,
 ) -> CompatibilityClassification | None:
     """The pinned classification a committed corpus fixture records for ``observed_version``,
-    or ``None`` when no version was observed or no fixture manifest proves it. Classifies
-    ``observed_version`` on its own terms — it does not decide whether ``observed_version``
-    is one this binding actually admits; a caller that needs that distinct fact (D2) checks
-    membership itself, against its own admitted-version set, before or after calling this.
+    or ``None`` when no version was observed or no fixture manifest proves it. Carries no
+    membership concept of its own (D2) — a caller checks admission itself, before or after.
     ``corpus_root`` defaults to this repo's own ``contracts/`` tree."""
 
     if observed_version is None:
