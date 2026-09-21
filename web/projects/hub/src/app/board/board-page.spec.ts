@@ -6,7 +6,7 @@ import { By } from '@angular/platform-browser';
 import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { BoardShell, compactRef, hubClient, injectDeleteChunkMutation } from 'fleet';
+import { BoardShell, compactRef, hubClient, hubQueueKey, injectDeleteChunkMutation } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
@@ -30,6 +30,11 @@ const READY_NEXT = 'ch_01KXKVVF1J3D6H6VYZ3XYNRDY2';
 const GONE = 'ch_01KXKVVF1J3D6H6VYZ3XYNGONE';
 const BACKLOG = 'ch_01KXKVVF1J3D6H6VYZ3XYNBLG1';
 const BACKLOG_NEXT = 'ch_01KXKVVF1J3D6H6VYZ3XYNBLG2';
+
+function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  return { promise: new Promise<T>((done) => (resolve = done)), resolve: (value) => resolve(value) };
+}
 
 const CHUNK = (chunkId: string, status: string) => ({
   chunk_id: chunkId,
@@ -470,6 +475,27 @@ describe('BoardPage', () => {
     const laneIds = (el: HTMLElement, column: string): string[] =>
       [...el.querySelectorAll(`[data-col="${column}"] [data-testid="chunk-id"]`)].map((n) => n.textContent?.trim());
 
+    it('renders the requested position before the POST returns', async () => {
+      const pendingPost = deferred<object>();
+      stub.restore();
+      stub = stubRequestClient(hubClient, (method, path) => {
+        if (method === 'POST' && path === '/api/queue/position') return pendingPost.promise;
+        return hubRoutes()(method, path);
+      });
+      const { el, harness } = await open();
+      const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+
+      shell.reposition.emit({ chunkId: READY_NEXT, afterChunkId: null, list: 'ready' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
+      expect(stub.forRoute('/api/queue/position', 'POST')).toHaveLength(1);
+      expect(laneIds(el, 'ready')).toEqual([compactRef(READY_NEXT), compactRef(READY)]);
+
+      pendingPost.resolve({ entries: [] });
+      await settle(harness.fixture);
+    });
+
     it('renders the READY lane in its requested order while the reposition is pending, reverting once it settles', async () => {
       const { el, harness } = await open();
       const queryClient = TestBed.inject(QueryClient);
@@ -491,6 +517,48 @@ describe('BoardPage', () => {
 
       // Settled with the fixture's queue read unchanged (a static stub, no real reorder):
       // the override is gone and the lane renders its last real order again.
+      expect(laneIds(el, 'ready')).toEqual([compactRef(READY), compactRef(READY_NEXT)]);
+    });
+
+    it("keeps the second drag in place while the first drag's refresh lands", async () => {
+      const { el, harness } = await open();
+      const queryClient = TestBed.inject(QueryClient);
+      const refreshResolvers: (() => void)[] = [];
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(
+        () => new Promise<void>((resolve) => refreshResolvers.push(resolve)),
+      );
+      const shell = harness.fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance as BoardShell;
+
+      shell.reposition.emit({ chunkId: READY_NEXT, afterChunkId: null, list: 'ready' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      shell.reposition.emit({ chunkId: READY, afterChunkId: null, list: 'ready' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
+      expect(laneIds(el, 'ready')).toEqual([compactRef(READY), compactRef(READY_NEXT)]);
+      expect(invalidateSpy).toHaveBeenCalledTimes(2);
+
+      // A's response carries A's order and predates B's write. B's later override
+      // must continue to win while B waits to start its own refresh.
+      queryClient.setQueryData(hubQueueKey, [
+        { chunk_id: READY_NEXT, graph_id: 'gr_1', position: 0, work_refs: [] },
+        { chunk_id: READY, graph_id: 'gr_1', position: 1, work_refs: [] },
+      ]);
+      refreshResolvers.splice(0).forEach((resolve) => resolve());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
+      expect(invalidateSpy).toHaveBeenCalledTimes(4);
+      expect(laneIds(el, 'ready')).toEqual([compactRef(READY), compactRef(READY_NEXT)]);
+
+      // B's own response now confirms B's order and retires its override.
+      queryClient.setQueryData(hubQueueKey, [
+        { chunk_id: READY, graph_id: 'gr_1', position: 0, work_refs: [] },
+        { chunk_id: READY_NEXT, graph_id: 'gr_1', position: 1, work_refs: [] },
+      ]);
+      refreshResolvers.splice(0).forEach((resolve) => resolve());
+      await settle(harness.fixture);
+
       expect(laneIds(el, 'ready')).toEqual([compactRef(READY), compactRef(READY_NEXT)]);
     });
 
