@@ -4,31 +4,34 @@
 
 Every session is recorded and read under a harness id. A runner build binds two: `claude_code`, built once at startup
 from `[worker]`'s `harness_binary` (and its sibling knobs below) in `blizzard-runner.toml`, and `opencode`, built from
-its own `[opencode]` table ("OpenCode configuration" below) — each the same binary every spawn, judge, and resume
-child for that harness runs. Which one a fresh mint actually spawns under is a per-`sessions:` entry declaration
+its own `[opencode]` table ("OpenCode configuration" below) — each the same binary every spawn, judge, and resume child
+for that harness runs. Which one a fresh mint actually spawns under is a per-`sessions:` entry declaration
 (`harnesses:`/`default_harnesses`, "Acceptable harness set" below), never a runner-wide switch, so a deployment that
-never names `opencode` anywhere never spawns it under that binding. Binding a harness does carry one small, bounded
-cost regardless of whether anything ever spawns under it: each bound binary's version is probed and cached for the
+never names `opencode` anywhere never spawns it under that binding. Binding a harness does carry one small, bounded cost
+regardless of whether anything ever spawns under it: each bound binary's version is probed and cached for the
 fleet-registration push and the claim peek, refreshed at most once every ten minutes (long enough that an idle runner
-pays it a few times an hour, not every ~30s tick; short enough that an in-place binary upgrade is noticed well within
-an operator's own deploy window) — never once per tick, and never for a binary that isn't on `PATH` at all. A recorded
-session's owner
-resolves against this runner's own bindings: **unknown** means the session was recorded under a harness id this runner
-build doesn't ship at all — the remedy is to run a runner version that binds that id, on the runner holding the chunk,
-never to substitute another harness. **unavailable** means the id is bound but this runner can't supply the specific
-capability being asked of it — resuming or judging versus reading its transcript. `claude_code` binds every capability
-the registry knows to ask for, so this never fires for it; `opencode` binds no transcript source at all (a later
-phase's own capability), so asking for one genuinely raises this today — the loop's own usage-recording and
-session-rotation call sites already treat it as their ordinary "no fallback transcript" outcome, never a crash. Either
-shows up as an `owner-unresolvable` event, which [observability.md](./observability.md) owns reading and resolving.
+pays it a few times an hour, not every ~30s tick; short enough that an in-place binary upgrade is noticed well within an
+operator's own deploy window) — never once per tick, and never for a binary that isn't on `PATH` at all. A recorded
+session's owner resolves against this runner's own bindings: **unknown** means the session was recorded under a harness
+id this runner build doesn't ship at all — the remedy is to run a runner version that binds that id, on the runner
+holding the chunk, never to substitute another harness. **unavailable** means the id is bound but this runner can't
+supply the specific capability being asked of it — resuming or judging versus reading its transcript. `claude_code`
+binds every capability the registry knows to ask for, so this never fires for it; `opencode` binds no transcript source
+at all (a later phase's own capability), so asking for one genuinely raises this today — the loop's own usage-recording
+and session-rotation call sites already treat it as their ordinary "no fallback transcript" outcome, never a crash.
+Either shows up as an `owner-unresolvable` event, which [observability.md](./observability.md) owns reading and
+resolving.
 
 OpenCode's own plugin channel — a soft heartbeat nudge after every tool call, and forwarding the lease's identity into
-tool subprocesses through `shell.env` — is classified `degraded` on the pinned OpenCode version: the compatibility
-proof's `root_hook` and `child_sessions` probes both report absent, so the plugin's loading at all is never something
-a deployment can prove or depend on ([opencode-compatibility.md](./opencode-compatibility.md) owns the full probe
-table and its classification policy). Nothing about a turn's completion or a lease's correctness rests on it — process
-liveness is the sole signal for both harnesses alike — so a runner whose OpenCode plugin never loads still executes
-work correctly and merely goes quiet between tool calls.
+tool subprocesses through `shell.env` — is classified `degraded` on every OpenCode version the runner admits today: the
+compatibility proof's `root_hook` and `child_sessions` probes both report absent, so the plugin's loading at all is
+never something a deployment can prove or depend on ([opencode-compatibility.md](./opencode-compatibility.md) owns the
+full probe table and its classification policy). This is a fact of each admitted version's own committed corpus, not a
+blanket guarantee — a future admitted version's own declared degradations (`OpenCodeHealthProbe.declared_degradations`,
+`src/blizzard/runner/harness/internal/opencode_health.py`) are read from that version's own manifest and can differ.
+Nothing about a turn's completion or a lease's correctness rests on it — process liveness is the sole signal for both
+harnesses alike — so a runner whose OpenCode plugin never loads still executes work correctly and merely goes quiet
+between tool calls.
 
 ## The three prompt layers
 
@@ -96,14 +99,14 @@ tier-to-model mapping lives in each runner's `blizzard-runner.toml`, keeping gra
 `advanced` to opus, and `basic` to sonnet, so a zero-config runner resolves the tiers on that harness; an entry
 overrides the built-in for that alias. `[effort.aliases]` maps onto the low|medium|high|max ordinal, which needs no
 entries; the table names a deployment's own vocabulary or reaches a native tier outside the ordinal, such as Claude
-Code's xhigh. OpenCode ships no built-in tier mapping at all, so its own `[opencode.models.aliases]` is not optional
-the way Claude Code's is — an unmapped tier is a deliberately unavailable capability on that harness ("OpenCode
+Code's xhigh. OpenCode ships no built-in tier mapping at all, so its own `[opencode.models.aliases]` is not optional the
+way Claude Code's is — an unmapped tier is a deliberately unavailable capability on that harness ("OpenCode
 configuration" below), never a guessed native name. Nothing substitutes downward when a tier is unmapped on either
 harness — aliases are roles, not a scale — so every degradation is authored.
 
-The resolved tier vocabulary — the built-ins and whatever `[models.aliases]` overrides or adds — is also what the
-runner advertises to the hub on registration, one binding per harness it can dispatch to: the hub never interprets a
-tier id, but it does hold this runner's own list of them to match a chunk's requirements against later.
+The resolved tier vocabulary — the built-ins and whatever `[models.aliases]` overrides or adds — is also what the runner
+advertises to the hub on registration, one binding per harness it can dispatch to: the hub never interprets a tier id,
+but it does hold this runner's own list of them to match a chunk's requirements against later.
 
 A model preference list resolves left to right: the first entry the runner can resolve wins, an unresolvable entry (an
 unmapped alias, another harness's name) is skipped rather than failing the spawn. For a single acceptable harness — the
@@ -125,14 +128,14 @@ measured cost.
 
 A `sessions:` entry's `harnesses:` (and a chunk's `default_harnesses`) name the acceptable set a fresh mint may spawn
 under, resolved harness-primary, model-inner: `HarnessSelector` walks the set in declared order, and for whichever
-harness this runner can dispatch to, that harness's own model preference resolves as above — never the other way
-around, so a later harness resolving an earlier-preferred model still loses to an earlier harness resolving a later
-one. With two or more acceptable harnesses, resolution is strict: a harness resolving none of the model preference is
-skipped entirely rather than falling back within it, so the single-harness fallback above holds only for that
-single-member case — a multi-harness set instead moves on to the next member, and only escalates
-(`no-acceptable-harness`, [observability.md](./observability.md)) once every member is exhausted. A retry keeps its
-prior lease's own owner when that owner is still a member of the (possibly since-edited) acceptable set, and escalates
-the same way when it has fallen out of one.
+harness this runner can dispatch to, that harness's own model preference resolves as above — never the other way around,
+so a later harness resolving an earlier-preferred model still loses to an earlier harness resolving a later one. With
+two or more acceptable harnesses, resolution is strict: a harness resolving none of the model preference is skipped
+entirely rather than falling back within it, so the single-harness fallback above holds only for that single-member case
+— a multi-harness set instead moves on to the next member, and only escalates (`no-acceptable-harness`,
+[observability.md](./observability.md)) once every member is exhausted. A retry keeps its prior lease's own owner when
+that owner is still a member of the (possibly since-edited) acceptable set, and escalates the same way when it has
+fallen out of one.
 
 ## OpenCode configuration
 
@@ -148,14 +151,14 @@ skips an unavailable member with its own `"unhealthy"` reason ([observability.md
 selecting it, so a node whose acceptable set includes `opencode` falls back to another member instead of failing at
 spawn, and escalates only once every member is exhausted. The binding stays visible, with its cause, in this runner's
 own `GET /api/harness-health` diagnostics; the hub sees only the boolean flag, never the cause.
-`[opencode.models.aliases]` and `[opencode.effort.aliases]` mirror `[models.aliases]`/
-`[effort.aliases]` in shape but not in defaults — see "Model and effort tiers" above for why OpenCode's own table
-carries the whole mapping rather than overrides to a built-in one. `worker_config_path` names the runner-owned
-permission/plugin document `blizzard runner init` scaffolds beside `worker-settings.json` (never inside a project
-repository); it denies OpenCode's native, non-interactive `question` tool outright — a headless worker has no one to
-answer it, and `blizzard runner ask` is its lease-authenticated replacement — and names the heartbeat plugin
-("Harness identity" above) for OpenCode to load. Effort reasserts on every OpenCode invocation exactly as it does for
-Claude Code, for the same reason: a mint-only value would silently drop across a resume.
+`[opencode.models.aliases]` and `[opencode.effort.aliases]` mirror `[models.aliases]`/ `[effort.aliases]` in shape but
+not in defaults — see "Model and effort tiers" above for why OpenCode's own table carries the whole mapping rather than
+overrides to a built-in one. `worker_config_path` names the runner-owned permission/plugin document
+`blizzard runner init` scaffolds beside `worker-settings.json` (never inside a project repository); it denies OpenCode's
+native, non-interactive `question` tool outright — a headless worker has no one to answer it, and `blizzard runner ask`
+is its lease-authenticated replacement — and names the heartbeat plugin ("Harness identity" above) for OpenCode to load.
+Effort reasserts on every OpenCode invocation exactly as it does for Claude Code, for the same reason: a mint-only value
+would silently drop across a resume.
 
 ## Compaction windows
 
@@ -165,8 +168,8 @@ fleet-driven invocation (spawn, judge, resume-with-message). Whether a harness r
 window is unmeasured, so the runner never bets on stickiness: it stamps the resolved window on the lease at mint and
 reasserts it from that stamp on every resume, as it does effort; an unrecognized or empty value is dropped with one log
 line, never failing a spawn. OpenCode has no comparable numeric threshold — its own compaction reserve and
-automatic-compaction switch do not represent the same semantics — so the OpenCode binding always resolves this facet
-as unsupported and omits it, the same one-log-line-and-drop treatment an unrecognized Claude Code value gets.
+automatic-compaction switch do not represent the same semantics — so the OpenCode binding always resolves this facet as
+unsupported and omits it, the same one-log-line-and-drop treatment an unrecognized Claude Code value gets.
 
 The window-versus-rotation ordering is the whole authoring decision: set below `rotate.max_context_tokens` — the only
 rotation bound a window is commensurable with — the window fires repeatedly inside one long node, costing the worker its

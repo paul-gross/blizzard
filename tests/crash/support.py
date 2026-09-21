@@ -78,7 +78,13 @@ def blizzard_root() -> Path:
 def mock_bin_dir() -> Path | None:
     mock = blizzard_root().parent / "blizzard-mock"
     bin_dir = mock / ".venv" / "bin"
-    if (bin_dir / "blizzard-mock-fixture").is_file() and (bin_dir / "mock-claude-code").is_file():
+    if (
+        (bin_dir / "blizzard-mock-fixture").is_file()
+        and (bin_dir / "mock-claude-code").is_file()
+        # An older-provisioned sibling predating `mock-opencode` should skip here, not
+        # fail obscurely inside an OpenCode-lineage scenario's crash-armed subprocess.
+        and (bin_dir / "mock-opencode").is_file()
+    ):
         return bin_dir
     return None
 
@@ -123,6 +129,54 @@ def build_script(landed_file: str) -> str:
         '    ["blizzard", "runner", "artifact", "commit",\n'
         '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
         "    check=True,\n"
+        ")\n"
+    )
+
+
+def opencode_build_script(landed_file: str) -> str:
+    """:func:`build_script`'s twin, but every ``subprocess.run`` call passes
+    ``capture_output=True`` — unlike ``build_script``'s plain calls, ``mock-opencode``
+    reads the spawned worker process's own first stdout line as session identity, so any
+    uncaptured child-process stdout leaking into the worker's own stdout would corrupt
+    that protocol (see ``tests/service/support.py::OPENCODE_BUILD_SCRIPT``, which this
+    mirrors adapted to the crash tier's own ``landed_file``/``REPO_NAME``/git-push idiom).
+    The commit is idempotent (only if dirty), :func:`pre_declare_build_script`'s own
+    pattern: the two-phase spawn's own crash points (D1/D2) confirm the launched process
+    durable — and so free-running, no longer bounded by the launch trampoline — BEFORE the
+    authoritative session record lands, so an orphaned worker from an armed kill in that
+    window can race a fresh re-attempt to the SAME commit; a plain ``git commit`` there
+    would find nothing to commit and raise, leaving the produce forever undeclared."""
+    return (
+        "import subprocess, pathlib\n"
+        f"repo = {REPO_NAME!r}\n"
+        f"(pathlib.Path(repo) / {landed_file!r}).write_text('landed by the crash sweep\\n')\n"
+        'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'
+        "_dirty = subprocess.run(\n"
+        '    ["git", "-C", repo, "status", "--porcelain"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        "if _dirty:\n"
+        "    subprocess.run(\n"
+        '        ["git", "-C", repo,\n'
+        '         "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
+        '         "commit", "-m", "feat: land a change from the crash sweep"],\n'
+        "        check=True, capture_output=True,\n"
+        "    )\n"
+        "_branch = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        "_commit = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        'subprocess.run(\n    ["git", "-C", repo, "push", "--force-with-lease", "origin", _branch],\n'
+        "    check=True, capture_output=True,\n"
+        ")\n"
+        "subprocess.run(\n"
+        '    ["blizzard", "runner", "artifact", "commit",\n'
+        '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+        "    check=True, capture_output=True,\n"
         ")\n"
     )
 
@@ -244,6 +298,57 @@ def graph_yaml(landed_file: str) -> str:
             "build": {
                 "executor": "runner",
                 "prompt": build_script(landed_file),
+                "produces": _GIT_COMMIT_PRODUCES,
+                "judgement": {
+                    "prompt": _JUDGEMENT_SCRIPT,
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+#: The graph-level named session (issue #144) an OpenCode-lineage ``build`` node resumes
+#: (D5, ``bzh:crash-sweep`` phase 4) — constrained to ``harnesses: [opencode]`` so the
+#: fresh mint that opens it is a real OpenCode dispatch, not a default Claude Code one.
+OPENCODE_SESSION_NAME = "crash-sweep-opencode"
+
+
+def opencode_graph_yaml(landed_file: str) -> str:
+    """:func:`graph_yaml`'s ``build -> deliver`` shape, but ``build`` resumes
+    :data:`OPENCODE_SESSION_NAME`, a graph-level session (issue #144) declared
+    ``harnesses: [opencode]`` — see ``tests/service/support.py::mock_hub_opencode_chunk_spec``
+    for that field's own shape. These are the SAME harness-neutral ``spawn.*``/``advance.*``
+    registry windows :func:`graph_yaml` already exercises under Claude Code, reached here
+    under an OpenCode lineage instead of a declared ``opencode.*`` mirror family (D5)."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "sessions": {OPENCODE_SESSION_NAME: {"harnesses": ["opencode"]}},
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "session": f"resume:{OPENCODE_SESSION_NAME}",
+                "prompt": opencode_build_script(landed_file),
                 "produces": _GIT_COMMIT_PRODUCES,
                 "judgement": {
                     "prompt": _JUDGEMENT_SCRIPT,
@@ -584,6 +689,9 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         # Both health probes read a fixture-written credential file (blizzard#438) — neither
         # mock binary is a real, logged-in provider CLI.
         claude_code_credentials_path=claude_credentials,
+        # Independent of `harness_binary` (still Claude Code's) — without this, no crash-tier
+        # scenario can spawn an OpenCode worker at all (bzh:crash-sweep phase 4).
+        opencode_binary=str(bin_dir / "mock-opencode"),
         opencode_auth_path=opencode_auth,
         # Unset on purpose: the external-usage sampler's first soft-failure check (a
         # missing credentials file) trips before any request is built (issue #218).

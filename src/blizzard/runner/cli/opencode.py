@@ -23,7 +23,7 @@ from blizzard.runner.harness.internal.opencode_scratch_git import SubprocessOpen
 
 @click.group("opencode")
 def opencode_group() -> None:
-    """Read-only diagnostics for the pinned OpenCode compatibility contract."""
+    """Read-only diagnostics for OpenCode's admitted-version compatibility contract."""
 
 
 @opencode_group.command("compatibility")
@@ -58,7 +58,7 @@ def opencode_compatibility(
     evidence_directory: Path,
     live_provider: bool,
 ) -> None:
-    """Prove OpenCode 1.18.25 in a disposable git repository and retain sanitized evidence."""
+    """Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence."""
     try:
         process = SubprocessOpenCodeProcess()
         transport = UrllibLoopbackTransport()

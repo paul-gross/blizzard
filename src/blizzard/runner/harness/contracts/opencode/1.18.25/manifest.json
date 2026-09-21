@@ -25,6 +25,20 @@
     "compaction",
     "child_session"
   ],
+  "declared_degradations": [
+    {
+      "probe": "root_hook",
+      "summary": "OpenCode has no portable root-hook lifecycle signal to observe, so the runner can never confirm whether its plugin's heartbeat nudge and per-tool identity forwarding actually loaded (docs/deployment/worker-spawn.md)."
+    },
+    {
+      "probe": "usage_cost",
+      "summary": "a turn can export token usage with no cost figure attached, understating a session's spend even though the turn itself completed."
+    },
+    {
+      "probe": "child_sessions",
+      "summary": "the pinned build denies the `task` tool for every agent, so no run can prove or disprove that a spawned child session reports its parent linkage correctly."
+    }
+  ],
   "live_evidence": {
     "version": "1.18.25",
     "model": "openai/gpt-5.6-luna",

@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import math
 import os
-import re
 import shlex
 import tempfile
 import time
@@ -26,6 +25,7 @@ from blizzard.runner.harness.compatibility import (
     EvidenceState,
     ProbeObservation,
 )
+from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.internal.opencode_attach import IAttachProxyFactory
 from blizzard.runner.harness.internal.opencode_compaction import (
     IOpenCodeCompactor,
@@ -98,15 +98,12 @@ from blizzard.runner.harness.internal.opencode_transcript import (
     inspect_transcript,
 )
 
-PINNED_VERSION_PATTERN = re.compile(
-    r"^\s*(?:opencode(?:\s+version)?\s+)?(?:v)?"
-    r"(?P<version>\d+\.\d+\.\d+(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
-    r"\s*$",
-    re.IGNORECASE,
-)
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 60.0
-# The one version this binding is built to prove; the neutral contract only carries it as data.
+# One concrete version this module's corpus/diagnostic fixtures are authored against — never the admission mechanism.
 PINNED_OPENCODE_VERSION = "1.18.25"
+# The declared admitted-version set (blizzard#438), currently one member: membership, never a pin equality check.
+ADMITTED_OPENCODE_VERSIONS: frozenset[str] = frozenset({PINNED_OPENCODE_VERSION})
+# Every admitted version owes a corpus manifest — checked at `OpenCodeHealthProbe` construction, degrading only it.
 SHAPE_FAULT_SUMMARY = "OpenCode emitted an unsupported or malformed required shape"
 INTERNAL_FAULT_SUMMARY = "the compatibility probe failed before it could observe OpenCode"
 BOUNDARY_FAULT_SUMMARY = "the runner could not establish the fail-closed filesystem boundary"
@@ -182,7 +179,7 @@ class OpenCodeCompatibilityProbe:
         self._transport = transport
         self._attach_proxy_factory = attach_proxy_factory
         self._timeout_seconds = timeout_seconds
-        self.expected_version = PINNED_OPENCODE_VERSION
+        self.admitted_versions = ADMITTED_OPENCODE_VERSIONS
         self.observed_version = "unknown"
         self._evidence: dict[str, object] = {}
         self._config_snapshots: dict[Path, bytes] = {}
@@ -243,13 +240,13 @@ class OpenCodeCompatibilityProbe:
                     "tool_user": "same-user-landlock-layer",
                 }
                 self.observed_version = self._observe_version(preflight_cwd, preflight_env)
-                if self.observed_version != PINNED_OPENCODE_VERSION:
+                if self.observed_version not in self.admitted_versions:
                     self._evidence["preflight_blocked"] = "version-mismatch"
+                    admitted = ", ".join(repr(version) for version in sorted(self.admitted_versions))
                     self._fill_failed(
                         observations,
                         PROBE_ROSTER,
-                        f"OpenCode version {self.observed_version!r} does not match the pinned "
-                        f"{PINNED_OPENCODE_VERSION}",
+                        f"OpenCode version {self.observed_version!r} is not in the admitted versions: {admitted}",
                     )
                     return self._ordered_observations(observations)
 
@@ -389,11 +386,8 @@ class OpenCodeCompatibilityProbe:
         result = self._invoke("version", [self.binary, "--version"], cwd=cwd, env=env)
         if result.returncode != 0:
             return "unknown"
-        lines = [line for line in result.stdout.splitlines() if line.strip()]
-        if len(lines) != 1:
-            return "unknown"
-        match = PINNED_VERSION_PATTERN.fullmatch(lines[0])
-        return match.group("version") if match else "unknown"
+        normalized = harness_shared.normalize_opencode_version(result.stdout)
+        return normalized if normalized is not None else "unknown"
 
     def _fresh_turn(self, cwd: Path, env: Mapping[str, str]) -> _TurnResult:
         """Run the edit/commit turn and export it repeatedly while live and after it exits."""
@@ -1354,8 +1348,9 @@ class OpenCodeCompatibilityProbe:
 
 
 __all__ = [
+    "ADMITTED_OPENCODE_VERSIONS",
     "DEFAULT_COMMAND_TIMEOUT_SECONDS",
-    "PINNED_VERSION_PATTERN",
+    "PINNED_OPENCODE_VERSION",
     "LiveProviderOptInRequired",
     "OpenCodeCompatibilityProbe",
     "OpenCodeProbeError",

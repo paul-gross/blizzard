@@ -359,6 +359,69 @@
           "role": "owner"
         }
       ]
+    },
+    {
+      "id": "opencode-admitted-version-set-currently-one-member",
+      "statement": "The runner OpenCode admitted-version set (ADMITTED_OPENCODE_VERSIONS) currently contains exactly one member, 1.18.25.",
+      "owner": "src/blizzard/runner/harness/internal/opencode_probe.py#<module>",
+      "owner_kind": "module",
+      "owner_assert": {
+        "quote": "currently one member"
+      },
+      "markers": [
+        "runner s admitted set currently",
+        "admitted opencode version set currently",
+        "opencode versions currently just"
+      ],
+      "sites": [
+        {
+          "file": "src/blizzard/runner/harness/internal/opencode_probe.py",
+          "symbol": "<module>",
+          "role": "owner"
+        },
+        {
+          "file": "../blizzard-context/verification/blizzard/gaps.md",
+          "symbol": "session-stickiness-effective-model-and-context-accounting",
+          "role": "allowed",
+          "reason": "Restates the admitted-set cardinality while describing an unrelated model-stickiness gap."
+        },
+        {
+          "file": "../blizzard-context/verification/blizzard/gaps.md",
+          "symbol": "opencodes-compaction-tail-marker",
+          "role": "allowed",
+          "reason": "Restates the admitted-set cardinality while describing the compaction-tail-marker gap."
+        },
+        {
+          "file": "../blizzard-context/verification/blizzard/gaps.md",
+          "symbol": "opencodes-analytics-dialect-has-no-proven-readskill-tool-name-mapping",
+          "role": "allowed",
+          "reason": "Restates the admitted-set cardinality while describing the read/skill dialect gap."
+        },
+        {
+          "file": "../blizzard-context/verification/blizzard/manual.md",
+          "symbol": "blizzardmanual-opencode-compatibility",
+          "role": "allowed",
+          "reason": "States the admitted set an operator must observe the diagnostic report against."
+        },
+        {
+          "file": "../blizzard-context/verification/blizzard.md",
+          "symbol": "manual-testing",
+          "role": "allowed",
+          "reason": "Table row summarizing the manual compatibility method against the admitted set."
+        },
+        {
+          "file": "docs/deployment/opencode-compatibility.md",
+          "symbol": "opencode-compatibility",
+          "role": "allowed",
+          "reason": "Operator-facing intro restating the admitted set for context."
+        },
+        {
+          "file": "docs/deployment/opencode-compatibility.md",
+          "symbol": "before-you-run",
+          "role": "allowed",
+          "reason": "Operator-facing prerequisite restating the admitted set for context."
+        }
+      ]
     }
   ]
 }

@@ -15,6 +15,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.health import HarnessHealthEvidence, HarnessHealthResult, evaluate_harness_health
+from blizzard.runner.harness.internal.harness_shared import normalize_opencode_version
 from blizzard.runner.harness.internal.offline_compatibility import classify_offline
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.wire.runner import RunnerCapability
@@ -106,13 +107,18 @@ class HarnessHealthCache:
         if not stale and not changed and harness_id in self._results:
             return self._results[harness_id]
         supported_version = probe.supported_version()
+        normalized_version = normalize_opencode_version(observed_version)
+        # D2: membership against the admitted set is this caller's own job, checked off the
+        # normalized observation — `None` (nothing observed) stays distinct from a non-member.
+        version_admitted = None if normalized_version is None else normalized_version in supported_version
         result = evaluate_harness_health(
             HarnessHealthEvidence(
                 harness_id=harness_id,
                 binary_present=probe.binary_present(),
-                version_declared=supported_version is not None,
+                version_declared=bool(supported_version),
+                version_admitted=version_admitted,
                 version_classification=(
-                    classify_offline(harness_id, observed_version) if supported_version is not None else None
+                    classify_offline(harness_id, normalized_version) if supported_version else None
                 ),
                 authenticated=probe.probe_authentication(),
                 unmapped_tiers=_unmapped_tiers(adapter, self.configured_tiers.get(harness_id, ())),
@@ -138,6 +144,21 @@ class HarnessHealthCache:
         the same ambiguity :meth:`get` already carries for "no result yet"."""
         value = self._last_version.get(harness_id)
         return value if isinstance(value, str) else None
+
+    def admitted_versions(self, harness_id: str) -> frozenset[str]:
+        """``harness_id``'s own declared admitted-version set, or empty when this cache
+        holds no probe for it — a probe's own static declaration, not a live read, so
+        callers may reach it without themselves depending on :attr:`probes`."""
+        probe = self.probes.get(harness_id)
+        return probe.supported_version() if probe is not None else frozenset()
+
+    def displayed_version(self, harness_id: str) -> str | None:
+        """:meth:`observed_version`, normalized when its raw shape allows it — so a
+        diagnostics display never shows a version alongside :meth:`admitted_versions`
+        in a form that looks non-member when it actually is. Falls back to the raw
+        form for a binding (Claude Code) whose own shape never normalizes."""
+        raw = self.observed_version(harness_id)
+        return normalize_opencode_version(raw) or raw
 
 
 def default_harness_id(harnesses: IHarnessRegistry) -> str | None:

@@ -54,10 +54,10 @@ class ClaudeCodeHealthProbe:
         access_token = oauth.get("accessToken")
         return isinstance(access_token, str) and bool(access_token)
 
-    def supported_version(self) -> str | None:
+    def supported_version(self) -> frozenset[str]:
         # Claude Code declares no supported-version range (blizzard#438's plan): unlike
-        # OpenCode's pinned corpus, no version cause ever applies to this binding.
-        return None
+        # OpenCode's admitted-version corpus, no version cause ever applies to this binding.
+        return frozenset()
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
         return ()

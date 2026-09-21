@@ -4,15 +4,20 @@ when a new selftest result lands, and never merely because a peek asked."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.selftest_result import SelfTestResultRecord
-from blizzard.runner.harness.health import DeclaredDegradation
+from blizzard.runner.harness.compatibility import CompatibilityClassification
+from blizzard.runner.harness.health import DeclaredDegradation, HarnessHealthCause
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS, PINNED_OPENCODE_VERSION
+from blizzard.runner.loop import capability_snapshot
 from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 
 pytestmark = pytest.mark.unit
@@ -25,7 +30,7 @@ _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 class _FakeProbe:
     binary: bool = True
     authenticated: bool = True
-    supported: str | None = None
+    supported: frozenset[str] = field(default_factory=frozenset)
     degradations: tuple[DeclaredDegradation, ...] = ()
     calls: int = field(default=0, compare=False)
 
@@ -36,7 +41,7 @@ class _FakeProbe:
     def probe_authentication(self) -> bool:
         return self.authenticated
 
-    def supported_version(self) -> str | None:
+    def supported_version(self) -> frozenset[str]:
         return self.supported
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
@@ -135,6 +140,89 @@ def test_a_new_selftest_result_forces_an_immediate_recompute() -> None:
     assert probe.calls == 2
     assert result is not None
     assert result.available is False
+
+
+def test_a_raw_admitted_version_normalizes_and_classifies_against_the_real_corpus() -> None:
+    """``refresh`` threads a probe's raw, unnormalized observed version — here prefixed the
+    way a real binary's ``--version`` output can be — through the shared normalizer before
+    the corpus/membership check, against opencode's own committed corpus (blizzard#438)."""
+    clock = FixedClock(_NOW)
+    probe = _FakeProbe(supported=ADMITTED_OPENCODE_VERSIONS)
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+
+    result = cache.refresh(
+        _HARNESS_ID, adapter=_FakeAdapter(), observed_version=f"opencode version {PINNED_OPENCODE_VERSION}"
+    )
+
+    assert result is not None
+    # The committed corpus classifies this version `degraded`, not `blocking` — a version
+    # cause never fires, and no degradation was declared by this fake probe.
+    assert result.available is True
+    assert result.cause is None
+
+
+def test_a_raw_version_outside_the_admitted_set_is_incompatible() -> None:
+    """A version genuinely outside the admitted set is `incompatible_version` (D2), reached
+    through the real evaluation path — `HarnessHealthCache.refresh` (capability_snapshot.py)
+    into `evaluate_harness_health` (health.py) — never a synthetic evidence construction.
+    No corpus entry exists for this version at all; the sibling test below pins the harder
+    case where one does."""
+    clock = FixedClock(_NOW)
+    probe = _FakeProbe(supported=ADMITTED_OPENCODE_VERSIONS)
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+
+    result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.18.24")
+
+    assert result is not None
+    assert result.available is False
+    assert result.cause is HarnessHealthCause.INCOMPATIBLE_VERSION
+
+
+def test_a_non_admitted_version_with_a_real_corpus_entry_still_reads_incompatible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Membership is checked before any corpus lookup (D2): a real fixture manifest that would
+    classify `supported` on its own still reads `INCOMPATIBLE_VERSION` once non-admitted."""
+    stray_version = "1.18.24"
+    manifest_dir = tmp_path / "opencode" / stray_version
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "manifest.json").write_text(json.dumps({"live_evidence": {"classification": "supported"}}))
+    real_classify_offline = capability_snapshot.classify_offline
+    monkeypatch.setattr(
+        capability_snapshot,
+        "classify_offline",
+        lambda harness_id, version: real_classify_offline(harness_id, version, corpus_root=tmp_path),
+    )
+    # Prove the fixture alone would classify `supported`, isolating what membership overrides.
+    assert (
+        real_classify_offline("opencode", stray_version, corpus_root=tmp_path) is CompatibilityClassification.SUPPORTED
+    )
+
+    clock = FixedClock(_NOW)
+    probe = _FakeProbe(supported=ADMITTED_OPENCODE_VERSIONS)
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+
+    result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version=stray_version)
+
+    assert result is not None
+    assert result.available is False
+    assert result.cause is HarnessHealthCause.INCOMPATIBLE_VERSION
+
+
+def test_an_admitted_version_with_no_corpus_manifest_is_unknown_not_incompatible() -> None:
+    """A version this fake probe declares admitted, but with no manifest anywhere under the
+    real committed corpus root, is `unknown_version` — distinct from a genuinely non-admitted
+    version above, reached through the same real evaluation path (blizzard#438, D2)."""
+    clock = FixedClock(_NOW)
+    unclassifiable_version = "9.9.9-not-a-real-corpus-entry"
+    probe = _FakeProbe(supported=frozenset({unclassifiable_version}))
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+
+    result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version=unclassifiable_version)
+
+    assert result is not None
+    assert result.available is False
+    assert result.cause is HarnessHealthCause.UNKNOWN_VERSION
 
 
 def test_unmapped_configured_tier_is_reported() -> None:

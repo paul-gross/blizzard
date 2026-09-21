@@ -24,7 +24,7 @@ from blizzard.runner.harness.internal.opencode_adapter import (
     _PendingOpenCodeIdentity,
 )
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
-from blizzard.runner.harness.internal.opencode_probe import PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.process import LinuxProcessProbe
@@ -32,6 +32,9 @@ from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, Skip
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.support_opencode_binary import worker_binary
 
+# Keyed off the admitted set itself (blizzard#438) — there is exactly one member today,
+# but this stays correct as the set grows.
+_AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
 _CORPUS_DIR = (
     Path(__file__).resolve().parents[1]
     / "src"
@@ -40,7 +43,7 @@ _CORPUS_DIR = (
     / "harness"
     / "contracts"
     / "opencode"
-    / PINNED_OPENCODE_VERSION
+    / _AN_ADMITTED_OPENCODE_VERSION
 )
 
 

@@ -154,10 +154,13 @@ class HarnessHealthView(BaseModel):
     available but degraded; ``None`` only when available with no declared degradation either."""
 
     harness_id: str
+    #: Normalized when the binding's raw shape allows it, so it never looks like a non-member below.
     version: str | None = None
     available: bool
     cause: str | None = None
     degradations: list[str] = []
+    #: This binding's own declared admitted-version set (D3); empty for a binding with none.
+    admitted_versions: list[str] = []
 
 
 class HarnessHealthListResponse(BaseModel):

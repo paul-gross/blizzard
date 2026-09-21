@@ -26,10 +26,12 @@ from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
+from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.store import schema as runner_schema
 from blizzard.tools.invariants import Invariants
 from tests.crash.support import (
     LAND_STEP,
+    OPENCODE_SESSION_NAME,
     OWNER,
     REPO,
     REPO_NAME,
@@ -46,6 +48,8 @@ from tests.crash.support import (
     migrate_source_yaml,
     migrate_target_yaml,
     nudge_graph_yaml,
+    opencode_build_script,
+    opencode_graph_yaml,
     pre_declare_build_script,
     start_hub,
     start_runner,
@@ -225,6 +229,69 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
+
+
+# --- The OpenCode-lineage windows (D5) — already-declared harness-neutral points a
+# Claude-Code-shaped graph never reaches under an OpenCode lineage, not a new family. ---
+
+# Derived by prefix filter against `_ALL_POINTS`, like every sibling family above, so a
+# newly-registered point is never silently missing its OpenCode arm.
+_OPENCODE_GENERIC_POINTS = [p for p in _ALL_POINTS if p.startswith(("spawn.", "advance."))]
+_OPENCODE_RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
+
+# Each mirrors its Claude-Code sibling's own CI representative (`_CI_SUBSET`/`_RESUME_CI_SUBSET`)
+# — the same harness-neutral point, proven recoverable under an OpenCode lineage in CI too.
+_OPENCODE_GENERIC_CI_SUBSET: tuple[str, ...] = ("spawn.after-lease-mint.before-spawn",)
+_OPENCODE_RESUME_CI_SUBSET: tuple[str, ...] = ("resume.after-kill.before-reattach",)
+_OPENCODE_GENERIC_SWEEP = _select(_OPENCODE_GENERIC_POINTS, _OPENCODE_GENERIC_CI_SUBSET)
+_OPENCODE_RESUME_SWEEP = _select(_OPENCODE_RESUME_POINTS, _OPENCODE_RESUME_CI_SUBSET)
+
+
+#: Hand-authored, not registry-filtered — `_RESUME_POINTS` shares `_OPENCODE_RESUME_POINTS`'s
+#: exact predicate, so only an independent anchor catches either narrowing.
+_RESUME_POINT_NAMES_BY_HAND = frozenset(
+    {
+        "resume.before-reattach",
+        "resume.after-kill.before-reattach",
+        "resume.after-reattach",
+        "resume.wake.after-launch.before-record",
+        "resume.wake.after-record",
+        "resume.wake.after-boundary-record.before-launch",
+    }
+)
+
+
+def test_opencode_named_points_are_swept_under_both_harnesses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each window this phase closes under OpenCode is armed once per harness (D5). The
+    expected set is re-derived off the registry, never read back off the two tuples
+    under test, so narrowing either fails loudly instead of passing by construction."""
+    monkeypatch.delenv("BLIZZARD_CRASH_SWEEP_CI", raising=False)
+    assert set(_RESUME_POINT_NAMES_BY_HAND) == set(_RESUME_POINTS), (
+        "the hand-authored resume-point anchor has drifted from the registry — update "
+        f"_RESUME_POINT_NAMES_BY_HAND: {sorted(set(_RESUME_POINT_NAMES_BY_HAND) ^ set(_RESUME_POINTS))}"
+    )
+    # Generic: off `_GENERIC_POINTS`, never `_OPENCODE_GENERIC_POINTS`'s own filter.
+    # Resume: off the hand-authored literal above, never `_RESUME_POINTS`'s.
+    should_cover_generic = [p for p in _GENERIC_POINTS if p.startswith(("spawn.", "advance."))]
+    should_cover_resume = [p for p in _ALL_POINTS if p in _RESUME_POINT_NAMES_BY_HAND]
+    should_cover = should_cover_generic + should_cover_resume
+    assert should_cover_generic and should_cover_resume, (
+        "the registry lost every spawn./advance. or every resume. point — nothing to sweep"
+    )
+
+    # The Claude Code leg: every point is in the unnarrowed registry lists the generic/
+    # resume sweeps parametrize from, reached under Claude Code there.
+    claude_generic = set(_select(_GENERIC_POINTS, _CI_SUBSET))
+    claude_resume = set(_select(_RESUME_POINTS, _RESUME_CI_SUBSET))
+    missing_claude = [p for p in should_cover if p not in claude_generic and p not in claude_resume]
+    assert not missing_claude, f"OpenCode-lineage point(s) missing their Claude-Code leg: {missing_claude}"
+
+    # The OpenCode leg: every point is in the tuples the OpenCode-lineage tests actually
+    # parametrize from, recomputed fresh rather than read off the frozen module sweeps.
+    opencode_generic = set(_select(_OPENCODE_GENERIC_POINTS, _OPENCODE_GENERIC_CI_SUBSET))
+    opencode_resume = set(_select(_OPENCODE_RESUME_POINTS, _OPENCODE_RESUME_CI_SUBSET))
+    missing_opencode = [p for p in should_cover if p not in opencode_generic and p not in opencode_resume]
+    assert not missing_opencode, f"registry point(s) missing their own OpenCode sweep arm: {missing_opencode}"
 
 
 def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str, after_recovery: bool) -> None:
@@ -1452,6 +1519,224 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)
         assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# --- The same generic/resume windows, reached under an OpenCode lineage (D5) ---------------
+
+
+def _ingest_opencode_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+    """:func:`_ingest_chunk`'s twin, minting :func:`opencode_graph_yaml` instead of
+    :func:`graph_yaml` — an OpenCode-lineage ``build`` node (D5) opens the SAME
+    harness-neutral ``spawn.*``/``advance.*`` windows under that lineage."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": opencode_graph_yaml(landed_file)})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "an OpenCode crash-sweep chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id
+
+
+def _lease_harness_ids_for_chunk(runner_dir: Path, chunk_id: str) -> set[str | None]:
+    """Every distinct ``harness_id`` recorded across ``chunk_id``'s leases — confirms a
+    convergence landed under the lineage a scenario armed, not a silent fallback to
+    another harness, regardless of whether the point's own recovery path re-mints a fresh
+    lease (a generic point's retry) or resumes the same one (a resume point)."""
+    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(runner_schema.leases.c.harness_id).where(runner_schema.leases.c.chunk_id == chunk_id)
+            ).all()
+        assert rows, f"no leases recorded for chunk {chunk_id}"
+        return {row[0] for row in rows}
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("point", _OPENCODE_GENERIC_SWEEP)
+def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """:func:`test_kill9_at_crash_point`'s twin under an OpenCode lineage (D5) — the same
+    ``spawn.*``/``advance.*`` windows a Claude-Code graph never reaches under OpenCode,
+    armed here against :func:`opencode_graph_yaml`'s ``build`` node instead."""
+    landed_file = f"LANDED-OPENCODE-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    # Every named point here fires in the RUNNER's loop (spawn.py/judgement.py) — never the hub.
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_opencode_chunk(hub, crash_env.forge, landed_file)
+
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=point)
+
+        # Wait for the armed runner to reach its point and self-SIGKILL.
+        code = wait_death(runner_proc)
+        assert code == -9, (
+            f"armed runner at {point} exited {code}, not SIGKILL (-9) under OpenCode; point never reached — "
+            "harness selection may have silently fallen back to Claude Code"
+        )
+
+        _assert_invariants(
+            runner_dir, hub_dir, when=f"immediately after OpenCode kill at {point}", after_recovery=False
+        )
+
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status == "done", f"chunk did not converge to done after OpenCode kill at {point} (last {status!r})"
+
+        _assert_invariants(runner_dir, hub_dir, when=f"after OpenCode convergence past {point}", after_recovery=True)
+
+        # Every lease recorded for this chunk, not just the last, must carry the OpenCode
+        # harness — a silent fall-back to Claude Code would still land the file.
+        assert _lease_harness_ids_for_chunk(runner_dir, chunk_id) == {OPENCODE_HARNESS_ID}, (
+            f"a lease that converged past {point} was not recorded under the OpenCode harness"
+        )
+
+        # Exactly-once delivery: the file is reachable from bare main exactly once.
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+def _opencode_hanging_graph_yaml(landed_file: str) -> str:
+    """:func:`_hanging_graph_yaml`'s twin under an OpenCode lineage (D5): the same
+    commit-then-``hang()`` ``build -> deliver`` shape, with ``build`` resuming
+    :data:`OPENCODE_SESSION_NAME` so the session a restart re-attaches is OpenCode's own —
+    what opens the `resume.wake.*`/`resume.after-*` windows under that lineage instead of
+    Claude Code's."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "sessions": {OPENCODE_SESSION_NAME: {"harnesses": ["opencode"]}},
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "session": f"resume:{OPENCODE_SESSION_NAME}",
+                "prompt": opencode_build_script(landed_file) + "hang()\n",
+                "judgement": {
+                    "prompt": "verdict('pass', 'committed before the restart; checks are green')\n",
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _ingest_opencode_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+    """:func:`_ingest_hanging_chunk`'s twin, minting :func:`_opencode_hanging_graph_yaml`."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": _opencode_hanging_graph_yaml(landed_file)})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "an OpenCode restart-resume chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id
+
+
+@pytest.mark.parametrize("point", _OPENCODE_RESUME_SWEEP)
+def test_kill9_at_resume_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """:func:`test_kill9_at_resume_crash_point`'s twin under an OpenCode lineage (D5) — a
+    kill at a resume boundary still re-attaches exactly once, converging under the same
+    lease/epoch/session and the same (OpenCode) harness."""
+    landed_file = f"LANDED-OPENCODE-resume-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_opencode_hanging_chunk(hub, crash_env.forge, landed_file)
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        # Let the OpenCode worker reach its commit and hang mid-flight, then gracefully stop
+        # to mark the lease for restart-resume.
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        _await_committed(runner_dir, chunk_id, landed_file)
+        assert _lease_harness_ids_for_chunk(runner_dir, chunk_id) == {OPENCODE_HARNESS_ID}, (
+            "the hanging build's own fresh mint was not dispatched to the OpenCode harness"
+        )
+        terminate(runner_proc)
+        before = _leases_for_chunk(runner_dir, chunk_id)
+        assert len(before) == 1, f"expected one lease before restart, got {before}"
+        lease_id, epoch, session_id, _pid_before = before[0]
+        assert _open_resume_intents(runner_dir) == {lease_id}, "graceful shutdown did not mark a resume-intent"
+
+        # Restart ARMED at the resume boundary: the first tick's RESUME reaches it (against the
+        # OpenCode session) and self-SIGKILLs.
+        runner_proc = start_runner(runner_dir, crash_point=point)
+        code = wait_death(runner_proc)
+        assert code == -9, (
+            f"armed runner at {point} exited {code}, not SIGKILL (-9) under OpenCode; point never reached?"
+        )
+        _assert_invariants(
+            runner_dir, hub_dir, when=f"immediately after OpenCode kill at {point}", after_recovery=False
+        )
+
+        # Restart UNARMED: RESUME recovers and the chunk converges — exactly once, still one lease.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after OpenCode kill at {point}"
+
+        after = _leases_for_chunk(runner_dir, chunk_id)
+        assert len(after) == 1, f"resume across an OpenCode crash at {point} minted an extra lease (retry): {after}"
+        assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)
+        assert _wait_for_cleared_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        # Convergence stayed on the OpenCode lineage the whole way through the crash — never a
+        # silent re-mint under a different (e.g. default Claude Code) harness.
+        assert _lease_harness_ids_for_chunk(runner_dir, chunk_id) == {OPENCODE_HARNESS_ID}, (
+            f"convergence past {point} lost the OpenCode lineage — the resumed lease's harness changed"
+        )
+        _assert_invariants(runner_dir, hub_dir, when=f"after OpenCode convergence past {point}", after_recovery=True)
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"

@@ -26,6 +26,7 @@ def _evidence(**overrides: object) -> HarnessHealthEvidence:
         "harness_id": _HARNESS_ID,
         "binary_present": True,
         "version_declared": True,
+        "version_admitted": True,
         "version_classification": CompatibilityClassification.SUPPORTED,
         "authenticated": True,
         "unmapped_tiers": (),
@@ -48,13 +49,36 @@ def test_missing_binary_is_unavailable() -> None:
 
 
 def test_incompatible_version_is_unavailable() -> None:
+    """An admitted version the corpus itself classifies `blocking`."""
     result = evaluate_harness_health(_evidence(version_classification=CompatibilityClassification.BLOCKING))
     assert result.available is False
     assert result.cause is HarnessHealthCause.INCOMPATIBLE_VERSION
 
 
+def test_a_non_admitted_version_is_incompatible_regardless_of_classification() -> None:
+    """D2: membership is checked before classification — a `version_admitted=False` version
+    is `incompatible_version` even when its (irrelevant, possibly stray) corpus entry would
+    otherwise classify `supported`."""
+    result = evaluate_harness_health(
+        _evidence(version_admitted=False, version_classification=CompatibilityClassification.SUPPORTED)
+    )
+    assert result.available is False
+    assert result.cause is HarnessHealthCause.INCOMPATIBLE_VERSION
+
+
 def test_unknown_version_is_unavailable() -> None:
+    """An admitted version the corpus cannot classify at all (no manifest, or a malformed
+    or unrecognized one) — distinct from a non-admitted version, which is
+    `incompatible_version` instead (D2)."""
     result = evaluate_harness_health(_evidence(version_classification=None))
+    assert result.available is False
+    assert result.cause is HarnessHealthCause.UNKNOWN_VERSION
+
+
+def test_no_version_observed_at_all_is_unknown_not_incompatible() -> None:
+    """`version_admitted=None` (nothing was observed to judge membership of) reads the same
+    as an admitted-but-unclassifiable version, never as a non-admitted one."""
+    result = evaluate_harness_health(_evidence(version_admitted=None, version_classification=None))
     assert result.available is False
     assert result.cause is HarnessHealthCause.UNKNOWN_VERSION
 
@@ -104,6 +128,7 @@ def test_claude_code_has_no_version_cause() -> None:
         _evidence(
             harness_id="claude_code",
             version_declared=False,
+            version_admitted=None,
             version_classification=CompatibilityClassification.BLOCKING,
         )
     )
@@ -120,6 +145,14 @@ def test_claude_code_has_no_version_cause() -> None:
         ),
         (
             {"version_classification": CompatibilityClassification.BLOCKING, "authenticated": False},
+            HarnessHealthCause.INCOMPATIBLE_VERSION,
+        ),
+        (
+            {
+                "version_admitted": False,
+                "version_classification": CompatibilityClassification.SUPPORTED,
+                "authenticated": False,
+            },
             HarnessHealthCause.INCOMPATIBLE_VERSION,
         ),
         (
