@@ -247,16 +247,33 @@ _OPENCODE_GENERIC_SWEEP = _select(_OPENCODE_GENERIC_POINTS, _OPENCODE_GENERIC_CI
 _OPENCODE_RESUME_SWEEP = _select(_OPENCODE_RESUME_POINTS, _OPENCODE_RESUME_CI_SUBSET)
 
 
+#: Hand-authored, not registry-filtered — `_RESUME_POINTS` shares `_OPENCODE_RESUME_POINTS`'s
+#: exact predicate, so only an independent anchor catches either narrowing.
+_RESUME_POINT_NAMES_BY_HAND = frozenset(
+    {
+        "resume.before-reattach",
+        "resume.after-kill.before-reattach",
+        "resume.after-reattach",
+        "resume.wake.after-launch.before-record",
+        "resume.wake.after-record",
+        "resume.wake.after-boundary-record.before-launch",
+    }
+)
+
+
 def test_opencode_named_points_are_swept_under_both_harnesses(monkeypatch: pytest.MonkeyPatch) -> None:
     """Each window this phase closes under OpenCode is armed once per harness (D5). The
     expected set is re-derived off the registry, never read back off the two tuples
     under test, so narrowing either fails loudly instead of passing by construction."""
     monkeypatch.delenv("BLIZZARD_CRASH_SWEEP_CI", raising=False)
-    # Derived off `_GENERIC_POINTS`/`_RESUME_POINTS` — the Claude-Code sweep's own
-    # already-established family lists — never off the same `_ALL_POINTS` filter
-    # `_OPENCODE_GENERIC_POINTS`/`_OPENCODE_RESUME_POINTS` themselves use.
+    assert set(_RESUME_POINT_NAMES_BY_HAND) == set(_RESUME_POINTS), (
+        "the hand-authored resume-point anchor has drifted from the registry — update "
+        f"_RESUME_POINT_NAMES_BY_HAND: {sorted(set(_RESUME_POINT_NAMES_BY_HAND) ^ set(_RESUME_POINTS))}"
+    )
+    # Generic: off `_GENERIC_POINTS`, never `_OPENCODE_GENERIC_POINTS`'s own filter.
+    # Resume: off the hand-authored literal above, never `_RESUME_POINTS`'s.
     should_cover_generic = [p for p in _GENERIC_POINTS if p.startswith(("spawn.", "advance."))]
-    should_cover_resume = list(_RESUME_POINTS)
+    should_cover_resume = [p for p in _ALL_POINTS if p in _RESUME_POINT_NAMES_BY_HAND]
     should_cover = should_cover_generic + should_cover_resume
     assert should_cover_generic and should_cover_resume, (
         "the registry lost every spawn./advance. or every resume. point — nothing to sweep"

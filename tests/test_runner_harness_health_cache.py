@@ -181,11 +181,8 @@ def test_a_raw_version_outside_the_admitted_set_is_incompatible() -> None:
 def test_a_non_admitted_version_with_a_real_corpus_entry_still_reads_incompatible(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Membership is checked before any corpus lookup (D2), so a stray corpus manifest for a
-    non-admitted version never flips the outcome — proven here against a real
-    `classify_offline` read of a real fixture manifest that *would* classify `supported` on
-    its own, not a synthetic evidence construction like
-    ``test_runner_harness_health.py::test_a_non_admitted_version_is_incompatible_regardless_of_classification``."""
+    """Membership is checked before any corpus lookup (D2): a real fixture manifest that would
+    classify `supported` on its own still reads `INCOMPATIBLE_VERSION` once non-admitted."""
     stray_version = "1.18.24"
     manifest_dir = tmp_path / "opencode" / stray_version
     manifest_dir.mkdir(parents=True)
