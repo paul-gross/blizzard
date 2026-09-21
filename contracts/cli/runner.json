@@ -3,7 +3,7 @@
     "artifact": {
       "commands": {
         "commit": {
-          "help": "Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only. Deliberately no\n``--forge``: the origin comes from the environment's repo manifest (pinned by\ntests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag).",
+          "help": "Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only. Deliberately no\n``--forge``: the origin comes from the environment's repo manifest (pinned by\ntests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag). Echoes a\nconfirmation naming REPO, BRANCH, and the sha on success (issue #584) \u2014 a silent exit 0 was\nindistinguishable from a no-op.",
           "params": [
             {
               "hidden": false,
@@ -94,16 +94,27 @@
           "short_help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node scope only."
         },
         "get": {
-          "help": "Worker: read one artifact by NAME \u2014 a ``produces:`` name (node scope), a baked-in graph\ndeclaration (graph scope), or one of blizzard's own published documents (system scope);\nunknown is a ``404``, more than one candidate a ``409`` naming them. ``--content`` prints\nraw asset text, and errors on the ``git_commit`` kind, which carries none. NAME is\npercent-encoded (issue #233).",
+          "help": "Worker: read one artifact by NAME \u2014 a ``produces:`` name (node scope), a baked-in graph\ndeclaration (graph scope), or one of blizzard's own published documents (system scope);\nunknown is a ``404``, more than one candidate a ``409`` naming them. ``--content`` prints\nraw asset text, and errors on the ``git_commit`` kind, which carries none.\n\nServes the last *published* epoch only \u2014 a node-step's own just-submitted content is not\npublished until the node-step completes; a not-yet-published NAME 404s naming\n``artifact staged`` instead. Read it back before completion with that verb.\n\nNAME is passed literally: the CLI percent-encodes it itself (issue #233), slashes\nincluded, so a slashed name (e.g. a ``merged/<owner>/<repo>`` delivery marker) is passed\nas-is, not pre-encoded.",
           "params": [
             {
               "hidden": false,
               "kind": "argument",
-              "name": "name",
+              "name": "name_arg",
               "opts": [
-                "name"
+                "name_arg"
               ],
-              "required": true,
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "name_opt",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -145,7 +156,7 @@
           "short_help": "Worker: read one artifact by NAME \u2014 a ``produces:`` name (node scope), a baked-in graph declaration (graph scope), or one of blizzard's own published documents (system scope); unknown is a ``404``, more than one candidate a ``409`` naming them."
         },
         "list": {
-          "help": "Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,\nplus the graph mint's own baked-in declarations and blizzard's published system-artifact\nset \u2014 ``--scope`` narrows to one. Content is elided by default (issue #169), since inlining\nevery upstream asset's full text has overflowed tool output; ``--content`` restores it.",
+          "help": "Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,\nplus the graph mint's own baked-in declarations and blizzard's published system-artifact\nset \u2014 ``--scope`` narrows to one. Content is elided by default (issue #169), since inlining\nevery upstream asset's full text has overflowed tool output; ``--content`` restores it.\nAlso includes this node-step's own staged, not-yet-published submissions (issue #584),\neach carrying ``\"staged\": true`` \u2014 everything published carries ``\"staged\": false``.",
           "params": [
             {
               "hidden": false,
