@@ -1345,9 +1345,7 @@ def test_usage_limited_judge_elicitation_engages_the_brake_clears_the_record_and
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     limit = UsageLimit(resets_at=None, detail="You've hit your session limit")
-    # The 1st `classify_usage_limit` call is the worker-generation classify on launch (must
-    # read unlimited so the judge elicitation actually launches); the 2nd is the judge's own,
-    # on the later collect pass.
+    # 1st classify call: the worker's own, must read unlimited so the judge launches; 2nd: the judge's.
     harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit, usage_limit_from_call=2)
     ctx = make_context(
         store,

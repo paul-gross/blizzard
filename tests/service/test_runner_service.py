@@ -51,6 +51,7 @@ from tests.service.support import (
     mock_hub,
     mock_hub_chunk_spec,
     mock_hub_escalating_chunk_spec,
+    mock_hub_usage_limited_chunk_spec,
     poll_until,
     require_mock_fleet,
     require_winter_source,
@@ -156,6 +157,63 @@ def test_dropped_ack_reapplies_idempotently_through_to_done(tmp_path: Path) -> N
         assert landed, f"chunk did not land after the dropped ack (status {_status(hub, chunk_id)!r})"
         # done is reached once — a double apply would have errored or re-run the deliver node.
         assert _status(hub, chunk_id) == "done"
+
+
+def _local_pause_reason(config: RunnerConfig) -> str | None:
+    """The runner's own store, read directly — no local API server is up in this tier
+    (``LoopWiring.tick_once`` alone drives the loop), so the store is the ground truth
+    the runner's own ``GET /api/runner`` would otherwise mirror (blizzard#594)."""
+    engine = create_engine_from_url(config.db_url)
+    try:
+        return SqlAlchemyRunnerStore(engine, runner_store_errors()).local_pause_reason(config.runner_id)
+    finally:
+        engine.dispose()
+
+
+def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_failing_the_attempt(
+    tmp_path: Path,
+) -> None:
+    """blizzard#594: a worker generation that exits usage-limited engages the runner's own
+    local pause brake, reason mirrored to the hub, no retry spent and no escalation —
+    never the hub's own brake, and the chunk never fails."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        resp = hub.post("/_seed/chunk", json=mock_hub_usage_limited_chunk_spec(_WORK_REF_URL))
+        assert resp.status_code == 201, resp.text
+        chunk_id = resp.json()["chunk_id"]
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        # Unset, the classifier's transcript read falls back to ``~/.claude/projects`` and
+        # silently finds nothing (blizzard#594, bzh:crash-sweep's own fix for the same gap).
+        config = dataclasses.replace(config, transcripts_root=str(workspace / ".blizzard-mock-harness" / "transcripts"))
+
+        engaged = poll_until(
+            lambda: _tick_then(config, fenced, lambda: _local_pause_reason(config) is not None), timeout=60.0
+        )
+        assert engaged, "the local brake never engaged"
+
+        reason = _local_pause_reason(config)
+        assert reason is not None and "claude_code" in reason, f"reason did not name the harness: {reason!r}"
+
+        mirrored = poll_until(
+            lambda: _tick_then(
+                config,
+                fenced,
+                lambda: hub.get(f"/api/fleet/runners/{config.runner_id}").json().get("locally_paused_reason") == reason,
+            ),
+            timeout=30.0,
+        )
+        assert mirrored, "the hub never mirrored the local pause's own reason"
+
+        # Parked in place, not failed: the lease kept its claim — no escalation, no epoch
+        # bump, so no attempt-failure fact was ever sent for it.
+        detail = hub.get(f"/api/fleet/chunks/{chunk_id}").json()
+        assert detail["status"] == "running", detail
+        assert detail["escalation"] is None, detail
+        assert detail["latest_epoch"] == 1, detail
 
 
 def test_fill_absorbs_a_dependency_denial_then_claims_once_it_clears(tmp_path: Path) -> None:

@@ -13,6 +13,7 @@ import threading
 import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -32,7 +33,7 @@ from blizzard.runner.harness.internal.harness_registry import build_production_h
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
@@ -407,6 +408,9 @@ class _HangingAdapter:
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         raise AssertionError("unreachable — spawn never returns")
 
+    def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
+        raise AssertionError("unreachable — spawn never returns")
+
     def transcript_source(self) -> IHarnessTranscriptSource:
         return NullTranscriptSource()
 
@@ -566,6 +570,9 @@ class _FixedPidAdapter:
             cache_create_tokens=0,
             cost_usd=None,
         )
+
+    def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
+        return None
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return NullTranscriptSource()

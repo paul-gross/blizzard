@@ -330,6 +330,22 @@ def mock_hub_escalating_chunk_spec(work_ref: str) -> dict:
     return spec
 
 
+#: The entry generation calls ``usage_limited()`` immediately and never reaches its own
+#: judgement — the classifier in ``Advance._advance_exited_worker`` intercepts the exit
+#: before any judge is launched (blizzard#594), the same shape as the crash tier's own
+#: ``usage_limited_graph_yaml``. No ``produces:`` is declared: this scenario proves the
+#: pause, not delivery, so nothing needs the runner's own local API up.
+USAGE_LIMITED_BUILD_SCRIPT = "usage_limited()\n"
+
+
+def mock_hub_usage_limited_chunk_spec(work_ref: str) -> dict:
+    """A single-node chunk whose entry generation exits usage-limited (blizzard#594): the
+    runner's own local brake engages and the lease parks in place, consuming no retry."""
+    spec = mock_hub_chunk_spec(work_ref)
+    spec["nodes"]["build"]["prompt"] = USAGE_LIMITED_BUILD_SCRIPT
+    return spec
+
+
 @contextlib.contextmanager
 def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx.Client]:
     """Run ``blizzard-mock-hub`` as a real subprocess and yield a client to it."""

@@ -39,6 +39,12 @@ class IReadPauseRepository(Protocol):
         #45). Defaults False when the operator has never set it."""
         ...
 
+    def local_pause_reason(self, runner_id: str) -> str | None:
+        """The newest local pause fact's own reason (blizzard#594) — ``None`` on a plain
+        operator pause, or when the brake has never been set. Read independently of
+        :meth:`local_paused` so a caller decides for itself whether to consult it."""
+        ...
+
     def last_daemon_liveness(self) -> datetime | None:
         """When the runner was last known alive, or ``None`` if it never ticked (issue #13).
 
@@ -70,12 +76,22 @@ class IWritePauseRepository(IReadPauseRepository, Protocol):
         ...
 
     def record_local_pause(
-        self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
+        self,
+        runner_id: str,
+        *,
+        paused: bool,
+        at: datetime,
+        by: str,
+        report_kind: str,
+        report_payload: str,
+        reason: str | None = None,
     ) -> int:
         """Append a local pause/start fact **and** its hub-bound report, atomically
         (issue #43), and return the buffered report's seq. Appends rather than upserts:
         a locally-minted fact, not a mirror; taking the buffer entry here makes the
-        brake and its report crash-atomic (``tests/test_ingest_and_pause_verbs.py``)."""
+        brake and its report crash-atomic (``tests/test_ingest_and_pause_verbs.py``).
+        ``reason`` is stored alongside the fact so :meth:`~IReadPauseRepository.local_pause_reason`
+        can read it back locally, not only through the hub-bound report (blizzard#594)."""
         ...
 
     def record_pause_park(self, *, lease_id: str, chunk_id: str, parked_at: datetime) -> None:
@@ -133,6 +149,7 @@ class PauseService:
             by=by,
             report_kind=RUNNER_LOCALLY_PAUSED,
             report_payload=json.dumps({"runner_id": runner_id, "by": by, "at": iso_utc(now), "reason": reason}),
+            reason=reason,
         )
         if self._events is not None:
             self._events.publish_fact_changed(seq=seq, kind=RUNNER_LOCALLY_PAUSED, chunk_id=None, lease_id=None)

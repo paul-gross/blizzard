@@ -11,11 +11,21 @@ import { LocalPauseControl } from './local-pause-control';
  * answered by `pause`, and `PATCH /api/runner` echoing the flipped local brake
  * back — or, when `patchError` is given, answering the PATCH with that
  * failure instead. */
-async function render(pause: { local: boolean; hub: boolean }, patchError?: ReturnType<typeof stubError>) {
+async function render(
+  pause: { local: boolean; hub: boolean; local_reason?: string | null },
+  patchError?: ReturnType<typeof stubError>,
+) {
   const stub = stubRequestClient(runnerClient, (method, path) => {
     if (method === 'GET' && path === '/api/dashboard') {
       return {
-        runner: { pause: { local: pause.local, hub: pause.hub, effective: pause.local || pause.hub } },
+        runner: {
+          pause: {
+            local: pause.local,
+            hub: pause.hub,
+            effective: pause.local || pause.hub,
+            local_reason: pause.local_reason ?? null,
+          },
+        },
         environments: { items: [] },
         asks: { items: [] },
         escalations: { items: [] },
@@ -119,6 +129,51 @@ describe('LocalPauseControl', () => {
     const style = el.querySelector('[data-testid="hub-paused-badge"] .badge')?.getAttribute('style') ?? '';
     expect(style).toContain('var(--amber-hi)');
     expect(style).not.toContain('var(--red)');
+  });
+
+  // --- Local pause reason (blizzard#594) ----------------------------------------
+  //
+  // A usage-limit pause, a spend-ceiling pause, and a manual pause must read distinctly:
+  // the first two carry `pause.local_reason`, a manual one carries none at all.
+
+  it('shows no reason badge when the local brake is off', async () => {
+    const { fixture, stub: s } = await render({ local: false, hub: false });
+    stub = s;
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="pause-reason-badge"]')).toBeNull();
+  });
+
+  it('shows no reason badge on a manual pause, which carries no reason', async () => {
+    const { fixture, stub: s } = await render({ local: true, hub: false, local_reason: null });
+    stub = s;
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="pause-reason-badge"]')).toBeNull();
+  });
+
+  it('shows the usage-limit reason distinctly from a manual pause', async () => {
+    const { fixture, stub: s } = await render({
+      local: true,
+      hub: false,
+      local_reason: 'usage limit: claude_code (resets 2026-09-21T22:40Z)',
+    });
+    stub = s;
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="pause-reason-badge"]')?.textContent).toContain('usage limit: claude_code');
+  });
+
+  it('shows the spend-ceiling reason distinctly from a usage-limit pause', async () => {
+    const { fixture, stub: s } = await render({
+      local: true,
+      hub: false,
+      local_reason: 'runner ceiling: $12.00 spent of $10.00 over 24h',
+    });
+    stub = s;
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="pause-reason-badge"]')?.textContent).toContain('runner ceiling');
   });
 
   it('surfaces a failed PATCH rather than swallowing it, and re-enables the toggle', async () => {
