@@ -66,7 +66,7 @@ interface StubbableClient {
  */
 export function stubRequestClient(
   client: StubbableClient,
-  route: (method: string, path: string) => unknown = () => ({}),
+  route: (method: string, path: string) => unknown | Promise<unknown> = () => ({}),
 ): RequestClientStub {
   const requests: CapturedRequest[] = [];
   const previousFetch = globalThis.fetch;
@@ -83,7 +83,7 @@ export function stubRequestClient(
       body = undefined;
     }
     requests.push({ method, path, body });
-    const result = route(method, path);
+    const result = await route(method, path);
     const [status, data] = isStubHttpError(result) ? [result.status, result.body] : [200, result];
     return new Response(JSON.stringify(data ?? {}), {
       status,

@@ -82,10 +82,19 @@ function withRequestedPosition(order: readonly string[], move: RepositionVars): 
   styleUrl: './board-page.css',
 })
 export class BoardPage {
+  /** The board's last operator-action failure — a promote or a reorder — or `null`.
+   * Reset at the start of every new attempt (issue #42's "report, don't swallow",
+   * the same convention `ChunkDetail`'s own `actionError` follows). */
+  protected readonly actionError = signal<string | null>(null);
+
   private readonly chunksQuery = injectHubChunksQuery();
   private readonly queueQuery = injectHubQueueQuery();
-  private readonly repositionQueue = injectRepositionQueueMutation();
-  private readonly repositionBacklog = injectRepositionBacklogMutation();
+  private readonly repositionQueue = injectRepositionQueueMutation((error) =>
+    this.actionError.set(errorMessage(error, 'Reorder failed.')),
+  );
+  private readonly repositionBacklog = injectRepositionBacklogMutation((error) =>
+    this.actionError.set(errorMessage(error, 'Reorder failed.')),
+  );
   private readonly selection = injectChunkUrlSelection();
   private readonly meQuery = injectMeQuery();
 
@@ -134,11 +143,6 @@ export class BoardPage {
    * are exactly what let a list surface see another component's in-flight mutation without
    * owning it. */
   private readonly pendingDeletes = injectPendingMutationVariables<DeleteVars>(chunkDeleteMutationKey);
-
-  /** The board's last operator-action failure — a promote or a reorder — or `null`.
-   * Reset at the start of every new attempt (issue #42's "report, don't swallow",
-   * the same convention `ChunkDetail`'s own `actionError` follows). */
-  protected readonly actionError = signal<string | null>(null);
 
   /** The live fleet chunk list; empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
@@ -237,10 +241,7 @@ export class BoardPage {
   protected reposition(move: BoardReposition): void {
     this.actionError.set(null);
     const mutation = move.list === 'notready' ? this.repositionBacklog : this.repositionQueue;
-    mutation.mutate(
-      { chunkId: move.chunkId, afterChunkId: move.afterChunkId },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Reorder failed.')) },
-    );
+    mutation.mutate({ chunkId: move.chunkId, afterChunkId: move.afterChunkId });
   }
 
   /** Promote a backlog chunk — the board card's own Promote button. */

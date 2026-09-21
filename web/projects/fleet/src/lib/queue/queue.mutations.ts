@@ -30,10 +30,13 @@ export interface RepositionVars {
  * silently dropped out of the order. On success it invalidates the queue and the fleet list; the live stream
  * will also fire `queue-changed`, so this is belt-and-braces.
  */
-export function injectRepositionQueueMutation() {
+export function injectRepositionQueueMutation(onError?: (error: Error) => void) {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: repositionQueueMutationKey,
+    // QueryClient-wide, so rapid drags remain ordered across component remounts.
+    // A queued mutation is still pending, so its requested position renders now.
+    scope: { id: 'hub-reposition-queue' },
     mutationFn: async (vars: RepositionVars): Promise<QueuePeekResponse> => {
       const { data, error } = await repositionQueueApiQueuePositionPost({
         body: { chunk_id: vars.chunkId, after_chunk_id: vars.afterChunkId },
@@ -47,6 +50,7 @@ export function injectRepositionQueueMutation() {
         queryClient.invalidateQueries({ queryKey: hubQueueKey }),
         queryClient.invalidateQueries({ queryKey: hubChunksKey }),
       ]),
+    ...(onError === undefined ? {} : { onError }),
   }));
 }
 
@@ -59,10 +63,11 @@ export function injectRepositionQueueMutation() {
  * itself. On success invalidates the backlog read and the fleet list;
  * the live stream also fires `queue-changed`, so this is belt-and-braces.
  */
-export function injectRepositionBacklogMutation() {
+export function injectRepositionBacklogMutation(onError?: (error: Error) => void) {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: repositionBacklogMutationKey,
+    scope: { id: 'hub-reposition-backlog' },
     mutationFn: async (vars: RepositionVars): Promise<BacklogPeekResponse> => {
       const { data, error } = await repositionBacklogApiBacklogPositionPost({
         body: { chunk_id: vars.chunkId, after_chunk_id: vars.afterChunkId },
@@ -76,5 +81,6 @@ export function injectRepositionBacklogMutation() {
         queryClient.invalidateQueries({ queryKey: hubBacklogKey }),
         queryClient.invalidateQueries({ queryKey: hubChunksKey }),
       ]),
+    ...(onError === undefined ? {} : { onError }),
   }));
 }
