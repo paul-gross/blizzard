@@ -7,6 +7,7 @@ recorded process start time together**. It is a seam (``bzh:pluggable-seams``); 
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 from typing import Protocol
@@ -62,6 +63,10 @@ class LinuxProcessProbe:
         return current is not None and current == process_start_time
 
     def group_alive(self, pgid: int) -> bool:
+        # `pgid` is the leader's own pid (D3): reap it first, or an exited-but-unreaped
+        # leader is a zombie `killpg`'s probe below still reaches as "alive".
+        with contextlib.suppress(ChildProcessError):
+            os.waitpid(pgid, os.WNOHANG)
         try:
             os.killpg(pgid, 0)
         except ProcessLookupError:

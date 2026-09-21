@@ -181,11 +181,12 @@ def opencode_build_script(landed_file: str) -> str:
     )
 
 
-def sigint_trap_hang_script() -> str:
-    """A ``hang()`` that traps SIGINT and ends the turn with a real ``error_during_execution``
-    envelope, rather than dying to the interpreter's default SIGINT handling — the exact
-    shape Claude Code itself writes on the graceful-shutdown drain's own signal (issue #12).
-    Exits 0, matching a real interrupted Claude Code invocation, not a crash."""
+def sigint_trap_hang_script(body: str) -> str:
+    """``body`` (typically :func:`build_script`) then ``hang()``, both guarded by a SIGINT
+    trap installed before ``body`` runs — a caller's readiness poll can observe ``body``'s
+    last ``subprocess.run`` durable before that call itself returns, so trapping only
+    around the hang would race a signal landing mid ``body`` (issue #12)."""
+    indented = "".join(f"    {line}\n" if line else "\n" for line in (body + "hang()\n").splitlines())
     return (
         "import signal\n"
         "from blizzard_mock.harness.engine import RunResult, current_context\n"
@@ -198,7 +199,7 @@ def sigint_trap_hang_script() -> str:
         "\n"
         "signal.signal(signal.SIGINT, _on_sigint)\n"
         "try:\n"
-        "    hang()\n"
+        f"{indented}"
         "except _Interrupted:\n"
         "    _ctx = current_context()\n"
         "    _ctx.result = RunResult(\n"

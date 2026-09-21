@@ -63,6 +63,38 @@ def test_exited_but_unreaped_worker_reads_dead() -> None:
 
 
 @pytest.mark.unit
+def test_group_alive_reaps_an_exited_leader_so_it_reads_dead() -> None:
+    """An exited-but-unreaped leader is a zombie `killpg`'s signal-0 probe still reaches —
+    unlike `is_alive`. Unreaped, `group_alive` would read it alive forever, so a waiter
+    polling it for exit (the drain's own wait loop) never observes the transition."""
+    probe = LinuxProcessProbe()
+    proc = subprocess.Popen(["true"], start_new_session=True)  # `start_new_session` -> pgid == pid
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if ProcStat.of(proc.pid).zombie:
+            break
+        time.sleep(0.02)
+    assert ProcStat.of(proc.pid).zombie, "child did not become a zombie"
+    assert not probe.group_alive(proc.pid)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        proc.wait(timeout=0)  # `group_alive` already reaped it — a no-op, not a hang
+
+
+@pytest.mark.unit
+def test_group_alive_leaves_a_still_running_leader_untouched() -> None:
+    """The non-blocking reap must never wait on a live leader — only an already-exited one."""
+    probe = LinuxProcessProbe()
+    proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
+    try:
+        assert probe.group_alive(proc.pid)
+        assert proc.poll() is None  # still running — `group_alive` did not reap it away
+    finally:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(proc.pid, 9)
+        proc.wait()
+
+
+@pytest.mark.unit
 def test_interrupt_group_signals_a_real_process_group() -> None:
     """``interrupt_group`` reaches a real throwaway process group: a child with no SIGINT
     handler dies on it, exactly the graceful-shutdown drain's own signal (issue #12)."""

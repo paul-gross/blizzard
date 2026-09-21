@@ -1245,10 +1245,10 @@ def _ingest_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
 
 
 def _sigint_drain_graph_yaml(landed_file: str) -> str:
-    """:func:`_hanging_graph_yaml`'s twin (issue #12): the build node hangs behind
-    :func:`~tests.crash.support.sigint_trap_hang_script` instead of a bare ``hang()``, so a
-    graceful shutdown's own SIGINT lands on a script that answers it with a real envelope
-    rather than dying to the interpreter's default handling."""
+    """:func:`_hanging_graph_yaml`'s twin (issue #12): the build node's whole script runs
+    behind :func:`~tests.crash.support.sigint_trap_hang_script`'s SIGINT trap, so a graceful
+    shutdown's own signal lands on a script that answers it with a real envelope no matter
+    which statement it catches the script mid."""
     import yaml
 
     graph = {
@@ -1257,7 +1257,7 @@ def _sigint_drain_graph_yaml(landed_file: str) -> str:
         "nodes": {
             "build": {
                 "executor": "runner",
-                "prompt": build_script(landed_file) + sigint_trap_hang_script(),
+                "prompt": sigint_trap_hang_script(build_script(landed_file)),
                 "judgement": {
                     "prompt": "verdict('pass', 'committed before the restart; checks are green')\n",
                     "choices": {
