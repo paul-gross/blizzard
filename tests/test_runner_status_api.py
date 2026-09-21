@@ -85,7 +85,7 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
     body = resp.json()
     assert body["runner_id"] == "runner-local"
     assert body["workspace_id"] == "workspace-local"
-    assert body["pause"] == {"local": False, "hub": False, "effective": False}
+    assert body["pause"] == {"local": False, "hub": False, "effective": False, "local_reason": None}
     assert body["capacities"] == {"max_agents": 3, "used": 0, "free": 3}
     assert body["hub"] == {
         "endpoint": "http://127.0.0.1:8421",
@@ -155,7 +155,54 @@ def test_pause_states_reported_apart_and_effective_is_the_or(tmp_path: Path) -> 
     with TestClient(app) as client:
         resp = client.get("/api/runner")
 
-    assert resp.json()["pause"] == {"local": True, "hub": False, "effective": True}
+    assert resp.json()["pause"] == {"local": True, "hub": False, "effective": True, "local_reason": None}
+
+
+@pytest.mark.component
+def test_pause_local_reason_surfaces_when_locally_paused_with_one(tmp_path: Path) -> None:
+    """A reasoned local pause (a usage limit, the spend ceiling) reads its reason back on the
+    runner's own status wire — the local mirror of the hub's `RunnerView.locally_paused_reason`
+    (blizzard#594)."""
+    app, store = _app_with_status(tmp_path)
+    store.record_local_pause(
+        "runner-local",
+        paused=True,
+        at=_NOW,
+        by="usage-limit",
+        report_kind="runner.locally_paused",
+        report_payload="{}",
+        reason="usage limit: claude_code (resets 2026-09-21T22:40Z)",
+    )
+
+    with TestClient(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.json()["pause"]["local_reason"] == "usage limit: claude_code (resets 2026-09-21T22:40Z)"
+
+
+@pytest.mark.component
+def test_pause_local_reason_is_none_when_not_locally_paused(tmp_path: Path) -> None:
+    """A reason from a stale, already-cleared local-pause fact must never leak into the
+    status view once the brake is off — reading it back is gated on `local_paused`, not a
+    bare newest-row lookup."""
+    app, store = _app_with_status(tmp_path)
+    store.record_local_pause(
+        "runner-local",
+        paused=True,
+        at=_NOW,
+        by="usage-limit",
+        report_kind="runner.locally_paused",
+        report_payload="{}",
+        reason="usage limit: claude_code",
+    )
+    store.record_local_pause(
+        "runner-local", paused=False, at=_NOW, by="operator", report_kind="runner.locally_resumed", report_payload="{}"
+    )
+
+    with TestClient(app) as client:
+        resp = client.get("/api/runner")
+
+    assert resp.json()["pause"] == {"local": False, "hub": False, "effective": False, "local_reason": None}
 
 
 @pytest.mark.component

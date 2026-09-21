@@ -55,6 +55,8 @@ from tests.crash.support import (
     start_hub,
     start_runner,
     terminate,
+    usage_limited_graph_yaml,
+    usage_limited_judge_graph_yaml,
     wait_death,
     wait_status,
     write_runner_config,
@@ -82,6 +84,7 @@ _DEDICATED_PREFIXES = (
     "checks.",
     "preempt.",
     "close.",
+    "usagelimit.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -111,6 +114,10 @@ _PREEMPT_POINTS = [p for p in _ALL_POINTS if p.startswith("preempt.")]
 # `close.*` fires inside the HUB — the close-intent outbox's own enqueue-then-drain
 # windows (blizzard#383). Swept by `test_kill9_at_close_crash_point`.
 _CLOSE_POINTS = [p for p in _ALL_POINTS if p.startswith("close.")]
+# `usagelimit.*` fires in the RUNNER's own ADVANCE step, once it classifies an exited worker
+# or judge generation as usage-limited (blizzard#594). Swept by
+# `test_kill9_at_usage_limit_crash_point`.
+_USAGE_LIMIT_POINTS = [p for p in _ALL_POINTS if p.startswith("usagelimit.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -179,6 +186,10 @@ _PREEMPT_CI_SUBSET = ("preempt.after-kill.before-closure",)
 # after-close, before-record window — is its own CI representative.
 _CLOSE_CI_SUBSET = ("close.after-close.before-record",)
 
+# The usage-limit CI subset (blizzard#594): the worker-side window is the family's
+# recovery-critical member — the brake is durable, the park is not yet.
+_USAGE_LIMIT_CI_SUBSET = ("usagelimit.worker-after-brake.before-park",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -205,6 +216,7 @@ _CHECKS_SWEEP = _select(_CHECKS_POINTS, _CHECKS_CI_SUBSET)
 _DECLARE_COMMIT_SWEEP = _select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSET)
 _PREEMPT_SWEEP = _select(_PREEMPT_POINTS, _PREEMPT_CI_SUBSET)
 _CLOSE_SWEEP = _select(_CLOSE_POINTS, _CLOSE_CI_SUBSET)
+_USAGE_LIMIT_SWEEP = _select(_USAGE_LIMIT_POINTS, _USAGE_LIMIT_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -227,6 +239,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSET))
         | set(_select(_PREEMPT_POINTS, _PREEMPT_CI_SUBSET))
         | set(_select(_CLOSE_POINTS, _CLOSE_CI_SUBSET))
+        | set(_select(_USAGE_LIMIT_POINTS, _USAGE_LIMIT_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -2129,6 +2142,135 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
     finally:
         hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# --- Usage-limit pause (blizzard#594) — the usagelimit.* crash points ---
+
+
+def _ingest_usage_limited_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+    """Mint the worker-side usage-limit graph and ingest a fresh issue against it to a ready
+    chunk — the entry node's own generation exits usage-limited, never reaching a judge."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": usage_limited_graph_yaml(landed_file)})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a usage-limit crash chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id
+
+
+def _ingest_usage_limited_judge_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str, marker: Path) -> str:
+    """Mint the judge-side usage-limit graph and ingest a fresh issue against it to a ready
+    chunk — the worker commits and exits cleanly; its judge elicitation is the one that exits
+    usage-limited, on its first call only (``marker`` gates the resumed elicitation's verdict)."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": usage_limited_judge_graph_yaml(landed_file, marker)})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a usage-limit judge crash chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id
+
+
+@pytest.mark.parametrize("point", _USAGE_LIMIT_SWEEP)
+def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` between the usage-limit brake engaging and its durable park still keeps
+    the claim (blizzard#594) — recovery re-parks the lease rather than abandoning it, and an
+    operator ``start`` resumes the same lease in place, no retry consumed. Unlike the operator
+    pause-park scenario, nothing external triggers this: the runner discovers the limit itself
+    from the exited generation's own transcript, with no hub-side pause API call at all. Swept
+    over both of the family's members: the worker-side window (an exited worker generation is
+    the one classified) and the judge-side window (its judge elicitation is), each needing its
+    own chunk shape since the two exits happen on different invocations."""
+    is_judge = point.startswith("usagelimit.judge")
+    landed_file = f"LANDED-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    runner = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        if is_judge:
+            marker = tmp_path / "judge-usage-limit-seen"
+            chunk_id = _ingest_usage_limited_judge_chunk(hub, crash_env.forge, landed_file, marker)
+        else:
+            chunk_id = _ingest_usage_limited_chunk(hub, crash_env.forge, landed_file)
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        # Armed from the start: unarmed in effect until the runner's own ADVANCE step
+        # classifies the exited generation and reaches `point` inside the park it triggers.
+        runner_proc = start_runner(runner_dir, crash_point=point)
+
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        if is_judge:
+            # The worker's own commit must land before the judge elicitation that follows it
+            # is the one racing the crash point.
+            _await_committed(runner_dir, chunk_id, landed_file)
+        before = _lease_for_chunk(runner_dir, chunk_id)
+        lease_id, epoch, session_id, _pid_before = before
+
+        # The armed runner classifies the usage-limited exit, engages its own local brake,
+        # and self-SIGKILLs before the park is durable — no external pause call at all.
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+        assert _open_pause_parks(runner_dir) == set(), "the park was durable — the crash point fired too late"
+
+        # Restart UNARMED: recovery must re-run the park, NOT abandon the chunk.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline and _open_pause_parks(runner_dir) != {lease_id}:
+            time.sleep(0.25)
+        assert _open_pause_parks(runner_dir) == {lease_id}, (
+            "the usage-limited lease was never re-parked after the crash — recovery abandoned "
+            "the chunk instead of keeping the claim"
+        )
+        # The claim survived the crash: no closure at all.
+        assert _closure_reason(runner_dir, lease_id) is None, (
+            "recovery closed the usage-limited lease — the pause became a detach/failure"
+        )
+        # This is the runner's own LOCAL brake, not a hub-side per-chunk pause — the hub still
+        # sees the chunk as running, unlike the operator pause-park scenario's `"paused"`.
+        assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
+        await_http(runner, "/api/health", proc=runner_proc)
+        view = runner.get("/api/runner").json()
+        assert view["pause"]["local"] is True, "the local brake was not durably engaged"
+        _assert_invariants(
+            runner_dir, hub_dir, when=f"after the usage-limit park recovered past {point}", after_recovery=True
+        )
+
+        # The operator clears the local brake — `blizzard runner start`'s own PATCH — and the
+        # SAME session finishes the work it was parked mid-way through.
+        resumed = runner.patch("/api/runner", json={"paused": False, "by": "crash-sweep"})
+        assert resumed.status_code == 200, resumed.text
+        assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
+
+        after = _leases_for_chunk(runner_dir, chunk_id)
+        # Nothing worked twice: still exactly one lease, same lease/epoch/session — the pause
+        # cost the chunk a process, not an attempt.
+        assert len(after) == 1, f"the usage-limit park/resume cycle minted an extra lease (retry, not resume): {after}"
+        assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        runner.close()
         terminate(runner_proc)
         terminate(hub_proc)
 

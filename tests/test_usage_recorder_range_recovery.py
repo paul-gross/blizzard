@@ -416,3 +416,67 @@ def test_a_judge_boundary_with_an_unreadable_start_skips_the_worker_sample_entir
 
     assert source.read_raw_lines_calls == []
     assert _usage_payloads_by_lease(store) == {}
+
+
+def test_advance_boundary_moves_the_judge_transcript_range_past_a_stale_signal(  # type: ignore[no-untyped-def]
+    tmp_path,
+) -> None:
+    """blizzard#594: a judge-usage-limit park's resume reuses the SAME ``(lease, generation,
+    "judge")`` boundary for its fresh elicitation — ``record_boundary_open``'s check-then-
+    insert never mints a second row for one generation's judge phase. Without advancing that
+    standing boundary in place, the fresh elicitation's own classification would re-read the
+    limited elicitation's own rate-limit signal off the transcript forever."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_a",
+        pid=1,
+        process_start_time="start-1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, _SESSION_ID),
+        spawned_at=_NOW,
+    )
+    store.record_boundary_open(
+        lease_id="lease_a",
+        chunk_id=_CHUNK_ID,
+        node_id=_NODE_ID,
+        epoch=1,
+        generation=1,
+        kind="judge",
+        start_position="tail-at-first-judge",
+        opened_at=_NOW,
+    )
+    source = FakeTranscriptSource(
+        lines_by_session={_SESSION_ID: ["a line"]},
+        tail_positions_by_session={_SESSION_ID: TranscriptPosition("tail-now")},
+    )
+    handle = WorkerHandle(session_id="unused", pid=0, process_start_time="0", pgid=0)
+    harness = FakeHarness(handle=handle, verdict=None, transcript_source=source)
+    registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=source)})
+    recorder = _recorder(store, registry)
+    lease_a = store.active_lease("lease_a")
+    assert lease_a is not None
+
+    recorder.judge_transcript_lines(lease_a, bindings=[], generation=1)
+    assert source.read_raw_lines_calls == [
+        (_SESSION_ID, TranscriptPosition("tail-at-first-judge"), TranscriptPosition("tail-now"))
+    ]
+
+    # A second row is never minted for the same (lease, generation, "judge") — this call
+    # reuses and advances the standing one, past the limited elicitation's own turn.
+    store.advance_boundary(
+        lease_id="lease_a",
+        generation=1,
+        kind="judge",
+        start_position="tail-after-limited-elicitation",
+        opened_at=_NOW,
+    )
+    advanced = store.boundary("lease_a", 1, "judge")
+    assert advanced is not None
+    assert advanced.start_position == "tail-after-limited-elicitation"
+
+    recorder.judge_transcript_lines(lease_a, bindings=[], generation=1)
+    assert source.read_raw_lines_calls[-1] == (
+        _SESSION_ID,
+        TranscriptPosition("tail-after-limited-elicitation"),
+        TranscriptPosition("tail-now"),
+    )

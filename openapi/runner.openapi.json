@@ -2458,7 +2458,7 @@
         "type": "object"
       },
       "PauseStateView": {
-        "description": "The pause brake's two independent surfaces, plus their effective OR.",
+        "description": "The pause brake's two independent surfaces, plus their effective OR.\n\n``local_reason`` is the local brake's own reason \u2014 a usage limit, the spend ceiling, or\n``None`` on a plain operator pause \u2014 the runner-local mirror of the reason the hub already\nshows for a runner's local pause (blizzard#594).",
         "properties": {
           "effective": {
             "title": "Effective",
@@ -2471,6 +2471,17 @@
           "local": {
             "title": "Local",
             "type": "boolean"
+          },
+          "local_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Reason"
           }
         },
         "required": [

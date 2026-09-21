@@ -88,6 +88,15 @@ export class LocalPauseControl {
   /** The hub's brake, as last mirrored by PULL — untouched by this control. */
   protected readonly hubPaused = computed<boolean>(() => this.dashboardQuery.data()?.runner?.pause?.hub ?? false);
 
+  /** The local brake's own reason (blizzard#594) — a usage limit, the spend ceiling, or
+   * `null` on a plain manual pause or while nothing overrides it (`overridePaused` names no
+   * reason of its own, so a pending flip shows no stale reason until the real read catches
+   * up). Read straight off `pause.local_reason`, never derived from `localPaused`'s own
+   * override — a reason belongs to the *server's* pause, not an optimistic local one. */
+  protected readonly localReason = computed<string | null>(
+    () => this.dashboardQuery.data()?.runner?.pause?.local_reason ?? null,
+  );
+
   /** Disables the toggle while a flip is in flight, so a double click can't
    * race two PATCHes. */
   protected readonly pending = computed<boolean>(() => this.pauseMutation.isPending());

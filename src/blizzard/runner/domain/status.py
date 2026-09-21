@@ -41,11 +41,14 @@ class PauseState:
     """The pause brake's two independent surfaces, plus their effective OR.
 
     Reported apart because they are cleared by different verbs
-    (``blizzard runner start`` vs. ``blizzard hub runner resume``)."""
+    (``blizzard runner start`` vs. ``blizzard hub runner resume``). ``local_reason`` is the
+    local brake's own reason (a usage limit, the spend ceiling), ``None`` on a plain operator
+    pause or when the brake is not engaged locally at all (blizzard#594)."""
 
     local: bool
     hub: bool
     effective: bool
+    local_reason: str | None
 
 
 @dataclass(frozen=True)
@@ -160,13 +163,16 @@ class RunnerStatusService:
     def summary(self) -> RunnerStatusSummary:
         local_paused = self._stores.pause.local_paused(self._runner_id)
         hub_paused = self._stores.pause.hub_paused(self._runner_id)
+        local_reason = self._stores.pause.local_pause_reason(self._runner_id) if local_paused else None
         used = len(self._stores.lease_record.list_active_leases())
         contact_at = self._stores.pause.hub_contact_at(self._runner_id)
         reachable = contact_at is not None and (self._clock.now() - contact_at) <= self._contact_staleness
         return RunnerStatusSummary(
             runner_id=self._runner_id,
             workspace_id=self._workspace_id,
-            pause=PauseState(local=local_paused, hub=hub_paused, effective=local_paused or hub_paused),
+            pause=PauseState(
+                local=local_paused, hub=hub_paused, effective=local_paused or hub_paused, local_reason=local_reason
+            ),
             capacities=Capacities(max_agents=self._max_agents, used=used, free=max(self._max_agents - used, 0)),
             hub=HubConnectivity(
                 endpoint=self._hub_url,

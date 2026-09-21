@@ -291,6 +291,7 @@ local_pause_facts = Table(
     Column("paused", Boolean, nullable=False),  # locally paused derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
+    Column("reason", String, nullable=True),  # None on an unreasoned pause/clear (blizzard#594)
 )
 
 # --- Workspace prompt override (runtime-settable spawn preamble — issue #17) --

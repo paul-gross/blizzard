@@ -1507,6 +1507,10 @@ export type OpenTakeoverView = {
  * PauseStateView
  *
  * The pause brake's two independent surfaces, plus their effective OR.
+ *
+ * ``local_reason`` is the local brake's own reason — a usage limit, the spend ceiling, or
+ * ``None`` on a plain operator pause — the runner-local mirror of the reason the hub already
+ * shows for a runner's local pause (blizzard#594).
  */
 export type PauseStateView = {
     /**
@@ -1521,6 +1525,10 @@ export type PauseStateView = {
      * Local
      */
     local: boolean;
+    /**
+     * Local Reason
+     */
+    local_reason?: string | null;
 };
 
 /**

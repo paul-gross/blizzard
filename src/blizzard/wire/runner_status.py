@@ -11,11 +11,16 @@ from blizzard.wire.fleet import FleetSummaryView
 
 
 class PauseStateView(BaseModel):
-    """The pause brake's two independent surfaces, plus their effective OR."""
+    """The pause brake's two independent surfaces, plus their effective OR.
+
+    ``local_reason`` is the local brake's own reason — a usage limit, the spend ceiling, or
+    ``None`` on a plain operator pause — the runner-local mirror of the reason the hub already
+    shows for a runner's local pause (blizzard#594)."""
 
     local: bool
     hub: bool
     effective: bool
+    local_reason: str | None = None
 
 
 class CapacitiesView(BaseModel):

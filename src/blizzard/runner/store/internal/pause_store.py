@@ -45,6 +45,15 @@ class PauseStore:
         )
         return bool(rows[0].paused) if rows else False
 
+    def local_pause_reason(self, runner_id: str) -> str | None:
+        rows = self._store.all(
+            select(local_pause_facts.c.reason)
+            .where(local_pause_facts.c.runner_id == runner_id)
+            .order_by(local_pause_facts.c.id.desc())
+            .limit(1)
+        )
+        return rows[0].reason if rows else None
+
     def last_daemon_liveness(self) -> datetime | None:
         rows = self._store.all(select(func.max(daemon_liveness.c.alive_at).label("alive_at")))
         return rows[0].alive_at if rows and rows[0].alive_at is not None else None
@@ -80,12 +89,24 @@ class PauseStore:
                 )
 
     def record_local_pause(
-        self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
+        self,
+        runner_id: str,
+        *,
+        paused: bool,
+        at: datetime,
+        by: str,
+        report_kind: str,
+        report_payload: str,
+        reason: str | None = None,
     ) -> int:
         # Both inserts, one transaction: two would leave a `kill -9` window where the runner
         # has stopped claiming and the hub is never told (issue #43).
         with self._store.begin() as conn:
-            conn.execute(local_pause_facts.insert().values(runner_id=runner_id, paused=paused, set_at=at, set_by=by))
+            conn.execute(
+                local_pause_facts.insert().values(
+                    runner_id=runner_id, paused=paused, set_at=at, set_by=by, reason=reason
+                )
+            )
             result = conn.execute(
                 outbound_buffer.insert().values(
                     kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=at

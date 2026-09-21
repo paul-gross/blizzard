@@ -8,13 +8,14 @@ caller summing cost must read it as "unknown" rather than zero."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 
 #: The point in a node's lifecycle an invocation is attributed to. Supplied by the
 #: caller, which knows the operation it just ran, never inferred by the adapter.
 UsageKind = Literal["spawn", "resume", "judge"]
 
-__all__ = ["SessionCostBasis", "UsageKind", "UsageSample", "invocation_cost"]
+__all__ = ["SessionCostBasis", "UsageKind", "UsageLimit", "UsageSample", "invocation_cost"]
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,23 @@ class UsageSample:
     def token_total(self) -> int:
         """This invocation's own four counts summed."""
         return self.input_tokens + self.output_tokens + self.cache_read_tokens + self.cache_create_tokens
+
+
+@dataclass(frozen=True)
+class UsageLimit:
+    """One invocation classified as exited over the account's own subscription usage
+    limit (blizzard#594) — a fact the adapter translates from its harness's own output,
+    never a decision (``bzh:deterministic-shell``): the loop is what engages the pause
+    brake from it.
+
+    ``resets_at`` is ``None`` when the classifier could not parse a reset time from the
+    harness's own report — never a guess, never a raise. ``detail`` is the harness's own
+    free-text report, carried through and logged at engagement for diagnosis — the brake's
+    own reason string (D3) stays the fixed ``usage limit: <harness> (resets <time>)`` shape
+    and never repeats it."""
+
+    resets_at: datetime | None
+    detail: str
 
 
 @dataclass(frozen=True)

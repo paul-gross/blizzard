@@ -11,6 +11,9 @@
   >
     {{ localPaused() ? 'Resume' : 'Pause' }}
   </fleet-kit-button>
+  @if (localPaused() && localReason(); as reason) {
+    <fleet-kit-badge tone="waiting" variant="pill" data-testid="pause-reason-badge">{{ reason }}</fleet-kit-badge>
+  }
   @if (error(); as err) {
     <p class="notice" data-testid="pause-error" role="alert">{{ err }}</p>
   }

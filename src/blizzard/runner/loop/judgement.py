@@ -25,6 +25,7 @@ from blizzard.runner.loop.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.spawn import Spawner
+from blizzard.runner.loop.usage_limit import classify_judge_usage_limit, engage_and_park_judge
 from blizzard.wire.completion import CheckResult, ChecksGate, CompletionSubmission, SubmittedArtifact
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import NodeEnvelope
@@ -83,13 +84,14 @@ def _elicitation_alive(ctx: LoopContext, elicitation: ElicitationRecord) -> bool
 
 
 def elicitation_still_pending(ctx: LoopContext, elicitation: ElicitationRecord) -> bool:
-    """Read-only mirror of `Judgement.collect`'s own staleness-then-liveness order, for a
-    caller that wants to know whether `collect` would trivially early-return WITHOUT paying
-    for a `Judgement` — the hub envelope fetch and binding read `Judgement.of` unconditionally
-    performs. ``True`` only in the live-and-under-the-bound steady state; stale or exited both
-    return ``False``, the two cases that genuinely need a full `Judgement` to proceed. Shares
+    """Read-only mirror of `Judgement.collect`'s own early-return condition, for a caller that
+    wants to know whether `collect` would trivially early-return WITHOUT paying for a
+    `Judgement` — the hub envelope fetch and binding read `Judgement.of` unconditionally
+    performs. ``True`` only in the live-and-under-the-bound steady state; stale-and-alive or
+    exited both return ``False``, the two cases that genuinely need a full `Judgement` to
+    proceed (to fail the first, or to classify/judge the second). Shares
     `_elicitation_stale`/`_elicitation_alive` with `Judgement.collect`, so the two can never
-    diverge on order or thresholds."""
+    diverge on thresholds."""
     if _elicitation_stale(ctx, elicitation):
         return False
     return _elicitation_alive(ctx, elicitation)
@@ -183,13 +185,15 @@ class Judgement:
         """Poll this lease's in-flight elicitation; once its process has exited, read its
         reply back and continue exactly where a launch's own reply would have (blizzard#443).
 
-        Staleness is checked FIRST, unconditionally — before liveness — so a hung process
-        that never exits is still bounded, not just a lost-and-empty one. Still
-        running and under the bound: pass over, no store write, collected on a later pass —
-        never blocking this one on a live model turn. Exited with nothing usable at all —
-        empty, or a partial write with no result envelope at all, the shape a `kill -9`
-        mid-write leaves — is a **lost** elicitation, not a verdict-less reply:
-        that relaunches under the staleness bound rather than consuming a retry (D5).
+        A still-live process is bounded by staleness alone — a hung process that never exits
+        must still fail, not wait forever. An **exited** process is classified for a usage
+        limit ahead of the staleness bound (blizzard#594, D2): an elicitation observed only
+        long after it exited — a delayed tick, a runner outage — must still pause rather than
+        fail, exactly the shape `_elicitation_stale`'s own bound would otherwise catch first.
+        Exited, not limited, and nothing usable at all — empty, or a partial write with no
+        result envelope at all, the shape a `kill -9` mid-write leaves — is a **lost**
+        elicitation, not a verdict-less reply: that relaunches under the staleness bound
+        rather than consuming a retry (D5).
 
         The record is cleared, and its output files swept, only AFTER the collected reply
         is fully processed: a crash mid-processing leaves the record standing,
@@ -197,6 +201,31 @@ class Judgement:
         because usage recording and completion buffering are already idempotent replays
         under a crash, the same guarantee the once-synchronous elicitation always leaned on."""
         lease = self.lease
+        if _elicitation_alive(self.ctx, elicitation):
+            if _elicitation_stale(self.ctx, elicitation):
+                _log.warning(
+                    "elicitation past its staleness bound — failing attempt",
+                    chunk_id=lease.chunk_id,
+                    lease_id=lease.lease_id,
+                    relaunch_count=elicitation.relaunch_count,
+                )
+                # `Attempt.fail` kills the (possibly still-running) process and clears this
+                # record itself (D7) — no separate write of our own precedes it.
+                Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
+            return
+        output = self.ctx.elicitation_files.read(elicitation.output_path)
+        session = lease.session
+        # Classified ahead of both the staleness bound and the lost-output check
+        # (blizzard#594): a usage-limited harness typically writes its own signal to the
+        # session transcript, not this elicitation's captured stdout, so neither an empty
+        # `output` nor a long-unobserved exit may fall through to failing or relaunching —
+        # exactly what a usage-limit pause exists to avoid.
+        if session is not None:
+            generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
+            limit = classify_judge_usage_limit(self.ctx, lease, output, generation=generation)
+            if limit is not None:
+                engage_and_park_judge(self.ctx, lease, limit)
+                return
         if _elicitation_stale(self.ctx, elicitation):
             _log.warning(
                 "elicitation past its staleness bound — failing attempt",
@@ -204,15 +233,12 @@ class Judgement:
                 lease_id=lease.lease_id,
                 relaunch_count=elicitation.relaunch_count,
             )
-            # `Attempt.fail` kills the (possibly still-running) process and clears this
-            # record itself (D7) — no separate write of our own precedes it.
             Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
             return
-        if _elicitation_alive(self.ctx, elicitation):
+        if session is None:
+            self._lost(elicitation)
             return
-        output = self.ctx.elicitation_files.read(elicitation.output_path)
-        session = lease.session
-        if not output or session is None:
+        if not output:
             self._lost(elicitation)
             return
         harness = self._resolve_harness(session, via="collect")

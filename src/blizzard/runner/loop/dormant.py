@@ -196,6 +196,9 @@ class DormantSession:
             self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
             _log.info("pause lifted on an ask-parked chunk — awaiting its answer", chunk_id=lease.chunk_id)
             return
+        if self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch) is not None:
+            self._resume_judge_usage_limit_park(now)
+            return
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings or lease.session is None:
             _log.warning("unpaused chunk has no warm env/session — cannot resume", chunk_id=lease.chunk_id)
@@ -213,6 +216,51 @@ class DormantSession:
             lease_id=lease.lease_id,
             epoch=lease.epoch,
             pid=pid,
+        )
+
+    def _resume_judge_usage_limit_park(self, now: datetime) -> None:
+        """Unpause a judge-usage-limit park (blizzard#594): the worker's own turn already
+        finished normally before its verdict elicitation hit the limit, so there is nothing
+        left to "continue" — re-running `Judgement` mints a fresh elicitation instead of
+        waking the worker with `_UNPAUSE_MESSAGE`, as D2 requires. The stale record from the
+        limited elicitation is left for `Judgement._launch`'s own `record_elicitation_launch`
+        to delete-then-insert over, rather than cleared here first — no window where neither
+        record exists. The park-resume is recorded only AFTER the fresh elicitation is
+        durably launched: if a crash lands between them, the lease is still pause-parked, so
+        the next pass re-enters this same method rather than the ordinary exited-worker path
+        re-classifying the same stale record and re-engaging the brake it was just cleared
+        from."""
+        lease = self.lease
+        # Deferred: `judgement` imports `DormantSession` at module scope, so importing
+        # `Judgement` back at module scope here would cycle.
+        from blizzard.runner.loop.judgement import Judgement
+
+        judgement = Judgement.of(self.ctx, lease)
+        if judgement is None:
+            return  # hub unreachable — the park is durable; retry next tick
+        if lease.session is not None:
+            # The standing "judge" boundary is reused, not reopened (`record_boundary_open`'s
+            # check-then-insert never mints a second row for one (lease, generation, kind)) —
+            # advance it past the limited elicitation's own signal, or the fresh one's own
+            # classification would re-read that same signal off the transcript forever.
+            generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
+            workdir = judgement.bindings[0].workdir if judgement.bindings else None
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(lease.session, workdir)
+            self.ctx.stores.invocation_boundaries.advance_boundary(
+                lease_id=lease.lease_id,
+                generation=generation,
+                kind="judge",
+                start_position=start_position,
+                start_unreadable=start_unreadable,
+                opened_at=now,
+            )
+        judgement.run()
+        self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
+        _log.info(
+            "resumed a judge-usage-limit park with a fresh elicitation",
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            epoch=lease.epoch,
         )
 
     def _restart(self) -> None:

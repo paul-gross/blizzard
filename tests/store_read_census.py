@@ -659,6 +659,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadPauseRepository, "hub_contact_at"): lambda w: w.read.pause.hub_contact_at(RUNNER_ID),
     (IReadPauseRepository, "hub_paused"): lambda w: w.read.pause.hub_paused(RUNNER_ID),
     (IReadPauseRepository, "local_paused"): lambda w: w.read.pause.local_paused(RUNNER_ID),
+    (IReadPauseRepository, "local_pause_reason"): lambda w: w.read.pause.local_pause_reason(RUNNER_ID),
     (IReadPauseRepository, "last_daemon_liveness"): lambda w: w.read.pause.last_daemon_liveness(),
     (IReadPauseRepository, "pause_parked_lease_ids"): lambda w: w.read.pause.pause_parked_lease_ids(),
     (IReadTakeoverRepository, "lease_for_open_takeover"): lambda w: w.read.takeover.lease_for_open_takeover(w.lease_5),
@@ -673,6 +674,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadUsageRepository, "usage_since"): lambda w: w.read.usage.usage_since(_BASE),
     (IReadUsageRepository, "context_sample_state"): lambda w: w.read.usage.context_sample_state(w.lease_1),
     (IReadUsageRepository, "last_external_usage_attempt_at"): lambda w: w.read.usage.last_external_usage_attempt_at(
+        w.usage_slug
+    ),
+    (IReadUsageRepository, "latest_external_usage_windows"): lambda w: w.read.usage.latest_external_usage_windows(
         w.usage_slug
     ),
     (IReadAttachmentRepository, "attachments_for_lease"): lambda w: w.read.attachments.attachments_for_lease(w.lease_2),

@@ -63,7 +63,12 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
     return RunnerStatusView(
         runner_id=summary.runner_id,
         workspace_id=summary.workspace_id,
-        pause=PauseStateView(local=summary.pause.local, hub=summary.pause.hub, effective=summary.pause.effective),
+        pause=PauseStateView(
+            local=summary.pause.local,
+            hub=summary.pause.hub,
+            effective=summary.pause.effective,
+            local_reason=summary.pause.local_reason,
+        ),
         capacities=CapacitiesView(
             max_agents=summary.capacities.max_agents, used=summary.capacities.used, free=summary.capacities.free
         ),

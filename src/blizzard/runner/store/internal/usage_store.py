@@ -21,6 +21,7 @@ from blizzard.runner.store.schema import (
     outbound_buffer,
     usage_facts,
 )
+from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
 from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.store")
@@ -90,6 +91,31 @@ class UsageStore:
         with self._store.connect() as conn:
             value = conn.execute(stmt).scalar_one_or_none()
         return value
+
+    def latest_external_usage_windows(self, slug: str) -> tuple[ExternalSubscriptionUsageWindow, ...]:
+        # A NULL-payload row is a recorded failed-sample attempt (blizzard#594 review F4) —
+        # excluded here so a sampler miss never hides an older still-valid 100%-utilized
+        # window behind it, which would silently drop D4's fallback reset time.
+        stmt = (
+            select(external_usage_samples.c.payload)
+            .where(and_(external_usage_samples.c.slug == slug, external_usage_samples.c.payload.is_not(None)))
+            .order_by(external_usage_samples.c.sampled_at.desc(), external_usage_samples.c.id.desc())
+            .limit(1)
+        )
+        with self._store.connect() as conn:
+            payload = conn.execute(stmt).scalar_one_or_none()
+        if not payload:
+            return ()
+        decoded = json.loads(payload)
+        return tuple(
+            ExternalSubscriptionUsageWindow(
+                window=window["window"],
+                utilization_pct=window["utilization_pct"],
+                resets_at=as_utc(datetime.fromisoformat(window["resets_at"])),
+                window_seconds=window["window_seconds"],
+            )
+            for window in decoded.get("windows", [])
+        )
 
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:
         stmt = select(

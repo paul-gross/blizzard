@@ -21,6 +21,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
+from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import (
@@ -35,13 +36,13 @@ from blizzard.runner.loop.held_chunk import HeldChunk
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.judgement import Judgement, elicitation_still_pending
 from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.usage_limit import classify_worker_usage_limit, engage_and_park_worker
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import (
     EVENT_RECORDED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
-    RUNNER_LOCALLY_PAUSED,
     ExternalSubscriptionUsageWindowFact,
 )
 
@@ -132,18 +133,9 @@ class SpendCeiling(Step):
             window_hours=ctx.config.runner_ceiling_window_hours,
             cost_partial=totals.cost_partial,
         )
-        seq = ctx.stores.pause.record_local_pause(
-            ctx.config.runner_id,
-            paused=True,
-            at=now,
-            by="runner-ceiling",
-            report_kind=RUNNER_LOCALLY_PAUSED,
-            report_payload=json.dumps(
-                {"runner_id": ctx.config.runner_id, "by": "runner-ceiling", "at": iso_utc(now), "reason": reason}
-            ),
+        PauseService(ctx.stores.pause, ctx.clock, events=ctx.events).engage(
+            ctx.config.runner_id, by="runner-ceiling", reason=reason
         )
-        if ctx.events is not None:
-            ctx.events.publish_fact_changed(seq=seq, kind=RUNNER_LOCALLY_PAUSED, chunk_id=None, lease_id=None)
 
 
 class Reap(Step):
@@ -541,6 +533,14 @@ class Advance(Step):
             judgement = Judgement.of(self.ctx, lease)
             if judgement is not None:
                 judgement.collect(elicitation)
+            return
+        # A usage-limited generation is classified ahead of the ask pre-check and judging
+        # alike (blizzard#594): the exit is neither an ask nor a verdict to judge, it is the
+        # harness itself reporting it could not run at all.
+        generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
+        limit = classify_worker_usage_limit(self.ctx, lease, generation=generation)
+        if limit is not None:
+            engage_and_park_worker(self.ctx, lease, limit)
             return
         # Ask-and-exit: an exit holding an unforwarded ask is a park, an exit with neither is a
         # failure. Not a spawn, so it proceeds regardless of the local brake.

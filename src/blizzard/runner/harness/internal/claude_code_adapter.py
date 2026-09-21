@@ -12,7 +12,9 @@ import re
 import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import (
@@ -28,7 +30,7 @@ from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.wire.envelope import TIER_PREFIX, NodeEnvelope
 
@@ -58,6 +60,10 @@ _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 # `--autocompact`'s own vocabulary shape (blizzard#343): a recognition check, not the
 # CLI's own 100k-1M range (enforced CLI-side, never re-implemented here).
 _COMPACTION_WINDOW_RE = re.compile(r"auto|[0-9]+[kK]?")
+
+# The synthetic record's own reset-time phrasing (blizzard#594, the 2026-09-05 shape):
+# "resets 5:40pm (America/Chicago)" — a clock time in an IANA zone, never a duration.
+_RATE_LIMIT_RESET_RE = re.compile(r"resets\s+(\d{1,2}):(\d{2})\s*([ap]m)\s*\(([^)]+)\)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -502,6 +508,61 @@ class ClaudeCodeAdapter:
             cache_create_tokens=cache_create_tokens,
             cost_usd=None,
         )
+
+    def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
+        # The signal is the synthetic transcript record (blizzard#594), never `output`:
+        # a limited invocation's own stdout carries no result envelope to read `is_error`
+        # off in the first place, so corroborating against it would only narrow, never help.
+        del output
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict) or record.get("type") != "assistant":
+                continue
+            if record.get("isApiErrorMessage") is not True or record.get("error") != "rate_limit":
+                continue
+            text = self._rate_limit_text(record)
+            return UsageLimit(resets_at=self._parse_rate_limit_reset(text, now), detail=text or "rate_limit")
+        return None
+
+    @staticmethod
+    def _rate_limit_text(record: Mapping[str, Any]) -> str:
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            return ""
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+                return block["text"]
+        return ""
+
+    @staticmethod
+    def _parse_rate_limit_reset(text: str, now: datetime) -> datetime | None:
+        """The next occurrence of the reported clock time in its own IANA zone, after
+        ``now`` — never a raise: an unrecognized zone or an unparseable message both
+        return ``None``, which the caller falls back on rather than guesses past."""
+        match = _RATE_LIMIT_RESET_RE.search(text)
+        if match is None:
+            return None
+        hour_str, minute_str, meridiem, zone_name = match.groups()
+        try:
+            zone = ZoneInfo(zone_name)
+        except (ZoneInfoNotFoundError, ValueError):
+            return None
+        hour = int(hour_str) % 12
+        if meridiem.lower() == "pm":
+            hour += 12
+        local_now = now.astimezone(zone)
+        candidate = local_now.replace(hour=hour, minute=int(minute_str), second=0, microsecond=0)
+        if candidate <= local_now:
+            candidate += timedelta(days=1)
+        # `now` is always UTC (``bzh:injected-clock``); the reply matches its own tzinfo.
+        return candidate.astimezone(now.tzinfo)
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source

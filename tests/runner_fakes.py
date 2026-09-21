@@ -40,7 +40,7 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.chunk_status_cache import IChunkViews, ReadThroughChunkViews
@@ -711,6 +711,8 @@ class FakeHarness:
         judge_output_usable: bool = True,
         identity_failures: int = 0,
         resume_process_start_time: str = "resume-start",
+        usage_limit: UsageLimit | None = None,
+        usage_limit_from_call: int = 1,
     ) -> None:
         self._handle = handle
         self.verdict = verdict
@@ -791,6 +793,13 @@ class FakeHarness:
         # Scriptable, not the null source (blizzard#245); defaults to an empty
         # `FakeTranscriptSource` (every session `not_found`, no lines, no size).
         self._transcript_source: IHarnessTranscriptSource = transcript_source or FakeTranscriptSource()
+        # Scripted `classify_usage_limit` reply (blizzard#594) — `None` (the default)
+        # classifies every invocation as not usage-limited, unchanged from before this slice.
+        # `usage_limit_from_call` (1-indexed) lets a test script a worker-generation exit as
+        # unlimited but its later judge elicitation as limited, or vice versa.
+        self.usage_limit = usage_limit
+        self.usage_limit_from_call = usage_limit_from_call
+        self.usage_limit_calls: list[tuple[str, tuple[str, ...]]] = []
 
     def spawn(
         self,
@@ -969,6 +978,13 @@ class FakeHarness:
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source
+
+    def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
+        del now
+        self.usage_limit_calls.append((output, tuple(lines)))
+        if len(self.usage_limit_calls) < self.usage_limit_from_call:
+            return None
+        return self.usage_limit
 
 
 class TieredFakeHarness(FakeHarness):
