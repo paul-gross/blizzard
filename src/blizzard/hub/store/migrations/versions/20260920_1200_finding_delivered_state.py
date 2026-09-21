@@ -43,6 +43,9 @@ _NEW_KINDS = (
     "reopened",
 )
 
+# Narrow read/write stub: downgrade backfills only this column.
+_facts = sa.Table("finding_facts", sa.MetaData(), sa.Column("kind", sa.String))
+
 
 def _check_sql(kinds: tuple[str, ...]) -> str:
     return "kind IN (" + ", ".join(f"'{kind}'" for kind in kinds) + ")"
@@ -68,6 +71,9 @@ def downgrade() -> None:
     bind = op.get_bind()
     if not _admits_delivered(bind):
         return
+    # `delivered` has no home in the old vocabulary — coalesce to `resolved`, the exit it
+    # settles to when nothing intervenes, so narrowing the CHECK never orphans a row.
+    bind.execute(_facts.update().where(_facts.c.kind == "delivered").values(kind="resolved"))
     with op.batch_alter_table(_FACTS_TABLE) as batch:
         batch.drop_constraint(_CHECK_NAME, type_="check")
         batch.create_check_constraint(_CHECK_NAME, _check_sql(_OLD_KINDS))

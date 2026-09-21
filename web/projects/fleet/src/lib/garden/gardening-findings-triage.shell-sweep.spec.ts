@@ -93,6 +93,16 @@ const ROWS: readonly FindingListRowVm[] = [
     routineName: null,
     scopeSlug: null,
   },
+  {
+    findingId: 'fin_6',
+    findingClass: 'lint',
+    locus: 'f.py:8',
+    summary: 'stale helper',
+    state: 'wont-fix',
+    lastSeenAt: null,
+    routineName: null,
+    scopeSlug: null,
+  },
 ];
 
 async function mount(rows: readonly FindingListRowVm[] = ROWS) {
@@ -179,12 +189,20 @@ describe('FleetFindingList delivered-state badge shell sweep (web:shell-sweep)',
       // the projected `.badge` span inside (`kit-badge.html`'s own style binding).
       const resolvedBadge = root.querySelector<HTMLElement>('[data-testid="gardening-finding-state-fin_4"] .badge')!;
       const deliveredBadge = root.querySelector<HTMLElement>('[data-testid="gardening-finding-state-fin_5"] .badge')!;
+      // `wont-fix` falls back to `idle`; comparing against it too catches a deleted
+      // `delivered: 'takeover'` entry, which a resolved-only comparison would miss.
+      const wontFixBadge = root.querySelector<HTMLElement>('[data-testid="gardening-finding-state-fin_6"] .badge')!;
       const resolvedBg = getComputedStyle(resolvedBadge).backgroundColor;
       const deliveredBg = getComputedStyle(deliveredBadge).backgroundColor;
+      const idleBg = getComputedStyle(wontFixBadge).backgroundColor;
       expect(
         deliveredBg,
         `a delivered badge's background (${deliveredBg}) must not read as a resolved badge's (${resolvedBg})`,
       ).not.toBe(resolvedBg);
+      expect(
+        deliveredBg,
+        `a delivered badge's background (${deliveredBg}) must not read as the idle fallback's (${idleBg})`,
+      ).not.toBe(idleBg);
     } finally {
       root.remove();
     }

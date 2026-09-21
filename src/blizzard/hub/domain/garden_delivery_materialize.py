@@ -215,8 +215,7 @@ class GardenDelivery:
                     )
                 else:
                     assert isinstance(op, GoneFindingOp)
-                    delivered_actor = validated.delivered_findings.get(op.id)
-                    if delivered_actor is not None:
+                    if op.id in validated.delivered_findings:
                         # Already delivered — this completes the exit rather than flagging it (blizzard#583 D3).
                         facts.append(
                             FindingFactRecord(
@@ -224,7 +223,7 @@ class GardenDelivery:
                                 kind="resolved",
                                 finding_set_id=finding_set_id,
                                 note=op.note,
-                                actor=delivered_actor,
+                                actor=validated.delivered_findings[op.id],
                             )
                         )
                     else:

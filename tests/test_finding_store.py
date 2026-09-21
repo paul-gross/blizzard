@@ -160,6 +160,19 @@ def test_a_persons_exit_verb_records_no_finding_set(tmp_path: Path) -> None:
     assert row.finding_set_id is None
 
 
+def test_a_delivered_facts_actor_reads_back_through_the_real_store(tmp_path: Path) -> None:
+    """The `actor` column threaded through `Finding`/`FindingLiveness` (blizzard#583 D3)
+    round-trips through the real store, not just a hand-built domain object — D3's
+    settle-with-original-actor behavior rests on this read, not a fixture."""
+    store = _store(tmp_path)
+    _add(store)
+
+    store.record_fact("fin_1", kind="delivered", at=_LATER, actor="pgross")
+
+    fetched = store.get("fin_1")
+    assert fetched.actor == "pgross"  # type: ignore[union-attr]
+
+
 def test_a_gone_finding_is_excluded_from_list_for_unless_include_gone(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _add(store, finding_id="fin_1")

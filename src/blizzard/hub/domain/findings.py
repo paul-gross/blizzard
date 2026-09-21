@@ -156,7 +156,10 @@ class FindingPage:
 
 
 class IReadFindingRepository(Protocol):
-    """Read-only finding access. Controllers at the edges depend on this variant."""
+    """Read-only finding access. Controllers at the edges depend on this variant.
+
+    An unsettled `delivered` finding carries no staleness bound of its own — outside
+    `include_gone=False` and every trend count until its owning routine revives or settles it."""
 
     def get(self, finding_id: str) -> Finding | None: ...
 
@@ -215,10 +218,11 @@ class IReadFindingRepository(Protocol):
         ...
 
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
-        """Whether any `delivered` fact already carries `proposal_id` — delivery-triggered
-        closure's own once-only gate (blizzard#394, blizzard#583), independent of any one
-        finding's current state so a later reopen of a delivered finding is never silently
-        redone."""
+        """Whether any fact already carries `proposal_id` — delivery-triggered closure's
+        own once-only gate (blizzard#394, blizzard#583), kind-agnostic so a proposal
+        delivered before `delivered` existed (its fact stamped `resolved`) still gates,
+        independent of any one finding's current state so a later reopen is never
+        silently redone."""
         ...
 
 
@@ -275,9 +279,9 @@ class FactEntry:
 
 
 class IFindingExitResolver(Protocol):
-    """`FindingExitService.deliver`'s own shape — the one exit verb delivery-triggered
-    closure calls, narrowed so that collaborator depends on a Protocol like every other
-    one it takes (blizzard#394, blizzard#583)."""
+    """`FindingExitService.deliver`'s own narrowed shape — delivery-triggered closure,
+    not an exit itself (blizzard#394, blizzard#583), so that collaborator depends on a
+    Protocol like every other one it takes."""
 
     def deliver(
         self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None
@@ -285,8 +289,9 @@ class IFindingExitResolver(Protocol):
 
 
 class FindingExitService:
-    """The human-driven exit verbs (blizzard#394) that decide a finding's fate for good,
-    plus `reopen`, the way back. Every method takes already-loaded :class:`Finding` objects
+    """The human-driven exit verbs (blizzard#394), `reopen`, and `deliver` (blizzard#583)
+    — delivery-triggered and provisional, not an exit, until the owning routine's next
+    run settles it. Every method takes already-loaded :class:`Finding` objects
     (`bzh:domain-takes-objects`) and refuses a blank or missing note before writing."""
 
     def __init__(self, *, repo: IWriteFindingRepository, clock: IClock) -> None:

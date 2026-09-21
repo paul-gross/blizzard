@@ -662,12 +662,44 @@ def test_close_run_twice_appends_only_one_delivery(tmp_path: Path) -> None:
     source.close(pointer)
 
     with engine.connect() as conn:
-        count = conn.execute(
+        facts = conn.execute(select(s.finding_facts).where(s.finding_facts.c.finding_id == "fin_1")).all()
+    assert [f.kind for f in facts] == ["add", "delivered"]
+
+
+def test_close_never_redelivers_a_proposal_a_legacy_resolved_fact_already_closed(tmp_path: Path) -> None:
+    """A proposal delivered before `delivered` existed left a `resolved` fact carrying
+    its `proposal_id` — `has_delivery_for_proposal` must still gate on it, or a reopened
+    finding gets silently redelivered by a later, unrelated retry."""
+    source, items, _, _, engine, _ = _source(tmp_path)
+    graph = _graph(engine)
+    created = seed_work_item(
+        items,
+        graph_id=graph.graph_id,
+        author=WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_seed", node_name="triage"),
+        at=_T0,
+    )
+    pointer = WorkRef(source="hub", ref=created.ref)
+    proposal_id = _seed_accepted_proposal(engine, pointer=pointer)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(s.finding_facts).values(
+                finding_id="fin_1", kind="resolved", recorded_at=_T0, proposal_id=proposal_id
+            )
+        )
+        conn.execute(insert(s.finding_facts).values(finding_id="fin_1", kind="observed", recorded_at=_T0))
+
+    source.close(pointer)
+
+    finding = FindingStore(hub_store_connections(engine)).get("fin_1")
+    assert finding is not None
+    assert finding.state == "live"
+    with engine.connect() as conn:
+        delivered = conn.execute(
             select(s.finding_facts).where(
                 s.finding_facts.c.finding_id == "fin_1", s.finding_facts.c.kind == "delivered"
             )
         ).all()
-    assert len(count) == 1
+    assert delivered == []
 
 
 def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_path: Path) -> None:

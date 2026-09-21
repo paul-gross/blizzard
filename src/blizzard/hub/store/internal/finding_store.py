@@ -259,9 +259,7 @@ class FindingStore:
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
         with self._store.read("has_delivery_for_proposal") as conn:
             row = conn.execute(
-                select(finding_facts.c.id)
-                .where(finding_facts.c.proposal_id == proposal_id, finding_facts.c.kind == "delivered")
-                .limit(1)
+                select(finding_facts.c.id).where(finding_facts.c.proposal_id == proposal_id).limit(1)
             ).first()
         return row is not None
 

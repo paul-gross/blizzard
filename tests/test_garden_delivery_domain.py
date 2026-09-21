@@ -468,6 +468,19 @@ def test_check_delta_accepts_an_observed_op_carrying_only_an_id() -> None:
     check_delta(delta, run=_RUN, live_findings=_live())  # does not raise
 
 
+def test_check_delta_rejects_two_ops_naming_the_same_finding() -> None:
+    """One finding under both an `observed` and a `gone` op would durably write
+    contradictory facts — worst against a `delivered` finding, where `gone` settles it
+    while `observed` revives it. Rejected outright rather than left to collide."""
+    delta = FindingDelta(
+        scope="runner",
+        findings=[ObservedFindingOp(id=_FIN1), GoneFindingOp(id=_FIN1, note="no longer reproduces")],
+    )
+
+    with pytest.raises(GardenDeliveryRejected, match="more than one op"):
+        check_delta(delta, run=_RUN, live_findings=_live())
+
+
 # --- delta shapes --------------------------------------------------------------------
 
 
@@ -591,6 +604,22 @@ def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> N
     assert result.deltas == [delta]
 
 
+def test_validate_delivery_accepts_an_observed_op_reviving_a_delivered_finding() -> None:
+    """`delivered`'s own revival mirror — an `observed` targeting a `delivered` finding
+    is accepted like the `gone`-revival case above, since D1 excludes `delivered` from
+    `EXIT_KINDS`: not yet a person's word, still addressable."""
+    delta = FindingDelta(scope="runner", findings=[ObservedFindingOp(id=_FIN1)])
+
+    result = validate_delivery(
+        run=_RUN,
+        delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
+        proposal_artifacts={},
+        known_findings=[_finding(_FIN1, live=False, state="delivered", actor="u_1")],
+    )
+
+    assert result.deltas == [delta]
+
+
 def test_validate_delivery_collects_delivered_findings_by_actor() -> None:
     """blizzard#583 D3: a `delivered` finding is a valid delta target (D1 — `delivered`
     is outside `EXIT_KINDS`) and its closer's actor rides on the result for
@@ -605,6 +634,23 @@ def test_validate_delivery_collects_delivered_findings_by_actor() -> None:
     )
 
     assert result.delivered_findings == {_FIN1: "u_1"}
+
+
+def test_validate_delivery_collects_an_actor_less_delivered_finding_too() -> None:
+    """A `delivered` finding whose closing fact carries no actor must still gate a later
+    `gone` op to settling, not fall through to flagging plain `gone` —
+    `delivered_findings` keys on state alone, never on the actor being truthy."""
+    delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id=_FIN1, note="no longer reproduces")])
+
+    result = validate_delivery(
+        run=_RUN,
+        delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
+        proposal_artifacts={},
+        known_findings=[_finding(_FIN1, live=False, state="delivered", actor=None)],
+    )
+
+    assert _FIN1 in result.delivered_findings
+    assert result.delivered_findings[_FIN1] is None
 
 
 def test_validate_delivery_rejects_an_op_naming_an_exited_finding() -> None:
