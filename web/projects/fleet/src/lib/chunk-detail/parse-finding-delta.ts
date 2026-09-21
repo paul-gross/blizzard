@@ -37,8 +37,9 @@ export interface FindingDeltaObservedOp {
   readonly id: string;
 }
 
-/** Mirrors `GoneFindingOp` — the run looked and could not find the finding. Does not
- * close it; flags it for a person. */
+/** Mirrors `GoneFindingOp` — the run looked and could not find the finding. Ordinarily
+ * does not close it; flags it for a person — except against a `delivered` finding,
+ * which it settles to `resolved` outright (blizzard#583 D3). */
 export interface FindingDeltaGoneOp {
   readonly op: 'gone';
   readonly id: string;

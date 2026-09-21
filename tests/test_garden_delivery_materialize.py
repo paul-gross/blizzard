@@ -184,6 +184,55 @@ def test_deliver_builds_observed_and_gone_facts_carrying_the_gone_note() -> None
     ]
 
 
+def test_deliver_settles_a_gone_op_against_a_delivered_finding_to_resolved() -> None:
+    """blizzard#583 D3: a `gone` op naming a finding the bucket carries as `delivered`
+    completes that exit rather than merely flagging it — the settling fact carries the
+    actor of the `delivered` fact it confirms, never `None`."""
+    repo = _FakeGardenDeliveryRepo()
+    service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id="fin_1", note="no longer reproduces")])
+    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[], delivered_findings={"fin_1": "u_1"})
+
+    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
+
+    facts = repo.delivered[0].deltas[0].facts
+    assert [(f.finding_id, f.kind, f.note, f.actor) for f in facts] == [
+        ("fin_1", "resolved", "no longer reproduces", "u_1")
+    ]
+
+
+def test_deliver_a_gone_op_against_a_finding_absent_from_delivered_findings_stays_gone() -> None:
+    """A `gone` op targeting a finding `validated.delivered_findings` does not name — the
+    ordinary case, a merely-live finding the run could not find — records the flag as
+    before, carrying no actor."""
+    repo = _FakeGardenDeliveryRepo()
+    service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id="fin_1", note="no longer reproduces")])
+    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[])
+
+    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
+
+    facts = repo.delivered[0].deltas[0].facts
+    assert [(f.finding_id, f.kind, f.note, f.actor) for f in facts] == [("fin_1", "gone", "no longer reproduces", None)]
+
+
+def test_deliver_settles_a_gone_op_against_an_actor_less_delivered_finding_too() -> None:
+    """The finding is present in `delivered_findings` mapped to `None` — membership
+    gates the settlement, not the actor being truthy, so this must still complete the
+    exit rather than falling through to a plain `gone` flag."""
+    repo = _FakeGardenDeliveryRepo()
+    service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id="fin_1", note="no longer reproduces")])
+    validated = ValidatedDelivery(run=_RUN, deltas=[delta], proposals=[], delivered_findings={"fin_1": None})
+
+    service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1, delta_artifact_ids=["art_1"])
+
+    facts = repo.delivered[0].deltas[0].facts
+    assert [(f.finding_id, f.kind, f.note, f.actor) for f in facts] == [
+        ("fin_1", "resolved", "no longer reproduces", None)
+    ]
+
+
 def test_deliver_on_an_empty_delta_yields_one_finding_set_and_no_findings_or_facts() -> None:
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))

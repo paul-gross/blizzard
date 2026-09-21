@@ -64,6 +64,8 @@ class ValidatedDelivery:
     #: `(repo, sha)`'s resolved authored instant — `None` when unresolved, absent when
     #: never attempted; materialization must not re-resolve to fill the gap (no backfill).
     introduced_at: dict[tuple[str, str], datetime | None] = field(default_factory=dict)
+    #: Every currently-`delivered` finding, valued by its closer's actor, or `None` (blizzard#583 D3).
+    delivered_findings: dict[str, str | None] = field(default_factory=dict)
 
 
 def parse_delta(artifact_name: str, raw: str) -> FindingDelta:
@@ -119,8 +121,8 @@ def check_delta(
 ) -> dict[tuple[str, str], datetime | None]:
     """Validate one already-parsed delta against `run` and `live_findings`, raising
     :class:`GardenDeliveryRejected` on the first failure: `delta.scope`, every commit sha,
-    every transformation's id, and a `gone` op's non-empty note. `exited_ids` only
-    distinguishes an exited id from an unknown one in the message (D3). Returns every
+    every transformation's id, one op per id, and a `gone` op's non-empty note. `exited_ids`
+    only distinguishes an exited id from an unknown one in the message (D3). Returns every
     `(repo, sha)` resolved for an `add`'s `introduced` commit, for `introduced_at`."""
     if delta.scope != run.scope_slug:
         raise GardenDeliveryRejected(
@@ -131,6 +133,7 @@ def check_delta(
 
     introduced_at: dict[tuple[str, str], datetime | None] = {}
     single_repo = single_repo_of(delta)
+    seen_ids: set[str] = set()
     for op in delta.findings:
         if isinstance(op, AddFindingOp):
             if op.ref is not None and is_finding_id_shaped(op.ref):
@@ -149,6 +152,11 @@ def check_delta(
                     _check_commit_wellformed(op.introduced, context="a finding addition's introduced commit")
             continue
         _check_known_id(op.id, run=run, live_findings=live_findings, scope=delta.scope, exited_ids=exited_ids)
+        if op.id in seen_ids:
+            # Two ops naming one finding could durably write contradictory facts, an
+            # `observed` and a `resolved` both landing on the same record.
+            raise GardenDeliveryRejected(f"finding {op.id!r} is named by more than one op in this delta")
+        seen_ids.add(op.id)
         if isinstance(op, GoneFindingOp) and not op.note.strip():
             raise GardenDeliveryRejected(f"finding {op.id!r}'s gone fact must carry a non-empty note")
     return introduced_at
@@ -226,6 +234,7 @@ def validate_delivery(
     the first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in known_findings if f.state not in EXIT_KINDS}
     exited_ids = frozenset(f.finding_id for f in known_findings if f.state in EXIT_KINDS)
+    delivered_findings = {f.finding_id: f.actor for f in known_findings if f.state == "delivered"}
     deltas = [parse_delta(name, raw) for name, raw in delta_artifacts.items()]
     proposals: list[GardenProposalCandidate] = []
     proposal_sources: list[str] = []
@@ -257,6 +266,7 @@ def validate_delivery(
         proposals=proposals,
         proposal_sources=proposal_sources,
         introduced_at=introduced_at,
+        delivered_findings=delivered_findings,
     )
 
 

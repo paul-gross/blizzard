@@ -51,8 +51,10 @@ class ObservedFindingOp(BaseModel):
 
 
 class GoneFindingOp(BaseModel):
-    """The run looked and could not find the finding named by `id`. Does not close the
-    finding (D3) — it flags it for a person."""
+    """The run looked and could not find the finding named by `id`. Ordinarily this does
+    not close the finding (D3) — it flags it for a person — except against a `delivered`
+    finding, which it settles to `resolved` outright (blizzard#583 D3): a delivery
+    already carries a person's own claim that the ground moved."""
 
     op: Literal["gone"] = "gone"
     id: str

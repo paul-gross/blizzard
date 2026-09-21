@@ -176,6 +176,7 @@ class GardenDeliveryStore:
                             "note": fact.note,
                             "finding_set_id": fact.finding_set_id,
                             "ref": fact.ref,
+                            "actor": fact.actor,
                         }
                         for fact in facts
                     ],

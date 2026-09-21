@@ -21,6 +21,19 @@ from tests.runner_fakes import runner_migration_prototype
 from tests.support import build_hub, checkpoint_sqlite, hub_migration_prototype
 
 
+def _normalize_ddl(sql: str) -> str:
+    """A ``CREATE TABLE``'s column/constraint lines, sorted — a ``batch_alter_table``
+    recreate reflects prior structure through what's apparently an identity-hashed set
+    somewhere in Alembic's own machinery, so two otherwise-identical recreates can order
+    FKs differently. Column order was already untested (``ADD COLUMN`` always appends);
+    this extends that same tolerance to constraint clauses."""
+    if not sql.lstrip().upper().startswith("CREATE TABLE"):
+        return sql
+    lines = sql.splitlines()
+    body = sorted(line.strip().rstrip(",") for line in lines[1:-1])
+    return "\n".join([lines[0], *body, lines[-1]])
+
+
 def _schema(db_url: str) -> tuple[str, set[tuple[str, str, str]]]:
     """The applied alembic revision plus every named object's DDL, order-independent —
     column order is not part of what this pins (``ADD COLUMN`` always appends)."""
@@ -29,7 +42,7 @@ def _schema(db_url: str) -> tuple[str, set[tuple[str, str, str]]]:
         with engine.connect() as conn:
             version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
             rows = conn.execute(sa.text("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL")).fetchall()
-        return version, {(row[0], row[1], row[2]) for row in rows}
+        return version, {(row[0], row[1], _normalize_ddl(row[2])) for row in rows}
     finally:
         engine.dispose()
 

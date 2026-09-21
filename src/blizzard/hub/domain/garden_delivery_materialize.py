@@ -54,12 +54,14 @@ class FindingFactRecord:
     delivery shares :attr:`DeliveryPlan.at` (`bzh:injected-clock`)."""
 
     finding_id: str
-    kind: str  # add | observed | gone
+    kind: str  # add | observed | gone | resolved
     finding_set_id: str  # the delivered list this fact belongs to (blizzard#401 D1)
     note: str | None = None
     #: The `add` op's own submission-local ref, when it carried one — never set for
     #: `observed`/`gone`.
     ref: str | None = None
+    #: The `delivered` fact's own closer, carried onto its settling `resolved` fact (blizzard#583 D3).
+    actor: str | None = None
 
 
 @dataclass(frozen=True)
@@ -213,9 +215,23 @@ class GardenDelivery:
                     )
                 else:
                     assert isinstance(op, GoneFindingOp)
-                    facts.append(
-                        FindingFactRecord(finding_id=op.id, kind="gone", finding_set_id=finding_set_id, note=op.note)
-                    )
+                    if op.id in validated.delivered_findings:
+                        # Already delivered — this completes the exit rather than flagging it (blizzard#583 D3).
+                        facts.append(
+                            FindingFactRecord(
+                                finding_id=op.id,
+                                kind="resolved",
+                                finding_set_id=finding_set_id,
+                                note=op.note,
+                                actor=validated.delivered_findings[op.id],
+                            )
+                        )
+                    else:
+                        facts.append(
+                            FindingFactRecord(
+                                finding_id=op.id, kind="gone", finding_set_id=finding_set_id, note=op.note
+                            )
+                        )
             # One finding_set per delta, even an empty one (delta.findings == []).
             finding_set = NewFindingSet(
                 finding_set_id=finding_set_id,

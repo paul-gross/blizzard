@@ -15,10 +15,11 @@ or a person exits or reopens it.
 
 A running pass cross-references its own bucket a different way: `blizzard runner garden findings`, flagless — the
 routine and the scope are derived server-side from the lease's own chunk, so a worker cannot point this read at another
-routine's bucket, and it needs no hub credential in its child environment at all. It is a pure client of the runner's
-local API, authorized by the spawn-injected lease identity, the same shape the `blizzard runner artifact` verbs take
-(see [artifacts.md](./artifacts.md)); [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint
-shape.
+routine's bucket, and it needs no hub credential in its child environment at all. This bucket is live findings plus any
+`delivered` one: a delivery-triggered closure the routine's own run has not yet re-checked, surfaced unconditionally so
+that check can happen. It is a pure client of the runner's local API, authorized by the spawn-injected lease identity,
+the same shape the `blizzard runner artifact` verbs take (see [artifacts.md](./artifacts.md));
+[openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shape.
 
 A worker whose own chunk an accepted garden-proposal accept minted reads a different bucket the same way:
 `blizzard runner finding list`, flagless, and `finding get <finding_id>` for one — the findings the chunk's own
@@ -62,9 +63,10 @@ the proposal answers (id, class, locus, and state) and naming the worker's own `
 `finding get <finding_id>` reads; `--no-work-item` declines to mint, and the decline is recorded rather than left to
 read as an absent link. Acceptance itself never promotes the minted item and never changes a finding's state — but
 delivering the item it minted does: once that item closes, every finding the proposal named that is still live is
-resolved, attributed to the proposal, the same as a hand `blizzard hub finding resolve` but requiring no verb of its
-own. Re-delivering the same item resolves nothing a second time. Either closing verb answers 409, naming the
-proposal's existing closure, when called again — closure is terminal.
+closed to `delivered`, attributed to the proposal, requiring no verb of its own — unlike a hand `blizzard hub finding
+resolve`, this is provisional: the owning garden routine's next run re-checks it, settling it to `resolved` if it still
+holds or reviving it to `live` if it does not. Re-delivering the same item delivers nothing a second time. Either
+closing verb answers 409, naming the proposal's existing closure, when called again — closure is terminal.
 
 A running pass reads its own routine's open proposals a different way: `blizzard runner garden proposals`, flagless —
 the routine is derived server-side from the lease's own chunk, so a worker cannot point this read at another routine's

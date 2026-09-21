@@ -1302,7 +1302,7 @@
    "comments": 23,
    "docstrings": 101,
    "over_cap": 0,
-   "total": 791
+   "total": 792
   },
   "blizzard/hub/api/garden_proposals.py": {
    "comments": 5,
@@ -2079,10 +2079,10 @@
    "total": 368
   },
   "blizzard/hub/domain/findings.py": {
-   "comments": 15,
-   "docstrings": 77,
+   "comments": 16,
+   "docstrings": 87,
    "over_cap": 1,
-   "total": 379
+   "total": 407
   },
   "blizzard/hub/domain/fleet.py": {
    "comments": 0,
@@ -2097,16 +2097,16 @@
    "total": 68
   },
   "blizzard/hub/domain/garden_delivery.py": {
-   "comments": 17,
+   "comments": 20,
    "docstrings": 53,
    "over_cap": 4,
-   "total": 309
+   "total": 319
   },
   "blizzard/hub/domain/garden_delivery_materialize.py": {
-   "comments": 17,
+   "comments": 19,
    "docstrings": 42,
    "over_cap": 2,
-   "total": 257
+   "total": 273
   },
   "blizzard/hub/domain/garden_proposal_closure.py": {
    "comments": 1,
@@ -2116,9 +2116,9 @@
   },
   "blizzard/hub/domain/garden_proposal_resolution.py": {
    "comments": 0,
-   "docstrings": 31,
+   "docstrings": 32,
    "over_cap": 4,
-   "total": 131
+   "total": 132
   },
   "blizzard/hub/domain/garden_proposals.py": {
    "comments": 4,
@@ -2538,13 +2538,13 @@
    "comments": 7,
    "docstrings": 31,
    "over_cap": 0,
-   "total": 424
+   "total": 423
   },
   "blizzard/hub/store/internal/garden_delivery_store.py": {
    "comments": 15,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 234
+   "total": 235
   },
   "blizzard/hub/store/internal/garden_proposal_closure_store.py": {
    "comments": 1,
@@ -3075,10 +3075,10 @@
    "total": 55
   },
   "blizzard/hub/store/migrations/versions/20260829_0900_findings_and_proposals.py": {
-   "comments": 2,
+   "comments": 3,
    "docstrings": 8,
-   "over_cap": 2,
-   "total": 52
+   "over_cap": 1,
+   "total": 95
   },
   "blizzard/hub/store/migrations/versions/20260829_1930_fact_tables_chunk_id_index.py": {
    "comments": 0,
@@ -3212,6 +3212,12 @@
    "over_cap": 0,
    "total": 46
   },
+  "blizzard/hub/store/migrations/versions/20260920_1200_finding_delivered_state.py": {
+   "comments": 5,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 79
+  },
   "blizzard/hub/store/migrations/versions/__init__.py": {
    "comments": 0,
    "docstrings": 0,
@@ -3219,10 +3225,10 @@
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 503,
+   "comments": 505,
    "docstrings": 6,
    "over_cap": 46,
-   "total": 1466
+   "total": 1470
   },
   "blizzard/hub/system_artifacts/__init__.py": {
    "comments": 3,
@@ -5074,9 +5080,9 @@
   },
   "blizzard/wire/finding.py": {
    "comments": 0,
-   "docstrings": 44,
+   "docstrings": 46,
    "over_cap": 1,
-   "total": 151
+   "total": 153
   },
   "blizzard/wire/fleet.py": {
    "comments": 0,
@@ -5654,7 +5660,7 @@
    "comments": 43,
    "docstrings": 31,
    "over_cap": 0,
-   "total": 1860
+   "total": 1864
   },
   "store_scan_allowlist.py": {
    "comments": 23,
@@ -6438,15 +6444,21 @@
   },
   "test_finding_api.py": {
    "comments": 17,
-   "docstrings": 10,
+   "docstrings": 13,
    "over_cap": 0,
-   "total": 579
+   "total": 608
+  },
+  "test_finding_delivered_state_migration.py": {
+   "comments": 2,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 151
   },
   "test_finding_exit_service.py": {
    "comments": 0,
    "docstrings": 4,
    "over_cap": 0,
-   "total": 164
+   "total": 187
   },
   "test_finding_exits_migration.py": {
    "comments": 8,
@@ -6467,10 +6479,10 @@
    "total": 240
   },
   "test_finding_store.py": {
-   "comments": 7,
-   "docstrings": 16,
+   "comments": 8,
+   "docstrings": 19,
    "over_cap": 0,
-   "total": 275
+   "total": 288
   },
   "test_finding_wire.py": {
    "comments": 3,
@@ -6480,9 +6492,9 @@
   },
   "test_findings_domain.py": {
    "comments": 1,
-   "docstrings": 11,
+   "docstrings": 16,
    "over_cap": 0,
-   "total": 108
+   "total": 140
   },
   "test_fleet_auth.py": {
    "comments": 15,
@@ -6504,9 +6516,9 @@
   },
   "test_fleet_garden_findings_api.py": {
    "comments": 5,
-   "docstrings": 11,
+   "docstrings": 15,
    "over_cap": 0,
-   "total": 128
+   "total": 152
   },
   "test_fleet_garden_proposals_api.py": {
    "comments": 1,
@@ -6582,21 +6594,21 @@
   },
   "test_garden_delivery_domain.py": {
    "comments": 34,
-   "docstrings": 21,
+   "docstrings": 33,
    "over_cap": 0,
-   "total": 638
+   "total": 706
   },
   "test_garden_delivery_materialize.py": {
    "comments": 3,
-   "docstrings": 12,
+   "docstrings": 21,
    "over_cap": 0,
-   "total": 317
+   "total": 366
   },
   "test_garden_delivery_store.py": {
    "comments": 19,
-   "docstrings": 26,
+   "docstrings": 28,
    "over_cap": 3,
-   "total": 625
+   "total": 666
   },
   "test_garden_proposal_api.py": {
    "comments": 2,
@@ -6647,10 +6659,10 @@
    "total": 199
   },
   "test_garden_routine_graph.py": {
-   "comments": 39,
-   "docstrings": 40,
+   "comments": 45,
+   "docstrings": 44,
    "over_cap": 1,
-   "total": 258
+   "total": 274
   },
   "test_garden_routine_graph_mint.py": {
    "comments": 0,
@@ -6990,9 +7002,9 @@
   },
   "test_hub_work_source.py": {
    "comments": 16,
-   "docstrings": 29,
+   "docstrings": 33,
    "over_cap": 0,
-   "total": 696
+   "total": 733
   },
   "test_hub_work_source_api.py": {
    "comments": 33,
@@ -7254,9 +7266,9 @@
   },
   "test_pin_migration_prototype.py": {
    "comments": 2,
-   "docstrings": 7,
+   "docstrings": 12,
    "over_cap": 0,
-   "total": 71
+   "total": 84
   },
   "test_pin_runner_harness.py": {
    "comments": 1,

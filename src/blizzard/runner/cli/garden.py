@@ -1,5 +1,5 @@
-"""``blizzard runner garden`` — a worker's own routine's live finding bucket (D4) and open
-garden-proposal docket."""
+"""``blizzard runner garden`` — a worker's own routine's live-plus-``delivered`` finding
+bucket (D4, blizzard#583 D2) and open garden-proposal docket."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def garden_group() -> None:
 
 @garden_group.command("findings")
 def garden_findings() -> None:
-    """Worker: list this run's live finding bucket as JSON."""
+    """Worker: list this run's live-plus-``delivered`` finding bucket as JSON."""
     worker = WorkerCall.of("garden findings")
     resp = worker.get(worker.leased("garden/findings"), failure="could not read the finding bucket")
     click.echo(resp.text)

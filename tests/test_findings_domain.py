@@ -91,6 +91,20 @@ def test_a_gone_fact_takes_it_out_of_the_live_bucket() -> None:
     assert state.observed_count == 0
 
 
+def test_a_delivered_fact_folds_to_its_own_state_not_resolved() -> None:
+    """A delivery-triggered closure (blizzard#583) is `delivered`, distinct from
+    `resolved` — never live, but not the human-settled state either."""
+    facts = [
+        FindingFact(kind="add", recorded_at=_T0),
+        FindingFact(kind="delivered", recorded_at=_T1, actor="usr_1"),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert state.state == "delivered"
+    assert state.live is False
+
+
 def test_a_later_fact_after_gone_restores_liveness() -> None:
     """`gone` does not close the finding
     (blizzard-context:/domain/findings-and-proposals.md §Liveness is derived, and
@@ -104,5 +118,23 @@ def test_a_later_fact_after_gone_restores_liveness() -> None:
     state = derive_liveness(facts)
 
     assert state.live is True
+    assert state.last_seen_at == _T2
+    assert state.observed_count == 1
+
+
+def test_a_later_fact_after_delivered_restores_liveness_too() -> None:
+    """`delivered`'s own revival mirror (blizzard#583) — an `observed` after it reads as
+    the delivery having been wrong or premature, restoring the finding to `live` exactly
+    like reviving a merely-`gone` one."""
+    facts = [
+        FindingFact(kind="add", recorded_at=_T0),
+        FindingFact(kind="delivered", recorded_at=_T1, actor="usr_1"),
+        FindingFact(kind="observed", recorded_at=_T2),
+    ]
+
+    state = derive_liveness(facts)
+
+    assert state.live is True
+    assert state.state == "live"
     assert state.last_seen_at == _T2
     assert state.observed_count == 1

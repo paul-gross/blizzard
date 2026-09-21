@@ -29,12 +29,13 @@ export const FINDING_WITHDRAWN_STATES: readonly string[] = ['wont-fix', 'not-a-f
  * it renders dimmed but present, never removed from the list. */
 export const FINDING_EXIT_STATES: readonly string[] = [...FINDING_OUTFLOW_STATES, ...FINDING_WITHDRAWN_STATES];
 
-/** `FindingView.state`'s own closed set — `"live"`, `"gone"`, or one of `EXIT_KINDS`
- * (`src/blizzard/hub/domain/findings.py`'s own doc comment on the field). `'live'`
- * and `'gone'` (still open) plus every exit state, derived from the same constants
+/** `FindingView.state`'s own closed set — `"live"`, `"gone"`, `"delivered"`, or one of
+ * `EXIT_KINDS` (`src/blizzard/hub/domain/findings.py`'s own doc comment on the field).
+ * `'live'`, `'gone'`, and `'delivered'` (all still open — blizzard#583 D1: `delivered`
+ * joins no `EXIT_KINDS` set) plus every exit state, derived from the same constants
  * above rather than a second hand-typed list, so this file stays the one place the
  * full vocabulary is spelled out. */
-export const FINDING_STATES: readonly string[] = ['live', 'gone', ...FINDING_EXIT_STATES];
+export const FINDING_STATES: readonly string[] = ['live', 'gone', 'delivered', ...FINDING_EXIT_STATES];
 
 /** Whether `state` is one of {@link FINDING_EXIT_STATES}. */
 export function isFindingExited(state: string): boolean {
@@ -54,10 +55,14 @@ export function isFindingGoneFlagged(state: string): boolean {
  * than a per-state opinion: a still-open finding reads amber (`live`, the work left
  * to do) or amber-hi (`gone`, flagged and literally waiting on a person to confirm);
  * an outflow exit reads green, the ground having actually moved; a withdrawn exit
- * reads dim, since nothing changed but somebody's judgment. */
+ * reads dim, since nothing changed but somebody's judgment. `delivered` (blizzard#583)
+ * reads `takeover`'s tone rather than borrowing `resolved`'s: it is a delivery's own
+ * claim, not yet the routine's own confirmation that the ground moved — "something
+ * else must happen before this continues" is exactly that wait. */
 const STATE_TONE: Readonly<Record<string, Tone>> = {
   live: 'running',
   gone: 'waiting',
+  delivered: 'takeover',
   resolved: 'done',
   'gone-confirmed': 'done',
   'wont-fix': 'idle',

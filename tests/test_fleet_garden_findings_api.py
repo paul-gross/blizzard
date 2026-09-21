@@ -1,8 +1,9 @@
 """``GET /api/fleet/chunks/{chunk_id}/garden/findings`` — the worker-scoped fleet read
-of a routine's live finding bucket (D5, D6, component tier). Derives the routine and
-scope from the chunk's own ``RunContext`` rather than a caller-supplied flag, reuses
-``findings.py``'s own ``finding_view`` projection, and refuses — rather than answering
-an empty bucket for — an unknown chunk or one with no run context at all."""
+of a routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583 D2, component
+tier). Derives the routine and scope from the chunk's own ``RunContext`` rather than a
+caller-supplied flag, reuses ``findings.py``'s own ``finding_view`` projection, and
+refuses — rather than answering an empty bucket for — an unknown chunk or one with no
+run context at all."""
 
 from __future__ import annotations
 
@@ -63,6 +64,12 @@ def _resolve_finding(hub: HubHarness, finding_id: str) -> None:
     )
 
 
+def _deliver_finding(hub: HubHarness, finding_id: str) -> None:
+    FindingStore(hub_store_connections(hub.engine)).record_fact(
+        finding_id, kind="delivered", at=_NOW, note="delivered by hub:1", actor="u_1"
+    )
+
+
 def test_404s_on_an_unknown_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.get("/api/fleet/chunks/ch_ghost/garden/findings")
@@ -112,6 +119,23 @@ def test_excludes_an_exited_finding_and_takes_no_include_gone_flag(tmp_path: Pat
     # silently ignored rather than widening the bucket.
     ignored = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/findings", params={"include_gone": "true"})
     assert [row["finding_id"] for row in ignored.json()] == ["fin_1"]
+
+
+def test_includes_a_delivered_finding_alongside_live_ones(tmp_path: Path) -> None:
+    """blizzard#583 D2: a `delivered` finding rides in this bucket so the owning
+    routine's own run can re-check it — unlike every other exited state, which stays
+    out (the prior test)."""
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_finding(hub, "fin_2")
+    _deliver_finding(hub, "fin_2")
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/findings")
+    assert resp.status_code == 200, resp.text
+    body = {row["finding_id"]: row for row in resp.json()}
+    assert set(body) == {"fin_1", "fin_2"}
+    assert (body["fin_2"]["state"], body["fin_2"]["live"]) == ("delivered", False)
 
 
 def test_takes_no_routine_or_scope_flag(tmp_path: Path) -> None:

@@ -102,6 +102,29 @@ def test_resolve_carries_a_proposal_id_when_supplied() -> None:
     ]
 
 
+def test_deliver_strips_and_records_one_fact_per_finding_in_one_batch() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.deliver([_finding("fin_1"), _finding("fin_2")], note="  delivered by hub:42  ", actor="u1")
+
+    assert repo.batches[0] == [
+        FactEntry(finding_id="fin_1", kind="delivered", at=_T0, note="delivered by hub:42", actor="u1"),
+        FactEntry(finding_id="fin_2", kind="delivered", at=_T0, note="delivered by hub:42", actor="u1"),
+    ]
+
+
+def test_deliver_carries_a_proposal_id_when_supplied() -> None:
+    repo = _FakeFindingRepo()
+    service = _service(repo)
+
+    service.deliver([_finding("fin_1")], note="answered", actor="u1", proposal_id="gprop_1")
+
+    assert repo.batches[0] == [
+        FactEntry(finding_id="fin_1", kind="delivered", at=_T0, note="answered", actor="u1", proposal_id="gprop_1")
+    ]
+
+
 def test_confirm_gone_records_gone_confirmed() -> None:
     repo = _FakeFindingRepo()
     service = _service(repo)

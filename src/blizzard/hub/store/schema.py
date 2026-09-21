@@ -365,9 +365,9 @@ findings = Table(
 Index("ix_findings_routine_scope", findings.c.routine_name, findings.c.scope_slug)
 Index("ix_findings_routine_class", findings.c.routine_name, findings.c.class_)
 
-# One row per `add`/`observed`/`gone`/exit/`reopened` transformation a delivered list or
-# a person applied to a finding (D2, D4, blizzard#394) — first-recorded, last-seen, and
-# the observed count are reads over this table, never a cached summary on `findings` itself.
+# One row per `add`/`observed`/`gone`/`delivered`/exit/`reopened` transformation a delivered
+# list or a person applied to a finding (D2, D4, blizzard#394, blizzard#583) — first-recorded,
+# last-seen, and the observed count are reads over this table, never a cached summary on `findings`.
 
 finding_facts = Table(
     "finding_facts",
@@ -376,11 +376,11 @@ finding_facts = Table(
     Column("finding_id", String, ForeignKey("findings.finding_id"), nullable=False),
     Column("kind", String, nullable=False),  # FACT_KINDS, domain/findings.py
     Column("recorded_at", UtcDateTime, nullable=False),
-    Column("note", Text, nullable=True),  # gone's/an exit's/reopened's note; null for add/observed
+    Column("note", Text, nullable=True),  # gone's/delivered's/an exit's/reopened's note; null for add/observed
     # Who recorded a human-driven fact (blizzard#394) — null for a run-driven add/observed/gone.
     Column("actor", String, nullable=True),
-    # The proposal a `resolved` fact answered, when the delivery-triggered drain recorded
-    # it (blizzard#394) — always null for a hand resolution.
+    # The proposal a `delivered` fact answered (blizzard#394, blizzard#583) — null for a
+    # hand resolution, and null again on the `resolved` fact a later run settles it to (D3).
     Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), nullable=True),
     # The absorbing finding, set only on a `superseded` fact (blizzard#394).
     Column("superseded_by", String, ForeignKey("findings.finding_id"), nullable=True),
@@ -392,8 +392,8 @@ finding_facts = Table(
     # any fact predating this column.
     Column("ref", String, nullable=True),
     CheckConstraint(
-        "kind IN ('add', 'observed', 'gone', 'resolved', 'gone-confirmed', 'wont-fix', 'not-a-finding',"
-        " 'superseded', 'reopened')",
+        "kind IN ('add', 'observed', 'gone', 'delivered', 'resolved', 'gone-confirmed', 'wont-fix',"
+        " 'not-a-finding', 'superseded', 'reopened')",
         name="ck_finding_facts_kind",
     ),
 )
