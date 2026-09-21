@@ -54,6 +54,20 @@ runner parks the chunk `needs_human` at the next step boundary with an escalatio
 usual takeover command. A capped chunk is not failed — no retry is consumed; resuming is human: raise or clear the cap,
 then requeue.
 
+## Usage-limit pause
+
+A harness can hit its own subscription's usage limit mid-turn, independently of either cap above — Claude Code and
+OpenCode each report this in a recognizable shape (a synthetic rate-limit transcript record, an OpenCode 429 `error`
+event), never inferred from cost or token figures. The runner classifies an exited worker generation or judge
+elicitation against that shape and, on a match, engages its own local pause brake — the same brake the ceiling and
+`runner pause` set — with a reason naming the harness and, where the harness reported one, its reset time; where it
+did not, the reason falls back to the soonest reset among this runner's own declared subscriptions' latest sampled
+windows already past 100% utilization ([External subscription usage](#external-subscription-usage) below), or carries
+no reset time at all. The limited lease is not failed and consumes no retry: it is parked in place, exactly like a
+per-chunk pause leaves a chunk, and resumes automatically once the brake lifts. As with the ceiling, only an explicit
+operator act clears it — `blizzard runner start`, or the runner panel's Resume — never an elapsed reset time the
+runner read out of the harness's own report.
+
 ## Partial totals
 
 When a worker dies before the harness emits its final usage envelope, the attempt's tokens are recorded from the

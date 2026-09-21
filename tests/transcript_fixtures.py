@@ -66,6 +66,29 @@ def assistant_usage(
     return _line(record)
 
 
+def rate_limit_record(*, text: str = "You've hit your session limit · resets 5:40pm (America/Chicago)") -> str:
+    """The synthetic assistant record a Claude Code invocation writes in place of a model
+    reply once its subscription hits a usage limit (blizzard#594) — the verbatim
+    2026-09-05 shape: no result envelope, ``model: "<synthetic>"``, zeroed usage."""
+    return _line(
+        {
+            "type": "assistant",
+            "isApiErrorMessage": True,
+            "error": "rate_limit",
+            "message": {
+                "model": "<synthetic>",
+                "usage": {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                },
+                "content": [{"type": "text", "text": text}],
+            },
+        }
+    )
+
+
 def assistant_tool_use(
     tool_use_id: str,
     name: str,

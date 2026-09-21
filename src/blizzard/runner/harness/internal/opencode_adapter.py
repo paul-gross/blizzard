@@ -8,10 +8,12 @@ through :class:`~blizzard.runner.harness.process_launch.ProcessLauncher`, as Cla
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import (
@@ -37,7 +39,7 @@ from blizzard.runner.harness.internal.opencode_shapes import (
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.wire.envelope import TIER_PREFIX, NodeEnvelope
 
@@ -54,6 +56,17 @@ _MAX_IDENTITY_PREAMBLE_LINES = 20
 
 # Bound on the diagnostic stderr tail a failed handshake's error carries (enough for one traceback line).
 _STDERR_TAIL_BYTES = 2000
+
+# The status a usage-limit refusal reports (blizzard#594) — distinct from an ordinary
+# rate-limit's transient 429s (out of scope, issue #595) by its own message phrasing below.
+_USAGE_LIMIT_STATUS_CODE = 429
+_USAGE_LIMIT_MESSAGE_RE = re.compile(r"usage limit", re.IGNORECASE)
+
+# The captured shape's own relative-reset phrasing (blizzard#594 D6): "reset in 2 hours",
+# "reset in 1 day 4 hours" — a duration, never a clock time (unlike Claude Code's).
+_RESET_DURATION_RE = re.compile(
+    r"reset\w*\s+in\s+(?:(\d+)\s*day[s]?\s*)?(?:(\d+)\s*hour[s]?\s*)?(?:(\d+)\s*minute[s]?\s*)?", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -608,6 +621,36 @@ class OpenCodeAdapter:
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source
+
+    def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
+        # The invocation's own captured stdout carries every event this turn produced
+        # (`_session_error` reads the same way); the transcript range is OpenCode's
+        # session-export shape, which a usage-limit refusal never reaches — the turn
+        # errors before a step ever finishes.
+        del lines
+        for event in self._parse_events(output):
+            if event.type != "error" or event.error is None:
+                continue
+            if event.error.status_code != _USAGE_LIMIT_STATUS_CODE:
+                continue
+            if not _USAGE_LIMIT_MESSAGE_RE.search(event.error.message):
+                continue
+            return UsageLimit(
+                resets_at=self._parse_reset_duration(event.error.message, now), detail=event.error.message
+            )
+        return None
+
+    @staticmethod
+    def _parse_reset_duration(text: str, now: datetime) -> datetime | None:
+        """``now`` plus the reported duration, or ``None`` when nothing parsed — never a
+        raise, and never a guess past an unrecognized phrasing."""
+        match = _RESET_DURATION_RE.search(text)
+        if match is None:
+            return None
+        days, hours, minutes = (int(group) if group else 0 for group in match.groups())
+        if days == 0 and hours == 0 and minutes == 0:
+            return None
+        return now + timedelta(days=days, hours=hours, minutes=minutes)
 
 
 def _conforms_harness_adapter(x: OpenCodeAdapter) -> IHarnessAdapter:

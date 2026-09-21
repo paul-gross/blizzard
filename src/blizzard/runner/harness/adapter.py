@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
 #: Sole-declared default bound on :meth:`PendingWorkerHandle.await_identity`; spawn and selftest both import it.
@@ -308,6 +309,21 @@ class IHarnessUsageAccounting(Protocol):
         ...
 
 
+class IHarnessUsageLimits(Protocol):
+    """Classifying an invocation's own output as a subscription-usage-limit exit
+    (``bzh:seam-size-ceiling``, blizzard#594) — a slice of its own rather than joining
+    ``IHarnessUsageAccounting``: that slice's mandate is producing a ``UsageSample``, this
+    one a fact the loop decides what to do with (``bzh:deterministic-shell``)."""
+
+    def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
+        """``None`` when this invocation was not usage-limited. ``output`` is the
+        invocation's own captured stdout; ``lines`` is its transcript range (generation
+        boundary to judge boundary or tail) — which one carries the harness's own signal
+        is this adapter's to know. Never raises: an unparseable reset time returns a
+        ``UsageLimit`` with ``resets_at=None``, not a guess."""
+        ...
+
+
 class IHarnessHealthProbe(Protocol):
     """The evidence a harness-health evaluation needs that no other adapter seam supplies —
     binary discovery, provider authentication, the binding's supported-version declaration,
@@ -360,9 +376,10 @@ class IHarnessAdapter(
     IHarnessModelResolution,
     IHarnessVerdictParsing,
     IHarnessUsageAccounting,
+    IHarnessUsageLimits,
     Protocol,
 ):
-    """The coding-harness seam: its four narrower slices (``bzh:seam-size-ceiling``) plus
+    """The coding-harness seam: its five narrower slices (``bzh:seam-size-ceiling``) plus
     ``transcript_source``, unsliced since no consumer needs it alone. Dumb: translates, never
     decides. A genuine pass-through — threading the adapter on rather than calling it —
     takes this alias; a caller takes the narrowest slice its job needs."""

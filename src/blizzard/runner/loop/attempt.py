@@ -385,6 +385,29 @@ class Attempt:
             via=via,
         )
 
+    def park_usage_limited(self) -> None:
+        """Park a lease whose exited generation was classified usage-limited (blizzard#594) —
+        the same durable park :meth:`park_paused` records, minus the kill: the worker has
+        already exited by the time a usage limit is classified, so there is nothing live to
+        tear down, and any in-flight elicitation record is the caller's own to clear (its
+        own ``relaunch_count`` lives on that record, not here). The claim, route, epoch and
+        session all survive; :class:`~blizzard.runner.loop.dormant.DormantSession` resumes it
+        once the local brake the caller engaged ahead of this call lifts."""
+        lease = self.lease
+        now = self.ctx.clock.now()
+        self.ctx.stores.pause.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
+        self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+        if self.ctx.events is not None:
+            # Same "dormant" cause `park_paused` publishes — this write flips the same
+            # LeaseActivity.state to "parked", just via the usage-limit path.
+            self.ctx.events.publish_lease_changed(lease.lease_id, lease.chunk_id, cause="dormant")
+        _log.info(
+            "parked chunk on a usage-limit pause — claim retained",
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            epoch=lease.epoch,
+        )
+
     def preempt(self, *, via: str) -> None:
         """Tear down an attempt an operator's restart superseded, and re-enter the node (#370).
 

@@ -8,6 +8,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.invocation_boundaries import (
     WORKER_STARTING_KINDS,
+    InvocationBoundaryKind,
     InvocationBoundaryRecord,
     IReadInvocationBoundaryRepository,
 )
@@ -115,48 +116,89 @@ class UsageRecorder:
         sample = harness.parse_usage(output, kind, model=lease.resolved_model) if output else None
         if sample is not None:
             return sample
-        if not self.transcripts_wired:
+        lines = self.worker_transcript_lines(lease, bindings, generation=generation)
+        if not lines:
             return None
+        return harness.sum_transcript_usage(lines, kind, model=lease.resolved_model)
+
+    def worker_transcript_lines(
+        self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int
+    ) -> list[str]:
+        """This generation's own worker-starting-to-judge-or-tail transcript range, raw
+        (blizzard#594) — the read half of :meth:`_worker_sample`'s own fallback, extracted
+        so a usage-limit classification reads the identical range a usage sum would sum."""
+        session = lease.session
+        if session is None or not self.transcripts_wired:
+            return []
         boundary = self._worker_boundary(lease.lease_id, generation)
         if boundary is None:
             # No durable start for this exact generation: never charge the whole session to
-            # one generation (blizzard#437 Phase 4) — no boundary, no sample.
-            return None
+            # one generation (blizzard#437 Phase 4) — no boundary, no read.
+            return []
         if boundary.start_unreadable:
-            # A genuinely failed tail read must never silently read from zero, re-summing an
-            # earlier generation's already-recorded tokens (F2/F10).
-            return None
+            # A genuinely failed tail read must never silently read from zero, re-reading an
+            # earlier generation's already-recorded lines (F2/F10).
+            return []
+        return self._read_range(
+            lease.lease_id, session, bindings, generation=generation, start=boundary, end_kind="judge"
+        )
+
+    def judge_transcript_lines(
+        self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int
+    ) -> list[str]:
+        """This generation's own judge-boundary-to-tail transcript range, raw (blizzard#594) —
+        the judge's own turns, read the same way :meth:`worker_transcript_lines` reads the
+        worker's; there is no boundary after a judge's own within one generation, so the
+        end is always the tail."""
+        session = lease.session
+        if session is None or not self.transcripts_wired:
+            return []
+        boundary = self.invocation_boundaries.boundary(lease.lease_id, generation, "judge")
+        if boundary is None or boundary.start_unreadable:
+            return []
+        return self._read_range(lease.lease_id, session, bindings, generation=generation, start=boundary, end_kind=None)
+
+    def _read_range(
+        self,
+        lease_id: str,
+        session: SessionReference,
+        bindings: list[EnvBindingRecord],
+        *,
+        generation: int,
+        start: InvocationBoundaryRecord,
+        end_kind: InvocationBoundaryKind | None,
+    ) -> list[str]:
         fallback_workdir = bindings[0].workdir if bindings else None
         spawn_cwd = SpawnCwd(self.workspace_root, fallback_workdir).path
         try:
             source = self.harnesses.transcript_source(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
-            # No transcript source registered for this owner: no fallback sample, never a
-            # raise out of a usage-recording call site.
+            # No transcript source registered for this owner: no fallback read, never a
+            # raise out of a usage-recording or usage-limit-classifying call site.
             _log.info(
-                "usage transcript fallback blocked by unavailable harness transcript source",
+                "transcript range read blocked by unavailable harness transcript source",
                 harness_id=session.harness_id,
                 detail=str(exc),
             )
-            return None
-        # A same-generation judge's own durable start (`Judgement._launch`) caps this read —
-        # its own later turns must never bleed into the worker's own fallback sum.
-        judge_boundary = self.invocation_boundaries.boundary(lease.lease_id, generation, "judge")
-        if judge_boundary is not None and judge_boundary.start_unreadable:
-            # Its own start could not be read: falling back to "tail right now" risks the
-            # judge's own later turns bleeding into this worker's sum (F10) — skip it instead.
-            return None
-        if judge_boundary is not None and judge_boundary.start_position is not None:
-            end = TranscriptPosition(judge_boundary.start_position)
+            return []
+        if end_kind is not None:
+            # A same-generation judge's own durable start caps this read — its own later
+            # turns must never bleed into the worker's own range.
+            end_boundary = self.invocation_boundaries.boundary(lease_id, generation, end_kind)
+            if end_boundary is not None and end_boundary.start_unreadable:
+                # Its own start could not be read: falling back to "tail right now" risks the
+                # judge's own later turns bleeding into this range (F10) — skip it instead.
+                return []
+            if end_boundary is not None and end_boundary.start_position is not None:
+                end = TranscriptPosition(end_boundary.start_position)
+            else:
+                # Genuinely no end boundary at all for this generation — the tail right now
+                # is the safe cap.
+                end = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
         else:
-            # Genuinely no judge boundary at all for this generation — the tail right now
-            # is the safe cap.
             end = source.tail_position(session.session_id, spawn_cwd=spawn_cwd)
-        start = TranscriptPosition(boundary.start_position) if boundary.start_position is not None else None
-        lines = source.read_raw_lines(session.session_id, spawn_cwd=spawn_cwd, start=start, end=end)
-        if not lines:
-            return None
-        return harness.sum_transcript_usage(lines, kind, model=lease.resolved_model)
+        start_position = TranscriptPosition(start.start_position) if start.start_position is not None else None
+        return source.read_raw_lines(session.session_id, spawn_cwd=spawn_cwd, start=start_position, end=end)
 
     def _worker_boundary(self, lease_id: str, generation: int) -> InvocationBoundaryRecord | None:
         """This generation's own worker-starting boundary — whichever of spawn/resume/nudge

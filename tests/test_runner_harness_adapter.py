@@ -12,6 +12,7 @@ import os
 import shutil
 import stat
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapt
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.wire.envelope import NodeEnvelope
+from tests import transcript_fixtures
 from tests.conftest import _WORKER_IDENTITY_ENV
 from tests.runner_fakes import FakeProbe, make_envelope
 
@@ -1753,3 +1755,66 @@ def test_parse_usage_reports_no_cost_scope_when_the_envelope_breaks_out_no_model
     sample = _adapter().parse_usage(_USAGE_ENVELOPE, "judge")
     assert sample is not None
     assert sample.cost_scope_tokens is None
+
+
+# --- classify_usage_limit (blizzard#594) ------------------------------------
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_reads_the_synthetic_transcript_record() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)  # 2:00pm America/Chicago (CDT, UTC-5)
+    lines = [transcript_fixtures.rate_limit_record()]
+    limit = _adapter().classify_usage_limit("", lines, now)
+    assert limit is not None
+    assert limit.detail == "You've hit your session limit · resets 5:40pm (America/Chicago)"
+    # 5:40pm CDT the same day is 22:40 UTC.
+    assert limit.resets_at == datetime(2026, 9, 5, 22, 40, tzinfo=UTC)
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_rolls_the_reset_to_the_next_day_when_already_past() -> None:
+    now = datetime(2026, 9, 5, 23, 0, tzinfo=UTC)  # past 5:40pm CDT already
+    limit = _adapter().classify_usage_limit("", [transcript_fixtures.rate_limit_record()], now)
+    assert limit is not None
+    assert limit.resets_at == datetime(2026, 9, 6, 22, 40, tzinfo=UTC)
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_none_for_an_unparseable_reset_never_raises() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
+    record = transcript_fixtures.rate_limit_record(text="You've hit your session limit")
+    limit = _adapter().classify_usage_limit("", [record], now)
+    assert limit is not None
+    assert limit.resets_at is None
+    assert limit.detail == "You've hit your session limit"
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_none_for_an_unrecognized_timezone() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
+    record = transcript_fixtures.rate_limit_record(text="resets 5:40pm (Nowhere/Imaginary)")
+    limit = _adapter().classify_usage_limit("", [record], now)
+    assert limit is not None
+    assert limit.resets_at is None
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_is_none_for_an_ordinary_assistant_reply() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
+    limit = _adapter().classify_usage_limit("", [transcript_fixtures.assistant_text("all good here")], now)
+    assert limit is None
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_is_none_for_a_non_rate_limit_api_error() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
+    other_error = json.dumps({"type": "assistant", "isApiErrorMessage": True, "error": "overloaded"})
+    limit = _adapter().classify_usage_limit("", [other_error], now)
+    assert limit is None
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_tolerates_malformed_lines() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
+    limit = _adapter().classify_usage_limit("", ["not json", "", transcript_fixtures.rate_limit_record()], now)
+    assert limit is not None

@@ -9,6 +9,7 @@ from typing import Protocol
 
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
 
 __all__ = [
     "ContextSampleState",
@@ -62,6 +63,13 @@ class IReadUsageRepository(Protocol):
         """``max(sampled_at)`` across this ``slug``'s own rows, or ``None`` (issue #218). A
         NULL-``payload`` attempt counts like a successful one, so one subscription's
         failed sample never masks its own windows."""
+        ...
+
+    def latest_external_usage_windows(self, slug: str) -> tuple[ExternalSubscriptionUsageWindow, ...]:
+        """This ``slug``'s own newest sampled snapshot's windows, decoded from the stored
+        payload — empty when never sampled, or when the newest attempt recorded none
+        (blizzard#594 D4). The usage-limit reset-time fallback's own read: no
+        harness-to-subscription mapping, just the newest windows this slug reported."""
         ...
 
 

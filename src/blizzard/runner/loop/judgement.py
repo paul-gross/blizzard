@@ -25,6 +25,7 @@ from blizzard.runner.loop.judgement_prompt import JudgementPrompt
 from blizzard.runner.loop.outbound import OutboundFacts
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.spawn import Spawner
+from blizzard.runner.loop.usage_limit import classify_judge_usage_limit, engage_and_park_judge
 from blizzard.wire.completion import CheckResult, ChecksGate, CompletionSubmission, SubmittedArtifact
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import NodeEnvelope
@@ -212,7 +213,20 @@ class Judgement:
             return
         output = self.ctx.elicitation_files.read(elicitation.output_path)
         session = lease.session
-        if not output or session is None:
+        if session is None:
+            self._lost(elicitation)
+            return
+        # Classified ahead of the lost-output check (blizzard#594): a usage-limited harness
+        # typically writes its own signal to the session transcript, not this elicitation's
+        # captured stdout, so an empty `output` must not fall through to `_lost` — whose
+        # staleness-bound relaunching would, over an hours-long limit, eventually fail this
+        # attempt, exactly what a usage-limit pause exists to avoid.
+        generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
+        limit = classify_judge_usage_limit(self.ctx, lease, output, generation=generation)
+        if limit is not None:
+            engage_and_park_judge(self.ctx, lease, elicitation, limit)
+            return
+        if not output:
             self._lost(elicitation)
             return
         harness = self._resolve_harness(session, via="collect")

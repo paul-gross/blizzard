@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import subprocess
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SkippedHarness
+from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.support_opencode_binary import worker_binary
 
@@ -899,3 +901,64 @@ def test_sum_transcript_usage_ignores_unparseable_lines() -> None:
         0,
     )
     assert sample.cost_usd is None
+
+
+# --- classify_usage_limit (blizzard#594) ------------------------------------
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_reads_the_captured_go_upsell_event() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
+    output = json.dumps(USAGE_LIMIT_EVENT)
+
+    limit = _adapter().classify_usage_limit(output, [], now)
+
+    assert limit is not None
+    assert "usage limit" in limit.detail.lower()
+    assert limit.resets_at == now + timedelta(hours=2)
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_is_none_for_an_ordinary_provider_error() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
+    payload = _fixture("provider_error")
+    output = _jsonl(payload["events"])
+
+    assert _adapter().classify_usage_limit(output, [], now) is None
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_is_none_for_a_429_that_does_not_name_a_usage_limit() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
+    output = json.dumps(
+        {
+            "type": "error",
+            "sessionID": "ses_x",
+            "error": {"name": "AI_APICallError", "data": {"message": "Too many requests", "statusCode": 429}},
+        }
+    )
+
+    assert _adapter().classify_usage_limit(output, [], now) is None
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_none_reset_for_an_unparseable_duration_never_raises() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
+    output = json.dumps(
+        {
+            "type": "error",
+            "sessionID": "ses_x",
+            "error": {"name": "AI_APICallError", "data": {"message": "Usage limit reached.", "statusCode": 429}},
+        }
+    )
+
+    limit = _adapter().classify_usage_limit(output, [], now)
+
+    assert limit is not None
+    assert limit.resets_at is None
+
+
+@pytest.mark.unit
+def test_classify_usage_limit_tolerates_malformed_capture() -> None:
+    now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
+    assert _adapter().classify_usage_limit("not json at all", [], now) is None

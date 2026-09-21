@@ -116,3 +116,23 @@ class PauseService:
         )
         if self._events is not None:
             self._events.publish_fact_changed(seq=seq, kind=report_kind, chunk_id=None, lease_id=None)
+
+    def engage(self, runner_id: str, *, by: str, reason: str) -> None:
+        """Engage the local brake with a durable reason (blizzard#594) — once: already
+        engaged for any cause (an operator pause, the spend ceiling, a prior usage limit)
+        leaves the standing fact and its reason untouched, exactly as :meth:`set_local_pause`
+        is engage-idempotent from the operator's own side. The operator's clear
+        (:meth:`set_local_pause` with ``paused=False``) is the only lift."""
+        if self._store.local_paused(runner_id):
+            return
+        now = self._clock.now()
+        seq = self._store.record_local_pause(
+            runner_id,
+            paused=True,
+            at=now,
+            by=by,
+            report_kind=RUNNER_LOCALLY_PAUSED,
+            report_payload=json.dumps({"runner_id": runner_id, "by": by, "at": iso_utc(now), "reason": reason}),
+        )
+        if self._events is not None:
+            self._events.publish_fact_changed(seq=seq, kind=RUNNER_LOCALLY_PAUSED, chunk_id=None, lease_id=None)

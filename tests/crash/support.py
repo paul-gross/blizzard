@@ -133,6 +133,141 @@ def build_script(landed_file: str) -> str:
     )
 
 
+def usage_limited_build_script(landed_file: str) -> str:
+    """:func:`build_script`'s twin for the usage-limit crash scenario (blizzard#594): commits,
+    pushes, and declares the same as always — so ``produces: commit`` is already met and the
+    resumed session (after the pause lifts) can proceed straight to judging rather than
+    nudging forever — then calls ``usage_limited()`` last in place of ending the turn plainly.
+    The generation exits with no verdict at all, the shape the runner's own classifier reacts
+    to organically (``Advance._advance_exited_worker``), with no external pause API call."""
+    return (
+        "import subprocess, pathlib\n"
+        f"repo = {REPO_NAME!r}\n"
+        f"(pathlib.Path(repo) / {landed_file!r}).write_text('landed by the crash sweep\\n')\n"
+        'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
+        "subprocess.run(\n"
+        '    ["git", "-C", repo,\n'
+        '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
+        '     "commit", "-m", "feat: land a change from the crash sweep"],\n'
+        "    check=True,\n"
+        ")\n"
+        "_branch = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        "_commit = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        'subprocess.run(["git", "-C", repo, "push", "--force-with-lease", "origin", _branch], check=True)\n'
+        "subprocess.run(\n"
+        '    ["blizzard", "runner", "artifact", "commit",\n'
+        '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+        "    check=True,\n"
+        ")\n"
+        "usage_limited()\n"
+    )
+
+
+def usage_limited_judgement_script(marker: Path) -> str:
+    """The judgement prompt for the usage-limit **judge** crash scenario: usage-limited on
+    the first elicitation, a real ``verdict()`` once resumed past the pause — ``marker``
+    (an absolute host path, :func:`pre_declare_build_script`'s own pattern) is how a stateless
+    per-invocation script tells its first call from its post-unpause resume."""
+    return (
+        "import pathlib\n"
+        f"_marker = pathlib.Path({str(marker)!r})\n"
+        "if _marker.exists():\n"
+        "    verdict('pass', 'the mock harness committed the change; checks are green')\n"
+        "else:\n"
+        "    _marker.write_text('hit\\n')\n"
+        "    usage_limited()\n"
+    )
+
+
+def usage_limited_judge_graph_yaml(landed_file: str, marker: Path) -> str:
+    """:func:`graph_yaml`'s ``build -> deliver`` shape, but the **judge elicitation** — not
+    the worker generation — is the one that exits usage-limited (blizzard#594's other crash
+    point): ``build`` commits and exits normally, same as the generic sweep's own node, but its
+    ``judgement.prompt`` is :func:`usage_limited_judgement_script` in place of the ordinary
+    ``verdict()`` call. Named ``default-delivery`` like :func:`graph_yaml` so ingest resolves it."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": build_script(landed_file),
+                "produces": _GIT_COMMIT_PRODUCES,
+                "judgement": {
+                    "prompt": usage_limited_judgement_script(marker),
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def usage_limited_graph_yaml(landed_file: str) -> str:
+    """A single-node ``build`` graph whose entry node's own generation calls
+    ``usage_limited()`` and never reaches its judgement — the classifier in
+    ``Advance._advance_exited_worker`` intercepts the exit before any judge is launched
+    (blizzard#594). Named ``default-delivery`` like :func:`graph_yaml` so ingest resolves it."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": usage_limited_build_script(landed_file),
+                "produces": _GIT_COMMIT_PRODUCES,
+                "judgement": {
+                    "prompt": _JUDGEMENT_SCRIPT,
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
 def opencode_build_script(landed_file: str) -> str:
     """:func:`build_script`'s twin, but every ``subprocess.run`` call passes
     ``capture_output=True`` — unlike ``build_script``'s plain calls, ``mock-opencode``
@@ -713,6 +848,11 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         hub_url=f"http://127.0.0.1:{hub_port}",
         workspace_root=str(workspace),
         workspace_envs=(RUNNER_ENV,),
+        # The mock façade's own fence-relative default (``ClaudeTranscriptWriter``'s
+        # ``transcripts_root``) — without this the real adapter's transcript reads (usage-limit
+        # classification, the transcript-summed usage fallback) fall back to the real
+        # ``~/.claude/projects`` and silently find nothing (blizzard#594).
+        transcripts_root=str(workspace / ".blizzard-mock-harness" / "transcripts"),
         harness_binary=str(bin_dir / "mock-claude-code"),
         # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
         # omitted here — ``None`` omits it.
