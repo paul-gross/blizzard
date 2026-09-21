@@ -4,16 +4,20 @@ when a new selftest result lands, and never merely because a peek asked."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.selftest_result import SelfTestResultRecord
+from blizzard.runner.harness.compatibility import CompatibilityClassification
 from blizzard.runner.harness.health import DeclaredDegradation, HarnessHealthCause
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS, PINNED_OPENCODE_VERSION
+from blizzard.runner.loop import capability_snapshot
 from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 
 pytestmark = pytest.mark.unit
@@ -161,16 +165,47 @@ def test_a_raw_version_outside_the_admitted_set_is_incompatible() -> None:
     """A version genuinely outside the admitted set is `incompatible_version` (D2), reached
     through the real evaluation path — `HarnessHealthCache.refresh` (capability_snapshot.py)
     into `evaluate_harness_health` (health.py) — never a synthetic evidence construction.
-    Membership is checked before any corpus lookup, so this stays `incompatible_version`
-    whether or not a stray corpus entry happens to exist for it; `classify_offline` itself
-    carries no membership concept (it classifies whatever version it is given), so that
-    precedence is pinned at the evaluation-policy level instead, synthetically, in
-    ``test_runner_harness_health.py::test_a_non_admitted_version_is_incompatible_regardless_of_classification``."""
+    No corpus entry exists for this version at all; the sibling test below pins the harder
+    case where one does."""
     clock = FixedClock(_NOW)
     probe = _FakeProbe(supported=ADMITTED_OPENCODE_VERSIONS)
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)
 
     result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.18.24")
+
+    assert result is not None
+    assert result.available is False
+    assert result.cause is HarnessHealthCause.INCOMPATIBLE_VERSION
+
+
+def test_a_non_admitted_version_with_a_real_corpus_entry_still_reads_incompatible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Membership is checked before any corpus lookup (D2), so a stray corpus manifest for a
+    non-admitted version never flips the outcome — proven here against a real
+    `classify_offline` read of a real fixture manifest that *would* classify `supported` on
+    its own, not a synthetic evidence construction like
+    ``test_runner_harness_health.py::test_a_non_admitted_version_is_incompatible_regardless_of_classification``."""
+    stray_version = "1.18.24"
+    manifest_dir = tmp_path / "opencode" / stray_version
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "manifest.json").write_text(json.dumps({"live_evidence": {"classification": "supported"}}))
+    real_classify_offline = capability_snapshot.classify_offline
+    monkeypatch.setattr(
+        capability_snapshot,
+        "classify_offline",
+        lambda harness_id, version: real_classify_offline(harness_id, version, corpus_root=tmp_path),
+    )
+    # Prove the fixture alone would classify `supported`, isolating what membership overrides.
+    assert (
+        real_classify_offline("opencode", stray_version, corpus_root=tmp_path) is CompatibilityClassification.SUPPORTED
+    )
+
+    clock = FixedClock(_NOW)
+    probe = _FakeProbe(supported=ADMITTED_OPENCODE_VERSIONS)
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+
+    result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version=stray_version)
 
     assert result is not None
     assert result.available is False
