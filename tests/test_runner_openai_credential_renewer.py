@@ -1,10 +1,8 @@
-"""``OpenAICredentialRenewer.renew_if_due`` (blizzard#504).
-
-Driven with an injected :class:`~blizzard.runner.subscriptions.one_shot_process.IOneShotProcess`
-fake and an injected ``FixedClock`` — no real credential file location, no real vendor CLI.
-Confirms the "at or near expiry" lead-window test, the ``initialize``-then-``account/read``
-JSON-RPC request shape, and that every subprocess failure mode reduces to a typed
-``FAILED`` outcome rather than a raise (D1, D4)."""
+"""``OpenAICredentialRenewer.renew_if_due`` (blizzard#504), driven with an injected
+:class:`~blizzard.runner.subscriptions.one_shot_process.IOneShotProcess` fake and a
+``FixedClock`` — no real credential file location, no real vendor CLI. Confirms the lead-window
+test, the ``initialize``-then-``account/read`` JSON-RPC request shape, and that every
+subprocess failure mode reduces to a typed ``FAILED`` outcome rather than a raise (D1, D4)."""
 
 from __future__ import annotations
 

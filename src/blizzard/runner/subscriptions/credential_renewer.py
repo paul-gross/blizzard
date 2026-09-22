@@ -14,11 +14,10 @@ __all__ = ["ICredentialRenewer", "RenewalFailureReason", "RenewalOutcome", "Rene
 
 
 class RenewalOutcomeKind(StrEnum):
-    """One renewal attempt's shape. ``RENEWED`` — the vendor CLI refreshed the
-    credential. ``NOT_DUE`` — the credential is not at or near its own expiry, or this
-    binding could not tell (an unreadable credential is the sampler's own miss to
-    report, not the renewer's). ``FAILED`` — renewal was due and attempted, but did not
-    succeed; see :attr:`RenewalOutcome.failure_reason`."""
+    """One renewal attempt's shape. ``RENEWED`` — the vendor CLI refreshed the credential.
+    ``NOT_DUE`` — the credential is not at or near expiry, or this binding could not tell (an
+    unreadable credential is the sampler's miss to report, not the renewer's). ``FAILED`` —
+    renewal was due and attempted but did not succeed; see :attr:`RenewalOutcome.failure_reason`."""
 
     RENEWED = "renewed"
     NOT_DUE = "not_due"
@@ -26,13 +25,10 @@ class RenewalOutcomeKind(StrEnum):
 
 
 class RenewalFailureReason(StrEnum):
-    """The closed set of reasons a due renewal attempt did not succeed.
-
-    ``RENEWER_UNAVAILABLE`` is the vendor CLI missing or unrunnable (e.g. not on
-    ``PATH``); ``TIMED_OUT`` is the bounded subprocess exceeding its timeout;
-    ``VENDOR_REFUSED`` is the vendor CLI exiting non-zero or its own response reporting
-    it could not refresh; ``PROTOCOL_ERROR`` is a response this binding could not make
-    sense of at all."""
+    """The closed set of reasons a due renewal attempt did not succeed: ``RENEWER_UNAVAILABLE``,
+    the vendor CLI missing or unrunnable; ``TIMED_OUT``, the bounded subprocess overrunning its
+    timeout; ``VENDOR_REFUSED``, a non-zero exit or a response saying it could not refresh;
+    ``PROTOCOL_ERROR``, a response this binding could not make sense of at all."""
 
     RENEWER_UNAVAILABLE = "renewer_unavailable"
     TIMED_OUT = "timed_out"

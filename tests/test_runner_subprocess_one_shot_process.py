@@ -59,9 +59,8 @@ def test_env_fully_replaces_the_childs_environment() -> None:
     )
 
     assert result.exit_code == 0
-    # Some platforms' own `subprocess` implicitly injects a locale variable (e.g.
-    # `LC_CTYPE`) alongside an explicit `env`; what matters is that nothing from this
-    # test process's own environment (e.g. `PATH`, `HOME`) leaked through.
+    # A platform's own `subprocess` may inject a locale variable (e.g. `LC_CTYPE`) beside an
+    # explicit `env`; what matters is that nothing from this process's own environment leaked.
     keys = set(ast.literal_eval(result.stdout))
     assert "ONLY_THIS" in keys
     assert "PATH" not in keys

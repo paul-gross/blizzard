@@ -2032,14 +2032,10 @@ export type SubscriptionListResponse = {
 /**
  * SubscriptionView
  *
- * One declared subscription's own runner-local diagnostics (blizzard#504) —
- * ``GET /api/subscriptions``. ``sampled_at``/``ok``/``miss_reason``/``renewal`` are all
- * ``None`` when this slug has never been attempted. ``miss_reason`` is one of
- * ``credential_lapsed``, ``credential_unreadable``, ``endpoint_unreachable``, or
- * ``response_unparseable`` when ``ok`` is ``False``; ``None`` when ``ok`` is ``True``.
- * ``renewal`` is this same attempt's own renewal outcome: ``renewed``, a
- * ``failed:<reason>`` string, or ``None`` when this slug has no renewer (e.g.
- * Anthropic) or its renewal was not due this attempt.
+ * One declared subscription's runner-local diagnostics (blizzard#504), served by
+ * ``GET /api/subscriptions``. Every field past ``provider`` is ``None`` until a first
+ * attempt; ``miss_reason`` is the closed-set reason when ``ok`` is ``False``; ``renewal`` is
+ * that attempt's own renewal outcome — ``renewed``, ``failed:<reason>``, or ``None``.
  */
 export type SubscriptionView = {
     /**

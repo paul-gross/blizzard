@@ -89,8 +89,8 @@ class OpenAISubscriptionSampler:
             )
             return SampleMiss(SampleMissReason.ENDPOINT_UNREACHABLE)
         if not resp.is_success:
-            # 401 here is the expired-token path: nothing refreshes this credential but
-            # the Codex CLI itself, and this sampler never writes the file.
+            # 401 is the expired-token path: renewal is the renewer seam's job, via the
+            # Codex CLI's own refresh; this sampler only reports it, never writes the file.
             _log.warning(
                 "external subscription usage sample failed: non-2xx response",
                 path=self._credentials_path,
@@ -126,11 +126,9 @@ class OpenAISubscriptionSampler:
 
     def _read_credential(self) -> tuple[str, str] | SampleMiss:
         """The access token and account id from the credential file, or the reason it
-        could not be read.
-
-        Read-only, always: the Codex CLI owns the refresh flow, holds its own lock over
-        this file, and rotates the refresh token, so a second writer risks both
-        corrupting it mid-refresh and invalidating the login it just renewed."""
+        could not be read. Read-only, always: renewal is the renewer seam's job, through
+        the Codex CLI's own lock and refresh-token rotation — a second writer risks both
+        corrupting the file mid-refresh and invalidating the login it just renewed."""
         try:
             raw = Path(self._credentials_path).read_text()
         except OSError as exc:

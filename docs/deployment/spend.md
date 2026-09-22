@@ -108,11 +108,26 @@ as fixed: `openai` labels each window from the length its own response reports, 
 rendered as it comes rather than forced into that pair.
 
 Each binding reads the credential file its own vendor CLI writes: `~/.claude/.credentials.json` for `anthropic`,
-`~/.codex/auth.json` for `openai`, either overridable per declaration with `credentials_path`. **Neither binding
-refreshes the credential it reads** — the vendor CLI owns that flow and its lock. That is invisible for `anthropic`,
-whose token a fleet's own Claude Code workers renew continuously, and load-bearing for `openai`, whose token expires
-about ten days after the last `codex` run: on a runner that never runs `codex`, the subscription samples until that
-lapses and reports nothing after. Running any `codex` command refreshes it.
+`~/.codex/auth.json` for `openai`, either overridable per declaration with `credentials_path`. **Blizzard never writes
+that file** — the vendor CLI owns the refresh flow, its lock, and its refresh-token rotation — but renewal is delegated
+to it, per provider. `openai` carries a renewal binding: once the access token is within ten minutes of its own expiry,
+the runner asks `codex app-server` for a proactive refresh on the subscription's own sampling cadence, before that
+cadence's sample, so an idle runner keeps sampling without anyone running `codex` by hand. It needs the `codex` binary
+reachable from the runner's environment; a renewal that times out or is refused is recorded as a failed outcome, never a
+raise, and the sample still follows it. `anthropic` carries none: a fleet's own Claude Code workers renew that token
+continuously, and an idle Anthropic runner whose token lapses shows the lapsed condition below until its next worker
+refreshes the file.
+
+A sample that produces nothing carries one of four reasons: `credential_lapsed` (a token past its own expiry, or a 401
+from the provider), `credential_unreadable` (a missing or unparseable credential file), `endpoint_unreachable` (a
+connection failure, a timeout, or any other non-2xx status), and `response_unparseable` (a body the binding could not
+read). Every reason surfaces on the runner: `blizzard runner status`, the runner panel's subscriptions rail, and `GET
+/api/subscriptions` show the newest attempt's outcome, its miss reason, and its renewal outcome, and the probe below
+prints the reason in operator words. Only `credential_lapsed` crosses to the hub: a miss reports `{slug, name,
+missed_at, reason}` — never a token, a refresh token, or a path — and a slug whose newest lapsed miss postdates its
+newest sample renders on the board as "credential lapsed — log in again on this runner" in place of its pace bars,
+ageing out under the same staleness gate a sample does. Any other reason leaves the board exactly as an unsampled slug
+leaves it today.
 
 Credentials never leave the runner machine: the sample reads the runner's own local OAuth credential file, and only
 derived utilization percentages, window labels, and reset times cross the wire to the hub — the bearer token is never
@@ -140,5 +155,5 @@ sample_interval_seconds = 300
 snapshot without writing, ticking, or reporting to the hub — confirming that subscription's credentials and cadence
 without waiting on a scheduled sample. It is also where the two silent outcomes separate: a declaration whose `provider`
 names no binding — a typo, most often — prints that it has no sampler, where a declared-and-bound subscription that
-simply got nothing back reports no sample instead. A runner with no `[[subscription]]` declared has exactly one slug to
+got nothing back prints its miss reason instead — `credential lapsed: log in again` for a token past its expiry. A runner with no `[[subscription]]` declared has exactly one slug to
 name: `anthropic`, the legacy table's own subscription.

@@ -117,12 +117,10 @@ class LoopConfig:
 
 @dataclass(frozen=True)
 class ResolvedSubscription:
-    """One declared subscription, paired with its resolved sampler and renewer bindings
-    (blizzard#436, blizzard#504) — the loop step's own view, carrying only what it reads
-    (``slug``/``name``/``sample_interval_seconds``); ``sampler`` is ``None`` for a
-    provider with no binding, declared but unsampled. ``renewer`` is ``None`` for
-    Anthropic or any unknown provider (D2), which keeps today's read-only behaviour
-    exactly."""
+    """One declared subscription with its resolved sampler and renewer bindings (blizzard#436,
+    blizzard#504) — the loop step's own view, carrying only what it reads. ``sampler`` is
+    ``None`` for a provider with no binding (declared but unsampled); ``renewer`` is ``None``
+    for Anthropic or any unknown provider (D2), keeping today's read-only behaviour exactly."""
 
     slug: str
     name: str

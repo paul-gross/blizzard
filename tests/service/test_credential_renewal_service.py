@@ -1,14 +1,9 @@
-"""Service-tier proof for the OpenAI credential renewer against a real ``mock-codex
-app-server`` process, spawned and exercised as an out-of-process binary
-(``bzh:external-cli-fake-is-service-tier``, blizzard#504 Phase 2 acceptance).
-
-The concurrent-writer proof: :class:`OpenAICredentialRenewer` driven with the real
-:class:`SubprocessOneShotProcess` seam against ``mock-codex app-server`` while a second,
-independent ``mock-codex app-server`` invocation — standing in for the vendor's own CLI
-refreshing the same login by hand — races it for the same ``auth.json``. Neither writer
-ever leaves the file unparseable, the final file holds a rotated refresh token, and
-blizzard's own renewer process never opens the credential file for writing itself
-(``bzh:subscriptions-no-write``, proven structurally, not by this test)."""
+"""Service-tier proof for the OpenAI credential renewer against a real ``mock-codex app-server``
+process (``bzh:external-cli-fake-is-service-tier``, blizzard#504 Phase 2): the renewer, on the
+real :class:`SubprocessOneShotProcess` seam, races a second independent ``mock-codex
+app-server`` invocation — the vendor's own CLI refreshing the same login by hand — for one
+``auth.json``. Neither writer leaves the file unparseable and the final file holds a rotated
+refresh token; that blizzard never writes the file is ``bzh:subscriptions-no-write``'s proof."""
 
 from __future__ import annotations
 

@@ -1,17 +1,9 @@
-"""The OpenAI (ChatGPT plan) credential-renewer binding (``bzh:pluggable-seams``,
-blizzard#504).
-
-Implements :class:`~blizzard.runner.subscriptions.credential_renewer.ICredentialRenewer`
-by asking the Codex CLI's own ``app-server`` for a vendor-owned proactive refresh: the
-newline-delimited JSON-RPC ``initialize`` handshake, then ``account/read`` with
-``refreshToken: true`` — confirmed live against Codex 0.149.0's own
-``generate-json-schema`` output and a scratch login (D1, plan's tested assumptions). The
-server interleaves unsolicited notifications between a request and its id-matched
-response, so every response is read by scanning for the matching id and skipping
-anything else. No token ever appears in this binding's own memory beyond what ``codex``
-itself already holds — the refreshed access/refresh tokens land on disk in the
-credential file as the vendor CLI's own side effect; this binding never opens it for
-writing."""
+"""The OpenAI (ChatGPT plan) credential-renewer binding (``bzh:pluggable-seams``, blizzard#504):
+asks the Codex CLI's own ``app-server`` for a vendor-owned proactive refresh — the JSON-RPC
+``initialize`` handshake, then ``account/read`` with ``refreshToken: true`` (confirmed live
+against Codex 0.149.0, D1). The server interleaves notifications between a request and its
+id-matched response, so replies are found by id. The refreshed tokens land on disk as the
+vendor CLI's own side effect; this binding never opens the credential file for writing."""
 
 from __future__ import annotations
 
@@ -35,9 +27,7 @@ _log = get_logger("blizzard.runner.subscriptions")
 DEFAULT_CREDENTIALS_PATH = str(Path.home() / ".codex" / "auth.json")
 DEFAULT_CODEX_BINARY = "codex"
 
-# How near its own expiry an access token must be before this binding asks for a
-# refresh — well above the sampler's own 5s request budget, so a renewal that is due
-# has time to land before the very next sample would otherwise observe a lapsed token.
+# The lead window before expiry in which a refresh is asked for — well above the sampler's 5s request budget.
 _RENEWAL_LEAD_WINDOW = timedelta(minutes=10)
 
 _APP_SERVER_TIMEOUT_SECONDS = 30.0

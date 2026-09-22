@@ -32,11 +32,10 @@ class ContextSampleState:
 
 @dataclass(frozen=True)
 class ExternalUsageAttemptSummary:
-    """This ``slug``'s own newest sampling attempt (blizzard#504) — the runner-local
-    diagnostics' read: what the probe, ``runner status``, and ``GET /api/subscriptions``
-    all show. ``miss_reason`` is one of :class:`~blizzard.runner.subscriptions.subscription_sampler.SampleMissReason`'s
-    values, or ``None`` when the attempt sampled successfully. ``renewal`` is the newest
-    renewal outcome recorded alongside this attempt, or ``None`` until a renewer is wired."""
+    """This ``slug``'s own newest sampling attempt (blizzard#504) — what the probe, ``runner
+    status``, and ``GET /api/subscriptions`` all show. ``miss_reason`` is a
+    :class:`~blizzard.runner.subscriptions.subscription_sampler.SampleMissReason` value or
+    ``None`` on success; ``renewal`` is the renewal outcome recorded with it, or ``None``."""
 
     slug: str
     sampled_at: datetime
@@ -144,15 +143,11 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         miss_reason: str | None = None,
         renewal: str | None = None,
     ) -> int | None:
-        """Append one declared subscription's sampling attempt **and**, only when it
-        produced a sample, buffer its outbound report — atomically (issue #218), returning
-        the buffered seq or ``None``. ``slug`` (blizzard#436) is the join key a later read
-        filters on, so one subscription's attempt never advances another's cadence.
-        ``miss_reason`` (blizzard#504) is one of
-        :class:`~blizzard.runner.subscriptions.subscription_sampler.SampleMissReason`'s
-        values on a miss, ``None`` on a successful sample. ``renewal`` (blizzard#504) is
-        this same attempt's own renewal outcome — ``None`` when this slug has no renewer,
-        or its renewal was not due this attempt."""
+        """Append one declared subscription's sampling attempt and, when it carries a report,
+        buffer that report — atomically (issue #218), returning the buffered seq or ``None``.
+        ``slug`` (blizzard#436) is the cadence's join key. ``miss_reason`` (blizzard#504) is a
+        ``SampleMissReason`` value on a miss, ``None`` on success; ``renewal`` is this attempt's
+        own renewal outcome, ``None`` when this slug has no renewer or none was due."""
         ...
 
     def prune_external_usage_samples(self, *, now: datetime) -> int:
