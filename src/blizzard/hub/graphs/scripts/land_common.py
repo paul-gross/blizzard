@@ -335,14 +335,23 @@ class PullRequest:
 
     @staticmethod
     def _merged_for_branch(run: LandRun, repo: str, branch: str) -> dict[str, Any] | None:
-        """The most recent already-merged PR for ``branch``, or ``None``. Filters on
-        ``merged_at`` — present on GitHub's list endpoint, unlike the ``merged`` boolean,
-        which is a single-PR-read-only field."""
+        """The already-merged PR that landed ``branch``'s live tip, or ``None``.
+
+        A stale merged PR from an earlier, unrelated push under the same branch name is
+        never mistaken for this run's own crashed attempt: the candidate's frozen head
+        sha must match the branch's current tip (``bzh:hub-node-step-idempotence``)."""
         _, listed = run.api("GET", f"/repos/{repo}/pulls?state=closed")
         candidates = [
             p for p in (listed or []) if p.get("head", {}).get("ref") == branch and p.get("merged_at") is not None
         ]
-        return max(candidates, key=lambda p: p.get("number", 0)) if candidates else None
+        if not candidates:
+            return None
+        merged = max(candidates, key=lambda p: p.get("number", 0))
+        status, ref = run.api("GET", f"/repos/{repo}/git/ref/heads/{branch}")
+        live_sha = (ref or {}).get("object", {}).get("sha") if status == 200 and isinstance(ref, dict) else None
+        if live_sha is None or merged.get("head", {}).get("sha") != live_sha:
+            return None
+        return merged
 
     def __str__(self) -> str:
         return f"{self.repo}#{self.number}"

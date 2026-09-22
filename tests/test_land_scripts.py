@@ -1183,6 +1183,98 @@ def test_a_refusal_that_is_not_an_empty_branch_still_waits_rather_than_landing(
     assert not any(url.endswith("/merge") for url in _urls(calls, "PUT")), "chunk atomicity: nothing merges"
 
 
+def _pull_request_run(fake: Any) -> land_common.LandRun:
+    """A minimal :class:`LandRun` for exercising :meth:`PullRequest.of` directly, with no
+    markers or commits of its own — the tests below only drive the forge reads."""
+    return land_common.LandRun(
+        forge_url="http://forge",
+        base_branch="main",
+        commits=[],
+        already=set(),
+        markers=land_common.MarkerWriter(callback_url="", token="", request=fake),
+        request=fake,
+    )
+
+
+def test_a_stale_merged_pr_on_a_reused_branch_name_is_never_mistaken_for_a_landing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A branch name is not identity: an earlier, unrelated chunk's merged PR under the
+    same branch name must never be read as THIS run's own already-landed attempt (the
+    false positive a session-scoped crash-sweep run surfaced)."""
+    base = f"http://forge/repos/{_REPO}"
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    responses = {
+        ("GET", f"{base}/pulls?state=closed"): (
+            200,
+            [{"number": 1, "head": {"ref": _BRANCH, "sha": "stale-head-sha"}, "merged_at": "2024-01-01T00:00:00Z"}],
+        ),
+        ("GET", f"{base}/git/ref/heads/{_BRANCH}"): (
+            200,
+            {"ref": f"refs/heads/{_BRANCH}", "object": {"sha": "current-head-sha", "type": "commit"}},
+        ),
+        ("GET", f"{base}/pulls?state=open"): (200, []),
+        ("POST", f"{base}/pulls"): (201, {"number": 2, "head": {"ref": _BRANCH}}),
+        ("GET", f"{base}/pulls/2"): (
+            200,
+            {"number": 2, "merged": False, "head": {"ref": _BRANCH, "sha": "current-head-sha"}},
+        ),
+    }
+
+    def fake(method: str, url: str, *, token: str | None, body: dict[str, Any] | None, **_: Any) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        return responses[(method, url)]
+
+    run = _pull_request_run(fake)
+    pr = land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"})
+
+    assert pr.number == 2, "the stale merged PR (#1) must be ignored — a fresh PR opens instead"
+    assert ("POST", f"{base}/pulls") in [(m, u) for m, u, _ in calls]
+
+
+def test_an_already_merged_pr_matching_the_live_branch_tip_is_recognized_without_a_duplicate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The intended case: a crash after a successful merge but before the marker was
+    recorded. Re-entry recognizes the merged PR, whose head sha still matches the
+    branch's live tip, and opens no duplicate."""
+    base = f"http://forge/repos/{_REPO}"
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    responses = {
+        ("GET", f"{base}/pulls?state=closed"): (
+            200,
+            [{"number": 1, "head": {"ref": _BRANCH, "sha": "the-head-sha"}, "merged_at": "2024-01-01T00:00:00Z"}],
+        ),
+        ("GET", f"{base}/git/ref/heads/{_BRANCH}"): (
+            200,
+            {"ref": f"refs/heads/{_BRANCH}", "object": {"sha": "the-head-sha", "type": "commit"}},
+        ),
+        ("GET", f"{base}/pulls/1"): (
+            200,
+            {
+                "number": 1,
+                "merged": True,
+                "head": {"ref": _BRANCH, "sha": "the-head-sha"},
+                "html_url": f"http://forge/{_REPO}/pull/1",
+            },
+        ),
+    }
+
+    def fake(method: str, url: str, *, token: str | None, body: dict[str, Any] | None, **_: Any) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        return responses[(method, url)]
+
+    run = _pull_request_run(fake)
+    pr = land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "the-head-sha"})
+
+    assert pr.number == 1
+    assert pr.merged
+    assert ("POST", f"{base}/pulls") not in [(m, u) for m, u, _ in calls], "no duplicate PR should open"
+    assert ("GET", f"{base}/pulls?state=open") not in [(m, u) for m, u, _ in calls], (
+        "an already-merged PR is recognized before any open-PR search runs"
+    )
+
+
 def test_land_pr_ci_selftest_passes() -> None:
     """Binds `land_pr_ci --selftest`'s pure routing/check/inheritance tables to the unit
     tier — previously reachable only by hand via the CLI flag."""
