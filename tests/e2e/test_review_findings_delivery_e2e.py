@@ -93,7 +93,7 @@ _RETROSPECTIVE_JUDGEMENT = "verdict('recorded', 'landed clean; the review round 
 def _scripted_graph_yaml() -> str:
     """The real packaged `basic-development-workflow` body with only its runner-node
     prompts swapped for scripts — `deliver` and `record-findings` (both hub-executor
-    script nodes) travel verbatim, so this exercises the real `land_ff`/`review_deliver`
+    script nodes) travel verbatim, so this exercises the real `land_pr_ci`/`review_deliver`
     scripts and the real hub route/domain code, not a mock of either."""
     body: Any = PACKAGED.named("basic-development-workflow").body
     # The built-in triage router's own migration-target name, so a freshly ingested
@@ -179,7 +179,6 @@ def test_review_finding_delta_mints_exactly_its_deferred_entry_at_landing(tmp_pa
         assert finding["class"] == "simplification"
         assert finding["locus"] == f"{REPO_NAME}/BUILD.md:1"
 
-    # land_ff fast-forwards the base ref directly (no PR) — the build commit is on
-    # bare main.
+    # land_pr_ci merges the PR into the base branch — the build commit is on bare main.
     build_md = _git_bare(origin_bare, "show", "main:BUILD.md")
     assert "build pass" in build_md, f"the build commit did not land on main:\n{build_md}"
