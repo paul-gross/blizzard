@@ -1,12 +1,9 @@
-"""The OpenAI (ChatGPT plan) credential-renewer binding (``bzh:pluggable-seams``): asks the
-Codex CLI's own ``app-server`` for a vendor-owned proactive refresh — the JSON-RPC
-``initialize`` handshake, then ``account/read`` with ``refreshToken: true`` (confirmed live
-against Codex 0.149.0). The server interleaves notifications between a request and its
-id-matched response, so replies are found by id, and it drops a reply still in flight if
-stdin reaches EOF first — the request is followed by a settle window before stdin closes,
-long enough for a live refresh to finish (confirmed live: 4s sufficed; 3/3 runs lost the
-reply with no settle at all). The refreshed tokens land on disk as the vendor CLI's own
-side effect; this binding never opens the credential file for writing."""
+"""The OpenAI (ChatGPT plan) credential-renewer binding (``bzh:pluggable-seams``): asks the Codex
+CLI's own ``app-server`` (``initialize``, then ``account/read`` with ``refreshToken: true``) for a
+vendor-owned refresh, and reports ``renewed`` only once the credential file's own expiry has advanced.
+Confirmed live against Codex 0.149.0: replies are id-matched among interleaved notifications; a reply
+still in flight is dropped if stdin hits EOF first, hence the settle window before stdin closes; and
+``requiresOpenaiAuth`` is true for every ChatGPT login, so ``account: null`` is the one no-login signal."""
 
 from __future__ import annotations
 
@@ -36,8 +33,7 @@ _RENEWAL_LEAD_WINDOW = timedelta(minutes=10)
 
 _APP_SERVER_TIMEOUT_SECONDS = 30.0
 
-# How long stdin stays open past the request before closing it — confirmed live against Codex
-# 0.149.0: a 4s hold let a pending account/read reply land; margin above that.
+# Stdin stays open this long past the request: live, a 4s hold let a pending account/read reply land.
 _ACCOUNT_READ_SETTLE_SECONDS = 5.0
 
 _CLIENT_INFO = {"name": "blizzard-runner", "version": "1"}
@@ -70,7 +66,7 @@ class OpenAICredentialRenewer:
             return RenewalOutcome(RenewalOutcomeKind.NOT_DUE)
         if self._clock.now() < expires_at - _RENEWAL_LEAD_WINDOW:
             return RenewalOutcome(RenewalOutcomeKind.NOT_DUE)
-        return self._request_refresh()
+        return self._request_refresh(expires_at)
 
     def _read_access_token_expiry(self) -> datetime | None:
         try:
@@ -84,7 +80,7 @@ class OpenAICredentialRenewer:
             return None
         return parse_jwt_expiry(access_token)
 
-    def _request_refresh(self) -> RenewalOutcome:
+    def _request_refresh(self, expires_at: datetime) -> RenewalOutcome:
         codex_home = str(Path(self._credentials_path).parent)
         request = _rpc_request(_INITIALIZE_ID, "initialize", {"clientInfo": _CLIENT_INFO}) + _rpc_request(
             _ACCOUNT_READ_ID, "account/read", {"refreshToken": True}
@@ -114,9 +110,14 @@ class OpenAICredentialRenewer:
         if "error" in response:
             _log.warning("credential renewal vendor CLI reported an error", detail=response.get("error"))
             return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
-        account = response.get("result")
-        if not isinstance(account, dict) or account.get("requiresOpenaiAuth"):
-            _log.warning("credential renewal vendor CLI reports the login itself needs re-authentication")
+        payload = response.get("result")
+        account = payload.get("account") if isinstance(payload, dict) else None
+        if not isinstance(account, dict):
+            _log.warning("credential renewal vendor CLI reports no login to refresh", codex_home=codex_home)
+            return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
+        renewed_until = self._read_access_token_expiry()
+        if renewed_until is None or renewed_until <= expires_at:
+            _log.warning("credential renewal vendor CLI answered but the credential's expiry did not advance")
             return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
         return RenewalOutcome(RenewalOutcomeKind.RENEWED)
 

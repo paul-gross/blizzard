@@ -33,13 +33,9 @@ class IOneShotProcess(Protocol):
     def run(
         self, argv: Sequence[str], *, stdin: str, timeout: float, env: Mapping[str, str], settle_seconds: float = 0.0
     ) -> OneShotResult:
-        """Run ``argv`` with ``stdin`` written to its standard input, under a ``timeout``
-        in seconds. ``env`` replaces the child's environment entirely — there is no
-        "inherit the caller's own" default, so every caller states exactly what a vendor
-        CLI needs to see. ``stdin`` is closed (EOF) ``settle_seconds`` after it is fully
-        written, not immediately: a child whose reply to an in-flight request is still
-        pending can otherwise read EOF as "abandon it" and drop that reply. The default,
-        0, closes right away, for a child that only needs a batch of input and its output.
-        A timeout kills the child; a launch failure (e.g. the binary is not on ``PATH``)
-        is caught; neither raises."""
+        """Run ``argv`` with ``stdin`` written to its standard input, under a ``timeout`` in
+        seconds. ``env`` replaces the child's environment entirely — no "inherit the caller's
+        own" default, so every caller states what a vendor CLI needs to see. ``stdin`` is closed
+        (EOF) ``settle_seconds`` after it is written, not at once, so a reply still being produced
+        is never cut off; 0 closes right away. A timeout kills the child; a launch failure is caught."""
         ...

@@ -42,21 +42,28 @@ def _write_credentials(path: Path, *, access_token: str | None) -> Path:
 
 
 class _ScriptedSubprocess:
-    """Records every call; replies with the scripted :class:`OneShotResult`."""
+    """Records every call; replies with the scripted :class:`OneShotResult`, after rewriting
+    ``rotates`` (a credential file) the way the vendor CLI's own refresh would, when given."""
 
-    def __init__(self, result: OneShotResult) -> None:
+    def __init__(self, result: OneShotResult, *, rotates: Path | None = None) -> None:
         self.result = result
+        self.rotates = rotates
         self.calls: list[tuple[Sequence[str], str, float, Mapping[str, str], float]] = []
 
     def run(
         self, argv: Sequence[str], *, stdin: str, timeout: float, env: Mapping[str, str], settle_seconds: float = 0.0
     ) -> OneShotResult:
         self.calls.append((argv, stdin, timeout, env, settle_seconds))
+        if self.rotates is not None:
+            _write_credentials(self.rotates, access_token=_jwt(expires_at=_NOW + timedelta(hours=1)))
         return self.result
 
 
-def _account_read_response(*, request_id: int = 2, requires_openai_auth: bool = False) -> str:
-    return json.dumps({"jsonrpc": "2.0", "id": request_id, "result": {"requiresOpenaiAuth": requires_openai_auth}})
+def _account_read_response(*, request_id: int = 2, logged_in: bool = True) -> str:
+    """The real reply shape: ``requiresOpenaiAuth`` is true for every ChatGPT-mode home, logged
+    in or not (confirmed live against Codex 0.149.0) — only ``account`` tells the two apart."""
+    account = {"type": "chatgpt", "planType": "plus"} if logged_in else None
+    return json.dumps({"jsonrpc": "2.0", "id": request_id, "result": {"account": account, "requiresOpenaiAuth": True}})
 
 
 def _renewed_result() -> OneShotResult:
@@ -98,7 +105,7 @@ def test_a_token_far_from_expiry_is_not_due(tmp_path: Path) -> None:
 
 def test_a_token_inside_the_lead_window_is_due(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=5)))
-    subprocess = _ScriptedSubprocess(_renewed_result())
+    subprocess = _ScriptedSubprocess(_renewed_result(), rotates=creds)
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
     outcome = renewer.renew_if_due()
@@ -109,7 +116,7 @@ def test_a_token_inside_the_lead_window_is_due(tmp_path: Path) -> None:
 
 def test_an_already_expired_token_is_due(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW - timedelta(minutes=1)))
-    subprocess = _ScriptedSubprocess(_renewed_result())
+    subprocess = _ScriptedSubprocess(_renewed_result(), rotates=creds)
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
     outcome = renewer.renew_if_due()
@@ -123,7 +130,7 @@ def test_an_already_expired_token_is_due(tmp_path: Path) -> None:
 
 def test_a_due_renewal_sends_initialize_then_account_read_with_refresh_token_true(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=1)))
-    subprocess = _ScriptedSubprocess(_renewed_result())
+    subprocess = _ScriptedSubprocess(_renewed_result(), rotates=creds)
     renewer = OpenAICredentialRenewer(
         credentials_path=str(creds), codex_binary="codex", subprocess=subprocess, clock=FixedClock(_NOW)
     )
@@ -208,10 +215,22 @@ def test_a_json_rpc_error_is_failed_vendor_refused(tmp_path: Path) -> None:
     assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
 
 
-def test_requires_openai_auth_is_failed_vendor_refused(tmp_path: Path) -> None:
+def test_a_null_account_is_failed_vendor_refused(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=1)))
-    stdout = _account_read_response(requires_openai_auth=True)
+    stdout = _account_read_response(logged_in=False)
     subprocess = _ScriptedSubprocess(OneShotResult(exit_code=0, stdout=stdout, stderr="", timed_out=False))
+    renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
+
+    outcome = renewer.renew_if_due()
+
+    assert outcome.kind is RenewalOutcomeKind.FAILED
+    assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
+
+
+def test_a_reply_that_leaves_the_expiry_unchanged_is_failed_vendor_refused(tmp_path: Path) -> None:
+    """A live login answers, but the file's own expiry is the proof of a refresh — not the reply."""
+    creds = _write_credentials(tmp_path / "auth.json", access_token=_jwt(expires_at=_NOW + timedelta(minutes=1)))
+    subprocess = _ScriptedSubprocess(_renewed_result())
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
     outcome = renewer.renew_if_due()
@@ -232,7 +251,9 @@ def test_an_interleaved_notification_before_the_matching_response_is_skipped(tmp
             _account_read_response(),
         ]
     )
-    subprocess = _ScriptedSubprocess(OneShotResult(exit_code=0, stdout=stdout, stderr="", timed_out=False))
+    subprocess = _ScriptedSubprocess(
+        OneShotResult(exit_code=0, stdout=stdout, stderr="", timed_out=False), rotates=creds
+    )
     renewer = OpenAICredentialRenewer(credentials_path=str(creds), subprocess=subprocess, clock=FixedClock(_NOW))
 
     outcome = renewer.renew_if_due()

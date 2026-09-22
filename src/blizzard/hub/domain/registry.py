@@ -32,8 +32,7 @@ def _usage_stale(sampled_at: datetime, *, now: datetime) -> bool:
     return (as_utc(now) - as_utc(sampled_at)) > EXTERNAL_USAGE_STALE_AFTER
 
 
-#: The one miss reason surfaced as a per-slug ``condition`` — shared with the runner's own
-#: closed set through ``blizzard.wire``, never a hand-copied literal the two could drift on.
+#: The one miss reason surfaced as a per-slug ``condition``; the runner's own set shares it via ``blizzard.wire``.
 CREDENTIAL_LAPSED_CONDITION = CREDENTIAL_LAPSED_MISS_REASON
 
 

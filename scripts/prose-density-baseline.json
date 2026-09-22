@@ -253,10 +253,10 @@
    "total": 6
   },
   "blizzard_mock/harness/facades/_codex_app_server.py": {
-   "comments": 3,
+   "comments": 4,
    "docstrings": 21,
    "over_cap": 0,
-   "total": 156
+   "total": 157
   },
   "blizzard_mock/harness/facades/_common.py": {
    "comments": 3,
@@ -2232,7 +2232,7 @@
    "comments": 17,
    "docstrings": 107,
    "over_cap": 5,
-   "total": 393
+   "total": 394
   },
   "blizzard/hub/domain/restart.py": {
    "comments": 8,
@@ -5049,10 +5049,10 @@
    "total": 31
   },
   "blizzard/runner/subscriptions/internal/openai_credential_renewer.py": {
-   "comments": 3,
+   "comments": 6,
    "docstrings": 11,
    "over_cap": 0,
-   "total": 135
+   "total": 147
   },
   "blizzard/runner/subscriptions/internal/openai_subscription_sampler.py": {
    "comments": 14,
@@ -5061,10 +5061,10 @@
    "total": 266
   },
   "blizzard/runner/subscriptions/internal/subprocess_one_shot_process.py": {
-   "comments": 0,
-   "docstrings": 7,
+   "comments": 1,
+   "docstrings": 6,
    "over_cap": 0,
-   "total": 57
+   "total": 60
   },
   "blizzard/runner/subscriptions/internal/subscription_sampler_factory.py": {
    "comments": 0,
@@ -5082,7 +5082,7 @@
    "comments": 3,
    "docstrings": 27,
    "over_cap": 1,
-   "total": 87
+   "total": 89
   },
   "blizzard/runner/transcripts/__init__.py": {
    "comments": 0,
@@ -5229,10 +5229,10 @@
    "total": 38
   },
   "blizzard/wire/facts.py": {
-   "comments": 12,
+   "comments": 13,
    "docstrings": 25,
    "over_cap": 5,
-   "total": 99
+   "total": 101
   },
   "blizzard/wire/finding.py": {
    "comments": 0,
@@ -5846,7 +5846,7 @@
    "comments": 43,
    "docstrings": 31,
    "over_cap": 0,
-   "total": 1886
+   "total": 1889
   },
   "store_scan_allowlist.py": {
    "comments": 23,
@@ -8141,10 +8141,10 @@
    "total": 523
   },
   "test_runner_openai_credential_renewer.py": {
-   "comments": 6,
-   "docstrings": 10,
+   "comments": 8,
+   "docstrings": 14,
    "over_cap": 0,
-   "total": 237
+   "total": 261
   },
   "test_runner_openai_subscription_sampler.py": {
    "comments": 8,
@@ -8240,7 +8240,7 @@
    "comments": 12,
    "docstrings": 21,
    "over_cap": 2,
-   "total": 160
+   "total": 161
   },
   "test_runner_runtime_opencode_plugin.py": {
    "comments": 0,
@@ -8321,10 +8321,10 @@
    "total": 204
   },
   "test_runner_subprocess_one_shot_process.py": {
-   "comments": 2,
-   "docstrings": 3,
+   "comments": 3,
+   "docstrings": 6,
    "over_cap": 0,
-   "total": 67
+   "total": 103
   },
   "test_runner_subscription_sampler_factory.py": {
    "comments": 4,
