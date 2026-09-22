@@ -32,6 +32,7 @@ from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
     EVENT_RECORDED,
+    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     LEASE_MINTED,
     QUESTION_ASKED,
@@ -331,6 +332,21 @@ class FactIngestService:
                 name=fact.text("name") or slug,
                 sampled_at=fact.instant("sampled_at", now),
                 windows_json=_external_usage_windows_json(fact.get("windows", []), runner_id=runner_id, slug=slug),
+                at=now,
+            )
+            return True, None
+        if kind == EXTERNAL_SUBSCRIPTION_USAGE_MISSED:
+            # Advisory sibling to the sampled fact above (D7) — refresh-in-place per
+            # (runner_id, slug), in its own table, never touching the sample row.
+            slug = fact.get("slug")
+            if not isinstance(slug, str) or not slug:
+                return False, None
+            self._fleet.record_external_usage_miss(
+                runner_id,
+                slug=slug,
+                name=fact.text("name") or slug,
+                missed_at=fact.instant("missed_at", now),
+                reason=fact.string("reason"),
                 at=now,
             )
             return True, None

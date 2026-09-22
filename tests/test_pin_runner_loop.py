@@ -24,6 +24,7 @@ from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopConfig, Resolv
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.steps import Advance, Resume
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.subscriptions.subscription_sampler import SampleMiss, SampleMissReason
 from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.queue import QueuePeekEntry
@@ -290,9 +291,9 @@ class _ClaimObservingSampler:
         self._hub = hub
         self.claims_at_sample: list[int] = []
 
-    def sample(self):  # type: ignore[no-untyped-def]
+    def sample(self) -> SampleMiss:
         self.claims_at_sample.append(len(self._hub.claims))
-        return None
+        return SampleMiss(SampleMissReason.ENDPOINT_UNREACHABLE)
 
 
 @pytest.mark.unit

@@ -96,7 +96,7 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
             SubscriptionUsageViewWire(
                 slug=view.slug,
                 name=view.name,
-                sampled_at=iso_utc(view.sampled_at),
+                sampled_at=iso_utc(view.sampled_at) if view.sampled_at is not None else None,
                 windows=[
                     ExternalSubscriptionUsageWindowView(
                         window=w.window,
@@ -106,6 +106,7 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
                     )
                     for w in view.windows
                 ],
+                condition=view.condition,
             )
             for view in PerSubscriptionUsageView.every(r, now=now)
         ],

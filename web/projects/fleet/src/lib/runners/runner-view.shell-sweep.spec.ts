@@ -38,6 +38,7 @@ const ROW: RunnerRow = {
         { window: '5h', utilizationPct: 62, elapsedPct: 38 },
         { window: '7d', utilizationPct: 81, elapsedPct: 90 },
       ],
+      condition: null,
     },
   ],
 };
@@ -64,6 +65,7 @@ const UNEQUAL_LABEL_ROW: RunnerRow = {
         { window: '5h', utilizationPct: 62, elapsedPct: 38 },
         { window: '30d', utilizationPct: 81, elapsedPct: 90 },
       ],
+      condition: null,
     },
   ],
 };
@@ -89,11 +91,13 @@ const SUBSCRIPTION_ROW: RunnerRow = {
         { window: '5h', utilizationPct: 62, elapsedPct: 38 },
         { window: '7d', utilizationPct: 81, elapsedPct: 90 },
       ],
+      condition: null,
     },
     {
       slug: 'anthropic-secondary',
       name: 'Anthropic (secondary)',
       paceBars: [{ window: '5h', utilizationPct: 15, elapsedPct: 5 }],
+      condition: null,
     },
   ],
 };
@@ -126,7 +130,22 @@ const EMPTY_SAMPLE_ROW: RunnerRow = {
   locally_paused: false,
   claims: [],
   used: 0,
-  subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [] }],
+  subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [], condition: null }],
+};
+
+const LAPSED_ROW: RunnerRow = {
+  runner_id: 'rn_lapsed',
+  workspace_id: 'ws_a',
+  registered_at: NOW,
+  last_seen_at: NOW,
+  online: true,
+  hub_paused: false,
+  locally_paused: false,
+  claims: [],
+  used: 0,
+  // A miss-only row (blizzard#504 D7): no windows, and a lapsed credential in place of
+  // the generic no-usage-windows report.
+  subscriptionPaces: [{ slug: 'openai', name: 'OpenAI', paceBars: [], condition: 'credential_lapsed' }],
 };
 
 async function render(rows: readonly RunnerRow[] = [ROW]) {
@@ -304,6 +323,24 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
       const report = root.querySelector<HTMLElement>('[data-testid="subscription-pace-group-unsampled"]')!;
       expect(report.textContent?.trim()).toBe('NO USAGE WINDOWS REPORTED');
       expect(report.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('renders a lapsed credential in place of the no-usage-windows report at ~390px (blizzard#504)', async () => {
+    const fixture = await render([LAPSED_ROW]);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      expect(root.querySelector('[data-testid="subscription-pace-group-unsampled"]')).toBeNull();
+      const lapsed = root.querySelector<HTMLElement>('[data-testid="subscription-pace-group-lapsed"]')!;
+      expect(lapsed.textContent?.trim()).toBe('credential lapsed — log in again on this runner');
     } finally {
       root.remove();
     }

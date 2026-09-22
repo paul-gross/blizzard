@@ -7226,15 +7226,33 @@
         "type": "object"
       },
       "SubscriptionUsageView": {
-        "description": "One reported subscription's newest sampled usage, carrying its identity\n(issue #218). ``slug`` is the runner-unique join key, ``name`` the operator-facing\nlabel.",
+        "description": "One reported subscription's newest sampled usage, carrying its identity\n(issue #218). ``slug`` is the runner-unique join key, ``name`` the operator-facing\nlabel. ``sampled_at`` is ``None`` for a miss-only row (blizzard#504 D7) \u2014 ``condition``\ncarries the reason in that case, and ``windows`` is empty.",
         "properties": {
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition"
+          },
           "name": {
             "title": "Name",
             "type": "string"
           },
           "sampled_at": {
-            "title": "Sampled At",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampled At"
           },
           "slug": {
             "title": "Slug",
@@ -7251,7 +7269,6 @@
         "required": [
           "slug",
           "name",
-          "sampled_at",
           "windows"
         ],
         "title": "SubscriptionUsageView",

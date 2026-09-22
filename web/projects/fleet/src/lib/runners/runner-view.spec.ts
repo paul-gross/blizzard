@@ -131,6 +131,7 @@ describe('RunnerPanelView', () => {
               { window: '5h', utilizationPct: 40, elapsedPct: 20 },
               { window: '7d', utilizationPct: 70, elapsedPct: 55 },
             ],
+            condition: null,
           },
         ],
       }),
@@ -165,7 +166,7 @@ describe('RunnerPanelView', () => {
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_empty_sample', {
-        subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [] }],
+        subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [], condition: null }],
       }),
     ]);
     await fixture.whenStable();
@@ -182,8 +183,8 @@ describe('RunnerPanelView', () => {
     fixture.componentRef.setInput('rows', [
       row('rn_multi', {
         subscriptionPaces: [
-          { slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }] },
-          { slug: 'anthropic-secondary', name: 'Anthropic (secondary)', paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }] },
+          { slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }], condition: null },
+          { slug: 'anthropic-secondary', name: 'Anthropic (secondary)', paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }], condition: null },
         ],
       }),
     ]);

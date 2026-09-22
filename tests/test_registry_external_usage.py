@@ -13,12 +13,14 @@ import pytest
 
 from blizzard.hub.api.runners import runner_view
 from blizzard.hub.domain.registry import (
+    CREDENTIAL_LAPSED_CONDITION,
     EXTERNAL_USAGE_STALE_AFTER,
     ExternalSubscriptionUsageWindow,
     PerSubscriptionUsageView,
     RunnerCapability,
     RunnerLiveness,
     RunnerRegistration,
+    SubscriptionUsageMissRecord,
     SubscriptionUsageRecord,
 )
 from tests.support import assert_utc_iso
@@ -99,7 +101,17 @@ def _record(slug: str, sampled_at: datetime, *, name: str | None = None) -> Subs
     return SubscriptionUsageRecord(slug=slug, name=name or slug.title(), sampled_at=sampled_at, windows=(_WINDOW,))
 
 
-def _registration(*, records: tuple[SubscriptionUsageRecord, ...]) -> RunnerRegistration:
+def _miss(
+    slug: str, missed_at: datetime, *, name: str | None = None, reason: str = CREDENTIAL_LAPSED_CONDITION
+) -> SubscriptionUsageMissRecord:
+    return SubscriptionUsageMissRecord(slug=slug, name=name or slug.title(), missed_at=missed_at, reason=reason)
+
+
+def _registration(
+    *,
+    records: tuple[SubscriptionUsageRecord, ...] = (),
+    misses: tuple[SubscriptionUsageMissRecord, ...] = (),
+) -> RunnerRegistration:
     return RunnerRegistration(
         runner_id="runner-a",
         workspace_id="ws-a",
@@ -107,7 +119,102 @@ def _registration(*, records: tuple[SubscriptionUsageRecord, ...]) -> RunnerRegi
         last_seen_at=_NOW,
         hub_paused=False,
         subscription_usage=records,
+        subscription_usage_misses=misses,
     )
+
+
+# blizzard#504 D7 — the `condition` derivation.
+# --------------------------------------------------------------------------- #
+
+
+def test_a_miss_with_no_sample_renders_a_miss_only_lapsed_row() -> None:
+    views = PerSubscriptionUsageView.every(
+        _registration(misses=(_miss("openai", _NOW - timedelta(minutes=1)),)), now=_NOW
+    )
+    assert len(views) == 1
+    assert views[0].slug == "openai"
+    assert views[0].name == "Openai"
+    assert views[0].sampled_at is None
+    assert views[0].windows == ()
+    assert views[0].condition == CREDENTIAL_LAPSED_CONDITION
+
+
+def test_a_miss_newer_than_the_sample_supersedes_it_as_a_lapsed_row() -> None:
+    sample = _record("openai", _NOW - timedelta(minutes=10))
+    miss = _miss("openai", _NOW - timedelta(minutes=1))
+    views = PerSubscriptionUsageView.every(_registration(records=(sample,), misses=(miss,)), now=_NOW)
+
+    assert len(views) == 1
+    assert views[0].sampled_at is None
+    assert views[0].windows == ()
+    assert views[0].condition == CREDENTIAL_LAPSED_CONDITION
+
+
+def test_a_sample_newer_than_the_miss_clears_the_condition() -> None:
+    """A fresh successful sample after a miss reads as healthy again — no `condition`."""
+    miss = _miss("openai", _NOW - timedelta(minutes=10))
+    sample = _record("openai", _NOW - timedelta(minutes=1))
+    views = PerSubscriptionUsageView.every(_registration(records=(sample,), misses=(miss,)), now=_NOW)
+
+    assert len(views) == 1
+    assert views[0].condition is None
+    assert views[0].sampled_at == sample.sampled_at
+    assert views[0].windows == (_WINDOW,)
+
+
+def test_a_non_lapsed_miss_reason_is_silent_even_when_newer_than_the_sample() -> None:
+    """Only `credential_lapsed` ever surfaces as a `condition` — every other reason is
+    silent, and the sample (if any and non-stale) renders unaffected."""
+    sample = _record("openai", _NOW - timedelta(minutes=10))
+    miss = _miss("openai", _NOW - timedelta(minutes=1), reason="endpoint_unreachable")
+    views = PerSubscriptionUsageView.every(_registration(records=(sample,), misses=(miss,)), now=_NOW)
+
+    assert len(views) == 1
+    assert views[0].condition is None
+    assert views[0].sampled_at == sample.sampled_at
+
+
+def test_a_non_lapsed_miss_reason_with_no_sample_renders_nothing() -> None:
+    miss = _miss("openai", _NOW - timedelta(minutes=1), reason="endpoint_unreachable")
+    assert PerSubscriptionUsageView.every(_registration(misses=(miss,)), now=_NOW) == ()
+
+
+def test_a_stale_miss_never_surfaces_the_condition() -> None:
+    """A live lapsed slug re-reports every cadence; a decommissioned one ages out just
+    like a dead sample does (D7)."""
+    miss = _miss("openai", _NOW - EXTERNAL_USAGE_STALE_AFTER - timedelta(minutes=1))
+    assert PerSubscriptionUsageView.every(_registration(misses=(miss,)), now=_NOW) == ()
+
+
+def test_a_stale_sample_with_a_stale_or_absent_lapsed_miss_drops_out_as_today() -> None:
+    """A stale sample whose newest miss is not a non-stale `credential_lapsed` drops out
+    exactly as it did before misses existed."""
+    stale_sample = _record("openai", _NOW - EXTERNAL_USAGE_STALE_AFTER - timedelta(minutes=1))
+    stale_miss = _miss("openai", _NOW - EXTERNAL_USAGE_STALE_AFTER - timedelta(minutes=1))
+    views = PerSubscriptionUsageView.every(_registration(records=(stale_sample,), misses=(stale_miss,)), now=_NOW)
+    assert views == ()
+
+
+def test_a_lapsed_sibling_does_not_blank_a_healthy_ones_view() -> None:
+    healthy = _record("anthropic", _NOW - timedelta(minutes=1))
+    lapsed_miss = _miss("openai", _NOW - timedelta(minutes=1))
+    views = PerSubscriptionUsageView.every(_registration(records=(healthy,), misses=(lapsed_miss,)), now=_NOW)
+
+    assert {v.slug for v in views} == {"anthropic", "openai"}
+    lapsed = next(v for v in views if v.slug == "openai")
+    healthy_view = next(v for v in views if v.slug == "anthropic")
+    assert lapsed.condition == CREDENTIAL_LAPSED_CONDITION
+    assert healthy_view.condition is None
+
+
+def test_the_rendered_view_carries_the_lapsed_condition_through_runner_view() -> None:
+    registration = _registration(misses=(_miss("openai", _NOW - timedelta(minutes=1)),))
+    view = runner_view(RunnerLiveness(registration=registration, online=True), now=_NOW)
+
+    assert len(view.subscriptions) == 1
+    assert view.subscriptions[0].condition == CREDENTIAL_LAPSED_CONDITION
+    assert view.subscriptions[0].sampled_at is None
+    assert view.subscriptions[0].windows == []
 
 
 def test_the_rendered_view_carries_an_explicit_utc_offset_on_every_instant() -> None:

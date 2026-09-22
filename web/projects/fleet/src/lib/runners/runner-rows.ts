@@ -34,6 +34,9 @@ export interface SubscriptionPace {
   readonly slug: string;
   readonly name: string;
   readonly paceBars: readonly PaceBar[];
+  /** `'credential_lapsed'` when the newest reported miss outranks the newest sample
+   * (blizzard#504 D7); `null` otherwise. */
+  readonly condition: string | null;
 }
 
 /** A registry row: the runner plus its claims and subscription pace groups, pre-folded
@@ -164,6 +167,7 @@ export function injectRunnerRows(): {
           slug: s.slug,
           name: s.name,
           paceBars: toPaceBars(nowMs, s.windows),
+          condition: s.condition ?? null,
         })),
       );
     }

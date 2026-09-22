@@ -133,7 +133,7 @@ describe('FleetView (mobile Fleet screen)', () => {
           {
             slug: 'anthropic-default',
             name: 'Anthropic (default)',
-            paceBars: [
+            condition: null, paceBars: [
               { window: '5h', utilizationPct: 40, elapsedPct: 20 },
               { window: '7d', utilizationPct: 70, elapsedPct: 55 },
             ],
@@ -155,8 +155,8 @@ describe('FleetView (mobile Fleet screen)', () => {
     fixture.componentRef.setInput('rows', [
       row('rn_multi', {
         subscriptionPaces: [
-          { slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }] },
-          { slug: 'anthropic-secondary', name: 'Anthropic (secondary)', paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }] },
+          { slug: 'anthropic-default', name: 'Anthropic (default)', condition: null, paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }] },
+          { slug: 'anthropic-secondary', name: 'Anthropic (secondary)', condition: null, paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }] },
         ],
       }),
     ]);
@@ -193,7 +193,7 @@ describe('FleetView (mobile Fleet screen)', () => {
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_unsampled', {
-        subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [] }],
+        subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', condition: null, paceBars: [] }],
       }),
     ]);
     await fixture.whenStable();

@@ -365,7 +365,36 @@ def test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string
         assert invalid["response"]["rejected"] == [2]
 
         assert hub.get("/api/runners/runner-subscriptions").json()["subscriptions"] == [
-            {"slug": "openai", "name": "OpenAI", "sampled_at": sampled_at, "windows": []}
+            {"slug": "openai", "name": "OpenAI", "sampled_at": sampled_at, "windows": [], "condition": None}
+        ]
+
+
+def test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_wire(tmp_path: Path) -> None:
+    """blizzard#504 D7 end to end: the mock runner drives a miss over the real wire, and
+    the real hub renders it as a miss-only, ``credential_lapsed`` row — no prior sample."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    missed_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+    with (
+        _forge(bin_dir, origins, forge_port),
+        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-lapsed") as runner,
+    ):
+        assert runner.post("/_drive/register").json()["status"] == 201
+        driven = runner.post(
+            "/_drive/report-external-usage-miss",
+            json={"slug": "openai", "name": "OpenAI", "missed_at": missed_at, "reason": "credential_lapsed"},
+        ).json()
+        assert driven["response"]["applied"] == [1]
+
+        # `raw_slug` is the mock's malformed-slug lever, mirroring the sampled test above.
+        invalid = runner.post(
+            "/_drive/report-external-usage-miss",
+            json={"raw_slug": 123, "missed_at": missed_at, "reason": "credential_lapsed"},
+        ).json()
+        assert invalid["response"]["rejected"] == [2]
+
+        assert hub.get("/api/runners/runner-lapsed").json()["subscriptions"] == [
+            {"slug": "openai", "name": "OpenAI", "sampled_at": None, "windows": [], "condition": "credential_lapsed"}
         ]
 
 

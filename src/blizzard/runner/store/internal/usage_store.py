@@ -327,7 +327,9 @@ class UsageStore:
                     slug=slug, sampled_at=sampled_at, payload=payload, miss_reason=miss_reason, renewal=renewal
                 )
             )
-            if payload is not None:
+            # A report buffers whenever the attempt carries one (`report_kind` non-empty), not
+            # only with a sample `payload`: a miss buffers its `missed` report with a NULL payload.
+            if report_kind:
                 result = conn.execute(
                     outbound_buffer.insert().values(
                         kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=sampled_at

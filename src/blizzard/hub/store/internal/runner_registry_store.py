@@ -19,6 +19,7 @@ from blizzard.hub.domain.registry import (
     IWriteRunnerRegistry,
     RunnerCapability,
     RunnerRegistration,
+    SubscriptionUsageMissRecord,
     SubscriptionUsageRecord,
 )
 from blizzard.hub.domain.work import ActivityRow
@@ -47,6 +48,7 @@ class RunnerRegistryStore:
                 self._paused(conn, runner_id),
                 self._local_pause_detail(conn, runner_id),
                 self._external_usage(conn, runner_id),
+                self._external_usage_misses(conn, runner_id),
             )
 
     def list_runners(self) -> list[RunnerRegistration]:
@@ -58,6 +60,7 @@ class RunnerRegistryStore:
                     self._paused(conn, row.runner_id),
                     self._local_pause_detail(conn, row.runner_id),
                     self._external_usage(conn, row.runner_id),
+                    self._external_usage_misses(conn, row.runner_id),
                 )
                 for row in rows
             ]
@@ -74,6 +77,7 @@ class RunnerRegistryStore:
                 self._paused(conn, row.runner_id),
                 self._local_pause_detail(conn, row.runner_id),
                 self._external_usage(conn, row.runner_id),
+                self._external_usage_misses(conn, row.runner_id),
             )
 
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
@@ -241,6 +245,39 @@ class RunnerRegistryStore:
                 .values(name=name, sampled_at=sampled_at, windows=windows_json, updated_at=at)
             )
 
+    def record_external_usage_miss(
+        self, runner_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+    ) -> None:
+        # Sibling to `record_external_usage`: same no-FK, no-known-runner-required upsert on
+        # (runner_id, slug) — its own table, never overwriting the sample row it joins at read.
+        with self._store.write("record_external_usage_miss") as conn:
+            existing = conn.execute(
+                select(s.runner_external_usage_misses.c.runner_id).where(
+                    s.runner_external_usage_misses.c.runner_id == runner_id,
+                    s.runner_external_usage_misses.c.slug == slug,
+                )
+            ).one_or_none()
+            if existing is None:
+                conn.execute(
+                    insert(s.runner_external_usage_misses).values(
+                        runner_id=runner_id,
+                        slug=slug,
+                        name=name,
+                        missed_at=missed_at,
+                        reason=reason,
+                        updated_at=at,
+                    )
+                )
+                return
+            conn.execute(
+                s.runner_external_usage_misses.update()
+                .where(
+                    s.runner_external_usage_misses.c.runner_id == runner_id,
+                    s.runner_external_usage_misses.c.slug == slug,
+                )
+                .values(name=name, missed_at=missed_at, reason=reason, updated_at=at)
+            )
+
     def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
         # `at` is not persisted: no rotation-audit column exists yet — accepted only for
         # signature symmetry with this seam's other writes.
@@ -304,11 +341,29 @@ class RunnerRegistryStore:
         return [(row.slug, row.name, row.sampled_at, row.windows) for row in rows]
 
     @staticmethod
+    def _external_usage_misses(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:  # type: ignore[no-untyped-def]
+        """Every reported subscription's newest miss for this runner, raw (blizzard#504
+        D7), one row per slug — ``(slug, name, missed_at, reason)`` tuples. Empty for a
+        runner that has never reported one."""
+        rows = conn.execute(
+            select(
+                s.runner_external_usage_misses.c.slug,
+                s.runner_external_usage_misses.c.name,
+                s.runner_external_usage_misses.c.missed_at,
+                s.runner_external_usage_misses.c.reason,
+            )
+            .where(s.runner_external_usage_misses.c.runner_id == runner_id)
+            .order_by(s.runner_external_usage_misses.c.slug)
+        ).all()
+        return [(row.slug, row.name, row.missed_at, row.reason) for row in rows]
+
+    @staticmethod
     def _registration(
         row,  # type: ignore[no-untyped-def]
         hub_paused: bool,
         local_pause_detail: tuple[bool, str | None, str | None],
         external_usage: list[tuple[str, str, datetime, str]],
+        external_usage_misses: list[tuple[str, str, datetime, str]],
     ) -> RunnerRegistration:
         locally_paused, locally_paused_by, locally_paused_reason = local_pause_detail
         subscription_usage = tuple(
@@ -319,6 +374,10 @@ class RunnerRegistryStore:
                 windows=RunnerRegistryStore._usage_windows(windows_json),
             )
             for slug, name, sampled_at, windows_json in external_usage
+        )
+        subscription_usage_misses = tuple(
+            SubscriptionUsageMissRecord(slug=slug, name=name, missed_at=missed_at, reason=reason)
+            for slug, name, missed_at, reason in external_usage_misses
         )
         capabilities = tuple(
             RunnerCapability(
@@ -344,6 +403,7 @@ class RunnerRegistryStore:
             public_url=row.public_url,
             redirect_uris=tuple(json.loads(row.redirect_uris)) if row.redirect_uris else (),
             subscription_usage=subscription_usage,
+            subscription_usage_misses=subscription_usage_misses,
             capabilities=capabilities,
         )
 

@@ -74,12 +74,15 @@ class ExternalSubscriptionUsageWindowView(BaseModel):
 class SubscriptionUsageView(BaseModel):
     """One reported subscription's newest sampled usage, carrying its identity
     (issue #218). ``slug`` is the runner-unique join key, ``name`` the operator-facing
-    label."""
+    label. ``sampled_at`` is ``None`` for a miss-only row (blizzard#504 D7) — ``condition``
+    carries the reason in that case, and ``windows`` is empty."""
 
     slug: str
     name: str
-    sampled_at: str
+    sampled_at: str | None = None
     windows: list[ExternalSubscriptionUsageWindowView]
+    #: ``"credential_lapsed"`` when the newest reported miss outranks the newest sample (D7); ``None`` otherwise.
+    condition: str | None = None
 
 
 class RunnerView(BaseModel):

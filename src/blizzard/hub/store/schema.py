@@ -1164,6 +1164,21 @@ runner_external_usage = Table(
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
+# The runner's newest external-usage *miss* per slug (blizzard#504 D7) — sibling to `runner_external_usage`, no FK.
+runner_external_usage_misses = Table(
+    "runner_external_usage_misses",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("slug", String, primary_key=True),
+    # The declaration's operator-facing label, reported alongside `slug`.
+    Column("name", String, nullable=False),
+    Column("missed_at", UtcDateTime, nullable=False),
+    # The sampler's own closed-set miss reason (e.g. `credential_lapsed`) — never a
+    # token, a refresh token, or a path.
+    Column("reason", String, nullable=False),
+    Column("updated_at", UtcDateTime, nullable=False),
+)
+
 # --- The identity spine: users, provider identities, sessions (issue #91) -----
 # ``role`` is a coarse tag expanded through a static map, never a stored permission list.
 

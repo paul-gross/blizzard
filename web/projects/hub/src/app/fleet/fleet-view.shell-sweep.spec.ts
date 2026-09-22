@@ -41,7 +41,7 @@ const ROWS: readonly RunnerRow[] = [
       {
         slug: 'anthropic-default',
         name: 'Anthropic (default) — a genuinely long subscription display name',
-        paceBars: [
+        condition: null, paceBars: [
           { window: '5h', utilizationPct: 40, elapsedPct: 20 },
           { window: '7d', utilizationPct: 70, elapsedPct: 55 },
         ],
@@ -59,7 +59,7 @@ const ROWS: readonly RunnerRow[] = [
     locally_paused_reason: 'spend ceiling $5.00 reached over the trailing 24h (spend $7.00)',
     used: 0,
     claims: [],
-    subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [] }],
+    subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', condition: null, paceBars: [] }],
   },
 ];
 
