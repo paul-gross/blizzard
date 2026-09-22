@@ -1,12 +1,8 @@
 """The runner-local external-subscription-usage diagnostics — ``GET /api/subscriptions``
-(blizzard#504).
-
-Every declared subscription's own newest sampling attempt: whether it sampled
-successfully, and when not, the closed-set reason distinguishing a lapsed credential from
-an unreachable endpoint or an unparseable response — so an operator reading this route or
-the panel it feeds can tell "log in again" apart from "the provider is having a bad day".
-Reads the store directly (``bzh:controller-read-only``), triggering no fresh sample of its
-own."""
+(blizzard#504): every declared subscription's newest sampling attempt, and on a miss the
+closed-set reason telling a lapsed credential ("log in again") from an unreachable endpoint
+or an unparseable response. Reads the store directly (``bzh:controller-read-only``),
+triggering no fresh sample of its own."""
 
 from __future__ import annotations
 

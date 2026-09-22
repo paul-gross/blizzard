@@ -106,9 +106,9 @@ class AnthropicSubscriptionSampler:
     def _read_access_token(self) -> str | SampleMiss:
         """The OAuth bearer token from the credential file, or the reason it could not be read.
 
-        Read-only, always: the harness owns the refresh flow and the file is shared by
-        every worker this runner spawns, so a second writer risks corrupting it mid-refresh.
-        An expired token is ``CREDENTIAL_LAPSED``, never a refresh trigger."""
+        Read-only, always: renewal is the renewer seam's job (Anthropic binds none — its own
+        workers refresh this file), and a second writer risks corrupting the shared file
+        mid-refresh. An expired token is ``CREDENTIAL_LAPSED``, never a refresh trigger."""
         try:
             raw = Path(self._credentials_path).read_text()
         except OSError as exc:

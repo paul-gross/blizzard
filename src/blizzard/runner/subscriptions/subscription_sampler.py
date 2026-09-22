@@ -55,13 +55,10 @@ class ExternalSubscriptionUsageSnapshot:
 
 
 class SampleMissReason(StrEnum):
-    """The closed set of reasons one sampling attempt produced nothing (blizzard#504).
-
-    ``CREDENTIAL_LAPSED`` is a token already past its own expiry before any request, or
-    a 401 from the provider; ``CREDENTIAL_UNREADABLE`` is a missing, malformed, or
-    incomplete credential file; ``ENDPOINT_UNREACHABLE`` is any other non-2xx response
-    or a request-level failure (timeout, connection error); ``RESPONSE_UNPARSEABLE`` is
-    a 2xx response whose body cannot be read as the windows it should carry."""
+    """The closed set of reasons one sampling attempt produced nothing (blizzard#504):
+    ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
+    missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
+    non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows."""
 
     CREDENTIAL_LAPSED = "credential_lapsed"
     CREDENTIAL_UNREADABLE = "credential_unreadable"
