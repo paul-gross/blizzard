@@ -1,0 +1,53 @@
+id: bzh:subscriptions-no-write
+valid:
+  # Read-only access — the shape every sampler and renewer binding actually uses.
+  - |
+    class OpenAISubscriptionSampler:
+        def _read_credential(self):
+            raw = Path(self._credentials_path).read_text()
+            data = json.loads(raw)
+            return data
+  - |
+    class OpenAICredentialRenewer:
+        def _read_access_token_expiry(self):
+            raw = Path(self._credentials_path).read_text()
+            return raw
+  - |
+    class LegacySampler:
+        def sample(self):
+            with open(self._path) as f:
+                return f.read()
+  - |
+    class LegacySampler:
+        def sample(self):
+            with open(self._path, "r") as f:
+                return f.read()
+  - |
+    class LegacySampler:
+        def sample(self):
+            with self._path.open("r") as f:
+                return f.read()
+invalid:
+  - |
+    class BadRenewer:
+        def _rotate(self):
+            self._credentials_path.write_text(json.dumps(data))
+  - |
+    class BadRenewer:
+        def _rotate(self):
+            self._credentials_path.write_bytes(raw)
+  - |
+    class BadRenewer:
+        def _rotate(self):
+            with open(self._credentials_path, "w") as f:
+                f.write(json.dumps(data))
+  - |
+    class BadRenewer:
+        def _rotate(self):
+            with open(self._credentials_path, "w", encoding="utf-8") as f:
+                f.write(json.dumps(data))
+  - |
+    class BadRenewer:
+        def _rotate(self):
+            with self._credentials_path.open("w") as f:
+                f.write(json.dumps(data))

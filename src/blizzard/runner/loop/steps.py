@@ -44,6 +44,7 @@ from blizzard.runner.loop.overload import (
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.usage_limit import classify_worker_usage_limit, engage_and_park_worker
 from blizzard.runner.stores import RunnerStores
+from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, SampleMiss
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import (
@@ -721,6 +722,18 @@ class ContextSample(Step):
         return SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
 
 
+def _renewal_outcome_value(outcome: RenewalOutcome) -> str | None:
+    """The attempt row's ``renewal`` string for one :class:`RenewalOutcome`: ``None``
+    for :attr:`RenewalOutcomeKind.NOT_DUE` (nothing renewal-worthy happened this
+    attempt), the kind's own value for a success, and ``"failed:<reason>"`` for a
+    failure — the reason travels with it, rather than only "failed"."""
+    if outcome.kind is RenewalOutcomeKind.NOT_DUE:
+        return None
+    if outcome.kind is RenewalOutcomeKind.FAILED and outcome.failure_reason is not None:
+        return f"failed:{outcome.failure_reason.value}"
+    return outcome.kind.value
+
+
 class ExternalUsageSample(Step):
     """Every declared subscription's own rate-limit utilization (issue #218), each on
     its own per-slug cadence — last in the tick."""
@@ -748,6 +761,10 @@ class ExternalUsageSample(Step):
             # Declared, but its provider names no known sampler binding — stays declared
             # and unsampled: no attempt row, since there is no sampler to have failed.
             return
+        # Renewal, if this provider has a binding, happens before the sample — on this
+        # same cadence gate, never its own (D5). A failed or not-due renewal never stops
+        # the sample that follows it.
+        renewal = self._renewal_value(resolved)
         # A miss is the sampler's own best-effort result — still an attempt worth
         # recording, so this slug's cadence advances and its last-good windows stay
         # untouched, with the reason carried for the runner-local diagnostics to show.
@@ -760,6 +777,7 @@ class ExternalUsageSample(Step):
                 report_kind="",
                 report_payload="",
                 miss_reason=result.reason.value,
+                renewal=renewal,
             )
             return
         snapshot = result
@@ -770,6 +788,7 @@ class ExternalUsageSample(Step):
             payload=payload,
             report_kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
             report_payload=payload,
+            renewal=renewal,
         )
         if seq is not None and ctx.events is not None:
             ctx.events.publish_fact_changed(
@@ -778,6 +797,21 @@ class ExternalUsageSample(Step):
                 chunk_id=None,
                 lease_id=None,
             )
+
+    @staticmethod
+    def _renewal_value(resolved: ResolvedSubscription) -> str | None:
+        """Asks this slug's renewer, if it has one, and reduces its outcome to the single
+        string the attempt row's ``renewal`` column carries — ``None`` for both "no
+        renewer" and "not due", since neither is a renewal outcome worth showing (D6);
+        never raises, so a broken renewer never stops the sample that follows it."""
+        if resolved.renewer is None:
+            return None
+        try:
+            outcome = resolved.renewer.renew_if_due()
+        except Exception as exc:  # second line of defense — the renewer contract already promises this
+            _log.warning("credential renewal failed unexpectedly", slug=resolved.slug, detail=str(exc))
+            return None
+        return _renewal_outcome_value(outcome)
 
     @staticmethod
     def _payload(resolved: ResolvedSubscription, snapshot: ExternalSubscriptionUsageSnapshot) -> dict[str, object]:

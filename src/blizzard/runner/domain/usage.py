@@ -142,6 +142,7 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         report_kind: str,
         report_payload: str,
         miss_reason: str | None = None,
+        renewal: str | None = None,
     ) -> int | None:
         """Append one declared subscription's sampling attempt **and**, only when it
         produced a sample, buffer its outbound report — atomically (issue #218), returning
@@ -149,7 +150,9 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         filters on, so one subscription's attempt never advances another's cadence.
         ``miss_reason`` (blizzard#504) is one of
         :class:`~blizzard.runner.subscriptions.subscription_sampler.SampleMissReason`'s
-        values on a miss, ``None`` on a successful sample."""
+        values on a miss, ``None`` on a successful sample. ``renewal`` (blizzard#504) is
+        this same attempt's own renewal outcome — ``None`` when this slug has no renewer,
+        or its renewal was not due this attempt."""
         ...
 
     def prune_external_usage_samples(self, *, now: datetime) -> int:

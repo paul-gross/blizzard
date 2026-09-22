@@ -1,0 +1,50 @@
+id: bzh:subscriptions-no-write
+snapshots:
+  ? |
+    class BadRenewer:
+        def _rotate(self):
+            self._credentials_path.write_bytes(raw)
+  : labels:
+    - source: self._credentials_path.write_bytes(raw)
+      style: primary
+      start: 49
+      end: 88
+  ? |
+    class BadRenewer:
+        def _rotate(self):
+            self._credentials_path.write_text(json.dumps(data))
+  : labels:
+    - source: self._credentials_path.write_text(json.dumps(data))
+      style: primary
+      start: 49
+      end: 100
+  ? |
+    class BadRenewer:
+        def _rotate(self):
+            with open(self._credentials_path, "w") as f:
+                f.write(json.dumps(data))
+  : labels:
+    - source: open(self._credentials_path, "w")
+      style: primary
+      start: 54
+      end: 87
+  ? |
+    class BadRenewer:
+        def _rotate(self):
+            with open(self._credentials_path, "w", encoding="utf-8") as f:
+                f.write(json.dumps(data))
+  : labels:
+    - source: open(self._credentials_path, "w", encoding="utf-8")
+      style: primary
+      start: 54
+      end: 105
+  ? |
+    class BadRenewer:
+        def _rotate(self):
+            with self._credentials_path.open("w") as f:
+                f.write(json.dumps(data))
+  : labels:
+    - source: self._credentials_path.open("w")
+      style: primary
+      start: 54
+      end: 86

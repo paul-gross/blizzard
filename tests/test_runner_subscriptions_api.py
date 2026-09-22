@@ -47,6 +47,7 @@ def test_a_never_attempted_slug_reports_every_field_none(tmp_path: Path) -> None
                 "sampled_at": None,
                 "ok": None,
                 "miss_reason": None,
+                "renewal": None,
             }
         ]
     }
@@ -72,6 +73,7 @@ def test_a_successful_attempt_reports_ok_true_and_no_miss_reason(tmp_path: Path)
     assert item["sampled_at"] == "2026-09-22T12:00:00+00:00"
     assert item["ok"] is True
     assert item["miss_reason"] is None
+    assert item["renewal"] is None
 
 
 def test_a_miss_reports_ok_false_and_its_reason(tmp_path: Path) -> None:
@@ -94,6 +96,26 @@ def test_a_miss_reports_ok_false_and_its_reason(tmp_path: Path) -> None:
     item = resp.json()["items"][0]
     assert item["ok"] is False
     assert item["miss_reason"] == "credential_lapsed"
+
+
+def test_a_recorded_renewal_outcome_reports_alongside_the_attempt(tmp_path: Path) -> None:
+    client, store = _client(
+        tmp_path,
+        subscriptions=(SubscriptionDeclaration(slug="codex", name="Codex", provider=PROVIDER_OPENAI),),
+    )
+    store.record_external_usage_attempt(
+        slug="codex",
+        sampled_at=_NOW,
+        payload="{}",
+        report_kind="external_subscription_usage.sampled",
+        report_payload="{}",
+        renewal="renewed",
+    )
+
+    resp = client.get("/api/subscriptions")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["items"][0]["renewal"] == "renewed"
 
 
 def test_several_declared_subscriptions_each_report_their_own_slugs_newest_attempt(tmp_path: Path) -> None:

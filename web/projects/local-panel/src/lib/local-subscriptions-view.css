@@ -34,3 +34,8 @@
   font-size: var(--fs-label);
   margin-top: 3px;
 }
+.renewal {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  margin-top: 1px;
+}

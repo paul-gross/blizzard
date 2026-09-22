@@ -3,13 +3,16 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 /** One resolved row for {@link LocalSubscriptionsView} — every value is already resolved
  * for display (including {@link sampledAgo}'s clock-driven text), so the view itself
  * injects nothing. `ok` drives the row's tone (`null` = never sampled, `false` = miss),
- * carried alongside the already-composed {@link conditionLabel} rather than re-derived from it. */
+ * carried alongside the already-composed {@link conditionLabel} rather than re-derived from it.
+ * `renewalLabel` is `null` whenever this attempt carries no renewal outcome — no renewer
+ * for this slug's provider (e.g. Anthropic), or its renewal was not due (blizzard#504 Phase 2). */
 export interface SubscriptionRow {
   readonly slug: string;
   readonly name: string;
   readonly provider: string;
   readonly conditionLabel: string;
   readonly sampledAgo: string;
+  readonly renewalLabel: string | null;
   readonly ok: boolean | null;
 }
 

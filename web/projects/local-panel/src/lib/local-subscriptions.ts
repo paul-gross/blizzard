@@ -12,8 +12,9 @@ import { injectRunnerDashboardQuery } from './status.query';
  * `subscriptions` section, the resolved async-state triad, and the ticking clock
  * {@link SubscriptionRow.sampledAgo} is derived from; the presentational
  * {@link LocalSubscriptionsView} owns the row template (`bzh:frontend-container-presentational`).
- * Read-only, like every other rail on this panel — renewal (blizzard#504 Phase 2) is
- * driven by the runner's own loop, never by an operator action here.
+ * Read-only, like every other rail on this panel — renewal (blizzard#504) is driven by
+ * the runner's own loop, never by an operator action here; this rail only shows its
+ * newest recorded outcome.
  */
 @Component({
   selector: 'local-subscriptions',
@@ -55,6 +56,7 @@ export class LocalSubscriptions {
       provider: sub.provider,
       conditionLabel: this.conditionLabel(sub.ok ?? null, sub.miss_reason ?? null),
       sampledAgo: this.sampledAgo(sub.sampled_at ?? null),
+      renewalLabel: sub.renewal ?? null,
       ok: sub.ok ?? null,
     })),
   );

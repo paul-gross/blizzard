@@ -234,6 +234,30 @@ def test_status_renders_a_miss_reason_for_a_lapsed_subscription(
 
 
 @pytest.mark.component
+def test_status_renders_a_renewal_outcome_alongside_a_successful_sample(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    store = _store(root)
+    store.record_external_usage_attempt(
+        slug="anthropic",
+        sampled_at=_NOW,
+        payload="{}",
+        report_kind="external_subscription_usage.sampled",
+        report_payload="{}",
+        renewal="renewed",
+    )
+
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "anthropic (anthropic): ok, sampled at" in result.output
+    assert "renewal: renewed" in result.output
+
+
+@pytest.mark.component
 def test_status_omits_an_unheld_pool_slot_from_held_environments(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

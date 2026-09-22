@@ -88,6 +88,7 @@ from blizzard.runner.stores import (
     RunnerReadStores,
     RunnerStores,
 )
+from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer, RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ISubscriptionSampler,
@@ -1058,6 +1059,24 @@ class FakeSubscriptionSampler:
 
 
 def _conforms_fake_subscription_sampler(x: FakeSubscriptionSampler) -> ISubscriptionSampler:
+    return x
+
+
+class FakeCredentialRenewer:
+    """A scriptable :class:`ICredentialRenewer` (blizzard#504): a canned outcome reply.
+    ``renew_calls`` counts every call, so a test can prove it was invoked before the
+    sampler, and in what order relative to the cadence gate."""
+
+    def __init__(self, *, outcome: RenewalOutcome | None = None) -> None:
+        self.outcome = outcome if outcome is not None else RenewalOutcome(RenewalOutcomeKind.NOT_DUE)
+        self.renew_calls = 0
+
+    def renew_if_due(self) -> RenewalOutcome:
+        self.renew_calls += 1
+        return self.outcome
+
+
+def _conforms_fake_credential_renewer(x: FakeCredentialRenewer) -> ICredentialRenewer:
     return x
 
 
