@@ -2791,7 +2791,10 @@ def _pr_ci_graph_two_repo_yaml(landed_file: str) -> str:
                     "choices": {
                         "landed": {"description": "Every repo's PR merged cleanly.", "to": "done"},
                         "conflict": {"description": "A repo's PR read dirty; back to build.", "to": "build"},
-                        "failure": {"description": "A repo's check run failed, or the land script crashed; back to build.", "to": "build"},
+                        "failure": {
+                            "description": "A repo's check run failed, or the land script crashed; back to build.",
+                            "to": "build",
+                        },
                         "inherited-failure": {
                             "description": "Every remaining check failure is inherited from the base; back to build.",
                             "to": "build",
@@ -2806,8 +2809,8 @@ def _pr_ci_graph_two_repo_yaml(landed_file: str) -> str:
 
 def test_kill9_between_pr_ci_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path) -> None:
     """A ``kill -9`` between two repos' merges in the real ``land_pr_ci`` re-runs only the
-    unmarked repo, recognizing its already-merged PR rather than opening a duplicate, and
-    landing each exactly once with no leaked ``hub:one-live-exec-slot``."""
+    unmarked repo — the marked one is skipped by its durable marker, never re-looked-up —
+    and lands each exactly once with no leaked ``hub:one-live-exec-slot``."""
     landed_file = "LANDED-mid-script-pr-ci-sweep.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -2867,8 +2870,8 @@ def test_kill9_between_pr_ci_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Pa
             runner_dir, hub_dir, when="immediately after mid-script kill -9 (land_pr_ci)", after_recovery=False
         )
 
-        # Restart the hub UNARMED: land_pr_ci re-runs, recognizes the marked repo's
-        # already-merged PR instead of opening a duplicate, and merges only the other one.
+        # Restart the hub UNARMED: land_pr_ci re-runs, skips the marked repo (marker
+        # already durable) rather than looking its PR up again, and merges only the other.
         hub_proc = start_hub(
             hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, new_session=True
         )

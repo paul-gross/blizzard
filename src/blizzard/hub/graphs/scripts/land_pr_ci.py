@@ -17,6 +17,7 @@ from blizzard.hub.graphs.scripts.land_common import (
     MergeDidNotLand,
     NothingToLand,
     PullRequest,
+    PullRequestLookupError,
     PullRequestOpenError,
 )
 
@@ -322,6 +323,11 @@ def _land() -> int:
                 continue
             except PullRequestOpenError as exc:
                 # A create hiccup is worth another poll, not a bounce.
+                print(str(exc), file=sys.stderr)
+                wait = True
+                continue
+            except PullRequestLookupError as exc:
+                # A degraded read is worth another poll too — never treated as "not merged".
                 print(str(exc), file=sys.stderr)
                 wait = True
                 continue

@@ -15,6 +15,7 @@ from blizzard.hub.graphs.scripts.land_common import (
     MergeDidNotLand,
     NothingToLand,
     PullRequest,
+    PullRequestLookupError,
     PullRequestOpenError,
 )
 
@@ -51,7 +52,7 @@ def _land() -> int:
                 print(f"{exc} — nothing to land", file=sys.stderr)
                 run.markers.record(commit["repo"], commit["commit"])
                 continue
-            except PullRequestOpenError as exc:
+            except (PullRequestOpenError, PullRequestLookupError) as exc:
                 raise _Conflict(str(exc)) from exc
             # An already-merged PR is a prior, interrupted run's — nothing to check, since
             # the push stage below re-derives its outcome as a no-op.

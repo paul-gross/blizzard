@@ -49,6 +49,9 @@ _PR_TITLE_MAX = 256
 _MARKER_WRITE_ATTEMPTS = 3
 _MARKER_RETRY_BACKOFF_SECONDS = 0.05
 
+# Bounds the closed-pull scan a merged-PR lookup does per repo (1000 PRs against one branch).
+_CLOSED_PULLS_PAGE_MAX = 10
+
 
 @dataclass(frozen=True)
 class ScriptEnv:
@@ -275,6 +278,13 @@ class PullRequestOpenError(Exception):
     or merely worth another poll is the script's call."""
 
 
+class PullRequestLookupError(Exception):
+    """Raised when a forge read the merged-PR lookup needs — the branch's live tip, or its
+    closed-pull history — failed outright rather than confirming an answer either way.
+    Never silently degrades to "no merged PR here": that reading reopens the exact
+    duplicate idempotent recovery exists to prevent."""
+
+
 class NothingToLand(Exception):
     """Raised when a repo's branch adds no commit its base branch lacks — a **no-op
     landing**, not a failure: no PR can be opened and no poll changes that, so a script
@@ -307,7 +317,7 @@ class PullRequest:
         rewrites shas, so re-entry can no longer recognize a landed PR via
         :meth:`~LandRun.contains` (``bzh:hub-node-step-idempotence``) — then the open one,
         opening one first when neither exists, then read live. Raises
-        :class:`PullRequestOpenError` when the forge refuses to open."""
+        :class:`PullRequestOpenError` or :class:`PullRequestLookupError` on a forge hiccup."""
         repo = run.repo(commit["repo"])
         branch = commit["branch"]
         merged = cls._merged_for_branch(run, repo, branch)
@@ -335,23 +345,36 @@ class PullRequest:
 
     @staticmethod
     def _merged_for_branch(run: LandRun, repo: str, branch: str) -> dict[str, Any] | None:
-        """The already-merged PR that landed ``branch``'s live tip, or ``None``.
-
-        A stale merged PR from an earlier, unrelated push under the same branch name is
-        never mistaken for this run's own crashed attempt: the candidate's frozen head
-        sha must match the branch's current tip (``bzh:hub-node-step-idempotence``)."""
-        _, listed = run.api("GET", f"/repos/{repo}/pulls?state=closed")
-        candidates = [
-            p for p in (listed or []) if p.get("head", {}).get("ref") == branch and p.get("merged_at") is not None
-        ]
+        """The already-merged PR that landed ``branch``'s live tip into THIS run's own
+        base, or ``None`` when the read confirms there is none — never a same-name PR
+        merged into a different base, and never a degraded read, which raises
+        :class:`PullRequestLookupError` instead of degrading to "no merged PR here"
+        (``bzh:hub-node-step-idempotence``)."""
+        candidates: list[dict[str, Any]] = []
+        for page in range(1, _CLOSED_PULLS_PAGE_MAX + 1):
+            status, listed = run.api(
+                "GET", f"/repos/{repo}/pulls?state=closed&base={run.base_branch}&page={page}&per_page=100"
+            )
+            if status != 200 or not isinstance(listed, list):
+                raise PullRequestLookupError(f"could not read {repo}'s closed pull list (HTTP {status})")
+            candidates.extend(
+                p
+                for p in listed
+                if p.get("head", {}).get("ref") == branch
+                and p.get("base", {}).get("ref") == run.base_branch
+                and p.get("merged_at") is not None
+            )
+            if len(listed) < 100:
+                break
         if not candidates:
             return None
-        merged = max(candidates, key=lambda p: p.get("number", 0))
         status, ref = run.api("GET", f"/repos/{repo}/git/ref/heads/{branch}")
-        live_sha = (ref or {}).get("object", {}).get("sha") if status == 200 and isinstance(ref, dict) else None
-        if live_sha is None or merged.get("head", {}).get("sha") != live_sha:
-            return None
-        return merged
+        if status != 200 or not isinstance(ref, dict):
+            raise PullRequestLookupError(f"could not read {repo}:{branch}'s live tip (HTTP {status})")
+        live_sha = (ref.get("object") or {}).get("sha")
+        if not isinstance(live_sha, str) or not live_sha:
+            raise PullRequestLookupError(f"{repo}:{branch}'s live tip read came back without a sha")
+        return next((p for p in candidates if p.get("head", {}).get("sha") == live_sha), None)
 
     def __str__(self) -> str:
         return f"{self.repo}#{self.number}"

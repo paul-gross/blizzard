@@ -189,9 +189,10 @@ nodes:
     run:
       - name: land-every-repo
         command: python3 -m blizzard.hub.graphs.scripts.land_pr_ci
-    # land_pr_ci reports the reserved `pending` outcome while any PR is `unstable`/
-    # `unknown`/not-yet-clean, so a transient forge state polls in place instead of
-    # bouncing validated work to pre-push.
+    # land_pr_ci reports the reserved `pending` outcome while any PR isn't yet eligible to
+    # merge — `unstable`/`unknown`/not-yet-clean, but ALSO a `clean` head whose checks
+    # haven't all finished green — so a transient forge state or in-flight CI polls in
+    # place instead of bouncing validated work to pre-push.
     poll_interval: 30
     poll_timeout: 1800
     judgement:

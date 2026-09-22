@@ -287,9 +287,11 @@ nodes:
     run:
       - name: land-every-repo
         command: python3 -m blizzard.hub.graphs.scripts.land_pr_ci
-    # land_pr_ci reports the reserved `pending` outcome while any PR is `unstable`/
-    # `unknown`/not-yet-clean, so a transient forge state polls in place (freeing the
-    # fleet-wide hub slot between polls) instead of bouncing validated work to build.
+    # land_pr_ci reports the reserved `pending` outcome while any PR isn't yet eligible to
+    # merge — `unstable`/`unknown`/not-yet-clean, but ALSO a `clean` head whose checks
+    # haven't all finished green — so a transient forge state or in-flight CI polls in
+    # place (freeing the fleet-wide hub slot between polls) instead of bouncing validated
+    # work to build.
     # A repo's PR reading `dirty` — a real merge conflict — routes the authored `conflict`
     # edge immediately, without waiting out poll_timeout, straight to `resolve`, which is
     # written for exactly this case, rather than to `build`.

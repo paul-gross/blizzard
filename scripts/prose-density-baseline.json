@@ -193,10 +193,10 @@
    "total": 123
   },
   "blizzard_mock/forge/domain/service.py": {
-   "comments": 12,
+   "comments": 14,
    "docstrings": 35,
    "over_cap": 0,
-   "total": 454
+   "total": 465
   },
   "blizzard_mock/forge/domain/state.py": {
    "comments": 0,
@@ -218,9 +218,9 @@
   },
   "blizzard_mock/forge/internal/git_backend.py": {
    "comments": 8,
-   "docstrings": 7,
+   "docstrings": 14,
    "over_cap": 0,
-   "total": 204
+   "total": 217
   },
   "blizzard_mock/forge/internal/lever_store.py": {
    "comments": 0,
@@ -2361,22 +2361,22 @@
    "total": 92
   },
   "blizzard/hub/graphs/scripts/land_common.py": {
-   "comments": 10,
-   "docstrings": 71,
+   "comments": 11,
+   "docstrings": 77,
    "over_cap": 4,
-   "total": 405
+   "total": 437
   },
   "blizzard/hub/graphs/scripts/land_default.py": {
    "comments": 6,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 81
+   "total": 82
   },
   "blizzard/hub/graphs/scripts/land_pr_ci.py": {
-   "comments": 77,
+   "comments": 78,
    "docstrings": 42,
    "over_cap": 8,
-   "total": 583
+   "total": 589
   },
   "blizzard/hub/runtime.py": {
    "comments": 0,
@@ -7140,9 +7140,9 @@
   },
   "test_land_scripts.py": {
    "comments": 44,
-   "docstrings": 56,
+   "docstrings": 76,
    "over_cap": 3,
-   "total": 1189
+   "total": 1457
   },
   "test_layering.py": {
    "comments": 14,

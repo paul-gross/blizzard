@@ -51,7 +51,7 @@ def _scripted_forge(
     list consumed one response per call — e.g. ``[503, 200]`` for a retry-then-succeed
     scenario)."""
     responses = {
-        ("GET", f"http://forge/repos/{_REPO}/pulls?state=closed"): (200, []),
+        ("GET", f"http://forge/repos/{_REPO}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
         ("GET", f"http://forge/repos/{_REPO}/pulls?state=open"): (200, []),
         ("POST", f"http://forge/repos/{_REPO}/pulls"): (201, {"number": 1, "head": {"ref": _BRANCH}}),
         ("GET", f"http://forge/repos/{_REPO}/pulls/1"): (
@@ -195,7 +195,7 @@ def _forge_with_state(
         "html_url": f"http://forge/{_REPO}/pull/1",
     }
     responses = {
-        ("GET", f"{base}/pulls?state=closed"): (200, []),
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
         ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
         ("GET", f"{base}/pulls/1"): (200, pull),
         ("PUT", f"{base}/pulls/1/update-branch"): (update_status, {"message": "Updating pull request branch."}),
@@ -569,8 +569,8 @@ def test_two_pending_repos_one_failing_names_only_the_failing_repo_and_merges_ne
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     other_base = f"http://forge/repos/{other_repo}"
     responses = {
-        ("GET", f"http://forge/repos/{_REPO}/pulls?state=closed"): (200, []),
-        ("GET", f"{other_base}/pulls?state=closed"): (200, []),
+        ("GET", f"http://forge/repos/{_REPO}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
+        ("GET", f"{other_base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
         ("GET", f"http://forge/repos/{_REPO}/pulls?state=open"): (
             200,
             [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}],
@@ -1070,7 +1070,7 @@ def _forge_with_an_empty_repo(
     base = f"http://forge/repos/{_REPO}"
     other_base = f"http://forge/repos/{other_repo}"
     responses = {
-        ("GET", f"{base}/pulls?state=closed"): (200, []),
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
         ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
         ("GET", f"{base}/pulls/1"): (
             200,
@@ -1087,7 +1087,7 @@ def _forge_with_an_empty_repo(
             {"total_count": 1, "check_runs": [_check_run("completed", "success")]},
         ),
         ("PUT", f"{base}/pulls/1/merge"): (200, {"sha": "merged-sha1", "merged": True}),
-        ("GET", f"{other_base}/pulls?state=closed"): (200, []),
+        ("GET", f"{other_base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
         ("GET", f"{other_base}/pulls?state=open"): (200, []),
         ("POST", f"{other_base}/pulls"): (
             422,
@@ -1205,9 +1205,16 @@ def test_a_stale_merged_pr_on_a_reused_branch_name_is_never_mistaken_for_a_landi
     base = f"http://forge/repos/{_REPO}"
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     responses = {
-        ("GET", f"{base}/pulls?state=closed"): (
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (
             200,
-            [{"number": 1, "head": {"ref": _BRANCH, "sha": "stale-head-sha"}, "merged_at": "2024-01-01T00:00:00Z"}],
+            [
+                {
+                    "number": 1,
+                    "head": {"ref": _BRANCH, "sha": "stale-head-sha"},
+                    "base": {"ref": "main"},
+                    "merged_at": "2024-01-01T00:00:00Z",
+                }
+            ],
         ),
         ("GET", f"{base}/git/ref/heads/{_BRANCH}"): (
             200,
@@ -1232,6 +1239,91 @@ def test_a_stale_merged_pr_on_a_reused_branch_name_is_never_mistaken_for_a_landi
     assert ("POST", f"{base}/pulls") in [(m, u) for m, u, _ in calls]
 
 
+def test_a_merged_pr_on_the_same_branch_retargeted_to_a_different_base_is_never_mistaken_for_a_landing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A human retarget reuses the branch name against a different base — its merge landed
+    somewhere else, so it must never be read as THIS run's own crashed attempt even though
+    its head sha still matches the branch's live tip."""
+    base = f"http://forge/repos/{_REPO}"
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    responses = {
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
+        ("GET", f"{base}/pulls?state=open"): (200, []),
+        ("POST", f"{base}/pulls"): (201, {"number": 2, "head": {"ref": _BRANCH}}),
+        ("GET", f"{base}/pulls/2"): (
+            200,
+            {"number": 2, "merged": False, "head": {"ref": _BRANCH, "sha": "current-head-sha"}},
+        ),
+    }
+
+    def fake(method: str, url: str, *, token: str | None, body: dict[str, Any] | None, **_: Any) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        return responses[(method, url)]
+
+    run = _pull_request_run(fake)
+    pr = land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"})
+
+    assert pr.number == 2, "a PR merged into a different base must be ignored — a fresh PR opens instead"
+    assert ("POST", f"{base}/pulls") in [(m, u) for m, u, _ in calls]
+
+
+def test_a_merged_candidate_past_the_first_page_of_closed_pulls_is_still_recognized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A full first page of unrelated closed PRs must not stop the scan short — the real
+    match, on page two, is still found and recognized without a duplicate PR opening."""
+    base = f"http://forge/repos/{_REPO}"
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    page1 = [
+        {
+            "number": n,
+            "head": {"ref": "other-branch", "sha": f"sha{n}"},
+            "base": {"ref": "main"},
+            "merged_at": "2024-01-01T00:00:00Z",
+        }
+        for n in range(1, 101)
+    ]
+    responses = {
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, page1),
+        ("GET", f"{base}/pulls?state=closed&base=main&page=2&per_page=100"): (
+            200,
+            [
+                {
+                    "number": 101,
+                    "head": {"ref": _BRANCH, "sha": "the-head-sha"},
+                    "base": {"ref": "main"},
+                    "merged_at": "2024-01-01T00:00:00Z",
+                }
+            ],
+        ),
+        ("GET", f"{base}/git/ref/heads/{_BRANCH}"): (
+            200,
+            {"ref": f"refs/heads/{_BRANCH}", "object": {"sha": "the-head-sha", "type": "commit"}},
+        ),
+        ("GET", f"{base}/pulls/101"): (
+            200,
+            {
+                "number": 101,
+                "merged": True,
+                "head": {"ref": _BRANCH, "sha": "the-head-sha"},
+                "html_url": f"http://forge/{_REPO}/pull/101",
+            },
+        ),
+    }
+
+    def fake(method: str, url: str, *, token: str | None, body: dict[str, Any] | None, **_: Any) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        return responses[(method, url)]
+
+    run = _pull_request_run(fake)
+    pr = land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "the-head-sha"})
+
+    assert pr.number == 101
+    assert pr.merged
+    assert ("POST", f"{base}/pulls") not in [(m, u) for m, u, _ in calls], "no duplicate PR should open"
+
+
 def test_an_already_merged_pr_matching_the_live_branch_tip_is_recognized_without_a_duplicate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1241,9 +1333,16 @@ def test_an_already_merged_pr_matching_the_live_branch_tip_is_recognized_without
     base = f"http://forge/repos/{_REPO}"
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     responses = {
-        ("GET", f"{base}/pulls?state=closed"): (
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (
             200,
-            [{"number": 1, "head": {"ref": _BRANCH, "sha": "the-head-sha"}, "merged_at": "2024-01-01T00:00:00Z"}],
+            [
+                {
+                    "number": 1,
+                    "head": {"ref": _BRANCH, "sha": "the-head-sha"},
+                    "base": {"ref": "main"},
+                    "merged_at": "2024-01-01T00:00:00Z",
+                }
+            ],
         ),
         ("GET", f"{base}/git/ref/heads/{_BRANCH}"): (
             200,
@@ -1273,6 +1372,83 @@ def test_an_already_merged_pr_matching_the_live_branch_tip_is_recognized_without
     assert ("GET", f"{base}/pulls?state=open") not in [(m, u) for m, u, _ in calls], (
         "an already-merged PR is recognized before any open-PR search runs"
     )
+
+
+def test_merged_for_branch_raises_lookup_error_on_a_non_200_closed_pulls_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A degraded closed-pulls read must never be silently read as "nothing merged" — that
+    reading is exactly what would reopen a duplicate PR over an already-landed branch."""
+    base = f"http://forge/repos/{_REPO}"
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    responses = {
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (503, {"message": "unavailable"}),
+    }
+
+    def fake(method: str, url: str, *, token: str | None, body: dict[str, Any] | None, **_: Any) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        return responses[(method, url)]
+
+    run = _pull_request_run(fake)
+    with pytest.raises(land_common.PullRequestLookupError):
+        land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"})
+
+
+def test_merged_for_branch_raises_lookup_error_on_a_non_200_branch_tip_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same, for the live-tip read that only fires once a merged candidate exists — a
+    degraded read there must not silently fall through to "the tip doesn't match"."""
+    base = f"http://forge/repos/{_REPO}"
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    responses = {
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (
+            200,
+            [
+                {
+                    "number": 1,
+                    "head": {"ref": _BRANCH, "sha": "some-sha"},
+                    "base": {"ref": "main"},
+                    "merged_at": "2024-01-01T00:00:00Z",
+                }
+            ],
+        ),
+        ("GET", f"{base}/git/ref/heads/{_BRANCH}"): (500, {"message": "internal error"}),
+    }
+
+    def fake(method: str, url: str, *, token: str | None, body: dict[str, Any] | None, **_: Any) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        return responses[(method, url)]
+
+    run = _pull_request_run(fake)
+    with pytest.raises(land_common.PullRequestLookupError):
+        land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "current-head-sha"})
+
+
+def test_land_pr_ci_polls_rather_than_reopening_a_duplicate_on_a_degraded_merged_pr_lookup(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The script-level view of the same guarantee: a degraded merged-PR lookup during
+    `land_pr_ci` prints `pending`, exactly like the existing create-hiccup case, rather than
+    crashing (which would bounce the chunk) or silently opening a duplicate PR."""
+    _set_base_env(monkeypatch, feature_title=None)
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    responses = {
+        ("GET", f"http://forge/repos/{_REPO}/pulls?state=closed&base=main&page=1&per_page=100"): (
+            503,
+            {"message": "unavailable"},
+        ),
+    }
+
+    def fake(method: str, url: str, *, token: str | None, body: dict[str, Any] | None, **_: Any) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        return responses[(method, url)]
+
+    monkeypatch.setattr(land_common, "forge_request", fake)
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "pending"
+    assert not any(m == "POST" for m, _, _ in calls), "no duplicate PR should open on a degraded read"
 
 
 def test_land_pr_ci_selftest_passes() -> None:
