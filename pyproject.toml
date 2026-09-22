@@ -38,6 +38,10 @@ dependencies = [
     # per-platform user config dir (`~/.config/blizzard/` on Linux) `sessions.json`
     # is written under.
     "platformdirs>=4.0.0",
+    # Semver range parsing for a harness binding's admitted-version gate (blizzard#438) —
+    # OpenCode's own `SpecifierSet` membership check, promoted from a transitive pytest
+    # dependency to a declared runtime one now the runner itself imports it.
+    "packaging>=24.0",
 ]
 
 # The sqlite/systemd path stays lean by default (`bzh:sql-portable`) — the postgres

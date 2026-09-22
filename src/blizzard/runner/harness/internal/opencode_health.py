@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 
+from packaging.specifiers import SpecifierSet
+
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.compatibility import CompatibilityProbe
@@ -19,9 +21,13 @@ from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.internal.offline_compatibility import (
     DEFAULT_CORPUS_ROOT,
     CorpusConfigurationError,
-    assert_admitted_versions_have_corpus,
+    admitted_corpus_versions,
+    assert_admitted_range_has_corpus,
 )
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS
+from blizzard.runner.harness.internal.opencode_probe import (
+    ADMITTED_OPENCODE_RANGE,
+    ADMITTED_OPENCODE_RANGE_DISPLAY,
+)
 
 _log = get_logger("blizzard.runner.harness.opencode")
 
@@ -80,12 +86,12 @@ class OpenCodeHealthProbe:
         # own real credential-discovery path.
         self._auth_path = Path(auth_path) if auth_path is not None else _default_opencode_auth_path()
         self._corpus_root = corpus_root
-        # Every admitted version owes a committed corpus manifest (D1) — checked here rather than
-        # at import, so a missing manifest only logs and degrades this binding, never daemon startup.
+        # The admitted range owes at least one committed corpus manifest inside it (D1) —
+        # checked here, not at import, so a misconfigured corpus only degrades this binding.
         try:
-            assert_admitted_versions_have_corpus(_HARNESS_ID, ADMITTED_OPENCODE_VERSIONS, corpus_root=corpus_root)
+            assert_admitted_range_has_corpus(_HARNESS_ID, ADMITTED_OPENCODE_RANGE, corpus_root=corpus_root)
         except CorpusConfigurationError as exc:
-            _log.warning("opencode admitted-version corpus is misconfigured", detail=str(exc))
+            _log.warning("opencode admitted-range corpus is misconfigured", detail=str(exc))
 
     def binary_present(self) -> bool:
         return harness_shared.binary_present(self._binary)
@@ -103,16 +109,19 @@ class OpenCodeHealthProbe:
         except OSError:
             return False
 
-    def supported_version(self) -> frozenset[str]:
-        return ADMITTED_OPENCODE_VERSIONS
+    def supported_version(self) -> SpecifierSet:
+        return ADMITTED_OPENCODE_RANGE
+
+    def supported_version_display(self) -> str:
+        return ADMITTED_OPENCODE_RANGE_DISPLAY
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
-        """The union of every admitted version's own declared degradations (blizzard#438),
-        read from each version's committed corpus manifest — never a hardcoded tuple
-        describing only one of them, and never one version's list picked arbitrarily, since
-        this seam reports independent of any one observed version."""
+        """The union of every committed corpus inside the admitted range's own declared
+        degradations (blizzard#438), read from each such version's manifest — never a
+        hardcoded tuple describing only one of them, and never one version's list picked
+        arbitrarily, since this seam reports independent of any one observed version."""
         seen: dict[CompatibilityProbe, DeclaredDegradation] = {}
-        for version in sorted(ADMITTED_OPENCODE_VERSIONS):
+        for version in admitted_corpus_versions(_HARNESS_ID, ADMITTED_OPENCODE_RANGE, corpus_root=self._corpus_root):
             for degradation in _degradations_from_manifest(version, corpus_root=self._corpus_root):
                 seen.setdefault(degradation.probe, degradation)
         return tuple(seen.values())

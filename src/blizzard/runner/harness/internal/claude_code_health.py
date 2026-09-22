@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from packaging.specifiers import SpecifierSet
+
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.internal import harness_shared
@@ -54,10 +56,13 @@ class ClaudeCodeHealthProbe:
         access_token = oauth.get("accessToken")
         return isinstance(access_token, str) and bool(access_token)
 
-    def supported_version(self) -> frozenset[str]:
-        # Claude Code declares no supported-version range (blizzard#438's plan): unlike
-        # OpenCode's admitted-version corpus, no version cause ever applies to this binding.
-        return frozenset()
+    def supported_version(self) -> SpecifierSet | None:
+        # Claude Code declares no supported-version range (blizzard#438's plan); see
+        # `IHarnessHealthProbe.supported_version` for why that's `None`, not an empty set.
+        return None
+
+    def supported_version_display(self) -> str | None:
+        return None
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
         return ()

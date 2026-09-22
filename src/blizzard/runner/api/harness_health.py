@@ -36,7 +36,7 @@ def _harness_health_list(harnesses: IHarnessRegistry, health: HarnessHealthCache
                 available=result.available if result is not None else True,
                 cause=result.cause.value if result is not None and result.cause is not None else None,
                 degradations=[d.summary for d in result.degradations] if result is not None else [],
-                admitted_versions=sorted(health.admitted_versions(harness_id)),
+                admitted_range=health.admitted_range(harness_id),
             )
         )
     return HarnessHealthListResponse(items=items)

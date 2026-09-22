@@ -188,12 +188,12 @@ class ProbeResult:
 @dataclass(frozen=True)
 class CompatibilityReport:
     """A complete, ordered compatibility report for one observed harness version.
-
-    ``admitted_versions`` is a declared *set*, not a single pin: the neutral contract only
-    carries whatever set a caller supplies as opaque data."""
+    ``admitted_range`` is an opaque display string (D2): the probe judges
+    ``observed_version`` against its own declared range and hands both that display
+    string and the resulting ``version_admitted`` bool here already-decided."""
 
     observed_version: str
-    admitted_versions: frozenset[str]
+    admitted_range: str
     results: tuple[ProbeResult, ...]
     version_admitted: bool
 
@@ -201,15 +201,14 @@ class CompatibilityReport:
     def from_observations(
         cls,
         observed_version: str,
-        admitted_versions: frozenset[str],
+        admitted_range: str,
+        version_admitted: bool,
         observations: Iterable[ProbeObservation],
     ) -> CompatibilityReport:
         if not isinstance(observed_version, str) or not observed_version.strip():
             raise CompatibilityContractError("the observed harness version is empty")
-        if not isinstance(admitted_versions, frozenset) or not admitted_versions:
-            raise CompatibilityContractError("the admitted harness version set is empty")
-        if any(not isinstance(version, str) or not version.strip() for version in admitted_versions):
-            raise CompatibilityContractError("the admitted harness version set has a blank entry")
+        if not isinstance(admitted_range, str) or not admitted_range.strip():
+            raise CompatibilityContractError("the admitted harness version range is empty")
         collected: dict[CompatibilityProbe, ProbeResult] = {}
         for observation in observations:
             result = ProbeResult.from_observation(observation)
@@ -222,14 +221,14 @@ class CompatibilityReport:
             raise IncompleteProbeReportError(f"compatibility report is missing probes: {', '.join(missing)}")
         return cls(
             observed_version=observed_version,
-            admitted_versions=admitted_versions,
+            admitted_range=admitted_range,
             results=tuple(collected[probe] for probe in PROBE_ROSTER),
-            version_admitted=observed_version in admitted_versions,
+            version_admitted=version_admitted,
         )
 
     @property
     def classification(self) -> CompatibilityClassification:
-        """The worst deterministic result, with a version outside the admitted set always blocking."""
+        """The worst deterministic result; a version outside the admitted range always blocks."""
 
         if not self.version_admitted or any(
             result.classification is CompatibilityClassification.BLOCKING for result in self.results
@@ -247,7 +246,7 @@ class CompatibilityReport:
 
     @property
     def admissible(self) -> bool:
-        """Whether later production work may depend on this admitted-set observation."""
+        """Whether later production work may depend on this admitted-range observation."""
 
         return self.complete and self.classification is not CompatibilityClassification.BLOCKING
 
@@ -255,8 +254,7 @@ class CompatibilityReport:
     def blocking_reasons(self) -> tuple[str, ...]:
         reasons = []
         if not self.version_admitted:
-            admitted = ", ".join(repr(version) for version in sorted(self.admitted_versions))
-            reasons.append(f"observed {self.observed_version!r}, admitted versions: {admitted}")
+            reasons.append(f"observed {self.observed_version!r}, admitted range: {self.admitted_range}")
         reasons.extend(
             result.probe.value
             for result in self.results
@@ -267,13 +265,13 @@ class CompatibilityReport:
     def to_payload(self) -> dict[str, object]:
         """Render stable report data for a later diagnostic without exposing raw observations.
 
-        Carries the admitted set the report was judged against alongside the observed
+        Carries the admitted range the report was judged against alongside the observed
         version — a report that cannot say what it was judged against is not evidence a
         gate can retain."""
 
         return {
             "observed_version": self.observed_version,
-            "admitted_versions": sorted(self.admitted_versions),
+            "admitted_range": self.admitted_range,
             "classification": self.classification.value,
             "complete": self.complete,
             "admissible": self.admissible,
@@ -291,10 +289,14 @@ class CompatibilityReport:
 
 
 class ICompatibilityProbe(Protocol):
-    """The inward-facing boundary for a live compatibility proof."""
+    """The inward-facing boundary for a live compatibility proof.
+    ``admitted_range`` and ``version_admitted`` are the probe's own already-decided
+    verdict (D2): whatever scheme a concrete admitted range uses is checked entirely
+    on the probe's own side, before ``run`` returns."""
 
     observed_version: str
-    admitted_versions: frozenset[str]
+    admitted_range: str
+    version_admitted: bool
 
     def run(self) -> Sequence[ProbeObservation]:
         """Collect one observation for each member of :data:`PROBE_ROSTER`."""
@@ -317,16 +319,19 @@ class CompatibilityDiagnostic:
         observations = self.probe.run()
         try:
             version = self.probe.observed_version
-            admitted = self.probe.admitted_versions
+            admitted_range = self.probe.admitted_range
+            version_admitted = self.probe.version_admitted
         except AttributeError as exc:
             raise CompatibilityContractError(
-                "the compatibility probe did not report its observed version and admitted versions"
+                "the compatibility probe did not report its observed version and admitted range"
             ) from exc
         if not isinstance(version, str) or not version.strip():
             raise CompatibilityContractError("the compatibility probe did not report an observed version")
-        if not isinstance(admitted, frozenset) or not admitted:
-            raise CompatibilityContractError("the compatibility probe did not report its admitted versions")
-        return CompatibilityReport.from_observations(version, admitted, observations)
+        if not isinstance(admitted_range, str) or not admitted_range.strip():
+            raise CompatibilityContractError("the compatibility probe did not report its admitted range")
+        if not isinstance(version_admitted, bool):
+            raise CompatibilityContractError("the compatibility probe did not report a version-admitted verdict")
+        return CompatibilityReport.from_observations(version, admitted_range, version_admitted, observations)
 
 
 SUPPORTED = CompatibilityClassification.SUPPORTED

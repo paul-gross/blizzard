@@ -13,10 +13,11 @@ import pytest
 import structlog
 from structlog.testing import capture_logs
 
+from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_export import IOpenCodeExporter, OpenCodeExportError
 from blizzard.runner.harness.internal.opencode_normalizer import NORMALIZER_VERSION, build_turns
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.internal.opencode_shapes import parse_session_export
 from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.process_launch import ProcessLauncher
@@ -24,9 +25,8 @@ from blizzard.runner.harness.transcript import TranscriptErrorFactory, Transcrip
 from tests.runner_fakes import FakeProbe
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent.parent / "src" / "blizzard" / "runner" / "harness"
-# Keyed off the admitted set itself (blizzard#438) — there is exactly one member today,
-# but this stays correct as the set grows.
-_AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
+# The oldest committed corpus inside the admitted range (blizzard#438) — stays correct as corpora are added.
+_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 
 

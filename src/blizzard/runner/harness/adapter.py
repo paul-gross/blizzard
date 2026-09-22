@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
+from packaging.specifiers import SpecifierSet
+
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.overload import ProviderOverload
@@ -357,12 +359,18 @@ class IHarnessHealthProbe(Protocol):
         a health check indefinitely."""
         ...
 
-    def supported_version(self) -> frozenset[str]:
-        """This binding's declared admitted-version set, or an empty set when it declares no
-        supported-version range at all (Claude Code) — distinct from
-        :meth:`IHarnessWorkerLifecycle.observe_version`'s live observation, which this
-        checks membership against instead. A set, not a semver interval or single pin: an
-        admitted version is membership, never an equality check against one literal."""
+    def supported_version(self) -> SpecifierSet | None:
+        """This binding's declared admitted-version range as a semver ``SpecifierSet``, or
+        ``None`` when it declares no range at all (Claude Code). Checked through
+        :func:`~blizzard.runner.harness.internal.harness_shared.version_admitted`, never
+        equality against one literal; ``None`` is the only "no constraint" value — an
+        *empty* ``SpecifierSet`` would instead admit every version."""
+        ...
+
+    def supported_version_display(self) -> str | None:
+        """:meth:`supported_version`'s own declared literal display string, or ``None``
+        alongside its ``None`` — never ``str(SpecifierSet)``, whose clause order does not
+        match how the range reads in docs (blizzard#604)."""
         ...
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:

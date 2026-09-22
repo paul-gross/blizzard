@@ -49,7 +49,7 @@ from blizzard.runner.harness.internal.opencode_facts import provider_refusal
 from blizzard.runner.harness.internal.opencode_landlock import landlock_version
 from blizzard.runner.harness.internal.opencode_loopback import UrllibLoopbackTransport
 from blizzard.runner.harness.internal.opencode_probe import (
-    ADMITTED_OPENCODE_VERSIONS,
+    ADMITTED_OPENCODE_RANGE_DISPLAY,
     BOUNDARY_FAULT_SUMMARY,
     INTERNAL_FAULT_SUMMARY,
     PINNED_OPENCODE_VERSION,
@@ -577,7 +577,8 @@ def test_successful_run_rejects_and_reaps_a_pipe_closing_descendant(tmp_path: Pa
 
 class _ContractProbe:
     observed_version = PINNED_OPENCODE_VERSION
-    admitted_versions = ADMITTED_OPENCODE_VERSIONS
+    admitted_range = ADMITTED_OPENCODE_RANGE_DISPLAY
+    version_admitted = True
 
     def __init__(self, observations: list[ProbeObservation]) -> None:
         self.observations = observations

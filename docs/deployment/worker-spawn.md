@@ -15,20 +15,21 @@ operator's own deploy window) — never once per tick, and never for a binary th
 session's owner resolves against this runner's own bindings: **unknown** means the session was recorded under a harness
 id this runner build doesn't ship at all — the remedy is to run a runner version that binds that id, on the runner
 holding the chunk, never to substitute another harness. **unavailable** means the id is bound but this runner can't
-supply the specific capability being asked of it — resuming or judging versus reading its transcript. `claude_code`
-binds every capability the registry knows to ask for, so this never fires for it; `opencode` binds no transcript source
-at all (a later phase's own capability), so asking for one genuinely raises this today — the loop's own usage-recording
-and session-rotation call sites already treat it as their ordinary "no fallback transcript" outcome, never a crash.
-Either shows up as an `owner-unresolvable` event, which [observability.md](./observability.md) owns reading and
-resolving.
+supply the specific capability being asked of it — resuming or judging versus reading its transcript. Both `claude_code`
+and `opencode` bind every capability the registry knows to ask for today, so this never fires for either; the loop's own
+usage-recording and session-rotation call sites still treat an `unavailable` binding as their ordinary "no fallback
+transcript" outcome, never a crash, for whichever future capability gap reintroduces one. Either shows up as an
+`owner-unresolvable` event, which [observability.md](./observability.md) owns reading and resolving.
 
 OpenCode's own plugin channel — a soft heartbeat nudge after every tool call, and forwarding the lease's identity into
 tool subprocesses through `shell.env` — is classified `degraded` on every OpenCode version the runner admits today: the
 compatibility proof's `root_hook` and `child_sessions` probes both report absent, so the plugin's loading at all is
 never something a deployment can prove or depend on ([opencode-compatibility.md](./opencode-compatibility.md) owns the
-full probe table and its classification policy). This is a fact of each admitted version's own committed corpus, not a
-blanket guarantee — a future admitted version's own declared degradations (`OpenCodeHealthProbe.declared_degradations`,
-`src/blizzard/runner/harness/internal/opencode_health.py`) are read from that version's own manifest and can differ.
+full probe table and its classification policy). This is a fact of the committed corpora inside the admitted range, not
+a blanket guarantee — the binding's declared degradations (`OpenCodeHealthProbe.declared_degradations`,
+`src/blizzard/runner/harness/internal/opencode_health.py`) are the union across every in-range corpus manifest, so a
+future corpus can change them; how an observed version resolves to its reference corpus is owned by
+[opencode-compatibility.md § Admitting a candidate version](./opencode-compatibility.md#admitting-a-candidate-version).
 Nothing about a turn's completion or a lease's correctness rests on it — process liveness is the sole signal for both
 harnesses alike — so a runner whose OpenCode plugin never loads still executes work correctly and merely goes quiet
 between tool calls.

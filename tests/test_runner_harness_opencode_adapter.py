@@ -19,13 +19,14 @@ import pytest
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, WorkerIdentityError, WorkerPreamble
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
+from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.internal.opencode_adapter import (
     _MAX_IDENTITY_PREAMBLE_LINES,
     OpenCodeAdapter,
     _PendingOpenCodeIdentity,
 )
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.process import LinuxProcessProbe
@@ -34,9 +35,8 @@ from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.support_opencode_binary import worker_binary
 
-# Keyed off the admitted set itself (blizzard#438) — there is exactly one member today,
-# but this stays correct as the set grows.
-_AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
+# The oldest committed corpus inside the admitted range (blizzard#438) — stays correct as corpora are added.
+_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = (
     Path(__file__).resolve().parents[1]
     / "src"

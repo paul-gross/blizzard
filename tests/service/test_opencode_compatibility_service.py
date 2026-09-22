@@ -791,8 +791,11 @@ def test_configuration_probe_requires_a_terminal_configured_denial(tmp_path: Pat
     assert configuration["state"] == "failed"
 
 
-@pytest.mark.parametrize("version", ["1.18.25-beta.1", "1.18.25+build.1", "1.18.25 extra"])
+@pytest.mark.parametrize("version", ["1.18.25-beta.1", "1.18.25 extra"])
 def test_version_suffix_or_additional_output_blocks_before_scratch_creation(tmp_path: Path, version: str) -> None:
+    """A pre-release suffix stays excluded from the admitted range regardless (D2's
+    ``prereleases=False``), and multi-token ``--version`` output never even normalizes to a
+    parseable version — both block before the scratch repository is ever created."""
     mock_opencode = _mock_opencode()
     probe, scratch = _probe(mock_opencode, tmp_path, version=version)
 
@@ -801,6 +804,46 @@ def test_version_suffix_or_additional_output_blocks_before_scratch_creation(tmp_
     assert report.classification.value == "blocking"
     assert scratch.path is None
     assert [operation["operation"] for operation in probe.evidence["operations"]] == ["version"]  # type: ignore[index]
+
+
+def test_a_local_version_suffix_is_admitted_by_range_membership(tmp_path: Path) -> None:
+    """Unlike the old exact-equality pin, range membership never special-cases a local
+    version identifier: `1.18.25+build.1` orders at or above `1.18.25`, so it is admitted and
+    the run proceeds past the version gate."""
+    mock_opencode = _mock_opencode()
+    probe, scratch = _probe(mock_opencode, tmp_path, version="1.18.25+build.1")
+
+    report = CompatibilityDiagnostic(probe).run()
+
+    assert report.version_admitted is True
+    assert scratch.path is not None
+    assert report.classification.value != "blocking"
+
+
+def test_a_version_above_the_pinned_corpus_but_inside_the_range_is_admitted(tmp_path: Path) -> None:
+    """`1.18.31` is above the only committed corpus but inside `ADMITTED_OPENCODE_RANGE`; the
+    live gate admits it on range membership alone — reference-corpus resolution is
+    `classify_offline`'s own concern (`tests/test_runner_harness_offline_compatibility.py`)."""
+    mock_opencode = _mock_opencode()
+    probe, scratch = _probe(mock_opencode, tmp_path, version="1.18.31")
+
+    report = CompatibilityDiagnostic(probe).run()
+
+    assert report.version_admitted is True
+    assert report.observed_version == "1.18.31"
+    assert scratch.path is not None
+    assert report.classification.value != "blocking"
+
+
+def test_a_version_at_or_above_the_upper_bound_is_rejected(tmp_path: Path) -> None:
+    mock_opencode = _mock_opencode()
+    probe, scratch = _probe(mock_opencode, tmp_path, version="2.0.0")
+
+    report = CompatibilityDiagnostic(probe).run()
+
+    assert report.version_admitted is False
+    assert report.classification.value == "blocking"
+    assert scratch.path is None
 
 
 def test_mutating_fake_cannot_change_host_auth_file_during_version_preflight(
