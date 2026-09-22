@@ -24,7 +24,7 @@ never id (ids restart at `F1` every submission): an **`accepted`** entry stays a
 If this workspace declares its own plan-review process, review through it. Absent one, run two gates:
 
 - **Verifiability** — every planned change maps to a verification method the project declares, or the plan schedules the
-  work to build the missing method first.
+  work to build the missing method first. An unjustified missing manual method is must-fix, not improvement-tier.
 - **Architecture** — the plan conforms to the project's architecture guidance.
 
 Check that every owed surface — code, agent-facing context, public documentation — is planned, and that phases, where

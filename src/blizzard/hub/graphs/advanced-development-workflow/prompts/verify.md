@@ -10,5 +10,9 @@ Verify the change **through a method the project declares**, exercising real run
 environment(s). A green build or type-check is not a verification. Fix what verification surfaces and re-verify until
 the method passes.
 
+The `reviewed-plan`'s manual method is owed: perform it. A runtime method is not yours to decline on the grounds that
+the verification table omitted it — the table binds what `plan` and `plan-review` are answerable for, not the ceiling
+of what this node exercises.
+
 Submit what you exercised, what passed, and anything you could not close as the node's `verification-report` asset
 before you declare done: run `blizzard runner artifact create --name verification-report` with the content on stdin.

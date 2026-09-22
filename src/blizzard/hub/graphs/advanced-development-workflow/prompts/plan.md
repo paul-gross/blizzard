@@ -15,7 +15,11 @@ means a first draft.
 - **The feature branch**, named at the top: `feat/<slug>`, a short kebab-case description of the change. Every repo the
   build touches uses this one branch.
 - **How each change is verified** — every planned change maps to a verification method the project already declares;
-  where none covers it, the plan schedules building that method first.
+  where none covers it, the plan schedules building that method first. Every surface the change reaches that a person
+  can drive earns the general manual method for that surface in the table — `blizzard:manual-hub`,
+  `blizzard:manual-runner`, `web:manual-board`, or `web:manual-panel` — with the concrete steps that exercise this
+  change through it. A change reaching no such surface (a docs-only or context-only edit) states why in the table
+  instead of a silent omission.
 - **Conformance to the project's architecture guidance.**
 - **Every surface the change owes** — code, agent-facing context, public documentation — each as planned work.
 - **Acceptance criteria** referencing those verification methods.
