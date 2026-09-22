@@ -7,11 +7,12 @@ owns the concept; this covers the verbs only.
 
 ## Findings
 
-`blizzard hub finding list --routine <name> --scope <slug> [--include-gone]` and `show <finding_id>` are the operator's
-own finding reads — an operator or an integration holding a hub credential, naming any routine and any scope, live only
-unless `--include-gone`, which also surfaces every exited finding alongside a merely `gone` one. `state`, `live`,
-`last_seen_at`, and `observed_count` track each finding's own fact history, changing as later runs observe or lose it,
-or a person exits or reopens it.
+`blizzard hub finding list --routine <name> --scope <slug> [--source routine|review] [--include-gone]` and
+`show <finding_id>` are the operator's own finding reads — an operator or an integration holding a hub credential,
+naming any routine and any scope, live only unless `--include-gone`, which also surfaces every exited finding alongside
+a merely `gone` one. `--routine` is required unless `--source review`, since a review-sourced finding carries no
+routine. `state`, `live`, `last_seen_at`, and `observed_count` track each finding's own fact history, changing as later
+runs observe or lose it, or a person exits or reopens it.
 
 A running pass cross-references its own bucket a different way: `blizzard runner garden findings`, flagless — the
 routine and the scope are derived server-side from the lease's own chunk, so a worker cannot point this read at another
@@ -47,6 +48,21 @@ Neither the triage actions nor their dialog is offered without `chunk:control`.*
 On mobile, the Findings sub-tab opens on its filters and list alone. Selecting a finding replaces both with the
 full-width finding panel; its Back row restores the same filtered list because the filter query parameters remain in the
 URL throughout the drill-down.
+
+### Review-sourced findings
+
+A delivery lane's review round can raise a finding too, alongside a routine's own — carrying no routine, a `severity`
+(`blocking` or `should-fix`), and the chunk that raised it. `blizzard hub finding list --scope <slug> --source review`
+(and `GET /api/findings?scope=&source=review`) reads only these; omitting `--source` reads both kinds together. A
+routine's own bucket read — `blizzard runner garden findings` above — already includes any review-sourced finding
+filed under that routine's swept scope, answerable with the same triage verbs as any other. The board's Findings rows
+render one exactly like a routine-sourced row, except the routine chip is replaced by the finding's severity and a link
+to the raising chunk.
+
+A worker reads the deployment's scope vocabulary with `blizzard runner scope list` — every scope's slug, description,
+and retired flag, as JSON — the read a delivery lane's `review` node uses to name an existing scope on a deferred
+finding rather than guessing at one; an unfamiliar slug is minted, not rejected. It needs no hub credential in its
+child environment, the same shape the other `blizzard runner` reads on this page take.
 
 ## Garden proposals
 

@@ -32,7 +32,9 @@ Blizzard itself publishes a small, global set of read-only documents — a slash
 per-graph one — that every graph and every chunk reads the identical copy of; no graph declares it, and no worker ever
 produces it. `garden/finding-format` and `garden/proposal-format` are the shipped examples: the shapes a garden
 routine's finding and proposal artifacts are meant to conform to, held in lockstep with the `blizzard.wire.finding`
-and `blizzard.wire.garden_proposal` models by a dedicated test rather than generated from them.
+and `blizzard.wire.garden_proposal` models by a dedicated test rather than generated from them. `review/finding-format`
+is a third: the shape a delivery lane's review round publishes as its `review-finding-delta` artifact, read by the
+`record-findings` node — see [findings-and-proposals.md](./findings-and-proposals.md).
 
 A system-scope read is always a live call to the hub, on every invocation, unlike a graph-scope read: `artifact get
 <name> --scope system` and `artifact list --scope system` never answer from a runner-local pin or cache, so if the hub
