@@ -316,6 +316,7 @@ class UsageStore:
         report_kind: str,
         report_payload: str,
         miss_reason: str | None = None,
+        renewal: str | None = None,
     ) -> int | None:
         # The attempt row and its outbound report land in ONE transaction. Runner-scoped
         # (`chunk_id=None, lease_id=None`): a fact about the account, not a chunk or lease.
@@ -323,7 +324,7 @@ class UsageStore:
         with self._store.begin() as conn:
             conn.execute(
                 external_usage_samples.insert().values(
-                    slug=slug, sampled_at=sampled_at, payload=payload, miss_reason=miss_reason
+                    slug=slug, sampled_at=sampled_at, payload=payload, miss_reason=miss_reason, renewal=renewal
                 )
             )
             if payload is not None:

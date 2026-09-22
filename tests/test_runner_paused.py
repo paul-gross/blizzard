@@ -1564,7 +1564,9 @@ def test_usage_limit_reason_falls_back_to_the_sampled_resets_at(tmp_path):  # ty
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
         subscriptions=(
-            ResolvedSubscription(slug="anthropic", name="Anthropic", sample_interval_seconds=60, sampler=None),
+            ResolvedSubscription(
+                slug="anthropic", name="Anthropic", sample_interval_seconds=60, sampler=None, renewer=None
+            ),
         ),
     )
 
@@ -1621,7 +1623,9 @@ def test_usage_limit_reason_fallback_skips_a_failed_samples_null_payload(tmp_pat
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
         subscriptions=(
-            ResolvedSubscription(slug="anthropic", name="Anthropic", sample_interval_seconds=60, sampler=None),
+            ResolvedSubscription(
+                slug="anthropic", name="Anthropic", sample_interval_seconds=60, sampler=None, renewer=None
+            ),
         ),
     )
 

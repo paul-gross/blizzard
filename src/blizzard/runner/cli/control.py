@@ -136,13 +136,15 @@ def status(directory: str, runner_url: str | None) -> None:
     subscriptions = subscriptions_resp.json().get("items", [])
     click.echo(f"\nsubscriptions ({len(subscriptions)}):")
     for sub in subscriptions:
+        renewal_suffix = f", renewal: {sub['renewal']}" if sub["renewal"] is not None else ""
         if sub["sampled_at"] is None:
             click.echo(f"  {sub['slug']} ({sub['provider']}): never sampled")
         elif sub["ok"]:
-            click.echo(f"  {sub['slug']} ({sub['provider']}): ok, sampled at {sub['sampled_at']}")
+            click.echo(f"  {sub['slug']} ({sub['provider']}): ok, sampled at {sub['sampled_at']}{renewal_suffix}")
         else:
             click.echo(
-                f"  {sub['slug']} ({sub['provider']}): miss ({sub['miss_reason']}), last attempt {sub['sampled_at']}"
+                f"  {sub['slug']} ({sub['provider']}): miss ({sub['miss_reason']}), "
+                f"last attempt {sub['sampled_at']}{renewal_suffix}"
             )
 
 

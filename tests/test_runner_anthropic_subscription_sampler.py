@@ -193,7 +193,9 @@ def test_missing_credentials_file_returns_credential_unreadable_and_warns_once(t
 
 
 @pytest.mark.unit
-def test_malformed_json_returns_credential_unreadable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_malformed_json_returns_credential_unreadable_and_warns_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     creds = tmp_path / ".credentials.json"
     creds.write_text("{not json")
     _guard_against_writes(monkeypatch, creds)
@@ -208,7 +210,9 @@ def test_malformed_json_returns_credential_unreadable_and_warns_once(tmp_path: P
 
 
 @pytest.mark.unit
-def test_missing_access_token_returns_credential_unreadable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_access_token_returns_credential_unreadable_and_warns_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(
         tmp_path / ".credentials.json", access_token=None, expires_at_ms=_future_expiry_ms(clock)
@@ -244,7 +248,9 @@ def test_expired_token_returns_credential_lapsed_warns_once_and_never_writes_the
 
 
 @pytest.mark.unit
-def test_non_2xx_401_response_returns_credential_lapsed_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_non_2xx_401_response_returns_credential_lapsed_and_warns_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
@@ -282,7 +288,9 @@ def test_timeout_returns_endpoint_unreachable_and_warns_once(tmp_path: Path, mon
 
 
 @pytest.mark.unit
-def test_connection_error_returns_endpoint_unreachable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_connection_error_returns_endpoint_unreachable_and_warns_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
@@ -301,7 +309,9 @@ def test_connection_error_returns_endpoint_unreachable_and_warns_once(tmp_path: 
 
 
 @pytest.mark.unit
-def test_unexpected_response_shape_returns_response_unparseable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unexpected_response_shape_returns_response_unparseable_and_warns_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
@@ -320,7 +330,9 @@ def test_unexpected_response_shape_returns_response_unparseable_and_warns_once(t
 
 
 @pytest.mark.unit
-def test_unparseable_response_body_returns_response_unparseable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unparseable_response_body_returns_response_unparseable_and_warns_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
@@ -339,7 +351,9 @@ def test_unparseable_response_body_returns_response_unparseable_and_warns_once(t
 
 
 @pytest.mark.unit
-def test_zero_parseable_windows_returns_response_unparseable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_zero_parseable_windows_returns_response_unparseable_and_warns_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)

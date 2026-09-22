@@ -36,6 +36,7 @@ from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.stores import RunnerStores
+from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer
 from blizzard.runner.subscriptions.subscription_sampler import ISubscriptionSampler
 from blizzard.wire.runner import RunnerCapability
 
@@ -116,15 +117,18 @@ class LoopConfig:
 
 @dataclass(frozen=True)
 class ResolvedSubscription:
-    """One declared subscription, paired with its resolved sampler binding (blizzard#436)
-    — the loop step's own view, carrying only what it reads (``slug``/``name``/
-    ``sample_interval_seconds``); ``sampler`` is ``None`` for a provider with no binding,
-    declared but unsampled."""
+    """One declared subscription, paired with its resolved sampler and renewer bindings
+    (blizzard#436, blizzard#504) — the loop step's own view, carrying only what it reads
+    (``slug``/``name``/``sample_interval_seconds``); ``sampler`` is ``None`` for a
+    provider with no binding, declared but unsampled. ``renewer`` is ``None`` for
+    Anthropic or any unknown provider (D2), which keeps today's read-only behaviour
+    exactly."""
 
     slug: str
     name: str
     sample_interval_seconds: int
     sampler: ISubscriptionSampler | None
+    renewer: ICredentialRenewer | None
 
 
 class ICloseableUsageHttpClient(Protocol):

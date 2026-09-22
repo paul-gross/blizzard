@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:subscriptions-no-write
+language: Python
+severity: error
+message: >-
+  A sampler or renewer under runner/subscriptions/ never opens a credential file for
+  writing (D1) — the vendor CLI owns its own lock, atomic write, and refresh-token
+  rotation; a second writer risks corrupting it mid-refresh or invalidating the login
+  it just renewed. Read the file; never write it.
+files:
+  - src/blizzard/runner/subscriptions/**
+rule:
+  any:
+    - pattern: $X.write_text($$$ARGS)
+    - pattern: $X.write_bytes($$$ARGS)
+    - pattern: open($PATH, $MODE)
+    - pattern: open($PATH, $MODE, $$$REST)
+    - pattern: $X.open($MODE)
+constraints:
+  MODE:
+    regex: "['\"][^'\"]*[wax][^'\"]*['\"]"

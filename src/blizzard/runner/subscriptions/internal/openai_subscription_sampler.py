@@ -6,8 +6,6 @@ coding-harness adapter — blizzard runs no OpenAI harness today."""
 
 from __future__ import annotations
 
-import base64
-import binascii
 import json
 import math
 from collections.abc import Callable
@@ -19,6 +17,7 @@ import httpx
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.subscriptions.internal.jwt_expiry import parse_jwt_expiry
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
@@ -171,7 +170,7 @@ class OpenAISubscriptionSampler:
                 path=self._credentials_path,
             )
             return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
-        expires_at = self._parse_token_expiry(access_token)
+        expires_at = parse_jwt_expiry(access_token)
         if expires_at is not None and expires_at <= self._clock.now():
             _log.warning(
                 "external subscription usage sample failed: access token expired",
@@ -250,28 +249,6 @@ class OpenAISubscriptionSampler:
                 return None
             return parsed.astimezone(UTC) if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
         return None
-
-    @staticmethod
-    def _parse_token_expiry(access_token: str) -> datetime | None:
-        """The ``exp`` claim of the JWT access token, read unverified — the server remains
-        the authority, and this only avoids spending a request on a token already dead.
-        ``None`` for any token this cannot read, which proceeds to the request."""
-        parts = access_token.split(".")
-        if len(parts) != 3:
-            return None
-        payload = parts[1]
-        try:
-            decoded = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
-            claims = json.loads(decoded)
-        except (binascii.Error, UnicodeDecodeError, ValueError):
-            return None
-        exp = claims.get("exp") if isinstance(claims, dict) else None
-        if not isinstance(exp, int | float) or isinstance(exp, bool):
-            return None
-        try:
-            return datetime.fromtimestamp(exp, tz=UTC)
-        except (OverflowError, OSError, ValueError):
-            return None
 
 
 def _window_label(window_seconds: int) -> str:

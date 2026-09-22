@@ -128,6 +128,32 @@ def require_opencode_cli_surface(bin_dir: Path) -> Path:
     return mock_opencode
 
 
+def require_codex_app_server_surface(bin_dir: Path) -> Path:
+    """``bin_dir``'s ``mock-codex`` binary, with the ``app-server`` verb live, or skip — an
+    older-provisioned sibling ``blizzard-mock`` worktree may carry ``mock-codex`` without
+    it. Probed with a real ``initialize`` exchange rather than ``app-server --help``:
+    argparse's own ``--help`` handling exits 0 either way, so only a real id-matched
+    reply tells the two apart."""
+    mock_codex = bin_dir / "mock-codex"
+    if not mock_codex.is_file():
+        pytest.skip("no provisioned sibling blizzard-mock worktree with mock-codex (run `winter provision <env>`)")
+    with tempfile.TemporaryDirectory() as probe_dir:
+        probe = subprocess.run(
+            [str(mock_codex), "app-server"],
+            input='{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}\n',
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CODEX_HOME": probe_dir},
+            timeout=5.0,
+        )
+        if probe.returncode != 0 or '"id": 1' not in probe.stdout:
+            pytest.skip(
+                "the provisioned sibling blizzard-mock's mock-codex predates the app-server verb "
+                "(run `winter provision <env>` again)"
+            )
+    return mock_codex
+
+
 def _mock_daemon_log(name: str, port: int, log_dir: Path | None) -> Path:
     """Where one mock daemon's merged output goes (issue #145, ``bzh:daemon-stdout-to-file``).
 

@@ -18,7 +18,15 @@ async function render(rows: readonly SubscriptionRow[]) {
 describe('LocalSubscriptionsView', () => {
   it('renders a subscription with its name, provider, and status — no query stub required', async () => {
     const { el } = await render([
-      { slug: 'anthropic', name: 'Anthropic', provider: 'anthropic', conditionLabel: 'ok', sampledAgo: '30s ago', ok: true },
+      {
+        slug: 'anthropic',
+        name: 'Anthropic',
+        provider: 'anthropic',
+        conditionLabel: 'ok',
+        sampledAgo: '30s ago',
+        renewalLabel: null,
+        ok: true,
+      },
     ]);
 
     const row = el.querySelector('[data-testid="subscription-row"]');
@@ -38,6 +46,7 @@ describe('LocalSubscriptionsView', () => {
         provider: 'openai',
         conditionLabel: 'miss: credential_lapsed',
         sampledAgo: '2m ago',
+        renewalLabel: null,
         ok: false,
       },
     ]);
@@ -49,10 +58,43 @@ describe('LocalSubscriptionsView', () => {
 
   it('renders one row per declared subscription', async () => {
     const { el } = await render([
-      { slug: 'anthropic', name: 'Anthropic', provider: 'anthropic', conditionLabel: 'ok', sampledAgo: '30s ago', ok: true },
-      { slug: 'codex', name: 'Codex', provider: 'openai', conditionLabel: 'never sampled', sampledAgo: 'never', ok: null },
+      {
+        slug: 'anthropic',
+        name: 'Anthropic',
+        provider: 'anthropic',
+        conditionLabel: 'ok',
+        sampledAgo: '30s ago',
+        renewalLabel: null,
+        ok: true,
+      },
+      {
+        slug: 'codex',
+        name: 'Codex',
+        provider: 'openai',
+        conditionLabel: 'never sampled',
+        sampledAgo: 'never',
+        renewalLabel: null,
+        ok: null,
+      },
     ]);
 
     expect(el.querySelectorAll('[data-testid="subscription-row"]')).toHaveLength(2);
+  });
+
+  it('renders a renewal line only when the row carries a renewal outcome', async () => {
+    const { el } = await render([
+      {
+        slug: 'codex',
+        name: 'Codex',
+        provider: 'openai',
+        conditionLabel: 'ok',
+        sampledAgo: '30s ago',
+        renewalLabel: 'renewed',
+        ok: true,
+      },
+    ]);
+
+    const row = el.querySelector('[data-testid="subscription-row"]');
+    expect(row?.querySelector('[data-testid="subscription-renewal"]')?.textContent).toBe('renewal: renewed');
   });
 });

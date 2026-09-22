@@ -69,6 +69,7 @@ const OK: runnerApi.SubscriptionView = {
   sampled_at: '2026-07-16T11:59:30.000Z',
   ok: true,
   miss_reason: null,
+  renewal: null,
 };
 
 const MISS: runnerApi.SubscriptionView = {
@@ -78,6 +79,17 @@ const MISS: runnerApi.SubscriptionView = {
   sampled_at: '2026-07-16T11:58:00.000Z',
   ok: false,
   miss_reason: 'credential_lapsed',
+  renewal: null,
+};
+
+const RENEWED: runnerApi.SubscriptionView = {
+  slug: 'codex',
+  name: 'Codex',
+  provider: 'openai',
+  sampled_at: '2026-07-16T11:59:30.000Z',
+  ok: true,
+  miss_reason: null,
+  renewal: 'renewed',
 };
 
 describe('LocalSubscriptions', () => {
@@ -103,6 +115,20 @@ describe('LocalSubscriptions', () => {
     const missRow = Array.from(rows).find((row) => row.getAttribute('data-slug') === 'codex');
     expect(missRow?.querySelector('.condition')?.textContent).toBe('miss: credential_lapsed');
     expect(missRow?.classList.contains('miss')).toBe(true);
+  });
+
+  it('renders a recorded renewal outcome alongside the attempt', async () => {
+    const { el } = await render([RENEWED]);
+
+    const row = el.querySelector('[data-testid="subscription-row"]');
+    expect(row?.querySelector('[data-testid="subscription-renewal"]')?.textContent).toBe('renewal: renewed');
+  });
+
+  it('renders no renewal line when the attempt carries no renewal outcome', async () => {
+    const { el } = await render([OK]);
+
+    const row = el.querySelector('[data-testid="subscription-row"]');
+    expect(row?.querySelector('[data-testid="subscription-renewal"]')).toBeNull();
   });
 
   describe('sampled-ago ticking', () => {

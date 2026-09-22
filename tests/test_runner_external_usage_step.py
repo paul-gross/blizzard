@@ -18,6 +18,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.steps import ExternalUsageSample
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.subscriptions.credential_renewer import RenewalFailureReason, RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
@@ -25,6 +26,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
 )
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
+    FakeCredentialRenewer,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -54,8 +56,11 @@ def _resolved(
     *,
     interval_seconds: int = 300,
     sampler: FakeSubscriptionSampler | None = None,
+    renewer: FakeCredentialRenewer | None = None,
 ) -> ResolvedSubscription:
-    return ResolvedSubscription(slug=slug, name=slug.title(), sample_interval_seconds=interval_seconds, sampler=sampler)
+    return ResolvedSubscription(
+        slug=slug, name=slug.title(), sample_interval_seconds=interval_seconds, sampler=sampler, renewer=renewer
+    )
 
 
 def _snapshot(*, sampled_at: datetime = _NOW) -> ExternalSubscriptionUsageSnapshot:
@@ -75,7 +80,14 @@ def _snapshot(*, sampled_at: datetime = _NOW) -> ExternalSubscriptionUsageSnapsh
     )
 
 
-def _ctx(store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval_seconds: int = 300):  # type: ignore[no-untyped-def]
+def _ctx(
+    store,  # type: ignore[no-untyped-def]
+    *,
+    sampler: FakeSubscriptionSampler,
+    clock: FixedClock,
+    interval_seconds: int = 300,
+    renewer: FakeCredentialRenewer | None = None,
+):
     return make_context(
         store,
         hub=FakeHub(),
@@ -84,7 +96,7 @@ def _ctx(store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval
         probe=FakeProbe(),
         clock=clock,
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
-        subscriptions=(_resolved(interval_seconds=interval_seconds, sampler=sampler),),
+        subscriptions=(_resolved(interval_seconds=interval_seconds, sampler=sampler, renewer=renewer),),
     )
 
 
@@ -495,3 +507,86 @@ def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_pa
     assert known.sample_calls == 1
     assert store.last_external_usage_attempt_at("known") == _NOW
     assert store.last_external_usage_attempt_at("no-binding") is None  # never attempted
+
+
+# AC 7 (blizzard#504 Phase 2) — renewal, on the same cadence gate, before the sample.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_a_renewer_is_asked_before_the_sample_and_its_outcome_is_recorded(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    renewer = FakeCredentialRenewer(outcome=RenewalOutcome(RenewalOutcomeKind.RENEWED))
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW), renewer=renewer)
+
+    ExternalUsageSample(ctx).run()
+
+    assert renewer.renew_calls == 1
+    attempt = store.latest_external_usage_attempt(_SLUG)
+    assert attempt is not None
+    assert attempt.renewal == "renewed"
+
+
+@pytest.mark.unit
+def test_a_not_due_renewal_records_no_renewal_outcome(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    renewer = FakeCredentialRenewer(outcome=RenewalOutcome(RenewalOutcomeKind.NOT_DUE))
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW), renewer=renewer)
+
+    ExternalUsageSample(ctx).run()
+
+    assert renewer.renew_calls == 1
+    attempt = store.latest_external_usage_attempt(_SLUG)
+    assert attempt is not None
+    assert attempt.renewal is None
+
+
+@pytest.mark.unit
+def test_a_failed_renewal_records_its_reason_and_still_lets_the_sample_proceed(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    renewer = FakeCredentialRenewer(outcome=RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT))
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW), renewer=renewer)
+
+    ExternalUsageSample(ctx).run()
+
+    assert sampler.sample_calls == 1  # the sample still ran despite the failed renewal
+    attempt = store.latest_external_usage_attempt(_SLUG)
+    assert attempt is not None
+    assert attempt.renewal == "failed:timed_out"
+    assert attempt.ok is True
+
+
+@pytest.mark.unit
+def test_a_renewer_is_asked_again_only_on_the_slugs_own_cadence(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    renewer = FakeCredentialRenewer(outcome=RenewalOutcome(RenewalOutcomeKind.NOT_DUE))
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    clock = FixedClock(_NOW)
+    ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300, renewer=renewer)
+
+    ExternalUsageSample(ctx).run()
+    assert renewer.renew_calls == 1
+
+    clock.advance(timedelta(seconds=100))
+    ExternalUsageSample(ctx).run()
+    assert renewer.renew_calls == 1  # still gated — under the interval, same as sampling
+
+    clock.advance(timedelta(seconds=200))
+    ExternalUsageSample(ctx).run()
+    assert renewer.renew_calls == 2  # due again, alongside the sample
+
+
+@pytest.mark.unit
+def test_a_slug_with_no_renewer_records_no_renewal_outcome(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW), renewer=None)
+
+    ExternalUsageSample(ctx).run()
+
+    attempt = store.latest_external_usage_attempt(_SLUG)
+    assert attempt is not None
+    assert attempt.renewal is None

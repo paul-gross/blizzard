@@ -306,7 +306,9 @@ def test_the_external_usage_sample_runs_after_fill_has_claimed(tmp_path) -> None
     hub.claim_outcome = claimed_outcome("ch_1", envelope)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     sampler = _ClaimObservingSampler(hub=hub)
-    resolved = ResolvedSubscription(slug="anthropic", name="Anthropic", sample_interval_seconds=300, sampler=sampler)
+    resolved = ResolvedSubscription(
+        slug="anthropic", name="Anthropic", sample_interval_seconds=300, sampler=sampler, renewer=None
+    )
     ctx = make_context(
         store,
         hub=hub,

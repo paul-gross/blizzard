@@ -6,5 +6,8 @@
     </div>
     <div class="condition">{{ row.conditionLabel }}</div>
     <div class="sampled">sampled {{ row.sampledAgo }}</div>
+    @if (row.renewalLabel !== null) {
+      <div class="renewal" data-testid="subscription-renewal">renewal: {{ row.renewalLabel }}</div>
+    }
   </div>
 }
