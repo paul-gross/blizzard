@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
 import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
@@ -58,12 +59,15 @@ const VM: FindingPanelVm = {
     },
   ],
   workItem: null,
+  source: 'routine',
+  severity: null,
+  raisedByChunkId: null,
 };
 
 async function render() {
   await TestBed.configureTestingModule({
     imports: [FleetFindingPanel],
-    providers: [provideZonelessChangeDetection()],
+    providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(FleetFindingPanel);
   fixture.componentRef.setInput('vm', VM);

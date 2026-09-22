@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { FleetFindingPanel, type FindingPanelTriageVerb, type FindingPanelVm } from './finding-panel';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
@@ -18,6 +19,19 @@ const LIVE_VM: FindingPanelVm = {
   note: null,
   facts: [{ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }],
   workItem: null,
+  source: 'routine',
+  severity: null,
+  raisedByChunkId: null,
+};
+
+/** A review-sourced finding (blizzard#582 D1) — no routine, its own severity and
+ * raising chunk in place of the routine-only facts above. */
+const REVIEW_VM: FindingPanelVm = {
+  ...LIVE_VM,
+  findingId: 'fin_4',
+  source: 'review',
+  severity: 'blocking',
+  raisedByChunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
 };
 
 const RESOLVED_VM: FindingPanelVm = {
@@ -35,7 +49,7 @@ describe('FleetFindingPanel', () => {
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetFindingPanel],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
     const fixture = TestBed.createComponent(FleetFindingPanel);
     fixture.componentRef.setInput('vm', inputs.vm ?? LIVE_VM);
@@ -191,6 +205,26 @@ describe('FleetFindingPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="fp-note"]')).toBeNull();
+  });
+
+  it('renders no source/severity/raised-by facts for a routine-sourced finding — additive, not a redesign', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="fp-source"]')).toBeNull();
+    expect(el.querySelector('[data-testid="fp-severity"]')).toBeNull();
+    expect(el.querySelector('[data-testid="fp-raised-by"]')).toBeNull();
+  });
+
+  it('renders source, severity, and a linked raising chunk for a review-sourced finding', async () => {
+    const fixture = await mount({ vm: REVIEW_VM });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="fp-source"]')?.textContent?.trim()).toBe('review');
+    expect(el.querySelector('[data-testid="fp-severity-badge"]')?.textContent?.trim()).toBe('blocking');
+    const link = el.querySelector<HTMLAnchorElement>('[data-testid="fp-raised-by-link"]');
+    expect(link?.textContent?.trim()).toBe('C-3YJ9');
+    expect(link?.getAttribute('title')).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   });
 
   it('renders a linked work item when present', async () => {

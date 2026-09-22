@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { FleetFindingList, type FindingListRowVm } from './finding-list';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
@@ -13,6 +14,9 @@ const LIVE_ROW: FindingListRowVm = {
   lastSeenAt: '2026-01-05T00:00:00Z',
   routineName: null,
   scopeSlug: null,
+  source: 'routine',
+  severity: null,
+  raisedByChunkId: null,
 };
 
 const GONE_ROW: FindingListRowVm = {
@@ -24,6 +28,9 @@ const GONE_ROW: FindingListRowVm = {
   lastSeenAt: '2026-01-06T00:00:00Z',
   routineName: null,
   scopeSlug: null,
+  source: 'routine',
+  severity: null,
+  raisedByChunkId: null,
 };
 
 const RESOLVED_ROW: FindingListRowVm = {
@@ -35,6 +42,9 @@ const RESOLVED_ROW: FindingListRowVm = {
   lastSeenAt: null,
   routineName: null,
   scopeSlug: null,
+  source: 'routine',
+  severity: null,
+  raisedByChunkId: null,
 };
 
 const ROWS: readonly FindingListRowVm[] = [LIVE_ROW, GONE_ROW, RESOLVED_ROW];
@@ -47,7 +57,7 @@ describe('FleetFindingList', () => {
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetFindingList],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
     const fixture = TestBed.createComponent(FleetFindingList);
     fixture.componentRef.setInput('rows', inputs.rows ?? ROWS);
@@ -195,6 +205,38 @@ describe('FleetFindingList', () => {
     const unnamed = el.querySelector('[data-testid="gardening-finding-row-fin_2"]');
     expect(unnamed?.querySelector('.fl-routine')).toBeNull();
     expect(unnamed?.querySelector('.fl-scope')).toBeNull();
+  });
+
+  it('renders no source/severity/raised-by chrome for a routine-sourced row — additive, not a redesign', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    const row = el.querySelector('[data-testid="gardening-finding-row-fin_01M1KANH0RZEABSD44RCEH6G9B"]');
+    expect(row?.querySelector('.fl-source')).toBeNull();
+    expect(row?.querySelector('.fl-severity')).toBeNull();
+    expect(row?.querySelector('.fl-raised-by')).toBeNull();
+  });
+
+  it('renders source, severity, and a linked raising chunk for a review-sourced row with no routine', async () => {
+    const fixture = await mount({
+      rows: [
+        {
+          ...LIVE_ROW,
+          source: 'review',
+          severity: 'blocking',
+          raisedByChunkId: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+        },
+      ],
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const row = el.querySelector('[data-testid="gardening-finding-row-fin_01M1KANH0RZEABSD44RCEH6G9B"]');
+    expect(row?.querySelector('.fl-routine')).toBeNull();
+    expect(row?.querySelector('.fl-source')?.textContent?.trim()).toBe('review');
+    expect(row?.querySelector('.fl-severity')?.textContent?.trim()).toBe('blocking');
+    const link = row?.querySelector<HTMLAnchorElement>('.fl-raised-by');
+    expect(link?.textContent?.trim()).toBe('C-3YJ9');
+    expect(link?.getAttribute('title')).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   });
 
   it('renders no checkbox and no bulk bar — triage is single-finding only, dispatched from the panel a row opens', async () => {

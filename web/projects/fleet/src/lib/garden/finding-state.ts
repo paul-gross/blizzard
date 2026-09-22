@@ -76,3 +76,19 @@ const STATE_TONE: Readonly<Record<string, Tone>> = {
 export function findingStateTone(state: string): Tone {
   return STATE_TONE[state] ?? 'idle';
 }
+
+/** A review-sourced finding's own severity (blizzard#582 D1) → badge tone.
+ * `blocking` reads `needs`, the same red a human-blocked chunk reads — a blocking
+ * finding is exactly that, something standing in the way until a person addresses
+ * it. `should-fix` reads `waiting`, the same amber-hi a parked chunk reads: real,
+ * but not fatal to the round. */
+const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
+  blocking: 'needs',
+  'should-fix': 'waiting',
+};
+
+/** {@link SEVERITY_TONE}'s lookup, falling back to `idle` for a severity this build
+ * does not know — {@link findingStateTone}'s own reasoning. */
+export function findingSeverityTone(severity: string): Tone {
+  return SEVERITY_TONE[severity] ?? 'idle';
+}

@@ -84,6 +84,9 @@ export class GardeningFindingDetail {
       note: finding.note ?? null,
       facts: finding.facts,
       workItem: this.workItemLookup.workItemFor(finding.finding_id),
+      source: finding.source ?? 'routine',
+      severity: finding.severity ?? null,
+      raisedByChunkId: finding.raised_by_chunk_id ?? null,
     };
   });
 

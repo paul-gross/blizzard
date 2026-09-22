@@ -1976,13 +1976,25 @@ export type FindingDetailView = {
      */
     observed_count: number;
     /**
+     * Raised By Chunk Id
+     */
+    raised_by_chunk_id?: string | null;
+    /**
      * Routine Name
      */
-    routine_name: string;
+    routine_name?: string | null;
     /**
      * Scope Slug
      */
     scope_slug: string;
+    /**
+     * Severity
+     */
+    severity?: string | null;
+    /**
+     * Source
+     */
+    source?: string;
     /**
      * State
      */
@@ -2080,6 +2092,10 @@ export type FindingSupersedeRequest = {
  * when a routine first recorded the finding — the earliest of its `add`/`observed`
  * span — and is null for a finding carrying neither, which is how a finding whose only
  * facts are exit verbs reads.
+ *
+ * `source` is `"routine"` or `"review"` (blizzard#582 D1): a review-sourced finding
+ * carries no `routine_name`, carries its own `severity`, and names the `raised_by_chunk_id`
+ * that raised it.
  */
 export type FindingView = {
     /**
@@ -2123,13 +2139,25 @@ export type FindingView = {
      */
     observed_count: number;
     /**
+     * Raised By Chunk Id
+     */
+    raised_by_chunk_id?: string | null;
+    /**
      * Routine Name
      */
-    routine_name: string;
+    routine_name?: string | null;
     /**
      * Scope Slug
      */
     scope_slug: string;
+    /**
+     * Severity
+     */
+    severity?: string | null;
+    /**
+     * Source
+     */
+    source?: string;
     /**
      * State
      */
@@ -3707,6 +3735,24 @@ export type RestartView = {
      * To Node Name
      */
     to_node_name?: string | null;
+};
+
+/**
+ * ReviewFindingsDeliveryResponse
+ *
+ * The result of one `record-findings` materialization (blizzard#582) — the
+ * `GardenDeliveryResponse` shape: ``recorded`` durably means it, materialized now or
+ * replayed; ``invalid`` carries the rejection reason in ``detail``.
+ */
+export type ReviewFindingsDeliveryResponse = {
+    /**
+     * Detail
+     */
+    detail?: string;
+    /**
+     * Outcome
+     */
+    outcome: 'recorded' | 'invalid';
 };
 
 /**
@@ -7239,6 +7285,45 @@ export type ResumeChunkApiChunksChunkIdResumePostResponses = {
 
 export type ResumeChunkApiChunksChunkIdResumePostResponse = ResumeChunkApiChunksChunkIdResumePostResponses[keyof ResumeChunkApiChunksChunkIdResumePostResponses];
 
+export type RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Node Id
+         */
+        node_id: string;
+        /**
+         * Epoch
+         */
+        epoch: number;
+    };
+    url: '/api/chunks/{chunk_id}/review-findings-delivery';
+};
+
+export type RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostError = RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors[keyof RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors];
+
+export type RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ReviewFindingsDeliveryResponse;
+};
+
+export type RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponse = RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses[keyof RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses];
+
 export type StopChunkApiChunksChunkIdStopPostData = {
     body: ChunkStopRequest;
     path: {
@@ -7467,6 +7552,10 @@ export type ListFindingsApiFindingsGetData = {
          * Scope
          */
         scope?: string | null;
+        /**
+         * Source
+         */
+        source?: string | null;
         /**
          * Include Gone
          */
@@ -8467,6 +8556,24 @@ export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses = {
 };
 
 export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponse = HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses[keyof HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses];
+
+export type GetScopesApiFleetScopesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/scopes';
+};
+
+export type GetScopesApiFleetScopesGetResponses = {
+    /**
+     * Response Get Scopes Api Fleet Scopes Get
+     *
+     * Successful Response
+     */
+    200: Array<ScopeView>;
+};
+
+export type GetScopesApiFleetScopesGetResponse = GetScopesApiFleetScopesGetResponses[keyof GetScopesApiFleetScopesGetResponses];
 
 export type FleetSummaryApiFleetSummaryGetData = {
     body?: never;
