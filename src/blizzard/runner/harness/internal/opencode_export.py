@@ -59,6 +59,7 @@ class SubprocessOpenCodeExporter:
                         # `bzh:worker-env-allowlist` — never a full `os.environ` copy into
                         # a plugin-capable third-party CLI.
                         env=AllowlistedEnv.of(self._env_passthrough).variables,
+                        stdin=subprocess.DEVNULL,
                         stdout=out_file,
                         stderr=subprocess.PIPE,
                         text=True,

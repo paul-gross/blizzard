@@ -214,6 +214,41 @@ def _reap(pid: int) -> None:
         os.waitpid(pid, 0)
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("defer_disarm", [False, True])
+def test_a_worker_never_inherits_the_daemons_open_stdin(tmp_path: Any, defer_disarm: bool) -> None:
+    """A headless harness that drains piped stdin before its turn (`opencode run`) must see
+    EOF at once, not block on whatever stdin the daemon was started with — here a pipe whose
+    write end this test holds open for the whole launch, as a backgrounded daemon's would be."""
+    sentinel = tmp_path / "drained"
+    read_fd, write_fd = os.pipe()
+    saved_stdin = os.dup(0)
+    os.dup2(read_fd, 0)
+    launched: LaunchedProcess | None = None
+    try:
+        launched = ProcessLauncher(LinuxProcessProbe()).launch(
+            [sys.executable, "-c", f"import sys; sys.stdin.read(); open({str(sentinel)!r}, 'w').close()"],
+            cwd=None,
+            env=dict(os.environ),
+            stdout=None,
+            stderr=None,
+            defer_disarm=defer_disarm,
+        )
+        launched.confirm_durable()
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline and not sentinel.exists():
+            time.sleep(0.05)
+        assert sentinel.exists(), "the worker blocked reading the daemon's inherited stdin"
+    finally:
+        os.dup2(saved_stdin, 0)
+        for fd in (saved_stdin, read_fd, write_fd):
+            os.close(fd)
+        if launched is not None:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(launched.pgid, signal.SIGKILL)
+            _reap(launched.pid)
+
+
 # --------------------------------------------------------------------------- #
 # `_ensure_executable`: a missing path is `ENOENT`; existing-but-not-executable is `EACCES`.
 
