@@ -1,8 +1,7 @@
-"""The PR + CI-watch delivery policy's `deliver` node script — self-healing.
-
-Opens a PR per repo and routes by the PR's live ``mergeable_state``, resolving what is
-mechanical or transient without waking the LLM: ``clean`` merges, ``behind`` self-heals via
-``update-branch``, ``dirty`` is the one true LLM kick-back, everything else waits. Honors the
+"""The PR + CI-watch delivery policy's `deliver` node script — self-healing. Routes by the
+PR's live ``mergeable_state`` plus, for a ``clean``/``blocked``/``unstable`` head, its check
+runs — what eligibility turns on. ``behind`` self-heals via ``update-branch``, ``dirty`` is
+the one true LLM kick-back, everything else waits. Merges via rebase-merge. Honors the
 hub-command-node authoring contract (``blizzard-context:/standards/hub-nodes.md``)."""
 
 from __future__ import annotations
@@ -56,6 +55,12 @@ _FAILED = "failed"  # a check run completed with a terminal conclusion — never
 # any other non-terminal status, by `poll_timeout`.
 _TERMINAL_CONCLUSIONS = {"failure", "timed_out", "action_required"}
 
+# The conclusions a green check run may carry — required or unrequired alike.
+_GREEN_CONCLUSIONS = {"success", "neutral", "skipped"}
+
+# States whose merge eligibility needs a live check-run verdict, not just `mergeable_state`.
+_CI_WATCH_STATES = {"clean", "blocked", "unstable"}
+
 # Whether a head-failing check is inherited from the base, or the chunk's own. Kept off
 # `Verdict` itself: the classification is a pure function of TWO readings — the head's own
 # terminal conclusion (already established) and the base's reading of that same check
@@ -66,28 +71,28 @@ _INHERITED = "inherited"
 
 @dataclass(frozen=True)
 class Route:
-    """Where one repo goes, from its PR's live ``(merged, mergeable_state)`` — pure.
-
-    ``clean``/already-merged pushes, ``dirty`` bounces, ``behind`` self-heals via
-    update-branch, and every other state waits, since none is a content conflict."""
+    """Where one repo goes, from its PR's live ``(merged, mergeable_state, verdict)`` —
+    pure. Already-merged and ``dirty``/``behind`` never need a verdict; a
+    ``clean``/``blocked``/``unstable`` head pushes only on a green one, else waits."""
 
     mergeable_state: str | None
     merged: bool = False
+    verdict: Verdict | None = None
 
     @classmethod
-    def of(cls, pull: PullRequest) -> Route:
-        return cls(pull.mergeable_state, merged=pull.merged)
+    def of(cls, pull: PullRequest, verdict: Verdict | None = None) -> Route:
+        return cls(pull.mergeable_state, merged=pull.merged, verdict=verdict)
 
     @property
     def decision(self) -> str:
         if self.merged:
             return _PUSH
-        if self.mergeable_state == "clean":
-            return _PUSH
         if self.mergeable_state == "dirty":
             return _BOUNCE
         if self.mergeable_state == "behind":
             return _UPDATE
+        if self.mergeable_state in _CI_WATCH_STATES:
+            return _PUSH if self.verdict is not None and self.verdict.green else _WAIT
         return _WAIT
 
 
@@ -134,6 +139,19 @@ class Verdict:
     def substantive(self) -> bool:
         """Whether this read says anything: a zero-check read is not worth findings."""
         return bool(self.check_runs)
+
+    @property
+    def green(self) -> bool:
+        """The merge-eligibility bar: at least one check run, and every one of them
+        completed with a conclusion in `_GREEN_CONCLUSIONS` — a degraded or empty read is
+        never green."""
+        runs = self.check_runs if isinstance(self.check_runs, list) else []
+        if not runs:
+            return False
+        return all(
+            isinstance(run, dict) and run.get("status") == "completed" and run.get("conclusion") in _GREEN_CONCLUSIONS
+            for run in runs
+        )
 
     def red(self, name: str) -> bool | None:
         """Whether this ref's own latest run named ``name`` is itself terminal — ``None``
@@ -309,7 +327,10 @@ def _land() -> int:
                 continue
             head_sha = pull.head_sha or commit["commit"]
             state = pull.mergeable_state
-            decision = Route.of(pull).decision
+            # A verdict is only ever worth reading for the states merge eligibility itself
+            # turns on — fetched once here and reused below, never re-read.
+            verdict = Verdict.of(run, pull.repo, head_sha) if state in _CI_WATCH_STATES else None
+            decision = Route.of(pull, verdict).decision
             if decision == _BOUNCE:
                 raise _Conflict(f"{pull} is dirty (a real merge conflict)")
             if decision == _UPDATE:
@@ -322,10 +343,9 @@ def _land() -> int:
                 wait = True
                 continue
             if decision == _WAIT:
-                if state in {"blocked", "unstable"}:
-                    # The CI-watch case (issue #232): a degraded read falls through to the
-                    # plain wait below.
-                    verdict = Verdict.of(run, pull.repo, head_sha)
+                if verdict is not None:
+                    # The CI-watch case (issue #232), now also entered by a clean-but-not-
+                    # green head: a degraded read falls through to the plain wait below.
                     if verdict.decision == _FAILED:
                         base = Verdict.of(run, pull.repo, run.base_branch)
                         checks = verdict.failure_rows(base)
@@ -400,7 +420,8 @@ def _land() -> int:
                 print(f"{pull} is {state} — not cleanly mergeable yet; re-polling", file=sys.stderr)
                 wait = True
                 continue
-            # decision == _PUSH: clean (or already merged) — eligible.
+            # decision == _PUSH: already merged, or a green verdict at a clean/blocked/
+            # unstable head — eligible.
             to_merge.append((pull, head_sha))
     except _Conflict as exc:
         print(f"conflict: {exc}", file=sys.stderr)
@@ -433,16 +454,18 @@ def _land() -> int:
         return 0
 
     # --- merge stage: merge the CURRENT head sha, which a self-heal update-branch may
-    #     have advanced past the originally-recorded artifact commit.
-    for pull, head_sha in to_merge:
+    #     have advanced past the originally-recorded artifact commit, via rebase-merge.
+    pending_count = len(to_merge)
+    for marker_index, (pull, head_sha) in enumerate(to_merge, start=1):
         try:
-            landed_sha = pull.merge(head_sha)
+            landed_sha = pull.merge(head_sha, method="rebase")
         except MergeDidNotLand as exc:
             # Not an already-merged prior run (`merge` absorbs that) — a race worth re-polling.
             print(f"merge of {pull} did not land ({exc.result}); will re-poll", file=sys.stderr)
             print(_PENDING)
             return 0
         run.markers.record(pull.bare_repo, landed_sha)
+        run.pause_for_crash_window(marker_index=marker_index, pending_count=pending_count)
 
     print(_LANDED)
     return 0
@@ -472,29 +495,38 @@ class _Table:
         return failures
 
 
+#: The only shape that turns a `clean`/`blocked`/`unstable` head into a push.
+_GREEN_VERDICT = Verdict([{"status": "completed", "conclusion": "success"}])
+#: A check run still in flight — `clean` alone is never enough to push.
+_PENDING_VERDICT = Verdict([{"status": "in_progress", "conclusion": None}])
+
+
 class _RouteTable(_Table):
     label = "routing cases"
     cases: ClassVar[list[tuple[Any, str]]] = [
-        (("clean", False), _PUSH),
-        ((None, True), _PUSH),  # already merged (interrupted prior run) — re-derive no-op
-        (("clean", True), _PUSH),
-        (("dirty", False), _BOUNCE),  # the ONLY true LLM bounce
-        (("behind", False), _UPDATE),  # self-heal, no LLM
-        (("unknown", False), _WAIT),  # transient — GitHub still computing
-        (("blocked", False), _WAIT),  # required CI/reviews not green — the CI-watch wait
-        (("unstable", False), _WAIT),
-        (("has_hooks", False), _WAIT),
-        (("draft", False), _WAIT),
-        ((None, False), _WAIT),  # missing state — wait, never bounce
+        (("clean", False, _GREEN_VERDICT), _PUSH),
+        ((None, True, None), _PUSH),  # already merged (interrupted prior run) — no verdict read
+        (("clean", True, None), _PUSH),  # merged wins outright, whatever the verdict
+        (("dirty", False, None), _BOUNCE),  # the ONLY true LLM bounce
+        (("behind", False, None), _UPDATE),  # self-heal, no LLM
+        (("unknown", False, None), _WAIT),  # transient — GitHub still computing
+        (("clean", False, _PENDING_VERDICT), _WAIT),  # merge refused while checks are pending
+        (("clean", False, None), _WAIT),  # clean alone, no verdict read — never push blind
+        (("blocked", False, _PENDING_VERDICT), _WAIT),  # required CI/reviews not green — CI-watch
+        (("unstable", False, _PENDING_VERDICT), _WAIT),
+        (("blocked", False, _GREEN_VERDICT), _PUSH),  # branch protection lagging a green head
+        (("has_hooks", False, None), _WAIT),
+        (("draft", False, None), _WAIT),
+        ((None, False, None), _WAIT),  # missing state — wait, never bounce
     ]
 
     def subject(self, case: Any) -> str:
-        state, merged = case
-        return f"({state!r}, merged={merged})"
+        state, merged, verdict = case
+        return f"({state!r}, merged={merged}, green={verdict.green if verdict else None})"
 
     def decide(self, case: Any) -> str:
-        state, merged = case
-        return Route(state, merged=merged).decision
+        state, merged, verdict = case
+        return Route(state, merged=merged, verdict=verdict).decision
 
 
 class _CheckTable(_Table):

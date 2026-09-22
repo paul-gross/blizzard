@@ -18,15 +18,17 @@
 # still rides back into `review` for cold eyes, and `clean` proceeds straight to
 # delivery.
 #
-# Delivery is PR-free: `deliver` runs the packaged `land_ff` script, which fast-forwards
-# each repo's base branch ref directly to the chunk's own commit instead of opening and
-# merging a PR — no merge commit, so history stays linear. A rejected fast-forward
-# (the base moved out from under the chunk) reports `conflict`, routed back to
-# `pre-push` — NOT to `build`. That edge is the point of having a pre-push node at all:
-# a rejected fast-forward means the base moved, not that the work is wrong, so the
-# recovery is to rebase again, not to rebuild a change that already passed review.
-# `pre-push` re-triages and returns to delivery; the hub node's bounce_cap bounds the
-# loop if the base keeps moving under it.
+# Delivery runs the packaged `land_pr_ci` script — the PR + CI-watch delivery policy,
+# which opens a PR per repo and polls until every PR merges cleanly, using GitHub's
+# rebase-merge so history stays linear. A dirty PR (a real merge conflict) reports
+# `conflict`, routed back to `pre-push` — NOT to `build`. That edge is the point of
+# having a pre-push node at all: a real conflict means the base moved under the chunk,
+# not that the work is wrong, so the recovery is to rebase again, not to rebuild a change
+# that already passed review. A repo's own CI check failing on the PR reports `failure`
+# the same way, also routed to `pre-push`, which reads `delivery-findings` to tell a
+# mechanical land-script hiccup from a real defect and triages accordingly. `pre-push`
+# re-triages and returns to delivery; the hub node's bounce_cap bounds the loop if the
+# base keeps moving under it.
 #
 # A landing closes on `retrospective`, the same post-delivery node
 # advanced-development-workflow ends on — the lightweight lane is cut down on *gates*,
@@ -128,8 +130,8 @@ nodes:
     produces:
       - pre-push-summary
       # A rebase REWRITES the branch, so the commit `build` declared is orphaned the
-      # moment this node runs. Re-declaring here is what lets `deliver` fast-forward to
-      # the rebased tip instead of the stale one it can never fast-forward to.
+      # moment this node runs. Re-declaring here is what lets `deliver` open its PR
+      # against the rebased tip instead of the stale, orphaned one.
       - {name: commit, kind: git_commit}
     judgement:
       prompt: ./prompts/pre-push.judgement.md
@@ -153,22 +155,27 @@ nodes:
     executor: hub
     run:
       - name: land-every-repo
-        command: python3 -m blizzard.hub.graphs.scripts.land_ff
+        command: python3 -m blizzard.hub.graphs.scripts.land_pr_ci
+    # land_pr_ci reports the reserved `pending` outcome while any PR is `unstable`/
+    # `unknown`/not-yet-clean, so a transient forge state polls in place instead of
+    # bouncing validated work to pre-push.
+    poll_interval: 30
+    poll_timeout: 1800
     judgement:
       choices:
         landed:
-          description: Every repo's base branch ref fast-forwarded cleanly to this chunk's commit; the chunk closes with a retrospective.
+          description: Every repo's PR merged cleanly into its base branch; the chunk closes with a retrospective.
           to: retrospective
         conflict:
-          description: A repo did not fast-forward cleanly (the base moved out from under it); returned to pre-push to rebase against the base as it now stands, not to build.
+          description: A repo's PR read dirty (a real merge conflict); returned to pre-push to rebase against the base as it now stands, not to build.
           to: pre-push
           prompt_addendum: ./prompts/pre-push.from-deliver.md
         failure:
-          description: land_ff itself failed or crashed (a missing env var, an unauthorized or failed marker write) rather than reporting a clean outcome; this lane has no resolve node, so it returns to pre-push — the same recovery point as conflict — to diagnose and retry without discarding the validated spine.
+          description: A repo's check run completed with a terminal conclusion the base branch does not share, poll_timeout was exceeded, or the land script itself crashed; this lane has no resolve node, so it returns to pre-push — the same recovery point as conflict — to diagnose (via delivery-findings) and retry without discarding the validated spine.
           to: pre-push
           prompt_addendum: ./prompts/pre-push.from-deliver.md
         inherited-failure:
-          description: Every remaining check failure is inherited from the base branch and survived a one-time re-run; not this chunk's defect, so it routes straight to build to repair the base as its own commit. land_ff reads no check runs, so this lane's script cannot print it yet.
+          description: Every remaining check failure is inherited from the base branch and survived a one-time re-run; not this chunk's defect, so it routes straight to build to repair the base as its own commit.
           to: build
           prompt_addendum: ./prompts/build.from-deliver.md
 

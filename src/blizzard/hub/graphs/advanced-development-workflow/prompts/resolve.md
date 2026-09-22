@@ -32,8 +32,8 @@ mergeable, change nothing, and say so.
 
 If anything you did moved a repo's branch, push it and re-declare the new tip:
 `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>` — `--env <id>` is added if the chunk
-holds more than one environment. Delivery fast-forwards to the sha you declare, so declare even when you changed
-nothing.
+holds more than one environment. Delivery opens its PR against the branch you declare, so declare even when you changed
+nothing — an undeclared repo never reaches delivery at all.
 
 Submit what you found, which case it was, and what you did per repo as the node's `resolve-report` asset before you
 declare done: run `blizzard runner artifact create --name resolve-report` with the content on stdin.

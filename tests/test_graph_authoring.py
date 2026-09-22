@@ -55,7 +55,7 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure", "inherited-failure"}
     deliver_targets = {e.to_node_name for e in graph.edges_from(deliver.node_id)}
     assert deliver_targets == {"retrospective", "pre-push", "build"}
-    assert deliver.run and deliver.run[0].command == "python3 -m blizzard.hub.graphs.scripts.land_ff"
+    assert deliver.run and deliver.run[0].command == "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"
     # The lane authors no bounce_cap (#64) — it reifies as None, so the
     # executor falls back to the fleet-wide default.
     assert deliver.bounce_cap is None
@@ -123,11 +123,14 @@ def test_every_lane_authors_the_inherited_failure_edge_with_its_own_addendum(gra
     assert "loop bound" in edges[0].prompt_addendum.lower()
 
 
-def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node() -> None:
-    """#241 recurrence guard: `land_pr_ci` must not print an outcome the graph never
-    authors a choice for. Reads the script's own outcome constants rather than
+@pytest.mark.parametrize(
+    "graph_name", ["advanced-development-workflow", "basic-development-workflow", "basic-harness-workflow"]
+)
+def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node(graph_name: str) -> None:
+    """#241 recurrence guard, over every lane: `land_pr_ci` must not print an outcome the
+    graph never authors a choice for. Reads the script's own outcome constants rather than
     hardcoding them; `_PENDING` is machinery-reserved and excluded."""
-    doc = PACKAGED.named("advanced-development-workflow").doc
+    doc = PACKAGED.named(graph_name).doc
     graph = Reification.of(doc, _clock()).graph
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
@@ -139,17 +142,6 @@ def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node() -> N
         land_pr_ci._INHERITED_FAILURE,
     }
     assert non_reserved_outcomes <= authored
-
-
-def test_every_land_ff_outcome_is_authored_on_the_shipped_bas_dwf_deliver_node() -> None:
-    """Sibling guard for `land_ff` (basic-development-workflow), cheap alongside the
-    adv-dwf one above. `land_ff` prints only `landed`/`conflict` — no named constants to
-    import here."""
-    graph = Reification.of(_bas_dwf_doc(), _clock()).graph
-    deliver = graph.node_by_name("deliver")
-    assert deliver is not None
-    authored = {c.name for c in deliver.choices}
-    assert {"landed", "conflict"} <= authored
 
 
 def test_reify_carries_an_authored_bounce_cap() -> None:

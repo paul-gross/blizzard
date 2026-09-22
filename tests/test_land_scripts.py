@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from blizzard.hub.graphs.scripts import land_common, land_default, land_ff, land_pr_ci
+from blizzard.hub.graphs.scripts import land_common, land_default, land_pr_ci
 
 pytestmark = pytest.mark.unit
 
@@ -51,11 +51,21 @@ def _scripted_forge(
     list consumed one response per call — e.g. ``[503, 200]`` for a retry-then-succeed
     scenario)."""
     responses = {
+        ("GET", f"http://forge/repos/{_REPO}/pulls?state=closed"): (200, []),
         ("GET", f"http://forge/repos/{_REPO}/pulls?state=open"): (200, []),
         ("POST", f"http://forge/repos/{_REPO}/pulls"): (201, {"number": 1, "head": {"ref": _BRANCH}}),
         ("GET", f"http://forge/repos/{_REPO}/pulls/1"): (
             200,
-            {"number": 1, "merged": False, "mergeable_state": "clean"},
+            {
+                "number": 1,
+                "merged": False,
+                "mergeable_state": "clean",
+                "head": {"ref": _BRANCH, "sha": "headsha"},
+            },
+        ),
+        ("GET", f"http://forge/repos/{_REPO}/commits/headsha/check-runs"): (
+            200,
+            {"total_count": 1, "check_runs": [_check_run("completed", "success")]},
         ),
         ("PUT", f"http://forge/repos/{_REPO}/pulls/1/merge"): (200, {"sha": "merged-sha1", "merged": True}),
     }
@@ -185,6 +195,7 @@ def _forge_with_state(
         "html_url": f"http://forge/{_REPO}/pull/1",
     }
     responses = {
+        ("GET", f"{base}/pulls?state=closed"): (200, []),
         ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
         ("GET", f"{base}/pulls/1"): (200, pull),
         ("PUT", f"{base}/pulls/1/update-branch"): (update_status, {"message": "Updating pull request branch."}),
@@ -278,12 +289,52 @@ def test_clean_pr_merges_the_current_head_sha(
 ) -> None:
     _set_base_env(monkeypatch, feature_title="t")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(land_common, "forge_request", _forge_with_state(calls, mergeable_state="clean"))
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_with_state(calls, mergeable_state="clean", head_check_runs=[_check_run("completed", "success")]),
+    )
 
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "landed"
     merge = [body for m, url, body in calls if m == "PUT" and url.endswith("/merge") and body is not None]
     assert merge and merge[0]["sha"] == "headsha", "a self-heal must merge the CURRENT head, not a stale commit"
+
+
+def test_clean_pr_waits_while_its_checks_are_still_pending(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`mergeable_state: clean` alone is never enough — the merge path requires a green
+    verdict, read independently of branch protection."""
+    _set_base_env(monkeypatch, feature_title="t")
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_with_state(calls, mergeable_state="clean", head_check_runs=[_check_run("in_progress", None)]),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "pending"
+    assert not any(url.endswith("/merge") for url in _urls(calls, "PUT")), "a clean-but-not-green PR must not merge"
+
+
+def test_clean_merge_body_asserts_a_rebase_merge_method(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`land_pr_ci` merges for a linear history."""
+    _set_base_env(monkeypatch, feature_title="t")
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_with_state(calls, mergeable_state="clean", head_check_runs=[_check_run("completed", "success")]),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "landed"
+    merge = [body for m, url, body in calls if m == "PUT" and url.endswith("/merge") and body is not None]
+    assert merge and merge[0]["merge_method"] == "rebase"
 
 
 # land_pr_ci terminal CI check failure + CI-watch findings (issue #232): asserts the
@@ -445,7 +496,11 @@ def test_a_green_re_run_is_simply_not_failing_on_the_next_poll(
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"ci-rerun/{_REPO}/build/headsha"]))
-    monkeypatch.setattr(land_common, "forge_request", _forge_with_state(calls, mergeable_state="clean"))
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_with_state(calls, mergeable_state="clean", head_check_runs=[_check_run("completed", "success")]),
+    )
 
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "landed"
@@ -514,6 +569,8 @@ def test_two_pending_repos_one_failing_names_only_the_failing_repo_and_merges_ne
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     other_base = f"http://forge/repos/{other_repo}"
     responses = {
+        ("GET", f"http://forge/repos/{_REPO}/pulls?state=closed"): (200, []),
+        ("GET", f"{other_base}/pulls?state=closed"): (200, []),
         ("GET", f"http://forge/repos/{_REPO}/pulls?state=open"): (
             200,
             [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}],
@@ -624,7 +681,7 @@ def test_an_empty_check_runs_list_is_not_a_substantive_wait(
     assert not _findings_posts(calls)
 
 
-@pytest.mark.parametrize("script", [land_default, land_pr_ci, land_ff], ids=["default", "pr-ci", "ff"])
+@pytest.mark.parametrize("script", [land_default, land_pr_ci], ids=["default", "pr-ci"])
 def test_an_empty_commit_set_fails_the_node_instead_of_reporting_landed(
     script, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -654,7 +711,7 @@ def test_an_empty_commit_set_fails_the_node_instead_of_reporting_landed(
     assert "no git commits to deliver" in captured.err
 
 
-@pytest.mark.parametrize("script", [land_default, land_pr_ci, land_ff], ids=["default", "pr-ci", "ff"])
+@pytest.mark.parametrize("script", [land_default, land_pr_ci], ids=["default", "pr-ci"])
 def test_a_fully_marked_commit_set_still_reports_landed(
     script, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -678,7 +735,7 @@ def test_a_fully_marked_commit_set_still_reports_landed(
     assert capsys.readouterr().out.strip().splitlines()[-1] == "landed"
 
 
-@pytest.mark.parametrize("script", [land_default, land_pr_ci, land_ff], ids=["default", "pr-ci", "ff"])
+@pytest.mark.parametrize("script", [land_default, land_pr_ci], ids=["default", "pr-ci"])
 def test_a_non_code_chunk_lands_empty_because_its_graph_promised_no_commit(
     script, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -703,7 +760,7 @@ def test_a_non_code_chunk_lands_empty_because_its_graph_promised_no_commit(
     assert capsys.readouterr().out.strip().splitlines()[-1] == "landed"
 
 
-@pytest.mark.parametrize("script", [land_default, land_pr_ci, land_ff], ids=["default", "pr-ci", "ff"])
+@pytest.mark.parametrize("script", [land_default, land_pr_ci], ids=["default", "pr-ci"])
 def test_an_absent_expectation_signal_is_treated_as_expected(script, monkeypatch: pytest.MonkeyPatch) -> None:
     """An older executor injects no signal; failing loudly on a set the policy cannot
     explain is safer than silently assuming "expected"."""
@@ -730,6 +787,7 @@ def _forge_double_for(module: Any, calls: list[tuple[str, str, dict[str, Any] | 
     ``land_pr_ci`` reads a live ``mergeable_state`` where ``land_default`` reads a fresh
     PR, so each needs its own fixture shape."""
     if module is land_pr_ci:
+        kwargs.setdefault("head_check_runs", [_check_run("completed", "success")])
         return _forge_with_state(calls, mergeable_state="clean", **kwargs)
     return _scripted_forge(calls, **kwargs)
 
@@ -778,7 +836,7 @@ def test_a_503_then_200_on_the_marker_write_retries_exactly_once_then_lands(
     assert capsys.readouterr().out.strip().splitlines()[-1] == "landed"
 
 
-@pytest.mark.parametrize("module", [land_default, land_ff, land_pr_ci], ids=["default", "ff", "pr-ci"])
+@pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["default", "pr-ci"])
 def test_an_unset_forge_url_names_it_and_exits_non_zero(
     monkeypatch: pytest.MonkeyPatch, module: Any, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -797,7 +855,7 @@ def test_an_unset_forge_url_names_it_and_exits_non_zero(
     assert "BZ_FORGE_URL" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("module", [land_default, land_ff, land_pr_ci], ids=["default", "ff", "pr-ci"])
+@pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["default", "pr-ci"])
 def test_malformed_git_commits_json_names_it_and_exits_non_zero(
     monkeypatch: pytest.MonkeyPatch, module: Any, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1012,6 +1070,7 @@ def _forge_with_an_empty_repo(
     base = f"http://forge/repos/{_REPO}"
     other_base = f"http://forge/repos/{other_repo}"
     responses = {
+        ("GET", f"{base}/pulls?state=closed"): (200, []),
         ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
         ("GET", f"{base}/pulls/1"): (
             200,
@@ -1023,7 +1082,12 @@ def _forge_with_an_empty_repo(
                 "html_url": f"http://forge/{_REPO}/pull/1",
             },
         ),
+        ("GET", f"{base}/commits/headsha/check-runs"): (
+            200,
+            {"total_count": 1, "check_runs": [_check_run("completed", "success")]},
+        ),
         ("PUT", f"{base}/pulls/1/merge"): (200, {"sha": "merged-sha1", "merged": True}),
+        ("GET", f"{other_base}/pulls?state=closed"): (200, []),
         ("GET", f"{other_base}/pulls?state=open"): (200, []),
         ("POST", f"{other_base}/pulls"): (
             422,

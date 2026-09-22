@@ -32,10 +32,8 @@ time: `blizzard runner artifact commit --repo <repo> --branch <branch> --commit 
 the environment's repo manifest — never an `owner/name` slug, a path, or a URL; `<sha>` is the full sha, never
 abbreviated; add `--env <id>` when the chunk holds more than one environment.
 
-Declare even a no-op rebase: an unchanged tip re-declared is harmless, an omitted repo never reaches delivery, and a
-chunk with nothing declared fails outright. Delivery fast-forwards the base to the declared sha, not the branch tip — a
-pushed but un-redeclared rebase aims delivery at an orphaned commit that can never fast-forward, bouncing back here
-indefinitely.
+Declare even a no-op rebase: an unchanged tip re-declared is harmless, but an un-redeclared repo is invisible to
+delivery — it opens no PR and never lands — and a chunk with nothing declared fails outright.
 
 ## Submit the summary
 

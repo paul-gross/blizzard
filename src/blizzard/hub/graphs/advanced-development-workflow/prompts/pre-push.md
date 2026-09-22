@@ -29,8 +29,8 @@ change — and any conflict resolution — touched. Targeted, not the entire sui
 
 **Every repo you touched is declared, every time.** For each, run
 `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>` — `--env <id>` is added if the chunk
-holds more than one environment. Delivery fast-forwards to the sha you declare, not to whatever the branch points at, so
-declare every repo even when its rebase was a no-op.
+holds more than one environment. Delivery opens its PR against the branch you declare, so declare every repo even when
+its rebase was a no-op — an undeclared repo never reaches delivery at all.
 
 ## Submit
 

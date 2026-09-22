@@ -261,8 +261,8 @@ nodes:
       - pre-push-summary
       - retrospective
       # A rebase REWRITES the branch, so the commit `build` declared is orphaned the
-      # moment this node runs. Re-declaring here is what lets `deliver` fast-forward to
-      # the rebased tip instead of the stale one it can never fast-forward to.
+      # moment this node runs. Re-declaring here is what lets `deliver` open its PR
+      # against the rebased tip instead of the stale, orphaned one.
       - {name: commit, kind: git_commit}
     judgement:
       prompt: ./prompts/pre-push.judgement.md
