@@ -75,6 +75,32 @@ class FindingDelta(BaseModel):
     findings: list[FindingOp] = []
 
 
+class ReviewFindingEntry(BaseModel):
+    """One entry in a delivery lane's review-finding delta (blizzard#582 D7) — the
+    review's own `ref` (`F1`…) and what became of that finding. A `deferred` entry adds
+    the fields a `garden/finding-format` `AddFindingOp` already carries (`severity`,
+    `scope`, `class`, `locus`, `summary`); `fixed`/`refuted` carry none of them — the
+    review already settled those, and materialization mints nothing for either."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    ref: str
+    disposition: Literal["deferred", "fixed", "refuted"]
+    severity: Literal["blocking", "should-fix"] | None = None
+    scope: str | None = None
+    class_: str | None = Field(default=None, alias="class")
+    locus: str | None = None
+    summary: str | None = None
+
+
+class ReviewFindingDelta(BaseModel):
+    """A delivery lane review round's own delta (blizzard#582 D7) — the wire shape
+    `review/finding-format` documents in full; this restates only the field meanings a
+    caller needs to construct one."""
+
+    entries: list[ReviewFindingEntry] = []
+
+
 class FindingView(BaseModel):
     """A finding. `state` is the newest fact's own kind, folded to `"live"` for
     `add`/`observed`/`reopened` (blizzard#394) — `live` is kept alongside it as the
@@ -87,12 +113,16 @@ class FindingView(BaseModel):
     `introduced` refers to ambiguous, so no instant is looked up. `first_observed_at` is
     when a routine first recorded the finding — the earliest of its `add`/`observed`
     span — and is null for a finding carrying neither, which is how a finding whose only
-    facts are exit verbs reads."""
+    facts are exit verbs reads.
+
+    `source` is `"routine"` or `"review"` (blizzard#582 D1): a review-sourced finding
+    carries no `routine_name`, carries its own `severity`, and names the `raised_by_chunk_id`
+    that raised it."""
 
     model_config = ConfigDict(populate_by_name=True)
 
     finding_id: str
-    routine_name: str
+    routine_name: str | None = None
     scope_slug: str
     class_: str = Field(alias="class")
     locus: str
@@ -105,6 +135,9 @@ class FindingView(BaseModel):
     note: str | None = None
     last_seen_at: str | None
     observed_count: int
+    source: str = "routine"
+    severity: str | None = None
+    raised_by_chunk_id: str | None = None
 
 
 class FindingsPageView(BaseModel):

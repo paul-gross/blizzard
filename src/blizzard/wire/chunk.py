@@ -345,6 +345,15 @@ class GardenDeliveryResponse(BaseModel):
     detail: str = ""
 
 
+class ReviewFindingsDeliveryResponse(BaseModel):
+    """The result of one `record-findings` materialization (blizzard#582) — the
+    `GardenDeliveryResponse` shape: ``recorded`` durably means it, materialized now or
+    replayed; ``invalid`` carries the rejection reason in ``detail``."""
+
+    outcome: Literal["recorded", "invalid"]
+    detail: str = ""
+
+
 class ChunkPauseRequest(BaseModel):
     """Set or clear a chunk's operator pause brake — records who flipped it (issue #46)."""
 

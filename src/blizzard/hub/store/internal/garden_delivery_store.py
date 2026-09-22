@@ -145,6 +145,7 @@ class GardenDeliveryStore:
                             "summary": f.summary,
                             "introduced": f.introduced,
                             "introduced_at": f.introduced_at,
+                            "source": "routine",
                         }
                         for f in new_findings
                     ],

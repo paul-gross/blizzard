@@ -42,6 +42,9 @@ _BUCKET = [
         "note": None,
         "last_seen_at": None,
         "observed_count": 0,
+        "source": "routine",
+        "severity": None,
+        "raised_by_chunk_id": None,
     }
 ]
 
