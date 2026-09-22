@@ -706,7 +706,9 @@ selftest_results = Table(
 # --- Provider-overload backoff facts (blizzard#595) --------------------------
 # Append-only, one row per exit classified overloaded; `overload_resets` closes a streak on
 # a later clean exit — mirrors `pause_parks`/`pause_park_resumes`'s own open/close pair.
-# Deliberately unindexed — see `asks`'s own comment above for why (issue #520).
+# Deliberately unindexed — one environment's own local runner store stays small for that
+# environment's lifetime (`tests/store_scan_allowlist.py`'s env-scoped-history reason), the
+# same ground `usage_facts`/`nudge_facts` above lean on, not the #520 near-empty six's own.
 
 overload_facts = Table(
     "overload_facts",

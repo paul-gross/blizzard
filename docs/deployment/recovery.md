@@ -98,8 +98,9 @@ first delay rather than continuing where an old streak left off.
 
 `resume_after` is a durable fact, not daemon or in-memory state, so a backing-off lease survives a restart or a crash
 exactly like an ask- or pause-parked one: REAP and RESUME leave it alone, and ADVANCE's own no-op-until-due check
-(`bzh:facts-not-status` — nothing is derived or cached ahead of time) picks the wait back up wherever the outage left
-it, waking it late rather than early or not at all. A judge elicitation's own overload is closed the same way a worker
+(`bzh:facts-not-status` — "is it backing off" is never itself cached; each tick derives it fresh off the durable
+`resume_after`) picks the wait back up wherever the outage left it, waking it late rather than early or not at all. A
+judge elicitation's own overload is closed the same way a worker
 generation's is — by the next invocation's own identity moving on, generation for a worker, launch instant for a
 judge — never a separate closing write. The fifth consecutive overload on a lease falls through to today's ordinary
 path: a worker generation is judged as usual, a verdict-less judge elicitation fails the attempt as usual, spending a

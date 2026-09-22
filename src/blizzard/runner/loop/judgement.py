@@ -224,14 +224,16 @@ class Judgement:
         # exactly what a usage-limit pause exists to avoid.
         if session is not None:
             generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
-            limit = classify_judge_usage_limit(self.ctx, lease, output, generation=generation)
+            lines = self.ctx.usage.judge_transcript_lines(lease, self.bindings, generation=generation)
+            limit = classify_judge_usage_limit(self.ctx, lease, output, lines)
             if limit is not None:
                 engage_and_park_judge(self.ctx, lease, limit)
                 return
             # A provider-overloaded elicitation is classified right alongside the usage
             # limit (blizzard#595) — the two are mutually exclusive exit reasons for the
-            # one exit, same as the worker's own classification order in steps.py.
-            overload = classify_judge_overload(self.ctx, lease, output, generation=generation)
+            # one exit, both read from the same `output`/`lines` pair read once above (F4),
+            # same as the worker's own classification order in steps.py.
+            overload = classify_judge_overload(self.ctx, lease, output, lines)
             if overload is not None:
                 identity = iso_utc(elicitation.first_launched_at)
                 backing_off = record_judge_overload(

@@ -10,6 +10,7 @@ module is where the loop decides what to do with it (``bzh:deterministic-shell``
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from blizzard.foundation.crash import crashpoint
@@ -17,7 +18,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.pause import PauseService
-from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.harness.adapter import IHarnessUsageLimits
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.usage import UsageLimit
@@ -40,18 +41,19 @@ _CP_JUDGE_AFTER_BRAKE = crashpoint(
 )
 
 
-def classify_worker_usage_limit(ctx: LoopContext, lease: LeaseRecord, *, generation: int) -> UsageLimit | None:
-    """This generation's own spawn/resume/nudge invocation, classified — ``None`` when it
-    was not usage-limited, an unresolvable owner, or a session-less lease."""
+def classify_worker_usage_limit(
+    ctx: LoopContext, lease: LeaseRecord, output: str, lines: Sequence[str]
+) -> UsageLimit | None:
+    """This generation's own spawn/resume/nudge invocation, classified over ``output`` and
+    ``lines`` — the caller's own single read of this generation's stdout and transcript
+    range, shared with its provider-overload classification so neither pays for the other's
+    read (blizzard#595 F4). ``None`` when not usage-limited, or the owner is unresolvable."""
     session = lease.session
     if session is None:
         return None
-    harness = _full_adapter(ctx, session)
+    harness = _usage_limit_adapter(ctx, session)
     if harness is None:
         return None
-    output = ctx.worker_files.read_stdout(lease.lease_id, generation)
-    bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
-    lines = ctx.usage.worker_transcript_lines(lease, bindings, generation=generation)
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
 
 
@@ -73,18 +75,17 @@ def engage_and_park_worker(ctx: LoopContext, lease: LeaseRecord, limit: UsageLim
 
 
 def classify_judge_usage_limit(
-    ctx: LoopContext, lease: LeaseRecord, output: str, *, generation: int
+    ctx: LoopContext, lease: LeaseRecord, output: str, lines: Sequence[str]
 ) -> UsageLimit | None:
-    """This generation's own judge elicitation, classified over its output file plus its
-    own transcript range (judge boundary to tail) — ``None`` when not usage-limited."""
+    """This generation's own judge elicitation, classified over its already-read output and
+    transcript range (judge boundary to tail, shared with provider-overload classification —
+    blizzard#595 F4) — ``None`` when not usage-limited."""
     session = lease.session
     if session is None:
         return None
-    harness = _full_adapter(ctx, session)
+    harness = _usage_limit_adapter(ctx, session)
     if harness is None:
         return None
-    bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
-    lines = ctx.usage.judge_transcript_lines(lease, bindings, generation=generation)
     return harness.classify_usage_limit(output, lines, ctx.clock.now())
 
 
@@ -143,12 +144,13 @@ def _minute_precision(value: datetime) -> str:
     return as_utc(value).strftime("%Y-%m-%dT%H:%MZ")
 
 
-def _full_adapter(ctx: LoopContext, session: SessionReference) -> IHarnessAdapter | None:
-    """The full adapter, unlike ``ctx.adapter_for``'s own ``IHarnessLifecycleAndVerdict``
-    narrowing — classification needs ``IHarnessUsageLimits`` too. ``None`` on an
-    unresolvable owner, never a raise: a lease already reaching this point has exited, and
-    an owner this runner cannot dispatch to is `Judgement`/`Attempt`'s own escalation to make,
-    not this classifier's."""
+def _usage_limit_adapter(ctx: LoopContext, session: SessionReference) -> IHarnessUsageLimits | None:
+    """This session's own adapter, narrowed to ``IHarnessUsageLimits`` — unlike
+    ``ctx.adapter_for``'s own ``IHarnessLifecycleAndVerdict`` slice (``bzh:seam-size-ceiling``):
+    a classifier depends on exactly the one method it calls rather than the full seam.
+    ``None`` on an unresolvable owner, never a raise: a lease already reaching this point has
+    exited, and an owner this runner cannot dispatch to is `Judgement`/`Attempt`'s own
+    escalation to make, not this classifier's."""
     try:
         return ctx.harnesses.adapter(session.harness_id)
     except (UnknownHarnessError, UnavailableHarnessError):

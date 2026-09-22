@@ -73,7 +73,10 @@ class IReadOverloadRepository(Protocol):
     def open_overload_facts(self) -> list[OverloadFactRecord]:
         """Every un-reset overload fact with a non-null ``resume_after`` — the backing-off
         candidates a caller narrows further against the lease's own current generation or
-        elicitation launch (D7), read once per tick like ``pause_parked_lease_ids``."""
+        elicitation launch (D7), read once per tick like ``pause_parked_lease_ids``. A fact
+        whose lease has since closed is excluded here too (``bzh:open-facts-declare-closure``):
+        a hub-terminal ending never writes a reset or a later overload of its own, so without
+        this the fact would otherwise stand forever."""
         ...
 
 

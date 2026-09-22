@@ -47,6 +47,9 @@
 .st-parked {
   color: var(--amber-hi);
 }
+.st-backing-off {
+  color: var(--amber-hi);
+}
 .st-spawning {
   color: var(--cyan);
 }

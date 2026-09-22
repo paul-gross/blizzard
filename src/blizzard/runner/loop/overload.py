@@ -7,23 +7,19 @@ after a bounded, growing wait, spending no retry and bumping no epoch. Imports n
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import LeaseRecord
-from blizzard.runner.domain.overload import (
-    BACKOFF_LIMIT,
-    InvocationKind,
-    backing_off_facts,
-    backoff_delay,
-)
-from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.domain.overload import BACKOFF_LIMIT, InvocationKind, backoff_delay
+from blizzard.runner.harness.adapter import IHarnessProviderOverload
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.loop.context import LoopContext
 
 __all__ = [
-    "backing_off_facts",
     "classify_judge_overload",
     "classify_worker_overload",
     "record_judge_overload",
@@ -34,18 +30,19 @@ __all__ = [
 _log = get_logger("blizzard.runner.loop")
 
 
-def classify_worker_overload(ctx: LoopContext, lease: LeaseRecord, *, generation: int) -> ProviderOverload | None:
-    """This generation's own spawn/resume/nudge invocation, classified — ``None`` when it
-    did not exit on a provider overload, an unresolvable owner, or a session-less lease."""
+def classify_worker_overload(
+    ctx: LoopContext, lease: LeaseRecord, output: str, lines: Sequence[str]
+) -> ProviderOverload | None:
+    """This generation's own spawn/resume/nudge invocation, classified over ``output`` and
+    ``lines`` — the caller's own single read of this generation's stdout and transcript
+    range, shared with its usage-limit classification so neither pays for the other's read
+    (blizzard#595 F4). ``None`` when not overloaded, or the owner is unresolvable."""
     session = lease.session
     if session is None:
         return None
-    harness = _full_adapter(ctx, session)
+    harness = _overload_adapter(ctx, session)
     if harness is None:
         return None
-    output = ctx.worker_files.read_stdout(lease.lease_id, generation)
-    bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
-    lines = ctx.usage.worker_transcript_lines(lease, bindings, generation=generation)
     return harness.classify_provider_overload(output, lines)
 
 
@@ -61,18 +58,17 @@ def record_worker_overload(
 
 
 def classify_judge_overload(
-    ctx: LoopContext, lease: LeaseRecord, output: str, *, generation: int
+    ctx: LoopContext, lease: LeaseRecord, output: str, lines: Sequence[str]
 ) -> ProviderOverload | None:
-    """This generation's own judge elicitation, classified over its output file plus its
-    own transcript range (judge boundary to tail) — ``None`` when not overloaded."""
+    """This generation's own judge elicitation, classified over its already-read output and
+    transcript range (judge boundary to tail, shared with usage-limit classification —
+    blizzard#595 F4) — ``None`` when not overloaded."""
     session = lease.session
     if session is None:
         return None
-    harness = _full_adapter(ctx, session)
+    harness = _overload_adapter(ctx, session)
     if harness is None:
         return None
-    bindings = ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
-    lines = ctx.usage.judge_transcript_lines(lease, bindings, generation=generation)
     return harness.classify_provider_overload(output, lines)
 
 
@@ -128,7 +124,8 @@ def _record(
             chunk_id=lease.chunk_id,
             lease_id=lease.lease_id,
             invocation_kind=invocation_kind,
-            streak=f"{streak_ordinal}/{BACKOFF_LIMIT}",
+            streak=streak_ordinal,
+            backoff_limit=BACKOFF_LIMIT,
             resume_after=iso_utc(resume_after) if resume_after is not None else None,
             detail=overload.detail,
         )
@@ -138,18 +135,20 @@ def _record(
             chunk_id=lease.chunk_id,
             lease_id=lease.lease_id,
             invocation_kind=invocation_kind,
-            streak=f"{streak_ordinal}/{BACKOFF_LIMIT}",
+            streak=streak_ordinal,
+            backoff_limit=BACKOFF_LIMIT,
             detail=overload.detail,
         )
     return backing_off
 
 
-def _full_adapter(ctx: LoopContext, session: SessionReference) -> IHarnessAdapter | None:
-    """The full adapter, unlike ``ctx.adapter_for``'s own ``IHarnessLifecycleAndVerdict``
-    narrowing — classification needs ``IHarnessProviderOverload`` too. ``None`` on an
-    unresolvable owner, never a raise: a lease already reaching this point has exited, and
-    an owner this runner cannot dispatch to is `Judgement`/`Attempt`'s own escalation to
-    make, not this classifier's."""
+def _overload_adapter(ctx: LoopContext, session: SessionReference) -> IHarnessProviderOverload | None:
+    """This session's own adapter, narrowed to ``IHarnessProviderOverload`` — unlike
+    ``ctx.adapter_for``'s own ``IHarnessLifecycleAndVerdict`` slice (``bzh:seam-size-ceiling``):
+    a classifier depends on exactly the one method it calls rather than the full seam.
+    ``None`` on an unresolvable owner, never a raise: a lease already reaching this point has
+    exited, and an owner this runner cannot dispatch to is `Judgement`/`Attempt`'s own
+    escalation to make, not this classifier's."""
     try:
         return ctx.harnesses.adapter(session.harness_id)
     except (UnknownHarnessError, UnavailableHarnessError):

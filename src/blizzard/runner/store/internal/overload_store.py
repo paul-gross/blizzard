@@ -10,8 +10,8 @@ from sqlalchemy import and_, func, select
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.overload import InvocationKind, IWriteOverloadRepository, OverloadFactRecord
-from blizzard.runner.store.internal.base import RunnerStoreConnections, Unsuperseded
-from blizzard.runner.store.schema import overload_facts, overload_resets
+from blizzard.runner.store.internal.base import RunnerStoreConnections, Unclosed, Unsuperseded
+from blizzard.runner.store.schema import lease_closures, overload_facts, overload_resets
 
 _log = get_logger("blizzard.runner.store")
 
@@ -25,14 +25,23 @@ _NOT_SUPERSEDED_BY_LATER_OVERLOAD = Unsuperseded(
         _later_overload_facts.c.observed_at > overload_facts.c.observed_at,
     ),
 )
+# A tie (a clean exit's reset landing on the exact same clock reading as the very next
+# overload) must side with the streak, not the reset — mirrors `overload_streak`'s own
+# strict `observed_at > since`; a `>=` here would immediately re-close a fresh streak's
+# own first fact.
 _NOT_SUPERSEDED_BY_RESET = Unsuperseded(
     overload_resets.c.id,
     (
         overload_resets.c.lease_id == overload_facts.c.lease_id,
         overload_resets.c.epoch == overload_facts.c.epoch,
-        overload_resets.c.reset_at >= overload_facts.c.observed_at,
+        overload_resets.c.reset_at > overload_facts.c.observed_at,
     ),
 )
+# `bzh:open-facts-declare-closure`: a hub-terminal chunk retires its lease (`lease_closures`)
+# without ever writing a reset or a later overload, so a fact outliving its own lease closes
+# here too — mirroring `ask_store.py`'s own anti-join rather than leaning on every caller
+# scoping its read to `list_active_leases()`.
+_NOT_SUPERSEDED_BY_LEASE_CLOSURE = Unclosed(overload_facts.c.lease_id, lease_closures.c.lease_id)
 
 
 class OverloadStore:
@@ -61,6 +70,7 @@ class OverloadStore:
                 overload_facts.c.resume_after.is_not(None),
                 _NOT_SUPERSEDED_BY_LATER_OVERLOAD.clause,
                 _NOT_SUPERSEDED_BY_RESET.clause,
+                _NOT_SUPERSEDED_BY_LEASE_CLOSURE.clause,
             )
         )
         return [self._row_to_record(r) for r in rows]

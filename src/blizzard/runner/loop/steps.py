@@ -21,6 +21,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
+from blizzard.runner.domain.overload import backing_off_facts
 from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -36,7 +37,6 @@ from blizzard.runner.loop.held_chunk import HeldChunk
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.judgement import Judgement, elicitation_still_pending
 from blizzard.runner.loop.overload import (
-    backing_off_facts,
     classify_worker_overload,
     record_worker_overload,
     reset_if_streak_open,
@@ -556,13 +556,17 @@ class Advance(Step):
         # alike (blizzard#594): the exit is neither an ask nor a verdict to judge, it is the
         # harness itself reporting it could not run at all.
         generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
-        limit = classify_worker_usage_limit(self.ctx, lease, generation=generation)
+        output = self.ctx.worker_files.read_stdout(lease.lease_id, generation)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+        lines = self.ctx.usage.worker_transcript_lines(lease, bindings, generation=generation)
+        limit = classify_worker_usage_limit(self.ctx, lease, output, lines)
         if limit is not None:
             engage_and_park_worker(self.ctx, lease, limit)
             return
         # A provider-overloaded generation is classified right alongside the usage limit
-        # (blizzard#595) — the two are mutually exclusive exit reasons for the one exit.
-        overload = classify_worker_overload(self.ctx, lease, generation=generation)
+        # (blizzard#595) — the two are mutually exclusive exit reasons for the one exit,
+        # both read from the same `output`/`lines` pair read once above (F4).
+        overload = classify_worker_overload(self.ctx, lease, output, lines)
         if overload is not None:
             if record_worker_overload(self.ctx, lease, overload, generation=generation):
                 return  # backing off in place — the next tick's `backing_off_facts` picks it up
