@@ -10,3 +10,13 @@ blocking issue remains; your findings ride back into the build node.
 
 Alongside your verdict, submit this node's retrospective: run `blizzard runner artifact create --name retrospective`
 with a few honest lines on stdin — what went well, what didn't, and what the next node or run should know.
+
+## The review-finding-delta asset
+
+Before your verdict, on every round, also run `blizzard runner artifact create --name review-finding-delta`, content on
+stdin: one entry per finding named in your `review-findings` submission, `ref` and `disposition` (`deferred`, `fixed`,
+or `refuted`). A `deferred` entry — a should-fix finding still unanswered on a `pass` — additionally carries
+`severity`, `scope`, `class`, `locus`, and `summary`; `fixed`/`refuted` carry no more than `ref` and `disposition`. A
+`deferred` entry can never carry `severity: blocking` — that cannot coexist with `pass`. Read the full shape live with
+`blizzard runner artifact get --scope system review/finding-format --content` and follow it exactly; on failure or an
+empty read, use the restatement above.

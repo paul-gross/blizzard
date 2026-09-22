@@ -114,6 +114,7 @@ nodes:
     session: fresh:gate  # cold eyes for review; the default is resume
     produces:
       - review-findings  # asset artifact — carried back into iterate on a fail
+      - review-finding-delta
     judgement:
       prompt: ./prompts/review.judgement.md
       choices:
@@ -198,8 +199,8 @@ nodes:
     judgement:
       choices:
         landed:
-          description: Every repo's PR merged cleanly into its base branch; the chunk closes with a retrospective.
-          to: retrospective
+          description: Every repo's PR merged cleanly into its base branch; routed to record-findings before the chunk closes with a retrospective.
+          to: record-findings
         conflict:
           description: A repo's PR read dirty (a real merge conflict); returned to pre-push to rebase against the base as it now stands, not to build.
           to: pre-push
@@ -212,6 +213,30 @@ nodes:
           description: Every remaining check failure is inherited from the base branch and survived a one-time re-run; not this chunk's defect, so it routes straight to iterate to repair the base as its own commit.
           to: iterate
           prompt_addendum: ./prompts/iterate.from-deliver.md
+
+  record-findings:
+    executor: hub
+    run:
+      - name: materialize-review-findings
+        command: python3 -m blizzard.hub.graphs.scripts.review_deliver
+    # The script reads no artifact names of its own — it addresses the hub, which reads
+    # this chunk's own newest `review-finding-delta` artifact (review's own `produces:`)
+    # server-side and materializes its `deferred` entries in one idempotent transaction
+    # (blizzard#582 D5/D6). None of the three outcomes routes back to iterate: the land
+    # step above already named a terminal choice.
+    judgement:
+      choices:
+        recorded:
+          description: The review round's deferred findings (if any) are durable, minted at this chunk's landing.
+          to: retrospective
+        invalid:
+          description: The chunk's newest review-finding-delta artifact failed shape validation. Nothing was written; routed to retrospective to record that this round's deferred findings were lost.
+          to: retrospective
+          prompt_addendum: ./prompts/retrospective.from-record-findings.md
+        failure:
+          description: review_deliver itself failed or crashed rather than reporting a clean outcome — a missing env var, a non-2xx delivery POST, an unrecognized response outcome, or an unauthorized/failed marker write. Routed to retrospective to record that this round's deferred findings were lost.
+          to: retrospective
+          prompt_addendum: ./prompts/retrospective.from-record-findings.md
 
   retrospective:
     executor: runner

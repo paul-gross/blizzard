@@ -37,6 +37,8 @@ _MODELS: dict[str, type[BaseModel]] = {
     "FindingDelta": finding.FindingDelta,
     **_finding_op_members(),
     "GardenProposalCandidate": garden_proposal.GardenProposalCandidate,
+    "ReviewFindingEntry": finding.ReviewFindingEntry,
+    "ReviewFindingDelta": finding.ReviewFindingDelta,
 }
 
 # `### ModelName`, then a fenced ```json block. Non-greedy body so consecutive pairs in
