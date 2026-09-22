@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.work import ChunkFacts, UsageFact
+from blizzard.hub.domain.work import ChunkFacts, UsageFact, UsageTotal
 
 pytestmark = pytest.mark.unit
 
@@ -33,6 +33,7 @@ def _usage(
     cache_read_tokens: int = 0,
     cache_create_tokens: int = 0,
     cost_usd: float | None = 0.0,
+    estimated_cost_usd: float | None = None,
     recorded_at: datetime | None = None,
 ) -> UsageFact:
     return UsageFact(
@@ -45,6 +46,7 @@ def _usage(
         cache_read_tokens=cache_read_tokens,
         cache_create_tokens=cache_create_tokens,
         cost_usd=cost_usd,
+        estimated_cost_usd=estimated_cost_usd,
         recorded_at=recorded_at or _at(0),
     )
 
@@ -118,6 +120,84 @@ def test_every_row_carrying_cost_derives_a_non_partial_total() -> None:
         ],
     )
     assert facts.usage_total().cost_partial is False
+    assert facts.usage_total().billed_partial is False
+
+
+def test_no_usage_facts_derives_no_estimate() -> None:
+    usage = ChunkFacts(minted=True).usage_total()
+    assert usage.estimated_cost_usd is None
+
+
+def test_an_estimate_only_row_is_summed_apart_from_cost_and_is_not_partial() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        usage=[_usage(cost_usd=None, estimated_cost_usd=0.03, recorded_at=_at(1))],
+    )
+    usage = facts.usage_total()
+    assert usage.cost_usd == 0.0
+    assert usage.estimated_cost_usd == pytest.approx(0.03)
+    assert usage.cost_partial is False
+    # No billed cost was recorded, so the billed figure alone is still a lower bound.
+    assert usage.billed_partial is True
+
+
+def test_a_row_with_neither_amount_still_flags_the_total_partial() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        usage=[_usage(cost_usd=None, estimated_cost_usd=None, recorded_at=_at(1))],
+    )
+    usage = facts.usage_total()
+    assert usage.estimated_cost_usd is None
+    assert usage.cost_partial is True
+
+
+def test_a_chunk_mixing_a_billed_and_an_estimated_row_sums_both_apart() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        usage=[
+            _usage(cost_usd=0.10, recorded_at=_at(1)),
+            _usage(cost_usd=None, estimated_cost_usd=0.03, recorded_at=_at(2)),
+        ],
+    )
+    usage = facts.usage_total()
+    assert usage.cost_usd == pytest.approx(0.10)
+    assert usage.estimated_cost_usd == pytest.approx(0.03)
+    assert usage.cost_partial is False
+    assert usage.billed_partial is True
+
+
+def test_of_grouped_sums_estimate_is_none_when_no_row_contributed() -> None:
+    total = UsageTotal.of_grouped_sums(
+        input_tokens=0,
+        output_tokens=0,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd_sum=0.0,
+        estimated_cost_usd_sum=0.0,
+        estimated_rows=0,
+        both_null_rows=0,
+        null_cost_rows=0,
+    )
+    assert total.estimated_cost_usd is None
+    assert total.cost_partial is False
+    assert total.billed_partial is False
+
+
+def test_of_grouped_sums_flags_partial_only_from_both_null_rows() -> None:
+    total = UsageTotal.of_grouped_sums(
+        input_tokens=0,
+        output_tokens=0,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd_sum=0.0,
+        estimated_cost_usd_sum=0.03,
+        estimated_rows=1,
+        both_null_rows=0,
+        null_cost_rows=1,
+    )
+    assert total.estimated_cost_usd == pytest.approx(0.03)
+    assert total.cost_partial is False
+    assert total.billed_partial is True
 
 
 def test_stale_epoch_usage_row_is_still_summed() -> None:

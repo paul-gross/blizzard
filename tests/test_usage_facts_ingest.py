@@ -27,8 +27,10 @@ def _claim(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     return chunk_id, node_id
 
 
-def _usage_payload(node_id: str, *, epoch: int, cost_usd: float | None) -> dict:
-    return {
+def _usage_payload(
+    node_id: str, *, epoch: int, cost_usd: float | None, estimated_cost_usd: float | None = None
+) -> dict:
+    payload = {
         "chunk_id": "",  # filled by the caller
         "node_id": node_id,
         "epoch": epoch,
@@ -40,10 +42,22 @@ def _usage_payload(node_id: str, *, epoch: int, cost_usd: float | None) -> dict:
         "cache_create_tokens": 5,
         "cost_usd": cost_usd,
     }
+    if estimated_cost_usd is not None:
+        payload["estimated_cost_usd"] = estimated_cost_usd
+    return payload
 
 
-def _push_usage(hub, *, chunk_id: str, node_id: str, epoch: int, seq: int, cost_usd: float | None = 0.1) -> dict:  # type: ignore[no-untyped-def]
-    payload = _usage_payload(node_id, epoch=epoch, cost_usd=cost_usd)
+def _push_usage(
+    hub,  # type: ignore[no-untyped-def]
+    *,
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    seq: int,
+    cost_usd: float | None = 0.1,
+    estimated_cost_usd: float | None = None,
+) -> dict:
+    payload = _usage_payload(node_id, epoch=epoch, cost_usd=cost_usd, estimated_cost_usd=estimated_cost_usd)
     payload["chunk_id"] = chunk_id
     resp = hub.client.post(
         "/api/fleet/events",
@@ -182,6 +196,81 @@ def test_cost_absent_usage_row_sums_tokens_and_flags_the_total_partial(tmp_path:
     assert detail["cost"]["input_tokens"] == 100  # tokens still summed
     assert detail["cost"]["cost_usd"] == 0.0  # nothing to sum — the lower bound
     assert detail["cost"]["cost_partial"] is True
+
+
+def test_estimate_only_row_is_shown_and_does_not_flag_the_total_partial(tmp_path: Path) -> None:
+    """A row with no billed cost but a reported estimate is not a lower bound — it must
+    not read PARTIAL, distinct from a row with neither amount."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=None, estimated_cost_usd=0.03)
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["usage"][0]["cost_usd"] is None
+    assert detail["usage"][0]["estimated_cost_usd"] == pytest.approx(0.03)
+    assert detail["cost"]["cost_usd"] == 0.0
+    assert detail["cost"]["estimated_cost_usd"] == pytest.approx(0.03)
+    assert detail["cost"]["cost_partial"] is False
+
+    listing = hub.client.get("/api/chunks").json()["chunks"]
+    row = next(c for c in listing if c["chunk_id"] == chunk_id)
+    assert row["cost"]["estimated_cost_usd"] == pytest.approx(0.03)
+    assert row["cost"]["cost_partial"] is False
+    # No billed cost was recorded: the billed figure alone is a lower bound.
+    assert detail["cost"]["billed_partial"] is True
+    assert row["cost"]["billed_partial"] is True
+
+
+def test_neither_amount_row_flags_the_total_partial(tmp_path: Path) -> None:
+    """A row reporting neither a billed cost nor an estimate is the one shape that still
+    reads PARTIAL under the new contract."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=None, estimated_cost_usd=None)
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["cost"]["estimated_cost_usd"] is None
+    assert detail["cost"]["cost_partial"] is True
+
+
+def test_a_chunk_mixing_a_billed_and_an_estimated_row_reports_both_amounts(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=0.10)
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=3, cost_usd=None, estimated_cost_usd=0.03)
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["cost"]["cost_usd"] == pytest.approx(0.10)
+    assert detail["cost"]["estimated_cost_usd"] == pytest.approx(0.03)
+    assert detail["cost"]["cost_partial"] is False
+
+
+def test_a_fact_without_the_estimate_key_behaves_exactly_as_today(tmp_path: Path) -> None:
+    """An older runner that never sends ``estimated_cost_usd`` ingests identically to
+    before the key existed — the key is additive in both directions."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    payload = _usage_payload(node_id, epoch=1, cost_usd=0.10)
+    assert "estimated_cost_usd" not in payload
+    payload["chunk_id"] = chunk_id
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={"runner_id": "r1", "facts": [{"seq": 2, "kind": "usage.recorded", "payload": payload}]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["usage"][0]["estimated_cost_usd"] is None
+    assert detail["cost"]["estimated_cost_usd"] is None
+    assert detail["cost"]["cost_partial"] is False
 
 
 def test_usage_ingest_fires_chunk_changed_over_sse(tmp_path: Path) -> None:

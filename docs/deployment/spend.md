@@ -1,9 +1,11 @@
 # Spend
 
 An unattended fleet spends against the operator's harness billing with no ceiling by default; two optional caps live in
-a `[cost]` table in `blizzard-runner.toml`, absent by default — no table, no cap. Every cost blizzard records derives
-from the harness's own reported figure, by subtraction and never by pricing: blizzard maintains no pricing table and
-never fabricates a cost.
+a `[cost]` table in `blizzard-runner.toml`, absent by default — no table, no cap. Every billed cost blizzard records
+derives from the harness's own reported figure, by subtraction and never by pricing: blizzard keeps no pricing table of
+its own. Where a step's own reported figure is a subscription's literal zero, the runner may still read OpenCode's own
+cached rates and label the result as an estimate ([Estimated cost](#estimated-cost) below) — never fabricated, never
+guessed past what that cache says, and never presented as billed spend.
 
 ## The two readings of a reported figure
 
@@ -71,18 +73,62 @@ the harness's own report.
 ## Partial totals
 
 When a worker dies before the harness emits its final usage envelope, the attempt's tokens are recorded from the
-transcript but its cost is genuinely unknown: an absent-cost row contributes its tokens and zero dollars, so every total
-is a lower bound flagged PARTIAL (a tilde on the board and in `hub status`). Both caps trip on that lower bound and
-surface PARTIAL on their own carrier — the escalation, or the recorded pause reason — so a crash-heavy chunk never
-silently reads cheap. A crash is not the only way a row lands cost-absent: a reported figure that runs backwards against
-what its session already banked records no cost either, for the reason
+transcript but its cost is genuinely unknown: an absent-cost row contributes its tokens and zero billed dollars. A row
+flags its total PARTIAL (a tilde on the board and in `hub status`) only when it carries **neither** a billed cost nor a
+reported estimate — see [Estimated cost](#estimated-cost) below; a row carrying only an estimate is not a lower bound
+and does not flag PARTIAL. The runner's own two caps are a separate reading: both trip on the billed lower bound
+alone, never on an estimate, and each surfaces its own PARTIAL on its own carrier — the escalation, or the recorded
+pause reason — whenever some invocation it summed carried no billed cost. That PARTIAL means exactly "no billed cost
+recorded", unchanged by whether the same invocation also carries an estimate, so a crash-heavy chunk never silently
+reads cheap. A crash is not the only way a row lands cost-absent: a reported figure that runs backwards against what its
+session already banked records no cost either, for the reason
 [The two readings of a reported figure](#the-two-readings-of-a-reported-figure) gives. A graceful restart no longer
 produces a PARTIAL row on its own: the shutdown drain (see [Graceful restart](./recovery.md#graceful-restart)) waits out
 each marked worker's own SIGINT-triggered envelope, so only a worker SIGKILLed at the drain's deadline, one that exits
 on SIGINT without writing an envelope, or an outright crash still lands cost-absent.
 
-`blizzard hub status` shows the per-chunk cost column, the fleet total, and a paused runner's ceiling reason; the
-board's chunk cards and detail dock show the same figures live.
+`blizzard hub status` shows the per-chunk cost column, the fleet total, and a paused runner's ceiling reason;
+[Estimated cost](#estimated-cost) below owns which surfaces add the estimate beside the billed figure.
+
+## Estimated cost
+
+An OpenCode step billed against a subscription reports its cost as a literal zero, which the runner records as no
+billed cost: when every step of an invocation reads that way, its `cost_usd` stays `None`, exactly like any other
+cost-absent row. When that step's model has a priced entry in OpenCode's own local cache — `models.json`, refreshed by
+OpenCode itself, keyed by provider and then by model — the runner estimates that one step's dollar cost from the cache
+instead, pricing it the way OpenCode itself prices a step. Because OpenCode's rate can depend on a step's own prompt
+size, the rate is always chosen from that one step's own tokens, never from an invocation's summed total, so two steps
+of the same invocation can price at two different rates. A step whose model has no entry in the cache, or whose cache
+file is missing or unreadable, stays cost-absent: never a raise, never a guess past what the cache says.
+
+The runner reads the cache from `XDG_CACHE_HOME/opencode/models.json` when `[worker] env_passthrough` passes
+`XDG_CACHE_HOME` through to the worker, or from `HOME/.cache/opencode/models.json` otherwise — the default OpenCode
+itself writes to. This is the same worker-owned environment mapping the worker's own identity is built from, never a
+constant path, so relocating a fleet's OpenCode cache is a passthrough change, not a runner one. For an invocation that
+ends with a usage envelope, a worker running on OpenCode's own configured default model — with no `provider/model` the
+runner ever resolved for it — gets no estimate: the process's own stdout events never name a step's provider or model,
+so there is nothing there to price it by. The transcript fallback below differs: its exported lines carry each step's
+own `providerID`/`modelID` regardless.
+
+For an invocation that ends with a usage envelope, a billed step and a zero-cost, estimated step can both appear
+together: its billed steps sum into `cost_usd`, and its estimated steps separately sum into `estimated_cost_usd` — the
+two are never merged and never double counted. The transcript fallback (the crash/reap path) never bills — it always
+records `cost_usd` as absent — and drops any estimate it would otherwise have built if it saw even one step with a
+real cost, so that row still reads cost-absent and stays PARTIAL rather than surfacing a partial estimate. Separately
+from all of that, the hub accepts and stores a reported `estimated_cost_usd` for a row: its own column, summed into
+its own total, never folded into `cost_usd`. A chunk's or the fleet's billed cost is never inflated by an estimate,
+and an estimate is never presented as billed spend.
+
+The estimate renders labeled `$X.XX est.`, only where a total carries one: on `blizzard hub chunk show` on its own
+line; beside the billed figure in `hub status`'s per-chunk column and fleet total, in `hub chunk list`, and in
+`hub analytics summary`'s spend rows, so a chunk whose cost is entirely estimated reads `$0.00  $X.XX est.` there
+rather than a bare `$0.00`; and on the board: chunk cards, the board header's spend figure, the chunk detail dock and
+its timeline, the mobile glance board, and the runner panel's chunk detail.
+
+An estimate never feeds either cap. `runner_ceiling_usd` and `chunk_cap_usd` ([The two caps](#the-two-caps) above) are
+both checked against billed cost alone: a chunk or a runner can run up real, uncapped subscription spend while every
+one of its steps shows only an estimate, and the caps stay blind to it — an operator relying on either cap to bound
+subscription spend needs to watch the estimate figure itself.
 
 ## External subscription usage
 

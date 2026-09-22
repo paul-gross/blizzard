@@ -201,6 +201,7 @@ def _usage_payload(
     *,
     epoch: int,
     cost_usd: float | None,
+    estimated_cost_usd: float | None = None,
     harness_id: str | None = "claude_code",
     harness_version: str | None = "1.2.3",
 ) -> dict:
@@ -222,6 +223,8 @@ def _usage_payload(
         payload["harness_id"] = harness_id
     if harness_version is not None:
         payload["harness_version"] = harness_version
+    if estimated_cost_usd is not None:
+        payload["estimated_cost_usd"] = estimated_cost_usd
     return payload
 
 
@@ -311,3 +314,46 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         assert len(detail["usage"]) == 3, "the replayed usage fact was applied twice"
         assert detail["cost"]["input_tokens"] == 300
+
+
+def test_hub_reads_back_an_estimate_apart_from_billed_cost_off_a_live_api(tmp_path: Path) -> None:
+    """An estimate-bearing payload round-trips on both the per-node-step row and the
+    derived totals ``GET /api/chunks/{id}`` and ``GET /api/chunks`` carry, kept apart from
+    ``cost_usd`` and not flagging the total partial."""
+    bin_dir = require_mock_fleet()
+    _workspace, origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    forge_port, hub_port = _free_port(), _free_port()
+
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "usage estimate over the wire")
+
+        with mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-usage-estimate") as runner:
+            assert runner.post("/_drive/register").json()["status"] == 201
+            claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
+            assert claim["claimed"] is True, claim
+            node_id = claim["from_node_id"]
+
+        detail = hub.get(f"/api/chunks/{chunk_id}").json()
+        epoch = detail["latest_epoch"] or 1
+
+        assert _push_usage(
+            hub,
+            runner_id="usage-estimate-pusher",
+            seq=1,
+            payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=None, estimated_cost_usd=0.03),
+        )["applied"] == [1]
+
+        detail = hub.get(f"/api/chunks/{chunk_id}").json()
+        step = detail["usage"][0]
+        assert step["cost_usd"] is None
+        assert step["estimated_cost_usd"] == pytest.approx(0.03)
+
+        total = detail["cost"]
+        assert total["cost_usd"] == 0.0
+        assert total["estimated_cost_usd"] == pytest.approx(0.03)
+        assert total["cost_partial"] is False  # an estimate is not a lower bound
+
+        row = next(c for c in hub.get("/api/chunks").json()["chunks"] if c["chunk_id"] == chunk_id)
+        assert row["cost"]["estimated_cost_usd"] == pytest.approx(0.03)
+        assert row["cost"]["cost_partial"] is False

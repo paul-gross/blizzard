@@ -364,6 +364,7 @@ class ChunkFactsStore:
                         recorded_at=u.recorded_at,
                         harness_id=u.harness_id,
                         harness_version=u.harness_version,
+                        estimated_cost_usd=u.estimated_cost_usd,
                     )
                 )
 

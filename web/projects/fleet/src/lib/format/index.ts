@@ -6,7 +6,7 @@
  */
 
 export { compactRef, ENTITY_DISPLAY, type EntityDisplay } from '../compact-ref';
-export { formatCost, formatTokens } from '../cost-format';
+export { formatCost, formatCostEstimate, formatTokens } from '../cost-format';
 export { errorMessage } from '../error-message';
 export { nodeStepKey, parseNodeStepKey } from '../node-step';
 export { LANES, STATUS_LANE, STATUS_TONE, laneFor, type Lane } from '../chunk-lanes';

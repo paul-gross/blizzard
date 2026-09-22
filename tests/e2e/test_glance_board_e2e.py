@@ -29,6 +29,7 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _winter_source,
 )
+from tests.e2e.test_board_cost_live_e2e import _ingest_promote_claim, _push_usage
 
 _HUB_BUNDLE = Path(__file__).resolve().parents[2] / "src" / "blizzard" / "static" / "hub" / "index.html"
 
@@ -157,5 +158,79 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
                 expect(page.get_by_test_id("needs-you-row")).to_have_count(1)
                 expect(page.get_by_test_id("needs-you-loading")).to_have_count(0)
                 expect(page.get_by_test_id("needs-you-empty")).to_have_count(0)
+            finally:
+                browser.close()
+
+
+def test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero(
+    tmp_path: Path, chromium_available: bool, narrow_viewport: ViewportSize
+) -> None:
+    """The glance spend panel and in-motion row render the estimate, never a plain billed
+    `$0.00`, for a chunk with no billed cost."""
+    if not chromium_available:
+        pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
+    if not _HUB_BUNDLE.is_file():
+        pytest.skip("no built hub bundle (run the web build — release tier drives `mise run e2e`)")
+    bin_dir = _mock_bin_dir()
+    if bin_dir is None:
+        pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
+    winter_source = _winter_source()
+    if winter_source is None:
+        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
+
+    from playwright.sync_api import expect, sync_playwright
+
+    scratch = tmp_path / "scratch"
+    subprocess.run(
+        [
+            str(bin_dir / "blizzard-mock-fixture"),
+            "reset",
+            "--env",
+            FIXTURE_ENV,
+            "--scratch-root",
+            str(scratch),
+            "--winter-source",
+            str(winter_source),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    origins = scratch / FIXTURE_ENV / "origins"
+
+    forge_port, hub_port = _free_port(), _free_port()
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+        chunk_id, node_id = _ingest_promote_claim(forge, hub, "chunk — glance cost estimate")
+
+        _push_usage(
+            hub,
+            chunk_id=chunk_id,
+            node_id=node_id,
+            seq=1,
+            cost_usd=None,
+            input_tokens=900,
+            output_tokens=400,
+            estimated_cost_usd=0.07,
+        )
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            page = browser.new_page(viewport=narrow_viewport)
+            try:
+                page.goto(f"http://127.0.0.1:{hub_port}/board", wait_until="load")
+                expect(page.get_by_test_id("glance-board")).to_be_visible()
+
+                # The spend panel: the estimate renders, labeled — never a plain billed
+                # $0.00 in its place.
+                spend_row = page.get_by_test_id("glance-spend-row")
+                expect(spend_row.get_by_test_id("glance-spend-estimate")).to_have_text("$0.07 est.")
+                expect(spend_row).not_to_contain_text("$0.00")
+
+                # The in-motion row: same rule, same label, on the one running chunk.
+                motion_row = page.locator('[data-testid="in-motion-row"][data-chunk="' + chunk_id + '"]')
+                expect(motion_row).to_have_count(1)
+                expect(motion_row.get_by_test_id("in-motion-cost")).to_have_count(0)
+                expect(motion_row.get_by_test_id("in-motion-cost-estimate")).to_have_text("$0.07 est.")
             finally:
                 browser.close()

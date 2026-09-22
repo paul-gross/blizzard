@@ -302,3 +302,83 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     expect(el.querySelector('[data-testid="done-today-count"]')?.textContent).toContain('2/4');
   });
 });
+
+// A subscription-only fleet: no billed cost anywhere, only a runner-reported estimate —
+// the glance board must never show a plain billed $0.00 for spend that is estimate-only.
+const ESTIMATE_CHUNKS = [
+  {
+    chunk_id: 'ch_01estimaterun0000000000000',
+    graph_id: 'gr_1',
+    status: 'running',
+    current_node_id: 'nd_build',
+    current_node_name: 'build',
+    model: 'claude-opus-4-8',
+    runner_id: 'r1',
+    cost: {
+      cost_usd: 0,
+      cost_partial: false,
+      estimated_cost_usd: 0.07,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+    },
+  },
+];
+
+const ESTIMATE_SPEND = {
+  cost_usd: 0,
+  cost_partial: false,
+  estimated_cost_usd: 0.07,
+  input_tokens: 900,
+  output_tokens: 400,
+  cache_read_tokens: 0,
+  cache_create_tokens: 0,
+  since: '2026-07-20T00:00:00Z',
+};
+
+describe('GlanceBoard — cost estimate, no billed cost', () => {
+  let stub: RequestClientStub;
+
+  beforeEach(async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/chunks') return { chunks: ESTIMATE_CHUNKS, next_cursor: null };
+      if (method === 'GET' && path === '/api/queue') return { entries: [] };
+      if (method === 'GET' && path === '/api/questions') return [];
+      if (method === 'GET' && path === '/api/runners') return { runners: [] };
+      if (method === 'GET' && path === '/api/health') return { status: 'ok' };
+      if (method === 'GET' && path === '/api/spend') return ESTIMATE_SPEND;
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [GlanceBoard],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => stub.restore());
+
+  it("shows the in-motion row's own estimate, labeled, rather than a plain billed $0.00", async () => {
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const row = el.querySelector('[data-testid="in-motion-row"]');
+    expect(row?.querySelector('[data-testid="in-motion-cost"]')).toBeNull();
+    expect(row?.querySelector('[data-testid="in-motion-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+  });
+
+  it("shows the spend panel's own estimate, labeled, rather than a plain billed $0.00", async () => {
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const row = el.querySelector('[data-testid="glance-spend-row"]');
+    expect(row?.querySelector('[data-testid="glance-spend-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(row?.textContent).not.toContain('$0.00');
+  });
+});

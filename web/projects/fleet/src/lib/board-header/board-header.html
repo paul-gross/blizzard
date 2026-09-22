@@ -23,6 +23,11 @@
       <div class="cell spend" [class.spend-yesterday]="cell.key === 'yesterday'" [attr.data-testid]="cell.testid">
         <span class="stat-lbl">{{ cell.label }}</span>
         <span class="v" [attr.data-testid]="cell.valueTestid">{{ formatCost(spend.cost_usd, spend.cost_partial) }}</span>
+        @if (spend.estimated_cost_usd !== null && spend.estimated_cost_usd !== undefined) {
+          <span class="v est" [attr.data-testid]="cell.valueTestid + '-estimate'">{{
+            formatCostEstimate(spend.estimated_cost_usd)
+          }}</span>
+        }
       </div>
     }
   }

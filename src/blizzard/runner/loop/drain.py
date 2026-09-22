@@ -159,7 +159,8 @@ class OutboundDrain:
         """True — chunk parked ``needs_human`` — iff its spend has reached ``cost.chunk_cap_usd``.
 
         Reads the hub-derived total (``bzh:facts-not-status``), never a local sum. That total is
-        a LOWER BOUND — a cost-absent row contributes $0 — so the cap trips conservatively."""
+        a LOWER BOUND — a row with no billed cost contributes $0, estimate or not — so the cap
+        trips conservatively, and its PARTIAL is the total's ``billed_partial``."""
         cap = self.ctx.config.chunk_cap_usd
         if cap is None:
             return False
@@ -171,13 +172,13 @@ class OutboundDrain:
         cost = view.cost
         if cost.cost_usd < cap:
             return False
-        partial_note = " (PARTIAL — true spend may be higher)" if cost.cost_partial else ""
+        partial_note = " (PARTIAL — true spend may be higher)" if cost.billed_partial else ""
         _log.warning(
             f"chunk parked — spend cap exceeded{partial_note}",
             chunk_id=lease.chunk_id,
             cap_usd=cap,
             spend_usd=cost.cost_usd,
-            cost_partial=cost.cost_partial,
+            cost_partial=cost.billed_partial,
         )
         Attempt(self.ctx, lease).escalate(
             reason=f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{partial_note})"

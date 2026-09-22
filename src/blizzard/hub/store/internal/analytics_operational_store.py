@@ -184,6 +184,9 @@ def _to_spend_stats(row: Any) -> SpendStats:
         cache_read_tokens=row.cache_read_tokens,
         cache_create_tokens=row.cache_create_tokens,
         cost_usd_sum=row.cost_usd,
+        estimated_cost_usd_sum=row.estimated_cost_usd,
+        estimated_rows=row.estimated_rows,
+        both_null_rows=row.both_null_rows,
         null_cost_rows=row.null_cost_rows,
     )
     return SpendStats(key=row.key, total=total)

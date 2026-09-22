@@ -155,6 +155,11 @@
   font-size: var(--fs-xs);
   white-space: nowrap;
 }
+/* The card's own estimate figure (never merged into the billed one above) — dimmer
+   than the billed amber, since it is a subscription estimate rather than metered spend. */
+.cost-estimate {
+  color: var(--label-dim);
+}
 /* The done-lane completion stamp (issue #173) — dim like the status label it
    sits beside, not a separate accent; it is a timestamp, not a state. */
 .done-at {

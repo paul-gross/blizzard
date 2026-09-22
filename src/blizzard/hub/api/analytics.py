@@ -425,6 +425,7 @@ def spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
                 cache_create_tokens=s.total.cache_create_tokens,
                 cost_usd=s.total.cost_usd,
                 cost_partial=s.total.cost_partial,
+                estimated_cost_usd=s.total.estimated_cost_usd,
             )
             for s in stats
         ]
@@ -459,6 +460,7 @@ def _chunk_spend_view(record: SpendStats) -> AnalyticsChunkSpendView:
         cache_create_tokens=record.total.cache_create_tokens,
         cost_usd=record.total.cost_usd,
         cost_partial=record.total.cost_partial,
+        estimated_cost_usd=record.total.estimated_cost_usd,
     )
 
 

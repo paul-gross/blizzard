@@ -16,8 +16,10 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
+from blizzard.runner.harness.internal.opencode_price_cache import OpenCodeModelPrice, OpenCodeRate
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import TranscriptPosition
@@ -56,7 +58,9 @@ def _build_envelope(chunk="ch_1"):  # type: ignore[no-untyped-def]
     return make_envelope(chunk, "build", node_id="nd_build", choices=_CHOICES)
 
 
-def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", session="sess-a", epoch=1):  # type: ignore[no-untyped-def]
+def _seed_running_lease(  # type: ignore[no-untyped-def]
+    store, *, chunk="ch_1", lease="lease_1", session="sess-a", epoch=1, harness_id=CLAUDE_CODE_HARNESS_ID
+):
     """A build lease already spawned into env e1, plus its binding."""
     store.record_lease(
         NewLease(
@@ -75,7 +79,7 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", session="sess-a
         lease,
         pid=100,
         process_start_time="start-100",
-        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
+        session=SessionReference(harness_id, session),
         spawned_at=_NOW,
     )
     # The generation-1 spawn's own worker-starting boundary (blizzard#437 Phase 4) — the
@@ -152,6 +156,53 @@ def test_advance_records_spawn_and_judge_usage_facts(tmp_path):  # type: ignore[
     assert totals.cost_partial is False
 
 
+@pytest.mark.unit
+def test_advance_carries_an_estimate_on_the_outbound_payload_without_touching_the_runner_row(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
+    """An estimate rides the outbound payload beside, never inside, the billed figure;
+    the row, ``usage_since``, and ``cost_partial`` never see it."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    _write_stdout(stdout_dir, "lease_1", 1)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    spawn_sample = UsageSample(
+        kind="spawn",
+        model="openai/gpt-5.6-luna",
+        input_tokens=100,
+        output_tokens=50,
+        cache_read_tokens=5,
+        cache_create_tokens=6,
+        cost_usd=None,
+        estimated_cost_usd=0.0308,
+    )
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"spawn": spawn_sample, "judge": spawn_sample})
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+
+    payloads = _usage_payloads(store)
+    spawn_payload = next(p for p in payloads if p["kind"] == "spawn")
+    assert spawn_payload["cost_usd"] is None
+    assert spawn_payload["estimated_cost_usd"] == pytest.approx(0.0308)
+    # The runner-local row and its cap-facing reads never see the estimate: a
+    # cost-less sample reads exactly as one with no estimate at all would.
+    totals = store.usage_since(_NOW)
+    assert totals.cost_usd == 0.0
+    assert totals.cost_partial is True
+
+
 _SIGINT_ENVELOPE = json.dumps(
     {
         "type": "result",
@@ -202,6 +253,85 @@ def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_env
     assert len(payloads) == 1
     assert payloads[0]["cost_usd"] == 0.019
     assert payloads[0]["input_tokens"] == 80
+
+
+class _LunaPriceCatalog:
+    """One priced OpenCode model, dollars per 1,000,000 tokens — never file I/O."""
+
+    def price_for(self, provider: str, model: str) -> OpenCodeModelPrice | None:
+        if (provider, model) != ("openai", "gpt-5.6-luna"):
+            return None
+        return OpenCodeModelPrice(base=OpenCodeRate(input=0.20, output=1.20, cache_read=0.02, cache_write=0.25))
+
+
+def _opencode_step_finish(part_id: str, *, cost: float, input_tokens: int, output_tokens: int) -> str:
+    return json.dumps(
+        {
+            "type": "step_finish",
+            "sessionID": "ses_a",
+            "part": {
+                "id": part_id,
+                "sessionID": "ses_a",
+                "messageID": f"msg_{part_id}",
+                "type": "step-finish",
+                "reason": "stop",
+                "cost": cost,
+                "tokens": {
+                    "input": input_tokens,
+                    "output": output_tokens,
+                    "reasoning": 0,
+                    "cache": {"read": 0, "write": 0},
+                },
+            },
+        }
+    )
+
+
+@pytest.mark.unit
+def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_billed_steps(tmp_path):  # type: ignore[no-untyped-def]
+    """Through the REAL OpenCode adapter and a priced catalog, `record_worker` puts a billed
+    step's cost on ``cost_usd`` and a subscription step's estimate on ``estimated_cost_usd``
+    of the one outbound payload — each step priced alone, neither folded into the other."""
+    store = _store(tmp_path)
+    _seed_running_lease(store, harness_id=OPENCODE_HARNESS_ID)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    stdout = "\n".join(
+        [
+            _opencode_step_finish("prt_billed", cost=0.004, input_tokens=100, output_tokens=20),
+            _opencode_step_finish("prt_subscription", cost=0, input_tokens=40, output_tokens=8),
+        ]
+    )
+    _write_stdout(stdout_dir, "lease_1", 1, stdout)
+    probe = FakeProbe()
+    adapter = OpenCodeAdapter(
+        process=probe,
+        launcher=ProcessLauncher(probe),
+        model="openai/gpt-5.6-luna",
+        price_catalog=_LunaPriceCatalog(),
+    )
+    registry = HarnessRegistry(
+        {OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source())}
+    )
+    recorder = UsageRecorder(
+        leases=store,
+        usage=store,
+        clock=FixedClock(_NOW),
+        worker_files=WorkerStdoutFiles(str(stdout_dir), store),
+        workspace_root="/ws",
+        harnesses=registry,
+        invocation_boundaries=store,
+    )
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    recorder.record_worker(lease, bindings=[])
+
+    payloads = _usage_payloads(store)
+    assert len(payloads) == 1
+    assert payloads[0]["cost_usd"] == pytest.approx(0.004)
+    assert payloads[0]["estimated_cost_usd"] == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
+    assert payloads[0]["input_tokens"] == 140
 
 
 @pytest.mark.unit

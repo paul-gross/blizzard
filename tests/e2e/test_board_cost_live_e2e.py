@@ -67,8 +67,11 @@ def _push_usage(
     output_tokens: int = 0,
     cache_read_tokens: int = 0,
     cache_create_tokens: int = 0,
+    estimated_cost_usd: float | None = None,
 ) -> None:
-    """Push one ``usage.recorded`` fact through the hub's real store-and-forward endpoint."""
+    """Push one ``usage.recorded`` fact through the hub's real store-and-forward endpoint.
+    ``estimated_cost_usd`` is omitted from the payload, not sent as ``None``, when unused.
+    """
     payload = {
         "chunk_id": chunk_id,
         "node_id": node_id,
@@ -81,6 +84,8 @@ def _push_usage(
         "cache_create_tokens": cache_create_tokens,
         "cost_usd": cost_usd,
     }
+    if estimated_cost_usd is not None:
+        payload["estimated_cost_usd"] = estimated_cost_usd
     resp = hub.post(
         "/api/fleet/events",
         json={"runner_id": "r1", "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
@@ -184,5 +189,40 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 expect(page.get_by_test_id("cost-total-usd")).to_contain_text("~$0.42")
                 expect(card.get_by_test_id("card-cost")).to_have_text("~$0.42")
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("~$0.42")
+
+                # --- A second, subscription-only chunk: an estimate, no billed cost -------
+                # A separate claim from the null-cost chunk above.
+                estimate_chunk_id, estimate_node_id = _ingest_promote_claim(forge, hub, "chunk — cost estimate render")
+                estimate_card = page.locator(f'[data-chunk="{estimate_chunk_id}"]')
+                expect(estimate_card).to_have_count(1)
+                expect(estimate_card.get_by_test_id("card-cost")).to_have_count(0)
+                expect(estimate_card.get_by_test_id("card-cost-estimate")).to_have_count(0)
+
+                # `seq` continues runner r1's own stream: the hub dedupes store-and-forward
+                # facts per (runner, seq), so reusing an earlier seq is silently dropped.
+                _push_usage(
+                    hub,
+                    chunk_id=estimate_chunk_id,
+                    node_id=estimate_node_id,
+                    seq=3,
+                    cost_usd=None,
+                    input_tokens=900,
+                    output_tokens=400,
+                    estimated_cost_usd=0.07,
+                )
+
+                # The card shows the estimate live, labeled, and never the billed figure.
+                expect(estimate_card.get_by_test_id("card-cost")).to_have_count(0)
+                expect(estimate_card.get_by_test_id("card-cost-estimate")).to_have_text("$0.07 est.")
+
+                # The header's spend-today estimate cell moves live off its own absence too.
+                expect(page.get_by_test_id("spend-today-value-estimate")).to_have_text("$0.07 est.")
+
+                # The detail dock: its own estimate row, apart from the billed $0.00, and no
+                # partial marker — an estimate-only row does not make this chunk PARTIAL.
+                estimate_card.click()
+                expect(page.get_by_test_id("cost-total-usd")).to_have_text("$0.00")
+                expect(page.get_by_test_id("cost-estimate-usd")).to_have_text("$0.07 est.")
+                expect(page.get_by_test_id("cost-partial-badge")).to_have_count(0)
             finally:
                 browser.close()

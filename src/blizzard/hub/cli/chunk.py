@@ -10,7 +10,7 @@ import httpx
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import ChunkRow, Cost, Listing
+from blizzard.hub.cli.views import ChunkRow, Cost, CostEstimate, Listing
 
 
 class ChunkListing(Listing):
@@ -52,6 +52,9 @@ class ChunkDetail:
         if dependents:
             yield f"  dependents: {', '.join(_neighbor_label(n) for n in dependents)}"
         yield f"  cost: {Cost.of(body.get('cost')).rendered}"
+        estimate = CostEstimate.of(body.get("cost"))
+        if estimate is not None:
+            yield f"  cost estimate: {estimate.rendered}"
 
 
 def _neighbor_label(neighbor: dict[str, Any]) -> str:

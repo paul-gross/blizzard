@@ -51,10 +51,10 @@ export type AnalyticsSpendResponse = {
 /**
  * AnalyticsSpendView
  *
- * One grouping key's usage/cost rollup (blizzard#256 D6) — ``key`` is a node id or
- * a graph id, whichever dataset served it. The same lower-bound + PARTIAL contract
- * ``GET /api/spend`` publishes: ``cost_usd`` sums only the rows that carried a cost
- * envelope, and ``cost_partial`` is ``True`` iff any summed row lacked one.
+ * One grouping key's usage/cost rollup — ``key`` is a node id or a graph id, whichever dataset
+ * served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed
+ * row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some
+ * summed row carried one.
  */
 export type AnalyticsSpendView = {
     /**
@@ -73,6 +73,10 @@ export type AnalyticsSpendView = {
      * Cost Usd
      */
     cost_usd: number;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
     /**
      * Input Tokens
      */
@@ -585,10 +589,16 @@ export type ChunkSummary = {
 /**
  * ChunkUsageTotalView
  *
- * A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) — never a
- * stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``.
+ * A chunk's derived usage/cost total, summed over every recorded invocation — never a stored column.
+ * ``cost_partial`` is ``True`` iff some summed row carries neither a billed nor an estimated amount;
+ * ``billed_partial`` iff some carries no billed amount, so ``cost_usd`` is then a lower bound of billed
+ * spend. ``estimated_cost_usd`` is ``None`` iff no row carried one, and never enters ``cost_usd``.
  */
 export type ChunkUsageTotalView = {
+    /**
+     * Billed Partial
+     */
+    billed_partial?: boolean;
     /**
      * Cache Create Tokens
      */
@@ -606,6 +616,10 @@ export type ChunkUsageTotalView = {
      */
     cost_usd: number;
     /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
+    /**
      * Input Tokens
      */
     input_tokens: number;
@@ -619,8 +633,9 @@ export type ChunkUsageTotalView = {
  * ChunkUsageView
  *
  * One node-step's usage/cost telemetry (issue #59) — one harness invocation's tokens-by-class and
- * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope
- * existed for this invocation — never fabricated.
+ * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was
+ * recorded for this invocation — never fabricated. ``estimated_cost_usd`` is the runner's own reported
+ * estimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.
  */
 export type ChunkUsageView = {
     /**
@@ -639,6 +654,10 @@ export type ChunkUsageView = {
      * Epoch
      */
     epoch: number;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
     /**
      * Harness Id
      */

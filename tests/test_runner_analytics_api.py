@@ -61,6 +61,7 @@ _SPEND_BODY = {
             "cache_create_tokens": 5,
             "cost_usd": 0.1,
             "cost_partial": False,
+            "estimated_cost_usd": 0.02,
         }
     ]
 }

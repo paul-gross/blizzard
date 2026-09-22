@@ -142,6 +142,56 @@ def test_spend_chunks_dataset_renders_the_chunk_spend_shape(monkeypatch: pytest.
     assert "~$0.02" in result.output
 
 
+def test_a_spend_row_carrying_an_estimate_renders_it_beside_the_billed_cost(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_get, _ = _get_returning(
+        {
+            "spend": [
+                {
+                    "key": "nd_build",
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_read_tokens": 0,
+                    "cache_create_tokens": 0,
+                    "cost_usd": 0.0,
+                    "cost_partial": False,
+                    "estimated_cost_usd": 0.75,
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes"])
+
+    assert result.exit_code == 0, result.output
+    assert "nd_build  $0.00  $0.75 est.  in=100" in result.output
+
+
+def test_a_spend_row_with_no_estimate_renders_no_est_label(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_get, _ = _get_returning(
+        {
+            "spend": [
+                {
+                    "key": "nd_build",
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_read_tokens": 0,
+                    "cache_create_tokens": 0,
+                    "cost_usd": 1.5,
+                    "cost_partial": False,
+                    "estimated_cost_usd": None,
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes"])
+
+    assert result.exit_code == 0, result.output
+    assert "est." not in result.output
+
+
 def test_outcomes_dataset_renders_the_outcomes_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_get, _ = _get_returning(
         {"outcomes": [{"node_id": "nd_build", "choice_counts": {"pass": 3, "fail": 1}, "attempt_failures": 2}]}

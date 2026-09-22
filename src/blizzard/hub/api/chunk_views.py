@@ -68,6 +68,8 @@ def usage_total_view(usage: UsageTotal) -> ChunkUsageTotalView:
         cache_create_tokens=usage.cache_create_tokens,
         cost_usd=usage.cost_usd,
         cost_partial=usage.cost_partial,
+        estimated_cost_usd=usage.estimated_cost_usd,
+        billed_partial=usage.billed_partial,
     )
 
 
@@ -346,6 +348,7 @@ class ChunkView:
                 cost_usd=u.cost_usd,
                 harness_id=u.harness_id,
                 harness_version=u.harness_version,
+                estimated_cost_usd=u.estimated_cost_usd,
             )
             for u in sorted(self.facts.usage, key=lambda u: u.recorded_at)
         ]

@@ -247,6 +247,15 @@ a.gr:focus-visible {
   text-align: right;
   white-space: nowrap;
 }
+/* The estimate sits beside the billed cost, never merged into it — its own
+   figure, wide enough for "est." without a fixed width of its own (unlike
+   `.tok`/`.cost` above, its text length varies with the label), so it relies
+   on `.step-usage`'s own `flex-wrap: wrap` to drop clear rather than overflow. */
+.step-usage .cost-estimate {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--label);
+}
 /* The harness-provenance badge beside a step's usage figures (blizzard#441). */
 .harness-badge {
   padding: 0 4px;
