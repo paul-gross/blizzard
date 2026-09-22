@@ -791,11 +791,8 @@ def test_the_env_addresses_this_visits_garden_delivery_route(tmp_path: Path) -> 
 @pytest.mark.component
 def test_the_env_addresses_this_visits_review_findings_route(tmp_path: Path) -> None:
     """``review_deliver`` reaches the hub only through the injected
-    ``BZ_HUB_REVIEW_FINDINGS_URL`` (blizzard#582), so the executor must address this
-    chunk, node and epoch — an absent or mis-built URL fails the node at runtime. The
-    route itself 404s here (this test's fixture chunk carries no `review-finding-delta`
-    artifact for this node) rather than routing `invalid`, which is enough to prove the
-    address is live and served, not a path only this test believes in."""
+    ``BZ_HUB_REVIEW_FINDINGS_URL`` (blizzard#582). The route 404s here (this fixture
+    chunk carries no `review-finding-delta`), enough to prove the address is live."""
     runner = FakeHubCommandRunner()
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
     chunk_id, build_node_id, graph = _to_merge_node(hub)

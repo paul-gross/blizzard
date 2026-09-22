@@ -27,8 +27,7 @@ _SCOPES = sa.Table(
     sa.Column("created_at", sa.DateTime, nullable=False),
 )
 
-# The pre-revision shape: no `source`/`severity`/`raised_by_chunk_id`, `routine_name`
-# still `NOT NULL`.
+# The pre-revision shape: no `source`/`severity`/`raised_by_chunk_id`; `routine_name` NOT NULL.
 _OLD_FINDINGS = sa.Table(
     "findings",
     sa.MetaData(),

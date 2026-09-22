@@ -1,11 +1,8 @@
-"""The `record-findings` node end to end (blizzard#582 Phase 3) — the `test_review_findings_delivery_e2e` scenario of
-the standing e2e smoke.
-
-The real packaged `basic-development-workflow` graph is minted with only its runner-node prompts swapped for scripts
-the mock can execute — `deliver` and `record-findings` stay verbatim, so `land_ff.py` and the real `review_deliver.py`
-run for real against the real hub route and domain code. The scripted review publishes a `review-finding-delta` with
-one `deferred`, one `fixed`, and one `refuted` entry; after landing, exactly the deferred entry is a durable
-review-sourced finding, readable through `GET /api/findings`."""
+"""The `record-findings` node end to end (blizzard#582 Phase 3): the real packaged
+`basic-development-workflow` graph, its `deliver`/`record-findings` scripts unscripted, runs
+against the real hub route. A scripted review publishes a `review-finding-delta` with one
+`deferred`, one `fixed`, and one `refuted` entry; after landing, only the deferred entry is a
+durable review-sourced finding, readable through `GET /api/findings`."""
 
 from __future__ import annotations
 
@@ -59,8 +56,7 @@ _BUILD_SCRIPT = (
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
 
-# One deferred (mints a fin_ row), one fixed, one refuted (mint nothing) — the mixed
-# delta the Phase 3 acceptance criterion asks for.
+# One deferred (mints a fin_ row), one fixed, one refuted (mints nothing).
 _DELTA = json.dumps(
     {
         "entries": [
@@ -100,9 +96,8 @@ def _scripted_graph_yaml() -> str:
     script nodes) travel verbatim, so this exercises the real `land_ff`/`review_deliver`
     scripts and the real hub route/domain code, not a mock of either."""
     body: Any = PACKAGED.named("basic-development-workflow").body
-    # Posted under the built-in triage router's own migration-target name (the
-    # `tests/e2e/test_review_cycle_e2e.py` convention) so a freshly ingested chunk
-    # mints straight onto it — no unscripted triage node in the loop.
+    # The built-in triage router's own migration-target name, so a freshly ingested
+    # chunk mints straight onto it with no unscripted triage node in the loop.
     body["name"] = "default-delivery"
     nodes: Any = body["nodes"]
     nodes["build"]["prompt"] = _BUILD_SCRIPT

@@ -347,9 +347,8 @@ def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(
     """A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583
     D2), widened to every review-sourced finding on the same scope (blizzard#582 D3) — the
     chunk's own run context derives the routine and the scope; no caller-supplied flag can
-    name another, and every other exited state stays out. 404 both for an unknown chunk
-    and for one carrying no run context (not a routine run): a chunk with nothing to read
-    is refused rather than answered with an empty bucket."""
+    name another. 404 both for an unknown chunk and for one carrying no run context (not a
+    routine run): a chunk with nothing to read is refused rather than an empty bucket."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

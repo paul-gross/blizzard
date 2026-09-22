@@ -57,9 +57,8 @@ class ReviewFindingFactRecord:
 class ReviewFindingsPlan:
     """Everything :class:`IWriteReviewFindingsRepository` needs to do its writes — every
     id already minted, every timestamp already stamped (`bzh:injected-clock`). The store
-    still mints any scope named here that it has not seen before, inside the same
-    transaction as the findings and facts (blizzard#582 D6) — a deliberate deviation from
-    the garden-delivery precedent, which reads the scope and refuses rather than minting it."""
+    still mints any scope named here it has not seen before, in the same transaction as
+    the findings and facts (blizzard#582 D6)."""
 
     chunk_id: str
     node_id: str

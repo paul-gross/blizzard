@@ -375,9 +375,8 @@ findings = Table(
 
 Index("ix_findings_routine_scope", findings.c.routine_name, findings.c.scope_slug)
 Index("ix_findings_routine_class", findings.c.routine_name, findings.c.class_)
-# The garden bucket's widened read (blizzard#582 D3) — a routine's own findings are
-# filtered on `ix_findings_routine_scope` above; a review-sourced finding on the same
-# scope is filtered on this one instead, so the union costs two indexed reads, never a scan.
+# The garden bucket's widened read (blizzard#582 D3): a review-sourced finding on the
+# same scope filters on this index instead of `ix_findings_routine_scope` above.
 Index("ix_findings_scope_source", findings.c.scope_slug, findings.c.source)
 
 # One row per `add`/`observed`/`gone`/`delivered`/exit/`reopened` transformation a delivered

@@ -1,11 +1,8 @@
 """The `record-findings` node's own script (blizzard#582) — posts to the hub's
 review-findings-delivery route and reports the outcome. The route reads the chunk's own
-newest `review-finding-delta` artifact server-side, so this script carries no body — the
-`garden_deliver.py` shape, minus the `--delta`/`--proposals` seam that script needs and
-this route does not. Pure stdlib (`bzh:deterministic-shell`), built on `land_common`'s own
-:class:`~blizzard.hub.graphs.scripts.land_common.ScriptEnv`/``forge_request``/
-:class:`~blizzard.hub.graphs.scripts.land_common.MarkerWriter` primitives rather than
-duplicating them."""
+newest `review-finding-delta` artifact server-side, so this script carries no body. Pure
+stdlib (`bzh:deterministic-shell`), built on `land_common`'s own `ScriptEnv`/
+`forge_request`/`MarkerWriter` primitives rather than duplicating them."""
 
 from __future__ import annotations
 
@@ -14,17 +11,14 @@ import sys
 from blizzard.hub.graphs.scripts import land_common
 from blizzard.hub.graphs.scripts.land_common import MarkerWriteError, MarkerWriter
 
-# The mid-run marker callback's token header (issue #230) — restated rather than imported,
-# mirroring `land_common`, to keep this module's dependency on that one at its seam only.
+# The mid-run marker callback's token header, restated from `land_common` at this seam.
 _MARKER_TOKEN_HEADER = "X-Blizzard-Marker-Token"
 
 _ENV_REVIEW_FINDINGS_URL = "BZ_HUB_REVIEW_FINDINGS_URL"
 _ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
 _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
 
-# The failure-marker name a rejected delivery's `invalid` edge reads back (see
-# `advanced-development-workflow/prompts/retrospective.from-record-findings.md` and its
-# sibling copies in the other two lanes).
+# The failure-marker name a rejected delivery's `invalid` edge reads back.
 _FAILURE_MARKER_NAME = "review-findings-failure"
 
 

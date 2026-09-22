@@ -59,8 +59,7 @@ class FindingNoteRequiredError(ValueError):
 @dataclass(frozen=True)
 class Finding:
     finding_id: str
-    #: A routine's own name, not its surrogate id (D5); `None` for a `source="review"`
-    #: finding, which carries no routine lineage (blizzard#582 D1).
+    #: A routine's own name, not its surrogate id (D5); `None` for `source="review"` (D1).
     routine_name: str | None
     scope_slug: str
     class_: str
@@ -81,8 +80,7 @@ class Finding:
     observed_count: int
     #: "routine" or "review" (blizzard#582 D1) — a finding's home, not its liveness.
     source: str = "routine"
-    #: blizzard's own closed severity vocabulary (blocking/should-fix); `None` for a
-    #: routine-sourced finding, which carries no severity of its own (blizzard#582 D1).
+    #: blocking/should-fix; `None` for a routine-sourced finding (blizzard#582 D1).
     severity: str | None = None
     #: The chunk whose review raised this finding; `None` for a routine-sourced finding.
     raised_by_chunk_id: str | None = None
@@ -227,12 +225,10 @@ class IReadFindingRepository(Protocol):
         limit: int,
     ) -> FindingPage:
         """Bounded, keyset-paginated read unifying `list_for`/`list_for_routine`/
-        `list_across_routines` (blizzard#526 D1/D5), ordered by `finding_id` ascending.
-        `source` narrows to `"routine"` or `"review"` (blizzard#582); `None` reads both.
-        Liveness is derived in Python after the SQL read (D3), so a short window can
-        undercount post-filter matches — implementation tops up windows until `limit`
-        matches or exhaustion. `cursor` is a prior :attr:`FindingPage.next_cursor`; any
-        other raises :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
+        `list_across_routines` (blizzard#526 D1/D5); `source` narrows to `"routine"` or
+        `"review"` (blizzard#582), `None` reads both. Liveness is derived in Python after
+        the SQL read (D3), so implementation tops up windows until `limit` matches or
+        exhaustion; `cursor` is a prior :attr:`FindingPage.next_cursor`."""
         ...
 
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
