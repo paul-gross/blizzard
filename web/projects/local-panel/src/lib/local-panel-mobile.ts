@@ -8,13 +8,15 @@ import type { MachineChunkStatus } from './chunk-status';
 import { LocalAsks } from './local-asks';
 import { LocalInfo } from './local-info';
 import type { MachineChunkRow } from './local-panel';
+import { LocalSubscriptions } from './local-subscriptions';
 
 /**
  * The runner local panel's mobile shell (mobile mockups, `../docs/designs/mobile/README.md`)
  * — a single scrolling column stacking the glance-relevant pieces in attention
  * order: machine info/status first (the hub link, `local-info`), then
  * agents/leases (`AgentRow` already carries its own heartbeat-freshness bar
- * per row), then chunks on this machine, then local asks. Every section is a
+ * per row), then chunks on this machine, then local asks, then subscriptions
+ * (blizzard#504's per-provider sampling diagnostics). Every section is a
  * desktop-layout component reused verbatim (`bzh:frontend-kit`) — this shell
  * only orders and stacks them, it never forks or re-styles their internals.
  *
@@ -48,7 +50,18 @@ import type { MachineChunkRow } from './local-panel';
 @Component({
   selector: 'local-panel-mobile',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AgentRow, ChunkCard, KitAsyncState, KitBackBar, KitPanel, KitPanelHeader, LocalAsks, LocalInfo, MachineDetail],
+  imports: [
+    AgentRow,
+    ChunkCard,
+    KitAsyncState,
+    KitBackBar,
+    KitPanel,
+    KitPanelHeader,
+    LocalAsks,
+    LocalInfo,
+    LocalSubscriptions,
+    MachineDetail,
+  ],
   templateUrl: './local-panel-mobile.html',
   styleUrl: './local-panel-mobile.css',
 })

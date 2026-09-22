@@ -16,6 +16,11 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
+from blizzard.runner.subscriptions.subscription_sampler import (
+    ExternalSubscriptionUsageSnapshot,
+    SampleMiss,
+    SampleMissReason,
+)
 
 _NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 
@@ -106,7 +111,7 @@ def test_happy_path_parses_both_windows_with_correct_scale_and_units(
 
     snapshot = sampler.sample()
 
-    assert snapshot is not None
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
     assert snapshot.sampled_at == _NOW
     by_window = {w.window: w for w in snapshot.windows}
     assert set(by_window) == {"5h", "7d"}
@@ -142,7 +147,7 @@ def test_a_window_absent_from_the_response_is_an_absent_entry_not_a_fabricated_z
 
     snapshot = _sampler(creds, handler, clock=clock).sample()
 
-    assert snapshot is not None
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
     assert [w.window for w in snapshot.windows] == ["5h"]
 
 
@@ -167,7 +172,8 @@ def test_resets_at_epoch_seconds_and_iso_string_parse_to_the_same_instant(
     snap_epoch = _sampler(creds, handler_epoch, clock=clock).sample()
     snap_iso = _sampler(creds, handler_iso, clock=clock).sample()
 
-    assert snap_epoch is not None and snap_iso is not None
+    assert isinstance(snap_epoch, ExternalSubscriptionUsageSnapshot)
+    assert isinstance(snap_iso, ExternalSubscriptionUsageSnapshot)
     assert snap_epoch.windows[0].resets_at == snap_iso.windows[0].resets_at == instant
 
 
@@ -175,18 +181,19 @@ def test_resets_at_epoch_seconds_and_iso_string_parse_to_the_same_instant(
 
 
 @pytest.mark.unit
-def test_missing_credentials_file_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_missing_credentials_file_returns_credential_unreadable_and_warns_once(tmp_path: Path) -> None:
     sampler = _sampler(tmp_path / "does-not-exist.json", _unreachable_handler)
 
     with capture_logs() as logs:
         result = sampler.sample()
 
-    assert result is None
+    assert isinstance(result, SampleMiss)
+    assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
 
 
 @pytest.mark.unit
-def test_malformed_json_returns_none_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_malformed_json_returns_credential_unreadable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     creds = tmp_path / ".credentials.json"
     creds.write_text("{not json")
     _guard_against_writes(monkeypatch, creds)
@@ -195,12 +202,13 @@ def test_malformed_json_returns_none_and_warns_once(tmp_path: Path, monkeypatch:
     with capture_logs() as logs:
         result = sampler.sample()
 
-    assert result is None
+    assert isinstance(result, SampleMiss)
+    assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
 
 
 @pytest.mark.unit
-def test_missing_access_token_returns_none_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_access_token_returns_credential_unreadable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(
         tmp_path / ".credentials.json", access_token=None, expires_at_ms=_future_expiry_ms(clock)
@@ -211,12 +219,13 @@ def test_missing_access_token_returns_none_and_warns_once(tmp_path: Path, monkey
     with capture_logs() as logs:
         result = sampler.sample()
 
-    assert result is None
+    assert isinstance(result, SampleMiss)
+    assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
 
 
 @pytest.mark.unit
-def test_expired_token_returns_none_warns_once_and_never_writes_the_file(
+def test_expired_token_returns_credential_lapsed_warns_once_and_never_writes_the_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     clock = FixedClock(_NOW)
@@ -228,13 +237,14 @@ def test_expired_token_returns_none_warns_once_and_never_writes_the_file(
     with capture_logs() as logs:
         result = sampler.sample()
 
-    assert result is None
+    assert isinstance(result, SampleMiss)
+    assert result.reason == SampleMissReason.CREDENTIAL_LAPSED
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
     assert creds.stat().st_mtime_ns == before_mtime
 
 
 @pytest.mark.unit
-def test_non_2xx_response_returns_none_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_non_2xx_401_response_returns_credential_lapsed_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
@@ -247,12 +257,13 @@ def test_non_2xx_response_returns_none_and_warns_once(tmp_path: Path, monkeypatc
     with capture_logs() as logs:
         result = sampler.sample()
 
-    assert result is None
+    assert isinstance(result, SampleMiss)
+    assert result.reason == SampleMissReason.CREDENTIAL_LAPSED
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
 
 
 @pytest.mark.unit
-def test_timeout_returns_none_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_timeout_returns_endpoint_unreachable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
@@ -265,12 +276,13 @@ def test_timeout_returns_none_and_warns_once(tmp_path: Path, monkeypatch: pytest
     with capture_logs() as logs:
         result = sampler.sample()
 
-    assert result is None
+    assert isinstance(result, SampleMiss)
+    assert result.reason == SampleMissReason.ENDPOINT_UNREACHABLE
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
 
 
 @pytest.mark.unit
-def test_connection_error_returns_none_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_connection_error_returns_endpoint_unreachable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
@@ -283,12 +295,13 @@ def test_connection_error_returns_none_and_warns_once(tmp_path: Path, monkeypatc
     with capture_logs() as logs:
         result = sampler.sample()
 
-    assert result is None
+    assert isinstance(result, SampleMiss)
+    assert result.reason == SampleMissReason.ENDPOINT_UNREACHABLE
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
 
 
 @pytest.mark.unit
-def test_unexpected_response_shape_returns_none_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unexpected_response_shape_returns_response_unparseable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
@@ -301,12 +314,13 @@ def test_unexpected_response_shape_returns_none_and_warns_once(tmp_path: Path, m
     with capture_logs() as logs:
         result = sampler.sample()
 
-    assert result is None
+    assert isinstance(result, SampleMiss)
+    assert result.reason == SampleMissReason.RESPONSE_UNPARSEABLE
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
 
 
 @pytest.mark.unit
-def test_unparseable_response_body_returns_none_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unparseable_response_body_returns_response_unparseable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
@@ -319,12 +333,13 @@ def test_unparseable_response_body_returns_none_and_warns_once(tmp_path: Path, m
     with capture_logs() as logs:
         result = sampler.sample()
 
-    assert result is None
+    assert isinstance(result, SampleMiss)
+    assert result.reason == SampleMissReason.RESPONSE_UNPARSEABLE
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1
 
 
 @pytest.mark.unit
-def test_zero_parseable_windows_returns_none_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_zero_parseable_windows_returns_response_unparseable_and_warns_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
@@ -341,5 +356,6 @@ def test_zero_parseable_windows_returns_none_and_warns_once(tmp_path: Path, monk
     with capture_logs() as logs:
         result = sampler.sample()
 
-    assert result is None
+    assert isinstance(result, SampleMiss)
+    assert result.reason == SampleMissReason.RESPONSE_UNPARSEABLE
     assert len([entry for entry in logs if entry["log_level"] == "warning"]) == 1

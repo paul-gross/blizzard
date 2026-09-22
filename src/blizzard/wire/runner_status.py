@@ -174,10 +174,33 @@ class HarnessHealthListResponse(BaseModel):
     items: list[HarnessHealthView] = []
 
 
+class SubscriptionView(BaseModel):
+    """One declared subscription's own runner-local diagnostics (blizzard#504) —
+    ``GET /api/subscriptions``. ``sampled_at``/``ok``/``miss_reason``/``renewal`` are all
+    ``None`` when this slug has never been attempted. ``miss_reason`` is one of
+    ``credential_lapsed``, ``credential_unreadable``, ``endpoint_unreachable``, or
+    ``response_unparseable`` when ``ok`` is ``False``; ``None`` when ``ok`` is ``True``.
+    ``renewal`` is ``None`` until a renewer is wired for this slug's provider."""
+
+    slug: str
+    name: str
+    provider: str
+    sampled_at: str | None = None
+    ok: bool | None = None
+    miss_reason: str | None = None
+    renewal: str | None = None
+
+
+class SubscriptionListResponse(BaseModel):
+    """Every declared subscription's own newest sampling attempt."""
+
+    items: list[SubscriptionView] = []
+
+
 class DashboardView(BaseModel):
-    """``GET /api/dashboard`` — eight status reads composed into one response.
+    """``GET /api/dashboard`` — nine status reads composed into one response.
     ``fleet_summary`` alone is a hub pass-through and the only nullable section —
-    ``None`` on a hub failure or an unwired runner, while the seven local sections
+    ``None`` on a hub failure or an unwired runner, while the eight local sections
     still populate."""
 
     runner: RunnerStatusView
@@ -187,4 +210,5 @@ class DashboardView(BaseModel):
     takeovers: OpenTakeoverListResponse
     facts: FactListResponse
     harness_health: HarnessHealthListResponse
+    subscriptions: SubscriptionListResponse
     fleet_summary: FleetSummaryView | None

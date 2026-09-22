@@ -10,7 +10,12 @@ from sqlalchemy import Connection, and_, case, func, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
-from blizzard.runner.domain.usage import ContextSampleState, IWriteUsageRepository, UsageTotals
+from blizzard.runner.domain.usage import (
+    ContextSampleState,
+    ExternalUsageAttemptSummary,
+    IWriteUsageRepository,
+    UsageTotals,
+)
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample, invocation_cost
 from blizzard.runner.store.internal.base import RunnerStoreConnections
@@ -115,6 +120,30 @@ class UsageStore:
                 window_seconds=window["window_seconds"],
             )
             for window in decoded.get("windows", [])
+        )
+
+    def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
+        stmt = (
+            select(
+                external_usage_samples.c.sampled_at,
+                external_usage_samples.c.payload,
+                external_usage_samples.c.miss_reason,
+                external_usage_samples.c.renewal,
+            )
+            .where(external_usage_samples.c.slug == slug)
+            .order_by(external_usage_samples.c.sampled_at.desc(), external_usage_samples.c.id.desc())
+            .limit(1)
+        )
+        with self._store.connect() as conn:
+            row = conn.execute(stmt).one_or_none()
+        if row is None:
+            return None
+        return ExternalUsageAttemptSummary(
+            slug=slug,
+            sampled_at=as_utc(row.sampled_at),
+            ok=row.payload is not None,
+            miss_reason=row.miss_reason,
+            renewal=row.renewal,
         )
 
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:
@@ -279,13 +308,24 @@ class UsageStore:
         return seq
 
     def record_external_usage_attempt(
-        self, *, slug: str, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
+        self,
+        *,
+        slug: str,
+        sampled_at: datetime,
+        payload: str | None,
+        report_kind: str,
+        report_payload: str,
+        miss_reason: str | None = None,
     ) -> int | None:
         # The attempt row and its outbound report land in ONE transaction. Runner-scoped
         # (`chunk_id=None, lease_id=None`): a fact about the account, not a chunk or lease.
         seq: int | None = None
         with self._store.begin() as conn:
-            conn.execute(external_usage_samples.insert().values(slug=slug, sampled_at=sampled_at, payload=payload))
+            conn.execute(
+                external_usage_samples.insert().values(
+                    slug=slug, sampled_at=sampled_at, payload=payload, miss_reason=miss_reason
+                )
+            )
             if payload is not None:
                 result = conn.execute(
                     outbound_buffer.insert().values(

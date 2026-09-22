@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Protocol
 
 __all__ = [
@@ -17,6 +18,8 @@ __all__ = [
     "ExternalSubscriptionUsageSnapshot",
     "ExternalSubscriptionUsageWindow",
     "ISubscriptionSampler",
+    "SampleMiss",
+    "SampleMissReason",
 ]
 
 # The Anthropic provider-sampler binding's own selector value (blizzard#436) — distinct
@@ -51,13 +54,37 @@ class ExternalSubscriptionUsageSnapshot:
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
 
 
+class SampleMissReason(StrEnum):
+    """The closed set of reasons one sampling attempt produced nothing (blizzard#504).
+
+    ``CREDENTIAL_LAPSED`` is a token already past its own expiry before any request, or
+    a 401 from the provider; ``CREDENTIAL_UNREADABLE`` is a missing, malformed, or
+    incomplete credential file; ``ENDPOINT_UNREACHABLE`` is any other non-2xx response
+    or a request-level failure (timeout, connection error); ``RESPONSE_UNPARSEABLE`` is
+    a 2xx response whose body cannot be read as the windows it should carry."""
+
+    CREDENTIAL_LAPSED = "credential_lapsed"
+    CREDENTIAL_UNREADABLE = "credential_unreadable"
+    ENDPOINT_UNREACHABLE = "endpoint_unreachable"
+    RESPONSE_UNPARSEABLE = "response_unparseable"
+
+
+@dataclass(frozen=True)
+class SampleMiss:
+    """One sampling attempt that produced nothing, with why (blizzard#504) — replaces a
+    bare ``None``, so a lapsed credential is distinguishable from an unreachable endpoint
+    or an unparseable body at every surface that reads a sampler's result."""
+
+    reason: SampleMissReason
+
+
 class ISubscriptionSampler(Protocol):
     """One declared subscription's rate-limit sampler. Dumb: samples, never decides."""
 
-    def sample(self) -> ExternalSubscriptionUsageSnapshot | None:
+    def sample(self) -> ExternalSubscriptionUsageSnapshot | SampleMiss:
         """Sample this subscription's rate-limit utilization (issue #218).
 
-        ``None`` means this attempt produced nothing — a bad credential, an unreachable
-        endpoint, an unparseable response, anything. Never a raise: the sample is
-        best-effort."""
+        A :class:`SampleMiss` means this attempt produced nothing — a bad credential, an
+        unreachable endpoint, an unparseable response — carrying its own closed-set
+        reason. Never a raise: the sample is best-effort."""
         ...

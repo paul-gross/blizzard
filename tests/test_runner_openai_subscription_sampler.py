@@ -18,6 +18,11 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
+from blizzard.runner.subscriptions.subscription_sampler import (
+    ExternalSubscriptionUsageSnapshot,
+    SampleMiss,
+    SampleMissReason,
+)
 
 _NOW = datetime(2026, 9, 7, 12, 0, 0, tzinfo=UTC)
 _ACCOUNT_ID = "acct-0e1c5883"
@@ -137,7 +142,7 @@ def test_happy_path_parses_both_windows_with_correct_scale_and_units(
 
     snapshot = _sampler(creds, handler, clock=clock).sample()
 
-    assert snapshot is not None
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
     assert snapshot.sampled_at == _NOW
     by_window = {w.window: w for w in snapshot.windows}
     assert set(by_window) == {"5h", "7d"}
@@ -186,7 +191,7 @@ def test_a_window_absent_from_the_response_is_an_absent_entry_not_a_fabricated_z
 
     snapshot = _sampler(creds, handler, clock=clock).sample()
 
-    assert snapshot is not None
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
     assert [w.window for w in snapshot.windows] == ["5h"]
 
 
@@ -206,7 +211,7 @@ def test_the_window_label_is_derived_from_the_reported_length_not_the_response_k
 
     snapshot = _sampler(creds, handler, clock=clock).sample()
 
-    assert snapshot is not None
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
     assert [w.window for w in snapshot.windows] == ["1h", "30d"]
 
 
@@ -226,7 +231,7 @@ def test_a_window_missing_its_length_is_skipped_rather_than_labelled_from_nothin
 
     snapshot = _sampler(creds, handler, clock=clock).sample()
 
-    assert snapshot is not None
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
     assert [w.window for w in snapshot.windows] == ["7d"]
 
 
@@ -247,47 +252,55 @@ def _assert_one_warning(logs: Sequence[Mapping[str, object]]) -> None:
 
 
 @pytest.mark.unit
-def test_missing_credentials_file_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_missing_credentials_file_returns_credential_unreadable_and_warns_once(tmp_path: Path) -> None:
     sampler = _sampler(tmp_path / "absent.json", _unreachable_handler)
 
     with capture_logs() as logs:
-        assert sampler.sample() is None
+        result = sampler.sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_malformed_json_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_malformed_json_returns_credential_unreadable_and_warns_once(tmp_path: Path) -> None:
     creds = tmp_path / "auth.json"
     creds.write_text("{not json")
     sampler = _sampler(creds, _unreachable_handler)
 
     with capture_logs() as logs:
-        assert sampler.sample() is None
+        result = sampler.sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_missing_tokens_block_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_missing_tokens_block_returns_credential_unreadable_and_warns_once(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=None, tokens_block=False)
     sampler = _sampler(creds, _unreachable_handler)
 
     with capture_logs() as logs:
-        assert sampler.sample() is None
+        result = sampler.sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_missing_access_token_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_missing_access_token_returns_credential_unreadable_and_warns_once(tmp_path: Path) -> None:
     creds = _write_credentials(tmp_path / "auth.json", access_token=None)
     sampler = _sampler(creds, _unreachable_handler)
 
     with capture_logs() as logs:
-        assert sampler.sample() is None
+        result = sampler.sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_missing_account_id_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_missing_account_id_returns_credential_unreadable_and_warns_once(tmp_path: Path) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(
         tmp_path / "auth.json", access_token=_jwt(expires_at=clock.instant + timedelta(days=5)), account_id=None
@@ -295,12 +308,14 @@ def test_missing_account_id_returns_none_and_warns_once(tmp_path: Path) -> None:
     sampler = _sampler(creds, _unreachable_handler, clock=clock)
 
     with capture_logs() as logs:
-        assert sampler.sample() is None
+        result = sampler.sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_expired_token_returns_none_warns_once_and_never_writes_the_file(
+def test_expired_token_returns_credential_lapsed_warns_once_and_never_writes_the_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Pins the read-only decision: the vendor CLI owns the refresh flow and its lock, and
@@ -315,13 +330,15 @@ def test_expired_token_returns_none_warns_once_and_never_writes_the_file(
     sampler = _sampler(creds, _unreachable_handler, clock=clock)
 
     with capture_logs() as logs:
-        assert sampler.sample() is None
+        result = sampler.sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.CREDENTIAL_LAPSED
     _assert_one_warning(logs)
     assert creds.read_text() == before
 
 
 @pytest.mark.unit
-def test_non_2xx_response_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_non_2xx_401_response_returns_credential_lapsed_and_warns_once(tmp_path: Path) -> None:
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
@@ -329,12 +346,14 @@ def test_non_2xx_response_returns_none_and_warns_once(tmp_path: Path) -> None:
         return httpx.Response(401, json={"detail": "Unauthorized"})
 
     with capture_logs() as logs:
-        assert _sampler(creds, handler, clock=clock).sample() is None
+        result = _sampler(creds, handler, clock=clock).sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.CREDENTIAL_LAPSED
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_timeout_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_timeout_returns_endpoint_unreachable_and_warns_once(tmp_path: Path) -> None:
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
@@ -342,12 +361,14 @@ def test_timeout_returns_none_and_warns_once(tmp_path: Path) -> None:
         raise httpx.ReadTimeout("timed out", request=request)
 
     with capture_logs() as logs:
-        assert _sampler(creds, handler, clock=clock).sample() is None
+        result = _sampler(creds, handler, clock=clock).sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.ENDPOINT_UNREACHABLE
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_connection_error_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_connection_error_returns_endpoint_unreachable_and_warns_once(tmp_path: Path) -> None:
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
@@ -355,12 +376,14 @@ def test_connection_error_returns_none_and_warns_once(tmp_path: Path) -> None:
         raise httpx.ConnectError("unreachable", request=request)
 
     with capture_logs() as logs:
-        assert _sampler(creds, handler, clock=clock).sample() is None
+        result = _sampler(creds, handler, clock=clock).sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.ENDPOINT_UNREACHABLE
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_unexpected_response_shape_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_unexpected_response_shape_returns_response_unparseable_and_warns_once(tmp_path: Path) -> None:
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
@@ -368,12 +391,14 @@ def test_unexpected_response_shape_returns_none_and_warns_once(tmp_path: Path) -
         return httpx.Response(200, json=["not", "a", "mapping"])
 
     with capture_logs() as logs:
-        assert _sampler(creds, handler, clock=clock).sample() is None
+        result = _sampler(creds, handler, clock=clock).sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.RESPONSE_UNPARSEABLE
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_unparseable_response_body_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_unparseable_response_body_returns_response_unparseable_and_warns_once(tmp_path: Path) -> None:
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
@@ -381,12 +406,14 @@ def test_unparseable_response_body_returns_none_and_warns_once(tmp_path: Path) -
         return httpx.Response(200, content=b"<html>not json</html>", headers={"Content-Type": "application/json"})
 
     with capture_logs() as logs:
-        assert _sampler(creds, handler, clock=clock).sample() is None
+        result = _sampler(creds, handler, clock=clock).sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.RESPONSE_UNPARSEABLE
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_zero_parseable_windows_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_zero_parseable_windows_returns_response_unparseable_and_warns_once(tmp_path: Path) -> None:
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
@@ -394,12 +421,14 @@ def test_zero_parseable_windows_returns_none_and_warns_once(tmp_path: Path) -> N
         return httpx.Response(200, json=_usage_body())
 
     with capture_logs() as logs:
-        assert _sampler(creds, handler, clock=clock).sample() is None
+        result = _sampler(creds, handler, clock=clock).sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.RESPONSE_UNPARSEABLE
     _assert_one_warning(logs)
 
 
 @pytest.mark.unit
-def test_an_absent_rate_limit_block_returns_none_and_warns_once(tmp_path: Path) -> None:
+def test_an_absent_rate_limit_block_returns_response_unparseable_and_warns_once(tmp_path: Path) -> None:
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
@@ -407,7 +436,9 @@ def test_an_absent_rate_limit_block_returns_none_and_warns_once(tmp_path: Path) 
         return httpx.Response(200, json={"plan_type": "plus", "rate_limit": None})
 
     with capture_logs() as logs:
-        assert _sampler(creds, handler, clock=clock).sample() is None
+        result = _sampler(creds, handler, clock=clock).sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.RESPONSE_UNPARSEABLE
     _assert_one_warning(logs)
 
 
@@ -426,7 +457,7 @@ def test_a_window_length_arriving_as_a_float_still_yields_an_integer_window(tmp_
 
     snapshot = _sampler(creds, handler, clock=clock).sample()
 
-    assert snapshot is not None
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
     assert snapshot.windows[0].window == "5h"
     assert snapshot.windows[0].window_seconds == _FIVE_HOURS
     assert isinstance(snapshot.windows[0].window_seconds, int)
@@ -453,7 +484,7 @@ def test_a_non_finite_window_length_skips_its_window_instead_of_raising(tmp_path
 
     snapshot = _sampler(creds, handler, clock=clock).sample()
 
-    assert snapshot is not None
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
     assert [w.window for w in snapshot.windows] == ["7d"]
 
 
@@ -474,7 +505,7 @@ def test_two_windows_reporting_one_length_yield_a_single_labelled_window(tmp_pat
 
     snapshot = _sampler(creds, handler, clock=clock).sample()
 
-    assert snapshot is not None
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
     assert [w.window for w in snapshot.windows] == ["5h"]
     assert snapshot.windows[0].utilization_pct == 10.0
 
@@ -500,6 +531,6 @@ def test_reset_at_epoch_seconds_and_iso_string_parse_to_the_same_instant(tmp_pat
 
     snapshot = _sampler(creds, handler, clock=clock).sample()
 
-    assert snapshot is not None
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
     by_window = {w.window: w for w in snapshot.windows}
     assert by_window["5h"].resets_at == by_window["7d"].resets_at == expected

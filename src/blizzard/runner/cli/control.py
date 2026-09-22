@@ -87,6 +87,7 @@ def status(directory: str, runner_url: str | None) -> None:
         asks_resp = daemon.get("/api/asks", params={"open": "true"})
         escalations_resp = daemon.get("/api/escalations")
         takeovers_resp = daemon.get("/api/takeovers")
+        subscriptions_resp = daemon.get("/api/subscriptions")
 
     click.echo(f"runner {view['runner_id']}  workspace={view['workspace_id']}")
     pause = view["pause"]
@@ -131,6 +132,18 @@ def status(directory: str, runner_url: str | None) -> None:
     click.echo(f"\nopen takeovers ({len(takeovers)}):")
     for tko in takeovers:
         click.echo(f"  chunk {tko['chunk_id']}  takeover={tko['takeover_id']}  held since {tko['held_since']}")
+
+    subscriptions = subscriptions_resp.json().get("items", [])
+    click.echo(f"\nsubscriptions ({len(subscriptions)}):")
+    for sub in subscriptions:
+        if sub["sampled_at"] is None:
+            click.echo(f"  {sub['slug']} ({sub['provider']}): never sampled")
+        elif sub["ok"]:
+            click.echo(f"  {sub['slug']} ({sub['provider']}): ok, sampled at {sub['sampled_at']}")
+        else:
+            click.echo(
+                f"  {sub['slug']} ({sub['provider']}): miss ({sub['miss_reason']}), last attempt {sub['sampled_at']}"
+            )
 
 
 @click.command()

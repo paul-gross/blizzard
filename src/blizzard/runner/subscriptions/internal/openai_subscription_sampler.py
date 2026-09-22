@@ -23,6 +23,8 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
     ISubscriptionSampler,
+    SampleMiss,
+    SampleMissReason,
 )
 
 _log = get_logger("blizzard.runner.harness")
@@ -60,10 +62,10 @@ class OpenAISubscriptionSampler:
         self._http_client = http_client
         self._clock: IClock = clock
 
-    def sample(self) -> ExternalSubscriptionUsageSnapshot | None:
+    def sample(self) -> ExternalSubscriptionUsageSnapshot | SampleMiss:
         credential = self._read_credential()
-        if credential is None:
-            return None
+        if isinstance(credential, SampleMiss):
+            return credential
         access_token, account_id = credential
         try:
             resp = self._http_client().get(
@@ -86,7 +88,7 @@ class OpenAISubscriptionSampler:
                 path=self._credentials_path,
                 detail=str(exc),
             )
-            return None
+            return SampleMiss(SampleMissReason.ENDPOINT_UNREACHABLE)
         if not resp.is_success:
             # 401 here is the expired-token path: nothing refreshes this credential but
             # the Codex CLI itself, and this sampler never writes the file.
@@ -95,7 +97,9 @@ class OpenAISubscriptionSampler:
                 path=self._credentials_path,
                 status_code=resp.status_code,
             )
-            return None
+            if resp.status_code == 401:
+                return SampleMiss(SampleMissReason.CREDENTIAL_LAPSED)
+            return SampleMiss(SampleMissReason.ENDPOINT_UNREACHABLE)
         try:
             body = resp.json()
         except ValueError as exc:
@@ -104,25 +108,26 @@ class OpenAISubscriptionSampler:
                 path=self._credentials_path,
                 detail=str(exc),
             )
-            return None
+            return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
         if not isinstance(body, dict):
             _log.warning(
                 "external subscription usage sample failed: unexpected response shape",
                 path=self._credentials_path,
                 body_type=type(body).__name__,
             )
-            return None
+            return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
         windows = self._parse_usage_windows(body)
         if not windows:
             _log.warning(
                 "external subscription usage sample failed: no parseable windows in response",
                 path=self._credentials_path,
             )
-            return None
+            return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
         return ExternalSubscriptionUsageSnapshot(sampled_at=self._clock.now(), windows=tuple(windows))
 
-    def _read_credential(self) -> tuple[str, str] | None:
-        """The access token and account id from the credential file, or ``None``.
+    def _read_credential(self) -> tuple[str, str] | SampleMiss:
+        """The access token and account id from the credential file, or the reason it
+        could not be read.
 
         Read-only, always: the Codex CLI owns the refresh flow, holds its own lock over
         this file, and rotates the refresh token, so a second writer risks both
@@ -135,7 +140,7 @@ class OpenAISubscriptionSampler:
                 path=self._credentials_path,
                 detail=str(exc),
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
@@ -144,14 +149,14 @@ class OpenAISubscriptionSampler:
                 path=self._credentials_path,
                 detail=str(exc),
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         tokens = data.get("tokens") if isinstance(data, dict) else None
         if not isinstance(tokens, dict):
             _log.warning(
                 "external subscription usage sample failed: no tokens block in credentials",
                 path=self._credentials_path,
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         access_token = tokens.get("access_token")
         account_id = tokens.get("account_id")
         if not isinstance(access_token, str) or not access_token:
@@ -159,13 +164,13 @@ class OpenAISubscriptionSampler:
                 "external subscription usage sample failed: no access token in credentials",
                 path=self._credentials_path,
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         if not isinstance(account_id, str) or not account_id:
             _log.warning(
                 "external subscription usage sample failed: no account id in credentials",
                 path=self._credentials_path,
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         expires_at = self._parse_token_expiry(access_token)
         if expires_at is not None and expires_at <= self._clock.now():
             _log.warning(
@@ -173,7 +178,7 @@ class OpenAISubscriptionSampler:
                 path=self._credentials_path,
                 expires_at=iso_utc(expires_at),
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_LAPSED)
         return access_token, account_id
 
     def _parse_usage_windows(self, body: dict[str, object]) -> list[ExternalSubscriptionUsageWindow]:

@@ -52,6 +52,7 @@ from blizzard.runner.api.requeues import router as requeues_router
 from blizzard.runner.api.scope import router as scope_router
 from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
+from blizzard.runner.api.subscriptions import router as subscriptions_router
 from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.transcript_segments import router as transcript_segments_router
 from blizzard.runner.api.transcripts import router as transcripts_router
@@ -153,6 +154,7 @@ _HUMAN = (
     facts_router,
     takeovers_router,
     harness_health_router,
+    subscriptions_router,
     dashboard_router,
     requeues_router,
     events_router,

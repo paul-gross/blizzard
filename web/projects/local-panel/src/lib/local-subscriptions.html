@@ -1,0 +1,11 @@
+<div class="wrap" data-testid="local-subscriptions">
+  <fleet-kit-async-state
+    [state]="triadState()"
+    loadingText="LOADING…"
+    errorText="SUBSCRIPTIONS UNAVAILABLE"
+    emptyText="NO DECLARED SUBSCRIPTIONS"
+    emptyTestid="subscriptions-empty"
+  >
+    <local-subscriptions-view [rows]="rows()" />
+  </fleet-kit-async-state>
+</div>

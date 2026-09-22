@@ -44,7 +44,7 @@ from blizzard.runner.loop.overload import (
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.usage_limit import classify_worker_usage_limit, engage_and_park_worker
 from blizzard.runner.stores import RunnerStores
-from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot
+from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, SampleMiss
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import (
     EVENT_RECORDED,
@@ -748,14 +748,21 @@ class ExternalUsageSample(Step):
             # Declared, but its provider names no known sampler binding — stays declared
             # and unsampled: no attempt row, since there is no sampler to have failed.
             return
-        # `None` is the sampler's own best-effort miss — still an attempt worth recording,
-        # so this slug's cadence advances and its last-good windows stay untouched.
-        snapshot = resolved.sampler.sample()
-        if snapshot is None:
+        # A miss is the sampler's own best-effort result — still an attempt worth
+        # recording, so this slug's cadence advances and its last-good windows stay
+        # untouched, with the reason carried for the runner-local diagnostics to show.
+        result = resolved.sampler.sample()
+        if isinstance(result, SampleMiss):
             ctx.stores.usage.record_external_usage_attempt(
-                slug=resolved.slug, sampled_at=ctx.clock.now(), payload=None, report_kind="", report_payload=""
+                slug=resolved.slug,
+                sampled_at=ctx.clock.now(),
+                payload=None,
+                report_kind="",
+                report_payload="",
+                miss_reason=result.reason.value,
             )
             return
+        snapshot = result
         payload = json.dumps(self._payload(resolved, snapshot))
         seq = ctx.stores.usage.record_external_usage_attempt(
             slug=resolved.slug,

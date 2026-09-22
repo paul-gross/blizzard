@@ -13,6 +13,7 @@ from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscript
 
 __all__ = [
     "ContextSampleState",
+    "ExternalUsageAttemptSummary",
     "IReadUsageRepository",
     "IWriteUsageRepository",
     "UsageTotals",
@@ -27,6 +28,21 @@ class ContextSampleState:
     last_sampled_at: datetime
     #: The highest context measured, or ``None`` when no attempt measured one — the warn dedupe.
     max_context_tokens: int | None
+
+
+@dataclass(frozen=True)
+class ExternalUsageAttemptSummary:
+    """This ``slug``'s own newest sampling attempt (blizzard#504) — the runner-local
+    diagnostics' read: what the probe, ``runner status``, and ``GET /api/subscriptions``
+    all show. ``miss_reason`` is one of :class:`~blizzard.runner.subscriptions.subscription_sampler.SampleMissReason`'s
+    values, or ``None`` when the attempt sampled successfully. ``renewal`` is the newest
+    renewal outcome recorded alongside this attempt, or ``None`` until a renewer is wired."""
+
+    slug: str
+    sampled_at: datetime
+    ok: bool
+    miss_reason: str | None
+    renewal: str | None
 
 
 @dataclass(frozen=True)
@@ -72,6 +88,11 @@ class IReadUsageRepository(Protocol):
         harness-to-subscription mapping, just the newest windows this slug reported."""
         ...
 
+    def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
+        """This ``slug``'s own newest attempt row, or ``None`` when never attempted
+        (blizzard#504) — the runner-local diagnostics' read."""
+        ...
+
 
 class IWriteUsageRepository(IReadUsageRepository, Protocol):
     """Read-write usage/context-sample store — held only by the domain."""
@@ -113,12 +134,22 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         ...
 
     def record_external_usage_attempt(
-        self, *, slug: str, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
+        self,
+        *,
+        slug: str,
+        sampled_at: datetime,
+        payload: str | None,
+        report_kind: str,
+        report_payload: str,
+        miss_reason: str | None = None,
     ) -> int | None:
         """Append one declared subscription's sampling attempt **and**, only when it
         produced a sample, buffer its outbound report — atomically (issue #218), returning
         the buffered seq or ``None``. ``slug`` (blizzard#436) is the join key a later read
-        filters on, so one subscription's attempt never advances another's cadence."""
+        filters on, so one subscription's attempt never advances another's cadence.
+        ``miss_reason`` (blizzard#504) is one of
+        :class:`~blizzard.runner.subscriptions.subscription_sampler.SampleMissReason`'s
+        values on a miss, ``None`` on a successful sample."""
         ...
 
     def prune_external_usage_samples(self, *, now: datetime) -> int:
