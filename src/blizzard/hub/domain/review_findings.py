@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pydantic import ValidationError
 
 from blizzard.hub.domain.scopes import ScopeSlug, ScopeSlugError
-from blizzard.wire.finding import ReviewFindingDelta, ReviewFindingEntry
+from blizzard.wire.finding import DeferredReviewFindingEntry, ReviewFindingDelta
 
 
 class ReviewFindingsRejected(Exception):
@@ -25,7 +25,7 @@ class ValidatedReviewFindings:
     """What a passing :func:`validate_review_findings` hands the materializer: only the
     `deferred` entries, which alone mint (`fixed`/`refuted` carry nothing further)."""
 
-    deferred: list[ReviewFindingEntry] = field(default_factory=list)
+    deferred: list[DeferredReviewFindingEntry] = field(default_factory=list)
 
 
 def parse_review_finding_delta(artifact_name: str, raw: str) -> ReviewFindingDelta:
@@ -43,37 +43,22 @@ def parse_review_finding_delta(artifact_name: str, raw: str) -> ReviewFindingDel
 
 def validate_review_findings(delta: ReviewFindingDelta) -> ValidatedReviewFindings:
     """Validate `delta`, raising :class:`ReviewFindingsRejected` on the first failure: a
-    duplicate `ref`, a `deferred` entry missing one of its required fields, a `deferred`
-    entry marked `blocking` (a passing review cannot hold one), or a malformed scope
-    slug. Returns only the `deferred` entries — `fixed`/`refuted` mint nothing."""
+    duplicate `ref`, a `deferred` entry marked `blocking` (a passing review cannot hold
+    one), or a malformed scope slug. A `deferred` entry missing a required field never
+    reaches here — `ReviewFindingDelta` itself refuses to parse one. Returns only the
+    `deferred` entries — `fixed`/`refuted` mint nothing."""
     seen_refs: set[str] = set()
-    deferred: list[ReviewFindingEntry] = []
+    deferred: list[DeferredReviewFindingEntry] = []
     for entry in delta.entries:
         if entry.ref in seen_refs:
             raise ReviewFindingsRejected(f"ref {entry.ref!r} is carried by more than one entry in this delta")
         seen_refs.add(entry.ref)
-        if entry.disposition != "deferred":
+        if not isinstance(entry, DeferredReviewFindingEntry):
             continue
-        missing = [
-            name
-            for name, value in (
-                ("severity", entry.severity),
-                ("scope", entry.scope),
-                ("class", entry.class_),
-                ("locus", entry.locus),
-                ("summary", entry.summary),
-            )
-            if value is None
-        ]
-        if missing:
-            raise ReviewFindingsRejected(
-                f"entry {entry.ref!r} is deferred but is missing required field(s): {', '.join(missing)}"
-            )
         if entry.severity == "blocking":
             raise ReviewFindingsRejected(
                 f"entry {entry.ref!r} is deferred and marked blocking — a passing review cannot hold one"
             )
-        assert entry.scope is not None  # narrowed by the missing-field check above
         try:
             ScopeSlug.parse(entry.scope)
         except ScopeSlugError as exc:

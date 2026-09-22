@@ -72,6 +72,11 @@
 .fp-work-item a {
   color: var(--amber-hi);
 }
+/* The severity pill (blizzard#582) — `white-space: nowrap` so its short label never
+   breaks mid-pill inside the fact grid's `<dd>`. */
+.fp-severity {
+  white-space: nowrap;
+}
 /* The raising chunk's own ref (blizzard#582) — `run-delta.css`'s own `.rd-ref`
    shape, reused here for the same "board chunk" link. */
 .fp-raised-by {

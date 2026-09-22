@@ -165,6 +165,43 @@ class MarkerWriter:
         self.post(f"{_MARKER_PREFIX}{repo}", commit_hash)
 
 
+def deliver_and_report(
+    *,
+    url: str,
+    body: dict[str, Any] | None,
+    token: str,
+    env: ScriptEnv,
+    failure_marker_name: str,
+    action: str,
+) -> int:
+    """POST ``body`` to a delivery route and translate its outcome into a land script's
+    own exit shape — the POST/status-check/outcome-dispatch/failure-marker block
+    ``garden_deliver.py`` and ``review_deliver.py`` both build a `main()` around, shared
+    here rather than duplicated. ``action`` names the delivery in a diagnostic; may raise
+    :class:`MarkerWriteError`, left for the caller's own top-level ``try`` to report."""
+    status, resp_body = forge_request("POST", url, token=None, body=body, headers={_MARKER_TOKEN_HEADER: token})
+    if not (200 <= status < 300):
+        # A fault in the POST itself is fatal, never printed over as a `recorded`/
+        # `invalid` outcome — no printed success over an unwritten delivery.
+        print(f"{action} request failed: HTTP {status} {resp_body!r}", file=sys.stderr)
+        return 1
+
+    outcome = (resp_body or {}).get("outcome")
+    detail = (resp_body or {}).get("detail", "")
+    if outcome == "recorded":
+        print("recorded")
+        return 0
+    if outcome == "invalid":
+        print(f"{action} rejected: {detail}", file=sys.stderr)
+        markers = MarkerWriter(callback_url=env.get(_ENV_MARKER_CALLBACK_URL), token=token, request=forge_request)
+        markers.post(failure_marker_name, detail)
+        print("invalid")
+        return 0
+
+    print(f"{action} returned an unrecognized outcome: {outcome!r}", file=sys.stderr)
+    return 1
+
+
 @dataclass(frozen=True)
 class LandRun:
     """One ``deliver`` node visit: the env the executor injected, and the two channels out

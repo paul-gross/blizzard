@@ -108,7 +108,7 @@ export class FleetFindingPanel {
 
   /** The record as an aligned fact grid (`fleet-kit-fact-list`, the one owner of
    * this chrome) — a method, not a stored computed, since it depends on both the
-   * selected finding and the four `<ng-template>`s the view declares for the rows
+   * selected finding and the five `<ng-template>`s the view declares for the rows
    * whose value is markup rather than text, `routine-panel.ts`'s own `recordRows`
    * shape. `severity`/`raised by` (blizzard#582) append only for a `source ===
    * 'review'` panel — a `'routine'` one renders exactly the five rows this grid

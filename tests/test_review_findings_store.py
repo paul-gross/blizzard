@@ -105,6 +105,7 @@ def test_deliver_mints_an_unseen_scope_in_the_same_transaction(tmp_path: Path) -
         node_name="record-findings",
         epoch=1,
         at=_NOW,
+        new_scope_description="Minted by review delivery on chunk ch_1",
         new_findings=[
             NewReviewFinding(
                 finding_id="fin_1",
@@ -164,6 +165,58 @@ def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
         assert conn.execute(sa.select(sa.func.count()).select_from(findings)).scalar_one() == 1
         assert conn.execute(sa.select(sa.func.count()).select_from(finding_facts)).scalar_one() == 1
         assert conn.execute(sa.select(sa.func.count()).select_from(artifacts)).scalar_one() == 1
+
+
+def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two concurrent mints of the same brand-new scope is invisible on sqlite, which
+    serializes writers (review:F2) — forced here by spoofing the guard `select` after a
+    racing writer already committed it, so the insert collides for real."""
+    store, engine = _store_and_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(sa.insert(scopes).values(slug="brand-new", description="winner", created_at=_NOW))
+
+    import blizzard.hub.store.internal.review_findings_store as module
+
+    real_select = module.select
+
+    def spoofed_select(*columns):  # type: ignore[no-untyped-def]
+        stmt = real_select(*columns)
+        return stmt.where(sa.literal(False)) if columns == (scopes.c.slug,) else stmt
+
+    monkeypatch.setattr(module, "select", spoofed_select)
+
+    plan = ReviewFindingsPlan(
+        chunk_id="ch_1",
+        node_id="nd_1",
+        node_name="record-findings",
+        epoch=1,
+        at=_NOW,
+        new_scope_description="loser",
+        new_findings=[
+            NewReviewFinding(
+                finding_id="fin_1",
+                scope_slug="brand-new",
+                class_="correctness",
+                locus="a.py:1",
+                summary="s1",
+                severity="should-fix",
+                raised_by_chunk_id="ch_1",
+            )
+        ],
+        facts=[ReviewFindingFactRecord(finding_id="fin_1", ref="F1")],
+    )
+
+    outcome = store.deliver(plan)
+
+    assert outcome is ReviewFindingsOutcome.RECORDED
+    with engine.connect() as conn:
+        scope_row = conn.execute(sa.select(scopes).where(scopes.c.slug == "brand-new")).one()
+        assert scope_row.description == "winner"
+        assert conn.execute(sa.select(sa.func.count()).select_from(findings)).scalar_one() == 1
+        marker_rows = conn.execute(sa.select(artifacts).where(artifacts.c.name == "review-findings-delivered")).all()
+        assert len(marker_rows) == 1
 
 
 def test_deliver_from_a_fresh_node_and_epoch_is_still_already_recorded(tmp_path: Path) -> None:

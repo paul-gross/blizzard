@@ -7,6 +7,7 @@ own idempotence marker, land together or not at all (D6)."""
 from __future__ import annotations
 
 from sqlalchemy import insert, select
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
@@ -42,21 +43,29 @@ class ReviewFindingsStore:
             )
         ).first()
 
+    @staticmethod
+    def _mint_scope_if_unseen(conn, slug: str, description: str, at) -> None:  # type: ignore[no-untyped-def]
+        """Mint `slug` if this select finds it unseen. The insert runs in its own
+        savepoint, not the outer `deliver` transaction, so a concurrent mint of the same
+        slug loses the race with an `IntegrityError` that rolls back only this nested
+        write — the rest of the delivery still commits, first-write-wins like
+        `ScopeStore.ensure` (D2). Invisible on sqlite, which serializes writers."""
+        existing = conn.execute(select(scopes.c.slug).where(scopes.c.slug == slug)).first()
+        if existing is not None:
+            return
+        try:
+            with conn.begin_nested():
+                conn.execute(insert(scopes).values(slug=slug, description=description, created_at=at))
+        except IntegrityError:
+            pass
+
     def deliver(self, plan: ReviewFindingsPlan) -> ReviewFindingsOutcome:
         with self._store.write("deliver") as conn:
             if self._marker(conn, chunk_id=plan.chunk_id) is not None:
                 return ReviewFindingsOutcome.ALREADY_RECORDED
 
             for scope_slug in plan.scope_slugs:
-                existing = conn.execute(select(scopes.c.slug).where(scopes.c.slug == scope_slug)).first()
-                if existing is None:
-                    conn.execute(
-                        insert(scopes).values(
-                            slug=scope_slug,
-                            description=f"Minted by review delivery on chunk {plan.chunk_id}",
-                            created_at=plan.at,
-                        )
-                    )
+                self._mint_scope_if_unseen(conn, scope_slug, plan.new_scope_description, plan.at)
 
             if plan.new_findings:
                 conn.execute(

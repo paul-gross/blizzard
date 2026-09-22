@@ -56,15 +56,16 @@ class ReviewFindingFactRecord:
 @dataclass(frozen=True)
 class ReviewFindingsPlan:
     """Everything :class:`IWriteReviewFindingsRepository` needs to do its writes — every
-    id already minted, every timestamp already stamped (`bzh:injected-clock`). The store
-    still mints any scope named here it has not seen before, in the same transaction as
-    the findings and facts (blizzard#582 D6)."""
+    id, timestamp, and scope description already composed (`bzh:injected-clock`). The
+    store still mints any unseen scope named here, in the same transaction as the
+    findings and facts (D6), but writes this plan's own description rather than its own."""
 
     chunk_id: str
     node_id: str
     node_name: str
     epoch: int
     at: datetime
+    new_scope_description: str = ""
     new_findings: list[NewReviewFinding] = field(default_factory=list)
     facts: list[ReviewFindingFactRecord] = field(default_factory=list)
 
@@ -124,11 +125,6 @@ class ReviewFindingsMaterialize:
         new_findings: list[NewReviewFinding] = []
         facts: list[ReviewFindingFactRecord] = []
         for entry in validated.deferred:
-            assert entry.severity is not None
-            assert entry.scope is not None
-            assert entry.class_ is not None
-            assert entry.locus is not None
-            assert entry.summary is not None
             finding_id = Id.mint(FINDING_PREFIX, self._clock).value
             new_findings.append(
                 NewReviewFinding(
@@ -149,6 +145,7 @@ class ReviewFindingsMaterialize:
             node_name=node.name,
             epoch=epoch,
             at=at,
+            new_scope_description=f"Minted by review delivery on chunk {chunk.chunk_id}",
             new_findings=new_findings,
             facts=facts,
         )
