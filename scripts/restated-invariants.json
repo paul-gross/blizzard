@@ -422,6 +422,38 @@
           "reason": "Operator-facing prerequisite restating the admitted range for context."
         }
       ]
+    },
+    {
+      "id": "claude-code-admitted-version-range-current-bounds",
+      "statement": "The runner Claude Code admitted-version range (ADMITTED_CLAUDE_CODE_RANGE) is currently >=2.1,<3.0.",
+      "owner": "src/blizzard/runner/harness/internal/claude_code_health.py#<module>",
+      "owner_kind": "module",
+      "owner_assert": {
+        "quote": ">=2.1,<3.0"
+      },
+      "markers": [
+        "claude code s own admitted version range is currently",
+        "since claude code declares no compatibility corpus"
+      ],
+      "sites": [
+        {
+          "file": "src/blizzard/runner/harness/internal/claude_code_health.py",
+          "symbol": "<module>",
+          "role": "owner"
+        },
+        {
+          "file": "docs/deployment/worker-spawn.md",
+          "symbol": "harness-identity",
+          "role": "allowed",
+          "reason": "States the admitted range while introducing the two bound harness ids."
+        },
+        {
+          "file": "docs/deployment/worker-spawn.md",
+          "symbol": "opencode-configuration",
+          "role": "allowed",
+          "reason": "Restates the admitted range while describing Claude Code's own health-evaluation carve-out."
+        }
+      ]
     }
   ]
 }

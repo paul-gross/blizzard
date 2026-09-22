@@ -362,7 +362,7 @@ class IHarnessHealthProbe(Protocol):
 
     def supported_version(self) -> SpecifierSet | None:
         """This binding's declared admitted-version range as a semver ``SpecifierSet``, or
-        ``None`` when it declares no range at all (Claude Code). Checked through
+        ``None`` when it declares no range at all. Checked through
         :func:`~blizzard.runner.harness.internal.harness_shared.version_admitted`, never
         equality against one literal; ``None`` is the only "no constraint" value — an
         *empty* ``SpecifierSet`` would instead admit every version."""
@@ -372,6 +372,21 @@ class IHarnessHealthProbe(Protocol):
         """:meth:`supported_version`'s own declared literal display string, or ``None``
         alongside its ``None`` — never ``str(SpecifierSet)``, whose clause order does not
         match how the range reads in docs (blizzard#604)."""
+        ...
+
+    def normalize_version(self, raw: str | None) -> str | None:
+        """This binding's own raw ``observe_version`` output, reduced to the bare version
+        :meth:`supported_version`'s membership check and any corpus lookup compare against —
+        each binding owns its own raw shape, never a normalizer shared across bindings by
+        default (blizzard#606)."""
+        ...
+
+    def classifies_offline(self) -> bool:
+        """Whether this binding backs its admitted range with a committed offline
+        compatibility corpus at all — declared here rather than read from the filesystem
+        (``bzh:pluggable-seams``), so a corpus going missing degrades that one binding's own
+        health rather than silently downgrading it to membership-only admission. ``False``
+        means an admitted version is never run through ``classify_offline`` at all."""
         ...
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:

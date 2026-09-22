@@ -115,6 +115,12 @@ class OpenCodeHealthProbe:
     def supported_version_display(self) -> str:
         return ADMITTED_OPENCODE_RANGE_DISPLAY
 
+    def normalize_version(self, raw: str | None) -> str | None:
+        return harness_shared.normalize_opencode_version(raw)
+
+    def classifies_offline(self) -> bool:
+        return True
+
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
         """The union of every committed corpus inside the admitted range's own declared
         degradations (blizzard#438), read from each such version's manifest — never a

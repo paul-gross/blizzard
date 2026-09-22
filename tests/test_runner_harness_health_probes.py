@@ -12,7 +12,7 @@ import pytest
 from packaging.version import Version
 
 from blizzard.runner.harness.compatibility import CompatibilityProbe
-from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
+from blizzard.runner.harness.internal.claude_code_health import ADMITTED_CLAUDE_CODE_RANGE, ClaudeCodeHealthProbe
 from blizzard.runner.harness.internal.offline_compatibility import DEFAULT_CORPUS_ROOT, admitted_corpus_versions
 from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
@@ -53,10 +53,11 @@ def test_opencode_health_probe_declares_the_pinned_versions_absences() -> None:
     assert diagnostic_degraded <= {probe.value for probe in declared_probes}
 
 
-def test_claude_code_health_probe_declares_no_version_or_degradations() -> None:
+def test_claude_code_health_probe_declares_an_admitted_range_and_no_degradations() -> None:
     probe = ClaudeCodeHealthProbe("claude")
 
-    assert probe.supported_version() is None
+    assert probe.supported_version() == ADMITTED_CLAUDE_CODE_RANGE
+    assert probe.classifies_offline() is False
     assert probe.declared_degradations() == ()
 
 
