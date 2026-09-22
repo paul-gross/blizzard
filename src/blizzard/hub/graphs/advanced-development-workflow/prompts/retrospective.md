@@ -15,10 +15,11 @@ the `reviewed-plan`, the plan-review and review findings, the verification repor
 Start from `blizzard runner artifact get delivery-findings --node deliver --content` when one exists. Fetch in each
 repo's worktree first, then check:
 
-1. **The landed sha is reachable from base** — per repo, newest-`epoch` `git_commit` entry, tested in that repo's
-   worktree: `git merge-base --is-ancestor <sha> origin/<base>` exits 0.
-2. **That repo's PR is merged** — read its merge state from inside that repo's worktree so the query targets the right
+1. **That repo's PR is merged** — read its merge state from inside that repo's worktree so the query targets the right
    forge (on GitHub, `gh pr view --json state,mergedAt`).
+2. **The merged sha is reachable from base** — the PR's own landed tip (`gh pr view --json mergeCommit`), never the
+   declared sha: rebase-merge rewrites that one out of history at merge. `git merge-base --is-ancestor <merged sha>
+   origin/<base>` exits 0.
 3. **The chunk's originating work item is closed** — `blizzard runner work-items <chunk-id>` gives each ref's `web_url`;
    ask the forge. An open item is a finding — never on its own a reason to select `delivery-incomplete`; only legs 1 and
    2 are.
@@ -26,9 +27,8 @@ repo's worktree first, then check:
 Record the result in **Landing Verification** either way. If leg 1 or 2 fails for any repo, submit the asset now naming
 the discrepancy; your judgement then takes `delivery-incomplete`.
 
-Separately, check whether the landing turned the base branch's own gate red — query by the PR's merge commit, per repo
-(on GitHub, `gh pr view --json mergeCommit`). Never a reason to route backward: raise a red run as a finding in this
-asset and leave it there for the cross-chunk analysis pass to gather.
+Separately, check whether the landing turned the base branch's own gate red — query by the PR's merge commit, per repo.
+Never a reason to route backward: raise a red run as a finding here and leave it for the cross-chunk analysis pass.
 
 ## Fold the findings docket
 

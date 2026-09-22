@@ -49,6 +49,9 @@ _PR_TITLE_MAX = 256
 _MARKER_WRITE_ATTEMPTS = 3
 _MARKER_RETRY_BACKOFF_SECONDS = 0.05
 
+# Bounds the closed-pull scan a merged-PR lookup does per repo (1000 PRs against one branch).
+_CLOSED_PULLS_PAGE_MAX = 10
+
 
 @dataclass(frozen=True)
 class ScriptEnv:
@@ -275,11 +278,17 @@ class PullRequestOpenError(Exception):
     or merely worth another poll is the script's call."""
 
 
+class PullRequestLookupError(Exception):
+    """Raised when a forge read the merged-PR lookup needs — the branch's live tip, or its
+    closed-pull history — failed outright rather than confirming an answer either way.
+    Never silently degrades to "no merged PR here": that reading reopens the exact
+    duplicate idempotent recovery exists to prevent."""
+
+
 class NothingToLand(Exception):
     """Raised when a repo's branch adds no commit its base branch lacks — a **no-op
     landing**, not a failure: no PR can be opened and no poll changes that, so a script
-    records the repo's ``merged/<repo>`` marker and moves on, as ``land_ff`` does for an
-    already-advanced base ref (``bzh:hub-node-step-idempotence``)."""
+    records the repo's ``merged/<repo>`` marker and moves on (``bzh:hub-node-step-idempotence``)."""
 
 
 class MergeDidNotLand(Exception):
@@ -304,10 +313,16 @@ class PullRequest:
 
     @classmethod
     def of(cls, run: LandRun, commit: dict[str, str]) -> PullRequest:
-        """The open PR for ``commit``'s branch — opening one first when none exists — then
-        read live. Raises :class:`PullRequestOpenError` when the forge refuses to open."""
+        """The PR for ``commit``'s branch: an already-merged one first — rebase-merge
+        rewrites shas, so re-entry can no longer recognize a landed PR via
+        :meth:`~LandRun.contains` (``bzh:hub-node-step-idempotence``) — then the open one,
+        opening one first when neither exists, then read live. Raises
+        :class:`PullRequestOpenError` or :class:`PullRequestLookupError` on a forge hiccup."""
         repo = run.repo(commit["repo"])
         branch = commit["branch"]
+        merged = cls._merged_for_branch(run, repo, branch)
+        if merged is not None:
+            return cls(run, commit["repo"], int(merged["number"]), {}).reread()
         _, listed = run.api("GET", f"/repos/{repo}/pulls?state=open")
         existing = next((p for p in (listed or []) if p.get("head", {}).get("ref") == branch), None)
         if existing is None:
@@ -327,6 +342,39 @@ class PullRequest:
                 raise PullRequestOpenError(f"could not open a PR for {repo}:{branch}: {created}")
             existing = created
         return cls(run, commit["repo"], int(existing["number"]), {}).reread()
+
+    @staticmethod
+    def _merged_for_branch(run: LandRun, repo: str, branch: str) -> dict[str, Any] | None:
+        """The already-merged PR that landed ``branch``'s live tip into THIS run's own
+        base, or ``None`` when the read confirms there is none — never a same-name PR
+        merged into a different base, and never a degraded read, which raises
+        :class:`PullRequestLookupError` instead of degrading to "no merged PR here"
+        (``bzh:hub-node-step-idempotence``)."""
+        candidates: list[dict[str, Any]] = []
+        for page in range(1, _CLOSED_PULLS_PAGE_MAX + 1):
+            status, listed = run.api(
+                "GET", f"/repos/{repo}/pulls?state=closed&base={run.base_branch}&page={page}&per_page=100"
+            )
+            if status != 200 or not isinstance(listed, list):
+                raise PullRequestLookupError(f"could not read {repo}'s closed pull list (HTTP {status})")
+            candidates.extend(
+                p
+                for p in listed
+                if p.get("head", {}).get("ref") == branch
+                and p.get("base", {}).get("ref") == run.base_branch
+                and p.get("merged_at") is not None
+            )
+            if len(listed) < 100:
+                break
+        if not candidates:
+            return None
+        status, ref = run.api("GET", f"/repos/{repo}/git/ref/heads/{branch}")
+        if status != 200 or not isinstance(ref, dict):
+            raise PullRequestLookupError(f"could not read {repo}:{branch}'s live tip (HTTP {status})")
+        live_sha = (ref.get("object") or {}).get("sha")
+        if not isinstance(live_sha, str) or not live_sha:
+            raise PullRequestLookupError(f"{repo}:{branch}'s live tip read came back without a sha")
+        return next((p for p in candidates if p.get("head", {}).get("sha") == live_sha), None)
 
     def __str__(self) -> str:
         return f"{self.repo}#{self.number}"
@@ -365,8 +413,9 @@ class PullRequest:
         )
         return status, ((body or {}).get("message", "") if isinstance(body, dict) else "")
 
-    def merge(self, sha: str) -> str:
-        """Merge at ``sha`` and return the landed commit.
+    def merge(self, sha: str, *, method: str = "merge") -> str:
+        """Merge at ``sha`` with ``method`` and return the landed commit — the caller's
+        choice, so a script that wants a linear history passes ``"rebase"``.
 
         An already-merged PR is a prior run's un-marked merge, a no-op to redo
         (``bzh:hub-node-step-idempotence``); anything else raises :class:`MergeDidNotLand`."""
@@ -376,7 +425,7 @@ class PullRequest:
             {
                 "commit_message": self.run.feature_title or f"blizzard: land {self.bare_repo}",
                 "sha": sha,
-                "merge_method": "merge",
+                "merge_method": method,
                 "user": _HUB_USER,
             },
         )

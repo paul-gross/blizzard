@@ -94,7 +94,7 @@ Closure is unconditional per source — there is no per-source `close` flag to s
 completes it by hand) enqueues one durable close intent per still-open work ref, through whichever source owns that ref;
 a fixed drain sweep, on its own short interval and independent of `annotation_interval_seconds`, then retires every
 pending intent through that source's binding — the guarantee half of closing delivered work, where a worker's own commit
-metadata is only an opportunistic hint that may beat the drain on a fast-forward landing. Unlike `annotate`, closing
+metadata is only an opportunistic hint that may beat the drain. Unlike `annotate`, closing
 carries no *multi-writer* canonical constraint: a close is idempotent at the forge, so more than one hub pointed at the
 same repo closing the same item is not a race to coordinate around.
 

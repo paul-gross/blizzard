@@ -1,9 +1,8 @@
 # Retrospective
 
-Deliver reported every repo's base branch fast-forwarded to the chunk's commit; this node re-derives that report rather
-than trusting it, then writes the closing reflection. This node never repairs or routes backward a discrepancy — record
-one plainly as a finding for a human to resolve — and it does not change the delivered code; name files and findings,
-not vibes.
+Deliver reported every repo's PR merged; this node re-derives that report rather than trusting it, then writes the
+closing reflection. This node never repairs or routes backward a discrepancy — record one plainly as a finding for a
+human to resolve — and it does not change the delivered code; name files and findings, not vibes.
 
 ## Gather the record
 
@@ -13,18 +12,20 @@ produced no artifact. This lane keeps no per-node retrospective diary to synthes
 
 ## Verify the landing
 
-`blizzard runner artifact list` shows one `git_commit` entry per repo per node that declared one. Verify the newest
-`epoch` entry per repo — an older declaration is expected to be unreachable after a rewrite, and is no discrepancy.
+`blizzard runner artifact list` shows one `git_commit` entry per repo per node that declared one; it names the branch
+pre-push pushed, not the merged sha — read each PR's own state rather than assuming from it.
 
-Fetch in each repo's worktree before verifying — its base-branch view dates from environment acquisition; the
-fast-forward happened on the forge. Test each landed sha's reachability with
-`git merge-base --is-ancestor <sha> origin/<base>` — `origin/master` unless the repo records another — using that
-predicate specifically, not branch-tip comparison or log reading. This lane fast-forwards base refs directly, so there
-is no PR-merge leg to check.
+Fetch in each repo's worktree before verifying — its base-branch view dates from environment acquisition. Per repo,
+check its PR's merge state from inside that repo's worktree so the query targets the right forge (on GitHub,
+`gh pr view --json state,mergedAt`), then test the merged sha's reachability — never the sha pre-push declared, which
+rebase-merge rewrites out of history the moment the PR merges — with
+`git merge-base --is-ancestor <merged sha> origin/<base>` (`origin/master` unless the repo records another;
+`gh pr view --json mergeCommit` gives the merged sha) — that predicate specifically, not branch-tip comparison or log
+reading.
 
-Check whether the landing turned the base branch's gate red, querying by the fast-forwarded commit per repo — not by
-branch; this lane makes no separate merge commit. A completed red gate run is a real finding: raise it in the asset with
-its disposition and leave it there for the routine cross-chunk analysis pass to route onward.
+Check whether the landing turned the base branch's gate red, querying by the PR's merge commit per repo — not by
+branch. A completed red gate run is a real finding: raise it in the asset with its disposition and leave it there for
+the routine cross-chunk analysis pass to route onward.
 
 Verify the originating work item closed: `blizzard runner work-items <chunk-id>` gives each work ref's `web_url`; the
 item has no open/closed field — ask the forge for the issue's `state`. Closes-on-merge is opportunistic, never

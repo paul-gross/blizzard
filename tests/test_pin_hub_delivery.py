@@ -60,6 +60,7 @@ def _blocked_forge_with_a_terminal_check(calls: list[tuple[str, str, dict[str, A
         "head_sha": "headsha",
     }
     responses = {
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
         ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
         ("GET", f"{base}/pulls/1"): (
             200,

@@ -176,9 +176,9 @@
   },
   "blizzard_mock/forge/domain/git.py": {
    "comments": 1,
-   "docstrings": 22,
+   "docstrings": 25,
    "over_cap": 0,
-   "total": 74
+   "total": 80
   },
   "blizzard_mock/forge/domain/levers.py": {
    "comments": 14,
@@ -193,10 +193,10 @@
    "total": 123
   },
   "blizzard_mock/forge/domain/service.py": {
-   "comments": 12,
+   "comments": 14,
    "docstrings": 35,
    "over_cap": 0,
-   "total": 454
+   "total": 465
   },
   "blizzard_mock/forge/domain/state.py": {
    "comments": 0,
@@ -217,10 +217,10 @@
    "total": 28
   },
   "blizzard_mock/forge/internal/git_backend.py": {
-   "comments": 6,
-   "docstrings": 7,
+   "comments": 8,
+   "docstrings": 14,
    "over_cap": 0,
-   "total": 170
+   "total": 217
   },
   "blizzard_mock/forge/internal/lever_store.py": {
    "comments": 0,
@@ -2361,28 +2361,22 @@
    "total": 92
   },
   "blizzard/hub/graphs/scripts/land_common.py": {
-   "comments": 10,
-   "docstrings": 65,
+   "comments": 11,
+   "docstrings": 77,
    "over_cap": 4,
-   "total": 388
+   "total": 437
   },
   "blizzard/hub/graphs/scripts/land_default.py": {
    "comments": 6,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 81
-  },
-  "blizzard/hub/graphs/scripts/land_ff.py": {
-   "comments": 4,
-   "docstrings": 10,
-   "over_cap": 0,
    "total": 82
   },
   "blizzard/hub/graphs/scripts/land_pr_ci.py": {
-   "comments": 37,
-   "docstrings": 26,
-   "over_cap": 2,
-   "total": 405
+   "comments": 78,
+   "docstrings": 42,
+   "over_cap": 8,
+   "total": 589
   },
   "blizzard/hub/runtime.py": {
    "comments": 0,
@@ -5303,10 +5297,10 @@
    "total": 742
   },
   "crash/test_kill9_sweep.py": {
-   "comments": 272,
-   "docstrings": 185,
-   "over_cap": 27,
-   "total": 2919
+   "comments": 297,
+   "docstrings": 206,
+   "over_cap": 30,
+   "total": 3171
   },
   "crash_points.py": {
    "comments": 1,
@@ -6786,9 +6780,9 @@
   },
   "test_graph_authoring.py": {
    "comments": 8,
-   "docstrings": 22,
-   "over_cap": 0,
-   "total": 326
+   "docstrings": 23,
+   "over_cap": 1,
+   "total": 351
   },
   "test_graph_domain.py": {
    "comments": 6,
@@ -7144,17 +7138,11 @@
    "over_cap": 0,
    "total": 191
   },
-  "test_land_ff.py": {
-   "comments": 6,
-   "docstrings": 13,
-   "over_cap": 1,
-   "total": 347
-  },
   "test_land_scripts.py": {
-   "comments": 40,
-   "docstrings": 35,
-   "over_cap": 1,
-   "total": 1009
+   "comments": 44,
+   "docstrings": 76,
+   "over_cap": 3,
+   "total": 1457
   },
   "test_layering.py": {
    "comments": 14,
@@ -7316,7 +7304,7 @@
    "comments": 3,
    "docstrings": 22,
    "over_cap": 0,
-   "total": 205
+   "total": 206
   },
   "test_pin_hub_domain.py": {
    "comments": 2,
