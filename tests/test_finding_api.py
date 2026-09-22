@@ -172,6 +172,51 @@ def test_list_widens_across_the_four_routine_scope_combinations(tmp_path: Path) 
     assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1", "fin_2", "fin_3"}
 
 
+def test_list_narrows_to_source(tmp_path: Path) -> None:
+    """blizzard#582: `source` further narrows a `GET /api/findings` read, independent
+    of `routine`/`scope` — absent reads both sources."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, "blizzard")
+    store = FindingStore(hub_store_connections(hub.engine))
+    store.add(
+        "fin_1",
+        routine_name="nightly",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s1",
+        introduced=None,
+        at=_NOW,
+    )
+    with hub.engine.begin() as conn:
+        conn.execute(
+            insert(s.findings).values(
+                finding_id="fin_review",
+                routine_name=None,
+                scope_slug="blizzard",
+                class_="correctness",
+                locus="b.py:1",
+                summary="s2",
+                source="review",
+                severity="should-fix",
+                raised_by_chunk_id="ch_1",
+            )
+        )
+        conn.execute(insert(s.finding_facts).values(finding_id="fin_review", kind="add", recorded_at=_NOW))
+
+    resp = hub.client.get("/api/findings", params={"scope": "blizzard", "source": "review"})
+    assert resp.status_code == 200, resp.text
+    assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_review"}
+
+    resp = hub.client.get("/api/findings", params={"scope": "blizzard", "source": "routine"})
+    assert resp.status_code == 200, resp.text
+    assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1"}
+
+    resp = hub.client.get("/api/findings", params={"scope": "blizzard"})
+    assert resp.status_code == 200, resp.text
+    assert {row["finding_id"] for row in resp.json()["findings"]} == {"fin_1", "fin_review"}
+
+
 def test_list_include_gone_behaves_the_same_across_routine_absent_combinations(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub, "blizzard")

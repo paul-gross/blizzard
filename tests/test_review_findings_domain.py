@@ -6,6 +6,8 @@ raise `ReviewFindingsRejected`; a clean delta returns exactly its `deferred` ent
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 import pytest
 
 from blizzard.hub.domain.review_findings import (
@@ -16,6 +18,14 @@ from blizzard.hub.domain.review_findings import (
 from blizzard.wire.finding import ReviewFindingDelta, ReviewFindingEntry
 
 pytestmark = pytest.mark.unit
+
+
+class _DeferredFields(TypedDict, total=False):
+    severity: str | None
+    scope: str | None
+    class_: str | None
+    locus: str | None
+    summary: str | None
 
 
 def _deferred(
@@ -93,7 +103,7 @@ def test_a_duplicate_ref_is_rejected() -> None:
 
 @pytest.mark.parametrize("missing", ["severity", "scope", "class_", "locus", "summary"])
 def test_a_deferred_entry_missing_a_required_field_is_rejected(missing: str) -> None:
-    kwargs = {missing: None}
+    kwargs: _DeferredFields = {missing: None}  # pyright: ignore[reportAssignmentType]
     delta = ReviewFindingDelta(entries=[_deferred(**kwargs)])
 
     with pytest.raises(ReviewFindingsRejected, match="F1"):

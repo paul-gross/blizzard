@@ -95,6 +95,24 @@ def _seed_finding(
     )
 
 
+def _seed_review_finding(hub: HubHarness, finding_id: str, *, scope_slug: str = _SCOPE) -> None:
+    with hub.engine.begin() as conn:
+        conn.execute(
+            insert(s.findings).values(
+                finding_id=finding_id,
+                routine_name=None,
+                scope_slug=scope_slug,
+                class_="correctness",
+                locus="a.py:1",
+                summary="s",
+                source="review",
+                severity="should-fix",
+                raised_by_chunk_id="ch_review_1",
+            )
+        )
+        conn.execute(insert(s.finding_facts).values(finding_id=finding_id, kind="add", recorded_at=_NOW))
+
+
 def _record_artifact(hub: HubHarness, chunk_id: str, *, name: str, content: str, epoch: int = _EPOCH) -> None:
     assert hub.services.hub_node.record_marker(
         chunk_id, node_id=_NODE_ID, node_name="deliver", epoch=epoch, name=name, content=content
@@ -252,6 +270,57 @@ def test_an_empty_docket_is_recorded(tmp_path: Path) -> None:
     assert resp.json() == {"outcome": "recorded", "detail": ""}
     with hub.engine.begin() as conn:
         assert conn.execute(select(s.garden_proposals)).all() == []
+
+
+def test_an_observed_op_admits_a_review_sourced_finding_on_the_runs_own_scope(tmp_path: Path) -> None:
+    """blizzard#582 D3: the delivery's known-findings set is widened with review-sourced
+    findings on the run's own scope, so an `observed`/`gone` op may transform one under
+    the same same-scope constraint any routine-sourced finding is already held to."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_review_finding(hub, finding_id)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
+
+    resp = _post(hub, chunk_id, delta=["delta"])
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcome"] == "recorded"
+
+
+def test_a_docket_can_cite_a_review_sourced_finding_on_the_runs_own_scope(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_review_finding(hub, finding_id)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta())
+    _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
+
+    resp = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcome"] == "recorded"
+    with hub.engine.begin() as conn:
+        links = conn.execute(select(s.garden_proposal_findings)).all()
+    assert [link.finding_id for link in links] == [finding_id]
+
+
+def test_a_review_sourced_finding_on_another_scope_is_out_of_scope(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    _seed_scope(hub, "other-scope")
+    chunk_id = _seed_chunk(hub)
+    finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_review_finding(hub, finding_id, scope_slug="other-scope")
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(finding_id)]))
+
+    resp = _post(hub, chunk_id, delta=["delta"])
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["outcome"] == "invalid"
 
 
 # --- invalid -----------------------------------------------------------------

@@ -3121,12 +3121,46 @@
             "title": "Observed Count",
             "type": "integer"
           },
+          "raised_by_chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raised By Chunk Id"
+          },
           "routine_name": {
-            "title": "Routine Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine Name"
           },
           "scope_slug": {
             "title": "Scope Slug",
+            "type": "string"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "source": {
+            "default": "routine",
+            "title": "Source",
             "type": "string"
           },
           "state": {
@@ -3140,7 +3174,6 @@
         },
         "required": [
           "finding_id",
-          "routine_name",
           "scope_slug",
           "class",
           "locus",
@@ -3271,7 +3304,7 @@
         "type": "object"
       },
       "FindingView": {
-        "description": "A finding. `state` is the newest fact's own kind, folded to `\"live\"` for\n`add`/`observed`/`reopened` (blizzard#394) \u2014 `live` is kept alongside it as the\n`state == \"live\"` shorthand existing consumers already read. `note` is the newest\nfact's own note, whatever kind it is \u2014 `None` for a kind that carries none.\n\nTwo distinct instants ride alongside `introduced`: `introduced_at` is the authored\ntime of the commit `introduced` names, and is null wherever that commit was never\nresolved \u2014 a delivery declaring zero or several repositories leaves which one\n`introduced` refers to ambiguous, so no instant is looked up. `first_observed_at` is\nwhen a routine first recorded the finding \u2014 the earliest of its `add`/`observed`\nspan \u2014 and is null for a finding carrying neither, which is how a finding whose only\nfacts are exit verbs reads.",
+        "description": "A finding. `state` is the newest fact's own kind, folded to `\"live\"` for\n`add`/`observed`/`reopened` (blizzard#394) \u2014 `live` is kept alongside it as the\n`state == \"live\"` shorthand existing consumers already read. `note` is the newest\nfact's own note, whatever kind it is \u2014 `None` for a kind that carries none.\n\nTwo distinct instants ride alongside `introduced`: `introduced_at` is the authored\ntime of the commit `introduced` names, and is null wherever that commit was never\nresolved \u2014 a delivery declaring zero or several repositories leaves which one\n`introduced` refers to ambiguous, so no instant is looked up. `first_observed_at` is\nwhen a routine first recorded the finding \u2014 the earliest of its `add`/`observed`\nspan \u2014 and is null for a finding carrying neither, which is how a finding whose only\nfacts are exit verbs reads.\n\n`source` is `\"routine\"` or `\"review\"` (blizzard#582 D1): a review-sourced finding\ncarries no `routine_name`, carries its own `severity`, and names the `raised_by_chunk_id`\nthat raised it.",
         "properties": {
           "class": {
             "title": "Class",
@@ -3348,12 +3381,46 @@
             "title": "Observed Count",
             "type": "integer"
           },
+          "raised_by_chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raised By Chunk Id"
+          },
           "routine_name": {
-            "title": "Routine Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine Name"
           },
           "scope_slug": {
             "title": "Scope Slug",
+            "type": "string"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "source": {
+            "default": "routine",
+            "title": "Source",
             "type": "string"
           },
           "state": {
@@ -3367,7 +3434,6 @@
         },
         "required": [
           "finding_id",
-          "routine_name",
           "scope_slug",
           "class",
           "locus",
@@ -5819,6 +5885,29 @@
           "recorded_at"
         ],
         "title": "RestartView",
+        "type": "object"
+      },
+      "ReviewFindingsDeliveryResponse": {
+        "description": "The result of one `record-findings` materialization (blizzard#582) \u2014 the\n`GardenDeliveryResponse` shape: ``recorded`` durably means it, materialized now or\nreplayed; ``invalid`` carries the rejection reason in ``detail``.",
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "recorded",
+              "invalid"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "ReviewFindingsDeliveryResponse",
         "type": "object"
       },
       "RoleAssignmentRequest": {
@@ -12369,6 +12458,67 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/review-findings-delivery": {
+      "post": {
+        "description": "The `record-findings` node's own route (blizzard#582) \u2014 validates the chunk's\nnewest `review-finding-delta` artifact and, on success, materializes its `deferred`\nentries in one transaction. A malformed delta or an unresolvable node is an\n``invalid`` outcome at a 200, never an error response \u2014 the graph's own `invalid`\nedge reads and routes on it. Idempotent per chunk (D6): a replay reads its own marker\nbefore ever re-parsing the artifact.",
+        "operationId": "record_review_findings_delivery_api_chunks__chunk_id__review_findings_delivery_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "epoch",
+            "required": true,
+            "schema": {
+              "title": "Epoch",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewFindingsDeliveryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Review Findings Delivery",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/stop": {
       "post": {
         "description": "Terminally abandon CHUNK \u2014 the operator's last-resort verb (issue #118).\n\nRecords the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never\nre-derives ``ready``, releases any live route, and supersedes any open escalation. 409\nwhen the chunk is already ``done`` or ``stopped`` \u2014 stopping is not retroactive.",
@@ -12753,7 +12903,7 @@
     },
     "/api/findings": {
       "get": {
-        "description": "The findings bucket, widened to every routine and every scope (blizzard#486),\nbounded and keyset-paginated (blizzard#526 D1/D5) \u2014 live only, unless `include_gone`\n(D3), which also surfaces every exited finding, not just a merely `gone` one.\n`routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it holds\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\nAll four share `list_page`'s own total `finding_id` order.",
+        "description": "The findings bucket, widened to every routine and every scope (blizzard#486),\nbounded and keyset-paginated (blizzard#526 D1/D5) \u2014 live only, unless `include_gone`\n(D3), which also surfaces every exited finding, not just a merely `gone` one.\n`routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it holds\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\n`source` further narrows to `\"routine\"` or `\"review\"` (blizzard#582); absent reads\nboth. All share `list_page`'s own total `finding_id` order.",
         "operationId": "list_findings_api_findings_get",
         "parameters": [
           {
@@ -12786,6 +12936,22 @@
                 }
               ],
               "title": "Scope"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -13574,7 +13740,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/garden/findings": {
       "get": {
-        "description": "A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583\nD2) \u2014 the chunk's own run context derives the routine and the scope; no caller-\nsupplied flag can name another, and every other exited state stays out. 404 both for\nan unknown chunk and for one carrying no run context (not a routine run): a chunk\nwith nothing to read is refused rather than answered with an empty bucket.",
+        "description": "A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583\nD2), widened to every review-sourced finding on the same scope (blizzard#582 D3) \u2014 the\nchunk's own run context derives the routine and the scope; no caller-supplied flag can\nname another, and every other exited state stays out. 404 both for an unknown chunk\nand for one carrying no run context (not a routine run): a chunk with nothing to read\nis refused rather than answered with an empty bucket.",
         "operationId": "get_garden_findings_api_fleet_chunks__chunk_id__garden_findings_get",
         "parameters": [
           {
@@ -14348,6 +14514,32 @@
           }
         },
         "summary": "Heartbeat Runner",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/scopes": {
+      "get": {
+        "description": "Every scope, newest first, each marked retired or not (blizzard#582 D2) \u2014 the\ndeployment's scope vocabulary, read by `blizzard runner scope list` so a review's\ndeferred findings can name an existing slug without a hub-interpreted default.",
+        "operationId": "get_scopes_api_fleet_scopes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScopeView"
+                  },
+                  "title": "Response Get Scopes Api Fleet Scopes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Scopes",
         "tags": [
           "fleet"
         ]

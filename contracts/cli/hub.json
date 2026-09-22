@@ -1632,7 +1632,7 @@
           "short_help": "Confirm by hand that FINDING_IDS no longer reproduce."
         },
         "list": {
-          "help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone, which\nalso surfaces every exited finding, not just a merely `gone` one.",
+          "help": "List findings under SCOPE \u2014 live only, unless --include-gone, which also\nsurfaces every exited finding, not just a merely `gone` one. --routine is required\nunless --source review, since a review-sourced finding carries no routine.",
           "params": [
             {
               "hidden": false,
@@ -1641,7 +1641,7 @@
               "opts": [
                 "--routine"
               ],
-              "required": true,
+              "required": false,
               "secondary_opts": [],
               "type": "text"
             },
@@ -1655,6 +1655,17 @@
               "required": true,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "source",
+              "opts": [
+                "--source"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
             },
             {
               "hidden": false,
@@ -1691,7 +1702,7 @@
             }
           ],
           "path": "hub finding list",
-          "short_help": "List ROUTINE's findings under SCOPE \u2014 live only, unless --include-gone, which also surfaces every exited finding, not just a merely `gone` one."
+          "short_help": "List findings under SCOPE \u2014 live only, unless --include-gone, which also surfaces every exited finding, not just a merely `gone` one."
         },
         "not-a-finding": {
           "help": "Withdraw FINDING_IDS as not findings.",

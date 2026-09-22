@@ -22,7 +22,9 @@ from blizzard.wire.scope import ScopeCreateRequest, ScopeEditRequest, ScopeLifec
 router = APIRouter(prefix="/api", tags=["scopes"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _scope_view(scope: Scope, *, retired: bool) -> ScopeView:
+def scope_view(scope: Scope, *, retired: bool) -> ScopeView:
+    """The one `Scope` -> `ScopeView` projection — reused as-is by the runner-facing
+    fleet route (`blizzard.hub.api.fleet`, blizzard#582 D2) rather than restated there."""
     return ScopeView(
         slug=scope.slug, description=scope.description, created_at=iso_utc(scope.created_at), retired=retired
     )
@@ -42,7 +44,7 @@ def create_scope(request: ScopeCreateRequest, services: Annotated[HubServices, D
     except ScopeSlugError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     scope = services.scope_registry.ensure(slug, description=request.description)
-    return _scope_view(scope, retired=services.scopes.is_retired(scope.slug))
+    return scope_view(scope, retired=services.scopes.is_retired(scope.slug))
 
 
 @router.get("/scopes", response_model=list[ScopeView], dependencies=[Depends(require(FLEET_VIEW))])
@@ -51,7 +53,7 @@ def list_scopes(services: Annotated[HubServices, Depends(get_services)]) -> list
     bulk read."""
     scopes = services.scopes.list_all()
     retired = services.scopes.retired_slugs()
-    return [_scope_view(s, retired=s.slug in retired) for s in scopes]
+    return [scope_view(s, retired=s.slug in retired) for s in scopes]
 
 
 @router.get("/scopes/{slug}", response_model=ScopeView, dependencies=[Depends(require(FLEET_VIEW))])
@@ -60,7 +62,7 @@ def get_scope(slug: str, services: Annotated[HubServices, Depends(get_services)]
     scope = services.scopes.get(slug)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")
-    return _scope_view(scope, retired=services.scopes.is_retired(slug))
+    return scope_view(scope, retired=services.scopes.is_retired(slug))
 
 
 @router.get(
@@ -91,7 +93,7 @@ def edit_scope(
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")
     edited = services.scope_registry.edit(scope, description=request.description)
-    return _scope_view(edited, retired=services.scopes.is_retired(slug))
+    return scope_view(edited, retired=services.scopes.is_retired(slug))
 
 
 @router.post(
@@ -108,7 +110,7 @@ def retire_scope(
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")
     services.scope_lifecycle.retire(scope, by=request.by)
-    return _scope_view(scope, retired=True)
+    return scope_view(scope, retired=True)
 
 
 @router.post(
@@ -125,4 +127,4 @@ def enable_scope(
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")
     services.scope_lifecycle.enable(scope, by=request.by)
-    return _scope_view(scope, retired=False)
+    return scope_view(scope, retired=False)

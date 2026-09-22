@@ -1770,6 +1770,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFindingRepository, "get_with_facts"): lambda w: w.hub.services.findings.get_with_facts(w.finding_1),
     (IReadFindingRepository, "list_for"): lambda w: w.hub.services.findings.list_for("gardening", "blizzard"),
     (IReadFindingRepository, "list_for_routine"): lambda w: w.hub.services.findings.list_for_routine("gardening"),
+    (IReadFindingRepository, "list_by_source"): lambda w: w.hub.services.findings.list_by_source(
+        scope_slug="blizzard", source="review"
+    ),
     (IReadFindingRepository, "list_across_routines"): lambda w: w.hub.services.findings.list_across_routines(),
     (IReadFindingRepository, "list_page"): lambda w: w.hub.services.findings.list_page(
         routine_name=None, scope_slug=None, limit=50

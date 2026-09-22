@@ -52,6 +52,40 @@ def test_finding_list_passes_routine_scope_and_include_gone(monkeypatch: pytest.
 
 
 @pytest.mark.unit
+def test_finding_list_with_source_review_does_not_require_routine(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        calls.append((url, params))
+        return _FakeResponse(200, {"findings": [], "next_cursor": None})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        hub_group,
+        ["finding", "list", "--scope", "blizzard", "--source", "review"],
+        env={"BZ_HUB_URL": "http://hub.local:8421"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        (
+            "http://hub.local:8421/api/findings",
+            {"scope": "blizzard", "include_gone": "false", "source": "review", "limit": "1000"},
+        )
+    ]
+
+
+@pytest.mark.unit
+def test_finding_list_without_routine_or_source_review_is_a_usage_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    result = CliRunner().invoke(
+        hub_group, ["finding", "list", "--scope", "blizzard"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code != 0
+    assert "--routine is required unless --source review" in result.output
+
+
+@pytest.mark.unit
 def test_finding_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(

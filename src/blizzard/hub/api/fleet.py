@@ -28,6 +28,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast
+from blizzard.hub.api.scopes import scope_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.hub_node import PollPolicy
@@ -78,6 +79,7 @@ from blizzard.wire.route import (
     RouteTokenRekeyResponse,
 )
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationResponse, RunnerView
+from blizzard.wire.scope import ScopeView
 from blizzard.wire.system_artifact import SystemArtifactView
 from blizzard.wire.transcript_segment import LeaseTranscriptView, TranscriptSegmentAck, TranscriptSegmentBatch
 
@@ -343,10 +345,11 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
 @router.get("/chunks/{chunk_id}/garden/findings", response_model=list[FindingView])
 def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[FindingView]:
     """A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583
-    D2) — the chunk's own run context derives the routine and the scope; no caller-
-    supplied flag can name another, and every other exited state stays out. 404 both for
-    an unknown chunk and for one carrying no run context (not a routine run): a chunk
-    with nothing to read is refused rather than answered with an empty bucket."""
+    D2), widened to every review-sourced finding on the same scope (blizzard#582 D3) — the
+    chunk's own run context derives the routine and the scope; no caller-supplied flag can
+    name another, and every other exited state stays out. 404 both for an unknown chunk
+    and for one carrying no run context (not a routine run): a chunk with nothing to read
+    is refused rather than answered with an empty bucket."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -357,6 +360,7 @@ def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(
             detail=f"chunk {chunk_id} carries no run context — not a routine run",
         )
     bucket = services.findings.list_for(run.routine_name, run.scope_slug, include_gone=True)
+    bucket += services.findings.list_by_source(scope_slug=run.scope_slug, source="review", include_gone=True)
     return [finding_view(f) for f in bucket if f.live or f.state == "delivered"]
 
 
@@ -381,6 +385,16 @@ def get_garden_proposals(
     return [
         garden_proposal_view(p, None) for p in services.open_garden_proposals.list_open_for_routine(run.routine_name)
     ]
+
+
+@router.get("/scopes", response_model=list[ScopeView])
+def get_scopes(services: Annotated[HubServices, Depends(get_services)]) -> list[ScopeView]:
+    """Every scope, newest first, each marked retired or not (blizzard#582 D2) — the
+    deployment's scope vocabulary, read by `blizzard runner scope list` so a review's
+    deferred findings can name an existing slug without a hub-interpreted default."""
+    scopes = services.scopes.list_all()
+    retired = services.scopes.retired_slugs()
+    return [scope_view(s, retired=s.slug in retired) for s in scopes]
 
 
 def _answered_findings_or_404(chunk_id: str, services: HubServices) -> list[FindingView]:
