@@ -1,10 +1,9 @@
 """Review-finding delivery validation (unit tier, blizzard#582 Phase 1) — the
 `record-findings` node's own shape check: a duplicate `ref`, a `deferred` entry marked
 `blocking`, and a malformed scope slug each raise `ReviewFindingsRejected`; a `deferred`
-entry missing a required field never reaches this validator at all, since
-`ReviewFindingDelta` itself refuses to parse one (review:F1, review:F8); a clean delta
-returns exactly its `deferred` entries (the `tests/test_garden_delivery_domain.py`
-shape)."""
+entry missing a required field never reaches this validator, since `ReviewFindingDelta`
+itself refuses to parse one; a clean delta returns exactly its `deferred` entries (the
+`tests/test_garden_delivery_domain.py` shape)."""
 
 from __future__ import annotations
 
