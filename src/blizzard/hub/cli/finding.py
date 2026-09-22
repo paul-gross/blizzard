@@ -29,7 +29,13 @@ class FindingDetail:
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        yield f"{body['finding_id']}  {body['state']}  routine={body['routine_name']}  scope={body['scope_slug']}"
+        if body.get("source") == "review":
+            yield (
+                f"{body['finding_id']}  {body['state']}  source=review  severity={body['severity']}  "
+                f"raised_by={body['raised_by_chunk_id']}  scope={body['scope_slug']}"
+            )
+        else:
+            yield f"{body['finding_id']}  {body['state']}  routine={body['routine_name']}  scope={body['scope_slug']}"
         yield f"  class={body['class']}  locus={body['locus']}"
         yield f"  {body['summary']}"
         if body.get("introduced"):

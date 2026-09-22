@@ -203,6 +203,43 @@ def test_finding_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.mark.unit
+def test_finding_show_renders_a_review_sourced_finding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """review:F11 — `show` must surface `source`/`severity`/`raised_by_chunk_id` for a
+    review-sourced finding rather than a bare, unhelpful `routine=None`."""
+
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            {
+                "finding_id": "fin_1",
+                "routine_name": None,
+                "scope_slug": "blizzard",
+                "class": "correctness",
+                "locus": "a.py:1",
+                "summary": "s",
+                "introduced": None,
+                "live": True,
+                "state": "live",
+                "note": None,
+                "last_seen_at": None,
+                "observed_count": 0,
+                "source": "review",
+                "severity": "should-fix",
+                "raised_by_chunk_id": "ch_1",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["finding", "show", "fin_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "source=review" in result.output
+    assert "severity=should-fix" in result.output
+    assert "raised_by=ch_1" in result.output
+    assert "routine=None" not in result.output
+
+
+@pytest.mark.unit
 def test_finding_show_unknown_id_reports_404(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown finding fin_ghost"})

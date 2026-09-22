@@ -107,6 +107,12 @@
   font-size: var(--fs-label);
   letter-spacing: 0.02em;
 }
+/* The severity pill (blizzard#582) sits beside `.fl-source`/`.fl-raised-by` in the same
+   wrapping row — `.fl-raised-by`'s own reason for `white-space: nowrap` below applies
+   here too, so the short label never breaks mid-pill. */
+.fl-severity {
+  white-space: nowrap;
+}
 .fl-raised-by {
   color: var(--label-dim);
   white-space: nowrap;

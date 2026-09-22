@@ -19,23 +19,24 @@ Every entry carries the review's own local `ref` (`F1`, `F2`, …) and what beca
   is real and stands unanswered. `fixed` and `refuted` are a record of what the review adjudicated — the review already
   settled them, so materialization mints nothing further for either.
 
-A `deferred` entry additionally carries the four `garden/finding-format` `AddFindingOp` fields, in the same meanings
-that document declares them (read it for the full field-by-field rationale — this restates only the two review adds):
+A `deferred` entry additionally carries the three `garden/finding-format` `AddFindingOp` fields, in the same meanings
+that document declares them (read it for the full field-by-field rationale — this restates only the two review adds),
+for five required fields beyond `ref`/`disposition` in total:
 
 - `severity` — `"blocking"` or `"should-fix"`. A `deferred` entry can never carry `"blocking"`: a passing review
   cannot hold a blocking finding by definition, so one on the wire is rejected outright, not silently downgraded.
 - `scope` — the scope this finding is filed under. Named freely; an unfamiliar slug is minted rather than rejected
   (blizzard#582 D2), and a retired one is still accepted — recording a finding is not running against the scope.
-- `class` — the lane's own review-axis name (correctness, simplification, efficiency, …), the deployment's own
-  vocabulary exactly as `garden/finding-format`'s `class` is.
+- `class` — the lane's own review-axis name, the deployment's own vocabulary exactly as `garden/finding-format`'s
+  `class` is — blizzard indexes it and never interprets it.
 - `locus` — where it lives, the same meaning and the same freedom to name a whole body of ground instead of one point.
 - `summary` — what was observed, in enough words to judge without re-deriving it.
 
-A `fixed` or `refuted` entry carries only `ref` and `disposition` — no `severity`, `scope`, `class`, `locus`, or
-`summary`. Sending them anyway is not rejected, but they are read by nothing: the review's own record of *why* a
-finding was fixed or refuted already lives in the `review-findings` asset and `review-finding-refutes`, not here.
+A `fixed` or `refuted` entry carries only `ref` and `disposition` — never `severity`, `scope`, `class`, `locus`, or
+`summary`: unlike `garden/finding-format`'s single flat `AddFindingOp`/`ObservedFindingOp`/`GoneFindingOp` union, each
+disposition here is its own model, so an extra field on the wrong one is a shape violation, not a value nothing reads.
 
-### ReviewFindingEntry
+### DeferredReviewFindingEntry
 
 ```json
 {
@@ -47,6 +48,18 @@ finding was fixed or refuted already lives in the `review-findings` asset and `r
   "locus": "src/billing/invoice.py:42",
   "summary": "Three near-identical branches could fold to one with a lookup table."
 }
+```
+
+### FixedReviewFindingEntry
+
+```json
+{ "ref": "F2", "disposition": "fixed" }
+```
+
+### RefutedReviewFindingEntry
+
+```json
+{ "ref": "F3", "disposition": "refuted" }
 ```
 
 ### ReviewFindingDelta

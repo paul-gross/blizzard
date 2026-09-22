@@ -2,21 +2,17 @@
 review-findings-delivery route and reports the outcome. The route reads the chunk's own
 newest `review-finding-delta` artifact server-side, so this script carries no body. Pure
 stdlib (`bzh:deterministic-shell`), built on `land_common`'s own `ScriptEnv`/
-`forge_request`/`MarkerWriter` primitives rather than duplicating them."""
+`deliver_and_report` primitives rather than duplicating them."""
 
 from __future__ import annotations
 
 import sys
 
 from blizzard.hub.graphs.scripts import land_common
-from blizzard.hub.graphs.scripts.land_common import MarkerWriteError, MarkerWriter
-
-# The mid-run marker callback's token header, restated from `land_common` at this seam.
-_MARKER_TOKEN_HEADER = "X-Blizzard-Marker-Token"
+from blizzard.hub.graphs.scripts.land_common import MarkerWriteError
 
 _ENV_REVIEW_FINDINGS_URL = "BZ_HUB_REVIEW_FINDINGS_URL"
 _ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
-_ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
 
 # The failure-marker name a rejected delivery's `invalid` edge reads back.
 _FAILURE_MARKER_NAME = "review-findings-failure"
@@ -36,35 +32,14 @@ def _deliver() -> int:
     delivery_url = env.require(_ENV_REVIEW_FINDINGS_URL)
     token = env.require(_ENV_MARKER_TOKEN)
 
-    status, body = land_common.forge_request(
-        "POST",
-        delivery_url,
-        token=None,
+    return land_common.deliver_and_report(
+        url=delivery_url,
         body=None,
-        headers={_MARKER_TOKEN_HEADER: token},
+        token=token,
+        env=env,
+        failure_marker_name=_FAILURE_MARKER_NAME,
+        action="review findings delivery",
     )
-    if not (200 <= status < 300):
-        # A fault in the POST itself is fatal, never printed over as a `recorded`/`invalid`
-        # outcome — no printed success over an unwritten delivery.
-        print(f"review findings delivery request failed: HTTP {status} {body!r}", file=sys.stderr)
-        return 1
-
-    outcome = (body or {}).get("outcome")
-    detail = (body or {}).get("detail", "")
-    if outcome == "recorded":
-        print("recorded")
-        return 0
-    if outcome == "invalid":
-        print(f"review findings delivery rejected: {detail}", file=sys.stderr)
-        markers = MarkerWriter(
-            callback_url=env.get(_ENV_MARKER_CALLBACK_URL), token=token, request=land_common.forge_request
-        )
-        markers.post(_FAILURE_MARKER_NAME, detail)
-        print("invalid")
-        return 0
-
-    print(f"review findings delivery returned an unrecognized outcome: {outcome!r}", file=sys.stderr)
-    return 1
 
 
 if __name__ == "__main__":

@@ -227,11 +227,11 @@ def validate_delivery(
     known_findings: Sequence[Finding],
     resolve_commit: CommitResolver | None = None,
 ) -> ValidatedDelivery:
-    """The delivery node's whole check. `delta_artifacts`/`proposal_artifacts` are
-    artifact-name → raw-JSON-text maps, what a route handler holds before parsing;
-    `known_findings` is every finding on `run.routine_name`, live or gone. Parses each
-    artifact, then checks it against `run`, raising :class:`GardenDeliveryRejected` on
-    the first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
+    """The delivery node's whole check: `delta_artifacts`/`proposal_artifacts` are
+    artifact-name → raw-JSON-text maps a route handler holds before parsing.
+    `known_findings` is every finding on `run.routine_name` plus review-sourced ones on
+    `run.scope_slug` (D3), live or gone. Raises :class:`GardenDeliveryRejected` on the
+    first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in known_findings if f.state not in EXIT_KINDS}
     exited_ids = frozenset(f.finding_id for f in known_findings if f.state in EXIT_KINDS)
     delivered_findings = {f.finding_id: f.actor for f in known_findings if f.state == "delivered"}

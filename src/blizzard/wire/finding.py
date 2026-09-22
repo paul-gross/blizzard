@@ -75,29 +75,58 @@ class FindingDelta(BaseModel):
     findings: list[FindingOp] = []
 
 
-class ReviewFindingEntry(BaseModel):
-    """One entry in a delivery lane's review-finding delta (blizzard#582 D7) — the
-    review's own `ref` (`F1`…) and what became of that finding. A `deferred` entry adds
-    the `garden/finding-format` `AddFindingOp` fields; `fixed`/`refuted` mint nothing and
-    carry none of them."""
+class DeferredReviewFindingEntry(BaseModel):
+    """A `deferred` entry (blizzard#582 D7) — a still-open should-fix finding a passing
+    review leaves unanswered, the only disposition that mints. Carries the
+    `garden/finding-format` `AddFindingOp` fields plus `severity`, all required:
+    pydantic refuses a delta missing one, rather than a hand-rolled check downstream."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     ref: str
-    disposition: Literal["deferred", "fixed", "refuted"]
-    severity: Literal["blocking", "should-fix"] | None = None
-    scope: str | None = None
-    class_: str | None = Field(default=None, alias="class")
-    locus: str | None = None
-    summary: str | None = None
+    disposition: Literal["deferred"] = "deferred"
+    severity: Literal["blocking", "should-fix"]
+    scope: str
+    class_: str = Field(alias="class")
+    locus: str
+    summary: str
+
+
+class FixedReviewFindingEntry(BaseModel):
+    """A `fixed` entry (blizzard#582 D7) — the review already settled it; materialization
+    mints nothing further and reads no field beyond `ref`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: str
+    disposition: Literal["fixed"] = "fixed"
+
+
+class RefutedReviewFindingEntry(BaseModel):
+    """A `refuted` entry (blizzard#582 D7) — the review already settled it; materialization
+    mints nothing further and reads no field beyond `ref`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: str
+    disposition: Literal["refuted"] = "refuted"
+
+
+ReviewFindingEntry = Annotated[
+    DeferredReviewFindingEntry | FixedReviewFindingEntry | RefutedReviewFindingEntry,
+    Field(discriminator="disposition"),
+]
 
 
 class ReviewFindingDelta(BaseModel):
     """A delivery lane review round's own delta (blizzard#582 D7) — the wire shape
     `review/finding-format` documents in full; this restates only the field meanings a
-    caller needs to construct one."""
+    caller needs. `entries` is required, not defaulted: a payload naming no `entries`
+    key at all is refused rather than read as an empty, `recorded` delta."""
 
-    entries: list[ReviewFindingEntry] = []
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[ReviewFindingEntry]
 
 
 class FindingView(BaseModel):

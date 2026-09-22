@@ -23,7 +23,7 @@ from blizzard.hub.domain.review_findings_materialize import (
     ReviewFindingsPlan,
 )
 from blizzard.hub.domain.work import Chunk, WorkRef
-from blizzard.wire.finding import ReviewFindingEntry
+from blizzard.wire.finding import DeferredReviewFindingEntry
 
 pytestmark = pytest.mark.unit
 
@@ -62,8 +62,8 @@ def _as_write_repo(repo: _FakeReviewFindingsRepo) -> IWriteReviewFindingsReposit
     return cast(IWriteReviewFindingsRepository, repo)
 
 
-def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "should-fix") -> ReviewFindingEntry:
-    return ReviewFindingEntry.model_validate(
+def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "should-fix") -> DeferredReviewFindingEntry:
+    return DeferredReviewFindingEntry.model_validate(
         {
             "ref": ref,
             "disposition": "deferred",
@@ -91,6 +91,7 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_a_deferred_entry() -> No
     assert plan.node_name == "record-findings"
     assert plan.epoch == 1
     assert plan.at == _T0
+    assert plan.new_scope_description == "Minted by review delivery on chunk ch_1"
 
     assert len(plan.new_findings) == 1
     finding = plan.new_findings[0]

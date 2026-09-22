@@ -18,26 +18,28 @@ from blizzard.hub.system_artifacts import PACKAGED
 from blizzard.wire import finding, garden_proposal
 
 
-def _finding_op_members() -> dict[str, type[BaseModel]]:
-    """``finding.FindingOp``'s three current member types, introspected off the union alias
-    itself (``Annotated[AddFindingOp | ObservedFindingOp | GoneFindingOp,
-    Field(discriminator="op")]``) rather than named by hand — so a member added to the union
-    later is pinned here automatically, and ``test_every_pinned_model_is_covered_by_some_document``
-    catches it going undocumented rather than silently passing."""
-    (union,) = get_args(finding.FindingOp)[:1]
+def _union_members(annotated: object) -> dict[str, type[BaseModel]]:
+    """A discriminated union's current member types, introspected off the union alias
+    itself (e.g. ``Annotated[AddFindingOp | ObservedFindingOp | GoneFindingOp,
+    Field(discriminator="op")]``) rather than named by hand — so a member added to the
+    union later is pinned here automatically, and
+    ``test_every_pinned_model_is_covered_by_some_document`` catches it going undocumented
+    rather than silently passing."""
+    (union,) = get_args(annotated)[:1]
     return {member.__name__: member for member in get_args(union)}
 
 
 pytestmark = pytest.mark.unit
 
-# The documented models, by heading name. `finding.FindingOp` is a union alias, not a model,
-# so it's absent here — a document pins its three member types individually instead.
+# The documented models, by heading name. A discriminated union alias (`finding.FindingOp`,
+# `finding.ReviewFindingEntry`) is not itself a model, so it's absent here — a document
+# pins its member types individually instead.
 _MODELS: dict[str, type[BaseModel]] = {
     "FindingCandidate": finding.FindingCandidate,
     "FindingDelta": finding.FindingDelta,
-    **_finding_op_members(),
+    **_union_members(finding.FindingOp),
     "GardenProposalCandidate": garden_proposal.GardenProposalCandidate,
-    "ReviewFindingEntry": finding.ReviewFindingEntry,
+    **_union_members(finding.ReviewFindingEntry),
     "ReviewFindingDelta": finding.ReviewFindingDelta,
 }
 
@@ -93,8 +95,18 @@ def test_finding_op_members_are_introspected_off_the_union_not_named_by_hand() -
     """Pins the introspection mechanism itself: a member added to, removed from, or renamed
     in the ``FindingOp`` union changes what this derives with no edit to this test file —
     the opposite of a hardcoded name list, which a new member could silently bypass."""
-    assert _finding_op_members() == {
+    assert _union_members(finding.FindingOp) == {
         "AddFindingOp": finding.AddFindingOp,
         "ObservedFindingOp": finding.ObservedFindingOp,
         "GoneFindingOp": finding.GoneFindingOp,
+    }
+
+
+def test_review_finding_entry_members_are_introspected_off_the_union_not_named_by_hand() -> None:
+    """The ``ReviewFindingEntry`` counterpart to the assertion above (blizzard#582
+    review:F8, disposition-discriminated like ``FindingOp``)."""
+    assert _union_members(finding.ReviewFindingEntry) == {
+        "DeferredReviewFindingEntry": finding.DeferredReviewFindingEntry,
+        "FixedReviewFindingEntry": finding.FixedReviewFindingEntry,
+        "RefutedReviewFindingEntry": finding.RefutedReviewFindingEntry,
     }
