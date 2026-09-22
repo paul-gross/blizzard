@@ -90,13 +90,15 @@ class ResultEnvelope:
                 decoded = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if isinstance(decoded, dict) and "result" in decoded:
+            if isinstance(decoded, dict) and ("result" in decoded or decoded.get("type") == "result"):
                 return cls(decoded)
         return None
 
     @property
     def result(self) -> str:
-        return str(self.fields["result"])
+        # Absent on a SIGINT drain's `error_during_execution` envelope: no assistant
+        # reply survived, so there is no result text to report.
+        return str(self.fields.get("result", ""))
 
     @property
     def usage(self) -> Mapping[str, Any] | None:

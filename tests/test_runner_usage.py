@@ -157,7 +157,6 @@ _SIGINT_ENVELOPE = json.dumps(
         "type": "result",
         "subtype": "error_during_execution",
         "is_error": True,
-        "result": "",
         "session_id": "sess-a",
         "model": "claude-opus-4-8",
         "usage": {

@@ -79,7 +79,8 @@ what its session already banked records no cost either, for the reason
 [The two readings of a reported figure](#the-two-readings-of-a-reported-figure) gives. A graceful restart no longer
 produces a PARTIAL row on its own: the shutdown drain (see
 [Graceful restart](./recovery.md#graceful-restart)) waits out each marked worker's own SIGINT-triggered envelope, so
-only a worker SIGKILLed at the drain's deadline — or an outright crash — still lands cost-absent.
+only a worker SIGKILLed at the drain's deadline, one that exits on SIGINT without writing an envelope, or an outright
+crash still lands cost-absent.
 
 `blizzard hub status` shows the per-chunk cost column, the fleet total, and a paused runner's ceiling reason; the
 board's chunk cards and detail dock show the same figures live.
