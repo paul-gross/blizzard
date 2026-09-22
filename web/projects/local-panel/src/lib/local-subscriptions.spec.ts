@@ -60,7 +60,6 @@ const NEVER_SAMPLED: runnerApi.SubscriptionView = {
   sampled_at: null,
   ok: null,
   miss_reason: null,
-  renewal: null,
 };
 
 const OK: runnerApi.SubscriptionView = {
@@ -70,7 +69,6 @@ const OK: runnerApi.SubscriptionView = {
   sampled_at: '2026-07-16T11:59:30.000Z',
   ok: true,
   miss_reason: null,
-  renewal: null,
 };
 
 const MISS: runnerApi.SubscriptionView = {
@@ -80,7 +78,6 @@ const MISS: runnerApi.SubscriptionView = {
   sampled_at: '2026-07-16T11:58:00.000Z',
   ok: false,
   miss_reason: 'credential_lapsed',
-  renewal: null,
 };
 
 describe('LocalSubscriptions', () => {

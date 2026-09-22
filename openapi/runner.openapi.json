@@ -3272,7 +3272,7 @@
         "type": "object"
       },
       "SubscriptionView": {
-        "description": "One declared subscription's own runner-local diagnostics (blizzard#504) \u2014\n``GET /api/subscriptions``. ``sampled_at``/``ok``/``miss_reason``/``renewal`` are all\n``None`` when this slug has never been attempted. ``miss_reason`` is one of\n``credential_lapsed``, ``credential_unreadable``, ``endpoint_unreachable``, or\n``response_unparseable`` when ``ok`` is ``False``; ``None`` when ``ok`` is ``True``.\n``renewal`` is ``None`` until a renewer is wired for this slug's provider.",
+        "description": "One declared subscription's own runner-local diagnostics (blizzard#504) \u2014\n``GET /api/subscriptions``. ``sampled_at``/``ok``/``miss_reason`` are all ``None``\nwhen this slug has never been attempted. ``miss_reason`` is one of\n``credential_lapsed``, ``credential_unreadable``, ``endpoint_unreachable``, or\n``response_unparseable`` when ``ok`` is ``False``; ``None`` when ``ok`` is ``True``.\nCarries no renewal outcome yet \u2014 that field joins in Phase 2, once a renewer is wired.",
         "properties": {
           "miss_reason": {
             "anyOf": [
@@ -3303,17 +3303,6 @@
           "provider": {
             "title": "Provider",
             "type": "string"
-          },
-          "renewal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Renewal"
           },
           "sampled_at": {
             "anyOf": [
