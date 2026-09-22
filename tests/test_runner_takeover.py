@@ -57,12 +57,13 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _service(store, *, clock=None, harness=None, probe=None):  # type: ignore[no-untyped-def]
+def _service(store, *, clock=None, harness=None, probe=None, workspace_root=""):  # type: ignore[no-untyped-def]
     return TakeoverService(
         make_stores(store),
         clock or FixedClock(_NOW),
         probe or FakeProbe(),
         local_api_url="http://127.0.0.1:8431",
+        workspace_root=workspace_root,
         harnesses=HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness or FakeHarness(handle=_HANDLE, verdict=None))}
         ),
@@ -134,15 +135,17 @@ def _close_scope(store, chunk_id: str = "ch_1") -> TakeoverCloseScope:  # type: 
 # --------------------------------------------------------------------------- #
 
 
-def test_takeover_opens_over_an_ask_parked_chunk(tmp_path) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
+def test_takeover_opens_over_an_ask_parked_chunk(tmp_path, workspace_root, expected_cwd) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
 
-    opened = _service(store).open(_open_scope(store), force=False)
+    opened = _service(store, workspace_root=workspace_root).open(_open_scope(store), force=False)
 
-    assert opened.command == "cd /ws/e1 && claude --resume sess-a"
-    assert opened.workdir == "/ws/e1"
+    # The command resumes from the session's own spawn cwd, where a directory-scoped harness finds it.
+    assert opened.command == f"cd {expected_cwd} && claude --resume sess-a"
+    assert opened.workdir == "/ws/e1"  # the environment; the command itself cds into the spawn cwd
     record = store.open_takeover_for_chunk("ch_1")
     assert record is not None
     assert record.takeover_id == opened.takeover_id
@@ -233,7 +236,12 @@ def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_p
         }
     )
     service = TakeoverService(
-        make_stores(store), FixedClock(_NOW), FakeProbe(), local_api_url="http://127.0.0.1:8431", harnesses=resolved
+        make_stores(store),
+        FixedClock(_NOW),
+        FakeProbe(),
+        local_api_url="http://127.0.0.1:8431",
+        harnesses=resolved,
+        workspace_root="",
     )
 
     opened = service.open(_open_scope(store), force=False)

@@ -521,6 +521,7 @@ def test_takeover_open_and_close_publish_takeover_changed(tmp_path: Path) -> Non
         FixedClock(_NOW),
         FakeProbe(),
         local_api_url="http://x",
+        workspace_root="",
         harnesses=HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
         ),
@@ -556,6 +557,7 @@ def test_takeover_force_open_over_a_live_worker_publishes_the_fence_bump_as_fact
         FixedClock(_NOW),
         probe,
         local_api_url="http://x",
+        workspace_root="",
         harnesses=HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
         ),

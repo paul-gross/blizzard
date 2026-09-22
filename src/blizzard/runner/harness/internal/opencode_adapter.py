@@ -332,7 +332,7 @@ class OpenCodeAdapter:
 
     def judge(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         judgement_prompt: str,
         output_path: str,
@@ -362,12 +362,12 @@ class OpenCodeAdapter:
                 # F1: deferred — the caller's own `confirm_durable()` (right after ITS durable
                 # `record_elicitation_started`/`record_elicitation_relaunch` lands) disarms it.
                 launched = self._launcher.launch(
-                    cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL, defer_disarm=True
+                    cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL, defer_disarm=True
                 )
         except OSError as exc:
-            _log.error("elicitation launch failed", binary=self._binary, cwd=workdir, detail=str(exc))
-            raise HarnessSpawnError(f"failed to launch {self._binary} in {workdir}: {exc}") from exc
-        _log.info("elicitation launched", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=workdir)
+            _log.error("elicitation launch failed", binary=self._binary, cwd=session_cwd, detail=str(exc))
+            raise HarnessSpawnError(f"failed to launch {self._binary} in {session_cwd}: {exc}") from exc
+        _log.info("elicitation launched", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=session_cwd)
         # F1: left armed — `Judgement._elicit`/`_relaunch` call `confirm_durable()` right after
         # THEIR OWN durable `record_elicitation_started`/`record_elicitation_relaunch` lands.
         return WorkerHandle(
@@ -380,7 +380,7 @@ class OpenCodeAdapter:
 
     def resume_with_message(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         message: str,
         stdout_path: str = "",
@@ -406,7 +406,7 @@ class OpenCodeAdapter:
         # calls `confirm_durable()` right after its own durable `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
-                cmd, cwd=workdir, env=env, stdout=stdout_file, stderr=None, defer_disarm=True
+                cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=None, defer_disarm=True
             )
         # `launched.pgid` is the launcher's own recorded group (D3) — carried to the
         # caller rather than left for it to assume `pgid == pid`.
@@ -419,7 +419,7 @@ class OpenCodeAdapter:
 
     def resume_command(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         *,
         model: str | None = None,
@@ -430,7 +430,7 @@ class OpenCodeAdapter:
         # `--permission-mode`): the paste string and exec'd form share the same argv (execution spec).
         del attended
         argv = self._command.takeover_argv(session_id=session_id, model=model, variant=effort)
-        return f"cd {workdir} && {' '.join(argv)}"
+        return f"cd {session_cwd} && {' '.join(argv)}"
 
     def identity_env(
         self, preamble: WorkerPreamble, chunk_id: str, session_id: str, *, elicitation: bool = False

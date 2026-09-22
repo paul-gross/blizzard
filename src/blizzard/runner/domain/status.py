@@ -17,6 +17,7 @@ from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.stores import RunnerReadStores
 
 __all__ = [
@@ -148,9 +149,11 @@ class RunnerStatusService:
         hub_url: str,
         env_pool: tuple[str, ...],
         harnesses: IHarnessRegistry,
+        workspace_root: str,
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
     ) -> None:
         self._stores = stores
+        self._workspace_root = workspace_root
         self._clock = clock
         self._harnesses = harnesses
         self._runner_id = runner_id
@@ -250,7 +253,7 @@ class RunnerStatusService:
                     # resolution: the operator lands in the configuration it ran with.
                     try:
                         resume_command = self._resolved_harness(session).resume_command(
-                            bindings[0].workdir,
+                            SpawnCwd.of_session(self._workspace_root, bindings[0].workdir),
                             session.session_id,
                             model=escalation.resolved_model,
                             effort=escalation.resolved_effort,

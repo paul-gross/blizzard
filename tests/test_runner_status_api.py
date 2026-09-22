@@ -51,6 +51,7 @@ def _app_with_status(
         max_agents=config.max_agents,
         hub_url=config.hub_url,
         env_pool=config.workspace_envs if env_pool is None else env_pool,
+        workspace_root="",
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness)}),
     )
     return create_app(config, runner_stores=make_stores(store), runner_status=service), store
@@ -520,10 +521,13 @@ def test_an_escalated_leases_harness_version_reads_the_generations_own_recorded_
 
 
 @pytest.mark.component
-def test_the_escalation_paste_string_carries_no_permission_mode_even_when_configured(tmp_path: Path) -> None:
+@pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
+def test_the_escalation_paste_string_carries_no_permission_mode_even_when_configured(
+    tmp_path: Path, workspace_root: str, expected_cwd: str
+) -> None:
     """Pins the paste surface to the REAL adapter (issue #258 review): a human running
     ``resume_command`` in a bare terminal must stay at the interactive permission
-    default."""
+    default — and from the session's own spawn cwd."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     probe = FakeProbe()
     service = RunnerStatusService(
@@ -534,6 +538,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
         max_agents=2,
         hub_url="http://hub",
         env_pool=("e1",),
+        workspace_root=workspace_root,
         harnesses=HarnessRegistry(
             {
                 CLAUDE_CODE_HARNESS_ID: HarnessBinding(
@@ -560,7 +565,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
 
     (escalation,) = service.escalations()
 
-    assert escalation.resume_command == "cd /ws/e1 && claude --resume sess-a"
+    assert escalation.resume_command == f"cd {expected_cwd} && claude --resume sess-a"
     assert "--permission-mode" not in escalation.resume_command
 
 

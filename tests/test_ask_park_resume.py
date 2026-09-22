@@ -16,6 +16,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Pull, Reap
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import ANSWER_DELIVERED, QUESTION_ASKED
@@ -249,7 +250,10 @@ def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  # type: ig
     assert harness.judged == []
 
 
-def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path):  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
+def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path, workspace_root, expected_cwd):  # type: ignore[no-untyped-def]
+    """The resume runs in the session's own spawn cwd — the workspace root when one is
+    configured, never the environment's own workdir beneath it."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
     store.record_ask(
@@ -267,12 +271,19 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path):  # t
     hub.questions["qn_1"] = _answered_question()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     harness.resume_pid = 4321
-    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, workspace_root=workspace_root),
+    )
 
     Advance(ctx).run()
 
     # The dormant session was resumed around the answer — same session id, same lease.
-    assert harness.resumed == [("/ws/e1", "sess-a", "# Answer from alice. Continue.\nrest")]
+    assert harness.resumed == [(expected_cwd, "sess-a", "# Answer from alice. Continue.\nrest")]
     # The park is closed and the lease reads live again (a fresh pid recorded).
     assert store.parked_lease_ids() == set()
     resumed_lease = store.active_lease("lease_1")

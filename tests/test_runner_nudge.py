@@ -58,7 +58,7 @@ class _AttachingOnResumeHarness(FakeHarness):
 
     def resume_with_message(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         message: str,
         stdout_path: str = "",
@@ -69,7 +69,7 @@ class _AttachingOnResumeHarness(FakeHarness):
         compaction_window: str | None = None,
     ) -> ResumeHandle:
         resumed = super().resume_with_message(
-            workdir,
+            session_cwd,
             session_id,
             message,
             stdout_path,
@@ -124,7 +124,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
 
     def resume_with_message(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         message: str,
         stdout_path: str = "",
@@ -135,7 +135,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
         compaction_window: str | None = None,
     ) -> ResumeHandle:
         resumed = super().resume_with_message(
-            workdir,
+            session_cwd,
             session_id,
             message,
             stdout_path,

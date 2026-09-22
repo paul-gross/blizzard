@@ -312,6 +312,7 @@ def _takeover_service(stores, *, harness_a: FakeHarness, harness_b: FakeHarness)
         FixedClock(_NOW),
         FakeProbe(),
         local_api_url="http://127.0.0.1:8431",
+        workspace_root="",
         harnesses=_two_harness_registry(harness_a, harness_b),
     )
 
@@ -376,6 +377,7 @@ def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_pa
         FixedClock(_NOW),
         FakeProbe(),
         local_api_url="http://127.0.0.1:8431",
+        workspace_root="",
         # Only `claude_code` is bound — `ch_b`'s own `unbound-harness` id resolves nowhere.
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness_a)}),
     )

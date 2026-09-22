@@ -16,6 +16,7 @@ from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import FAILED, Attempt
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
@@ -406,7 +407,7 @@ class Judgement:
             # that closure — no other runner can resume this exact session to relaunch on.
             return
         handle = harness.judge(
-            self.bindings[0].workdir,
+            SpawnCwd.of_session(self.ctx.config.workspace_root, self.bindings[0].workdir),
             session.session_id,
             message,
             output_path,

@@ -402,6 +402,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         hub_url=config.hub_url,
         env_pool=config.workspace_envs,
         harnesses=harnesses,
+        workspace_root=config.workspace_root,
     )
     takeover = TakeoverService(
         runner_stores,
@@ -410,6 +411,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
         harnesses=harnesses,
+        workspace_root=config.workspace_root,
         events=events,
     )
     requeue = RequeueService(runner_stores.requeue, SystemClock())

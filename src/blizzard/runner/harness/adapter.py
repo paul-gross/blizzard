@@ -122,9 +122,10 @@ class PendingWorkerHandle(Protocol):
 
 
 class IHarnessWorkerLifecycle(Protocol):
-    """Spawning, resuming, and judging a worker process (``bzh:seam-size-ceiling``) — one
-    of the six slices ``IHarnessAdapter`` composes; a consumer driving only worker
-    lifecycle takes this narrower seam instead."""
+    """Spawning, resuming, and judging a worker process (``bzh:seam-size-ceiling``) — one of the six slices
+    ``IHarnessAdapter`` composes, the narrower seam for a consumer driving only worker lifecycle. Every
+    ``session_cwd`` is the session's spawn cwd (``SpawnCwd.of_session``), whatever it resolved to: a harness
+    scoping sessions to their launch directory never completes a turn run from anywhere else."""
 
     def spawn(
         self,
@@ -159,7 +160,7 @@ class IHarnessWorkerLifecycle(Protocol):
 
     def resume_with_message(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         message: str,
         stdout_path: str = "",
@@ -178,7 +179,7 @@ class IHarnessWorkerLifecycle(Protocol):
 
     def judge(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         judgement_prompt: str,
         output_path: str,
@@ -201,7 +202,7 @@ class IHarnessWorkerLifecycle(Protocol):
 
     def resume_command(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         *,
         model: str | None = None,
