@@ -111,6 +111,7 @@ def list_findings(
     services: Annotated[HubServices, Depends(get_services)],
     routine: Annotated[str | None, Query()] = None,
     scope: Annotated[str | None, Query()] = None,
+    source: Annotated[str | None, Query()] = None,
     include_gone: Annotated[bool, Query()] = False,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -125,10 +126,16 @@ def list_findings(
     - `routine` absent, `scope` named — every routine's findings under one scope
     - both absent — every finding across every routine and every scope
 
-    All four share `list_page`'s own total `finding_id` order."""
+    `source` further narrows to `"routine"` or `"review"` (blizzard#582); absent reads
+    both. All share `list_page`'s own total `finding_id` order."""
     try:
         page = services.findings.list_page(
-            routine_name=routine, scope_slug=scope, include_gone=include_gone, cursor=cursor, limit=limit
+            routine_name=routine,
+            scope_slug=scope,
+            source=source,
+            include_gone=include_gone,
+            cursor=cursor,
+            limit=limit,
         )
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc

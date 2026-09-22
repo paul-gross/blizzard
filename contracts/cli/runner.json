@@ -761,6 +761,20 @@
       "path": "runner requeue",
       "short_help": "Hand a needs_human chunk back to the fleet: a fresh attempt at its current node (issue #53)."
     },
+    "scope": {
+      "commands": {
+        "list": {
+          "help": "Worker: list every scope (slug, description, retired) as JSON.",
+          "params": [],
+          "path": "runner scope list",
+          "short_help": "Worker: list every scope (slug, description, retired) as JSON."
+        }
+      },
+      "help": "Worker: read the deployment's scope vocabulary.",
+      "params": [],
+      "path": "runner scope",
+      "short_help": "Worker: read the deployment's scope vocabulary."
+    },
     "selftest": {
       "help": "Adapter-drift canary before an unattended period (issue #54): exercises CODING_HARNESS against a\nthrowaway scratch repo \u2014 spawn with a pre-assigned session id, a trivial edit+commit, verdict\nelicitation, an automated follow-up resume, and resume-command composition \u2014 touching no chunk,\nlease, environment, or hub. Posts the run, polls it, prints each check, exits non-zero on failure.",
       "params": [

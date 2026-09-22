@@ -262,6 +262,58 @@ def test_count_by_class_counts_across_the_named_routine(tmp_path: Path) -> None:
     assert store.count_by_class("nightly", "unseen-class") == 0
 
 
+def _add_review_finding(engine: Engine, finding_id: str = "fin_review", *, scope_slug: str = "blizzard") -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                "INSERT INTO findings (finding_id, routine_name, scope_slug, class, locus, summary, source,"
+                " severity, raised_by_chunk_id) VALUES (:id, NULL, :scope, 'correctness', 'a.py:1', 's',"
+                " 'review', 'should-fix', 'ch_1')"
+            ),
+            {"id": finding_id, "scope": scope_slug},
+        )
+        conn.execute(
+            sa.text("INSERT INTO finding_facts (finding_id, kind, recorded_at) VALUES (:id, 'add', :now)"),
+            {"id": finding_id, "now": _NOW},
+        )
+
+
+def test_list_by_source_narrows_to_review_findings_under_one_scope(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    _add(store, finding_id="fin_routine")
+    _add_review_finding(engine, "fin_review")
+    _add_review_finding(engine, "fin_review_other_scope", scope_slug="other-scope")
+
+    result = store.list_by_source(scope_slug="blizzard", source="review")
+
+    assert [f.finding_id for f in result] == ["fin_review"]
+    assert result[0].source == "review"
+    assert result[0].severity == "should-fix"
+    assert result[0].raised_by_chunk_id == "ch_1"
+    assert result[0].routine_name is None
+
+
+def test_list_by_source_excludes_a_gone_finding_unless_include_gone(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    _add_review_finding(engine, "fin_review")
+    store.record_fact("fin_review", kind="gone", at=_LATER, note="no longer reproduces")
+
+    assert store.list_by_source(scope_slug="blizzard", source="review") == []
+    everything = store.list_by_source(scope_slug="blizzard", source="review", include_gone=True)
+    assert [f.finding_id for f in everything] == ["fin_review"]
+
+
+def test_list_by_source_query_plans_as_an_index_search(tmp_path: Path) -> None:
+    _store, engine = _store_and_engine(tmp_path)
+    _add_review_finding(engine)
+
+    with engine.connect() as conn:
+        plan = conn.execute(
+            sa.text("EXPLAIN QUERY PLAN SELECT * FROM findings WHERE scope_slug = 'blizzard' AND source = 'review'")
+        ).all()
+    assert any("ix_findings_scope_source" in str(row) for row in plan), plan
+
+
 def test_list_for_query_plans_as_an_index_search(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
     _add(store)

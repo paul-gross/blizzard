@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from sqlalchemy import select
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
@@ -18,6 +19,8 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import HubHarness, build_hub, hub_store_connections, seed_work_item
+
+pytestmark = pytest.mark.component
 
 _NODE_ID = "nd_record_findings"
 _EPOCH = 1

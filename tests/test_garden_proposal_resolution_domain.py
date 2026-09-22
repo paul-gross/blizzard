@@ -145,11 +145,15 @@ class _FakeFindings:
     def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
         raise NotImplementedError
 
+    def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
+        raise NotImplementedError
+
     def list_page(
         self,
         *,
         routine_name: str | None,
         scope_slug: str | None,
+        source: str | None = None,
         include_gone: bool = False,
         cursor: str | None = None,
         limit: int,

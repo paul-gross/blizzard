@@ -373,7 +373,12 @@ def record_garden_delivery(
     if services.garden_delivery.already_delivered(chunk_id=chunk_id, node_id=node_id, epoch=epoch):
         return GardenDeliveryResponse(outcome="recorded", detail="")
 
+    # Widened with this run's own scope's review-sourced findings (blizzard#582 D3): an
+    # `observed`/`gone` op may transform one, and a proposal may cite one, exactly like
+    # any routine-sourced finding under the same-scope constraint `_check_known_id` already
+    # enforces.
     known_findings = services.findings.list_for_routine(run.routine_name, include_gone=True)
+    known_findings += services.findings.list_by_source(scope_slug=run.scope_slug, source="review", include_gone=True)
 
     try:
         validated = validate_delivery(

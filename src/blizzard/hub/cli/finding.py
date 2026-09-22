@@ -49,20 +49,32 @@ def finding_group() -> None:
 
 
 @finding_group.command("list", cls=FleetCommand)
-@click.option("--routine", "routine", required=True, help="The routine whose findings to list.")
+@click.option(
+    "--routine", "routine", default=None, help="The routine whose findings to list. Required unless --source review."
+)
 @click.option("--scope", "scope", required=True, help="The scope to filter to.")
+@click.option(
+    "--source",
+    "source",
+    type=click.Choice(["routine", "review"]),
+    default=None,
+    help="Narrow to routine- or review-sourced findings (blizzard#582); absent reads both.",
+)
 @click.option(
     "--include-gone", is_flag=True, default=False, help="Also show every exited finding, not just a live one (D3)."
 )
-def finding_list(cli: CliContext, routine: str, scope: str, include_gone: bool) -> None:
-    """List ROUTINE's findings under SCOPE — live only, unless --include-gone, which
-    also surfaces every exited finding, not just a merely `gone` one."""
-    rows = cli.get_all(
-        "/api/findings",
-        "GET /findings",
-        key="findings",
-        params={"routine": routine, "scope": scope, "include_gone": str(include_gone).lower()},
-    )
+def finding_list(cli: CliContext, routine: str | None, scope: str, source: str | None, include_gone: bool) -> None:
+    """List findings under SCOPE — live only, unless --include-gone, which also
+    surfaces every exited finding, not just a merely `gone` one. --routine is required
+    unless --source review, since a review-sourced finding carries no routine."""
+    if routine is None and source != "review":
+        raise click.UsageError("--routine is required unless --source review")
+    params: dict[str, str] = {"scope": scope, "include_gone": str(include_gone).lower()}
+    if routine is not None:
+        params["routine"] = routine
+    if source is not None:
+        params["source"] = source
+    rows = cli.get_all("/api/findings", "GET /findings", key="findings", params=params)
     cli.show(rows, FindingListing(rows))
 
 

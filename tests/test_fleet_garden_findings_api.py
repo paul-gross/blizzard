@@ -11,9 +11,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy import insert
 
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import WorkItemAuthor
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -68,6 +70,24 @@ def _deliver_finding(hub: HubHarness, finding_id: str) -> None:
     FindingStore(hub_store_connections(hub.engine)).record_fact(
         finding_id, kind="delivered", at=_NOW, note="delivered by hub:1", actor="u_1"
     )
+
+
+def _seed_review_finding(hub: HubHarness, finding_id: str, *, scope_slug: str = _SCOPE, chunk_id: str = "ch_x") -> None:
+    with hub.engine.begin() as conn:
+        conn.execute(
+            insert(s.findings).values(
+                finding_id=finding_id,
+                routine_name=None,
+                scope_slug=scope_slug,
+                class_="correctness",
+                locus="a.py:1",
+                summary="s",
+                source="review",
+                severity="should-fix",
+                raised_by_chunk_id=chunk_id,
+            )
+        )
+        conn.execute(insert(s.finding_facts).values(finding_id=finding_id, kind="add", recorded_at=_NOW))
 
 
 def test_404s_on_an_unknown_chunk(tmp_path: Path) -> None:
@@ -136,6 +156,35 @@ def test_includes_a_delivered_finding_alongside_live_ones(tmp_path: Path) -> Non
     body = {row["finding_id"]: row for row in resp.json()}
     assert set(body) == {"fin_1", "fin_2"}
     assert (body["fin_2"]["state"], body["fin_2"]["live"]) == ("delivered", False)
+
+
+def test_includes_a_review_sourced_finding_on_the_same_scope(tmp_path: Path) -> None:
+    """blizzard#582 D3: the bucket is a union of the routine's own findings and every
+    review-sourced finding recorded on this run's scope."""
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_review_finding(hub, "fin_review")
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/findings")
+
+    assert resp.status_code == 200, resp.text
+    body = {row["finding_id"]: row for row in resp.json()}
+    assert set(body) == {"fin_1", "fin_review"}
+    assert body["fin_review"]["source"] == "review"
+    assert body["fin_review"]["severity"] == "should-fix"
+    assert body["fin_review"]["routine_name"] is None
+
+
+def test_excludes_a_review_sourced_finding_on_a_different_scope(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_review_finding(hub, "fin_review", scope_slug="other-scope")
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/findings")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
 
 
 def test_takes_no_routine_or_scope_flag(tmp_path: Path) -> None:

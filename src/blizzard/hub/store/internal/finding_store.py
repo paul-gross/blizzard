@@ -207,11 +207,24 @@ class FindingStore:
             result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
         return [f for f in result if include_gone or f.live]
 
+    def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
+        """Filtered on `ix_findings_scope_source` (blizzard#582 D3)."""
+        with self._store.read("list_by_source") as conn:
+            rows = conn.execute(
+                select(findings)
+                .where(findings.c.scope_slug == scope_slug, findings.c.source == source)
+                .order_by(findings.c.finding_id)
+            ).all()
+            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
+            result = [self._of(row, facts_by_id[row.finding_id]) for row in rows]
+        return [f for f in result if include_gone or f.live]
+
     def list_page(
         self,
         *,
         routine_name: str | None,
         scope_slug: str | None,
+        source: str | None = None,
         include_gone: bool = False,
         cursor: str | None = None,
         limit: int,
@@ -233,6 +246,8 @@ class FindingStore:
                     stmt = stmt.where(findings.c.routine_name == routine_name)
                 if scope_slug is not None:
                     stmt = stmt.where(findings.c.scope_slug == scope_slug)
+                if source is not None:
+                    stmt = stmt.where(findings.c.source == source)
                 if window_after is not None:
                     stmt = stmt.where(findings.c.finding_id > window_after)
                 rows = conn.execute(stmt).all()

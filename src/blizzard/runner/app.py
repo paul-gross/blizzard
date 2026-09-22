@@ -49,6 +49,7 @@ from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.api.requeues import router as requeues_router
+from blizzard.runner.api.scope import router as scope_router
 from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
 from blizzard.runner.api.takeovers import router as takeovers_router
@@ -134,6 +135,7 @@ _UNGATED = (
     work_items_router,
     garden_router,
     finding_router,
+    scope_router,
 )
 # The human web lane: the local panel's own reads and writes (issue #51), the runner's own
 # pause brake reachable with the hub down (#43), and the pass-throughs proxied to the hub.
