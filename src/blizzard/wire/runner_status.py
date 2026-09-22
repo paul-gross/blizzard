@@ -176,11 +176,11 @@ class HarnessHealthListResponse(BaseModel):
 
 class SubscriptionView(BaseModel):
     """One declared subscription's own runner-local diagnostics (blizzard#504) —
-    ``GET /api/subscriptions``. ``sampled_at``/``ok``/``miss_reason``/``renewal`` are all
-    ``None`` when this slug has never been attempted. ``miss_reason`` is one of
+    ``GET /api/subscriptions``. ``sampled_at``/``ok``/``miss_reason`` are all ``None``
+    when this slug has never been attempted. ``miss_reason`` is one of
     ``credential_lapsed``, ``credential_unreadable``, ``endpoint_unreachable``, or
     ``response_unparseable`` when ``ok`` is ``False``; ``None`` when ``ok`` is ``True``.
-    ``renewal`` is ``None`` until a renewer is wired for this slug's provider."""
+    Carries no renewal outcome yet — that field joins in Phase 2, once a renewer is wired."""
 
     slug: str
     name: str
@@ -188,7 +188,6 @@ class SubscriptionView(BaseModel):
     sampled_at: str | None = None
     ok: bool | None = None
     miss_reason: str | None = None
-    renewal: str | None = None
 
 
 class SubscriptionListResponse(BaseModel):

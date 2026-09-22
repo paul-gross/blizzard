@@ -47,7 +47,6 @@ def test_a_never_attempted_slug_reports_every_field_none(tmp_path: Path) -> None
                 "sampled_at": None,
                 "ok": None,
                 "miss_reason": None,
-                "renewal": None,
             }
         ]
     }
