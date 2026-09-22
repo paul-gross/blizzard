@@ -25,7 +25,7 @@ from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapt
 from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE_DISPLAY
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
@@ -45,8 +45,11 @@ class _HealthyWithDegradationProbe:
     def probe_authentication(self) -> bool:
         return True
 
-    def supported_version(self) -> frozenset[str]:
-        return frozenset()
+    def supported_version(self) -> None:
+        return None
+
+    def supported_version_display(self) -> None:
+        return None
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
         return (DeclaredDegradation(probe=CompatibilityProbe.USAGE_COST, summary="no cost figure on some turns"),)
@@ -129,8 +132,7 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path) 
         selftest_results=None,
     )
     health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=claude_adapter, observed_version=None)
-    an_admitted_version = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
-    health.refresh(OPENCODE_HARNESS_ID, adapter=opencode_adapter, observed_version=an_admitted_version)
+    health.refresh(OPENCODE_HARNESS_ID, adapter=opencode_adapter, observed_version="1.18.25")
     client = TestClient(create_app(config, harnesses=harnesses, harness_health=health))
 
     resp = client.get("/api/harness-health")
@@ -142,10 +144,10 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path) 
     assert items[OPENCODE_HARNESS_ID]["cause"] == "missing_binary"
 
 
-def test_admitted_versions_surface_per_binding(tmp_path: Path) -> None:
-    """``admitted_versions`` (blizzard#438) is populated from each binding's own
-    `supported_version()` — non-empty for OpenCode, empty for a binding (Claude Code) that
-    declares no supported-version range at all."""
+def test_admitted_range_surfaces_per_binding(tmp_path: Path) -> None:
+    """``admitted_range`` (blizzard#438) is populated from each binding's own
+    `supported_version()` display string — set for OpenCode, ``None`` for a binding (Claude
+    Code) that declares no supported-version range at all."""
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     process = LinuxProcessProbe()
     launcher = ProcessLauncher(process)
@@ -173,5 +175,7 @@ def test_admitted_versions_surface_per_binding(tmp_path: Path) -> None:
 
     assert resp.status_code == 200, resp.text
     items = {item["harness_id"]: item for item in resp.json()["items"]}
-    assert items[CLAUDE_CODE_HARNESS_ID]["admitted_versions"] == []
-    assert set(items[OPENCODE_HARNESS_ID]["admitted_versions"]) == ADMITTED_OPENCODE_VERSIONS
+    assert items[CLAUDE_CODE_HARNESS_ID]["admitted_range"] is None
+    assert items[OPENCODE_HARNESS_ID]["admitted_range"] == ADMITTED_OPENCODE_RANGE_DISPLAY
+    # Pinned literally (blizzard#604): `str(SpecifierSet(...))` reorders clauses to `<2.0,>=1.18.25`.
+    assert items[OPENCODE_HARNESS_ID]["admitted_range"] == ">=1.18.25,<2.0"

@@ -35,6 +35,7 @@ from blizzard.runner.harness.compatibility import (
     ProbeObservation,
     classify_observation,
 )
+from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.internal.opencode_attach import (
     OpenCodeAttachProxy,
     OpenCodeAttachRequest,
@@ -54,7 +55,11 @@ from blizzard.runner.harness.internal.opencode_loopback import (
     LoopbackTransportError,
     UrllibLoopbackTransport,
 )
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS, PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.internal.opencode_probe import (
+    ADMITTED_OPENCODE_RANGE,
+    ADMITTED_OPENCODE_RANGE_DISPLAY,
+    PINNED_OPENCODE_VERSION,
+)
 from blizzard.runner.harness.internal.opencode_sanitizer import REDACTED, sanitize_json, sanitize_value
 from blizzard.runner.harness.internal.opencode_shapes import (
     OpenCodeRunEvent,
@@ -73,9 +78,9 @@ from blizzard.runner.harness.internal.opencode_transcript import TranscriptExpor
 pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
-# Keyed off the admitted set itself (blizzard#438) — there is exactly one member today,
-# but this stays correct as the set grows.
-_AN_ADMITTED_OPENCODE_VERSION = sorted(ADMITTED_OPENCODE_VERSIONS)[0]
+# Keyed off the admitted range's own committed corpus (blizzard#438) — there is exactly
+# one committed corpus today, but this stays correct once a second one lands.
+_AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 
 
@@ -135,7 +140,7 @@ def test_classification_policy_is_deterministic(
 
 def test_complete_report_has_every_probe_in_roster_order() -> None:
     report = CompatibilityReport.from_observations(
-        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, _all_observations()
+        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_RANGE_DISPLAY, True, _all_observations()
     )
 
     assert report.complete is True
@@ -143,12 +148,13 @@ def test_complete_report_has_every_probe_in_roster_order() -> None:
     assert report.admissible is True
     assert tuple(result.probe for result in report.results) == PROBE_ROSTER
     assert report.to_payload()["classification"] == "supported"
-    assert report.to_payload()["admitted_versions"] == sorted(ADMITTED_OPENCODE_VERSIONS)
+    assert report.to_payload()["admitted_range"] == ADMITTED_OPENCODE_RANGE_DISPLAY
 
 
 def test_diagnostic_requires_the_probe_to_declare_its_observed_version() -> None:
     class ProbeWithoutVersion:
-        admitted_versions = ADMITTED_OPENCODE_VERSIONS
+        admitted_range = ADMITTED_OPENCODE_RANGE_DISPLAY
+        version_admitted = True
 
         def run(self) -> list[ProbeObservation]:
             return _all_observations()
@@ -160,7 +166,7 @@ def test_diagnostic_requires_the_probe_to_declare_its_observed_version() -> None
 def test_report_rejects_a_missing_probe_instead_of_publishing_an_incomplete_result() -> None:
     with pytest.raises(IncompleteProbeReportError, match="missing probes"):
         CompatibilityReport.from_observations(
-            PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, _all_observations()[:-1]
+            PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_RANGE_DISPLAY, True, _all_observations()[:-1]
         )
 
 
@@ -168,16 +174,20 @@ def test_report_rejects_a_duplicate_probe() -> None:
     observations = [*_all_observations(), ProbeObservation.observed(CompatibilityProbe.FRESH_TURN, "again")]
 
     with pytest.raises(IncompleteProbeReportError, match="duplicate"):
-        CompatibilityReport.from_observations(PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, observations)
+        CompatibilityReport.from_observations(
+            PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_RANGE_DISPLAY, True, observations
+        )
 
 
 def test_a_version_mismatch_is_blocking_even_with_successful_probe_evidence() -> None:
-    report = CompatibilityReport.from_observations("1.18.24", ADMITTED_OPENCODE_VERSIONS, _all_observations())
+    report = CompatibilityReport.from_observations(
+        "1.18.24", ADMITTED_OPENCODE_RANGE_DISPLAY, False, _all_observations()
+    )
 
     assert report.version_admitted is False
     assert report.classification is BLOCKING
     assert report.admissible is False
-    assert report.blocking_reasons == ("observed '1.18.24', admitted versions: '1.18.25'",)
+    assert report.blocking_reasons == (f"observed '1.18.24', admitted range: {ADMITTED_OPENCODE_RANGE_DISPLAY}",)
 
 
 def test_corpus_manifest_closes_categories_and_parser_shape_coverage() -> None:
@@ -760,7 +770,7 @@ def test_sanitizer_redacts_arbitrary_host_paths_in_nested_structured_values() ->
 
 def test_evidence_redacts_binary_workdir_and_nested_host_paths(tmp_path: Path) -> None:
     report = CompatibilityReport.from_observations(
-        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, _all_observations()
+        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_RANGE_DISPLAY, True, _all_observations()
     )
     binary = "/srv/tools/opencode/bin/opencode"
     workdir = "/home/operator/blizzard"
@@ -792,7 +802,7 @@ def test_evidence_redacts_binary_workdir_and_nested_host_paths(tmp_path: Path) -
 
 def test_evidence_replaces_raw_external_ids_with_stable_aliases(tmp_path: Path) -> None:
     report = CompatibilityReport.from_observations(
-        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, _all_observations()
+        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_RANGE_DISPLAY, True, _all_observations()
     )
     runtime = {
         "operations": [
@@ -822,7 +832,7 @@ def test_evidence_replaces_raw_external_ids_with_stable_aliases(tmp_path: Path) 
 
 def test_evidence_aliases_observed_identifiers_without_vendor_prefixes(tmp_path: Path) -> None:
     report = CompatibilityReport.from_observations(
-        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_VERSIONS, _all_observations()
+        PINNED_OPENCODE_VERSION, ADMITTED_OPENCODE_RANGE_DISPLAY, True, _all_observations()
     )
     runtime = {
         "operations": [

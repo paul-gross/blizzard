@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from packaging.specifiers import SpecifierSet
+
 from blizzard.runner.harness.compatibility import (
     PROBE_ROSTER,
     CompatibilityProbe,
@@ -101,9 +103,10 @@ from blizzard.runner.harness.internal.opencode_transcript import (
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 60.0
 # One concrete version this module's corpus/diagnostic fixtures are authored against — never the admission mechanism.
 PINNED_OPENCODE_VERSION = "1.18.25"
-# The declared admitted-version set (blizzard#438), currently one member: membership, never a pin equality check.
-ADMITTED_OPENCODE_VERSIONS: frozenset[str] = frozenset({PINNED_OPENCODE_VERSION})
-# Every admitted version owes a corpus manifest — checked at `OpenCodeHealthProbe` construction, degrading only it.
+# Currently >=1.18.25,<2.0 (blizzard#604) — the literal display; membership via `harness_shared.version_admitted`.
+ADMITTED_OPENCODE_RANGE_DISPLAY = ">=1.18.25,<2.0"
+ADMITTED_OPENCODE_RANGE: SpecifierSet = SpecifierSet(ADMITTED_OPENCODE_RANGE_DISPLAY)
+# At least one committed corpus must fall inside the admitted range — checked at `OpenCodeHealthProbe` construction.
 SHAPE_FAULT_SUMMARY = "OpenCode emitted an unsupported or malformed required shape"
 INTERNAL_FAULT_SUMMARY = "the compatibility probe failed before it could observe OpenCode"
 BOUNDARY_FAULT_SUMMARY = "the runner could not establish the fail-closed filesystem boundary"
@@ -179,8 +182,9 @@ class OpenCodeCompatibilityProbe:
         self._transport = transport
         self._attach_proxy_factory = attach_proxy_factory
         self._timeout_seconds = timeout_seconds
-        self.admitted_versions = ADMITTED_OPENCODE_VERSIONS
+        self.admitted_range = ADMITTED_OPENCODE_RANGE_DISPLAY
         self.observed_version = "unknown"
+        self.version_admitted = False
         self._evidence: dict[str, object] = {}
         self._config_snapshots: dict[Path, bytes] = {}
         self._security_markers: tuple[Path, Path] | None = None
@@ -205,6 +209,7 @@ class OpenCodeCompatibilityProbe:
         """Run all probes and return one observation for every closed-roster member."""
 
         self.observed_version = "unknown"
+        self.version_admitted = False
         self._evidence = {"operations": []}
         observations: dict[CompatibilityProbe, ProbeObservation] = {}
         try:
@@ -240,13 +245,14 @@ class OpenCodeCompatibilityProbe:
                     "tool_user": "same-user-landlock-layer",
                 }
                 self.observed_version = self._observe_version(preflight_cwd, preflight_env)
-                if self.observed_version not in self.admitted_versions:
+                self.version_admitted = harness_shared.version_admitted(self.observed_version, ADMITTED_OPENCODE_RANGE)
+                if not self.version_admitted:
                     self._evidence["preflight_blocked"] = "version-mismatch"
-                    admitted = ", ".join(repr(version) for version in sorted(self.admitted_versions))
                     self._fill_failed(
                         observations,
                         PROBE_ROSTER,
-                        f"OpenCode version {self.observed_version!r} is not in the admitted versions: {admitted}",
+                        f"OpenCode version {self.observed_version!r} is not in the admitted range: "
+                        f"{self.admitted_range}",
                     )
                     return self._ordered_observations(observations)
 
@@ -1348,7 +1354,8 @@ class OpenCodeCompatibilityProbe:
 
 
 __all__ = [
-    "ADMITTED_OPENCODE_VERSIONS",
+    "ADMITTED_OPENCODE_RANGE",
+    "ADMITTED_OPENCODE_RANGE_DISPLAY",
     "DEFAULT_COMMAND_TIMEOUT_SECONDS",
     "PINNED_OPENCODE_VERSION",
     "LiveProviderOptInRequired",

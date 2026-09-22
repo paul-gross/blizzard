@@ -11,12 +11,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from packaging.specifiers import SpecifierSet
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.selftest_result import SelfTestResultRecord
 from blizzard.runner.harness.compatibility import CompatibilityClassification
 from blizzard.runner.harness.health import DeclaredDegradation, HarnessHealthCause
-from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_VERSIONS, PINNED_OPENCODE_VERSION
+from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE, PINNED_OPENCODE_VERSION
 from blizzard.runner.loop import capability_snapshot
 from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 
@@ -30,7 +31,7 @@ _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 class _FakeProbe:
     binary: bool = True
     authenticated: bool = True
-    supported: frozenset[str] = field(default_factory=frozenset)
+    supported: SpecifierSet | None = None
     degradations: tuple[DeclaredDegradation, ...] = ()
     calls: int = field(default=0, compare=False)
 
@@ -41,8 +42,11 @@ class _FakeProbe:
     def probe_authentication(self) -> bool:
         return self.authenticated
 
-    def supported_version(self) -> frozenset[str]:
+    def supported_version(self) -> SpecifierSet | None:
         return self.supported
+
+    def supported_version_display(self) -> str | None:
+        return str(self.supported) if self.supported is not None else None
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
         return self.degradations
@@ -147,7 +151,7 @@ def test_a_raw_admitted_version_normalizes_and_classifies_against_the_real_corpu
     way a real binary's ``--version`` output can be — through the shared normalizer before
     the corpus/membership check, against opencode's own committed corpus (blizzard#438)."""
     clock = FixedClock(_NOW)
-    probe = _FakeProbe(supported=ADMITTED_OPENCODE_VERSIONS)
+    probe = _FakeProbe(supported=ADMITTED_OPENCODE_RANGE)
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)
 
     result = cache.refresh(
@@ -161,14 +165,29 @@ def test_a_raw_admitted_version_normalizes_and_classifies_against_the_real_corpu
     assert result.cause is None
 
 
-def test_a_raw_version_outside_the_admitted_set_is_incompatible() -> None:
-    """A version genuinely outside the admitted set is `incompatible_version` (D2), reached
+def test_a_version_above_every_committed_corpus_still_resolves_against_the_real_corpus() -> None:
+    """A version above every committed corpus, but inside the admitted range, still resolves
+    to a reference corpus rather than reading `unknown_version` — the reference-corpus
+    resolution `classify_offline` performs (blizzard#438)."""
+    clock = FixedClock(_NOW)
+    probe = _FakeProbe(supported=ADMITTED_OPENCODE_RANGE)
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+
+    result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.18.31")
+
+    assert result is not None
+    assert result.available is True
+    assert result.cause is None
+
+
+def test_a_raw_version_outside_the_admitted_range_is_incompatible() -> None:
+    """A version genuinely outside the admitted range is `incompatible_version` (D2), reached
     through the real evaluation path — `HarnessHealthCache.refresh` (capability_snapshot.py)
     into `evaluate_harness_health` (health.py) — never a synthetic evidence construction.
     No corpus entry exists for this version at all; the sibling test below pins the harder
     case where one does."""
     clock = FixedClock(_NOW)
-    probe = _FakeProbe(supported=ADMITTED_OPENCODE_VERSIONS)
+    probe = _FakeProbe(supported=ADMITTED_OPENCODE_RANGE)
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)
 
     result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.18.24")
@@ -191,15 +210,19 @@ def test_a_non_admitted_version_with_a_real_corpus_entry_still_reads_incompatibl
     monkeypatch.setattr(
         capability_snapshot,
         "classify_offline",
-        lambda harness_id, version: real_classify_offline(harness_id, version, corpus_root=tmp_path),
+        lambda harness_id, version, admitted_range: real_classify_offline(
+            harness_id, version, admitted_range, corpus_root=tmp_path
+        ),
     )
-    # Prove the fixture alone would classify `supported`, isolating what membership overrides.
+    # Prove the fixture alone would classify `supported` once the range actually reaches it,
+    # isolating what membership overrides below.
     assert (
-        real_classify_offline("opencode", stray_version, corpus_root=tmp_path) is CompatibilityClassification.SUPPORTED
+        real_classify_offline("opencode", stray_version, SpecifierSet(">=1.0.0,<2.0"), corpus_root=tmp_path)
+        is CompatibilityClassification.SUPPORTED
     )
 
     clock = FixedClock(_NOW)
-    probe = _FakeProbe(supported=ADMITTED_OPENCODE_VERSIONS)
+    probe = _FakeProbe(supported=ADMITTED_OPENCODE_RANGE)
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)
 
     result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version=stray_version)
@@ -214,8 +237,8 @@ def test_an_admitted_version_with_no_corpus_manifest_is_unknown_not_incompatible
     real committed corpus root, is `unknown_version` — distinct from a genuinely non-admitted
     version above, reached through the same real evaluation path (blizzard#438, D2)."""
     clock = FixedClock(_NOW)
-    unclassifiable_version = "9.9.9-not-a-real-corpus-entry"
-    probe = _FakeProbe(supported=frozenset({unclassifiable_version}))
+    unclassifiable_version = "9.9.9"
+    probe = _FakeProbe(supported=SpecifierSet(f"=={unclassifiable_version}"))
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)
 
     result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version=unclassifiable_version)

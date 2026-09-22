@@ -164,8 +164,8 @@ class HarnessHealthView(BaseModel):
     available: bool
     cause: str | None = None
     degradations: list[str] = []
-    #: This binding's own declared admitted-version set (D3); empty for a binding with none.
-    admitted_versions: list[str] = []
+    #: This binding's own declared admitted-version range as its literal display string (D3); ``None`` when none.
+    admitted_range: str | None = None
 
 
 class HarnessHealthListResponse(BaseModel):

@@ -54,7 +54,7 @@ under them both daemons survive a crash or reboot with nothing lost and nothing 
 
 | File                                                                             | When to read                                                                                                                                     |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`deployment/opencode-compatibility.md`](./deployment/opencode-compatibility.md) | You are running the OpenCode compatibility diagnostic against the runner's admitted version set, or admitting a new candidate version to that set |
+| [`deployment/opencode-compatibility.md`](./deployment/opencode-compatibility.md) | You are running the OpenCode compatibility diagnostic against the runner's admitted version range, or admitting a new candidate version or corpus to it |
 
 ### Watching it
 

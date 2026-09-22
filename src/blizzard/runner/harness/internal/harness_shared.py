@@ -14,6 +14,9 @@ import subprocess
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import IO
 
+from packaging.specifiers import SpecifierSet
+from packaging.version import InvalidVersion, Version
+
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -49,6 +52,25 @@ def normalize_opencode_version(raw: str | None) -> str | None:
         return None
     match = OPENCODE_VERSION_PATTERN.fullmatch(lines[0])
     return match.group("version") if match else None
+
+
+# A semver pre-release: `X.Y.Z-<identifiers>`, which `Version` would otherwise parse by PEP 440's rules instead.
+_SEMVER_PRERELEASE_PATTERN = re.compile(r"^\d+\.\d+\.\d+-")
+
+
+def version_admitted(version: str, admitted_range: SpecifierSet) -> bool:
+    """Whether ``version`` is a member of ``admitted_range`` — the one membership check a
+    binding's declared range and any caller's own version, a corpus directory name included
+    (blizzard#604), are ever compared through. An unparsable or semver-pre-release ``version``
+    reads as not admitted rather than raising. Pre-releases are always excluded
+    (``prereleases=False``), never ``SpecifierSet``'s own no-other-candidate ``filter`` default."""
+    if _SEMVER_PRERELEASE_PATTERN.match(version):
+        return False
+    try:
+        parsed = Version(version)
+    except InvalidVersion:
+        return False
+    return admitted_range.contains(parsed, prereleases=False)
 
 
 def binary_present(binary: str) -> bool:
