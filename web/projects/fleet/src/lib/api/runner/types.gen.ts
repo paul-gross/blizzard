@@ -895,22 +895,10 @@ export type FactView = {
 /**
  * FindingView
  *
- * A finding. `state` is the newest fact's own kind, folded to `"live"` for
- * `add`/`observed`/`reopened` (blizzard#394) — `live` is kept alongside it as the
- * `state == "live"` shorthand existing consumers already read. `note` is the newest
- * fact's own note, whatever kind it is — `None` for a kind that carries none.
- *
- * Two distinct instants ride alongside `introduced`: `introduced_at` is the authored
- * time of the commit `introduced` names, and is null wherever that commit was never
- * resolved — a delivery declaring zero or several repositories leaves which one
- * `introduced` refers to ambiguous, so no instant is looked up. `first_observed_at` is
- * when a routine first recorded the finding — the earliest of its `add`/`observed`
- * span — and is null for a finding carrying neither, which is how a finding whose only
- * facts are exit verbs reads.
- *
- * `source` is `"routine"` or `"review"` (blizzard#582 D1): a review-sourced finding
- * carries no `routine_name`, carries its own `severity`, and names the `raised_by_chunk_id`
- * that raised it.
+ * A finding. `state` folds the newest fact's kind to `"live"` for
+ * `add`/`observed`/`reopened` (blizzard#394); `note` is that fact's own note. `source`
+ * is `"routine"` or `"review"` (blizzard#582 D1): a review-sourced finding carries no
+ * `routine_name`, its own `severity`, and the `raised_by_chunk_id` that raised it.
  */
 export type FindingView = {
     /**
