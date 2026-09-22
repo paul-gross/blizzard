@@ -15,6 +15,7 @@ from blizzard.runner.domain.takeover import TakeoverCommand
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
@@ -218,7 +219,10 @@ class Attempt:
             # Composed from the lease's own stamps (issue #144), so a takeover lands in exactly
             # the configuration the parked session ran with, never a fresh resolution.
             takeover = harness.resume_command(
-                bindings[0].workdir, session.session_id, model=lease.resolved_model, effort=lease.resolved_effort
+                SpawnCwd.of_session(self.ctx.config.workspace_root, bindings[0].workdir),
+                session.session_id,
+                model=lease.resolved_model,
+                effort=lease.resolved_effort,
             )
             # Wrapped-vs-raw rules: `blizzard-context:/domain/humans/escalation.md` §The commands an escalation carries.
             if self.ctx.config.runner_dir:

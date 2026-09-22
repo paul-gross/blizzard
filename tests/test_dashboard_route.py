@@ -48,6 +48,7 @@ def _app_with_status(
         max_agents=config.max_agents,
         hub_url=config.hub_url,
         env_pool=("e1",),
+        workspace_root="",
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness)}),
     )
     app = create_app(

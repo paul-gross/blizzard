@@ -2804,14 +2804,17 @@ def test_reap_leaves_exited_worker_for_advance(tmp_path):  # type: ignore[no-unt
 
 
 @pytest.mark.unit
-def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
+def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, expected_cwd):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()  # retries_max = 2
     # A runtime dir with whitespace (issue #251) — proves the composed wrapped command
     # stays shell-safe (shlex.quote) rather than merely happening to work on a plain path.
     runner_dir = "/tmp/runner dir/r1"
-    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, runner_dir=runner_dir)
+    config = LoopConfig(
+        runner_id="r1", workspace_id="ws1", max_agents=1, runner_dir=runner_dir, workspace_root=workspace_root
+    )
     # Three verdict-less attempts: attempt 1 & 2 requeue, attempt 3 escalates.
     provider = FakeProvider({"e1": "/ws/e1"})
     for i in range(1, 4):
@@ -2832,7 +2835,9 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
     # the flusher reports it up to POST /events, where the fleet derives needs_human.
     payload = json.loads(escalations[0].payload)
     assert payload["chunk_id"] == "ch_1"
-    assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume" in payload["takeover_command"]
+    # It resumes from the session's own spawn cwd, where a directory-scoped harness finds it.
+    takeover_command = payload["takeover_command"]
+    assert takeover_command.startswith(f"cd {expected_cwd} &&") and "--resume" in takeover_command
     # The wrapped, supported entry point (issue #251) — composed under the same guard,
     # alongside the raw fallback above.
     wrapped = payload["wrapped_takeover_command"]
@@ -3618,3 +3623,29 @@ def test_harness_version_is_cached_across_ticks_and_refreshed_once_stale(tmp_pat
     clock.advance(timedelta(seconds=HARNESS_VERSION_REFRESH_SECONDS + 1))
     tick(ctx)
     assert harness.version_probes == 2, "a tick past the refresh window never re-probed the now-stale version"
+
+
+@pytest.mark.component
+@pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
+def test_judgement_runs_in_the_sessions_own_spawn_cwd(tmp_path, workspace_root, expected_cwd):  # type: ignore[no-untyped-def]
+    """A judgement resumes the held session from its spawn cwd — the workspace root when one
+    is configured, never the environment's own workdir beneath it."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", workspace_root=workspace_root),
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation
+
+    assert [judged[0] for judged in harness.judged] == [expected_cwd]

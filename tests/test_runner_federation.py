@@ -96,6 +96,7 @@ def _build_app(
         max_agents=1,
         hub_url=config.hub_url,
         env_pool=("e1",),
+        workspace_root="",
         harnesses=HarnessRegistry({}),  # unused by the two routes this test drives
     )
     app = create_app(

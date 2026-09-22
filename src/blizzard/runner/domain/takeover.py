@@ -22,6 +22,7 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle, WorkerPreamble
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.process import IProcessProbe, kill_owned_process
 from blizzard.wire.facts import LEASE_MINTED
 
@@ -225,9 +226,11 @@ class TakeoverService:
         *,
         local_api_url: str,
         harnesses: IHarnessRegistry,
+        workspace_root: str,
         events: IRunnerEventPublisher | None = None,
     ) -> None:
         self._stores = stores
+        self._workspace_root = workspace_root
         self._clock = clock
         self._harnesses = harnesses
         self._process = process
@@ -317,7 +320,7 @@ class TakeoverService:
         # Read the reference lease's stamps (issue #144) rather than re-resolving, so the
         # operator continues under exactly the configuration the session ran with.
         command = harness.resume_command(
-            workdir,
+            SpawnCwd.of_session(self._workspace_root, workdir),
             session.session_id,
             model=reference.resolved_model,
             effort=reference.resolved_effort,

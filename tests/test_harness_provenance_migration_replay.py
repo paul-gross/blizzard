@@ -291,6 +291,7 @@ def test_backfilled_session_takeover_opens_under_claude_code(tmp_path) -> None: 
         FixedClock(_NOW),
         FakeProbe(),
         local_api_url="http://127.0.0.1:8431",
+        workspace_root="",
         harnesses=registry,
     )
     scope = TakeoverOpenScope(

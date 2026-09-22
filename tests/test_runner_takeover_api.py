@@ -48,6 +48,7 @@ def _app_with_takeover(
         clock or FixedClock(_NOW),
         probe or FakeProbe(),
         local_api_url="http://127.0.0.1:8431",
+        workspace_root="",
         harnesses=resolved_harnesses,
     )
     return create_app(config, runner_stores=make_stores(store), takeover=service), store

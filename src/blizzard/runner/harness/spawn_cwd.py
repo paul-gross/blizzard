@@ -22,3 +22,9 @@ class SpawnCwd:
     @property
     def path(self) -> str | None:
         return self.workspace_root or self.fallback_workdir
+
+    @staticmethod
+    def of_session(workspace_root: str, workdir: str) -> str:
+        """The spawn cwd of a held session, which always has a workdir — so, unlike
+        ``path``, never ``None``. Every later operation on the session runs here."""
+        return SpawnCwd(workspace_root, workdir).path or workdir

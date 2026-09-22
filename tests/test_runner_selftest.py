@@ -338,7 +338,7 @@ class _HangingAdapter:
 
     def resume_with_message(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         message: str,
         stdout_path: str = "",
@@ -352,7 +352,7 @@ class _HangingAdapter:
 
     def resume_command(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         *,
         model: str | None = None,
@@ -366,7 +366,7 @@ class _HangingAdapter:
 
     def judge(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         judgement_prompt: str,
         output_path: str,
@@ -492,7 +492,7 @@ class _FixedPidAdapter:
 
     def resume_with_message(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         message: str,
         stdout_path: str = "",
@@ -506,21 +506,21 @@ class _FixedPidAdapter:
 
     def resume_command(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         *,
         model: str | None = None,
         effort: str | None = None,
         attended: bool = False,
     ) -> str:
-        return f"cd {workdir} && fake --resume {session_id}"
+        return f"cd {session_cwd} && fake --resume {session_id}"
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         return {"BLIZZARD_SESSION_ID": session_id, "BLIZZARD_CHUNK_ID": chunk_id}
 
     def judge(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         judgement_prompt: str,
         output_path: str,

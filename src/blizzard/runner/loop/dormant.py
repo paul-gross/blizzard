@@ -15,6 +15,7 @@ from blizzard.runner.domain.overload import OverloadFactRecord
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
@@ -467,7 +468,7 @@ class DormantSession:
         # failing probe must never run after the worker is already live and unrecorded.
         version = harness.observe_version()
         resumed = harness.resume_with_message(
-            bindings[0].workdir,
+            SpawnCwd.of_session(self.ctx.config.workspace_root, bindings[0].workdir),
             session.session_id,
             message,
             stdout_path=spawner.stdout_path(lease.lease_id),

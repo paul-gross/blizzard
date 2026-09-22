@@ -759,7 +759,7 @@ class FakeHarness:
         self.judged: list[tuple[str, str, str]] = []
         self.judge_output_paths: list[str] = []  # one entry per judge (launch) call
         self.judge_preambles: list[WorkerPreamble | None] = []  # one entry per judge call
-        self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
+        self.resumed: list[tuple[str, str, str]] = []  # (session_cwd, session_id, message)
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
         # Defaults to `resume_pid` (D3), mirroring `judge_pgid`: an explicit assignment
@@ -852,7 +852,7 @@ class FakeHarness:
 
     def judge(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         judgement_prompt: str,
         output_path: str,
@@ -863,7 +863,7 @@ class FakeHarness:
         model: str | None = None,
         compaction_window: str | None = None,
     ) -> WorkerHandle:
-        self.judged.append((workdir, session_id, judgement_prompt))
+        self.judged.append((session_cwd, session_id, judgement_prompt))
         self.judge_preambles.append(preamble)
         self.judge_model_effort.append((model, effort))
         self.judge_compaction_windows.append(compaction_window)
@@ -885,7 +885,7 @@ class FakeHarness:
 
     def resume_with_message(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         message: str,
         stdout_path: str = "",
@@ -895,7 +895,7 @@ class FakeHarness:
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
-        self.resumed.append((workdir, session_id, message))
+        self.resumed.append((session_cwd, session_id, message))
         self.resume_efforts.append(effort)
         self.resume_compaction_windows.append(compaction_window)
         # Captured separately so existing 3-tuple unpackers of `.resumed` keep working while
@@ -914,7 +914,7 @@ class FakeHarness:
 
     def resume_command(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         *,
         model: str | None = None,
@@ -923,7 +923,7 @@ class FakeHarness:
     ) -> str:
         self.resume_command_config.append((model, effort))
         flags = "".join(f" --{name} {value}" for name, value in (("model", model), ("effort", effort)) if value)
-        return f"cd {workdir} && claude --resume {session_id}{flags}"
+        return f"cd {session_cwd} && claude --resume {session_id}{flags}"
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         # Mirrors the real adapter's shape (issue #258): BLIZZARD_* identity on top of an

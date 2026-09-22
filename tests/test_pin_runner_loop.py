@@ -193,7 +193,7 @@ class _RecordingResumeHarness(FakeHarness):
 
     def resume_with_message(
         self,
-        workdir: str,
+        session_cwd: str,
         session_id: str,
         message: str,
         stdout_path: str = "",
@@ -205,7 +205,7 @@ class _RecordingResumeHarness(FakeHarness):
     ) -> ResumeHandle:
         self.fired_at_resume.append(self._store.nudge_fired(self._lease_id, self._epoch))
         return super().resume_with_message(
-            workdir,
+            session_cwd,
             session_id,
             message,
             stdout_path,

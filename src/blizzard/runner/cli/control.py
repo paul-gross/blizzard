@@ -212,7 +212,7 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
             raise click.ClickException(f"takeover: {resp.json().get('detail', 'chunk is not takeable')}")
         resp.raise_for_status()
         view = resp.json()
-        click.echo(f"taking over chunk {chunk_id} in {view['workdir']}")
+        click.echo(f"taking over chunk {chunk_id} in {view['workdir']}: {view['command']}")
         try:
             # The takeover env (issue #258), layered over the terminal env: the forwarded
             # vars deliberately WIN over the terminal's own, and carry the lease token.
