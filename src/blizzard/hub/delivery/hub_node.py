@@ -108,6 +108,9 @@ ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"  # POST {name, content} r
 ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"  # the capability token authorizing that POST (issue #230)
 # POST {delta, proposals} (artifact names) delivers a routine's run (blizzard#393)
 ENV_GARDEN_DELIVERY_URL = "BZ_HUB_GARDEN_DELIVERY_URL"
+# POST with no body delivers the chunk's own newest review-finding-delta artifact
+# (blizzard#582) — read only by review_deliver.py
+ENV_REVIEW_FINDINGS_URL = "BZ_HUB_REVIEW_FINDINGS_URL"
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_common.LandRun.repo
@@ -186,6 +189,7 @@ class HubEnv:
     base_branch: str
     marker_callback_url: str
     garden_delivery_url: str = ""
+    review_findings_url: str = ""
     forge_url: str | None = None
     forge_token: str | None = None
     forge_owner: str | None = None
@@ -215,6 +219,8 @@ class HubEnv:
         }
         if self.garden_delivery_url:
             env[ENV_GARDEN_DELIVERY_URL] = self.garden_delivery_url
+        if self.review_findings_url:
+            env[ENV_REVIEW_FINDINGS_URL] = self.review_findings_url
         if self.forge_url:
             env[ENV_FORGE_URL] = self.forge_url
         if self.forge_token:
@@ -396,6 +402,7 @@ class HubNodeExecutor:
                     base_branch=self._base_branch,
                     marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
                     garden_delivery_url=self._garden_delivery_url(chunk.chunk_id, node.node_id, epoch),
+                    review_findings_url=self._review_findings_url(chunk.chunk_id, node.node_id, epoch),
                     forge_url=self._forge_url,
                     forge_token=self._forge_token,
                     forge_owner=self._forge_owner,
@@ -678,3 +685,9 @@ class HubNodeExecutor:
             return ""
         base = self._marker_callback_base_url.rstrip("/")
         return f"{base}/api/chunks/{chunk_id}/garden-delivery?node_id={node_id}&epoch={epoch}"
+
+    def _review_findings_url(self, chunk_id: str, node_id: str, epoch: int) -> str:
+        if not self._marker_callback_base_url:
+            return ""
+        base = self._marker_callback_base_url.rstrip("/")
+        return f"{base}/api/chunks/{chunk_id}/review-findings-delivery?node_id={node_id}&epoch={epoch}"

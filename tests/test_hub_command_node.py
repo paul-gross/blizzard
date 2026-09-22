@@ -26,6 +26,7 @@ from blizzard.hub.delivery.hub_node import (
     DEFAULT_POLL_TIMEOUT,
     ENV_GARDEN_DELIVERY_URL,
     ENV_MARKER_TOKEN,
+    ENV_REVIEW_FINDINGS_URL,
     HubEnv,
     PollPolicy,
     PrintedChoice,
@@ -784,6 +785,30 @@ def test_the_env_addresses_this_visits_garden_delivery_route(tmp_path: Path) -> 
     # The route it addresses is served: a POST there answers, rather than 404ing a path
     # only this test believes in.
     delivery = hub.client.post(env[ENV_GARDEN_DELIVERY_URL], json={"delta": [], "proposals": []})
+    assert delivery.status_code == 200, delivery.text
+
+
+@pytest.mark.component
+def test_the_env_addresses_this_visits_review_findings_route(tmp_path: Path) -> None:
+    """``review_deliver`` reaches the hub only through the injected
+    ``BZ_HUB_REVIEW_FINDINGS_URL`` (blizzard#582), so the executor must address this
+    chunk, node and epoch — an absent or mis-built URL fails the node at runtime. The
+    route itself 404s here (this test's fixture chunk carries no `review-finding-delta`
+    artifact for this node) rather than routing `invalid`, which is enough to prove the
+    address is live and served, not a path only this test believes in."""
+    runner = FakeHubCommandRunner()
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id, graph = _to_merge_node(hub)
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+
+    _command, _cwd, env = runner.calls[0]
+    assert env[ENV_REVIEW_FINDINGS_URL].endswith(
+        f"/api/chunks/{chunk_id}/review-findings-delivery?node_id={merge_node.node_id}&epoch=1"
+    )
+    delivery = hub.client.post(env[ENV_REVIEW_FINDINGS_URL])
     assert delivery.status_code == 200, delivery.text
 
 

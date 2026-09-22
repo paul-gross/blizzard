@@ -36,13 +36,22 @@ def test_bas_hwf_shape_is_the_six_node_frontier_build_advanced_gate_lane() -> No
     doc = _doc()
     assert doc.name == "bas-hwf"
     assert doc.entry == "build"
-    assert [n.name for n in doc.nodes] == ["build", "review", "iterate", "pre-push", "deliver", "retrospective"]
+    assert [n.name for n in doc.nodes] == [
+        "build",
+        "review",
+        "iterate",
+        "pre-push",
+        "deliver",
+        "record-findings",
+        "retrospective",
+    ]
     assert doc.node("plan") is None  # no plan-gate, same as bas-dwf
     assert doc.node("build").executor is Executor.RUNNER  # type: ignore[union-attr]
     assert doc.node("review").executor is Executor.RUNNER  # type: ignore[union-attr]
     assert doc.node("iterate").executor is Executor.RUNNER  # type: ignore[union-attr]
     assert doc.node("pre-push").executor is Executor.RUNNER  # type: ignore[union-attr]
     assert doc.node("deliver").executor is Executor.HUB  # type: ignore[union-attr]
+    assert doc.node("record-findings").executor is Executor.HUB  # type: ignore[union-attr]
     assert doc.node("retrospective").executor is Executor.RUNNER  # type: ignore[union-attr]
 
 
@@ -92,10 +101,15 @@ def test_bas_hwf_target_routing_table() -> None:
     assert routes("iterate") == {"pass": "review", "fail": "iterate"}
     assert routes("pre-push") == {"clean": "deliver", "insignificant": "review", "significant": "iterate"}
     assert routes("deliver") == {
-        "landed": "retrospective",
+        "landed": "record-findings",
         "conflict": "pre-push",
         "failure": "pre-push",
         "inherited-failure": "iterate",
+    }
+    assert routes("record-findings") == {
+        "recorded": "retrospective",
+        "invalid": "retrospective",
+        "failure": "retrospective",
     }
     assert routes("retrospective") == {"recorded": "done"}
 
@@ -105,6 +119,7 @@ def test_bas_hwf_produces() -> None:
     build_produces = {(p.name, p.kind) for p in doc.node("build").produces}  # type: ignore[union-attr]
     assert ("commit", ArtifactKind.GIT_COMMIT) in build_produces
     assert any(p.name == "review-findings" for p in doc.node("review").produces)  # type: ignore[union-attr]
+    assert any(p.name == "review-finding-delta" for p in doc.node("review").produces)  # type: ignore[union-attr]
     assert any(p.name == "retrospective" for p in doc.node("retrospective").produces)  # type: ignore[union-attr]
 
 
