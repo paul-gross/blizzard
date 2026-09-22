@@ -151,6 +151,10 @@ _EXPECTED_DRIVE_VERBS: dict[str, str] = {
         "IHubClient.push_facts (external_subscription_usage.sampled) — POST /api/fleet/events "
         "(issue #218, blizzard#436 phase 3)"
     ),
+    "report-external-usage-miss": (
+        "IHubClient.push_facts (external_subscription_usage.missed) — POST /api/fleet/events, "
+        "the miss-half sibling of report-external-usage"
+    ),
     "declare-git-commit": (
         "no IHubClient operation (issue #143, Phase 3) — a local write against the mock's own "
         "git-commit declaration store, the produces-kind analogue of CompleteBody.artifacts; "
