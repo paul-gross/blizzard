@@ -65,7 +65,10 @@ export class GardeningFindingsPage {
    * observation. Only the dimension the active filter leaves unnamed shows on the
    * row (D4): a bucket widened to every routine or every scope needs each row to
    * say which it came from, but a bucket already filtered to one doesn't need it
-   * repeated on every row. */
+   * repeated on every row. `source`/`severity`/`raised_by_chunk_id` (blizzard#582)
+   * ride every row verbatim — unlike routine/scope they carry no filter-dependent
+   * `null`-out, since `FleetFindingList` only renders them at all for a
+   * `source === 'review'` row. */
   protected readonly findingListRows = computed<readonly FindingListRowVm[]>(() =>
     this.filters.filteredBucket().map((f) => ({
       findingId: f.finding_id,
@@ -74,8 +77,11 @@ export class GardeningFindingsPage {
       summary: f.summary,
       state: f.state,
       lastSeenAt: f.last_seen_at,
-      routineName: this.filters.selectedRoutine() === null ? f.routine_name : null,
+      routineName: this.filters.selectedRoutine() === null ? (f.routine_name ?? null) : null,
       scopeSlug: this.filters.selectedScope() === null ? f.scope_slug : null,
+      source: f.source ?? 'routine',
+      severity: f.severity ?? null,
+      raisedByChunkId: f.raised_by_chunk_id ?? null,
     })),
   );
 

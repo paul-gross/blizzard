@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import type { FindingFactView } from '../api/hub';
 import { compactRef } from '../compact-ref';
@@ -10,7 +11,7 @@ import { KitProseBlock } from '../kit/kit-prose-block';
 import { FleetWhen } from '../when-display';
 import type { Tone } from '../kit/tone';
 import { FleetFindingFactTimeline } from './finding-fact-timeline';
-import { findingStateTone, isFindingExited } from './finding-state';
+import { findingSeverityTone, findingStateTone, isFindingExited } from './finding-state';
 import type { FindingTriageVerb } from './finding-list';
 import type { ProposalWorkItemVm } from './proposal-panel';
 
@@ -47,6 +48,16 @@ export interface FindingPanelVm {
    * straight to {@link FleetFindingFactTimeline}, which owns its own rendering. */
   readonly facts: readonly FindingFactView[];
   readonly workItem: ProposalWorkItemVm | null;
+  /** `FindingView.source` (blizzard#582 D1) — `"routine"` or `"review"`. Drives
+   * whether {@link severity}/{@link raisedByChunkId} render at all: a `"routine"`
+   * finding renders exactly as it did before this field existed — additive, not a
+   * redesign (`finding-list.ts`'s own `FindingListRowVm.source` shape). */
+  readonly source: string;
+  /** `FindingView.severity` — set only when {@link source} is `"review"`. */
+  readonly severity: string | null;
+  /** `FindingView.raised_by_chunk_id` — the chunk id whose review raised the
+   * finding, set only when {@link source} is `"review"`. */
+  readonly raisedByChunkId: string | null;
 }
 
 /**
@@ -66,7 +77,16 @@ export interface FindingPanelVm {
 @Component({
   selector: 'fleet-finding-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitButton, KitFactList, KitProseBlock, FleetFindingFactTimeline, FleetWhen],
+  imports: [
+    KitAsyncState,
+    KitBadge,
+    KitButton,
+    KitFactList,
+    KitProseBlock,
+    FleetFindingFactTimeline,
+    FleetWhen,
+    RouterLink,
+  ],
   templateUrl: './finding-panel.html',
   styleUrl: './finding-panel.css',
 })
@@ -88,22 +108,36 @@ export class FleetFindingPanel {
 
   /** The record as an aligned fact grid (`fleet-kit-fact-list`, the one owner of
    * this chrome) — a method, not a stored computed, since it depends on both the
-   * selected finding and the three `<ng-template>`s the view declares for the rows
+   * selected finding and the four `<ng-template>`s the view declares for the rows
    * whose value is markup rather than text, `routine-panel.ts`'s own `recordRows`
-   * shape. */
+   * shape. `severity`/`raised by` (blizzard#582) append only for a `source ===
+   * 'review'` panel — a `'routine'` one renders exactly the five rows this grid
+   * always carried, additive rather than a redesign. */
   protected factRows(
     panel: FindingPanelVm,
     introduced: TemplateRef<unknown>,
     firstObserved: TemplateRef<unknown>,
     lastSeen: TemplateRef<unknown>,
+    severity: TemplateRef<unknown>,
+    raisedBy: TemplateRef<unknown>,
   ): readonly KitFact[] {
-    return [
+    const rows: KitFact[] = [
       { label: 'state', value: panel.state, testid: 'fp-state' },
       { label: 'observed', value: `x${panel.observedCount}`, testid: 'fp-observed' },
       { label: 'introduced', template: introduced, testid: 'fp-introduced' },
       { label: 'first observed', template: firstObserved, testid: 'fp-first-observed' },
       { label: 'last seen', template: lastSeen, testid: 'fp-last-seen' },
     ];
+    if (panel.source === 'review') {
+      rows.push({ label: 'source', value: 'review', testid: 'fp-source' });
+      if (panel.severity) {
+        rows.push({ label: 'severity', template: severity, testid: 'fp-severity' });
+      }
+      if (panel.raisedByChunkId) {
+        rows.push({ label: 'raised by', template: raisedBy, testid: 'fp-raised-by' });
+      }
+    }
+    return rows;
   }
 
   protected readonly exited = computed<boolean>(() => {
@@ -118,5 +152,13 @@ export class FleetFindingPanel {
   protected readonly stateTone = computed<Tone>(() => {
     const panel = this.vm();
     return panel === null ? 'idle' : findingStateTone(panel.state);
+  });
+
+  /** The severity fact row's badge tone — `finding-state.ts`'s own mapping, shared
+   * with `finding-list.ts`'s row badge so the two never disagree on a severity's
+   * color. `idle` while nothing is selected or the panel carries no severity. */
+  protected readonly severityTone = computed<Tone>(() => {
+    const panel = this.vm();
+    return panel?.severity ? findingSeverityTone(panel.severity) : 'idle';
   });
 }

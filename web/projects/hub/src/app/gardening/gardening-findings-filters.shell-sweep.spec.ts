@@ -25,6 +25,12 @@ import { GardeningFindingsPage } from './gardening-findings-page';
  * happily lay out `flex-wrap: wrap` without ever exercising the hypothetical-size
  * wrap decision the bug lived in.
  *
+ * A second sweep alongside it covers a review-sourced finding (blizzard#582 D1,
+ * `fnd_3` below) — no routine at all, its own `severity` and raising chunk
+ * (`raised_by_chunk_id`) rendered in the routine/scope pair's own wrapping slot
+ * (`finding-list.css`'s `.fl-source`/`.fl-severity`/`.fl-raised-by`) — the same
+ * genuine-overflow proof jsdom cannot make for that row either.
+ *
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) —
  * run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
@@ -83,6 +89,26 @@ const FINDINGS = [
     live: true,
     observed_count: 1,
     last_seen_at: '2026-01-10T00:00:00Z',
+  },
+  /** A review-sourced finding (blizzard#582 D1) — `routine_name` is `null` (a review
+   * finding carries no routine at all, never merely an unnamed one), and it carries
+   * its own `severity` and `raised_by_chunk_id` in place of the routine/scope
+   * disambiguation the two rows above render. Proves the row shows that gracefully
+   * rather than blank or broken at the narrow widths gardening is reached at. */
+  {
+    finding_id: 'fnd_3',
+    routine_name: null,
+    scope_slug: 'blizzard',
+    class: 'missing-error-handling',
+    locus: 'src/c.py:20',
+    summary: 'no error handling for a network failure the review flagged',
+    state: 'live',
+    live: true,
+    observed_count: 1,
+    last_seen_at: '2026-01-11T00:00:00Z',
+    source: 'review',
+    severity: 'blocking',
+    raised_by_chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   },
 ];
 
@@ -197,4 +223,43 @@ describe('gardening findings filter row and row disambiguation shell sweep (web:
       await page.viewport(1280, 800);
     }
   });
+
+  it.each([390, 320])(
+    'renders a review-sourced row (no routine, severity and raising chunk shown) with no horizontal overflow at %ipx',
+    async (width) => {
+      const { fixture, stub } = await render();
+      const root = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(root);
+      await fixture.whenStable();
+
+      try {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const row = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fnd_3"]')!;
+        expect(row).not.toBeNull();
+
+        // No routine — a review-sourced finding carries none, and the row must show
+        // that gracefully (blizzard#582) rather than a blank or broken chip.
+        expect(row.querySelector('.fl-routine')).toBeNull();
+        expect(row.querySelector('.fl-scope')?.textContent?.trim()).toBe('blizzard');
+
+        // Source, severity, and the raising chunk render in the routine's own slot.
+        expect(row.querySelector('.fl-source')?.textContent?.trim()).toBe('review');
+        expect(row.querySelector('.fl-severity')?.textContent?.trim()).toBe('blocking');
+        const raisedBy = row.querySelector<HTMLAnchorElement>('.fl-raised-by');
+        expect(raisedBy?.textContent?.trim()).toBe('C-3YJ9');
+        expect(raisedBy?.getAttribute('title')).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
+
+        expect(
+          row.scrollWidth,
+          `${width}px: the review-sourced row overflows horizontally (${row.scrollWidth} > ${row.clientWidth})`,
+        ).toBeLessThanOrEqual(row.clientWidth);
+      } finally {
+        root.remove();
+        stub.restore();
+        await page.viewport(1280, 800);
+      }
+    },
+  );
 });

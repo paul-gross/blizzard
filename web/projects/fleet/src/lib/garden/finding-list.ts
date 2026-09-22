@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { compactRef } from '../compact-ref';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
@@ -6,7 +7,7 @@ import { KitBadge } from '../kit/kit-badge';
 import { KitSelectRow } from '../kit/kit-select-row';
 import { FleetWhen } from '../when-display';
 import type { Tone } from '../kit/tone';
-import { findingStateTone, isFindingExited, isFindingGoneFlagged } from './finding-state';
+import { findingSeverityTone, findingStateTone, isFindingExited, isFindingGoneFlagged } from './finding-state';
 
 /** One row of the findings triage bucket list (`hub finding list`'s own read),
  * pared to what a 320px master-column row actually shows — the summary as the
@@ -34,6 +35,19 @@ export interface FindingListRowVm {
    * repeat what every row already shares. */
   readonly routineName: string | null;
   readonly scopeSlug: string | null;
+  /** `FindingView.source` (blizzard#582 D1) — `"routine"` or `"review"`. A
+   * review-sourced finding carries no {@link routineName} (always `null` for one),
+   * so the row shows {@link severity} and {@link raisedByChunkId} in its place
+   * rather than leaving that slot silently empty. A `"routine"` row renders exactly
+   * as it did before this field existed — additive, not a redesign. */
+  readonly source: string;
+  /** `FindingView.severity` — set only when {@link source} is `"review"`. */
+  readonly severity: string | null;
+  /** `FindingView.raised_by_chunk_id` — the chunk id whose review raised the
+   * finding, set only when {@link source} is `"review"`. Linked like every other
+   * chunk-id reference on the board (`run-delta.ts`'s own `['/board', 'chunk', id]`
+   * shape). */
+  readonly raisedByChunkId: string | null;
 }
 
 /** The triage verbs a finding can be dispatched under — every human-driven exit
@@ -84,7 +98,7 @@ export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a
 @Component({
   selector: 'fleet-finding-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitSelectRow, FleetWhen],
+  imports: [KitAsyncState, KitBadge, KitSelectRow, FleetWhen, RouterLink],
   templateUrl: './finding-list.html',
   styleUrl: './finding-list.css',
 })
@@ -113,5 +127,12 @@ export class FleetFindingList {
    * `finding-panel.ts`'s own title badge cannot disagree on a state's color. */
   protected stateTone(row: FindingListRowVm): Tone {
     return findingStateTone(row.state);
+  }
+
+  /** The row's severity badge tone, when the row is review-sourced and carries one —
+   * `finding-state.ts`'s own mapping, shared with `finding-panel.ts` so the two
+   * never disagree on a severity's color. */
+  protected severityTone(row: FindingListRowVm): Tone {
+    return row.severity === null ? 'idle' : findingSeverityTone(row.severity);
   }
 }

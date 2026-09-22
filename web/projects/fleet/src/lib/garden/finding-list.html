@@ -19,13 +19,36 @@
                 <span class="fl-class">{{ row.findingClass }}</span>
                 <span class="fl-ref" [title]="row.findingId">{{ compactRef(row.findingId) }}</span>
               </div>
-              @if (row.routineName || row.scopeSlug) {
+              @if (row.routineName || row.scopeSlug || row.source === 'review') {
                 <div class="fl-hdr-secondary">
                   @if (row.routineName) {
                     <span class="fl-routine">{{ row.routineName }}</span>
                   }
                   @if (row.scopeSlug) {
                     <span class="fl-scope">{{ row.scopeSlug }}</span>
+                  }
+                  @if (row.source === 'review') {
+                    <span class="fl-source" [attr.data-testid]="'gardening-finding-source-' + row.findingId"
+                      >review</span
+                    >
+                    @if (row.severity) {
+                      <fleet-kit-badge
+                        class="fl-severity"
+                        [attr.data-testid]="'gardening-finding-severity-' + row.findingId"
+                        [tone]="severityTone(row)"
+                        variant="soft"
+                        >{{ row.severity }}</fleet-kit-badge
+                      >
+                    }
+                    @if (row.raisedByChunkId; as raisedByChunkId) {
+                      <a
+                        class="fl-raised-by"
+                        [routerLink]="['/board', 'chunk', raisedByChunkId]"
+                        [title]="raisedByChunkId"
+                        [attr.data-testid]="'gardening-finding-raised-by-' + row.findingId"
+                        >{{ compactRef(raisedByChunkId) }}</a
+                      >
+                    }
                   }
                 </div>
               }

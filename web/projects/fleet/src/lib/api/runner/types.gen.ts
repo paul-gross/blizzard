@@ -907,6 +907,10 @@ export type FactView = {
  * when a routine first recorded the finding — the earliest of its `add`/`observed`
  * span — and is null for a finding carrying neither, which is how a finding whose only
  * facts are exit verbs reads.
+ *
+ * `source` is `"routine"` or `"review"` (blizzard#582 D1): a review-sourced finding
+ * carries no `routine_name`, carries its own `severity`, and names the `raised_by_chunk_id`
+ * that raised it.
  */
 export type FindingView = {
     /**
@@ -950,13 +954,25 @@ export type FindingView = {
      */
     observed_count: number;
     /**
+     * Raised By Chunk Id
+     */
+    raised_by_chunk_id?: string | null;
+    /**
      * Routine Name
      */
-    routine_name: string;
+    routine_name?: string | null;
     /**
      * Scope Slug
      */
     scope_slug: string;
+    /**
+     * Severity
+     */
+    severity?: string | null;
+    /**
+     * Source
+     */
+    source?: string;
     /**
      * State
      */
@@ -1863,6 +1879,30 @@ export type RunnerStatusView = {
      * Workspace Id
      */
     workspace_id: string;
+};
+
+/**
+ * ScopeView
+ *
+ * A scope as served by the create/list/read/lifecycle routes.
+ */
+export type ScopeView = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Retired
+     */
+    retired?: boolean;
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**
@@ -3530,6 +3570,38 @@ export type GetHistoryApiLeasesLeaseIdHistoryGetResponses = {
 };
 
 export type GetHistoryApiLeasesLeaseIdHistoryGetResponse = GetHistoryApiLeasesLeaseIdHistoryGetResponses[keyof GetHistoryApiLeasesLeaseIdHistoryGetResponses];
+
+export type ListScopesApiLeasesLeaseIdScopesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/scopes';
+};
+
+export type ListScopesApiLeasesLeaseIdScopesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListScopesApiLeasesLeaseIdScopesGetError = ListScopesApiLeasesLeaseIdScopesGetErrors[keyof ListScopesApiLeasesLeaseIdScopesGetErrors];
+
+export type ListScopesApiLeasesLeaseIdScopesGetResponses = {
+    /**
+     * Response List Scopes Api Leases  Lease Id  Scopes Get
+     *
+     * Successful Response
+     */
+    200: Array<ScopeView>;
+};
+
+export type ListScopesApiLeasesLeaseIdScopesGetResponse = ListScopesApiLeasesLeaseIdScopesGetResponses[keyof ListScopesApiLeasesLeaseIdScopesGetResponses];
 
 export type SessionEndApiLeasesLeaseIdSessionEndPostData = {
     body?: never;

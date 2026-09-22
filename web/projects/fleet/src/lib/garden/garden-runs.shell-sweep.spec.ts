@@ -200,6 +200,9 @@ const PANEL_FINDING: FindingPanelVm = {
   note: null,
   facts: [{ kind: 'add', recorded_at: '2026-01-02T00:00:00Z' }],
   workItem: null,
+  source: 'routine',
+  severity: null,
+  raisedByChunkId: null,
 };
 
 const PANEL_SCOPE: ScopePanelVm = {
@@ -217,7 +220,7 @@ describe('gardening panels shell sweep (web:shell-sweep)', () => {
   it('wraps the finding panel triage buttons rather than overflowing, at 1280/390/320px', async () => {
     await TestBed.configureTestingModule({
       imports: [FleetFindingPanel],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
     const fixture = TestBed.createComponent(FleetFindingPanel);
     fixture.componentRef.setInput('vm', PANEL_FINDING);

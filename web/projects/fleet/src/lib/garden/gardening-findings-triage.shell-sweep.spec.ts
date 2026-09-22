@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
 import { FleetFindingList, type FindingListRowVm } from './finding-list';
@@ -52,6 +53,9 @@ const ROWS: readonly FindingListRowVm[] = [
     lastSeenAt: '2026-01-05T00:00:00Z',
     routineName: null,
     scopeSlug: null,
+    source: 'routine',
+    severity: null,
+    raisedByChunkId: null,
   },
   {
     findingId: 'fin_2',
@@ -62,6 +66,9 @@ const ROWS: readonly FindingListRowVm[] = [
     lastSeenAt: '2026-01-06T00:00:00Z',
     routineName: null,
     scopeSlug: null,
+    source: 'routine',
+    severity: null,
+    raisedByChunkId: null,
   },
   {
     findingId: 'fin_3',
@@ -72,6 +79,9 @@ const ROWS: readonly FindingListRowVm[] = [
     lastSeenAt: '2026-01-04T00:00:00Z',
     routineName: null,
     scopeSlug: null,
+    source: 'routine',
+    severity: null,
+    raisedByChunkId: null,
   },
   {
     findingId: 'fin_4',
@@ -82,6 +92,9 @@ const ROWS: readonly FindingListRowVm[] = [
     lastSeenAt: null,
     routineName: null,
     scopeSlug: null,
+    source: 'routine',
+    severity: null,
+    raisedByChunkId: null,
   },
   {
     findingId: 'fin_5',
@@ -92,6 +105,9 @@ const ROWS: readonly FindingListRowVm[] = [
     lastSeenAt: '2026-01-07T00:00:00Z',
     routineName: null,
     scopeSlug: null,
+    source: 'routine',
+    severity: null,
+    raisedByChunkId: null,
   },
   {
     findingId: 'fin_6',
@@ -102,6 +118,9 @@ const ROWS: readonly FindingListRowVm[] = [
     lastSeenAt: null,
     routineName: null,
     scopeSlug: null,
+    source: 'routine',
+    severity: null,
+    raisedByChunkId: null,
   },
 ];
 
@@ -109,7 +128,7 @@ async function mount(rows: readonly FindingListRowVm[] = ROWS) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [FleetFindingList],
-    providers: [provideZonelessChangeDetection()],
+    providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(FleetFindingList);
   fixture.componentRef.setInput('rows', rows);
@@ -225,6 +244,9 @@ describe('FleetFindingList summary headline clamp shell sweep (web:shell-sweep)'
         lastSeenAt: '2026-01-05T00:00:00Z',
         routineName: null,
         scopeSlug: null,
+        source: 'routine',
+        severity: null,
+        raisedByChunkId: null,
       },
       {
         findingId: 'fin_long',
@@ -235,6 +257,9 @@ describe('FleetFindingList summary headline clamp shell sweep (web:shell-sweep)'
         lastSeenAt: '2026-01-05T00:00:00Z',
         routineName: null,
         scopeSlug: null,
+        source: 'routine',
+        severity: null,
+        raisedByChunkId: null,
       },
     ]);
     try {

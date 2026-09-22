@@ -98,6 +98,25 @@
   color: var(--label-dim);
   overflow-wrap: anywhere;
 }
+/* A review-sourced finding's own `source`/severity/raising-chunk trio (blizzard#582)
+   — rendered in `.fl-routine`/`.fl-scope`'s own wrapping slot, since a review-sourced
+   row never carries a routine to share it with. */
+.fl-source {
+  color: var(--label-dim);
+  text-transform: uppercase;
+  font-size: var(--fs-label);
+  letter-spacing: 0.02em;
+}
+.fl-raised-by {
+  color: var(--label-dim);
+  white-space: nowrap;
+  text-decoration: none;
+}
+.fl-raised-by:hover,
+.fl-raised-by:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
 .fl-ref {
   flex: none;
   margin-left: auto;

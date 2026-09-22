@@ -50,10 +50,28 @@
             —
           }
         </ng-template>
+        <ng-template #severityValue>
+          @if (panel.severity; as severity) {
+            <fleet-kit-badge class="fp-severity" data-testid="fp-severity-badge" [tone]="severityTone()" variant="soft">{{
+              severity
+            }}</fleet-kit-badge>
+          }
+        </ng-template>
+        <ng-template #raisedByValue>
+          @if (panel.raisedByChunkId; as raisedByChunkId) {
+            <a
+              class="fp-raised-by"
+              [routerLink]="['/board', 'chunk', raisedByChunkId]"
+              [title]="raisedByChunkId"
+              data-testid="fp-raised-by-link"
+              >{{ compactRef(raisedByChunkId) }}</a
+            >
+          }
+        </ng-template>
         <fleet-kit-fact-list
           class="fp-facts"
           testid="fp-facts"
-          [rows]="factRows(panel, introducedValue, firstObservedValue, lastSeenValue)"
+          [rows]="factRows(panel, introducedValue, firstObservedValue, lastSeenValue, severityValue, raisedByValue)"
         />
       </header>
 
