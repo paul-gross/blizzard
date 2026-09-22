@@ -24,6 +24,14 @@ Keep drafts and notes outside every repo working tree and outside the spawn work
 worktrees. Use a temp per-chunk directory named with `$BLIZZARD_CHUNK_ID`, preferring a workspace-declared scratch
 location if one exists.
 
+## Verify it by hand
+
+Before pushing, exercise the change by hand against a running application — a green build or type-check is not a
+verification. Stand up the leased environment (`winter service up <env> --wait`) and drive whichever surface the change
+reaches: the hub or runner's HTTP API (`blizzard:manual-hub`, `blizzard:manual-runner`) or a real browser against the
+board or panel (`web:manual-board`, `web:manual-panel`). A change reaching no running surface — a docs-only or
+context-only edit — is exempt. Record what you exercised and its result in the commit message.
+
 ## Push and declare
 
 Push the branch to each changed repo's origin, then declare every touched repo with
