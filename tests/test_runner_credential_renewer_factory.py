@@ -1,7 +1,7 @@
-"""``select_renewer`` — the provider -> renewer-binding selection (blizzard#504).
+"""``select_renewer`` — the provider -> renewer-binding selection.
 
 Anthropic and any unknown provider select ``None`` — declared, but with no renewal
-binding, which keeps today's read-only behaviour exactly (D2)."""
+binding, which keeps today's read-only behaviour exactly."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ _NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
 
 class _UnreachableSubprocess:
     def run(
-        self, argv: Sequence[str], *, stdin: str, timeout: float, env: Mapping[str, str] | None = None
+        self, argv: Sequence[str], *, stdin: str, timeout: float, env: Mapping[str, str], settle_seconds: float = 0.0
     ) -> OneShotResult:
         raise AssertionError("no subprocess should have been run")
 

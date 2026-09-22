@@ -33,11 +33,11 @@ scope count does reach model work its per-invocation counts leave out, but its f
 happens, so the reading still lands right; an adapter that was invocation-scoped and billed uncounted work would not.
 
 Nothing of this is visible while it goes right: a chunk's cost column and the fleet total simply read what the fleet
-spent. A rejected figure shows as the PARTIAL tilde, and the runner log carries one line naming the reported figure
-that read below its session — the one place the two causes of an absent cost separate, a crashed worker being the
-other. A session already running when a runner upgrades onto this reading keeps whatever its earlier facts banked:
-every invocation from the upgrade forward is charged its own share, while the dollars those earlier rows recorded stay
-as they were recorded, so that one session's lifetime total can read high until it ends.
+spent. A rejected figure shows as the PARTIAL tilde, and the runner log carries one line naming the reported figure that
+read below its session — the one place the two causes of an absent cost separate, a crashed worker being the other. A
+session already running when a runner upgrades onto this reading keeps whatever its earlier facts banked: every
+invocation from the upgrade forward is charged its own share, while the dollars those earlier rows recorded stay as they
+were recorded, so that one session's lifetime total can read high until it ends.
 
 ## The two caps
 
@@ -60,13 +60,13 @@ A harness can hit its own subscription's usage limit mid-turn, independently of 
 OpenCode each report this in a recognizable shape (a synthetic rate-limit transcript record, an OpenCode 429 `error`
 event), never inferred from cost or token figures. The runner classifies an exited worker generation or judge
 elicitation against that shape and, on a match, engages its own local pause brake — the same brake the ceiling and
-`runner pause` set — with a reason naming the harness and, where the harness reported one, its reset time; where it
-did not, the reason falls back to the soonest reset among this runner's own declared subscriptions' latest sampled
-windows already past 100% utilization ([External subscription usage](#external-subscription-usage) below), or carries
-no reset time at all. The limited lease is not failed and consumes no retry: it is parked in place, exactly like a
-per-chunk pause leaves a chunk, and resumes automatically once the brake lifts. As with the ceiling, only an explicit
-operator act clears it — `blizzard runner start`, or the runner panel's Resume — never an elapsed reset time the
-runner read out of the harness's own report.
+`runner pause` set — with a reason naming the harness and, where the harness reported one, its reset time; where it did
+not, the reason falls back to the soonest reset among this runner's own declared subscriptions' latest sampled windows
+already past 100% utilization ([External subscription usage](#external-subscription-usage) below), or carries no reset
+time at all. The limited lease is not failed and consumes no retry: it is parked in place, exactly like a per-chunk
+pause leaves a chunk, and resumes automatically once the brake lifts. As with the ceiling, only an explicit operator act
+clears it — `blizzard runner start`, or the runner panel's Resume — never an elapsed reset time the runner read out of
+the harness's own report.
 
 ## Partial totals
 
@@ -77,10 +77,9 @@ surface PARTIAL on their own carrier — the escalation, or the recorded pause r
 silently reads cheap. A crash is not the only way a row lands cost-absent: a reported figure that runs backwards against
 what its session already banked records no cost either, for the reason
 [The two readings of a reported figure](#the-two-readings-of-a-reported-figure) gives. A graceful restart no longer
-produces a PARTIAL row on its own: the shutdown drain (see
-[Graceful restart](./recovery.md#graceful-restart)) waits out each marked worker's own SIGINT-triggered envelope, so
-only a worker SIGKILLed at the drain's deadline, one that exits on SIGINT without writing an envelope, or an outright
-crash still lands cost-absent.
+produces a PARTIAL row on its own: the shutdown drain (see [Graceful restart](./recovery.md#graceful-restart)) waits out
+each marked worker's own SIGINT-triggered envelope, so only a worker SIGKILLed at the drain's deadline, one that exits
+on SIGINT without writing an envelope, or an outright crash still lands cost-absent.
 
 `blizzard hub status` shows the per-chunk cost column, the fleet total, and a paused runner's ceiling reason; the
 board's chunk cards and detail dock show the same figures live.
@@ -121,13 +120,15 @@ refreshes the file.
 A sample that produces nothing carries one of four reasons: `credential_lapsed` (a token past its own expiry, or a 401
 from the provider), `credential_unreadable` (a missing or unparseable credential file), `endpoint_unreachable` (a
 connection failure, a timeout, or any other non-2xx status), and `response_unparseable` (a body the binding could not
-read). Every reason surfaces on the runner: `blizzard runner status`, the runner panel's subscriptions rail, and `GET
-/api/subscriptions` show the newest attempt's outcome, its miss reason, and its renewal outcome, and the probe below
-prints the reason in operator words. Only `credential_lapsed` crosses to the hub: a miss reports `{slug, name,
-missed_at, reason}` — never a token, a refresh token, or a path — and a slug whose newest lapsed miss postdates its
-newest sample renders on the board as "credential lapsed — log in again on this runner" in place of its pace bars,
-ageing out under the same staleness gate a sample does. Any other reason leaves the board exactly as an unsampled slug
-leaves it today.
+read). Every reason surfaces on the runner: `blizzard runner status`, the runner panel's subscriptions rail, and
+`GET
+/api/subscriptions` show the newest attempt's outcome, its miss reason, and its renewal outcome, and the probe
+below prints the reason in operator words. Every miss crosses to the hub the same way a sample does — reporting
+`{slug, name,
+missed_at, reason}`, never a token, a refresh token, or a path — but only `credential_lapsed` renders: a
+slug whose newest lapsed miss postdates its newest sample shows on the board as "credential lapsed — log in again on
+this runner" in place of its pace bars, ageing out under the same staleness gate a sample does. Any other reason leaves
+the board exactly as an unsampled slug leaves it today, even though the hub has stored it.
 
 Credentials never leave the runner machine: the sample reads the runner's own local OAuth credential file, and only
 derived utilization percentages, window labels, and reset times cross the wire to the hub — the bearer token is never
@@ -154,6 +155,6 @@ sample_interval_seconds = 300
 `blizzard runner external-usage probe <slug>` samples one declared subscription, by its slug, once and prints the parsed
 snapshot without writing, ticking, or reporting to the hub — confirming that subscription's credentials and cadence
 without waiting on a scheduled sample. It is also where the two silent outcomes separate: a declaration whose `provider`
-names no binding — a typo, most often — prints that it has no sampler, where a declared-and-bound subscription that
-got nothing back prints its miss reason instead — `credential lapsed: log in again` for a token past its expiry. A runner with no `[[subscription]]` declared has exactly one slug to
-name: `anthropic`, the legacy table's own subscription.
+names no binding — a typo, most often — prints that it has no sampler, where a declared-and-bound subscription that got
+nothing back prints its miss reason instead — `credential lapsed: log in again` for a token past its expiry. A runner
+with no `[[subscription]]` declared has exactly one slug to name: `anthropic`, the legacy table's own subscription.

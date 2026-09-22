@@ -34,6 +34,10 @@ EVENT_RECORDED = "event.recorded"
 EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED = "external_subscription_usage.sampled"
 # A sampler miss (D7), upserted per (runner_id, slug) beside the sample. Payload: {slug, name, missed_at, reason} only.
 EXTERNAL_SUBSCRIPTION_USAGE_MISSED = "external_subscription_usage.missed"
+# The one miss reason (of the runner's own closed set, ``SampleMissReason``) the hub derives a
+# per-slug ``condition`` from — shared here so the runner's emission and the hub's derivation
+# read the same literal rather than each spelling it out independently.
+CREDENTIAL_LAPSED_MISS_REASON = "credential_lapsed"
 
 
 class ExternalSubscriptionUsageWindowFact(BaseModel):

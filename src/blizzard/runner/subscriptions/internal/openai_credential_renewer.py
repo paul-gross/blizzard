@@ -1,13 +1,17 @@
-"""The OpenAI (ChatGPT plan) credential-renewer binding (``bzh:pluggable-seams``, blizzard#504):
-asks the Codex CLI's own ``app-server`` for a vendor-owned proactive refresh — the JSON-RPC
+"""The OpenAI (ChatGPT plan) credential-renewer binding (``bzh:pluggable-seams``): asks the
+Codex CLI's own ``app-server`` for a vendor-owned proactive refresh — the JSON-RPC
 ``initialize`` handshake, then ``account/read`` with ``refreshToken: true`` (confirmed live
-against Codex 0.149.0, D1). The server interleaves notifications between a request and its
-id-matched response, so replies are found by id. The refreshed tokens land on disk as the
-vendor CLI's own side effect; this binding never opens the credential file for writing."""
+against Codex 0.149.0). The server interleaves notifications between a request and its
+id-matched response, so replies are found by id, and it drops a reply still in flight if
+stdin reaches EOF first — the request is followed by a settle window before stdin closes,
+long enough for a live refresh to finish (confirmed live: 4s sufficed; 3/3 runs lost the
+reply with no settle at all). The refreshed tokens land on disk as the vendor CLI's own
+side effect; this binding never opens the credential file for writing."""
 
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -31,6 +35,10 @@ DEFAULT_CODEX_BINARY = "codex"
 _RENEWAL_LEAD_WINDOW = timedelta(minutes=10)
 
 _APP_SERVER_TIMEOUT_SECONDS = 30.0
+
+# How long stdin stays open past the request before closing it — confirmed live against Codex
+# 0.149.0: a 4s hold let a pending account/read reply land; margin above that.
+_ACCOUNT_READ_SETTLE_SECONDS = 5.0
 
 _CLIENT_INFO = {"name": "blizzard-runner", "version": "1"}
 _INITIALIZE_ID = 1
@@ -85,7 +93,10 @@ class OpenAICredentialRenewer:
             [self._codex_binary, "app-server"],
             stdin=request,
             timeout=_APP_SERVER_TIMEOUT_SECONDS,
-            env={"CODEX_HOME": codex_home, "HOME": str(Path.home())},
+            # PATH is required for a bare binary name (the common case) to resolve at all;
+            # CODEX_HOME and HOME are the only other names the vendor CLI needs to see.
+            env={"PATH": os.environ.get("PATH", ""), "CODEX_HOME": codex_home, "HOME": str(Path.home())},
+            settle_seconds=_ACCOUNT_READ_SETTLE_SECONDS,
         )
         if result.exit_code is None:
             if result.timed_out:

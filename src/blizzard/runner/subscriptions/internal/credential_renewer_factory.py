@@ -1,9 +1,9 @@
-"""Selects the renewer binding for one declared provider subscription (blizzard#504).
+"""Selects the renewer binding for one declared provider subscription.
 
 A ``provider -> binding`` map, confined to ``internal/`` (``bzh:dependency-inversion``),
 beside :func:`~blizzard.runner.subscriptions.internal.subscription_sampler_factory.select_sampler`.
 Anthropic and any unknown provider select ``None`` — declared, but with no renewal
-binding, which keeps today's read-only behaviour exactly (D2)."""
+binding, which keeps today's read-only behaviour exactly."""
 
 from __future__ import annotations
 
