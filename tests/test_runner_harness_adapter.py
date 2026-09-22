@@ -927,7 +927,6 @@ _SIGINT_ENVELOPE = json.dumps(
         "type": "result",
         "subtype": "error_during_execution",
         "is_error": True,
-        "result": "",
         "session_id": "s1",
         "model": "claude-opus-4-8",
         "usage": {
@@ -958,6 +957,13 @@ def test_parse_usage_extracts_a_real_cost_from_a_sigint_error_during_execution_e
     assert sample.cost_usd == 0.019
     assert sample.input_tokens == 80
     assert sample.output_tokens == 12
+
+
+@pytest.mark.unit
+def test_has_usable_output_is_true_for_a_sigint_error_during_execution_envelope() -> None:
+    """A judge that ends in this envelope was judged, not lost: it names no verdict, so
+    the attempt fails and consumes a retry rather than relaunching indefinitely."""
+    assert _adapter().has_usable_output(_SIGINT_ENVELOPE) is True
 
 
 @pytest.mark.unit

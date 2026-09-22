@@ -10,11 +10,13 @@ health, since it knows the sessions were running a moment ago; the crash path mu
 
 Right after marking, the shutdown drains its own workers: SIGINT each marked lease's process group, wait up to 60s total
 (one shared budget across every marked worker, not 60s each), then SIGKILL whatever is still alive. Claude Code answers
-SIGINT with an `error_during_execution` envelope that still carries a real `total_cost_usd`, so the next startup's
-restart-resume path records that generation's real spend rather than falling back to a NULL-cost transcript sum. A
-worker that ignores SIGINT is SIGKILLed at the deadline and falls back the same way a crash-killed one always has —
-shutdown never hangs waiting on it. The drain makes no durable write of its own: it only waits long enough for the
-envelope to reach the worker's stdout file, which the restart's own usage recording already reads.
+SIGINT with an `error_during_execution` envelope that still carries a real `total_cost_usd` (but no `result` key), so
+the next startup's restart-resume path records that generation's real spend rather than falling back to a NULL-cost
+transcript sum. Two workers fall back the same way a crash-killed one always has: one that ignores SIGINT is SIGKILLed
+at the deadline, and shutdown never hangs waiting on it; and one that exits on SIGINT without writing any envelope at
+all, which Claude Code occasionally does — the drain counts it `exited_on_sigint`, yet its stdout file is empty. The
+drain makes no durable write of its own: it only waits long enough for the envelope to reach the worker's stdout file,
+which the restart's own usage recording already reads.
 
 The unit declares `KillMode=mixed` and `TimeoutStopSec=120` so this stays the *only* thing that ever signals a worker:
 under the default `control-group` mode systemd would SIGTERM every worker in the daemon's cgroup right alongside it,
