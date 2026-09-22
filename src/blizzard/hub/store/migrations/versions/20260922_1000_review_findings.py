@@ -1,7 +1,5 @@
 """Adds review-sourced findings (blizzard#582 D1): `findings` gains `source`,
-`severity`, and `raised_by_chunk_id`; `routine_name` becomes nullable since a
-review-sourced finding carries no routine lineage. Every existing row backfills to
-`source = 'routine'`.
+`severity`, and `raised_by_chunk_id`; `routine_name` becomes nullable.
 
 Revision ID: 20260922_1000_review_findings
 Revises: 20260920_1200_finding_delivered_state
@@ -49,9 +47,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index(_INDEX_NAME, table_name=_FINDINGS_TABLE)
     bind = op.get_bind()
-    # A review-sourced row's null `routine_name` has no home in the old, `NOT NULL`
-    # shape — coalesced to `""`, the `finding_sets.routine_name` backfill's own shape,
-    # so narrowing the column never orphans a row.
+    # A review-sourced row's null `routine_name` has no home in the old `NOT NULL`
+    # shape, so it is coalesced to `""` before the column narrows.
     bind.execute(_findings.update().where(_findings.c.routine_name.is_(None)).values(routine_name=""))
     with op.batch_alter_table(_FINDINGS_TABLE) as batch:
         batch.drop_constraint(_CHECK_NAME, type_="check")

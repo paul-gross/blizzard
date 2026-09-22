@@ -18,8 +18,7 @@ from blizzard.hub.domain.review_findings_materialize import (
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
 
-#: Keyed on `chunk_id` alone (D6) — not `(chunk_id, node_id, epoch)` like garden's
-#: `garden-delivered` marker, since a chunk owes at most one review-findings delivery.
+#: Keyed on `chunk_id` alone (D6): a chunk owes at most one review-findings delivery.
 _DELIVERED_MARKER_NAME = "review-findings-delivered"
 
 

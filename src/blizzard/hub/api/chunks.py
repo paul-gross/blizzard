@@ -373,10 +373,8 @@ def record_garden_delivery(
     if services.garden_delivery.already_delivered(chunk_id=chunk_id, node_id=node_id, epoch=epoch):
         return GardenDeliveryResponse(outcome="recorded", detail="")
 
-    # Widened with this run's own scope's review-sourced findings (blizzard#582 D3): an
-    # `observed`/`gone` op may transform one, and a proposal may cite one, exactly like
-    # any routine-sourced finding under the same-scope constraint `_check_known_id` already
-    # enforces.
+    # Widened with this run's own scope's review-sourced findings (blizzard#582 D3), so an
+    # `observed`/`gone` op or a proposal citation admits one under the same-scope constraint.
     known_findings = services.findings.list_for_routine(run.routine_name, include_gone=True)
     known_findings += services.findings.list_by_source(scope_slug=run.scope_slug, source="review", include_gone=True)
 
@@ -406,9 +404,7 @@ def record_garden_delivery(
     return GardenDeliveryResponse(outcome="recorded", detail="")
 
 
-#: The `review` node's own `produces:` asset name (blizzard#582 D8) — fixed, unlike
-#: garden delivery's caller-named `--delta`/`--proposals` artifacts, since exactly one
-#: review-finding delta feeds `record-findings`.
+#: The `review` node's own fixed `produces:` asset name (blizzard#582 D8).
 _REVIEW_FINDING_DELTA_ARTIFACT = "review-finding-delta"
 
 
@@ -426,9 +422,7 @@ def record_review_findings_delivery(
     """The `record-findings` node's own route (blizzard#582) — validates the chunk's
     newest `review-finding-delta` artifact and, on success, materializes its `deferred`
     entries in one transaction. A malformed delta or an unresolvable node is an
-    ``invalid`` outcome at a 200, never an error response — the graph's own `invalid`
-    edge reads and routes on it. Idempotent per chunk (D6): a replay reads its own marker
-    before ever re-parsing the artifact."""
+    ``invalid`` outcome at a 200, never an error response. Idempotent per chunk (D6)."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

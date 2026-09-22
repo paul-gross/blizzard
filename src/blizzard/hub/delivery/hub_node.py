@@ -108,8 +108,7 @@ ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"  # POST {name, content} r
 ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"  # the capability token authorizing that POST (issue #230)
 # POST {delta, proposals} (artifact names) delivers a routine's run (blizzard#393)
 ENV_GARDEN_DELIVERY_URL = "BZ_HUB_GARDEN_DELIVERY_URL"
-# POST with no body delivers the chunk's own newest review-finding-delta artifact
-# (blizzard#582) — read only by review_deliver.py
+# POST with no body delivers the chunk's own newest review-finding-delta artifact (blizzard#582)
 ENV_REVIEW_FINDINGS_URL = "BZ_HUB_REVIEW_FINDINGS_URL"
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
