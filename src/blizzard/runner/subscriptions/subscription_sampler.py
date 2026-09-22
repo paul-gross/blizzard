@@ -12,6 +12,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
+
 __all__ = [
     "PROVIDER_ANTHROPIC",
     "PROVIDER_OPENAI",
@@ -60,7 +62,7 @@ class SampleMissReason(StrEnum):
     missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
     non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows."""
 
-    CREDENTIAL_LAPSED = "credential_lapsed"
+    CREDENTIAL_LAPSED = CREDENTIAL_LAPSED_MISS_REASON
     CREDENTIAL_UNREADABLE = "credential_unreadable"
     ENDPOINT_UNREACHABLE = "endpoint_unreachable"
     RESPONSE_UNPARSEABLE = "response_unparseable"

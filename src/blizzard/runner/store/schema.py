@@ -574,11 +574,11 @@ external_usage_samples = Table(
     Column("slug", String, nullable=False),
     Column("sampled_at", UtcDateTime, nullable=False),
     Column("payload", Text, nullable=True),  # NULL = this attempt sampled nothing
-    # blizzard#504: the closed-set SampleMissReason value on a miss, NULL on a successful
-    # sample. Read-only for this table's own writer — never derived at read time.
+    # The closed-set SampleMissReason value on a miss, NULL on a successful sample.
+    # Read-only for this table's own writer — never derived at read time.
     Column("miss_reason", String, nullable=True),
-    # blizzard#504: this attempt's own renewal outcome (renewed/not_due/failed), NULL
-    # until a renewer is wired for this slug's provider (Phase 2).
+    # This attempt's own renewal outcome: "renewed", "failed:<reason>", or NULL — no
+    # renewal was due, or no renewer is wired for this slug's provider.
     Column("renewal", String, nullable=True),
 )
 

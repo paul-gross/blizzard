@@ -1,8 +1,8 @@
-"""``OpenAICredentialRenewer.renew_if_due`` (blizzard#504), driven with an injected
+"""``OpenAICredentialRenewer.renew_if_due``, driven with an injected
 :class:`~blizzard.runner.subscriptions.one_shot_process.IOneShotProcess` fake and a
 ``FixedClock`` — no real credential file location, no real vendor CLI. Confirms the lead-window
 test, the ``initialize``-then-``account/read`` JSON-RPC request shape, and that every
-subprocess failure mode reduces to a typed ``FAILED`` outcome rather than a raise (D1, D4)."""
+subprocess failure mode reduces to a typed ``FAILED`` outcome rather than a raise."""
 
 from __future__ import annotations
 
@@ -46,12 +46,12 @@ class _ScriptedSubprocess:
 
     def __init__(self, result: OneShotResult) -> None:
         self.result = result
-        self.calls: list[tuple[Sequence[str], str, float, Mapping[str, str] | None]] = []
+        self.calls: list[tuple[Sequence[str], str, float, Mapping[str, str], float]] = []
 
     def run(
-        self, argv: Sequence[str], *, stdin: str, timeout: float, env: Mapping[str, str] | None = None
+        self, argv: Sequence[str], *, stdin: str, timeout: float, env: Mapping[str, str], settle_seconds: float = 0.0
     ) -> OneShotResult:
-        self.calls.append((argv, stdin, timeout, env))
+        self.calls.append((argv, stdin, timeout, env, settle_seconds))
         return self.result
 
 
@@ -131,15 +131,18 @@ def test_a_due_renewal_sends_initialize_then_account_read_with_refresh_token_tru
     renewer.renew_if_due()
 
     assert len(subprocess.calls) == 1
-    argv, stdin, _timeout, env = subprocess.calls[0]
+    argv, stdin, _timeout, env, settle_seconds = subprocess.calls[0]
     assert list(argv) == ["codex", "app-server"]
     lines = [json.loads(line) for line in stdin.splitlines() if line.strip()]
     assert lines[0]["method"] == "initialize"
     assert lines[0]["params"]["clientInfo"]["name"]
     assert lines[1]["method"] == "account/read"
     assert lines[1]["params"] == {"refreshToken": True}
-    assert env is not None
     assert env["CODEX_HOME"] == str(tmp_path)
+    # A bare binary name (the common case) resolves only if PATH survives into the child.
+    assert env["PATH"]
+    # Closing stdin right away can drop a reply still in flight against the real vendor CLI.
+    assert settle_seconds > 0
 
 
 # Every subprocess failure mode reduces to a typed FAILED outcome.
