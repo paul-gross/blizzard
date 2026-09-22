@@ -50,10 +50,14 @@ export class AgentRow {
   protected readonly leaseRef = computed(() => compactRef(this.agent().lease_id));
   protected readonly chunkRef = computed(() => compactRef(this.agent().chunk_id));
 
-  /** `st-running` / `st-stale` / `st-parked` / `st-spawning` / `st-exited` / `st-closed`. */
+  /** `st-running` / `st-stale` / `st-parked` / `st-backing-off` / `st-spawning` / `st-exited` /
+   * `st-closed`. */
   protected readonly stateClass = computed(() => `st-${this.agent().state}`);
 
-  protected readonly stateLabel = computed(() => this.agent().state.toUpperCase());
+  /** `backing-off`'s own hyphen reads as a space here, matching the fleet board's own
+   * hand-authored 'BACKING OFF' label (`chunk-status.ts`) — every other state is one word,
+   * so this is a no-op for them. */
+  protected readonly stateLabel = computed(() => this.agent().state.toUpperCase().replace('-', ' '));
 
   protected readonly isStale = computed(() => this.agent().state === 'stale');
 }

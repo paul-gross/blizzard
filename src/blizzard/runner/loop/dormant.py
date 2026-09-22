@@ -11,6 +11,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
 from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.overload import OverloadFactRecord
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
@@ -30,6 +31,10 @@ _RESTART_MESSAGE = "# The supervisor restarted; continue your task where you lef
 #: The message ADVANCE delivers into a session the operator paused and resumed (issue #46).
 #: Same inert ``#``-prefixed framing; the exact prose is unpinned.
 _UNPAUSE_MESSAGE = "# The operator resumed this chunk; continue your task where you left off."
+
+#: The message a worker generation's own overload backoff delivers on wake (blizzard#595).
+#: Same inert ``#``-prefixed framing; the exact prose is unpinned.
+_OVERLOAD_BACKOFF_MESSAGE = "# The provider was overloaded; retrying automatically."
 
 # The restart re-attach. `_wake`'s own middle (a resumed process launched but not yet
 # durably recorded) is armed exactly like SPAWN's two-phase mint (D1/D4), below; recovery
@@ -216,6 +221,82 @@ class DormantSession:
             lease_id=lease.lease_id,
             epoch=lease.epoch,
             pid=pid,
+        )
+
+    def on_overload_backoff(self, fact: OverloadFactRecord) -> None:
+        """No-op until ``fact.resume_after`` has passed, then resume the same
+        lease/epoch/session in place (blizzard#595) — no retry consumed, no epoch bumped.
+
+        Nothing is written on the no-op branch: ``resume_after`` is already durable, and
+        `backing_off_facts` re-derives the same fact next tick. A worker generation wakes
+        via `_wake` directly; a judge elicitation gets a fresh launch instead, mirroring
+        :meth:`_resume_judge_usage_limit_park` — its own turn already finished normally
+        before the elicitation overloaded, so there is nothing to "continue" by message."""
+        lease = self.lease
+        now = self.ctx.clock.now()
+        if fact.resume_after is None or now < fact.resume_after:
+            return
+        suppressed = Spawner(self.ctx).suppressed(
+            via="overload-backoff-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id
+        )
+        if suppressed:
+            return
+        if fact.invocation_kind == "judge":
+            self._resume_judge_overload_backoff(now)
+            return
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+        if not bindings or lease.session is None:
+            _log.warning("backing-off chunk has no warm env/session — cannot resume", chunk_id=lease.chunk_id)
+            return
+        harness = self._resolve_harness(via="overload-backoff-resume")
+        if harness is None:
+            return
+        # The overloaded generation's own usage (F12) — recorded before `_wake` mints the new one.
+        self.ctx.usage.record_worker(lease, bindings)
+        pid, _ = self._wake(_OVERLOAD_BACKOFF_MESSAGE, bindings, harness=harness, at=now)
+        _log.info(
+            "resumed a worker generation after a provider-overload backoff",
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            epoch=lease.epoch,
+            pid=pid,
+        )
+
+    def _resume_judge_overload_backoff(self, now: datetime) -> None:
+        """The judge half of :meth:`on_overload_backoff` (blizzard#595) — clear-then-relaunch,
+        exactly :meth:`_resume_judge_usage_limit_park`'s own shape: the stale record from the
+        overloaded elicitation is left for `Judgement._launch`'s own `record_elicitation_launch`
+        to delete-then-insert over, so there is no window where neither record exists."""
+        lease = self.lease
+        # Deferred: `judgement` imports `DormantSession` at module scope, so importing
+        # `Judgement` back at module scope here would cycle.
+        from blizzard.runner.loop.judgement import Judgement
+
+        judgement = Judgement.of(self.ctx, lease)
+        if judgement is None:
+            return  # hub unreachable — `resume_after` is durable; retry next tick
+        if lease.session is not None:
+            # The standing "judge" boundary is reused, not reopened (`record_boundary_open`'s
+            # check-then-insert never mints a second row for one (lease, generation, kind)) —
+            # advance it past the overloaded elicitation's own signal, or the fresh one's own
+            # classification would re-read that same signal off the transcript forever.
+            generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
+            workdir = judgement.bindings[0].workdir if judgement.bindings else None
+            start_position, start_unreadable = self.ctx.resolve_boundary_start(lease.session, workdir)
+            self.ctx.stores.invocation_boundaries.advance_boundary(
+                lease_id=lease.lease_id,
+                generation=generation,
+                kind="judge",
+                start_position=start_position,
+                start_unreadable=start_unreadable,
+                opened_at=now,
+            )
+        judgement.run()
+        _log.info(
+            "resumed a judge elicitation after a provider-overload backoff",
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            epoch=lease.epoch,
         )
 
     def _resume_judge_usage_limit_park(self, now: datetime) -> None:

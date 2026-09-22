@@ -42,6 +42,8 @@ export function deriveMachineChunkStatus(lease: runnerApi.LeaseView, facts: Mach
       return { label: 'STALE', tone: 'stale' };
     case 'parked':
       return { label: 'PARKED', tone: 'waiting' };
+    case 'backing-off':
+      return { label: 'BACKING OFF', tone: 'waiting' };
     case 'spawning':
       return { label: 'SPAWNING', tone: 'spawning' };
     case 'exited':

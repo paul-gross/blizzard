@@ -45,8 +45,8 @@ both wait, exactly where the crash or shutdown left them, for the first tick aft
 nothing lost, only deferred.
 
 Both the shutdown and crash paths mark only live work with a session to re-attach: a lease still unspawned, dormant on a
-question or an operator pause, or holding a buffered completion awaiting flush has nothing to resume — each is already
-owned by the step that parked it. A standing operator `chunk pause` outranks restart-resume: a pause the runner already
+question or an operator pause, backing off after a provider overload, or holding a buffered completion awaiting flush
+has nothing to resume — each is already owned by the step that parked it. A standing operator `chunk pause` outranks restart-resume: a pause the runner already
 parked on locally is never marked and stays parked, ADVANCE lifting it when the pause clears, while a pause recorded
 only at the hub is discovered by RESUME's own re-attach read, which re-parks the lease instead of respawning — either
 way the pause fact, not the restart, decides.
@@ -82,6 +82,29 @@ bounded by the crash-point sweep's recovery, no stronger.
 
 On the hub side, a completion re-flushed after a hub crash applies idempotently behind the epoch fence, and a per-repo
 land already recorded is skipped on redelivery — a crash mid-delivery lands the chunk exactly once.
+
+## Provider-overload backoff
+
+A worker generation or judge elicitation can exit because the harness's own provider returned an overload signal
+(Claude Code's `server_error`/529 assistant reply, an OpenCode 529 or `overloaded` error event) rather than because the
+turn actually finished. The runner classifies that exit the same way it classifies a usage limit — a translated fact,
+never inferred from cost or token figures — and, short of five consecutive overloads on the one lease, backs the lease
+off instead of judging it: no verdict is elicited, no retry is consumed, and the epoch is unchanged. The agent slot and
+every bound environment stay held exactly as a dormant, ask-parked lease's do, and the same session resumes in place —
+only `pid`/`process_start_time` rewritten — once a durable `resume_after` passes: 60s after the first overload in a
+streak, doubling each further consecutive one (120s, 240s, 480s), capped at 15 minutes though the cap is never actually
+reached before the streak limit. A clean exit closes an open streak, so a later, unrelated overload starts fresh at the
+first delay rather than continuing where an old streak left off.
+
+`resume_after` is a durable fact, not daemon or in-memory state, so a backing-off lease survives a restart or a crash
+exactly like an ask- or pause-parked one: REAP and RESUME leave it alone, and ADVANCE's own no-op-until-due check
+(`bzh:facts-not-status` — "is it backing off" is never itself cached; each tick derives it fresh off the durable
+`resume_after`) picks the wait back up wherever the outage left it, waking it late rather than early or not at all. A
+judge elicitation's own overload is closed the same way a worker
+generation's is — by the next invocation's own identity moving on, generation for a worker, launch instant for a
+judge — never a separate closing write. The fifth consecutive overload on a lease falls through to today's ordinary
+path: a worker generation is judged as usual, a verdict-less judge elicitation fails the attempt as usual, spending a
+retry only there.
 
 ## How the contract is exercised
 

@@ -21,6 +21,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
+from blizzard.runner.domain.overload import backing_off_facts
 from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -35,6 +36,11 @@ from blizzard.runner.loop.drain import OutboundDrain
 from blizzard.runner.loop.held_chunk import HeldChunk
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.judgement import Judgement, elicitation_still_pending
+from blizzard.runner.loop.overload import (
+    classify_worker_overload,
+    record_worker_overload,
+    reset_if_streak_open,
+)
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.usage_limit import classify_worker_usage_limit, engage_and_park_worker
 from blizzard.runner.stores import RunnerStores
@@ -223,14 +229,19 @@ class ResumeIntents:
         restart-resume would otherwise wake a second process on the same session, and an
         ungraceful crash-orphan scan would otherwise leave the pre-resume elicitation's stale
         record to be misread as the resumed generation's own verdict — neither path may
-        re-mint or resume a lease whose elicitation is in flight."""
+        re-mint or resume a lease whose elicitation is in flight. A backing-off lease is
+        excluded the same way (blizzard#595): its own ``resume_after`` is already durable,
+        and either restart path re-marking it would wake it early, skipping the wait."""
         parked = self.stores.asks.parked_lease_ids()
         pending = self.stores.outbound.pending_submission_lease_ids()
         eliciting = self.stores.elicitations.in_flight_elicitation_lease_ids()
+        backing_off = backing_off_facts(self.stores.overload, self.stores.liveness, self.stores.elicitations)
         for lease in self.stores.lease_record.list_active_leases():
             if lease.pid is None or lease.session_id is None:
                 continue
             if lease.lease_id in parked or lease.lease_id in pending or lease.lease_id in eliciting:
+                continue
+            if lease.lease_id in backing_off:
                 continue
             yield lease
 
@@ -485,6 +496,7 @@ class Advance(Step):
         pending = ctx.stores.outbound.pending_submission_lease_ids()
         ask_parked = ctx.stores.asks.ask_parked_lease_ids()
         pause_parked = ctx.stores.pause.pause_parked_lease_ids()
+        backing_off = backing_off_facts(ctx.stores.overload, ctx.stores.liveness, ctx.stores.elicitations)
         resume_intents = ctx.stores.resume_intent.resume_intent_lease_ids()
         taken_over = ctx.stores.takeover.open_takeover_chunk_ids()
         for lease in ctx.stores.lease_record.list_active_leases():
@@ -501,6 +513,12 @@ class Advance(Step):
                 continue
             if lease.lease_id in ask_parked:
                 DormantSession(ctx, lease).on_answer()  # dormant on a question — resume on the answer
+                continue
+            if lease.lease_id in backing_off:
+                # No-ops until `resume_after` passes, then wakes the same lease/epoch/session
+                # in place (blizzard#595) — checked before liveness since an overloaded worker
+                # generation has already exited; a judge's own process is gone too.
+                DormantSession(ctx, lease).on_overload_backoff(backing_off[lease.lease_id])
                 continue
             if ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
                 continue  # worker still running
@@ -538,10 +556,23 @@ class Advance(Step):
         # alike (blizzard#594): the exit is neither an ask nor a verdict to judge, it is the
         # harness itself reporting it could not run at all.
         generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
-        limit = classify_worker_usage_limit(self.ctx, lease, generation=generation)
+        output = self.ctx.worker_files.read_stdout(lease.lease_id, generation)
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+        lines = self.ctx.usage.worker_transcript_lines(lease, bindings, generation=generation)
+        limit = classify_worker_usage_limit(self.ctx, lease, output, lines)
         if limit is not None:
             engage_and_park_worker(self.ctx, lease, limit)
             return
+        # A provider-overloaded generation is classified right alongside the usage limit
+        # (blizzard#595) — the two are mutually exclusive exit reasons for the one exit,
+        # both read from the same `output`/`lines` pair read once above (F4).
+        overload = classify_worker_overload(self.ctx, lease, output, lines)
+        if overload is not None:
+            if record_worker_overload(self.ctx, lease, overload, generation=generation):
+                return  # backing off in place — the next tick's `backing_off_facts` picks it up
+            # Streak limit reached: fall through to today's ordinary path below.
+        else:
+            reset_if_streak_open(self.ctx, lease)
         # Ask-and-exit: an exit holding an unforwarded ask is a park, an exit with neither is a
         # failure. Not a spawn, so it proceeds regardless of the local brake.
         ask = self.ctx.stores.asks.unforwarded_ask(lease.lease_id)

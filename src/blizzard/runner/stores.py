@@ -44,6 +44,7 @@ from blizzard.runner.domain.leases import (
     IWriteLeaseSessionRepository,
 )
 from blizzard.runner.domain.outbound import IReadOutboundRepository, IWriteOutboundRepository
+from blizzard.runner.domain.overload import IReadOverloadRepository, IWriteOverloadRepository
 from blizzard.runner.domain.pause import IReadPauseRepository, IWritePauseRepository
 from blizzard.runner.domain.requeue import IReadRequeueRepository, IWriteRequeueRepository
 from blizzard.runner.domain.selftest_result import (
@@ -69,6 +70,7 @@ class IReadRunnerStore(
     IReadTokenRepository,
     IReadWorkspacePromptRepository,
     IReadOutboundRepository,
+    IReadOverloadRepository,
     IReadAskRepository,
     IReadPauseRepository,
     IReadTakeoverRepository,
@@ -99,6 +101,7 @@ class IWriteRunnerStore(
     IWriteTokenRepository,
     IWriteWorkspacePromptRepository,
     IWriteOutboundRepository,
+    IWriteOverloadRepository,
     IWriteAskRepository,
     IWritePauseRepository,
     IWriteTakeoverRepository,
@@ -133,6 +136,7 @@ class RunnerStores:
     tokens: IWriteTokenRepository
     workspace_prompt: IWriteWorkspacePromptRepository
     outbound: IWriteOutboundRepository
+    overload: IWriteOverloadRepository
     asks: IWriteAskRepository
     pause: IWritePauseRepository
     takeover: IWriteTakeoverRepository
@@ -165,6 +169,7 @@ class RunnerReadStores:
     tokens: IReadTokenRepository
     workspace_prompt: IReadWorkspacePromptRepository
     outbound: IReadOutboundRepository
+    overload: IReadOverloadRepository
     asks: IReadAskRepository
     pause: IReadPauseRepository
     takeover: IReadTakeoverRepository
@@ -193,6 +198,7 @@ class RunnerReadStores:
             tokens=stores.tokens,
             workspace_prompt=stores.workspace_prompt,
             outbound=stores.outbound,
+            overload=stores.overload,
             asks=stores.asks,
             pause=stores.pause,
             takeover=stores.takeover,

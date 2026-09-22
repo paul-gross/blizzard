@@ -1818,3 +1818,54 @@ def test_classify_usage_limit_tolerates_malformed_lines() -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     limit = _adapter().classify_usage_limit("", ["not json", "", transcript_fixtures.rate_limit_record()], now)
     assert limit is not None
+
+
+# --- classify_provider_overload (blizzard#595) ------------------------------
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_reads_the_synthetic_transcript_record() -> None:
+    overload = _adapter().classify_provider_overload("", [transcript_fixtures.overload_record()])
+    assert overload is not None
+    assert "529" in overload.detail
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_is_none_for_an_ordinary_assistant_reply() -> None:
+    lines = [transcript_fixtures.assistant_text("all good here")]
+    assert _adapter().classify_provider_overload("", lines) is None
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_is_none_for_the_sigint_error_during_execution_envelope() -> None:
+    # The envelope-shaped output plays no part — only the transcript range does, and a
+    # SIGINT'd-but-completed turn's own last transcript record is an ordinary reply.
+    output = json.dumps({"type": "result", "subtype": "error_during_execution", "is_error": True})
+    lines = [transcript_fixtures.assistant_text("partial work before the interrupt")]
+    assert _adapter().classify_provider_overload(output, lines) is None
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_is_none_for_a_rate_limit_api_error() -> None:
+    lines = [transcript_fixtures.rate_limit_record()]
+    assert _adapter().classify_provider_overload("", lines) is None
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_is_none_for_a_non_overload_server_error() -> None:
+    other_error = json.dumps({"type": "assistant", "isApiErrorMessage": True, "error": "server_error"})
+    assert _adapter().classify_provider_overload("", [other_error]) is None
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_is_none_when_a_real_reply_follows_it_in_the_range() -> None:
+    # A relaunched judge reuses its first judge boundary, so its own range can hold an
+    # earlier overload record followed by a real reply — that generation completed.
+    lines = [transcript_fixtures.overload_record(), transcript_fixtures.assistant_text("here is my verdict")]
+    assert _adapter().classify_provider_overload("", lines) is None
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_tolerates_malformed_lines() -> None:
+    lines = ["not json", "", transcript_fixtures.overload_record()]
+    assert _adapter().classify_provider_overload("", lines) is not None

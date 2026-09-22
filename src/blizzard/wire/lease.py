@@ -1,8 +1,9 @@
 """Lease wire bodies — the runner-local lease read (issues #28, #29).
 
 ``closed_at``/``closure_reason`` are both ``None`` iff the lease is active, and ``state``
-carries a sixth ``"closed"`` value. Datetimes are ISO-8601 strings that **always carry an
-explicit UTC offset** (``2026-07-16T12:00:00+00:00``) — ``bzh:utc-instants``.
+carries a seventh ``"backing-off"`` value (blizzard#595) alongside ``"closed"``. Datetimes
+are ISO-8601 strings that **always carry an explicit UTC offset**
+(``2026-07-16T12:00:00+00:00``) — ``bzh:utc-instants``.
 """
 
 from __future__ import annotations

@@ -1389,7 +1389,7 @@ export type LeaseView = {
     /**
      * State
      */
-    state: 'running' | 'stale' | 'parked' | 'spawning' | 'exited' | 'closed';
+    state: 'running' | 'stale' | 'parked' | 'backing-off' | 'spawning' | 'exited' | 'closed';
     /**
      * Workdir
      */

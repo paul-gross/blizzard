@@ -962,3 +962,74 @@ def test_classify_usage_limit_none_reset_for_an_unparseable_duration_never_raise
 def test_classify_usage_limit_tolerates_malformed_capture() -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     assert _adapter().classify_usage_limit("not json at all", [], now) is None
+
+
+# --- classify_provider_overload (blizzard#595) ------------------------------
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_reads_a_529_status_code() -> None:
+    output = json.dumps(
+        {
+            "type": "error",
+            "sessionID": "ses_x",
+            "error": {"name": "AI_APICallError", "data": {"message": "Overloaded", "statusCode": 529}},
+        }
+    )
+
+    overload = _adapter().classify_provider_overload(output, [])
+
+    assert overload is not None
+    assert overload.detail == "Overloaded"
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_reads_an_overloaded_error_name_without_a_529_status() -> None:
+    output = json.dumps(
+        {
+            "type": "error",
+            "sessionID": "ses_x",
+            "error": {"name": "OverloadedError", "data": {"message": "the model is overloaded"}},
+        }
+    )
+
+    assert _adapter().classify_provider_overload(output, []) is not None
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_never_calls_the_transcript_reader() -> None:
+    output = json.dumps(
+        {
+            "type": "error",
+            "sessionID": "ses_x",
+            "error": {"name": "AI_APICallError", "data": {"message": "Overloaded", "statusCode": 529}},
+        }
+    )
+
+    class _ExplodingLines(list[str]):
+        def __iter__(self) -> Any:
+            raise AssertionError("classify_provider_overload must not read the transcript range")
+
+    overload = _adapter().classify_provider_overload(output, _ExplodingLines())
+
+    assert overload is not None
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_is_none_for_an_ordinary_provider_error() -> None:
+    payload = _fixture("provider_error")
+    output = _jsonl(payload["events"])
+
+    assert _adapter().classify_provider_overload(output, []) is None
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_is_none_for_a_429_usage_limit_refusal() -> None:
+    output = json.dumps(USAGE_LIMIT_EVENT)
+
+    assert _adapter().classify_provider_overload(output, []) is None
+
+
+@pytest.mark.unit
+def test_classify_provider_overload_tolerates_malformed_capture() -> None:
+    assert _adapter().classify_provider_overload("not json at all", []) is None

@@ -105,6 +105,7 @@ from blizzard.runner.domain.leases import (
     NewLease,
 )
 from blizzard.runner.domain.outbound import IReadOutboundRepository
+from blizzard.runner.domain.overload import IReadOverloadRepository
 from blizzard.runner.domain.pause import IReadPauseRepository
 from blizzard.runner.domain.requeue import IReadRequeueRepository
 from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
@@ -541,6 +542,18 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         recorded_at=_t(87),
     )
 
+    stores.overload.record_overload(
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        epoch=1,
+        generation=1,
+        invocation_kind="worker",
+        invocation_identity="1",
+        streak_ordinal=1,
+        observed_at=_t(88),
+        resume_after=_t(88) + timedelta(seconds=60),
+    )
+
     seq_a = stores.outbound.enqueue_outbound(
         kind="lease.minted", chunk_id=chunk_1, lease_id=lease_2, payload="{}", created_at=_t(90)
     )
@@ -707,6 +720,8 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadSelfTestResultRepository, "latest_selftest_result"): lambda w: w.read.selftest_results.latest_selftest_result(
         CLAUDE_CODE_HARNESS_ID
     ),
+    (IReadOverloadRepository, "overload_streak"): lambda w: w.read.overload.overload_streak(w.lease_2, 1),
+    (IReadOverloadRepository, "open_overload_facts"): lambda w: w.read.overload.open_overload_facts(),
 }
 
 #: Runner ``IRead*`` methods with no SQL behind them at all, each reasoned below.
