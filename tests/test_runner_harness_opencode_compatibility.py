@@ -63,7 +63,9 @@ from blizzard.runner.harness.internal.opencode_probe import (
 from blizzard.runner.harness.internal.opencode_sanitizer import REDACTED, sanitize_json, sanitize_value
 from blizzard.runner.harness.internal.opencode_shapes import (
     OpenCodeRunEvent,
+    OpenCodeSessionInfo,
     OpenCodeShapeError,
+    OpenCodeToolState,
     UnknownOpenCodeShapeError,
     parse_child_sessions,
     parse_model_reference,
@@ -425,6 +427,46 @@ def test_unknown_required_tool_and_message_shapes_fail_explicitly() -> None:
     export["messages"][0]["info"]["role"] = "system"
     with pytest.raises(UnknownOpenCodeShapeError, match="role has unknown value"):
         parse_session_export(export)
+
+
+def _empty_title_glob_state() -> dict[str, Any]:
+    payload = dict(_fixtures())["success"]
+    (part,) = (event["part"] for event in payload["events"] if event["part"]["id"] == "prt_success_glob")
+    assert part["state"]["title"] == ""
+    return copy.deepcopy(part["state"])
+
+
+def test_tool_state_normalizes_an_empty_title_to_none() -> None:
+    state = OpenCodeToolState.parse(_empty_title_glob_state())
+
+    assert state.title is None
+
+
+def test_tool_state_rejects_a_non_string_title() -> None:
+    state = _empty_title_glob_state()
+    state["title"] = 3
+
+    with pytest.raises(OpenCodeShapeError, match=r"state\.title"):
+        OpenCodeToolState.parse(state)
+
+
+def test_session_info_normalizes_an_empty_title_to_none() -> None:
+    payload = _fixtures()[0][1]
+    info = copy.deepcopy(payload["export"]["info"])
+    info["title"] = ""
+
+    parsed = OpenCodeSessionInfo.parse(info)
+
+    assert parsed.title is None
+
+
+def test_session_info_rejects_a_non_string_title() -> None:
+    payload = _fixtures()[0][1]
+    info = copy.deepcopy(payload["export"]["info"])
+    info["title"] = 3
+
+    with pytest.raises(OpenCodeShapeError, match=r"info\.title"):
+        OpenCodeSessionInfo.parse(info)
 
 
 def test_event_rejects_a_part_from_another_session() -> None:

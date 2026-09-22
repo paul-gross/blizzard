@@ -71,7 +71,8 @@ def _optional_string(value: Mapping[str, Any], key: str, where: str, *, allow_em
         return None
     raw = value[key]
     if not isinstance(raw, str) or (not raw and not allow_empty):
-        raise OpenCodeShapeError(f"{where}.{key} must be a non-empty string or null")
+        rule = "a string" if allow_empty else "a non-empty string"
+        raise OpenCodeShapeError(f"{where}.{key} must be {rule} or null")
     return raw
 
 
@@ -148,7 +149,7 @@ class OpenCodeToolState:
         raw_input = _object(_required(state, "input", where), f"{where}.input")
         output = _optional_string(state, "output", where, allow_empty=True)
         error = _optional_string(state, "error", where)
-        title = _optional_string(state, "title", where)
+        title = _optional_string(state, "title", where, allow_empty=True) or None
         if status == "completed" and output is None:
             raise OpenCodeShapeError(f"{where} with status 'completed' needs output")
         if status == "error" and error is None:
@@ -369,7 +370,7 @@ class OpenCodeSessionInfo:
             id=_string(info, "id", where),
             parent_id=_optional_string(info, "parentID", where),
             directory=_optional_string(info, "directory", where),
-            title=_optional_string(info, "title", where),
+            title=_optional_string(info, "title", where, allow_empty=True) or None,
             project_id=_optional_string(info, "projectID", where),
             raw=info,
         )
