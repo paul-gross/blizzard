@@ -73,6 +73,7 @@ class FindingStore:
                     locus=locus,
                     summary=summary,
                     introduced=introduced,
+                    source="routine",
                 )
             )
             conn.execute(insert(finding_facts).values(finding_id=finding_id, kind="add", recorded_at=at, note=None))
@@ -91,6 +92,7 @@ class FindingStore:
             note=None,
             last_seen_at=at,
             observed_count=0,
+            source="routine",
         )
 
     def record_fact(
@@ -317,6 +319,9 @@ class FindingStore:
             note=state.note,
             last_seen_at=state.last_seen_at,
             observed_count=state.observed_count,
+            source=row.source,
+            severity=row.severity,
+            raised_by_chunk_id=row.raised_by_chunk_id,
             actor=state.actor,
         )
 

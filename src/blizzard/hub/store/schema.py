@@ -351,7 +351,9 @@ findings = Table(
     "findings",
     metadata,
     Column("finding_id", String, primary_key=True),  # fin_<ulid>
-    Column("routine_name", String, nullable=False),  # D5 — a routine's own name, not its surrogate id
+    # D5 — a routine's own name, not its surrogate id; null for a `source="review"` finding,
+    # which carries no routine lineage (blizzard#582 D1).
+    Column("routine_name", String, nullable=True),
     Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),  # D5
     Column("class", String, key="class_", nullable=False),  # the deployment's own vocabulary; opaque to the hub
     Column("locus", String, nullable=False),  # a repo-relative path, optionally :line/::symbol; opaque to the hub
@@ -360,10 +362,23 @@ findings = Table(
     # `introduced`'s own authored instant (blizzard#394) — nullable, never backfilled: null
     # wherever unresolved, by design.
     Column("introduced_at", UtcDateTime, nullable=True),
+    # "routine" (a routine's run raised it) or "review" (a delivery lane's review raised
+    # it, blizzard#582 D1) — a finding's home, not its liveness.
+    Column("source", String, nullable=False, server_default="routine"),
+    # blizzard's own closed severity vocabulary (blocking/should-fix) — null for a
+    # routine-sourced finding, which carries no severity of its own (blizzard#582 D1).
+    Column("severity", String, nullable=True),
+    # The chunk whose review raised this finding — null for a routine-sourced finding.
+    Column("raised_by_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=True),
+    CheckConstraint("source IN ('routine', 'review')", name="ck_findings_source"),
 )
 
 Index("ix_findings_routine_scope", findings.c.routine_name, findings.c.scope_slug)
 Index("ix_findings_routine_class", findings.c.routine_name, findings.c.class_)
+# The garden bucket's widened read (blizzard#582 D3) — a routine's own findings are
+# filtered on `ix_findings_routine_scope` above; a review-sourced finding on the same
+# scope is filtered on this one instead, so the union costs two indexed reads, never a scan.
+Index("ix_findings_scope_source", findings.c.scope_slug, findings.c.source)
 
 # One row per `add`/`observed`/`gone`/`delivered`/exit/`reopened` transformation a delivered
 # list or a person applied to a finding (D2, D4, blizzard#394, blizzard#583) — first-recorded,

@@ -44,6 +44,11 @@ from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.pause import ChunkNotPausable
 from blizzard.hub.domain.restart import ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown
+from blizzard.hub.domain.review_findings import (
+    ReviewFindingsRejected,
+    parse_review_finding_delta,
+    validate_review_findings,
+)
 from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
     Chunk,
@@ -75,6 +80,7 @@ from blizzard.wire.chunk import (
     GardenDeliveryResponse,
     HubMarkerRequest,
     HubMarkerResponse,
+    ReviewFindingsDeliveryResponse,
     WorkItemEntry,
     WorkItemsView,
 )
@@ -393,6 +399,60 @@ def record_garden_delivery(
         proposal_artifact_ids=proposal_artifact_ids,
     )
     return GardenDeliveryResponse(outcome="recorded", detail="")
+
+
+#: The `review` node's own `produces:` asset name (blizzard#582 D8) — fixed, unlike
+#: garden delivery's caller-named `--delta`/`--proposals` artifacts, since exactly one
+#: review-finding delta feeds `record-findings`.
+_REVIEW_FINDING_DELTA_ARTIFACT = "review-finding-delta"
+
+
+@router.post(
+    "/chunks/{chunk_id}/review-findings-delivery",
+    response_model=ReviewFindingsDeliveryResponse,
+    dependencies=[Depends(require_marker_authority)],
+)
+def record_review_findings_delivery(
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> ReviewFindingsDeliveryResponse:
+    """The `record-findings` node's own route (blizzard#582) — validates the chunk's
+    newest `review-finding-delta` artifact and, on success, materializes its `deferred`
+    entries in one transaction. A malformed delta or an unresolvable node is an
+    ``invalid`` outcome at a 200, never an error response — the graph's own `invalid`
+    edge reads and routes on it. Idempotent per chunk (D6): a replay reads its own marker
+    before ever re-parsing the artifact."""
+    chunk = services.chunks.record.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    graph = services.graphs.get(chunk.graph_id)
+    node = graph.node_by_id(node_id) if graph is not None else None
+    if node is None:
+        return ReviewFindingsDeliveryResponse(
+            outcome="invalid", detail=f"unknown node {node_id!r} for chunk {chunk_id}"
+        )
+
+    # Checked before validation (D6): a replay must stay a no-op.
+    if services.review_findings.already_delivered(chunk_id=chunk_id):
+        return ReviewFindingsDeliveryResponse(outcome="recorded", detail="")
+
+    artifact = services.chunks.artifacts.latest_artifact(chunk_id, _REVIEW_FINDING_DELTA_ARTIFACT)
+    if artifact is None:
+        return ReviewFindingsDeliveryResponse(
+            outcome="invalid",
+            detail=f"no {_REVIEW_FINDING_DELTA_ARTIFACT!r} artifact found for chunk {chunk_id}",
+        )
+
+    try:
+        delta = parse_review_finding_delta(_REVIEW_FINDING_DELTA_ARTIFACT, artifact.data)
+        validated = validate_review_findings(delta)
+    except ReviewFindingsRejected as exc:
+        return ReviewFindingsDeliveryResponse(outcome="invalid", detail=str(exc))
+
+    services.review_findings.deliver(validated, chunk=chunk, node=node, epoch=epoch)
+    return ReviewFindingsDeliveryResponse(outcome="recorded", detail="")
 
 
 @router.post(

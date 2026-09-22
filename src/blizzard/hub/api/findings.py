@@ -54,6 +54,9 @@ def _finding_view_fields(finding: Finding) -> dict[str, object]:
         "note": finding.note,
         "last_seen_at": iso_utc(finding.last_seen_at) if finding.last_seen_at is not None else None,
         "observed_count": finding.observed_count,
+        "source": finding.source,
+        "severity": finding.severity,
+        "raised_by_chunk_id": finding.raised_by_chunk_id,
     }
 
 

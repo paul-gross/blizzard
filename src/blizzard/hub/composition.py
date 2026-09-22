@@ -84,6 +84,7 @@ from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.restart import RestartService
+from blizzard.hub.domain.review_findings_materialize import ReviewFindingsMaterialize
 from blizzard.hub.domain.routine_baselines import RoutineBaselineService
 from blizzard.hub.domain.routine_run import RunService
 from blizzard.hub.domain.routines import (
@@ -114,6 +115,7 @@ from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
@@ -270,6 +272,8 @@ class HubServices:
     answered_findings: AnsweredFindingsReader
     #: Materialize a validated delivery in one transaction (blizzard#393).
     garden_delivery: GardenDelivery
+    #: Materialize a delivery lane's deferred review findings, one per chunk (blizzard#582).
+    review_findings: ReviewFindingsMaterialize
     #: Resolves a cited commit against the configured forge (blizzard#393 D2).
     commit_resolver: CommitResolver
     #: A routine's finding inflow-against-outflow over a window (blizzard#394).
@@ -419,6 +423,7 @@ def build_services(
     garden_proposal_closure_store = GardenProposalClosureStore(store_connections)
     run_context_store = RunContextStore(store_connections)
     garden_delivery_store = GardenDeliveryStore(store_connections)
+    review_findings_store = ReviewFindingsStore(store_connections)
     garden_trend_store = GardenTrendStore(store_connections)
     garden_sweeps_store = GardenSweepsStore(store_connections)
     garden_run_store = GardenRunStore(store_connections)
@@ -592,6 +597,7 @@ def build_services(
             closures=garden_proposal_closure_store, proposals=garden_proposal_store, findings=finding_store
         ),
         garden_delivery=GardenDelivery(delivery=garden_delivery_store, clock=clock),
+        review_findings=ReviewFindingsMaterialize(delivery=review_findings_store, clock=clock),
         commit_resolver=commit_resolver,
         garden_trend=GardenTrendService(repo=garden_trend_store),
         garden_sweeps=GardenSweepsService(
