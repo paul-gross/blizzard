@@ -518,9 +518,7 @@ export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boole
  * The `record-findings` node's own route (blizzard#582) — validates the chunk's
  * newest `review-finding-delta` artifact and, on success, materializes its `deferred`
  * entries in one transaction. A malformed delta or an unresolvable node is an
- * ``invalid`` outcome at a 200, never an error response — the graph's own `invalid`
- * edge reads and routes on it. Idempotent per chunk (D6): a replay reads its own marker
- * before ever re-parsing the artifact.
+ * ``invalid`` outcome at a 200, never an error response. Idempotent per chunk (D6).
  */
 export const recordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPost = <ThrowOnError extends boolean = false>(options: Options<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostData, ThrowOnError>): RequestResult<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses, RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors, ThrowOnError> => (options.client ?? client).post<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses, RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/review-findings-delivery', ...options });
 
@@ -809,9 +807,8 @@ export const getChunkFindingApiFleetChunksChunkIdFindingsFindingIdGet = <ThrowOn
  * A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583
  * D2), widened to every review-sourced finding on the same scope (blizzard#582 D3) — the
  * chunk's own run context derives the routine and the scope; no caller-supplied flag can
- * name another, and every other exited state stays out. 404 both for an unknown chunk
- * and for one carrying no run context (not a routine run): a chunk with nothing to read
- * is refused rather than answered with an empty bucket.
+ * name another. 404 both for an unknown chunk and for one carrying no run context (not a
+ * routine run): a chunk with nothing to read is refused rather than an empty bucket.
  */
 export const getGardenFindingsApiFleetChunksChunkIdGardenFindingsGet = <ThrowOnError extends boolean = false>(options: Options<GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetData, ThrowOnError>): RequestResult<GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetResponses, GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetResponses, GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/garden/findings', ...options });
 
