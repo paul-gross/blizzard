@@ -121,11 +121,9 @@ A sample that produces nothing carries one of four reasons: `credential_lapsed` 
 from the provider), `credential_unreadable` (a missing or unparseable credential file), `endpoint_unreachable` (a
 connection failure, a timeout, or any other non-2xx status), and `response_unparseable` (a body the binding could not
 read). Every reason surfaces on the runner: `blizzard runner status`, the runner panel's subscriptions rail, and
-`GET
-/api/subscriptions` show the newest attempt's outcome, its miss reason, and its renewal outcome, and the probe
+`GET /api/subscriptions` show the newest attempt's outcome, its miss reason, and its renewal outcome, and the probe
 below prints the reason in operator words. Every miss crosses to the hub the same way a sample does — reporting
-`{slug, name,
-missed_at, reason}`, never a token, a refresh token, or a path — but only `credential_lapsed` renders: a
+`{slug, name, missed_at, reason}`, never a token, a refresh token, or a path — but only `credential_lapsed` renders: a
 slug whose newest lapsed miss postdates its newest sample shows on the board as "credential lapsed — log in again on
 this runner" in place of its pace bars, ageing out under the same staleness gate a sample does. Any other reason leaves
 the board exactly as an unsampled slug leaves it today, even though the hub has stored it.

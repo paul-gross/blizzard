@@ -14,12 +14,10 @@ _log = get_logger("blizzard.runner.subscriptions")
 
 
 class SubprocessOneShotProcess:
-    """Runs ``argv`` via ``subprocess.Popen``, feeding it ``stdin`` and closing it
-    ``settle_seconds`` after the write — the same one-request-then-EOF shape a
-    JSON-RPC-over-stdio vendor CLI expects, except EOF is delayed long enough for a
-    reply to an in-flight request to land first. ``stdin`` is assumed small enough
-    (a JSON-RPC handshake, not a data transfer) to fit an OS pipe buffer without a
-    concurrent reader, so the write below never blocks on a full stdout pipe."""
+    """Runs ``argv`` via ``subprocess.Popen``: writes ``stdin``, waits ``settle_seconds``, then
+    closes it — EOF delayed so a reply to an in-flight request can land first. ``stdin`` is
+    assumed small (a JSON-RPC handshake, not a data transfer), so the write fits the OS pipe
+    buffer without a concurrent reader and never blocks on a full stdout pipe."""
 
     def run(
         self, argv: Sequence[str], *, stdin: str, timeout: float, env: Mapping[str, str], settle_seconds: float = 0.0
