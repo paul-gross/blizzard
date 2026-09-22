@@ -13,6 +13,14 @@
           />
         }
       </div>
+    } @else if (group.condition === 'credential_lapsed') {
+      <div
+        class="sub-lapsed"
+        data-testid="subscription-pace-group-lapsed"
+        [attr.aria-label]="group.name + ' credential lapsed — log in again on this runner'"
+      >
+        credential lapsed — log in again on this runner
+      </div>
     } @else {
       <div
         class="sub-unsampled"

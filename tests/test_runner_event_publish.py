@@ -35,10 +35,12 @@ from blizzard.runner.loop.steps import Advance, ContextSample, ExternalUsageSamp
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
+    SampleMissReason,
 )
 from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.facts import (
     EVENT_RECORDED,
+    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     RUNNER_LOCALLY_PAUSED,
     USAGE_RECORDED,
@@ -805,6 +807,39 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
     fact_frames = _frames(events, "fact-changed")
     assert len(fact_frames) == 1
     assert fact_frames[0]["kind"] == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
+    assert fact_frames[0]["chunk_id"] is None
+    assert fact_frames[0]["lease_id"] is None
+
+
+def test_external_usage_miss_publishes_fact_changed(tmp_path: Path) -> None:
+    """A miss now buffers its own `missed` report (blizzard#504 D7) — this pins that the
+    row it buffers is announced, mirroring the sampled sibling above."""
+    store = _store(tmp_path)
+    events = EventBroker()
+    resolved = ResolvedSubscription(
+        slug="openai",
+        name="OpenAI",
+        sample_interval_seconds=300,
+        sampler=FakeSubscriptionSampler(miss_reason=SampleMissReason.CREDENTIAL_LAPSED),
+        renewer=None,
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        events=events,
+        subscriptions=(resolved,),
+    )
+
+    ExternalUsageSample(ctx).run()
+
+    fact_frames = _frames(events, "fact-changed")
+    assert len(fact_frames) == 1
+    assert fact_frames[0]["kind"] == EXTERNAL_SUBSCRIPTION_USAGE_MISSED
     assert fact_frames[0]["chunk_id"] is None
     assert fact_frames[0]["lease_id"] is None
 

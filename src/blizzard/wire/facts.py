@@ -32,6 +32,8 @@ EVENT_RECORDED = "event.recorded"
 # status derives from. Payload: {slug, sampled_at, windows: [...], name|null}; upserted
 # per (runner_id, slug), not appended.
 EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED = "external_subscription_usage.sampled"
+# A sampler miss (D7), upserted per (runner_id, slug) beside the sample. Payload: {slug, name, missed_at, reason} only.
+EXTERNAL_SUBSCRIPTION_USAGE_MISSED = "external_subscription_usage.missed"
 
 
 class ExternalSubscriptionUsageWindowFact(BaseModel):

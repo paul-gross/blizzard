@@ -44,6 +44,7 @@ _NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 _SAMPLED_KIND = "external_subscription_usage.sampled"
+_MISSED_KIND = "external_subscription_usage.missed"
 _SLUG = "anthropic"
 
 
@@ -267,12 +268,12 @@ def test_an_empty_sample_is_persisted_and_buffered_as_an_empty_windows_collectio
     assert payload["windows"] == []
 
 
-# AC 3 — a None sample writes a NULL-payload attempt row and enqueues nothing.
+# AC 3 — a miss writes a NULL-payload attempt row and enqueues a `missed` report (D7), never a `sampled` one.
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
-def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_no_sample_records_a_null_payload_attempt_and_enqueues_no_sampled_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(miss_reason=SampleMissReason.CREDENTIAL_LAPSED)
     clock = FixedClock(_NOW)
@@ -294,6 +295,42 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path)
     ExternalUsageSample(ctx).run()
     assert sampler.sample_calls == 1
     assert store.last_external_usage_attempt_at(_SLUG) == _NOW  # unchanged — no new attempt
+
+
+@pytest.mark.unit
+def test_a_miss_buffers_exactly_one_missed_report_with_the_exact_key_set(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The `missed` fact payload carries no token, refresh token, or path — this pins its
+    exact key set (blizzard#504 D7 acceptance)."""
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(miss_reason=SampleMissReason.CREDENTIAL_LAPSED)
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
+
+    ExternalUsageSample(ctx).run()
+
+    pending = [f for f in store.pending_outbound() if f.kind == _MISSED_KIND]
+    assert len(pending) == 1
+    fact = pending[0]
+    # Runner-scoped: no chunk_id/lease_id, mirroring the sampled report's own shape.
+    assert fact.chunk_id is None
+    assert fact.lease_id is None
+
+    payload = json.loads(fact.payload)
+    assert set(payload) == {"slug", "name", "missed_at", "reason"}
+    assert payload["slug"] == _SLUG
+    assert payload["name"] == _SLUG.title()
+    assert payload["missed_at"] == "2026-08-01T12:00:00+00:00"
+    assert payload["reason"] == "credential_lapsed"
+
+
+@pytest.mark.unit
+def test_a_successful_sample_enqueues_no_missed_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
+
+    ExternalUsageSample(ctx).run()
+
+    assert [f for f in store.pending_outbound() if f.kind == _MISSED_KIND] == []
 
 
 @pytest.mark.unit

@@ -4634,9 +4634,14 @@ export type SubmittedArtifact = {
  *
  * One reported subscription's newest sampled usage, carrying its identity
  * (issue #218). ``slug`` is the runner-unique join key, ``name`` the operator-facing
- * label.
+ * label. ``sampled_at`` is ``None`` for a miss-only row (blizzard#504 D7) — ``condition``
+ * carries the reason in that case, and ``windows`` is empty.
  */
 export type SubscriptionUsageView = {
+    /**
+     * Condition
+     */
+    condition?: string | null;
     /**
      * Name
      */
@@ -4644,7 +4649,7 @@ export type SubscriptionUsageView = {
     /**
      * Sampled At
      */
-    sampled_at: string;
+    sampled_at?: string | null;
     /**
      * Slug
      */

@@ -12,6 +12,7 @@ from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
     EVENT_RECORDED,
+    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     LEASE_MINTED,
     QUESTION_ASKED,
@@ -62,7 +63,7 @@ class IngestBroadcast:
         """The runner-scoped kinds dispatch first: carrying no ``chunk_id``, the chunk arm drops them."""
         if fact.kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
             self._runner_pause(fact, row_id)
-        elif fact.kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
+        elif fact.kind in (EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED, EXTERNAL_SUBSCRIPTION_USAGE_MISSED):
             self.services.events.publish_runner_changed(self.batch.runner_id, kind="external-usage")
         elif fact.kind == EVENT_RECORDED:
             pass  # already published by EventLogService.record

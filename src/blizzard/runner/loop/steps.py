@@ -49,6 +49,7 @@ from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscript
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import (
     EVENT_RECORDED,
+    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     ExternalSubscriptionUsageWindowFact,
 )
@@ -761,24 +762,31 @@ class ExternalUsageSample(Step):
             # Declared, but its provider names no known sampler binding — stays declared
             # and unsampled: no attempt row, since there is no sampler to have failed.
             return
-        # Renewal, if this provider has a binding, happens before the sample — on this
-        # same cadence gate, never its own (D5). A failed or not-due renewal never stops
-        # the sample that follows it.
+        # Renewal, if this provider binds one, runs before the sample on this same cadence
+        # gate, never its own (D5); a failed or not-due renewal never stops the sample.
         renewal = self._renewal_value(resolved)
-        # A miss is the sampler's own best-effort result — still an attempt worth
-        # recording, so this slug's cadence advances and its last-good windows stay
-        # untouched, with the reason carried for the runner-local diagnostics to show.
+        # A miss is still an attempt worth recording: this slug's cadence advances, its
+        # last-good windows stay untouched, and the reason feeds the runner-local diagnostics.
         result = resolved.sampler.sample()
         if isinstance(result, SampleMiss):
-            ctx.stores.usage.record_external_usage_attempt(
+            missed_at = ctx.clock.now()
+            missed_payload = json.dumps(self._miss_payload(resolved, result, missed_at=missed_at))
+            seq = ctx.stores.usage.record_external_usage_attempt(
                 slug=resolved.slug,
-                sampled_at=ctx.clock.now(),
+                sampled_at=missed_at,
                 payload=None,
-                report_kind="",
-                report_payload="",
+                report_kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+                report_payload=missed_payload,
                 miss_reason=result.reason.value,
                 renewal=renewal,
             )
+            if seq is not None and ctx.events is not None:
+                ctx.events.publish_fact_changed(
+                    seq=seq,
+                    kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+                    chunk_id=None,
+                    lease_id=None,
+                )
             return
         snapshot = result
         payload = json.dumps(self._payload(resolved, snapshot))
@@ -812,6 +820,18 @@ class ExternalUsageSample(Step):
             _log.warning("credential renewal failed unexpectedly", slug=resolved.slug, detail=str(exc))
             return None
         return _renewal_outcome_value(outcome)
+
+    @staticmethod
+    def _miss_payload(resolved: ResolvedSubscription, result: SampleMiss, *, missed_at: datetime) -> dict[str, object]:
+        """The stable JSON shape for a sampler miss (blizzard#504 D7) — exactly ``{slug,
+        name, missed_at, reason}``, the reason only: never a token, a refresh token, or a
+        path crosses on a miss."""
+        return {
+            "slug": resolved.slug,
+            "name": resolved.name,
+            "missed_at": iso_utc(missed_at),
+            "reason": result.reason.value,
+        }
 
     @staticmethod
     def _payload(resolved: ResolvedSubscription, snapshot: ExternalSubscriptionUsageSnapshot) -> dict[str, object]:

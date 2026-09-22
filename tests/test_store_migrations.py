@@ -363,6 +363,29 @@ def test_chunk_dependencies_table_survives_migration_roundtrip(tmp_path: Path) -
     assert "chunk_dependencies" in _table_names()
 
 
+def test_runner_external_usage_misses_table_survives_migration_roundtrip(tmp_path: Path) -> None:
+    """``runner_external_usage_misses`` (blizzard#504 D7) — one hand-written revision mints
+    the table; downgrades to its own parent by id, so the drop half is asserted rather than
+    inferred from a revision marker a no-op ``downgrade()`` would satisfy just as well."""
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _has_table() -> bool:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            return "runner_external_usage_misses" in sa.inspect(engine).get_table_names()
+        finally:
+            engine.dispose()
+
+    assert _has_table()
+
+    runner.downgrade("20260922_1000_review_findings")
+    assert not _has_table()
+
+    runner.upgrade("head")
+    assert _has_table()
+
+
 _ROUTINE_SCOPES_JOIN_PARENT = "20260905_1100_hub_runner_external_usage_slug"
 
 

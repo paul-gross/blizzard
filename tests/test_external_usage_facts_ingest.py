@@ -20,7 +20,12 @@ from blizzard.hub.domain.registry import FleetService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from blizzard.wire.facts import EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED, RunnerFact, RunnerFactBatch
+from blizzard.wire.facts import (
+    EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+    RunnerFact,
+    RunnerFactBatch,
+)
 from tests.support import build_hub, chunk_stores, emitted_events, hub_store_connections, migrate_to
 
 pytestmark = pytest.mark.component
@@ -272,6 +277,7 @@ def test_get_runners_renders_the_landed_sample_on_its_subscription(tmp_path: Pat
                     "window_seconds": 18000,
                 }
             ],
+            "condition": None,
         }
     }
 
@@ -423,7 +429,7 @@ def test_malformed_usage_windows_are_omitted_and_a_later_valid_empty_sample_rend
     assert healthy.status_code == 200, healthy.text
     assert healthy.json()["applied"] == [2]
     assert hub.client.get("/api/runners").json()["runners"][0]["subscriptions"] == [
-        {"slug": "anthropic", "name": "Anthropic", "sampled_at": empty_at.isoformat(), "windows": []}
+        {"slug": "anthropic", "name": "Anthropic", "sampled_at": empty_at.isoformat(), "windows": [], "condition": None}
     ]
 
 
@@ -542,3 +548,295 @@ def test_a_stale_subscription_does_not_blank_a_healthy_sibling_at_the_component_
     # The stale sibling is simply absent — never a reason to omit the healthy one.
     assert set(subscriptions) == {"anthropic"}
     assert subscriptions["anthropic"]["windows"][0]["utilization_pct"] == 5.0
+
+
+# blizzard#504 D7 — the `missed` fact.
+# --------------------------------------------------------------------------- #
+
+
+def _miss_payload(*, slug: str, missed_at: datetime, reason: str, name: str | None = None) -> dict:
+    payload: dict = {"slug": slug, "missed_at": missed_at.isoformat(), "reason": reason}
+    if name is not None:
+        payload["name"] = name
+    return payload
+
+
+def _miss_row(engine: sa.Engine, runner_id: str, slug: str = "openai"):  # type: ignore[no-untyped-def]
+    with engine.connect() as conn:
+        return conn.execute(
+            sa.select(s.runner_external_usage_misses).where(
+                s.runner_external_usage_misses.c.runner_id == runner_id,
+                s.runner_external_usage_misses.c.slug == slug,
+            )
+        ).one_or_none()
+
+
+def test_a_missed_fact_upserts_one_row_and_a_later_call_wins(tmp_path: Path) -> None:
+    _, engine = migrate_to(tmp_path, "head")
+    clock = FixedClock(_T0)
+    service = _service(engine, clock)
+
+    first = service.ingest(
+        RunnerFactBatch(
+            runner_id="r1",
+            facts=[
+                RunnerFact(
+                    seq=1,
+                    kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+                    payload=_miss_payload(slug="openai", missed_at=_T0, reason="credential_lapsed", name="OpenAI"),
+                )
+            ],
+        )
+    )
+    assert first.ack.applied == [1]
+
+    row = _miss_row(engine, "r1")
+    assert row is not None
+    assert row.reason == "credential_lapsed"
+    assert row.name == "OpenAI"
+
+    later = _T0.replace(hour=13)
+    second = service.ingest(
+        RunnerFactBatch(
+            runner_id="r1",
+            facts=[
+                RunnerFact(
+                    seq=2,
+                    kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+                    payload=_miss_payload(slug="openai", missed_at=later, reason="endpoint_unreachable"),
+                )
+            ],
+        )
+    )
+    assert second.ack.applied == [2]
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa.select(s.runner_external_usage_misses).where(s.runner_external_usage_misses.c.runner_id == "r1")
+        ).all()
+    # Exactly one row (upsert, not append), carrying the later call's payload.
+    assert len(rows) == 1
+    assert rows[0].reason == "endpoint_unreachable"
+    assert rows[0].missed_at == later
+
+
+def test_a_missed_fact_never_touches_the_sample_row(tmp_path: Path) -> None:
+    """The sample row and the miss row are siblings (D7) — landing one never overwrites
+    or deletes the other."""
+    _, engine = migrate_to(tmp_path, "head")
+    clock = FixedClock(_T0)
+    service = _service(engine, clock)
+
+    service.ingest(
+        RunnerFactBatch(
+            runner_id="r1",
+            facts=[
+                RunnerFact(
+                    seq=1,
+                    kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+                    payload=_payload(slug="openai", sampled_at=_T0, utilization_pct=10.0, name="OpenAI"),
+                )
+            ],
+        )
+    )
+    service.ingest(
+        RunnerFactBatch(
+            runner_id="r1",
+            facts=[
+                RunnerFact(
+                    seq=2,
+                    kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+                    payload=_miss_payload(
+                        slug="openai", missed_at=_T0 + timedelta(minutes=1), reason="credential_lapsed"
+                    ),
+                )
+            ],
+        )
+    )
+
+    sample_row = _row(engine, "r1", "openai")
+    miss_row = _miss_row(engine, "r1", "openai")
+    assert sample_row is not None
+    assert miss_row is not None
+    assert json.loads(sample_row.windows)[0]["utilization_pct"] == 10.0
+    assert miss_row.reason == "credential_lapsed"
+
+
+def test_a_missed_fact_for_a_runner_with_no_registration_row_applies_without_stalling_high_water(
+    tmp_path: Path,
+) -> None:
+    """Mirrors the sampled fact's own no-FK, no-known-runner-required acceptance."""
+    _, engine = migrate_to(tmp_path, "head")
+    clock = FixedClock(_T0)
+    service = _service(engine, clock)
+
+    result = service.ingest(
+        RunnerFactBatch(
+            runner_id="ghost-runner",
+            facts=[
+                RunnerFact(
+                    seq=1,
+                    kind=EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+                    payload=_miss_payload(slug="openai", missed_at=_T0, reason="credential_lapsed"),
+                )
+            ],
+        )
+    )
+    assert result.ack.applied == [1]
+    assert result.ack.high_water == 1
+    assert _miss_row(engine, "ghost-runner") is not None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"missed_at": _T0.isoformat(), "reason": "credential_lapsed"},
+        {"slug": "", "missed_at": _T0.isoformat(), "reason": "credential_lapsed"},
+        {"slug": 123, "missed_at": _T0.isoformat(), "reason": "credential_lapsed"},
+    ],
+    ids=["missing-slug", "empty-slug", "non-string-slug"],
+)
+def test_a_missed_fact_with_an_invalid_slug_is_rejected_without_writing_a_row(
+    tmp_path: Path, payload: dict[str, object]
+) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+
+    response = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [{"seq": 1, "kind": "external_subscription_usage.missed", "payload": payload}],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["rejected"] == [1]
+    assert hub.client.get("/api/runners/r1").json()["subscriptions"] == []
+
+
+def test_posted_missed_fact_publishes_runner_changed_once_and_a_replay_publishes_nothing(tmp_path: Path) -> None:
+    """The actual route, mirroring the sampled fact's own broadcast pin — a real-side
+    `_publish_one` branch missing would leave this landing but never broadcasting."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+    since = hub.events.latest_id()
+
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.missed",
+                    "payload": _miss_payload(slug="openai", missed_at=_T0, reason="credential_lapsed"),
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["applied"] == [1]
+
+    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == "runner-changed"]
+    assert frames == [{"runner_id": "r1", "kind": "external-usage"}]
+
+
+def test_get_runners_renders_a_lapsed_credential_as_a_miss_only_condition_row(tmp_path: Path) -> None:
+    """The hub end-to-end: a miss with no prior sample renders as a miss-only,
+    `credential_lapsed` row on `GET /api/runners` (D7)."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+
+    missed_at = hub.clock.now() - timedelta(minutes=1)
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.missed",
+                    "payload": _miss_payload(
+                        slug="openai", missed_at=missed_at, reason="credential_lapsed", name="OpenAI"
+                    ),
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    detail = hub.client.get("/api/runners/r1").json()
+    assert detail["subscriptions"] == [
+        {"slug": "openai", "name": "OpenAI", "sampled_at": None, "windows": [], "condition": "credential_lapsed"}
+    ]
+
+
+def test_get_runners_clears_the_condition_once_a_newer_sample_lands(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+
+    now = hub.clock.now()
+    missed_at = now - timedelta(minutes=10)
+    sampled_at = now - timedelta(minutes=1)
+    hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.missed",
+                    "payload": _miss_payload(
+                        slug="openai", missed_at=missed_at, reason="credential_lapsed", name="OpenAI"
+                    ),
+                }
+            ],
+        },
+    )
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 2,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": _payload(slug="openai", sampled_at=sampled_at, utilization_pct=5.0, name="OpenAI"),
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    detail = hub.client.get("/api/runners/r1").json()
+    assert len(detail["subscriptions"]) == 1
+    assert detail["subscriptions"][0]["condition"] is None
+    assert detail["subscriptions"][0]["sampled_at"] is not None
+    assert detail["subscriptions"][0]["windows"][0]["utilization_pct"] == 5.0
+
+
+def test_get_runners_stays_silent_for_a_non_lapsed_miss_reason(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+
+    resp = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "external_subscription_usage.missed",
+                    "payload": _miss_payload(
+                        slug="openai", missed_at=hub.clock.now(), reason="endpoint_unreachable", name="OpenAI"
+                    ),
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Never sampled and only a non-lapsed miss on record — absent entirely, exactly as a
+    # never-sampled slug always has been.
+    assert hub.client.get("/api/runners/r1").json()["subscriptions"] == []

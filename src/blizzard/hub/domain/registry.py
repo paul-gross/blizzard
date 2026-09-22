@@ -31,6 +31,10 @@ def _usage_stale(sampled_at: datetime, *, now: datetime) -> bool:
     return (as_utc(now) - as_utc(sampled_at)) > EXTERNAL_USAGE_STALE_AFTER
 
 
+#: The one miss reason surfaced as a per-slug ``condition`` (D7); a literal, never a ``blizzard.runner`` import.
+CREDENTIAL_LAPSED_CONDITION = "credential_lapsed"
+
+
 @dataclass(frozen=True)
 class RunnerRegistration:
     """A fleet-registry row with its two **derived** brakes (issue #43): ``hub_paused``, the fleet's own,
@@ -60,6 +64,8 @@ class RunnerRegistration:
     #: Every declared subscription's newest reported sample, raw, one per slug (issue #218) —
     #: staleness is applied per slug at derive time, not here.
     subscription_usage: tuple[SubscriptionUsageRecord, ...] = ()
+    #: Every declared subscription's newest reported miss, one per slug (D7) — unioned with the samples at derive time.
+    subscription_usage_misses: tuple[SubscriptionUsageMissRecord, ...] = ()
     #: The runner's reported capability snapshot — every harness/tier it can execute right now.
     capabilities: tuple[RunnerCapability, ...] = ()
 
@@ -121,28 +127,73 @@ class SubscriptionUsageRecord:
 
 
 @dataclass(frozen=True)
-class PerSubscriptionUsageView:
-    """One subscription's usage, past its own staleness gate, carrying its identity
-    (blizzard#436)."""
+class SubscriptionUsageMissRecord:
+    """One declared subscription's newest reported miss, raw (blizzard#504 D7) — staleness
+    is applied at derive time, mirroring :class:`SubscriptionUsageRecord`. ``reason`` is the
+    sampler's closed-set miss reason; no token, refresh token, or path ever crosses on a
+    miss."""
 
     slug: str
     name: str
-    sampled_at: datetime
+    missed_at: datetime
+    reason: str
+
+
+@dataclass(frozen=True)
+class PerSubscriptionUsageView:
+    """One subscription's usage, past its own staleness gate, carrying its identity
+    (blizzard#436). ``sampled_at`` is ``None`` for a miss-only row (blizzard#504 D7) —
+    ``condition`` carries the reason in that case, and ``windows`` is empty."""
+
+    slug: str
+    name: str
+    sampled_at: datetime | None
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
+    #: ``"credential_lapsed"`` when the newest miss outranks the newest sample (D7); ``None`` otherwise.
+    condition: str | None = None
 
     @classmethod
     def every(cls, registration: RunnerRegistration, *, now: datetime) -> tuple[PerSubscriptionUsageView, ...]:
         """Every declared subscription's non-stale view, sorted by slug — a portable,
-        deterministic order (``bzh:sql-portable``) — one dead or stale subscription is
-        simply absent from this collection, never a reason to omit any other."""
+        deterministic order (``bzh:sql-portable``) — over the **union** of sample and miss
+        rows per slug (blizzard#504 D7): a newest lapsed miss outranking its (or an absent)
+        sample renders as a miss-only row; a dead or stale subscription, or one with only
+        silent (non-lapsed) misses, is simply absent, never a reason to omit any other."""
+        samples = {record.slug: record for record in registration.subscription_usage}
+        misses = {record.slug: record for record in registration.subscription_usage_misses}
         views: list[PerSubscriptionUsageView] = []
-        for record in registration.subscription_usage:
-            if _usage_stale(record.sampled_at, now=now):
+        for slug in sorted(set(samples) | set(misses)):
+            sample = samples.get(slug)
+            miss = misses.get(slug)
+            if cls._lapsed(sample, miss, now=now):
+                assert miss is not None  # _lapsed only returns True when miss is not None
+                views.append(
+                    cls(slug=slug, name=miss.name, sampled_at=None, windows=(), condition=CREDENTIAL_LAPSED_CONDITION)
+                )
                 continue
-            views.append(
-                cls(slug=record.slug, name=record.name, sampled_at=as_utc(record.sampled_at), windows=record.windows)
-            )
+            if sample is not None and not _usage_stale(sample.sampled_at, now=now):
+                views.append(
+                    cls(
+                        slug=slug,
+                        name=sample.name,
+                        sampled_at=as_utc(sample.sampled_at),
+                        windows=sample.windows,
+                        condition=None,
+                    )
+                )
         return tuple(views)
+
+    @staticmethod
+    def _lapsed(
+        sample: SubscriptionUsageRecord | None, miss: SubscriptionUsageMissRecord | None, *, now: datetime
+    ) -> bool:
+        """``True`` iff this slug's newest miss is a non-stale ``credential_lapsed`` newer
+        than its newest (or absent) sample — the one condition worth surfacing (D7)."""
+        if miss is None or miss.reason != CREDENTIAL_LAPSED_CONDITION:
+            return False
+        if sample is not None and as_utc(sample.sampled_at) >= as_utc(miss.missed_at):
+            return False
+        return not _usage_stale(miss.missed_at, now=now)
 
 
 class IReadRunnerRegistry(Protocol):
@@ -226,6 +277,14 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         runner: a fact for one the registry has not seen lands anyway, and is read once it has."""
         ...
 
+    def record_external_usage_miss(
+        self, runner_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+    ) -> None:
+        """Upsert one declared subscription's newest reported miss (blizzard#504 D7), keyed on
+        ``(runner_id, slug)`` — refresh-in-place, mirroring :meth:`record_external_usage`. The
+        sample row is left untouched: this is a sibling table, not an overwrite of it."""
+        ...
+
 
 class FleetService:
     """Register runners, refresh liveness, and set the declarative pause brake."""
@@ -306,6 +365,19 @@ class FleetService:
             runner_id, slug=slug, name=name, sampled_at=sampled_at, windows_json=windows_json, at=at
         )
         _log.info("runner external usage sample landed", runner_id=runner_id, slug=slug, sampled_at=sampled_at)
+
+    def record_external_usage_miss(
+        self, runner_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
+    ) -> None:
+        """Land one declared subscription's reported miss (blizzard#504 D7) — refresh-in-place
+        per ``(runner_id, slug)``, mirroring :meth:`record_external_usage`'s own
+        no-known-runner-required acceptance."""
+        self._registry.record_external_usage_miss(
+            runner_id, slug=slug, name=name, missed_at=missed_at, reason=reason, at=at
+        )
+        _log.info(
+            "runner external usage miss landed", runner_id=runner_id, slug=slug, reason=reason, missed_at=missed_at
+        )
 
     def get_liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
         """One runner's derived liveness over its loaded registration

@@ -25,11 +25,13 @@ describe('SubscriptionPaceGroup', () => {
         slug: 'anthropic-default',
         name: 'Anthropic (default)',
         paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }],
+        condition: null,
       },
       {
         slug: 'anthropic-secondary',
         name: 'Anthropic (secondary)',
         paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }],
+        condition: null,
       },
     ]);
 
@@ -62,7 +64,9 @@ describe('SubscriptionPaceGroup', () => {
   });
 
   it('reports no usage windows for a subscription with a sampled empty window list', async () => {
-    const el = await render([{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [] }]);
+    const el = await render([
+      { slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [], condition: null },
+    ]);
 
     const group = el.querySelector('[data-subscription-slug="anthropic-default"]');
     expect(group?.querySelector('[data-testid="runner-pace-bar"]')).toBeNull();
@@ -70,6 +74,19 @@ describe('SubscriptionPaceGroup', () => {
     expect(unsampled).not.toBeNull();
     expect(unsampled?.textContent?.trim()).toBe('NO USAGE WINDOWS REPORTED');
     expect(unsampled?.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
+  });
+
+  it('renders a lapsed credential in place of the empty-windows message (blizzard#504)', async () => {
+    const el = await render([
+      { slug: 'openai', name: 'OpenAI', paceBars: [], condition: 'credential_lapsed' },
+    ]);
+
+    const group = el.querySelector('[data-subscription-slug="openai"]');
+    expect(group?.querySelector('[data-testid="runner-pace-bar"]')).toBeNull();
+    expect(group?.querySelector('[data-testid="subscription-pace-group-unsampled"]')).toBeNull();
+    const lapsed = group?.querySelector('[data-testid="subscription-pace-group-lapsed"]');
+    expect(lapsed).not.toBeNull();
+    expect(lapsed?.textContent?.trim()).toBe('credential lapsed — log in again on this runner');
   });
 
   it('renders nothing at all for a runner with no declared subscriptions', async () => {

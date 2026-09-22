@@ -26,3 +26,8 @@
   font-size: var(--fs-xs);
   letter-spacing: 0.08em;
 }
+.sub-lapsed {
+  color: var(--amber);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+}
