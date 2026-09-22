@@ -31,6 +31,7 @@ function dashboardBody(facts: readonly runnerApi.FactView[]): runnerApi.Dashboar
     fleet_summary: null,
     facts: { items: [...facts] },
     harness_health: { items: [] },
+    subscriptions: { items: [] },
   };
 }
 

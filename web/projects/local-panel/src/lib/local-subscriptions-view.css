@@ -1,0 +1,36 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.sub {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.s-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.name {
+  color: var(--amber-hi);
+  font-size: var(--fs-sm);
+}
+.provider {
+  color: var(--label);
+  font-size: var(--fs-label);
+}
+.condition {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  margin-top: 2px;
+}
+.sub.miss .condition {
+  color: var(--red);
+}
+.sampled {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  margin-top: 3px;
+}

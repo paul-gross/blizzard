@@ -11,6 +11,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from blizzard.cli.main import blizzard
+from blizzard.runner.subscriptions.subscription_sampler import SampleMiss, SampleMissReason
 
 pytestmark = pytest.mark.unit
 
@@ -43,3 +44,29 @@ def test_an_unknown_slug_still_errors_by_name(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "mystery" in result.output
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected"),
+    [
+        (SampleMissReason.CREDENTIAL_LAPSED, "no sample: credential lapsed: log in again"),
+        (SampleMissReason.CREDENTIAL_UNREADABLE, "no sample: credential unreadable"),
+        (SampleMissReason.ENDPOINT_UNREACHABLE, "no sample: endpoint unreachable"),
+        (SampleMissReason.RESPONSE_UNPARSEABLE, "no sample: response unparseable"),
+    ],
+)
+def test_a_miss_prints_its_own_distinguishable_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: SampleMissReason, expected: str
+) -> None:
+    root = _runtime(tmp_path)
+
+    class _MissSampler:
+        def sample(self) -> SampleMiss:
+            return SampleMiss(reason)
+
+    monkeypatch.setattr("blizzard.runner.cli.external_usage.select_sampler", lambda *args, **kwargs: _MissSampler())
+
+    result = _probe(root)
+
+    assert result.exit_code == 0, result.output
+    assert expected in result.output

@@ -1,0 +1,10 @@
+@for (row of rows(); track row.slug) {
+  <div class="sub" data-testid="subscription-row" [attr.data-slug]="row.slug" [class.miss]="row.ok === false">
+    <div class="s-hdr">
+      <span class="name">{{ row.name }}</span>
+      <span class="provider">{{ row.provider }}</span>
+    </div>
+    <div class="condition">{{ row.conditionLabel }}</div>
+    <div class="sampled">sampled {{ row.sampledAgo }}</div>
+  </div>
+}

@@ -1000,7 +1000,7 @@
         "type": "object"
       },
       "DashboardView": {
-        "description": "``GET /api/dashboard`` \u2014 eight status reads composed into one response.\n``fleet_summary`` alone is a hub pass-through and the only nullable section \u2014\n``None`` on a hub failure or an unwired runner, while the seven local sections\nstill populate.",
+        "description": "``GET /api/dashboard`` \u2014 nine status reads composed into one response.\n``fleet_summary`` alone is a hub pass-through and the only nullable section \u2014\n``None`` on a hub failure or an unwired runner, while the eight local sections\nstill populate.",
         "properties": {
           "asks": {
             "$ref": "#/components/schemas/AskListResponse"
@@ -1030,6 +1030,9 @@
           "runner": {
             "$ref": "#/components/schemas/RunnerStatusView"
           },
+          "subscriptions": {
+            "$ref": "#/components/schemas/SubscriptionListResponse"
+          },
           "takeovers": {
             "$ref": "#/components/schemas/OpenTakeoverListResponse"
           }
@@ -1042,6 +1045,7 @@
           "takeovers",
           "facts",
           "harness_health",
+          "subscriptions",
           "fleet_summary"
         ],
         "title": "DashboardView",
@@ -3252,6 +3256,89 @@
         "title": "StagedAttachment",
         "type": "object"
       },
+      "SubscriptionListResponse": {
+        "description": "Every declared subscription's own newest sampling attempt.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "SubscriptionListResponse",
+        "type": "object"
+      },
+      "SubscriptionView": {
+        "description": "One declared subscription's own runner-local diagnostics (blizzard#504) \u2014\n``GET /api/subscriptions``. ``sampled_at``/``ok``/``miss_reason``/``renewal`` are all\n``None`` when this slug has never been attempted. ``miss_reason`` is one of\n``credential_lapsed``, ``credential_unreadable``, ``endpoint_unreachable``, or\n``response_unparseable`` when ``ok`` is ``False``; ``None`` when ``ok`` is ``True``.\n``renewal`` is ``None`` until a renewer is wired for this slug's provider.",
+        "properties": {
+          "miss_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Miss Reason"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ok"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "renewal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal"
+          },
+          "sampled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampled At"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "provider"
+        ],
+        "title": "SubscriptionView",
+        "type": "object"
+      },
       "TakeoverEndResponse": {
         "description": "``PATCH /chunks/{id}/takeovers/{tid}`` \u2014 the takeover is recorded closed.",
         "properties": {
@@ -4836,7 +4923,7 @@
     },
     "/api/dashboard": {
       "get": {
-        "description": "The panel's eight reads composed into one \u2014 the seven local sections always\npopulate; ``fleet_summary`` is ``None`` on a hub outage or an unwired runner.",
+        "description": "The panel's nine reads composed into one \u2014 the eight local sections always\npopulate; ``fleet_summary`` is ``None`` on a hub outage or an unwired runner.",
         "operationId": "get_dashboard_api_dashboard_get",
         "responses": {
           "200": {
@@ -5972,6 +6059,28 @@
           }
         },
         "summary": "Get Selftest",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/subscriptions": {
+      "get": {
+        "description": "Every declared subscription's own newest sampling attempt.",
+        "operationId": "list_subscriptions_api_subscriptions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Subscriptions",
         "tags": [
           "runner"
         ]

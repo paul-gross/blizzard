@@ -92,6 +92,7 @@ function dashboardBody(asks: unknown) {
     takeovers: { items: [] },
     facts: { items: [] },
     harness_health: { items: [] },
+    subscriptions: { items: [] },
     fleet_summary: null,
   };
 }

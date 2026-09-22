@@ -18,7 +18,12 @@ from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
-from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from blizzard.runner.subscriptions.subscription_sampler import (
+    PROVIDER_ANTHROPIC,
+    PROVIDER_OPENAI,
+    SampleMiss,
+    SampleMissReason,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -44,7 +49,9 @@ def test_the_anthropic_provider_selects_an_anthropic_sampler_carrying_its_creden
     # Observes the threaded-through path via the sampler's own behavior, never a private
     # attribute: it fails to read *this* file, not the default credentials location.
     with capture_logs() as logs:
-        assert sampler.sample() is None
+        result = sampler.sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
     assert any(log.get("path") == str(missing_credentials) for log in logs)
 
 
@@ -60,7 +67,9 @@ def test_the_openai_provider_selects_an_openai_sampler_carrying_its_credentials_
     # Observes the threaded-through path via the sampler's own behavior, never a private
     # attribute: it fails to read *this* file, not the default credentials location.
     with capture_logs() as logs:
-        assert sampler.sample() is None
+        result = sampler.sample()
+        assert isinstance(result, SampleMiss)
+        assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
     assert any(log.get("path") == str(missing_credentials) for log in logs)
 
 

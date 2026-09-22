@@ -20,6 +20,8 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
     ISubscriptionSampler,
+    SampleMiss,
+    SampleMissReason,
 )
 
 _log = get_logger("blizzard.runner.harness")
@@ -58,10 +60,10 @@ class AnthropicSubscriptionSampler:
         self._http_client = http_client
         self._clock: IClock = clock
 
-    def sample(self) -> ExternalSubscriptionUsageSnapshot | None:
+    def sample(self) -> ExternalSubscriptionUsageSnapshot | SampleMiss:
         access_token = self._read_access_token()
-        if access_token is None:
-            return None
+        if isinstance(access_token, SampleMiss):
+            return access_token
         try:
             resp = self._http_client().get(
                 f"{self._usage_api_base}{_USAGE_PATH}",
@@ -76,33 +78,37 @@ class AnthropicSubscriptionSampler:
             # Covers both a timeout and a connection failure: a best-effort diagnostic
             # sample, never a spawn/resume failure.
             _log.warning("external subscription usage sample failed: request error", detail=str(exc))
-            return None
+            return SampleMiss(SampleMissReason.ENDPOINT_UNREACHABLE)
         if not resp.is_success:
             _log.warning("external subscription usage sample failed: non-2xx response", status_code=resp.status_code)
-            return None
+            # A 401 here is the token-lapsed-mid-flight path: the file's own `expiresAt`
+            # hadn't caught up yet, but the provider has already refused it.
+            if resp.status_code == 401:
+                return SampleMiss(SampleMissReason.CREDENTIAL_LAPSED)
+            return SampleMiss(SampleMissReason.ENDPOINT_UNREACHABLE)
         try:
             body = resp.json()
         except ValueError as exc:
             _log.warning("external subscription usage sample failed: unparseable response body", detail=str(exc))
-            return None
+            return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
         if not isinstance(body, dict):
             _log.warning(
                 "external subscription usage sample failed: unexpected response shape",
                 body_type=type(body).__name__,
             )
-            return None
+            return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
         windows = self._parse_usage_windows(body)
         if not windows:
             _log.warning("external subscription usage sample failed: no parseable windows in response")
-            return None
+            return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
         return ExternalSubscriptionUsageSnapshot(sampled_at=self._clock.now(), windows=tuple(windows))
 
-    def _read_access_token(self) -> str | None:
-        """The OAuth bearer token from the credential file, or ``None`` on any failure.
+    def _read_access_token(self) -> str | SampleMiss:
+        """The OAuth bearer token from the credential file, or the reason it could not be read.
 
         Read-only, always: the harness owns the refresh flow and the file is shared by
         every worker this runner spawns, so a second writer risks corrupting it mid-refresh.
-        An expired token is another ``None`` path, never a refresh trigger."""
+        An expired token is ``CREDENTIAL_LAPSED``, never a refresh trigger."""
         try:
             raw = Path(self._credentials_path).read_text()
         except OSError as exc:
@@ -111,7 +117,7 @@ class AnthropicSubscriptionSampler:
                 path=self._credentials_path,
                 detail=str(exc),
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
@@ -120,35 +126,35 @@ class AnthropicSubscriptionSampler:
                 path=self._credentials_path,
                 detail=str(exc),
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         oauth = data.get("claudeAiOauth") if isinstance(data, dict) else None
         if not isinstance(oauth, dict):
             _log.warning(
                 "external subscription usage sample failed: no claudeAiOauth block in credentials",
                 path=self._credentials_path,
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         access_token = oauth.get("accessToken")
         if not isinstance(access_token, str) or not access_token:
             _log.warning(
                 "external subscription usage sample failed: no access token in credentials",
                 path=self._credentials_path,
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         expires_at = self._parse_epoch_millis(oauth.get("expiresAt"))
         if expires_at is None:
             _log.warning(
                 "external subscription usage sample failed: missing/unparseable token expiry",
                 path=self._credentials_path,
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         if expires_at <= self._clock.now():
             _log.warning(
                 "external subscription usage sample failed: access token expired",
                 path=self._credentials_path,
                 expires_at=iso_utc(expires_at),
             )
-            return None
+            return SampleMiss(SampleMissReason.CREDENTIAL_LAPSED)
         return access_token
 
     def _parse_usage_windows(self, body: dict[str, object]) -> list[ExternalSubscriptionUsageWindow]:

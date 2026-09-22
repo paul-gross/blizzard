@@ -66,19 +66,29 @@ describe('LocalPanelMobile', () => {
 
   afterEach(() => stub.restore());
 
-  it('stacks the four sections in attention order — info, agents, chunks, asks', async () => {
+  it('stacks the five sections in attention order — info, agents, chunks, asks, subscriptions', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    const panes = ['mobile-info-pane', 'mobile-agents-pane', 'mobile-chunks-pane', 'mobile-asks-pane'].map(
-      (testid) => el.querySelector(`[data-testid="${testid}"]`),
-    );
+    const panes = [
+      'mobile-info-pane',
+      'mobile-agents-pane',
+      'mobile-chunks-pane',
+      'mobile-asks-pane',
+      'mobile-subscriptions-pane',
+    ].map((testid) => el.querySelector(`[data-testid="${testid}"]`));
     expect(panes.every((pane) => pane !== null)).toBe(true);
 
     const order = Array.from(el.querySelectorAll('[data-testid$="-pane"]')).map((node) =>
       node.getAttribute('data-testid'),
     );
-    expect(order).toEqual(['mobile-info-pane', 'mobile-agents-pane', 'mobile-chunks-pane', 'mobile-asks-pane']);
+    expect(order).toEqual([
+      'mobile-info-pane',
+      'mobile-agents-pane',
+      'mobile-chunks-pane',
+      'mobile-asks-pane',
+      'mobile-subscriptions-pane',
+    ]);
   });
 
   it('renders the machine info section off its own query, no props needed', async () => {

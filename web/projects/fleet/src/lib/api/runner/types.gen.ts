@@ -610,9 +610,9 @@ export type CreateWorkItemProposal = {
 /**
  * DashboardView
  *
- * ``GET /api/dashboard`` — eight status reads composed into one response.
+ * ``GET /api/dashboard`` — nine status reads composed into one response.
  * ``fleet_summary`` alone is a hub pass-through and the only nullable section —
- * ``None`` on a hub failure or an unwired runner, while the seven local sections
+ * ``None`` on a hub failure or an unwired runner, while the eight local sections
  * still populate.
  */
 export type DashboardView = {
@@ -623,6 +623,7 @@ export type DashboardView = {
     fleet_summary: FleetSummaryView | null;
     harness_health: HarnessHealthListResponse;
     runner: RunnerStatusView;
+    subscriptions: SubscriptionListResponse;
     takeovers: OpenTakeoverListResponse;
 };
 
@@ -2014,6 +2015,59 @@ export type StagedAttachment = {
      * Name
      */
     name: string;
+};
+
+/**
+ * SubscriptionListResponse
+ *
+ * Every declared subscription's own newest sampling attempt.
+ */
+export type SubscriptionListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<SubscriptionView>;
+};
+
+/**
+ * SubscriptionView
+ *
+ * One declared subscription's own runner-local diagnostics (blizzard#504) —
+ * ``GET /api/subscriptions``. ``sampled_at``/``ok``/``miss_reason``/``renewal`` are all
+ * ``None`` when this slug has never been attempted. ``miss_reason`` is one of
+ * ``credential_lapsed``, ``credential_unreadable``, ``endpoint_unreachable``, or
+ * ``response_unparseable`` when ``ok`` is ``False``; ``None`` when ``ok`` is ``True``.
+ * ``renewal`` is ``None`` until a renewer is wired for this slug's provider.
+ */
+export type SubscriptionView = {
+    /**
+     * Miss Reason
+     */
+    miss_reason?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Ok
+     */
+    ok?: boolean | null;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Renewal
+     */
+    renewal?: string | null;
+    /**
+     * Sampled At
+     */
+    sampled_at?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**
@@ -3770,6 +3824,22 @@ export type GetSelftestApiSelftestsSelftestIdGetResponses = {
 };
 
 export type GetSelftestApiSelftestsSelftestIdGetResponse = GetSelftestApiSelftestsSelftestIdGetResponses[keyof GetSelftestApiSelftestsSelftestIdGetResponses];
+
+export type ListSubscriptionsApiSubscriptionsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/subscriptions';
+};
+
+export type ListSubscriptionsApiSubscriptionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SubscriptionListResponse;
+};
+
+export type ListSubscriptionsApiSubscriptionsGetResponse = ListSubscriptionsApiSubscriptionsGetResponses[keyof ListSubscriptionsApiSubscriptionsGetResponses];
 
 export type ListOpenTakeoversApiTakeoversGetData = {
     body?: never;

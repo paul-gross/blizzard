@@ -88,7 +88,12 @@ from blizzard.runner.stores import (
     RunnerReadStores,
     RunnerStores,
 )
-from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, ISubscriptionSampler
+from blizzard.runner.subscriptions.subscription_sampler import (
+    ExternalSubscriptionUsageSnapshot,
+    ISubscriptionSampler,
+    SampleMiss,
+    SampleMissReason,
+)
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.tools.invariants import RunnerInvariants, Violation
@@ -1035,17 +1040,21 @@ class FakeSubscriptionSampler:
         self,
         *,
         snapshot: ExternalSubscriptionUsageSnapshot | None = None,
+        miss_reason: SampleMissReason = SampleMissReason.ENDPOINT_UNREACHABLE,
         raises: Exception | None = None,
     ) -> None:
         self.snapshot = snapshot
+        self.miss_reason = miss_reason
         self.raises = raises
         self.sample_calls = 0
 
-    def sample(self) -> ExternalSubscriptionUsageSnapshot | None:
+    def sample(self) -> ExternalSubscriptionUsageSnapshot | SampleMiss:
         self.sample_calls += 1
         if self.raises is not None:
             raise self.raises
-        return self.snapshot
+        if self.snapshot is not None:
+            return self.snapshot
+        return SampleMiss(self.miss_reason)
 
 
 def _conforms_fake_subscription_sampler(x: FakeSubscriptionSampler) -> ISubscriptionSampler:

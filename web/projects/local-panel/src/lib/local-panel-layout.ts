@@ -11,6 +11,7 @@ import { EnvList } from './env-list';
 import { LocalAsks } from './local-asks';
 import { LocalInfo } from './local-info';
 import type { MachineChunkRow } from './local-panel';
+import { LocalSubscriptions } from './local-subscriptions';
 
 /**
  * The runner's machine-local panel's layout half (issue #80) — shaped like
@@ -27,8 +28,9 @@ import type { MachineChunkRow } from './local-panel';
  *   per-attempt selection moved to the runner-local chunk detail route
  *   (issue #318).
  * - **Right (330px)** — the machine's account of itself: the hub link
- *   (endpoint, reachability, last flush, buffer) and the open local asks. The
- *   local fact log moved to its own `/events` route (issue #313) — full
+ *   (endpoint, reachability, last flush, buffer), the open local asks, and
+ *   each declared subscription's own newest sampling attempt (blizzard#504).
+ *   The local fact log moved to its own `/events` route (issue #313) — full
  *   width there rather than a rail-sized panel.
  *
  * Presentational only: it renders exactly the leases/chunks/selection it is
@@ -48,7 +50,18 @@ import type { MachineChunkRow } from './local-panel';
 @Component({
   selector: 'local-panel-layout',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AgentRow, MachineDetail, ChunkRow, EnvList, KitAsyncState, KitPanel, KitPanelHeader, LocalAsks, LocalInfo],
+  imports: [
+    AgentRow,
+    MachineDetail,
+    ChunkRow,
+    EnvList,
+    KitAsyncState,
+    KitPanel,
+    KitPanelHeader,
+    LocalAsks,
+    LocalInfo,
+    LocalSubscriptions,
+  ],
   templateUrl: './local-panel-layout.html',
   styleUrl: './local-panel-layout.css',
 })

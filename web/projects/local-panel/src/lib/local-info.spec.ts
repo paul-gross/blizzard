@@ -38,6 +38,7 @@ function dashboardBody(fleetSummary: runnerApi.FleetSummaryView | null): runnerA
     takeovers: { items: [] },
     facts: { items: [] },
     harness_health: { items: [] },
+    subscriptions: { items: [] },
     fleet_summary: fleetSummary,
   };
 }

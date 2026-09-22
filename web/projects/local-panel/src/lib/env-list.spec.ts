@@ -31,6 +31,7 @@ function dashboardBody(envs: readonly runnerApi.EnvironmentView[]): runnerApi.Da
     fleet_summary: null,
     facts: { items: [] },
     harness_health: { items: [] },
+    subscriptions: { items: [] },
   };
 }
 

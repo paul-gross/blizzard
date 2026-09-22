@@ -189,6 +189,8 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
     assert "session=code (opus, high)" in out  # which lineage parked, not just its id
     assert "open takeovers (1):" in out
     assert "chunk ch_3" in out and "takeover=tko_1" in out
+    assert "subscriptions (1):" in out
+    assert "anthropic (anthropic): never sampled" in out
 
 
 @pytest.mark.component
@@ -204,6 +206,31 @@ def test_status_renders_empty_sections_on_a_fresh_runner(tmp_path: Path, monkeyp
     assert "open asks (0):" in result.output
     assert "escalations (0):" in result.output
     assert "open takeovers (0):" in result.output
+    assert "subscriptions (1):" in result.output  # the synthesized legacy anthropic declaration
+    assert "never sampled" in result.output
+
+
+@pytest.mark.component
+def test_status_renders_a_miss_reason_for_a_lapsed_subscription(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    _no_hub(monkeypatch)
+    store = _store(root)
+    store.record_external_usage_attempt(
+        slug="anthropic",
+        sampled_at=_NOW,
+        payload=None,
+        report_kind="",
+        report_payload="",
+        miss_reason="credential_lapsed",
+    )
+
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "anthropic (anthropic): miss (credential_lapsed)" in result.output
 
 
 @pytest.mark.component

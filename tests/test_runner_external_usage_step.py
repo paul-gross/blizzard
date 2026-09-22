@@ -21,6 +21,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
+    SampleMissReason,
 )
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
@@ -261,7 +262,7 @@ def test_an_empty_sample_is_persisted_and_buffered_as_an_empty_windows_collectio
 @pytest.mark.unit
 def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    sampler = FakeSubscriptionSampler(snapshot=None)
+    sampler = FakeSubscriptionSampler(miss_reason=SampleMissReason.CREDENTIAL_LAPSED)
     clock = FixedClock(_NOW)
     ctx = _ctx(store, sampler=sampler, clock=clock, interval_seconds=300)
 
@@ -270,12 +271,31 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_nothing(tmp_path)
     assert store.last_external_usage_attempt_at(_SLUG) == _NOW
     assert [f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND] == []
 
+    attempt = store.latest_external_usage_attempt(_SLUG)
+    assert attempt is not None
+    assert attempt.ok is False
+    assert attempt.miss_reason == "credential_lapsed"
+
     # The next tick, still within the interval, must not re-sample — the NULL-payload
     # attempt still counts as "tried" for cadence purposes.
     clock.advance(timedelta(seconds=100))
     ExternalUsageSample(ctx).run()
     assert sampler.sample_calls == 1
     assert store.last_external_usage_attempt_at(_SLUG) == _NOW  # unchanged — no new attempt
+
+
+@pytest.mark.unit
+def test_a_successful_sample_records_an_attempt_with_no_miss_reason(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    sampler = FakeSubscriptionSampler(snapshot=_snapshot())
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
+
+    ExternalUsageSample(ctx).run()
+
+    attempt = store.latest_external_usage_attempt(_SLUG)
+    assert attempt is not None
+    assert attempt.ok is True
+    assert attempt.miss_reason is None
 
 
 # AC 4 — a raising adapter leaves the tick completing normally, other steps intact.
