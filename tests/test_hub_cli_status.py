@@ -113,6 +113,30 @@ def test_status_marks_a_partial_total_on_both_the_chunk_row_and_the_fleet_total(
     assert result.output.count("~$0.10") == 2
 
 
+def test_status_renders_the_estimate_beside_the_chunk_row_and_the_fleet_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cost = {**_cost(0.0, partial=False), "estimated_cost_usd": 0.31}
+    _install(monkeypatch, _responses(cost, cost))
+
+    result = CliRunner().invoke(hub_group, ["status"])
+
+    assert result.exit_code == 0, result.output
+    # A subscription-only chunk never reads a bare, exact-looking $0.00.
+    assert result.output.count("$0.00  $0.31 est.") == 2
+    assert "~" not in result.output
+
+
+def test_status_renders_no_estimate_where_none_was_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    cost = {**_cost(0.42, partial=False), "estimated_cost_usd": None}
+    _install(monkeypatch, _responses(cost, cost))
+
+    result = CliRunner().invoke(hub_group, ["status"])
+
+    assert result.exit_code == 0, result.output
+    assert "est." not in result.output
+
+
 def test_status_names_a_ceiling_pause_reason_inline(monkeypatch: pytest.MonkeyPatch) -> None:
     """A runner-ceiling escalation (issue #61) is distinguishable from a manual pause on
     ``blizzard hub status`` — the composed ceiling+spend reason rides inline rather than

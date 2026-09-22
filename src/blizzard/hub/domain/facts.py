@@ -101,7 +101,8 @@ class Payload:
         return int(self.body[key])  # type: ignore[arg-type]
 
     def amount(self, key: str) -> float | None:
-        """A usage fact's ``cost_usd`` — ``None`` stays ``None`` (no envelope), never fabricated."""
+        """A usage fact's dollar figure by ``key`` — ``cost_usd`` or ``estimated_cost_usd`` — ``None``
+        stays ``None`` (no such figure was reported), never fabricated."""
         value = self.body.get(key)
         return float(value) if value is not None else None  # type: ignore[arg-type]
 
@@ -293,6 +294,7 @@ class FactIngestService:
                 cache_read_tokens=fact.require_number("cache_read_tokens"),
                 cache_create_tokens=fact.require_number("cache_create_tokens"),
                 cost_usd=fact.amount("cost_usd"),
+                estimated_cost_usd=fact.amount("estimated_cost_usd"),
                 at=now,
             )
             return True, None

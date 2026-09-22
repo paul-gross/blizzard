@@ -255,7 +255,7 @@
         "type": "object"
       },
       "AnalyticsChunkSpendView": {
-        "description": "One chunk's own usage/cost rollup (blizzard#256 D8) \u2014 the per-chunk grouping's\nunbounded, cursor-paged row.",
+        "description": "One chunk's own usage/cost rollup (blizzard#256 D8) \u2014 the per-chunk grouping's\nunbounded, cursor-paged row. ``cost_partial`` is ``True`` iff some summed row carried neither a billed\nnor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some summed row carried one.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -276,6 +276,17 @@
           "cost_usd": {
             "title": "Cost Usd",
             "type": "number"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "input_tokens": {
             "title": "Input Tokens",
@@ -622,7 +633,7 @@
         "type": "object"
       },
       "AnalyticsSpendView": {
-        "description": "One grouping key's usage/cost rollup (blizzard#256 D6) \u2014 ``key`` is a node id or\na graph id, whichever dataset served it. The same lower-bound + PARTIAL contract\n``GET /api/spend`` publishes: ``cost_usd`` sums only the rows that carried a cost\nenvelope, and ``cost_partial`` is ``True`` iff any summed row lacked one.",
+        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id or a graph id, whichever dataset\nserved it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed\nrow carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some\nsummed row carried one.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -639,6 +650,17 @@
           "cost_usd": {
             "title": "Cost Usd",
             "type": "number"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "input_tokens": {
             "title": "Input Tokens",
@@ -2051,8 +2073,13 @@
         "type": "object"
       },
       "ChunkUsageTotalView": {
-        "description": "A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) \u2014 never a\nstored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``.",
+        "description": "A chunk's derived usage/cost total, summed over every recorded invocation \u2014 never a stored column.\n``cost_partial`` is ``True`` iff some summed row carries neither a billed nor an estimated amount;\n``billed_partial`` iff some carries no billed amount, so ``cost_usd`` is then a lower bound of billed\nspend. ``estimated_cost_usd`` is ``None`` iff no row carried one, and never enters ``cost_usd``.",
         "properties": {
+          "billed_partial": {
+            "default": false,
+            "title": "Billed Partial",
+            "type": "boolean"
+          },
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
             "type": "integer"
@@ -2068,6 +2095,17 @@
           "cost_usd": {
             "title": "Cost Usd",
             "type": "number"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "input_tokens": {
             "title": "Input Tokens",
@@ -2090,7 +2128,7 @@
         "type": "object"
       },
       "ChunkUsageView": {
-        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope\nexisted for this invocation \u2014 never fabricated.",
+        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was\nrecorded for this invocation \u2014 never fabricated. ``estimated_cost_usd`` is the runner's own reported\nestimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -2114,6 +2152,17 @@
           "epoch": {
             "title": "Epoch",
             "type": "integer"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "harness_id": {
             "anyOf": [
@@ -3473,7 +3522,7 @@
         "type": "object"
       },
       "FleetSpendView": {
-        "description": "The fleet's usage/cost total since ``since`` and, when the caller bounded the\nwindow, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``\nmarks ``cost_usd`` as a lower bound.",
+        "description": "The fleet's usage/cost total since ``since`` and, when the caller bounded the window, strictly\nbefore ``until`` (``None`` for the open-ended tail). ``cost_partial`` is ``True`` iff some summed row\ncarries neither a billed nor an estimated amount, so ``cost_usd`` is then a lower bound;\n``estimated_cost_usd`` is ``None`` unless some summed row carried one, and never enters ``cost_usd``.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -3490,6 +3539,17 @@
           "cost_usd": {
             "title": "Cost Usd",
             "type": "number"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "input_tokens": {
             "title": "Input Tokens",

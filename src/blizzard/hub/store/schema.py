@@ -902,7 +902,10 @@ usage_facts = Table(
     Column("output_tokens", Integer, nullable=False),
     Column("cache_read_tokens", Integer, nullable=False),
     Column("cache_create_tokens", Integer, nullable=False),
-    Column("cost_usd", Float, nullable=True),  # None = no envelope for this invocation — never fabricated
+    Column("cost_usd", Float, nullable=True),  # None = no billed figure for this invocation — never fabricated
+    # A runner-side estimate, kept apart from `cost_usd` — nullable, un-backfilled; see
+    # `docs/deployment/spend.md`'s "Estimated cost" section.
+    Column("estimated_cost_usd", Float, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_usage_facts_chunk_id", usage_facts.c.chunk_id)

@@ -40,13 +40,14 @@ class IWriteChunkUsageRepository(IReadChunkUsageRepository, Protocol):
         cache_read_tokens: int,
         cache_create_tokens: int,
         cost_usd: float | None,
+        estimated_cost_usd: float | None = None,
         at: datetime,
     ) -> None:
-        """Append one ``usage.recorded`` fact (issue #59) — never a stored aggregate.
+        """Append one ``usage.recorded`` fact — never a stored aggregate.
 
         Deliberately **not** epoch-fenced: called for every landed usage fact regardless
         of whether ``epoch`` is the chunk's latest, since it is real spend either way.
         Idempotency rides the caller's own applied-seq high-water mark. ``harness_id``/
-        ``harness_version`` (blizzard#441) are recorded, never derived — ``None`` from a
-        runner that predates them (A10) or a generation that recorded no version (D4)."""
+        ``harness_version``/``estimated_cost_usd`` are recorded, never derived — each
+        ``None`` when the caller had none to report (see ``docs/deployment/spend.md``)."""
         ...

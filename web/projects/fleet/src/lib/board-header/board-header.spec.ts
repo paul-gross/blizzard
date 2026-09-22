@@ -112,6 +112,44 @@ describe('BoardHeader', () => {
     expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('$3.50');
   });
 
+  it('renders the spend-today estimate, labeled, apart from the billed figure', async () => {
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('spendToday', {
+      since: '2026-07-17T00:00:00Z',
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: 0,
+      cost_partial: false,
+      estimated_cost_usd: 0.07,
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('$0.00');
+    expect(el.querySelector('[data-testid="spend-today-value-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+  });
+
+  it('renders no spend-today estimate when the fleet spend read carries none', async () => {
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('spendToday', {
+      since: '2026-07-17T00:00:00Z',
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: 3.5,
+      cost_partial: false,
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="spend-today-value-estimate"]')).toBeNull();
+  });
+
   it('renders explicit stat cells in place of the chunk-derived ones, as a capacity fraction (issue #131)', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
     fixture.componentRef.setInput('chunks', [chunk('ch_1', 'ready')]);

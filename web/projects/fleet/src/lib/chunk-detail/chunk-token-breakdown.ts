@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
 
 import type { ChunkDetail, ChunkUsageTotalView } from '../api/hub';
-import { formatCost, formatTokens } from '../cost-format';
+import { formatCost, formatCostEstimate, formatTokens } from '../cost-format';
 import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 
 /** The all-zero, non-partial total — this component's default before `detail().cost`
@@ -20,9 +20,11 @@ const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
  * {@link ChunkFacts}'s chunk-identity table above it: derived usage/cost is a
  * different kind of information from Status/Node/Runner/Attempts/Graph, so it now
  * reads as its own thing rather than folding into that table as extra rows. The
- * derived total cost is visibly marked PARTIAL when any summed invocation's
- * envelope-less cost was absent (never silently understated), and the chunk's
- * token counts render one labelled row per class — Input, Output, Cache Read,
+ * derived total cost is visibly marked PARTIAL whenever `cost_partial` is set (never
+ * silently understated). A subscription
+ * invocation's runner-reported estimate renders as its own row, labeled
+ * `est.`, only when the total carries one — never folded into the billed
+ * figure above it. The chunk's token counts render one labelled row per class — Input, Output, Cache Read,
  * and Cache Creation, the human-readable names for the wire's own
  * `input_tokens`/`output_tokens`/`cache_read_tokens`/`cache_create_tokens`
  * (`ChunkUsageTotalView`, `wire/chunk.py`) — always visible inline, no expand
@@ -49,6 +51,7 @@ export class ChunkTokenBreakdown {
   readonly detail = input.required<ChunkDetail>();
 
   protected readonly formatCost = formatCost;
+  protected readonly formatCostEstimate = formatCostEstimate;
   protected readonly formatTokens = formatTokens;
 
   /** The chunk's derived usage/cost total — never absent: the hub API always
@@ -59,22 +62,36 @@ export class ChunkTokenBreakdown {
    * their own null handling. */
   protected readonly cost = computed<ChunkUsageTotalView>(() => this.detail().cost ?? ZERO_USAGE_TOTAL);
 
+  /** The total's own estimate, rendered (`formatCostEstimate`), or `null` when none was
+   * reported — a string rather than the raw number so the row's own `@if` never has to
+   * treat a legitimate `$0.00 est.` as absent (a plain falsy check on the amount would). */
+  protected readonly costEstimateLabel = computed<string | null>(() => {
+    const amount = this.cost().estimated_cost_usd;
+    return amount == null ? null : formatCostEstimate(amount);
+  });
+
   /** The usage table's rows — a method, not a stored computed, since each row's
    * markup needs the `<ng-template>` the view declares for it (`KitFactList`'s own
-   * templated-row contract). */
+   * templated-row contract). The estimate row is appended only when the total
+   * carries one — a chunk with no estimate renders exactly as it did before. */
   protected factRows(
     costValue: TemplateRef<unknown>,
+    costEstimateValue: TemplateRef<unknown>,
     inputValue: TemplateRef<unknown>,
     outputValue: TemplateRef<unknown>,
     cacheReadValue: TemplateRef<unknown>,
     cacheCreationValue: TemplateRef<unknown>,
   ): readonly KitFact[] {
-    return [
-      { label: 'Cost', template: costValue, testid: 'fact-cost' },
+    const rows: KitFact[] = [{ label: 'Cost', template: costValue, testid: 'fact-cost' }];
+    if (this.costEstimateLabel() !== null) {
+      rows.push({ label: 'Cost estimate', template: costEstimateValue, testid: 'fact-cost-estimate' });
+    }
+    rows.push(
       { label: 'Input', template: inputValue, testid: 'fact-tokens-input' },
       { label: 'Output', template: outputValue, testid: 'fact-tokens-output' },
       { label: 'Cache Read', template: cacheReadValue, testid: 'fact-tokens-cache-read' },
       { label: 'Cache Creation', template: cacheCreationValue, testid: 'fact-tokens-cache-creation' },
-    ];
+    );
+    return rows;
   }
 }

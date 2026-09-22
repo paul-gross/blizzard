@@ -521,6 +521,30 @@ def test_show_gains_no_lines_when_no_blocked_marking_or_edges(monkeypatch: pytes
     assert "dependents" not in result.output
 
 
+@pytest.mark.unit
+def test_show_prints_a_cost_estimate_line_labeled_est_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _detail("ch_1", cost={"cost_usd": 0.0, "cost_partial": False, "estimated_cost_usd": 0.03})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "cost estimate: $0.03 est." in result.output
+
+
+@pytest.mark.unit
+def test_show_prints_no_cost_estimate_line_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _detail("ch_1", cost={"cost_usd": 0.10, "cost_partial": False})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "cost estimate" not in result.output
+
+
 # `chunk depend` / `chunk release-dependency` (issue #476) — pure clients of the two
 # existing dependency routes.
 # --------------------------------------------------------------------------- #
@@ -739,6 +763,35 @@ def test_chunk_list_marks_a_blocked_chunk(monkeypatch: pytest.MonkeyPatch) -> No
     lines = result.output.splitlines()
     assert "[blocked on ch_prereq]" in lines[0]
     assert "[blocked" not in lines[1]
+
+
+@pytest.mark.unit
+def test_chunk_list_renders_an_estimate_beside_the_billed_cost(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            {
+                "chunks": [
+                    {
+                        "chunk_id": "ch_1",
+                        "status": "running",
+                        "current_node_id": "nd_1",
+                        "cost": {"cost_usd": 0.0, "cost_partial": False, "estimated_cost_usd": 0.12},
+                        "blocked": {"prerequisite_chunk_id": "ch_prereq"},
+                    },
+                    {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": {"cost_usd": 0.5}},
+                ],
+                "next_cursor": None,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["chunk", "list"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0].endswith("$0.00  $0.12 est.  [blocked on ch_prereq]")
+    assert "est." not in lines[1]
 
 
 @pytest.mark.unit

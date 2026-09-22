@@ -124,6 +124,13 @@
   color: var(--amber-hi);
   font-size: var(--fs-sm);
 }
+/* An estimate figure (the spend panel, `.cid.est`; the in-motion row, `.num.est`) —
+   dimmer than the billed amber beside it, since it is a subscription estimate rather
+   than metered spend, and never merged into the billed figure it sits beside. */
+.cid.est,
+.num.est {
+  color: var(--label-dim);
+}
 .rid {
   color: var(--label);
   font-size: var(--fs-xs);

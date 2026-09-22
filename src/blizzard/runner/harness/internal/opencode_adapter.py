@@ -28,6 +28,11 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
+from blizzard.runner.harness.internal.opencode_price_cache import (
+    IOpenCodePriceCatalog,
+    OpenCodeModelPrice,
+    OpenCodeStepTokens,
+)
 from blizzard.runner.harness.internal.opencode_shapes import (
     OpenCodeMessage,
     OpenCodePart,
@@ -169,6 +174,7 @@ class OpenCodeAdapter:
         effort_aliases: Sequence[tuple[str, str]] = (),
         worker_config_path: str | None = None,
         transcript_source: IHarnessTranscriptSource | None = None,
+        price_catalog: IOpenCodePriceCatalog | None = None,
         process: IProcessProbe,
         launcher: IProcessLauncher,
     ) -> None:
@@ -186,6 +192,8 @@ class OpenCodeAdapter:
         # predates the OpenCode binding, or a deployment chose not to scaffold one.
         self._worker_config_path = worker_config_path
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
+        # Injected, optional: with no catalog, a zero-cost step never gets an estimate.
+        self._price_catalog = price_catalog
         self._process: IProcessProbe = process
         # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings (D4).
         self._launcher: IProcessLauncher = launcher
@@ -541,6 +549,57 @@ class OpenCodeAdapter:
             return None
         return sum(known)
 
+    def _invocation_model_reference(self, model: str | None) -> tuple[str | None, str | None]:
+        """This invocation's own ``(provider, model)``, the fallback a zero-cost step's
+        estimate uses when its own parsed shape carries no message info. A label
+        this binding cannot parse — including OpenCode's own unresolved-default fallback —
+        leaves the step unknown rather than guessed."""
+        label = model or self._model
+        if not label:
+            return None, None
+        try:
+            reference = parse_model_reference(label)
+        except OpenCodeShapeError:
+            return None, None
+        return reference.provider, reference.model
+
+    @staticmethod
+    def _step_tokens(part: OpenCodePart) -> OpenCodeStepTokens:
+        """One step's own tokens, priced the way :class:`OpenCodeModelPrice` expects —
+        reasoning kept apart from output, before :meth:`_sum_tokens` folds the two
+        together. ``part.tokens`` is guaranteed non-``None`` by every caller."""
+        tokens = part.tokens
+        assert tokens is not None
+        return OpenCodeStepTokens(
+            input=tokens.input_tokens,
+            output=tokens.output_tokens,
+            reasoning=tokens.reasoning_tokens,
+            cache_read=tokens.cache_read_tokens,
+            cache_write=tokens.cache_write_tokens,
+        )
+
+    def _estimate_step(
+        self,
+        part: OpenCodePart,
+        provider: str | None,
+        model: str | None,
+        prices: dict[tuple[str, str], OpenCodeModelPrice | None],
+    ) -> float | None:
+        """This zero-cost step's estimated dollar cost, or ``None`` when it stays unknown:
+        no catalog injected, no resolvable provider/model, or the catalog has no priceable
+        entry (a missing model, a missing or unreadable cache file). Never raises.
+        ``prices`` memoizes lookups across one parse, so the cache is read once per model
+        rather than once per step."""
+        if self._price_catalog is None or provider is None or model is None:
+            return None
+        key = (provider, model)
+        if key not in prices:
+            prices[key] = self._price_catalog.price_for(provider, model)
+        price = prices[key]
+        if price is None:
+            return None
+        return price.estimate(self._step_tokens(part))
+
     def parse_verdict(self, output: str) -> str | None:
         return harness_shared.find_choice_verdict(self._root_text(self._parse_events(output)))
 
@@ -569,6 +628,19 @@ class OpenCodeAdapter:
             return None
         parts = list(by_id.values())
         input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(parts)
+        # A run event never carries per-step message info (only an export does), so every
+        # zero-cost step here falls back to the invocation's own provider/model.
+        provider, resolved_model = self._invocation_model_reference(model)
+        estimated: list[float] = []
+        prices: dict[tuple[str, str], OpenCodeModelPrice | None] = {}
+        # Every step here prices against this one (provider, resolved_model) pair, so the
+        # lookup can never diverge step to step — unlike the per-step pairs below.
+        for part in parts:
+            if part.cost:
+                continue
+            amount = self._estimate_step(part, provider, resolved_model, prices)
+            if amount is not None:
+                estimated.append(amount)
         return UsageSample(
             kind=kind,
             model=model or self._model or "opencode",
@@ -577,15 +649,15 @@ class OpenCodeAdapter:
             cache_read_tokens=cache_read_tokens,
             cache_create_tokens=cache_create_tokens,
             cost_usd=self._known_cost(parts),
+            estimated_cost_usd=sum(estimated) if estimated else None,
         )
 
     @staticmethod
-    def _finish_parts_from_line(line: str) -> list[OpenCodePart]:
-        """One transcript line's completed-step parts, tolerating either raw-OpenCode shape:
-        a run event (process stdout) or an exported message (session-export) — the same
-        completed step can be described by both, which the caller's identity-keyed dedup
-        collapses back to one (execution spec). Unparseable lines contribute nothing;
-        this is a best-effort fallback, never a raise."""
+    def _finish_parts_from_line(line: str) -> list[tuple[OpenCodePart, str | None, str | None]]:
+        """One transcript line's completed-step parts with the ``(provider, model)`` its shape
+        carries — none for a run event, ``message.info``'s for an exported message. The
+        caller's identity-keyed dedup collapses a step both shapes describe (execution spec).
+        Unparseable lines contribute nothing; never a raise."""
         stripped = line.strip()
         if not stripped:
             return []
@@ -600,20 +672,47 @@ class OpenCodeAdapter:
         except OpenCodeShapeError:
             pass
         else:
-            return [event.part] if event.type == "step_finish" and event.part is not None else []
+            return [(event.part, None, None)] if event.type == "step_finish" and event.part is not None else []
         try:
             message = OpenCodeMessage.parse(decoded)
         except OpenCodeShapeError:
             return []
-        return [part for part in message.parts if part.type == "step-finish"]
+        return [
+            (part, message.info.provider_id, message.info.model_id)
+            for part in message.parts
+            if part.type == "step-finish"
+        ]
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
-        by_id: dict[str, OpenCodePart] = {}
+        by_id: dict[str, tuple[OpenCodePart, str | None, str | None]] = {}
         for line in lines:
-            for part in self._finish_parts_from_line(line):
-                if part.tokens is not None:
-                    by_id[part.id] = part
-        input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(by_id.values())
+            for part, provider, part_model in self._finish_parts_from_line(line):
+                if part.tokens is None:
+                    continue
+                if provider is None or part_model is None:
+                    # A run-event copy of a step an export line already named keeps that
+                    # export's own provider/model rather than erasing it.
+                    _, provider, part_model = by_id.get(part.id, (part, None, None))
+                by_id[part.id] = (part, provider, part_model)
+        parts = [entry[0] for entry in by_id.values()]
+        input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(parts)
+        estimated_cost_usd: float | None = None
+        # A non-zero cost here is a billed figure this fallback drops; no estimate
+        # may then mask it.
+        if not any(part.cost for part in parts):
+            invocation_provider, invocation_model = self._invocation_model_reference(model)
+            amounts: list[float | None] = []
+            prices: dict[tuple[str, str], OpenCodeModelPrice | None] = {}
+            for part, provider, part_model in by_id.values():
+                # The step's own (provider, model) pair when its shape carried both, else the
+                # invocation's pair — never one half of each.
+                if provider is None or part_model is None:
+                    provider, part_model = invocation_provider, invocation_model
+                amounts.append(self._estimate_step(part, provider, part_model, prices))
+            # All-or-nothing: one unpriced step leaves the whole estimate unknown rather
+            # than silently understated.
+            complete = bool(amounts) and all(a is not None for a in amounts)
+            estimated_cost_usd = sum(a for a in amounts if a is not None) if complete else None
         return UsageSample(
             kind=kind,
             model=model or self._model or "opencode",
@@ -622,8 +721,9 @@ class OpenCodeAdapter:
             cache_read_tokens=cache_read_tokens,
             cache_create_tokens=cache_create_tokens,
             # A transcript carries no dollar figure (`IHarnessUsageAccounting.sum_transcript_usage`);
-            # token counts stay authoritative regardless.
+            # token counts stay authoritative regardless. It may still carry an estimate.
             cost_usd=None,
+            estimated_cost_usd=estimated_cost_usd,
         )
 
     def transcript_source(self) -> IHarnessTranscriptSource:

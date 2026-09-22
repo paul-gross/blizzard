@@ -124,6 +124,8 @@ def _chunk_with_cost(  # type: ignore[no-untyped-def]
     *,
     cost_usd,
     cost_partial=False,
+    billed_partial=None,
+    estimated_cost_usd=None,
     status=ChunkStatus.RUNNING,
     route_runner_id="r1",
     epoch=1,
@@ -141,6 +143,9 @@ def _chunk_with_cost(  # type: ignore[no-untyped-def]
             cache_create_tokens=0,
             cost_usd=cost_usd,
             cost_partial=cost_partial,
+            estimated_cost_usd=estimated_cost_usd,
+            # A row with neither amount has no billed one either, so `billed_partial` follows by default.
+            billed_partial=cost_partial if billed_partial is None else billed_partial,
         ),
     )
 
@@ -3235,6 +3240,42 @@ def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path)
     escalate_events = [e for e in captured if e.get("event", "").startswith("escalated to needs-human")]
     assert len(escalate_events) == 1
     assert "PARTIAL" in escalate_events[0]["reason"] and "spend cap" in escalate_events[0]["reason"]
+
+
+@pytest.mark.unit
+def test_cost_cap_marks_partial_when_part_of_the_spend_is_only_estimated(tmp_path):  # type: ignore[no-untyped-def]
+    """A subscription row carries an estimate but no billed cost: the hub total does not read
+    ``cost_partial``, yet the cap still trips on the billed lower bound and states PARTIAL,
+    because its PARTIAL means no billed cost was recorded, estimate or not."""
+    from structlog.testing import capture_logs
+
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=5.0, cost_partial=False, billed_partial=True, estimated_cost_usd=3.0)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=_cap_config(5.0),
+    )
+
+    Advance(ctx).run()
+    Advance(ctx).run()  # collects it — the fake pid reads dead by default
+    with capture_logs() as captured:
+        Pull(ctx).run()
+
+    assert store.active_lease_for_chunk("ch_1") is None
+    escalate_events = [e for e in captured if e.get("event", "").startswith("escalated to needs-human")]
+    assert len(escalate_events) == 1
+    assert "PARTIAL" in escalate_events[0]["reason"]
+    # The billed figure alone trips and names the cap — the estimate never enters it.
+    assert "$5.00" in escalate_events[0]["reason"]
 
 
 @pytest.mark.unit

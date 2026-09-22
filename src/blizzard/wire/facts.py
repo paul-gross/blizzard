@@ -23,7 +23,9 @@ ANSWER_DELIVERED = "answer.delivered"
 RUNNER_LOCALLY_PAUSED = "runner.locally_paused"
 RUNNER_LOCALLY_RESUMED = "runner.locally_resumed"
 # One harness invocation's usage/cost telemetry (issue #58) — a fact, never a stored
-# aggregate. Payload: {chunk_id, node_id, epoch, kind, model, tokens…, cost_usd|null}.
+# aggregate. Payload: {chunk_id, node_id, epoch, kind, model, tokens…, cost_usd|null,
+# estimated_cost_usd|null}, the estimate absent from a runner predating it and kept apart
+# from cost_usd — a runner-side estimate for a subscription invocation, never billed spend.
 USAGE_RECORDED = "usage.recorded"
 # One operationally-significant failure (issue #125). Payload: {severity, kind,
 # chunk_id|null, lease_id|null, node_name|null, message, detail|null}. Never token-gated.

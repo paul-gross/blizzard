@@ -107,6 +107,7 @@ export class BoardShell {
         pointerLabels: (chunk.work_refs ?? []).flatMap((p) => (p.label ? [p.label] : [])),
         costUsd: chunk.cost?.cost_usd ?? 0,
         costPartial: chunk.cost?.cost_partial ?? false,
+        estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,
         completedAt: chunk.completed_at ?? null,
         blockedOn: chunk.blocked?.prerequisite_chunk_id ?? null,
         // `unmet_count` is optional on the wire (it defaults server-side), so an older

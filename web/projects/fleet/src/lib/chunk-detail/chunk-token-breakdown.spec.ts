@@ -23,6 +23,20 @@ const COST_DETAIL: ChunkDetail = {
   },
 };
 
+const ESTIMATE_COST_DETAIL: ChunkDetail = {
+  ...COST_DETAIL,
+  chunk_id: 'ch_01estimate0000000000000000000',
+  cost: {
+    input_tokens: 900,
+    output_tokens: 400,
+    cache_read_tokens: 0,
+    cache_create_tokens: 0,
+    cost_usd: 0,
+    cost_partial: false,
+    estimated_cost_usd: 0.07,
+  },
+};
+
 const PARTIAL_COST_DETAIL: ChunkDetail = {
   ...COST_DETAIL,
   chunk_id: 'ch_01partial00000000000000000000',
@@ -99,6 +113,26 @@ describe('ChunkTokenBreakdown', () => {
     expect(zeroed('fact-tokens-output')).toBe(false);
     expect(zeroed('fact-tokens-cache-read')).toBe(true);
     expect(zeroed('fact-tokens-cache-creation')).toBe(true);
+  });
+
+  it('renders a separate, labeled cost-estimate row only when the total carries one, apart from the billed figure', async () => {
+    const fixture = TestBed.createComponent(ChunkTokenBreakdown);
+    fixture.componentRef.setInput('detail', ESTIMATE_COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('$0.00');
+    expect(el.querySelector('[data-testid="cost-estimate-usd"]')?.textContent?.trim()).toBe('$0.07 est.');
+  });
+
+  it('renders no cost-estimate row for a chunk with no estimate — exactly as before this total carried one', async () => {
+    const fixture = TestBed.createComponent(ChunkTokenBreakdown);
+    fixture.componentRef.setInput('detail', COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="cost-estimate-usd"]')).toBeNull();
+    expect(el.querySelector('[data-testid="fact-cost-estimate"]')).toBeNull();
   });
 
   it('does not mute a non-zero cache count — the rule is "zero", not "cache"', async () => {

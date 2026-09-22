@@ -299,17 +299,17 @@ class IHarnessUsageAccounting(Protocol):
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
         """Translate a result envelope's ``usage`` + its cost figure into a sample.
 
-        ``kind`` names which invocation produced ``output``; the adapter never infers it, and
-        ``model`` attributes it only when the harness reports none. ``None`` when no envelope.
-        Cost rides verbatim, its scope on ``cost_scope_tokens`` — neither estimated nor resolved."""
+        ``kind`` names which invocation produced ``output`` — never inferred; ``model`` attributes it only when the
+        harness reports none. ``None`` when no envelope. Cost rides verbatim, its scope on ``cost_scope_tokens`` —
+        unresolved, and never folded into the sample's separate ``estimated_cost_usd``."""
         ...
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         """Sum per-message ``usage`` across a session transcript's raw JSONL lines.
 
-        The envelope-less fallback, for a worker killed before it produced a result
-        envelope: token counts with ``cost_usd=None``, since a transcript carries no dollar
-        figure. ``model`` is the same attribution fallback :meth:`parse_usage` takes."""
+        The envelope-less fallback for a worker killed before its result envelope: token counts
+        and ``cost_usd=None`` (a transcript carries no billed figure), maybe an estimate.
+        ``model`` is the same attribution fallback :meth:`parse_usage` takes."""
         ...
 
 

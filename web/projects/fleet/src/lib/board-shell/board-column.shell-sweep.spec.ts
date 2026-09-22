@@ -15,6 +15,7 @@ const CARD: BoardCard = {
   pointerLabels: [],
   costUsd: 0,
   costPartial: false,
+  estimatedCostUsd: null,
   completedAt: null,
   blockedOn: null,
   blockedCount: 0,

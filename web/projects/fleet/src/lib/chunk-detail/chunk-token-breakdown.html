@@ -10,6 +10,9 @@
     >
   }
 </ng-template>
+<ng-template #costEstimateValue>
+  <span data-testid="cost-estimate-usd">{{ costEstimateLabel() }}</span>
+</ng-template>
 <ng-template #inputValue>
   <span [class.zero]="cost().input_tokens === 0">{{ formatTokens(cost().input_tokens) }}</span>
 </ng-template>
@@ -25,5 +28,5 @@
 <fleet-kit-fact-list
   class="ctb-facts"
   testid="chunk-usage"
-  [rows]="factRows(costValue, inputValue, outputValue, cacheReadValue, cacheCreationValue)"
+  [rows]="factRows(costValue, costEstimateValue, inputValue, outputValue, cacheReadValue, cacheCreationValue)"
 />
