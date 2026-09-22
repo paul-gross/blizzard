@@ -3304,7 +3304,7 @@
         "type": "object"
       },
       "FindingView": {
-        "description": "A finding. `state` is the newest fact's own kind, folded to `\"live\"` for\n`add`/`observed`/`reopened` (blizzard#394) \u2014 `live` is kept alongside it as the\n`state == \"live\"` shorthand existing consumers already read. `note` is the newest\nfact's own note, whatever kind it is \u2014 `None` for a kind that carries none.\n\nTwo distinct instants ride alongside `introduced`: `introduced_at` is the authored\ntime of the commit `introduced` names, and is null wherever that commit was never\nresolved \u2014 a delivery declaring zero or several repositories leaves which one\n`introduced` refers to ambiguous, so no instant is looked up. `first_observed_at` is\nwhen a routine first recorded the finding \u2014 the earliest of its `add`/`observed`\nspan \u2014 and is null for a finding carrying neither, which is how a finding whose only\nfacts are exit verbs reads.\n\n`source` is `\"routine\"` or `\"review\"` (blizzard#582 D1): a review-sourced finding\ncarries no `routine_name`, carries its own `severity`, and names the `raised_by_chunk_id`\nthat raised it.",
+        "description": "A finding. `state` folds the newest fact's kind to `\"live\"` for\n`add`/`observed`/`reopened` (blizzard#394); `note` is that fact's own note. `source`\nis `\"routine\"` or `\"review\"` (blizzard#582 D1): a review-sourced finding carries no\n`routine_name`, its own `severity`, and the `raised_by_chunk_id` that raised it.",
         "properties": {
           "class": {
             "title": "Class",
@@ -12460,7 +12460,7 @@
     },
     "/api/chunks/{chunk_id}/review-findings-delivery": {
       "post": {
-        "description": "The `record-findings` node's own route (blizzard#582) \u2014 validates the chunk's\nnewest `review-finding-delta` artifact and, on success, materializes its `deferred`\nentries in one transaction. A malformed delta or an unresolvable node is an\n``invalid`` outcome at a 200, never an error response \u2014 the graph's own `invalid`\nedge reads and routes on it. Idempotent per chunk (D6): a replay reads its own marker\nbefore ever re-parsing the artifact.",
+        "description": "The `record-findings` node's own route (blizzard#582) \u2014 validates the chunk's\nnewest `review-finding-delta` artifact and, on success, materializes its `deferred`\nentries in one transaction. A malformed delta or an unresolvable node is an\n``invalid`` outcome at a 200, never an error response. Idempotent per chunk (D6).",
         "operationId": "record_review_findings_delivery_api_chunks__chunk_id__review_findings_delivery_post",
         "parameters": [
           {
@@ -13740,7 +13740,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/garden/findings": {
       "get": {
-        "description": "A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583\nD2), widened to every review-sourced finding on the same scope (blizzard#582 D3) \u2014 the\nchunk's own run context derives the routine and the scope; no caller-supplied flag can\nname another, and every other exited state stays out. 404 both for an unknown chunk\nand for one carrying no run context (not a routine run): a chunk with nothing to read\nis refused rather than answered with an empty bucket.",
+        "description": "A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583\nD2), widened to every review-sourced finding on the same scope (blizzard#582 D3) \u2014 the\nchunk's own run context derives the routine and the scope; no caller-supplied flag can\nname another. 404 both for an unknown chunk and for one carrying no run context (not a\nroutine run): a chunk with nothing to read is refused rather than an empty bucket.",
         "operationId": "get_garden_findings_api_fleet_chunks__chunk_id__garden_findings_get",
         "parameters": [
           {
