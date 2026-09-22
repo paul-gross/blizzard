@@ -28,6 +28,7 @@ def test_export_returns_stdout_on_success(monkeypatch: pytest.MonkeyPatch) -> No
     assert exporter.export("sess-1") == '{"info": {}}'
     assert captured["cmd"] == ["opencode", "export", "sess-1"]
     assert "cwd" not in captured["kwargs"]  # type: ignore[operator]  # no cwd — export resolves by id alone
+    assert captured["kwargs"]["stdin"] is subprocess.DEVNULL  # type: ignore[index]  # never the daemon's own stdin
 
 
 @pytest.mark.unit

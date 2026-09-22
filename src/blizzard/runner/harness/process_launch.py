@@ -86,7 +86,9 @@ class IProcessLauncher(Protocol):
         defer_disarm: bool = False,
     ) -> LaunchedProcess:
         """Start ``argv`` under its own process group and a parent-death signal. ``cwd``/
-        ``stdout``/``stderr`` of ``None`` inherit bare ``subprocess.Popen``'s own defaults.
+        ``stdout``/``stderr`` of ``None`` inherit bare ``subprocess.Popen``'s own defaults;
+        stdin is always ``/dev/null``, never the launcher's own, so a child that drains stdin
+        before its turn sees EOF at once.
         Raises ``OSError`` on a launch failure — each adapter translates it into its own
         ``HarnessSpawnError``. ``defer_disarm=True`` (F1) holds the real binary's ``exec()``
         behind a trampoline until the returned handle's ``confirm_durable()`` is called."""
@@ -171,6 +173,8 @@ class ProcessLauncher:
             argv,
             cwd=cwd,
             env=env,
+            # pinned by `test_a_worker_never_inherits_the_daemons_open_stdin`
+            stdin=subprocess.DEVNULL,
             stdout=stdout,
             stderr=stderr,
             start_new_session=True,
