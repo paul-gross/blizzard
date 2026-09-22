@@ -39,6 +39,25 @@
       }
     },
     {
+      "type": "tool_use",
+      "timestamp": 1788000000350,
+      "sessionID": "ses_success",
+      "part": {
+        "id": "prt_success_glob",
+        "sessionID": "ses_success",
+        "messageID": "msg_success_assistant",
+        "type": "tool",
+        "callID": "call_success_glob",
+        "tool": "glob",
+        "state": {
+          "status": "completed",
+          "input": {"pattern": "*.missing"},
+          "output": "",
+          "title": ""
+        }
+      }
+    },
+    {
       "type": "text",
       "timestamp": 1788000000400,
       "sessionID": "ses_success",
@@ -91,6 +110,15 @@
             "callID": "call_success",
             "tool": "bash",
             "state": {"status": "completed", "input": {"command": "printf 'ok\\n' > proof.txt"}, "output": "proof.txt", "title": "Write proof file", "metadata": {}}
+          },
+          {
+            "id": "prt_success_glob",
+            "sessionID": "ses_success",
+            "messageID": "msg_success_assistant",
+            "type": "tool",
+            "callID": "call_success_glob",
+            "tool": "glob",
+            "state": {"status": "completed", "input": {"pattern": "*.missing"}, "output": "", "title": ""}
           },
           {"id": "prt_success_answer", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "text", "text": "Done. <Choice>pass</Choice>"},
           {"id": "prt_success_finish", "sessionID": "ses_success", "messageID": "msg_success_assistant", "type": "step-finish", "reason": "stop", "cost": 0.0123, "tokens": {"input": 120, "output": 45, "reasoning": 18, "cache": {"read": 30, "write": 15}}}

@@ -889,6 +889,25 @@ def test_sum_transcript_usage_skips_tokenless_user_messages_without_raising() ->
 
 
 @pytest.mark.unit
+def test_sum_transcript_usage_recovers_step_finish_from_a_message_with_an_empty_tool_title() -> None:
+    # A tool that matched nothing reports `"title": ""`; that part must not cost its message's usage.
+    message = _fixture("success")["export"]["messages"][1]
+    message["parts"] = [part for part in message["parts"] if part["id"] in ("prt_success_glob", "prt_success_finish")]
+    assert [part["type"] for part in message["parts"]] == ["tool", "step-finish"]
+    lines = [json.dumps(message)]
+
+    sample = _adapter().sum_transcript_usage(lines, "spawn")
+
+    assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens) == (
+        120,
+        45 + 18,
+        30,
+        15,
+    )
+    assert sample.cost_usd is None
+
+
+@pytest.mark.unit
 def test_sum_transcript_usage_ignores_unparseable_lines() -> None:
     sample = _adapter().sum_transcript_usage(
         ["", "not json", "{}", '{"type": "future_event", "sessionID": "x"}'], "spawn"

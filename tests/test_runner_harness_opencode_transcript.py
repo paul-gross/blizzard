@@ -91,6 +91,7 @@ def _tool_part(
     output: str | None = None,
     error: str | None = None,
     metadata: dict[str, Any] | None = None,
+    title: str | None = None,
 ) -> dict[str, Any]:
     state: dict[str, Any] = {"status": status, "input": input or {}}
     if output is not None:
@@ -99,6 +100,8 @@ def _tool_part(
         state["error"] = error
     if metadata is not None:
         state["metadata"] = metadata
+    if title is not None:
+        state["title"] = title
     return {
         "id": part_id,
         "sessionID": session_id,
@@ -183,6 +186,42 @@ def test_cold_turns_since_produces_env_asst_thinking_tool_turns() -> None:
     assert batch.sidechain_truncated is False
     assert batch.unlinked_sidechains == []
     assert batch.next_position is not None
+
+
+@pytest.mark.unit
+def test_cold_turns_since_tolerates_an_empty_tool_title() -> None:
+    export = _export(
+        "sess-1",
+        [
+            _user_message("sess-1", "m-user", [_text_part("sess-1", "m-user", "p-user", "hello")]),
+            _assistant_message(
+                "sess-1",
+                "m-asst",
+                [
+                    _tool_part(
+                        "sess-1",
+                        "m-asst",
+                        "p-tool",
+                        call_id="call-1",
+                        tool="glob",
+                        input={"pattern": "*.missing"},
+                        output="",
+                        title="",
+                    ),
+                ],
+            ),
+        ],
+    )
+    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": export}), _error_factory())
+
+    batch = source.turns_since("sess-1", spawn_cwd=None, since=None)
+
+    assert batch.available is True
+    assert [t.kind for t in batch.turns] == ["env", "tool"]
+    tool = batch.turns[1].tool
+    assert tool is not None
+    assert tool.name == "glob"
+    assert tool.tool_use_id == "call-1"
 
 
 @pytest.mark.unit
