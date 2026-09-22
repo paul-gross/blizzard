@@ -15,7 +15,6 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.health import HarnessHealthEvidence, HarnessHealthResult, evaluate_harness_health
-from blizzard.runner.harness.internal.harness_shared import normalize_opencode_version
 from blizzard.runner.harness.internal.harness_shared import version_admitted as _version_admitted
 from blizzard.runner.harness.internal.offline_compatibility import classify_offline
 from blizzard.runner.harness.registry import IHarnessRegistry
@@ -108,7 +107,8 @@ class HarnessHealthCache:
         if not stale and not changed and harness_id in self._results:
             return self._results[harness_id]
         supported_version = probe.supported_version()
-        normalized_version = normalize_opencode_version(observed_version)
+        normalized_version = probe.normalize_version(observed_version)
+        classifies_offline = probe.classifies_offline()
         # D2: membership against the range is this caller's job; `None` here means nothing
         # observed, distinct from a non-member, and a `None` `supported_version` means no range.
         version_admitted = (
@@ -124,12 +124,13 @@ class HarnessHealthCache:
                 version_admitted=version_admitted,
                 version_classification=(
                     classify_offline(harness_id, normalized_version, supported_version)
-                    if supported_version is not None
+                    if supported_version is not None and classifies_offline
                     else None
                 ),
                 authenticated=probe.probe_authentication(),
                 unmapped_tiers=_unmapped_tiers(adapter, self.configured_tiers.get(harness_id, ())),
                 selftest_failed=(latest.status == "failed") if latest is not None else None,
+                corpus_backed=classifies_offline,
                 degradations=probe.declared_degradations(),
             )
         )
@@ -161,12 +162,15 @@ class HarnessHealthCache:
         return probe.supported_version_display() if probe is not None else None
 
     def displayed_version(self, harness_id: str) -> str | None:
-        """:meth:`observed_version`, normalized when its raw shape allows it — so a
-        diagnostics display never shows a version alongside :meth:`admitted_range`
-        in a form that looks non-member when it actually is. Falls back to the raw
-        form for a binding (Claude Code) whose own shape never normalizes."""
+        """:meth:`observed_version`, normalized through this binding's own probe when its raw
+        shape allows it — so a diagnostics display never shows a version alongside
+        :meth:`admitted_range` in a form that looks non-member when it actually is. Falls
+        back to the raw form when this cache holds no probe for ``harness_id`` or that
+        probe's own shape doesn't normalize."""
         raw = self.observed_version(harness_id)
-        return normalize_opencode_version(raw) or raw
+        probe = self.probes.get(harness_id)
+        normalized = probe.normalize_version(raw) if probe is not None else None
+        return normalized or raw
 
 
 def default_harness_id(harnesses: IHarnessRegistry) -> str | None:

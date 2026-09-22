@@ -469,6 +469,12 @@ def test_harness_selection_skips_a_member_health_has_withdrawn():  # type: ignor
         def supported_version_display(self) -> None:
             return None
 
+        def normalize_version(self, raw: str | None) -> str | None:
+            return raw
+
+        def classifies_offline(self) -> bool:
+            return False
+
         def declared_degradations(self) -> tuple[()]:
             return ()
 

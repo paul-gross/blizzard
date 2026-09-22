@@ -17,6 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.selftest_result import SelfTestResultRecord
 from blizzard.runner.harness.compatibility import CompatibilityClassification
 from blizzard.runner.harness.health import DeclaredDegradation, HarnessHealthCause
+from blizzard.runner.harness.internal.harness_shared import normalize_opencode_version
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE, PINNED_OPENCODE_VERSION
 from blizzard.runner.loop import capability_snapshot
 from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
@@ -32,6 +33,7 @@ class _FakeProbe:
     binary: bool = True
     authenticated: bool = True
     supported: SpecifierSet | None = None
+    corpus_backed: bool = True
     degradations: tuple[DeclaredDegradation, ...] = ()
     calls: int = field(default=0, compare=False)
 
@@ -47,6 +49,12 @@ class _FakeProbe:
 
     def supported_version_display(self) -> str | None:
         return str(self.supported) if self.supported is not None else None
+
+    def normalize_version(self, raw: str | None) -> str | None:
+        return normalize_opencode_version(raw)
+
+    def classifies_offline(self) -> bool:
+        return self.corpus_backed
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
         return self.degradations
@@ -242,6 +250,35 @@ def test_an_admitted_version_with_no_corpus_manifest_is_unknown_not_incompatible
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)
 
     result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version=unclassifiable_version)
+
+    assert result is not None
+    assert result.available is False
+    assert result.cause is HarnessHealthCause.UNKNOWN_VERSION
+
+
+def test_a_corpus_free_probe_admits_by_membership_alone() -> None:
+    """A probe declaring `classifies_offline() -> False` (blizzard#606) is available on
+    membership alone — `refresh` never consults `classify_offline` for it, so an admitted
+    version with no corpus behind it still reads available, not `unknown_version`."""
+    clock = FixedClock(_NOW)
+    probe = _FakeProbe(supported=SpecifierSet(">=2.1,<3.0"), corpus_backed=False)
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+
+    result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="2.1.278")
+
+    assert result is not None
+    assert result.available is True
+    assert result.cause is None
+
+
+def test_a_corpus_free_probe_with_nothing_observed_is_still_unknown_version() -> None:
+    """The corpus-free carve-out only excuses a missing classification — it never excuses
+    a version that was never observed or couldn't be normalized (D4)."""
+    clock = FixedClock(_NOW)
+    probe = _FakeProbe(supported=SpecifierSet(">=2.1,<3.0"), corpus_backed=False)
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+
+    result = cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version=None)
 
     assert result is not None
     assert result.available is False

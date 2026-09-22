@@ -5,7 +5,10 @@
 Every session is recorded and read under a harness id. A runner build binds two: `claude_code`, built once at startup
 from `[worker]`'s `harness_binary` (and its sibling knobs below) in `blizzard-runner.toml`, and `opencode`, built from
 its own `[opencode]` table ("OpenCode configuration" below) — each the same binary every spawn, judge, and resume child
-for that harness runs. Which one a fresh mint actually spawns under is a per-`sessions:` entry declaration
+for that harness runs. Claude Code's own admitted-version range is currently `>=2.1,<3.0` (blizzard#606), checked by
+membership alone with pre-releases excluded, and backed by no compatibility corpus — unlike OpenCode's own range below,
+an admitted Claude Code version is never run through an offline classification, so nothing about it can read
+`unknown_version` once observed. Which one a fresh mint actually spawns under is a per-`sessions:` entry declaration
 (`harnesses:`/`default_harnesses`, "Acceptable harness set" below), never a runner-wide switch, so a deployment that
 never names `opencode` anywhere never spawns it under that binding. Binding a harness does carry one small, bounded cost
 regardless of whether anything ever spawns under it: each bound binary's version is probed and cached for the
@@ -151,7 +154,10 @@ authentication, an unmapped configured tier, or a recorded selftest failure — 
 skips an unavailable member with its own `"unhealthy"` reason ([observability.md](./observability.md)) rather than
 selecting it, so a node whose acceptable set includes `opencode` falls back to another member instead of failing at
 spawn, and escalates only once every member is exhausted. The binding stays visible, with its cause, in this runner's
-own `GET /api/harness-health` diagnostics; the hub sees only the boolean flag, never the cause.
+own `GET /api/harness-health` diagnostics; the hub sees only the boolean flag, never the cause. Claude Code's own
+health check is the same evaluation, membership-only (blizzard#606): an incompatible or unobserved version withholds
+availability exactly as OpenCode's does, but since Claude Code declares no compatibility corpus, an admitted version
+is never itself a cause — there is no `unknown_version` an admitted-but-unclassified Claude Code version could read.
 `[opencode.models.aliases]` and `[opencode.effort.aliases]` mirror `[models.aliases]`/ `[effort.aliases]` in shape but
 not in defaults — see "Model and effort tiers" above for why OpenCode's own table carries the whole mapping rather than
 overrides to a built-in one. `worker_config_path` names the runner-owned permission/plugin document
