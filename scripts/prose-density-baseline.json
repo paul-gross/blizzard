@@ -5585,10 +5585,10 @@
    "total": 462
   },
   "e2e/test_ideation_e2e.py": {
-   "comments": 33,
-   "docstrings": 28,
+   "comments": 40,
+   "docstrings": 29,
    "over_cap": 0,
-   "total": 514
+   "total": 606
   },
   "e2e/test_login_session_e2e.py": {
    "comments": 14,
@@ -7280,7 +7280,7 @@
    "comments": 40,
    "docstrings": 37,
    "over_cap": 0,
-   "total": 261
+   "total": 262
   },
   "test_idp_authorize.py": {
    "comments": 6,
