@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import subprocess
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,13 @@ from blizzard.runner.harness.internal.opencode_adapter import (
     _PendingOpenCodeIdentity,
 )
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
+from blizzard.runner.harness.internal.opencode_price_cache import (
+    FileOpenCodePriceCatalog,
+    IOpenCodePriceCatalog,
+    OpenCodeContextTier,
+    OpenCodeModelPrice,
+    OpenCodeRate,
+)
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -920,6 +928,360 @@ def test_sum_transcript_usage_ignores_unparseable_lines() -> None:
         0,
     )
     assert sample.cost_usd is None
+
+
+# --- OpenCode price estimation ----------------------------------------------
+
+# `gpt-5.6-luna`'s base rates (the issue's worked example), dollars per 1,000,000 tokens.
+_LUNA_RATE = OpenCodeRate(input=0.20, output=1.20, cache_read=0.02, cache_write=0.25)
+_LUNA_TIER = OpenCodeContextTier(
+    size=100, rate=OpenCodeRate(input=0.40, output=1.80, cache_read=0.04, cache_write=0.50)
+)
+
+
+@dataclass(frozen=True)
+class _FakePriceCatalog:
+    """A price catalog pinned to exactly the entries a test names — never file I/O."""
+
+    prices: dict[tuple[str, str], OpenCodeModelPrice]
+
+    def price_for(self, provider: str, model: str) -> OpenCodeModelPrice | None:
+        return self.prices.get((provider, model))
+
+
+def _conforms_fake_catalog(x: _FakePriceCatalog) -> IOpenCodePriceCatalog:
+    return x
+
+
+def _luna_catalog(**price_kwargs: Any) -> _FakePriceCatalog:
+    return _FakePriceCatalog({("openai", "gpt-5.6-luna"): OpenCodeModelPrice(base=_LUNA_RATE, **price_kwargs)})
+
+
+def _step_finish_event(
+    *, session_id: str, part_id: str, message_id: str, cost: float, tokens: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "type": "step_finish",
+        "sessionID": session_id,
+        "part": {
+            "id": part_id,
+            "sessionID": session_id,
+            "messageID": message_id,
+            "type": "step-finish",
+            "reason": "stop",
+            "cost": cost,
+            "tokens": tokens,
+        },
+    }
+
+
+def _export_message(
+    *,
+    session_id: str,
+    message_id: str,
+    provider_id: str,
+    model_id: str,
+    part_id: str,
+    cost: float,
+    tokens: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "info": {
+            "id": message_id,
+            "sessionID": session_id,
+            "role": "assistant",
+            "providerID": provider_id,
+            "modelID": model_id,
+        },
+        "parts": [
+            {
+                "id": part_id,
+                "sessionID": session_id,
+                "messageID": message_id,
+                "type": "step-finish",
+                "reason": "stop",
+                "cost": cost,
+                "tokens": tokens,
+            }
+        ],
+    }
+
+
+_ZERO_TOKENS = {"input": 40, "output": 8, "reasoning": 0, "cache": {"read": 0, "write": 0}}
+
+
+@pytest.mark.unit
+def test_parse_usage_estimates_an_all_zero_cost_step_when_its_model_is_priced() -> None:
+    payload = _fixture("permission_denial")
+    output = _jsonl(payload["events"])
+    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+
+    sample = adapter.parse_usage(output, "spawn")
+
+    assert sample is not None
+    assert sample.cost_usd is None
+    assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
+
+
+@pytest.mark.unit
+def test_parse_usage_leaves_a_non_zero_cost_step_billed_with_no_estimate() -> None:
+    payload = _fixture("success")
+    output = _jsonl(payload["events"])
+    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+
+    sample = adapter.parse_usage(output, "spawn")
+
+    assert sample is not None
+    assert sample.cost_usd == pytest.approx(0.0123)
+    assert sample.estimated_cost_usd is None
+
+
+@pytest.mark.unit
+def test_parse_usage_reports_both_a_billed_and_an_estimated_amount_for_a_mixed_invocation() -> None:
+    events = [
+        _step_finish_event(
+            session_id="ses_mixed",
+            part_id="prt_billed",
+            message_id="msg_billed",
+            cost=0.05,
+            tokens={"input": 1_000, "output": 200, "reasoning": 0, "cache": {"read": 0, "write": 0}},
+        ),
+        _step_finish_event(
+            session_id="ses_mixed", part_id="prt_zero", message_id="msg_zero", cost=0.0, tokens=_ZERO_TOKENS
+        ),
+    ]
+    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+
+    sample = adapter.parse_usage(_jsonl(events), "spawn")
+
+    assert sample is not None
+    assert sample.cost_usd == pytest.approx(0.05)
+    assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
+
+
+@pytest.mark.unit
+def test_parse_usage_prices_two_steps_on_either_side_of_a_tier_threshold_at_their_own_rate() -> None:
+    # F = input + cache.read + cache.write: 40 stays under the 100 tier, 150 clears it.
+    below = {"input": 40, "output": 10, "reasoning": 0, "cache": {"read": 0, "write": 0}}
+    above = {"input": 150, "output": 10, "reasoning": 0, "cache": {"read": 0, "write": 0}}
+    events = [
+        _step_finish_event(session_id="ses_tier", part_id="prt_below", message_id="msg_below", cost=0.0, tokens=below),
+        _step_finish_event(session_id="ses_tier", part_id="prt_above", message_id="msg_above", cost=0.0, tokens=above),
+    ]
+    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog(tiers=(_LUNA_TIER,)))
+
+    sample = adapter.parse_usage(_jsonl(events), "spawn")
+
+    below_expected = (40 * 0.20 + 10 * 1.20) / 1_000_000
+    above_expected = (150 * 0.40 + 10 * 1.80) / 1_000_000
+    assert sample is not None
+    assert sample.estimated_cost_usd == pytest.approx(below_expected + above_expected)
+    assert below_expected != above_expected  # each step really did price at its own rate
+
+
+@pytest.mark.unit
+def test_parse_usage_gives_no_estimate_when_the_invocation_model_does_not_parse() -> None:
+    payload = _fixture("permission_denial")
+    output = _jsonl(payload["events"])
+    # No slash: not a valid `provider/model` reference, so the fallback label is unknown.
+    adapter = _adapter(model="not-a-valid-model-reference", price_catalog=_luna_catalog())
+
+    sample = adapter.parse_usage(output, "spawn")
+
+    assert sample is not None
+    assert sample.estimated_cost_usd is None
+
+
+@pytest.mark.unit
+def test_parse_usage_gives_no_estimate_with_no_catalog_injected() -> None:
+    payload = _fixture("permission_denial")
+    output = _jsonl(payload["events"])
+    adapter = _adapter(model="openai/gpt-5.6-luna")  # no price_catalog kwarg at all
+
+    sample = adapter.parse_usage(output, "spawn")
+
+    assert sample is not None
+    assert sample.estimated_cost_usd is None
+
+
+@pytest.mark.unit
+def test_parse_usage_leaves_a_zero_cost_step_unknown_when_the_cache_file_is_missing(tmp_path: Path) -> None:
+    payload = _fixture("permission_denial")
+    output = _jsonl(payload["events"])
+    catalog = FileOpenCodePriceCatalog(tmp_path / "does-not-exist" / "models.json")
+    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=catalog)
+
+    sample = adapter.parse_usage(output, "spawn")
+
+    assert sample is not None
+    assert sample.cost_usd is None
+    assert sample.estimated_cost_usd is None
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_estimates_a_zero_cost_step_from_its_own_export_message_model() -> None:
+    # The invocation's own model resolves to a provider the catalog has no entry for — the
+    # estimate can only have come from the exported message's own providerID/modelID.
+    line = json.dumps(
+        _export_message(
+            session_id="ses_export",
+            message_id="msg_export",
+            provider_id="openai",
+            model_id="gpt-5.6-luna",
+            part_id="prt_export",
+            cost=0.0,
+            tokens=_ZERO_TOKENS,
+        )
+    )
+    adapter = _adapter(model="anthropic/claude-unpriced", price_catalog=_luna_catalog())
+
+    sample = adapter.sum_transcript_usage([line], "spawn")
+
+    assert sample.cost_usd is None
+    assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_never_bills_but_may_still_carry_an_estimate() -> None:
+    line = json.dumps(
+        _export_message(
+            session_id="ses_export",
+            message_id="msg_export",
+            provider_id="openai",
+            model_id="gpt-5.6-luna",
+            part_id="prt_export",
+            cost=0.0,
+            tokens=_ZERO_TOKENS,
+        )
+    )
+    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+
+    sample = adapter.sum_transcript_usage([line], "spawn")
+
+    assert sample.cost_usd is None
+    assert sample.estimated_cost_usd is not None
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_drops_the_estimate_entirely_when_any_step_reported_a_real_cost() -> None:
+    """A dropped billed amount is never hidden behind an estimate: once one step's
+    real cost is unrecoverable on this fallback path, the whole sample stays without one,
+    even though another step in the same transcript was priceable."""
+    billed_line = json.dumps(
+        _export_message(
+            session_id="ses_export",
+            message_id="msg_billed",
+            provider_id="openai",
+            model_id="gpt-5.6-luna",
+            part_id="prt_billed",
+            cost=0.05,
+            tokens={"input": 1_000, "output": 200, "reasoning": 0, "cache": {"read": 0, "write": 0}},
+        )
+    )
+    zero_line = json.dumps(
+        _export_message(
+            session_id="ses_export",
+            message_id="msg_zero",
+            provider_id="openai",
+            model_id="gpt-5.6-luna",
+            part_id="prt_zero",
+            cost=0.0,
+            tokens=_ZERO_TOKENS,
+        )
+    )
+    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+
+    sample = adapter.sum_transcript_usage([billed_line, zero_line], "spawn")
+
+    assert sample.cost_usd is None
+    assert sample.estimated_cost_usd is None
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_gives_no_estimate_when_one_zero_cost_steps_model_is_unpriced() -> None:
+    """A partial estimate is never reported as complete: one step priced, another whose
+    own exported model the catalog has no entry for, leaves the whole sample without one."""
+    priced_line = json.dumps(
+        _export_message(
+            session_id="ses_mixed",
+            message_id="msg_priced",
+            provider_id="openai",
+            model_id="gpt-5.6-luna",
+            part_id="prt_priced",
+            cost=0.0,
+            tokens=_ZERO_TOKENS,
+        )
+    )
+    unpriced_line = json.dumps(
+        _export_message(
+            session_id="ses_mixed",
+            message_id="msg_unpriced",
+            provider_id="anthropic",
+            model_id="claude-unpriced",
+            part_id="prt_unpriced",
+            cost=0.0,
+            tokens=_ZERO_TOKENS,
+        )
+    )
+    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+
+    sample = adapter.sum_transcript_usage([priced_line, unpriced_line], "spawn")
+
+    assert sample.cost_usd is None
+    assert sample.estimated_cost_usd is None
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_keeps_an_export_lines_model_when_a_run_event_repeats_the_step() -> None:
+    # One step as an export naming its priced model, then as a run event naming none;
+    # the invocation's own model is unpriced, so only the export's pair can price it.
+    export_line = json.dumps(
+        _export_message(
+            session_id="ses_dup",
+            message_id="msg_dup",
+            provider_id="openai",
+            model_id="gpt-5.6-luna",
+            part_id="prt_dup",
+            cost=0.0,
+            tokens=_ZERO_TOKENS,
+        )
+    )
+    event_line = json.dumps(
+        _step_finish_event(session_id="ses_dup", part_id="prt_dup", message_id="msg_dup", cost=0.0, tokens=_ZERO_TOKENS)
+    )
+    adapter = _adapter(model="anthropic/claude-unpriced", price_catalog=_luna_catalog())
+
+    sample = adapter.sum_transcript_usage([export_line, event_line], "spawn")
+
+    assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
+
+
+@dataclass
+class _CountingPriceCatalog:
+    inner: _FakePriceCatalog
+    lookups: int = 0
+
+    def price_for(self, provider: str, model: str) -> OpenCodeModelPrice | None:
+        self.lookups += 1
+        return self.inner.price_for(provider, model)
+
+
+@pytest.mark.unit
+def test_parse_usage_looks_a_model_up_once_however_many_zero_cost_steps_it_prices() -> None:
+    events = [
+        _step_finish_event(
+            session_id="ses_memo", part_id=f"prt_{i}", message_id=f"msg_{i}", cost=0.0, tokens=_ZERO_TOKENS
+        )
+        for i in range(5)
+    ]
+    catalog = _CountingPriceCatalog(_luna_catalog())
+    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=catalog)
+
+    sample = adapter.parse_usage(_jsonl(events), "spawn")
+
+    assert sample is not None
+    assert sample.estimated_cost_usd == pytest.approx(5 * (40 * 0.20 + 8 * 1.20) / 1_000_000)
+    assert catalog.lookups == 1
 
 
 # --- classify_usage_limit (blizzard#594) ------------------------------------

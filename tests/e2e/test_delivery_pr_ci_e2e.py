@@ -229,6 +229,9 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
 
     main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
     assert main_after != main_before, "bare main did not move despite a clean merge"
+    merge_sha, base_parent, head_parent = _git_bare(origin_bare, "rev-list", "--parents", "-n", "1", "main").split()
+    assert merge_sha == main_after and base_parent == main_before
+    assert head_parent == pulls[0]["head"]["sha"], "merge commit did not preserve the checked PR head"
     landings = [
         ln for ln in _git_bare(origin_bare, "log", "--oneline", "--", "PR_CI_LANDED.md").splitlines() if ln.strip()
     ]

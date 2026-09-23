@@ -70,6 +70,11 @@
             <span class="step-usage" data-testid="history-step-usage">
               <span class="tok" data-testid="history-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
               <span class="cost" data-testid="history-step-cost">{{ formatCost(u.costUsd, u.costPartial) }}</span>
+              @if (u.estimatedCostUsd !== null) {
+                <span class="cost-estimate" data-testid="history-step-cost-estimate">{{
+                  formatCostEstimate(u.estimatedCostUsd)
+                }}</span>
+              }
               @if (u.costPartial) {
                 <span
                   class="partial-badge"

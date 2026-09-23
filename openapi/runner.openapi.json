@@ -1,6 +1,114 @@
 {
   "components": {
     "schemas": {
+      "AnalyticsCountView": {
+        "description": "One grouping key and how many events fell under it (blizzard#255). ``key`` names\nwhichever dimension this response is grouped by \u2014 a file path, a skill name, an\nagent type, or a node id.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "count"
+        ],
+        "title": "AnalyticsCountView",
+        "type": "object"
+      },
+      "AnalyticsCountsResponse": {
+        "description": "Every grouping key matching the filters, most-frequent first with the key\nascending as the tiebreak \u2014 a total order two identical calls agree on.",
+        "properties": {
+          "counts": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsCountView"
+            },
+            "title": "Counts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "counts"
+        ],
+        "title": "AnalyticsCountsResponse",
+        "type": "object"
+      },
+      "AnalyticsSpendResponse": {
+        "description": "Every grouping key matching the filters, key ascending \u2014 a total order two\nidentical calls agree on, the same convention the durations/counts responses use.",
+        "properties": {
+          "spend": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsSpendView"
+            },
+            "title": "Spend",
+            "type": "array"
+          }
+        },
+        "required": [
+          "spend"
+        ],
+        "title": "AnalyticsSpendResponse",
+        "type": "object"
+      },
+      "AnalyticsSpendView": {
+        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id or a graph id, whichever dataset\nserved it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed\nrow carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some\nsummed row carried one.",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cost_partial": {
+            "title": "Cost Partial",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd",
+          "cost_partial"
+        ],
+        "title": "AnalyticsSpendView",
+        "type": "object"
+      },
       "ArtifactKind": {
         "description": "The union discriminator.",
         "enum": [
@@ -848,8 +956,13 @@
         "type": "object"
       },
       "ChunkUsageTotalView": {
-        "description": "A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) \u2014 never a\nstored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``.",
+        "description": "A chunk's derived usage/cost total, summed over every recorded invocation \u2014 never a stored column.\n``cost_partial`` is ``True`` iff some summed row carries neither a billed nor an estimated amount;\n``billed_partial`` iff some carries no billed amount, so ``cost_usd`` is then a lower bound of billed\nspend. ``estimated_cost_usd`` is ``None`` iff no row carried one, and never enters ``cost_usd``.",
         "properties": {
+          "billed_partial": {
+            "default": false,
+            "title": "Billed Partial",
+            "type": "boolean"
+          },
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
             "type": "integer"
@@ -865,6 +978,17 @@
           "cost_usd": {
             "title": "Cost Usd",
             "type": "number"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "input_tokens": {
             "title": "Input Tokens",
@@ -887,7 +1011,7 @@
         "type": "object"
       },
       "ChunkUsageView": {
-        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope\nexisted for this invocation \u2014 never fabricated.",
+        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was\nrecorded for this invocation \u2014 never fabricated. ``estimated_cost_usd`` is the runner's own reported\nestimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -911,6 +1035,17 @@
           "epoch": {
             "title": "Epoch",
             "type": "integer"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "harness_id": {
             "anyOf": [
@@ -5166,6 +5301,456 @@
         ]
       }
     },
+    "/api/leases/{lease_id}/analytics/counts/agent-types": {
+      "get": {
+        "description": "Forward this lease's chunk's counts-by-agent-type read to the hub over the window.",
+        "operationId": "get_analytics_counts_agent_types_api_leases__lease_id__analytics_counts_agent_types_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Counts Agent Types",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/counts/files": {
+      "get": {
+        "description": "Forward this lease's chunk's counts-by-file read to the hub over the window.",
+        "operationId": "get_analytics_counts_files_api_leases__lease_id__analytics_counts_files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Counts Files",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/counts/nodes": {
+      "get": {
+        "description": "Forward this lease's chunk's counts-by-node read to the hub over the window.",
+        "operationId": "get_analytics_counts_nodes_api_leases__lease_id__analytics_counts_nodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Counts Nodes",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/counts/skills": {
+      "get": {
+        "description": "Forward this lease's chunk's counts-by-skill read to the hub over the window.",
+        "operationId": "get_analytics_counts_skills_api_leases__lease_id__analytics_counts_skills_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Counts Skills",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/spend/graphs": {
+      "get": {
+        "description": "Forward this lease's chunk's spend-by-graph read to the hub over the window.",
+        "operationId": "get_analytics_spend_graphs_api_leases__lease_id__analytics_spend_graphs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Spend Graphs",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/spend/nodes": {
+      "get": {
+        "description": "Forward this lease's chunk's spend-by-node read to the hub over the window.",
+        "operationId": "get_analytics_spend_nodes_api_leases__lease_id__analytics_spend_nodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Spend Nodes",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
     "/api/leases/{lease_id}/artifacts": {
       "get": {
         "description": "The worker's own artifacts \u2014 every node-step input resolved latest-by-epoch, the graph\nmint's own baked-in declarations, and blizzard's published system-artifact set, all\nkind-discriminated. ``scope`` narrows to one; omitted, all three are read. ``scope=graph``\nnever reaches the hub; ``scope=system`` always does.",
@@ -5612,7 +6197,7 @@
     },
     "/api/leases/{lease_id}/garden/proposals": {
       "get": {
-        "description": "Forward this lease's chunk's garden-proposals read to the hub \u2014 the layered\npass-through. A chunk with no run context (not a routine run) reaches this only as\nthe hub's own refusal, forwarded verbatim rather than answered as an empty bucket.",
+        "description": "Forward this lease's chunk's garden-proposals read to the hub \u2014 the layered\npass-through, `state` carried through unvalidated (the hub is the one source of\ntruth for which values it accepts). A chunk with no run context (not a routine run)\nreaches this only as the hub's own refusal, forwarded verbatim rather than answered\nas an empty bucket.",
         "operationId": "list_garden_proposals_api_leases__lease_id__garden_proposals_get",
         "parameters": [
           {
@@ -5621,6 +6206,16 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "title": "State",
               "type": "string"
             }
           }

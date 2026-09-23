@@ -58,11 +58,15 @@ const ACTIVE_VERBS: Partial<Record<ChunkStatus, { choice: string; label: string 
 
 /** One history step's summed usage (issue #60) — every invocation (spawn/resume/judge)
  * recorded at that step's own `(from_node_id, epoch)`, folded into one tokens+cost
- * figure so the timeline reads one lap's cost per line. */
+ * figure so the timeline reads one lap's cost per line. `costPartial` folds by the hub's
+ * own rule: `src/blizzard/hub/domain/work.py`'s `UsageTotal`. */
 export interface StepUsageTotal {
   readonly tokens: number;
   readonly costUsd: number;
   readonly costPartial: boolean;
+  /** The step's summed estimate, `null` iff no summed row carried one — kept apart from
+   * `costUsd`, never merged into it. */
+  readonly estimatedCostUsd: number | null;
   /** The step's own recorded harness identity (blizzard#441) — read off whichever of
    * its own summed rows recorded one, newest first, never derived from `model`. `null`
    * when no row at this step recorded a stamp (a pre-provenance row, or none at all). */
@@ -172,10 +176,14 @@ export function usageForStep(detail: ChunkDetail, row: HistoryRow): StepUsageTot
   // Newest-first: `detail.usage` arrives oldest-first (the hub's own `_usage_history`),
   // so the step's own most recent invocation is the step's own current identity.
   const stamped = [...rows].reverse().find((u) => u.harness_id != null);
+  const estimatedRows = rows.flatMap((u) => (u.estimated_cost_usd == null ? [] : [u.estimated_cost_usd]));
   return {
     tokens: rows.reduce((sum, u) => sum + u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_create_tokens, 0),
     costUsd: rows.reduce((sum, u) => sum + (u.cost_usd ?? 0), 0),
-    costPartial: rows.some((u) => u.cost_usd === null),
+    // A row carrying only an estimate does not mark this step partial — mirrors the
+    // hub's own `UsageTotal.of`.
+    costPartial: rows.some((u) => u.cost_usd === null && u.estimated_cost_usd == null),
+    estimatedCostUsd: estimatedRows.length > 0 ? estimatedRows.reduce((sum, amount) => sum + amount, 0) : null,
     harnessId: stamped?.harness_id ?? null,
     harnessVersion: stamped?.harness_version ?? null,
   };

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../api/hub';
-import { formatCost, formatTokens } from '../cost-format';
+import { formatCost, formatCostEstimate, formatTokens } from '../cost-format';
 import { KitAsyncState } from '../kit/kit-async-state';
 import {
   deriveActiveRow,
@@ -103,6 +103,7 @@ export class ChunkTimeline {
   readonly pickStep = output<string | null>();
 
   protected readonly formatCost = formatCost;
+  protected readonly formatCostEstimate = formatCostEstimate;
   protected readonly formatTokens = formatTokens;
 
   /** Names harness and version explicitly for the badge's accessible name

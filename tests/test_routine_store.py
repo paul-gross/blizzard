@@ -128,6 +128,50 @@ def test_edit_changes_everything_but_name_and_id(tmp_path: Path) -> None:
     assert store.get("rtn_1") == edited
 
 
+# --- Lifecycle (retire/enable brake) — the ScopeStore shape ----------
+
+
+def test_a_freshly_minted_routine_is_not_retired(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create(_routine())
+    assert store.is_retired("rtn_1") is False
+
+
+def test_retire_then_enable_derives_not_retired_and_leaves_the_row_untouched(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create(_routine())
+    before = store.get("rtn_1")
+
+    store.record_lifecycle("rtn_1", retired=True, at=_NOW, by="paul")
+    assert store.is_retired("rtn_1") is True
+
+    store.record_lifecycle("rtn_1", retired=False, at=_NOW, by="paul")
+    assert store.is_retired("rtn_1") is False
+    assert store.get("rtn_1") == before
+
+
+def test_a_second_retire_is_a_harmless_no_op(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create(_routine())
+
+    store.record_lifecycle("rtn_1", retired=True, at=_NOW, by="paul")
+    store.record_lifecycle("rtn_1", retired=True, at=_NOW, by="paul")
+
+    assert store.is_retired("rtn_1") is True
+
+
+def test_retired_ids_reflects_only_the_newest_fact_per_routine(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create(_routine(routine_id="rtn_a", name="a"))
+    store.create(_routine(routine_id="rtn_b", name="b"))
+
+    store.record_lifecycle("rtn_a", retired=True, at=_NOW, by="paul")
+    store.record_lifecycle("rtn_b", retired=True, at=_NOW, by="paul")
+    store.record_lifecycle("rtn_b", retired=False, at=_NOW, by="paul")
+
+    assert store.retired_ids() == {"rtn_a"}
+
+
 # --- RoutineScopeStore (the routine_scopes join, blizzard#488) --------------------
 
 

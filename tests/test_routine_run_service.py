@@ -10,10 +10,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.routine_run import ScopeNotRelatedError, ScopeRetiredError
+from blizzard.hub.domain.routine_run import RoutineRetiredError, ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.routines import Routine, RoutineGraphUnresolvedError, RunMode
 from blizzard.hub.domain.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.work import WorkItemAuthor
@@ -57,6 +58,11 @@ def _default_scope(hub: HubHarness, routine: Routine) -> Scope:
     scope = hub.services.scopes.get(routine.default_scope_slug)
     assert scope is not None
     return scope
+
+
+def _work_item_count(hub: HubHarness) -> int:
+    with hub.engine.connect() as conn:
+        return conn.execute(sa.select(sa.func.count()).select_from(s.work_items)).scalar_one()
 
 
 def test_full_mode_mints_ingests_and_promotes(tmp_path: Path) -> None:
@@ -269,6 +275,35 @@ def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> Non
             author=_AUTHOR,
             statuses=hub.services.chunks.facts.load_all_statuses(),
         )
+
+
+def test_a_retired_routine_is_refused_and_enabling_it_lets_the_run_succeed(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    routine, _graph = _routine(hub)
+    hub.services.routine_lifecycle.retire(routine, by="operator")
+
+    with pytest.raises(RoutineRetiredError):
+        hub.services.routine_run.run(
+            routine,
+            scope=_default_scope(hub, routine),
+            mode=RunMode.FULL,
+            note=None,
+            author=_AUTHOR,
+            statuses=hub.services.chunks.facts.load_all_statuses(),
+        )
+    assert _work_item_count(hub) == 0
+
+    hub.services.routine_lifecycle.enable(routine, by="operator")
+    result = hub.services.routine_run.run(
+        routine,
+        scope=_default_scope(hub, routine),
+        mode=RunMode.FULL,
+        note=None,
+        author=_AUTHOR,
+        statuses=hub.services.chunks.facts.load_all_statuses(),
+    )
+    assert result.effective_mode is RunMode.FULL
+    assert _work_item_count(hub) == 1
 
 
 def test_a_routine_whose_graph_has_no_enabled_mint_is_refused(tmp_path: Path) -> None:

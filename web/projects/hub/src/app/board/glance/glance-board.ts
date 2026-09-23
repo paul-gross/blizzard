@@ -124,6 +124,7 @@ export class GlanceBoard {
         pillLabel: chunk.status === 'delivering' ? ('deliver' as const) : ('run' as const),
         costUsd: chunk.cost?.cost_usd ?? 0,
         costPartial: chunk.cost?.cost_partial ?? false,
+        estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,
       })),
   );
 

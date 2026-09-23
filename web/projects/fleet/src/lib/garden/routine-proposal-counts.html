@@ -1,0 +1,33 @@
+<fleet-kit-panel label="Proposal counts" data-testid="gardening-routine-proposal-counts-panel" [bodyScroll]="false">
+  <fleet-kit-async-state
+    [state]="state()"
+    placement="inline"
+    emptyText="No garden proposals in this window."
+    emptyTestid="gardening-routine-proposal-counts-empty"
+  >
+    <table class="rpc-table" data-testid="gardening-routine-proposal-counts-table">
+      <thead>
+        <tr>
+          <th>class</th>
+          <th>created</th>
+          <th>open</th>
+          <th>passed</th>
+          <th>accepted (item)</th>
+          <th>accepted (no item)</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.proposalClass) {
+          <tr [attr.data-testid]="'gardening-routine-proposal-counts-' + row.proposalClass">
+            <td>{{ row.proposalClass }}</td>
+            <td>{{ row.created }}</td>
+            <td>{{ row.open }}</td>
+            <td>{{ row.passed }}</td>
+            <td>{{ row.acceptedWithItem }}</td>
+            <td>{{ row.acceptedWithoutItem }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </fleet-kit-async-state>
+</fleet-kit-panel>

@@ -1,5 +1,203 @@
 {
   "commands": {
+    "analytics": {
+      "commands": {
+        "counts": {
+          "commands": {
+            "agent-types": {
+              "help": "Worker: occurrence counts by agent type over the window, as JSON.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "since",
+                  "opts": [
+                    "--since"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                },
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "until",
+                  "opts": [
+                    "--until"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                }
+              ],
+              "path": "runner analytics counts agent-types",
+              "short_help": "Worker: occurrence counts by agent type over the window, as JSON."
+            },
+            "files": {
+              "help": "Worker: file-read occurrence counts over the window, as JSON.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "since",
+                  "opts": [
+                    "--since"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                },
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "until",
+                  "opts": [
+                    "--until"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                }
+              ],
+              "path": "runner analytics counts files",
+              "short_help": "Worker: file-read occurrence counts over the window, as JSON."
+            },
+            "nodes": {
+              "help": "Worker: occurrence counts by node over the window, as JSON.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "since",
+                  "opts": [
+                    "--since"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                },
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "until",
+                  "opts": [
+                    "--until"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                }
+              ],
+              "path": "runner analytics counts nodes",
+              "short_help": "Worker: occurrence counts by node over the window, as JSON."
+            },
+            "skills": {
+              "help": "Worker: skill-invocation occurrence counts over the window, as JSON.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "since",
+                  "opts": [
+                    "--since"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                },
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "until",
+                  "opts": [
+                    "--until"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                }
+              ],
+              "path": "runner analytics counts skills",
+              "short_help": "Worker: skill-invocation occurrence counts over the window, as JSON."
+            }
+          },
+          "help": "Worker: read one of the usage-counts summaries.",
+          "params": [],
+          "path": "runner analytics counts",
+          "short_help": "Worker: read one of the usage-counts summaries."
+        },
+        "spend": {
+          "commands": {
+            "graphs": {
+              "help": "Worker: usage/cost rollups by graph over the window, as JSON.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "since",
+                  "opts": [
+                    "--since"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                },
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "until",
+                  "opts": [
+                    "--until"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                }
+              ],
+              "path": "runner analytics spend graphs",
+              "short_help": "Worker: usage/cost rollups by graph over the window, as JSON."
+            },
+            "nodes": {
+              "help": "Worker: usage/cost rollups by node over the window, as JSON.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "since",
+                  "opts": [
+                    "--since"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                },
+                {
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "until",
+                  "opts": [
+                    "--until"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "datetime"
+                }
+              ],
+              "path": "runner analytics spend nodes",
+              "short_help": "Worker: usage/cost rollups by node over the window, as JSON."
+            }
+          },
+          "help": "Worker: read one of the spend summaries.",
+          "params": [],
+          "path": "runner analytics spend",
+          "short_help": "Worker: read one of the spend summaries."
+        }
+      },
+      "help": "Worker: read fleet-wide usage-counts and spend summaries over a window \u2014 access\nis gated server-side on the worker's own lease naming a routine-run chunk, but the\nrows returned are fleet-wide rollups, not scoped to that run.",
+      "params": [],
+      "path": "runner analytics",
+      "short_help": "Worker: read fleet-wide usage-counts and spend summaries over a window \u2014 access is gated server-side on the worker's own lease naming a routine-run chunk, but the rows returned are fleet-wide rollups, not scoped to that run."
+    },
     "artifact": {
       "commands": {
         "commit": {
@@ -358,10 +556,22 @@
           "short_help": "Worker: list this run's live-plus-``delivered`` finding bucket as JSON."
         },
         "proposals": {
-          "help": "Worker: list this run's own routine's open garden proposals as JSON, closed ones\nexcluded.",
-          "params": [],
+          "help": "Worker: list this run's own routine's garden proposals as JSON, filtered by\nSTATE \u2014 closed ones carry their closure and pass reason.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "state",
+              "opts": [
+                "--state"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            }
+          ],
           "path": "runner garden proposals",
-          "short_help": "Worker: list this run's own routine's open garden proposals as JSON, closed ones excluded."
+          "short_help": "Worker: list this run's own routine's garden proposals as JSON, filtered by STATE \u2014 closed ones carry their closure and pass reason."
         }
       },
       "help": "Worker: read this run's own garden machinery \u2014 the routine and scope are both\nderived server-side from the worker's own lease, so no verb here takes a flag\nnaming either.",

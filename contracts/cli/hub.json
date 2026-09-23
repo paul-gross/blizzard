@@ -3387,9 +3387,71 @@
           "path": "hub routine edit",
           "short_help": "Change ROUTINE_ID's graph, default scope, and model/effort/harnesses defaults; its name never changes here."
         },
-        "list": {
-          "help": "List every routine, newest first \u2014 routine_id, name, graph, default scope.",
+        "enable": {
+          "help": "Re-enable a retired routine NAME.",
           "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub routine enable",
+          "short_help": "Re-enable a retired routine NAME."
+        },
+        "list": {
+          "help": "List every routine, newest first \u2014 routine_id, name, graph, default scope.\n\nExcludes a retired routine unless --include-retired.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "include_retired",
+              "opts": [
+                "--include-retired"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
             {
               "hidden": false,
               "kind": "option",
@@ -3416,8 +3478,121 @@
           "path": "hub routine list",
           "short_help": "List every routine, newest first \u2014 routine_id, name, graph, default scope."
         },
+        "proposal-counts": {
+          "help": "NAME's garden-proposal counts over --since/--until, split into open/passed/\naccepted-with-item/accepted-without-item per class, with created as their sum; omit\nNAME to see every routine's rows at once.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "since",
+              "opts": [
+                "--since"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "until",
+              "opts": [
+                "--until"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub routine proposal-counts",
+          "short_help": "NAME's garden-proposal counts over --since/--until, split into open/passed/ accepted-with-item/accepted-without-item per class, with created as their sum; omit NAME to see every routine's rows at once."
+        },
+        "retire": {
+          "help": "Retire routine NAME \u2014 a reversible brake; in-flight runs are untouched.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub routine retire",
+          "short_help": "Retire routine NAME \u2014 a reversible brake; in-flight runs are untouched."
+        },
         "run": {
-          "help": "Mint, ingest, and promote a hub work item from routine NAME, in one act.\n\nNAME is resolved to its routine_id through the routine list (D3).",
+          "help": "Mint, ingest, and promote a hub work item from routine NAME, in one act.\n\nNAME is resolved to its routine_id through the routine list, including a retired\nroutine \u2014 so it reaches the domain's own retired refusal.",
           "params": [
             {
               "hidden": false,
@@ -3640,7 +3815,7 @@
           "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults, and its linked scopes (blizzard#488)."
         },
         "sweeps": {
-          "help": "NAME's per-scope last-swept table \u2014 its declared scope set, retired scopes\nfiltered out unless already swept while linked \u2014 and its measurement series over\n--since/--until.\n\nNAME is resolved to its routine_id through the routine list (D3).",
+          "help": "NAME's per-scope last-swept table \u2014 its declared scope set, retired scopes\nfiltered out unless already swept while linked \u2014 and its measurement series over\n--since/--until.",
           "params": [
             {
               "hidden": false,

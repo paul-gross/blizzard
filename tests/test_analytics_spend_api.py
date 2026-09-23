@@ -90,7 +90,14 @@ def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> 
 
 
 def _push_usage(  # type: ignore[no-untyped-def]
-    hub, *, chunk_id: str, node_id: str, epoch: int, seq: int, cost_usd: float | None
+    hub,
+    *,
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    seq: int,
+    cost_usd: float | None,
+    estimated_cost_usd: float | None = None,
 ) -> None:
     payload = {
         "chunk_id": chunk_id,
@@ -104,6 +111,8 @@ def _push_usage(  # type: ignore[no-untyped-def]
         "cache_create_tokens": 5,
         "cost_usd": cost_usd,
     }
+    if estimated_cost_usd is not None:
+        payload["estimated_cost_usd"] = estimated_cost_usd
     resp = hub.client.post(
         "/api/fleet/events",
         json={"runner_id": "r1", "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
@@ -161,6 +170,7 @@ def test_spend_by_node_rolls_up_usage(tmp_path: Path) -> None:
             "cache_create_tokens": 10,
             "cost_usd": pytest.approx(0.3),
             "cost_partial": False,
+            "estimated_cost_usd": None,
         }
     ]
 
@@ -181,6 +191,7 @@ def test_spend_by_graph_groups_on_the_chunks_current_graph(tmp_path: Path) -> No
             "cache_create_tokens": 5,
             "cost_usd": pytest.approx(0.1),
             "cost_partial": False,
+            "estimated_cost_usd": None,
         }
     ]
 
@@ -197,6 +208,32 @@ def test_a_null_cost_row_sums_tokens_and_flags_the_group_partial(tmp_path: Path)
     assert row["cost_usd"] == pytest.approx(0.1)  # the null row is skipped, never read as zero
     assert row["cost_partial"] is True
     assert row["input_tokens"] == 200  # token counts are exact regardless of cost
+
+
+@pytest.mark.parametrize("path", ["/api/analytics/spend/nodes", "/api/analytics/spend/chunks"])
+def test_an_estimate_only_row_publishes_its_estimate_apart_from_billed_cost(tmp_path: Path, path: str) -> None:
+    """The estimate sums into its own figure, never into ``cost_usd``, and a row carrying
+    only one is not the "neither amount" shape that flags ``cost_partial``."""
+    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=None, estimated_cost_usd=0.03)
+
+    resp = hub.client.get(path, headers=_cookie(token))
+
+    row = resp.json()["spend"][0]
+    assert row["estimated_cost_usd"] == pytest.approx(0.03)
+    assert row["cost_usd"] == 0.0
+    assert row["cost_partial"] is False
+
+
+def test_a_group_with_no_estimated_row_publishes_no_estimate(tmp_path: Path) -> None:
+    hub, token, _graph_id, nodes = _seeded_hub(tmp_path)
+    chunk_id = _mint_chunk(hub, token)
+    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.10)
+
+    resp = hub.client.get("/api/analytics/spend/nodes", headers=_cookie(token))
+
+    assert resp.json()["spend"][0]["estimated_cost_usd"] is None
 
 
 # --- per-chunk: cursor paging and NDJSON parity ---------------------------------------

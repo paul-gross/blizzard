@@ -24,9 +24,18 @@ def garden_findings() -> None:
 
 
 @garden_group.command("proposals")
-def garden_proposals() -> None:
-    """Worker: list this run's own routine's open garden proposals as JSON, closed ones
-    excluded."""
+@click.option(
+    "--state",
+    type=click.Choice(["open", "closed", "all"]),
+    default="open",
+    show_default=True,
+    help="Which of the routine's proposals to list.",
+)
+def garden_proposals(state: str) -> None:
+    """Worker: list this run's own routine's garden proposals as JSON, filtered by
+    STATE — closed ones carry their closure and pass reason."""
     worker = WorkerCall.of("garden proposals")
-    resp = worker.get(worker.leased("garden/proposals"), failure="could not read the proposal docket")
+    resp = worker.get(
+        worker.leased("garden/proposals"), failure="could not read the proposal docket", params={"state": state}
+    )
     click.echo(resp.text)

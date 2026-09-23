@@ -75,6 +75,21 @@ recompute at fetch, so an early-page chunk can be invalidated by a usage fact re
 Analytics reads share the hub's default connection pool (5 plus 10 overflow) with the fleet's write path — no dedicated
 budget — so a burst of unfiltered calls can make an unrelated write wait out the pool's checkout timeout.
 
+## A routine run's own read
+
+A running pass reads six of the same rollups a different way: `blizzard runner analytics counts
+{files,skills,agent-types,nodes} --since <instant> [--until <instant>]` and `analytics spend {nodes,graphs} --since
+<instant> [--until <instant>]` — the same rows the matching `blizzard hub analytics summary` dataset serves for the
+same window, gated on the chunk's own run context rather than an operator credential. `--since` is required here
+(unlike the operator's own optional one), so no worker call omits a window — but that bounds the caller, not the
+query: `transcript_events` carries no index on `occurred_at` (only `(extractor_version, id)`), so `counts/*` and
+`spend/*` still scan the full `extractor_version` partition regardless of the window's width, the same full-scan
+deferral the operator's own routes carry (Filters, above). Neither verb takes `--graph`, `--source`, or any of the
+event projection's own narrowing flags — the window is the only lever a routine run gets. A chunk that is not a
+routine run 404s, the same refusal `blizzard runner garden findings` gives. It needs no hub credential in its child
+environment either, is a pure client of the runner's local API authorized by the spawn-injected lease identity, and
+shares [openapi/runner.openapi.json](../../openapi/runner.openapi.json) as its endpoint-shape home.
+
 ## Errors and wire shapes
 
 A bare 401 gets the `blizzard hub login` hint ([human-auth.md](./human-auth.md)); a bare 403 — missing

@@ -576,6 +576,62 @@ def test_record_usage_with_no_stamped_harness_identity_reads_back_null(tmp_path)
 
 
 @pytest.mark.unit
+def test_record_usage_carries_an_estimate_on_the_payload_but_never_into_the_row(tmp_path):  # type: ignore[no-untyped-def]
+    """``estimated_cost_usd`` rides the outbound payload untransformed, while the row and
+    ``usage_since`` read a ``None``-cost, estimate-bearing sample as if it had none."""
+    store = _store(tmp_path)
+    _mint(store)
+    sample = replace(_sample(cost=None), estimated_cost_usd=0.0308)
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=sample,
+        recorded_at=_NOW,
+    )
+    payload = json.loads(store.pending_outbound()[0].payload)
+    assert payload["cost_usd"] is None
+    assert payload["estimated_cost_usd"] == pytest.approx(0.0308)
+    totals = store.usage_since(_NOW)
+    assert totals.cost_usd == 0.0
+    assert totals.cost_partial is True
+
+
+@pytest.mark.unit
+def test_record_usage_withholds_the_estimate_when_a_backwards_billed_reading_is_rejected(tmp_path):  # type: ignore[no-untyped-def]
+    """A billed reading ``invocation_cost`` rejects as backwards leaves ``cost_usd`` ``None``;
+    an estimate riding the same sample must not survive it either, or the two would disagree."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_spawn(
+        "lease_1",
+        pid=1,
+        process_start_time="1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-backwards"),
+        spawned_at=_NOW,
+    )
+    banked = replace(_sample(cost=5.0), cost_scope_tokens=37)
+    store.record_usage(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", epoch=1, generation=1, sample=banked, recorded_at=_NOW
+    )
+    backwards = replace(_sample(cost=3.0), cost_scope_tokens=74, estimated_cost_usd=0.02)
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=2,
+        sample=backwards,
+        recorded_at=_NOW,
+    )
+    payload = json.loads(store.pending_outbound()[1].payload)
+    assert payload["cost_usd"] is None
+    assert payload["estimated_cost_usd"] is None
+
+
+@pytest.mark.unit
 def test_record_usage_is_idempotent_per_lease_generation_kind(tmp_path):  # type: ignore[no-untyped-def]
     """A replay of the exact same invocation (same lease/generation/kind) is a no-op."""
     store = _store(tmp_path)

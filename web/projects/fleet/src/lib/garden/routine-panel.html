@@ -11,12 +11,52 @@
       <div class="rp-body">
         <header class="rp-record" data-testid="gardening-routine-record">
           <h3>{{ panel.record.name }}</h3>
+          <span
+            class="rp-state"
+            [class.rp-state--retired]="panel.renderedRetired"
+            data-testid="gardening-routine-panel-state"
+          >
+            {{ panel.renderedRetired ? 'retired' : 'enabled' }}
+          </span>
           <fleet-kit-fact-list
             class="rp-record-facts"
             [rows]="recordRows(panel.record)"
             testid="gardening-routine-record-facts"
           />
         </header>
+
+        <!-- The control shown stays keyed off the real `panel.retired`, not
+             `panel.renderedRetired` — a pending Retire/Enable's own predicted outcome
+             must never flip which verb the next click would fire
+             (`scope-panel.html`'s own control-choice comment). -->
+        @if (canEdit()) {
+          <div class="rp-lifecycle-actions">
+            @if (panel.retired) {
+              <fleet-kit-button
+                size="cta"
+                testid="gardening-routine-panel-enable"
+                [disabled]="lifecyclePending()"
+                (click)="onEnable()"
+              >
+                Re-enable
+              </fleet-kit-button>
+            } @else {
+              <fleet-kit-button
+                variant="danger"
+                size="cta"
+                testid="gardening-routine-panel-retire"
+                [disabled]="lifecyclePending()"
+                (click)="onRetire()"
+              >
+                Retire
+              </fleet-kit-button>
+            }
+          </div>
+        }
+
+        @if (actionError(); as err) {
+          <p class="rp-error" data-testid="gardening-routine-panel-error">{{ err }}</p>
+        }
 
         @if (panel.relatedScopes; as relatedScopes) {
           <section class="rp-scopes" data-testid="gardening-routine-scopes">
@@ -44,6 +84,8 @@
           <p class="rp-blocked" data-testid="gardening-routine-blocked">
             Blocked — {{ panel.blockedReason }}. No run is offered.
           </p>
+        } @else if (panel.renderedRetired) {
+          <p class="rp-blocked" data-testid="gardening-routine-retired-notice">Retired. No run is offered.</p>
         } @else {
           <div class="rp-run" data-testid="gardening-routine-actions">
             <fleet-kit-button size="cta" (click)="run.emit()" testid="gardening-routine-run">Run</fleet-kit-button>
@@ -118,4 +160,17 @@
       </section>
     </div>
   </fleet-kit-panel>
+}
+
+@if (pendingConfirm(); as confirm) {
+  <fleet-kit-confirm-dialog
+    [open]="true"
+    [heading]="confirm.heading"
+    [message]="confirm.message"
+    [confirmLabel]="confirm.confirmLabel"
+    [variant]="confirm.variant"
+    testid="confirm-dialog"
+    (confirmed)="onConfirmed()"
+    (cancelled)="onCancelled()"
+  />
 }

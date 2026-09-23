@@ -75,8 +75,10 @@ class ChunkIngestConflict(BaseModel):
 
 
 class ChunkUsageTotalView(BaseModel):
-    """A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) — never a
-    stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``."""
+    """A chunk's derived usage/cost total, summed over every recorded invocation — never a stored column.
+    ``cost_partial`` is ``True`` iff some summed row carries neither a billed nor an estimated amount;
+    ``billed_partial`` iff some carries no billed amount, so ``cost_usd`` is then a lower bound of billed
+    spend. ``estimated_cost_usd`` is ``None`` iff no row carried one, and never enters ``cost_usd``."""
 
     input_tokens: int
     output_tokens: int
@@ -84,6 +86,8 @@ class ChunkUsageTotalView(BaseModel):
     cache_create_tokens: int
     cost_usd: float
     cost_partial: bool
+    estimated_cost_usd: float | None = None
+    billed_partial: bool = False
 
     @classmethod
     def zero(cls) -> ChunkUsageTotalView:
@@ -95,13 +99,16 @@ class ChunkUsageTotalView(BaseModel):
             cache_create_tokens=0,
             cost_usd=0.0,
             cost_partial=False,
+            estimated_cost_usd=None,
+            billed_partial=False,
         )
 
 
 class ChunkUsageView(BaseModel):
     """One node-step's usage/cost telemetry (issue #59) — one harness invocation's tokens-by-class and
-    cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope
-    existed for this invocation — never fabricated."""
+    cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was
+    recorded for this invocation — never fabricated. ``estimated_cost_usd`` is the runner's own reported
+    estimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported."""
 
     node_id: str
     epoch: int
@@ -116,6 +123,7 @@ class ChunkUsageView(BaseModel):
     #: and un-backfilled, never a guess from ``model``.
     harness_id: str | None = None
     harness_version: str | None = None
+    estimated_cost_usd: float | None = None
 
 
 class ChunkSummary(BaseModel):

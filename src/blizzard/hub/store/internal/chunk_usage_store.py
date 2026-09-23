@@ -45,6 +45,9 @@ class ChunkUsageStore:
                 cache_read_tokens=row.cache_read_tokens,
                 cache_create_tokens=row.cache_create_tokens,
                 cost_usd_sum=row.cost_usd,
+                estimated_cost_usd_sum=row.estimated_cost_usd,
+                estimated_rows=row.estimated_rows,
+                both_null_rows=row.both_null_rows,
                 null_cost_rows=row.null_cost_rows,
             )
 
@@ -64,6 +67,7 @@ class ChunkUsageStore:
         cache_read_tokens: int,
         cache_create_tokens: int,
         cost_usd: float | None,
+        estimated_cost_usd: float | None = None,
         at: datetime,
     ) -> None:
         # Append-only, no epoch fence, no second dedup key — the caller's per-runner seq
@@ -84,6 +88,7 @@ class ChunkUsageStore:
                     cache_read_tokens=cache_read_tokens,
                     cache_create_tokens=cache_create_tokens,
                     cost_usd=cost_usd,
+                    estimated_cost_usd=estimated_cost_usd,
                     recorded_at=at,
                 )
             )

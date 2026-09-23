@@ -18,7 +18,7 @@ from blizzard.hub.cli.views import Listing
 
 
 def _utc_query_value(value: datetime | None) -> str | None:
-    """See `src/blizzard/hub/cli/analytics.py`'s own `_utc_query_value`."""
+    """See `blizzard.cli.window.utc_query_value`."""
     return iso_utc(value.astimezone(UTC)) if value is not None else None
 
 

@@ -1809,8 +1809,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadGardenProposalRepository, "list_for_routine"): lambda w: w.hub.services.garden_proposals.list_for_routine(
         "gardening"
     ),
-    (IReadGardenProposalRepository, "count_by_class"): lambda w: w.hub.services.garden_proposals.count_by_class(
-        "gardening", "remediate"
+    (IReadGardenProposalRepository, "counts_by_class"): lambda w: w.hub.services.garden_proposals.counts_by_class(
+        since=_ht(11), until=_ht(14)
     ),
     (IReadGardenRunRepository, "runs_in_window"): lambda w: w.garden_run.runs_in_window(
         since=_HUB_BASE, until=_HUB_UNTIL
@@ -1853,6 +1853,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRoutineRepository, "get"): lambda w: w.hub.services.routines.get(w.routine_id),
     (IReadRoutineRepository, "get_by_name"): lambda w: w.hub.services.routines.get_by_name("gardening"),
     (IReadRoutineRepository, "list_all"): lambda w: w.hub.services.routines.list_all(),
+    (IReadRoutineRepository, "is_retired"): lambda w: w.hub.services.routines.is_retired(w.routine_id),
+    (IReadRoutineRepository, "retired_ids"): lambda w: w.hub.services.routines.retired_ids(),
     (IReadRoutineScopeRepository, "list_scopes"): lambda w: w.hub.services.routine_scopes.list_scopes(w.routine_id),
     (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.services.routine_scopes.list_routines("blizzard"),
     (IReadRunContextRepository, "for_chunk"): lambda w: w.hub.services.run_context.for_chunk(w.run_chunk_1_chunk),

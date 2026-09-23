@@ -13,7 +13,9 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from tests.support import build_hub, pointer_token, report_lease
+from tests.test_fleet_auth import _seed_enrolled
 
 pytestmark = pytest.mark.component
 
@@ -30,7 +32,16 @@ def _claim(hub, pointer: dict) -> tuple[str, str]:  # type: ignore[no-untyped-de
     return chunk_id, node_id
 
 
-def _push_usage(hub, *, chunk_id: str, node_id: str, epoch: int, seq: int, cost_usd: float | None) -> None:  # type: ignore[no-untyped-def]
+def _push_usage(
+    hub,  # type: ignore[no-untyped-def]
+    *,
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    seq: int,
+    cost_usd: float | None,
+    estimated_cost_usd: float | None = None,
+) -> None:
     payload = {
         "chunk_id": chunk_id,
         "node_id": node_id,
@@ -43,6 +54,8 @@ def _push_usage(hub, *, chunk_id: str, node_id: str, epoch: int, seq: int, cost_
         "cache_create_tokens": 5,
         "cost_usd": cost_usd,
     }
+    if estimated_cost_usd is not None:
+        payload["estimated_cost_usd"] = estimated_cost_usd
     resp = hub.client.post(
         "/api/fleet/events",
         json={"runner_id": "r1", "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
@@ -77,6 +90,19 @@ def test_fleet_spend_sums_usage_across_every_chunk_since_the_cutoff(tmp_path: Pa
     assert body["cost_partial"] is False
 
 
+def test_refuses_a_runner_principal(tmp_path: Path) -> None:
+    """``GET /api/spend`` stays operator-only — a routine run reads its fleet-wide
+    spend total nowhere at all (blizzard#545's own out-of-scope, held here since no
+    other test refuses a runner token on this route)."""
+    token = _seed_enrolled(tmp_path, runner_id="runner-a")
+    hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)
+
+    resp = hub.client.get(
+        "/api/spend", params={"since": "2026-01-01T00:00:00Z"}, headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 403
+
+
 def test_fleet_spend_flags_partial_when_any_summed_row_has_no_cost(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claim(hub, _POINTER_A)
@@ -90,6 +116,35 @@ def test_fleet_spend_flags_partial_when_any_summed_row_has_no_cost(tmp_path: Pat
     body = resp.json()
     assert body["input_tokens"] == 200  # tokens still summed for both rows
     assert body["cost_usd"] == pytest.approx(0.10)  # the lower bound
+    assert body["cost_partial"] is True
+
+
+def test_fleet_spend_reports_an_estimate_apart_from_billed_cost_and_stays_non_partial(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub, _POINTER_A)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    cutoff = iso_utc(hub.clock.now())
+
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=None, estimated_cost_usd=0.03)
+
+    resp = hub.client.get("/api/spend", params={"since": cutoff})
+    body = resp.json()
+    assert body["cost_usd"] == 0.0
+    assert body["estimated_cost_usd"] == pytest.approx(0.03)
+    assert body["cost_partial"] is False
+
+
+def test_fleet_spend_flags_partial_only_when_a_row_carries_neither_amount(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub, _POINTER_A)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    cutoff = iso_utc(hub.clock.now())
+
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=None, estimated_cost_usd=None)
+
+    resp = hub.client.get("/api/spend", params={"since": cutoff})
+    body = resp.json()
+    assert body["estimated_cost_usd"] is None
     assert body["cost_partial"] is True
 
 

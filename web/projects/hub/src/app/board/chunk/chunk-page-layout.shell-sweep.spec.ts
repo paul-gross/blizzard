@@ -72,6 +72,21 @@ const ASK_DETAIL: hubApi.ChunkDetail = {
   ],
 };
 
+/** A subscription step: the total and its own history step each carry a runner-reported
+ * estimate but no billed cost (an estimate-only total is kept non-partial) — proves the
+ * token-breakdown's own estimate row and the timeline's own estimate figure both fit at
+ * phone widths. */
+const ESTIMATE_DETAIL: hubApi.ChunkDetail = {
+  ...DETAIL,
+  history: [
+    { choice_name: 'pass', epoch: 1, from_node_id: 'nd_build', from_node_name: 'build', to_node_id: 'nd_review', to_node_name: 'review', recorded_at: '2026-07-16T11:00:00.000Z' },
+  ],
+  cost: { input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0, cost_partial: false, estimated_cost_usd: 0.07 },
+  usage: [
+    { node_id: 'nd_build', epoch: 1, kind: 'spawn', model: 'claude-opus-4-8', input_tokens: 900, output_tokens: 400, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: null, estimated_cost_usd: 0.07 },
+  ],
+};
+
 /**
  * A `needs_human` chunk carrying both the runner-composed wrapped takeover command
  * (blizzard#251) and its raw `cd <workdir> && <harness resume>` fallback — realistically
@@ -151,6 +166,32 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#2
     }
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it('renders the token-breakdown and timeline cost-estimate rows without overflow at ~390px', async () => {
+    const fixture = await render(ESTIMATE_DETAIL);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const breakdownEstimate = root.querySelector<HTMLElement>('[data-testid="cost-estimate-usd"]');
+      expect(breakdownEstimate?.textContent?.trim()).toBe('$0.07 est.');
+
+      const timelineEstimate = root.querySelector<HTMLElement>('[data-testid="history-step-cost-estimate"]');
+      expect(timelineEstimate?.textContent?.trim()).toBe('$0.07 est.');
+
+      const general = root.querySelector<HTMLElement>('[data-testid="chunk-general-tab"]')!;
+      expect(
+        general.scrollWidth,
+        `General tab overflows horizontally (${general.scrollWidth} > ${general.clientWidth})`,
+      ).toBeLessThanOrEqual(general.clientWidth);
+    } finally {
+      root.remove();
+    }
   });
 
   it('sits node history beside a shared work-item/issues left column at 1024px', async () => {

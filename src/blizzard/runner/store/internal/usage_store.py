@@ -194,6 +194,10 @@ class UsageStore:
             # What this invocation alone cost, which is the harness's own figure only
             # until the session has banked something for a session-scoped one to include.
             cost_usd = invocation_cost(sample, self._session_cost_basis(conn, lease_id))
+            # `invocation_cost` rejected a backwards billed reading: withhold the estimate too,
+            # so the two readings can never diverge.
+            billed_reading_rejected = cost_usd is None and sample.cost_usd is not None
+            estimated_cost_usd = None if billed_reading_rejected else sample.estimated_cost_usd
             conn.execute(
                 usage_facts.insert().values(
                     lease_id=lease_id,
@@ -229,6 +233,9 @@ class UsageStore:
                     "cache_read_tokens": sample.cache_read_tokens,
                     "cache_create_tokens": sample.cache_create_tokens,
                     "cost_usd": cost_usd,
+                    # Never written to the runner's `usage_facts` row: only this
+                    # outbound fact carries it, as computed on the sample itself.
+                    "estimated_cost_usd": estimated_cost_usd,
                 }
             )
             result = conn.execute(

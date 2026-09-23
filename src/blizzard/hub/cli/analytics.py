@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import click
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import Cost, Listing
+from blizzard.hub.cli.views import Cost, CostEstimate, Listing
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class SpendRow:
 
     def line(self) -> str:
         row = self.row
-        cost = Cost(row["cost_usd"], row["cost_partial"]).rendered
+        cost = Cost(row["cost_usd"], row["cost_partial"]).rendered + CostEstimate.suffix(row)
         return (
             f"{row[self.key_field]}  {cost}  in={row['input_tokens']} out={row['output_tokens']} "
             f"cache_read={row['cache_read_tokens']} cache_create={row['cache_create_tokens']}"
@@ -119,22 +119,11 @@ def _source_option(f: Any) -> Any:
     return click.option("--source", default=None, help="Scope to one work source.")(f)
 
 
-def _since_option(f: Any) -> Any:
-    return click.option(
-        "--since",
-        default=None,
-        type=click.DateTime(),
-        help="Only records at/after this instant, read in the operator's own local time.",
-    )(f)
-
-
-def _until_option(f: Any) -> Any:
-    return click.option(
-        "--until",
-        default=None,
-        type=click.DateTime(),
-        help="Only records before this instant, read in the operator's own local time.",
-    )(f)
+#: The operator's own ``--since`` stays optional (an unbounded-window read is legal
+#: here, unlike the fleet route's own required window) — `blizzard.cli.window`'s
+#: shared factory built with its default.
+_since_option = since_option()
+_until_option = until_option()
 
 
 def _extractor_version_option(f: Any) -> Any:
@@ -180,12 +169,6 @@ def _effort_option(f: Any) -> Any:
     return click.option("--effort", default=None, help="Narrow to one effort level.")(f)
 
 
-def _utc_query_value(value: datetime | None) -> str | None:
-    """D6: a bare ``--since``/``--until`` is read as the operator's own local wall clock,
-    not UTC — converted (not merely relabeled) before it crosses the wire."""
-    return iso_utc(value.astimezone(UTC)) if value is not None else None
-
-
 def _scope_params(
     *,
     graph_id: str | None,
@@ -206,8 +189,8 @@ def _scope_params(
     named = {
         "graph_id": graph_id,
         "source": source,
-        "since": _utc_query_value(since),
-        "until": _utc_query_value(until),
+        "since": utc_query_value(since),
+        "until": utc_query_value(until),
         "extractor_version": extractor_version,
         "kind": kind,
         "tool": tool,

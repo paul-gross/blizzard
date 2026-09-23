@@ -1,7 +1,7 @@
 """The PR + CI-watch delivery policy's `deliver` node script — self-healing. Routes by the
 PR's live ``mergeable_state`` plus, for a ``clean``/``blocked``/``unstable`` head, its check
 runs — what eligibility turns on. ``behind`` self-heals via ``update-branch``, ``dirty`` is
-the one true LLM kick-back, everything else waits. Merges via rebase-merge. Honors the
+the one true LLM kick-back, everything else waits. Merges via merge commit. Honors the
 hub-command-node authoring contract (``blizzard-context:/standards/hub-nodes.md``)."""
 
 from __future__ import annotations
@@ -460,11 +460,11 @@ def _land() -> int:
         return 0
 
     # --- merge stage: merge the CURRENT head sha, which a self-heal update-branch may
-    #     have advanced past the originally-recorded artifact commit, via rebase-merge.
+    #     have advanced past the originally-recorded artifact commit.
     pending_count = len(to_merge)
     for marker_index, (pull, head_sha) in enumerate(to_merge, start=1):
         try:
-            landed_sha = pull.merge(head_sha, method="rebase")
+            landed_sha = pull.merge(head_sha, method="merge")
         except MergeDidNotLand as exc:
             # Not an already-merged prior run (`merge` absorbs that) — a race worth re-polling.
             print(f"merge of {pull} did not land ({exc.result}); will re-poll", file=sys.stderr)

@@ -5,6 +5,7 @@ import { page } from 'vitest/browser';
 
 import type { ChunkDetail } from '../api/hub';
 import { ChunkTimeline } from './chunk-timeline';
+import { ChunkTimelineSelection } from './chunk-timeline-selection';
 
 /**
  * The node-history timeline's harness-provenance badges (blizzard#441), the tooled half
@@ -61,6 +62,19 @@ const DETAIL: ChunkDetail = {
   ],
 };
 
+// The same two-step history, but the second step is a subscription invocation: no
+// billed cost, only a runner-reported estimate (an estimate-only row is kept
+// non-partial). Carried by both the timeline and the Node history tab's Selection list,
+// since both render a step's usage from the same `chunk-timeline-rows.ts` fold.
+const ESTIMATE_DETAIL: ChunkDetail = {
+  ...DETAIL,
+  chunk_id: 'ch_01estimateprov0000000000000',
+  usage: [
+    DETAIL.usage![0],
+    { ...DETAIL.usage![1], cost_usd: null, estimated_cost_usd: 0.07 },
+  ],
+};
+
 describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep, blizzard#441)', () => {
   it('keeps two steps recording distinct harnesses visually distinct with no page errors or horizontal overflow at ~390px', async () => {
     const pageErrors: string[] = [];
@@ -101,6 +115,65 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
       ).toBeLessThanOrEqual(steps.clientWidth);
     } finally {
       root.remove();
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    }
+
+    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it('renders a step’s own cost estimate on both the timeline and the Node history Selection list, labeled, with no overflow at ~390px', async () => {
+    const pageErrors: string[] = [];
+    const onError = (e: ErrorEvent) => pageErrors.push(e.message);
+    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+
+    await TestBed.configureTestingModule({
+      imports: [ChunkTimeline, ChunkTimelineSelection],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
+    }).compileComponents();
+
+    const timelineFixture = TestBed.createComponent(ChunkTimeline);
+    timelineFixture.componentRef.setInput('detail', ESTIMATE_DETAIL);
+    await timelineFixture.whenStable();
+    const timelineRoot = timelineFixture.nativeElement as HTMLElement;
+    document.body.appendChild(timelineRoot);
+    await timelineFixture.whenStable();
+
+    const selectionFixture = TestBed.createComponent(ChunkTimelineSelection);
+    selectionFixture.componentRef.setInput('detail', ESTIMATE_DETAIL);
+    await selectionFixture.whenStable();
+    const selectionRoot = selectionFixture.nativeElement as HTMLElement;
+    document.body.appendChild(selectionRoot);
+    await selectionFixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const timelineEstimate = timelineRoot.querySelector<HTMLElement>('[data-testid="history-step-cost-estimate"]');
+      expect(timelineEstimate?.textContent?.trim()).toBe('$0.07 est.');
+      expect(timelineRoot.querySelector('[data-testid="history-step-cost-partial"]')).toBeNull();
+
+      const selectionEstimate = selectionRoot.querySelector<HTMLElement>('[data-testid="selection-step-cost-estimate"]');
+      expect(selectionEstimate?.textContent?.trim()).toBe('$0.07 est.');
+      expect(selectionRoot.querySelector('[data-testid="selection-step-cost-partial"]')).toBeNull();
+
+      const timelineList = timelineRoot.querySelector<HTMLElement>('.timeline') ?? timelineRoot;
+      expect(
+        timelineList.scrollWidth,
+        `timeline overflows horizontally at 390px (${timelineList.scrollWidth} > ${timelineList.clientWidth})`,
+      ).toBeLessThanOrEqual(timelineList.clientWidth);
+
+      const selectionList = selectionRoot.querySelector<HTMLElement>('.timeline') ?? selectionRoot;
+      expect(
+        selectionList.scrollWidth,
+        `selection overflows horizontally at 390px (${selectionList.scrollWidth} > ${selectionList.clientWidth})`,
+      ).toBeLessThanOrEqual(selectionList.clientWidth);
+    } finally {
+      timelineRoot.remove();
+      selectionRoot.remove();
       window.removeEventListener('error', onError);
       window.removeEventListener('unhandledrejection', onRejection);
     }

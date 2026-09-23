@@ -91,6 +91,7 @@ from blizzard.hub.domain.routines import (
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
     RoutineAuthoring,
+    RoutineLifecycle,
     RoutineScopeMembership,
 )
 from blizzard.hub.domain.run_context import IReadRunContextRepository
@@ -241,6 +242,8 @@ class HubServices:
     routine_scope_membership: RoutineScopeMembership
     #: Create and edit a routine, minting its default scope on demand (blizzard#389 D4).
     routine_authoring: RoutineAuthoring
+    #: The routine retire/enable brake.
+    routine_lifecycle: RoutineLifecycle
     #: Mint, ingest, and promote a hub work item from a routine, in one act (blizzard#392).
     routine_run: RunService
     #: The per-scope delta baseline a routine has swept, and how much has landed since
@@ -568,7 +571,9 @@ def build_services(
             routine_scopes=routine_scope_store,
             clock=clock,
         ),
+        routine_lifecycle=RoutineLifecycle(routines=routine_store, clock=clock),
         routine_run=RunService(
+            routines=routine_store,
             scopes=scope_store,
             routine_scopes=routine_scope_store,
             graphs=graph_store,

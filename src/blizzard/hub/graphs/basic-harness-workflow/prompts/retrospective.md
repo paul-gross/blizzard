@@ -19,8 +19,8 @@ environment was acquired.
 that was pushed, not the merged sha — read each PR's own state rather than assuming from it.
 
 Per repo, check its PR's merge state from inside that repo's worktree so the query targets the right forge (on GitHub,
-`gh pr view --json state,mergedAt`), then test the merged sha's reachability — never the sha the newest declaration
-carries, which rebase-merge rewrites out of history at merge — with `git merge-base --is-ancestor <merged sha>
+`gh pr view --json state,mergedAt`), then test the PR merge commit's reachability, not the sha the newest declaration
+carries, with `git merge-base --is-ancestor <merged sha>
 origin/<base>` — `origin/master` unless the repo records another; `gh pr view --json mergeCommit` gives the merged sha
 — exit 0 means reachable; comparing branch tips or log output answers a different question.
 

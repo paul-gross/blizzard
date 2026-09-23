@@ -79,6 +79,7 @@ export class GardeningRoutinesPage {
       name: r.name,
       graphName: r.graph_name,
       blocked: isRoutineBlocked(this.graphs(), this.graphsQuery.isPending(), r.graph_name),
+      retired: r.retired ?? false,
     })),
   );
 

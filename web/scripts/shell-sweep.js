@@ -184,6 +184,9 @@
  *     the blocked marking's adjacency to a card's status: it renders directly below the
  *     status row without moving the status's own position or overflowing the card, at
  *     800px and at 390/320px.
+ *   - projects/fleet/src/lib/board-card/board-card-cost.shell-sweep.spec.ts — a
+ *     done-lane card's completion stamp, billed cost, and estimate stay side by side on
+ *     one line without overflowing the card, at 800px and at 390/320px.
  *   - projects/fleet/src/lib/board-shell/board-column.shell-sweep.spec.ts — the
  *     READY and BACKLOG whole-card drag cue: its decorative token-coloured dots
  *     resolve as a two-wide grid only when reordering is armed.
@@ -268,6 +271,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-page-grids.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-findings-filters.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-blocked.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/board-card/board-card-cost.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/board-shell/board-column.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk-detail/chunk-detail-header.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/machine-detail-header.shell-sweep.spec.ts' },

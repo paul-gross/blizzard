@@ -5,6 +5,93 @@ export type ClientOptions = {
 };
 
 /**
+ * AnalyticsCountView
+ *
+ * One grouping key and how many events fell under it (blizzard#255). ``key`` names
+ * whichever dimension this response is grouped by — a file path, a skill name, an
+ * agent type, or a node id.
+ */
+export type AnalyticsCountView = {
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Key
+     */
+    key: string;
+};
+
+/**
+ * AnalyticsCountsResponse
+ *
+ * Every grouping key matching the filters, most-frequent first with the key
+ * ascending as the tiebreak — a total order two identical calls agree on.
+ */
+export type AnalyticsCountsResponse = {
+    /**
+     * Counts
+     */
+    counts: Array<AnalyticsCountView>;
+};
+
+/**
+ * AnalyticsSpendResponse
+ *
+ * Every grouping key matching the filters, key ascending — a total order two
+ * identical calls agree on, the same convention the durations/counts responses use.
+ */
+export type AnalyticsSpendResponse = {
+    /**
+     * Spend
+     */
+    spend: Array<AnalyticsSpendView>;
+};
+
+/**
+ * AnalyticsSpendView
+ *
+ * One grouping key's usage/cost rollup — ``key`` is a node id or a graph id, whichever dataset
+ * served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed
+ * row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some
+ * summed row carried one.
+ */
+export type AnalyticsSpendView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cost Partial
+     */
+    cost_partial: boolean;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
+};
+
+/**
  * ArtifactKind
  *
  * The union discriminator.
@@ -502,10 +589,16 @@ export type ChunkSummary = {
 /**
  * ChunkUsageTotalView
  *
- * A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) — never a
- * stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``.
+ * A chunk's derived usage/cost total, summed over every recorded invocation — never a stored column.
+ * ``cost_partial`` is ``True`` iff some summed row carries neither a billed nor an estimated amount;
+ * ``billed_partial`` iff some carries no billed amount, so ``cost_usd`` is then a lower bound of billed
+ * spend. ``estimated_cost_usd`` is ``None`` iff no row carried one, and never enters ``cost_usd``.
  */
 export type ChunkUsageTotalView = {
+    /**
+     * Billed Partial
+     */
+    billed_partial?: boolean;
     /**
      * Cache Create Tokens
      */
@@ -523,6 +616,10 @@ export type ChunkUsageTotalView = {
      */
     cost_usd: number;
     /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
+    /**
      * Input Tokens
      */
     input_tokens: number;
@@ -536,8 +633,9 @@ export type ChunkUsageTotalView = {
  * ChunkUsageView
  *
  * One node-step's usage/cost telemetry (issue #59) — one harness invocation's tokens-by-class and
- * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope
- * existed for this invocation — never fabricated.
+ * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was
+ * recorded for this invocation — never fabricated. ``estimated_cost_usd`` is the runner's own reported
+ * estimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.
  */
 export type ChunkUsageView = {
     /**
@@ -556,6 +654,10 @@ export type ChunkUsageView = {
      * Epoch
      */
     epoch: number;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
     /**
      * Harness Id
      */
@@ -3247,6 +3349,240 @@ export type ListLeasesApiLeasesGetResponses = {
 
 export type ListLeasesApiLeasesGetResponse = ListLeasesApiLeasesGetResponses[keyof ListLeasesApiLeasesGetResponses];
 
+export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/counts/agent-types';
+};
+
+export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetError = GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors[keyof GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors];
+
+export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponse = GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses[keyof GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses];
+
+export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/counts/files';
+};
+
+export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetError = GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors[keyof GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors];
+
+export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponse = GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses[keyof GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses];
+
+export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/counts/nodes';
+};
+
+export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetError = GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors[keyof GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors];
+
+export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponse = GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses[keyof GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses];
+
+export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/counts/skills';
+};
+
+export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetError = GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors[keyof GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors];
+
+export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponse = GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses[keyof GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses];
+
+export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/spend/graphs';
+};
+
+export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetError = GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors[keyof GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors];
+
+export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponse = GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses[keyof GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses];
+
+export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/spend/nodes';
+};
+
+export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetError = GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors[keyof GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors];
+
+export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponse = GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses[keyof GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses];
+
 export type ListArtifactsApiLeasesLeaseIdArtifactsGetData = {
     body?: never;
     path: {
@@ -3525,7 +3861,12 @@ export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetData = {
          */
         lease_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * State
+         */
+        state?: string;
+    };
     url: '/api/leases/{lease_id}/garden/proposals';
 };
 

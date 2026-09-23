@@ -494,6 +494,8 @@ class UsageFact:
     #: and un-backfilled (D4), never a fresh resolution or a guess from ``model``.
     harness_id: str | None = None
     harness_version: str | None = None
+    #: A runner-side subscription estimate, kept apart from ``cost_usd``; ``None`` when none was reported.
+    estimated_cost_usd: float | None = None
 
 
 @dataclass(frozen=True)
@@ -1157,10 +1159,10 @@ class ChunkChange:
 
 @dataclass(frozen=True)
 class UsageTotal:
-    """A usage/cost total summed at read time, never a stored column. **The one canonical
-    owner of the lower-bound + PARTIAL cost contract** (``canon:one-owner``): token counts
-    are exact; ``cost_usd`` sums only the rows that carry one, so ``cost_partial`` (True
-    iff any summed row lacked one) marks ``cost_usd`` a lower bound, to surface PARTIAL."""
+    """A usage/cost total summed at read time, never a stored column. **The one canonical owner of the
+    lower-bound + PARTIAL cost contract** (``canon:one-owner``): ``cost_usd``/``estimated_cost_usd`` sum only
+    billed/estimated rows (the latter ``None`` when none contributed); ``cost_partial`` is ``True`` iff some row
+    carries neither a billed nor an estimated amount, ``billed_partial`` iff some row carries no billed one."""
 
     input_tokens: int
     output_tokens: int
@@ -1168,18 +1170,23 @@ class UsageTotal:
     cache_create_tokens: int
     cost_usd: float
     cost_partial: bool
+    estimated_cost_usd: float | None = None
+    billed_partial: bool = False
 
     @classmethod
     def of(cls, rows: list[UsageFact]) -> UsageTotal:
         """Sum ``rows`` into one total — one chunk's own facts, or an arbitrary set
-        (the fleet spend-since window, issue #60)."""
+        (the fleet spend-since window)."""
+        estimated_rows = [u.estimated_cost_usd for u in rows if u.estimated_cost_usd is not None]
         return cls(
             input_tokens=sum(u.input_tokens for u in rows),
             output_tokens=sum(u.output_tokens for u in rows),
             cache_read_tokens=sum(u.cache_read_tokens for u in rows),
             cache_create_tokens=sum(u.cache_create_tokens for u in rows),
             cost_usd=sum(u.cost_usd for u in rows if u.cost_usd is not None),
-            cost_partial=any(u.cost_usd is None for u in rows),
+            estimated_cost_usd=sum(estimated_rows) if estimated_rows else None,
+            cost_partial=any(u.cost_usd is None and u.estimated_cost_usd is None for u in rows),
+            billed_partial=any(u.cost_usd is None for u in rows),
         )
 
     @classmethod
@@ -1191,20 +1198,24 @@ class UsageTotal:
         cache_read_tokens: int,
         cache_create_tokens: int,
         cost_usd_sum: float,
+        estimated_cost_usd_sum: float,
+        estimated_rows: int,
+        both_null_rows: int,
         null_cost_rows: int,
     ) -> UsageTotal:
-        """Build from sums a caller already grouped in SQL (blizzard#256 D6), applying
-        this same lower-bound + PARTIAL contract over them rather than a second,
-        independent one: ``cost_usd_sum`` is the caller's own skip-null sum (e.g.
-        ``COALESCE(SUM(cost_usd), 0)`` over the group's non-null rows), and
-        ``null_cost_rows`` is how many of the group's rows lacked a cost envelope."""
+        """Build from sums a caller already grouped in SQL, applying this same contract
+        rather than a second, independent one: ``cost_usd_sum``/``estimated_cost_usd_sum``
+        are the caller's own skip-null sums; the ``*_rows`` counts carry an estimate, neither
+        amount, and no billed amount respectively."""
         return cls(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
             cache_create_tokens=cache_create_tokens,
             cost_usd=cost_usd_sum,
-            cost_partial=null_cost_rows > 0,
+            estimated_cost_usd=estimated_cost_usd_sum if estimated_rows > 0 else None,
+            cost_partial=both_null_rows > 0,
+            billed_partial=null_cost_rows > 0,
         )
 
 

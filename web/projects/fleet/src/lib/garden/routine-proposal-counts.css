@@ -1,0 +1,19 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+  min-width: 0;
+}
+.rpc-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.rpc-table th,
+.rpc-table td {
+  text-align: left;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}

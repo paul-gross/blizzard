@@ -11,6 +11,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
+from blizzard.runner.harness.internal.opencode_price_cache import FileOpenCodePriceCatalog
 from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.process_launch import _SPAWN_EXECUTOR
 from blizzard.runner.harness.registry import (
@@ -87,6 +88,38 @@ def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: P
     assert isinstance(source, OpenCodeTranscriptSource)
     adapter_source = vars(registry.adapter(OPENCODE_HARNESS_ID))["_transcript_source"]
     assert adapter_source is source
+
+
+@pytest.mark.unit
+def test_production_registry_injects_a_file_price_catalog_from_worker_env_passthrough(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The OpenCode binding's price catalog is resolved from the same
+    ``[worker] env_passthrough`` the worker's own environment is built from — never a
+    constant path — and it is a real file-backed catalog, not left unset."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", worker_env_passthrough=("XDG_CACHE_HOME",))
+
+    registry = build_production_harness_registry(config)
+
+    catalog = vars(registry.adapter(OPENCODE_HARNESS_ID))["_price_catalog"]
+    assert isinstance(catalog, FileOpenCodePriceCatalog)
+    assert vars(catalog)["_path"] == tmp_path / "xdg-cache" / "opencode" / "models.json"
+
+
+@pytest.mark.unit
+def test_production_registry_binds_no_price_catalog_with_an_unresolvable_cache_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Neither ``XDG_CACHE_HOME`` nor ``HOME`` reaching the worker leaves the cache root
+    unresolvable, so the binding skips the catalog entirely rather than one rooted at cwd."""
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("HOME", raising=False)
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+
+    registry = build_production_harness_registry(config)
+
+    assert vars(registry.adapter(OPENCODE_HARNESS_ID))["_price_catalog"] is None
 
 
 @pytest.mark.unit

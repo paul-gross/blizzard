@@ -80,6 +80,7 @@ export {
   acceptGardenProposalMutationKey,
   passGardenProposalMutationKey,
   scopeLifecycleMutationKey,
+  routineLifecycleMutationKey,
 } from './lib/mutation-keys';
 
 export * as hubApi from './lib/api/hub';

@@ -8,6 +8,7 @@ it further through :meth:`FleetRequest.assert_owns` — except the lease-transcr
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -23,6 +24,13 @@ from blizzard.hub.api import queue as queue_api
 from blizzard.hub.api import runners as runners_api
 from blizzard.hub.api import system_artifacts as system_artifacts_api
 from blizzard.hub.api import transcripts as transcripts_api
+from blizzard.hub.api.analytics import (
+    EventScopeFilters,
+    ScopeFilters,
+    counts_response,
+    operational_criteria,
+    spend_response,
+)
 from blizzard.hub.api.auth import AuthMode, RunnerPrincipal, require_runner_principal
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.findings import finding_view
@@ -40,12 +48,15 @@ from blizzard.hub.domain.claim import (
     ClaimDeniedTerminal,
 )
 from blizzard.hub.domain.envelope import Arrival, Envelope
+from blizzard.hub.domain.garden_proposals import RoutineProposalState
 from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
 from blizzard.hub.domain.registry import RunnerCapability
+from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
 )
+from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
 from blizzard.wire.chunk import (
     ChunkDetail,
     ChunkPauseRequest,
@@ -342,6 +353,26 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     ).wire
 
 
+def _routine_run_or_404(chunk_id: str, services: HubServices) -> RunContext:
+    """The run context that gates a worker's fleet-scoped read — 404 both for an
+    unknown chunk and for one carrying no run context (not a routine run), shared by
+    every fleet route that requires the chunk to be a routine run (garden
+    findings/proposals, and the analytics reads, blizzard#545). Callers decide what to
+    do with the returned run: the garden reads filter by its routine and scope; the
+    analytics reads use it only to gate access, and return fleet-wide rollups over the
+    window."""
+    chunk = services.chunks.record.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    run = services.run_context.for_chunk(chunk)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"chunk {chunk_id} carries no run context — not a routine run",
+        )
+    return run
+
+
 @router.get("/chunks/{chunk_id}/garden/findings", response_model=list[FindingView])
 def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[FindingView]:
     """A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583
@@ -349,15 +380,7 @@ def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(
     chunk's own run context derives the routine and the scope; no caller-supplied flag can
     name another. 404 both for an unknown chunk and for one carrying no run context (not a
     routine run): a chunk with nothing to read is refused rather than an empty bucket."""
-    chunk = services.chunks.record.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    run = services.run_context.for_chunk(chunk)
-    if run is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"chunk {chunk_id} carries no run context — not a routine run",
-        )
+    run = _routine_run_or_404(chunk_id, services)
     bucket = services.findings.list_for(run.routine_name, run.scope_slug, include_gone=True)
     bucket += services.findings.list_by_source(scope_slug=run.scope_slug, source="review", include_gone=True)
     return [finding_view(f) for f in bucket if f.live or f.state == "delivered"]
@@ -365,25 +388,120 @@ def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(
 
 @router.get("/chunks/{chunk_id}/garden/proposals", response_model=list[GardenProposalView])
 def get_garden_proposals(
-    chunk_id: str, services: Annotated[HubServices, Depends(get_services)]
+    chunk_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    state: Annotated[RoutineProposalState, Query()] = RoutineProposalState.OPEN,
 ) -> list[GardenProposalView]:
-    """A worker's own routine's open garden proposals — the chunk's own run context
-    derives the routine; no caller-supplied flag can name another, and no scope filter
-    applies (a proposal carries no scope column). 404 both for an unknown chunk and for
-    one carrying no run context (not a routine run): a chunk with nothing to read is
-    refused rather than answered with an empty bucket."""
-    chunk = services.chunks.record.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    run = services.run_context.for_chunk(chunk)
-    if run is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"chunk {chunk_id} carries no run context — not a routine run",
-        )
+    """A worker's own routine's garden proposals, filtered by `state` (`open` by
+    default, plus `closed` and `all`, each closed entry carrying its closure) — the
+    chunk's own run context derives the routine; no caller-supplied flag can name
+    another, and no scope filter applies (a proposal carries no scope column). 404 both
+    for an unknown chunk and for one carrying no run context (not a routine run): a
+    chunk with nothing to read is refused rather than answered with an empty bucket."""
+    run = _routine_run_or_404(chunk_id, services)
     return [
-        garden_proposal_view(p, None) for p in services.open_garden_proposals.list_open_for_routine(run.routine_name)
+        garden_proposal_view(p, closure)
+        for p, closure in services.open_garden_proposals.list_for_routine(run.routine_name, state)
     ]
+
+
+@dataclass(frozen=True)
+class AnalyticsWindow:
+    """The one filter a worker's fleet-scoped analytics read takes: the window (D2,
+    blizzard#545) — ``since`` required (422 unset), ``until`` optional, both UTC-aware
+    instants (``bzh:utc-instants``). No graph, source, or event-shape filter: those stay
+    the operator plane's own. Builds the operator plane's own filter types with only the
+    window populated, so a fleet route renders through the identical criteria and
+    response-shaping helpers the operator route does (Decision 1)."""
+
+    since: datetime
+    until: datetime | None
+
+    @classmethod
+    def of(
+        cls,
+        since: Annotated[datetime, Query()],
+        until: Annotated[datetime | None, Query()] = None,
+    ) -> AnalyticsWindow:
+        return cls(since, until)
+
+    @property
+    def scope(self) -> ScopeFilters:
+        return ScopeFilters(graph_id=None, source=None, since=self.since, until=self.until)
+
+    @property
+    def event_scope(self) -> EventScopeFilters:
+        return EventScopeFilters(
+            self.scope, extractor_version=None, harness_id=None, harness_version=None, model=None, effort=None
+        )
+
+
+@router.get("/chunks/{chunk_id}/analytics/counts/files", response_model=AnalyticsCountsResponse)
+def get_chunk_analytics_counts_files(
+    chunk_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+) -> AnalyticsCountsResponse:
+    """A worker's own routine-run read of ``GET /api/analytics/counts/files`` — the same
+    rows, over the window it names, gated on the chunk carrying a run context rather than
+    on operator credentials (blizzard#545)."""
+    _routine_run_or_404(chunk_id, services)
+    return counts_response(services.analytics_events.counts_by_file(window.event_scope.criteria()))
+
+
+@router.get("/chunks/{chunk_id}/analytics/counts/skills", response_model=AnalyticsCountsResponse)
+def get_chunk_analytics_counts_skills(
+    chunk_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+) -> AnalyticsCountsResponse:
+    """A worker's own routine-run read of ``GET /api/analytics/counts/skills`` (blizzard#545)."""
+    _routine_run_or_404(chunk_id, services)
+    return counts_response(services.analytics_events.counts_by_skill(window.event_scope.criteria()))
+
+
+@router.get("/chunks/{chunk_id}/analytics/counts/agent-types", response_model=AnalyticsCountsResponse)
+def get_chunk_analytics_counts_agent_types(
+    chunk_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+) -> AnalyticsCountsResponse:
+    """A worker's own routine-run read of ``GET /api/analytics/counts/agent-types`` (blizzard#545)."""
+    _routine_run_or_404(chunk_id, services)
+    return counts_response(services.analytics_events.counts_by_agent_type(window.event_scope.criteria()))
+
+
+@router.get("/chunks/{chunk_id}/analytics/counts/nodes", response_model=AnalyticsCountsResponse)
+def get_chunk_analytics_counts_nodes(
+    chunk_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+) -> AnalyticsCountsResponse:
+    """A worker's own routine-run read of ``GET /api/analytics/counts/nodes`` (blizzard#545)."""
+    _routine_run_or_404(chunk_id, services)
+    return counts_response(services.analytics_events.counts_by_node(window.event_scope.criteria()))
+
+
+@router.get("/chunks/{chunk_id}/analytics/spend/nodes", response_model=AnalyticsSpendResponse)
+def get_chunk_analytics_spend_nodes(
+    chunk_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+) -> AnalyticsSpendResponse:
+    """A worker's own routine-run read of ``GET /api/analytics/spend/nodes`` (blizzard#545)."""
+    _routine_run_or_404(chunk_id, services)
+    return spend_response(services.operational_analytics.spend_by_node(operational_criteria(window.scope)))
+
+
+@router.get("/chunks/{chunk_id}/analytics/spend/graphs", response_model=AnalyticsSpendResponse)
+def get_chunk_analytics_spend_graphs(
+    chunk_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
+) -> AnalyticsSpendResponse:
+    """A worker's own routine-run read of ``GET /api/analytics/spend/graphs`` (blizzard#545)."""
+    _routine_run_or_404(chunk_id, services)
+    return spend_response(services.operational_analytics.spend_by_graph(operational_criteria(window.scope)))
 
 
 @router.get("/scopes", response_model=list[ScopeView])

@@ -66,4 +66,5 @@ def fleet_spend(
         cache_create_tokens=usage.cache_create_tokens,
         cost_usd=usage.cost_usd,
         cost_partial=usage.cost_partial,
+        estimated_cost_usd=usage.estimated_cost_usd,
     )

@@ -138,7 +138,8 @@ export type AnalyticsChunkSpendResponse = {
  * AnalyticsChunkSpendView
  *
  * One chunk's own usage/cost rollup (blizzard#256 D8) — the per-chunk grouping's
- * unbounded, cursor-paged row.
+ * unbounded, cursor-paged row. ``cost_partial`` is ``True`` iff some summed row carried neither a billed
+ * nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some summed row carried one.
  */
 export type AnalyticsChunkSpendView = {
     /**
@@ -161,6 +162,10 @@ export type AnalyticsChunkSpendView = {
      * Cost Usd
      */
     cost_usd: number;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
     /**
      * Input Tokens
      */
@@ -393,10 +398,10 @@ export type AnalyticsSpendResponse = {
 /**
  * AnalyticsSpendView
  *
- * One grouping key's usage/cost rollup (blizzard#256 D6) — ``key`` is a node id or
- * a graph id, whichever dataset served it. The same lower-bound + PARTIAL contract
- * ``GET /api/spend`` publishes: ``cost_usd`` sums only the rows that carried a cost
- * envelope, and ``cost_partial`` is ``True`` iff any summed row lacked one.
+ * One grouping key's usage/cost rollup — ``key`` is a node id or a graph id, whichever dataset
+ * served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed
+ * row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some
+ * summed row carried one.
  */
 export type AnalyticsSpendView = {
     /**
@@ -415,6 +420,10 @@ export type AnalyticsSpendView = {
      * Cost Usd
      */
     cost_usd: number;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
     /**
      * Input Tokens
      */
@@ -1280,10 +1289,16 @@ export type ChunkSummary = {
 /**
  * ChunkUsageTotalView
  *
- * A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) — never a
- * stored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``.
+ * A chunk's derived usage/cost total, summed over every recorded invocation — never a stored column.
+ * ``cost_partial`` is ``True`` iff some summed row carries neither a billed nor an estimated amount;
+ * ``billed_partial`` iff some carries no billed amount, so ``cost_usd`` is then a lower bound of billed
+ * spend. ``estimated_cost_usd`` is ``None`` iff no row carried one, and never enters ``cost_usd``.
  */
 export type ChunkUsageTotalView = {
+    /**
+     * Billed Partial
+     */
+    billed_partial?: boolean;
     /**
      * Cache Create Tokens
      */
@@ -1301,6 +1316,10 @@ export type ChunkUsageTotalView = {
      */
     cost_usd: number;
     /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
+    /**
      * Input Tokens
      */
     input_tokens: number;
@@ -1314,8 +1333,9 @@ export type ChunkUsageTotalView = {
  * ChunkUsageView
  *
  * One node-step's usage/cost telemetry (issue #59) — one harness invocation's tokens-by-class and
- * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope
- * existed for this invocation — never fabricated.
+ * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was
+ * recorded for this invocation — never fabricated. ``estimated_cost_usd`` is the runner's own reported
+ * estimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.
  */
 export type ChunkUsageView = {
     /**
@@ -1334,6 +1354,10 @@ export type ChunkUsageView = {
      * Epoch
      */
     epoch: number;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
     /**
      * Harness Id
      */
@@ -2176,9 +2200,10 @@ export type FindingsPageView = {
 /**
  * FleetSpendView
  *
- * The fleet's usage/cost total since ``since`` and, when the caller bounded the
- * window, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``
- * marks ``cost_usd`` as a lower bound.
+ * The fleet's usage/cost total since ``since`` and, when the caller bounded the window, strictly
+ * before ``until`` (``None`` for the open-ended tail). ``cost_partial`` is ``True`` iff some summed row
+ * carries neither a billed nor an estimated amount, so ``cost_usd`` is then a lower bound;
+ * ``estimated_cost_usd`` is ``None`` unless some summed row carried one, and never enters ``cost_usd``.
  */
 export type FleetSpendView = {
     /**
@@ -2197,6 +2222,10 @@ export type FleetSpendView = {
      * Cost Usd
      */
     cost_usd: number;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd?: number | null;
     /**
      * Input Tokens
      */
@@ -2380,6 +2409,67 @@ export type GardenProposalClosureView = {
      * Source
      */
     source: string | null;
+};
+
+/**
+ * GardenProposalCountsRowView
+ *
+ * One routine/class pair's garden-proposal counts over the requested window.
+ */
+export type GardenProposalCountsRowView = {
+    /**
+     * Accepted With Item
+     */
+    accepted_with_item: number;
+    /**
+     * Accepted Without Item
+     */
+    accepted_without_item: number;
+    /**
+     * Class
+     */
+    class: string;
+    /**
+     * Created
+     */
+    created: number;
+    /**
+     * Open
+     */
+    open: number;
+    /**
+     * Passed
+     */
+    passed: number;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+};
+
+/**
+ * GardenProposalCountsView
+ *
+ * `GET /api/routines/proposal-counts`'s own response — `routine` echoes the
+ * optional filter, `None` when unfiltered.
+ */
+export type GardenProposalCountsView = {
+    /**
+     * Routine
+     */
+    routine: string | null;
+    /**
+     * Rows
+     */
+    rows: Array<GardenProposalCountsRowView>;
+    /**
+     * Since
+     */
+    since: string;
+    /**
+     * Until
+     */
+    until: string;
 };
 
 /**
@@ -3980,6 +4070,28 @@ export type RoutineEditRequest = {
 };
 
 /**
+ * RoutineLifecycleRequest
+ *
+ * Retire or re-enable a routine — records who flipped it.
+ */
+export type RoutineLifecycleRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
+ * RoutineProposalState
+ *
+ * Which of a routine's garden proposals `OpenGardenProposalReader.list_for_routine`
+ * returns: `OPEN` (the default) excludes any proposal already closed, `CLOSED` returns
+ * only closed ones with their closure, `ALL` returns every proposal with its closure
+ * when one exists.
+ */
+export type RoutineProposalState = 'open' | 'closed' | 'all';
+
+/**
  * RoutineRunRequest
  *
  * ``POST /api/routines/{routine_id}/run`` (blizzard#392) — ``scope_slug`` omitted
@@ -4065,7 +4177,7 @@ export type RoutineRunResponse = {
 /**
  * RoutineView
  *
- * A routine as served by the create/list/read/edit routes.
+ * A routine as served by the create/list/read/edit/lifecycle routes.
  */
 export type RoutineView = {
     /**
@@ -4096,6 +4208,10 @@ export type RoutineView = {
      * Name
      */
     name: string;
+    /**
+     * Retired
+     */
+    retired?: boolean;
     /**
      * Routine Id
      */
@@ -7837,6 +7953,240 @@ export type GetChunkApiFleetChunksChunkIdGetResponses = {
 
 export type GetChunkApiFleetChunksChunkIdGetResponse = GetChunkApiFleetChunksChunkIdGetResponses[keyof GetChunkApiFleetChunksChunkIdGetResponses];
 
+export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types';
+};
+
+export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetError = GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors[keyof GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors];
+
+export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetResponse = GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetResponses[keyof GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetResponses];
+
+export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/counts/files';
+};
+
+export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetError = GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors[keyof GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors];
+
+export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponse = GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses[keyof GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses];
+
+export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/counts/nodes';
+};
+
+export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetError = GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors[keyof GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors];
+
+export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetResponse = GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetResponses[keyof GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetResponses];
+
+export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/counts/skills';
+};
+
+export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetError = GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors[keyof GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors];
+
+export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetResponse = GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetResponses[keyof GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetResponses];
+
+export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/spend/graphs';
+};
+
+export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetError = GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors[keyof GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors];
+
+export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetResponse = GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetResponses[keyof GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetResponses];
+
+export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/spend/nodes';
+};
+
+export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetError = GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors[keyof GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors];
+
+export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponse = GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponses[keyof GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponses];
+
 export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostData = {
     body: CompletionSubmission;
     path: {
@@ -8067,7 +8417,9 @@ export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetData = {
          */
         chunk_id: string;
     };
-    query?: never;
+    query?: {
+        state?: RoutineProposalState;
+    };
     url: '/api/fleet/chunks/{chunk_id}/garden/proposals';
 };
 
@@ -9176,9 +9528,23 @@ export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiR
 export type ListRoutinesApiRoutinesGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
     url: '/api/routines';
 };
+
+export type ListRoutinesApiRoutinesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRoutinesApiRoutinesGetError = ListRoutinesApiRoutinesGetErrors[keyof ListRoutinesApiRoutinesGetErrors];
 
 export type ListRoutinesApiRoutinesGetResponses = {
     /**
@@ -9215,6 +9581,44 @@ export type CreateRoutineApiRoutinesPostResponses = {
 };
 
 export type CreateRoutineApiRoutinesPostResponse = CreateRoutineApiRoutinesPostResponses[keyof CreateRoutineApiRoutinesPostResponses];
+
+export type RoutineProposalCountsApiRoutinesProposalCountsGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until: string;
+        /**
+         * Routine
+         */
+        routine?: string | null;
+    };
+    url: '/api/routines/proposal-counts';
+};
+
+export type RoutineProposalCountsApiRoutinesProposalCountsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RoutineProposalCountsApiRoutinesProposalCountsGetError = RoutineProposalCountsApiRoutinesProposalCountsGetErrors[keyof RoutineProposalCountsApiRoutinesProposalCountsGetErrors];
+
+export type RoutineProposalCountsApiRoutinesProposalCountsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalCountsView;
+};
+
+export type RoutineProposalCountsApiRoutinesProposalCountsGetResponse = RoutineProposalCountsApiRoutinesProposalCountsGetResponses[keyof RoutineProposalCountsApiRoutinesProposalCountsGetResponses];
 
 export type RoutineTrendApiRoutinesTrendGetData = {
     body?: never;
@@ -9353,6 +9757,66 @@ export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses = {
 };
 
 export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponse = RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses[keyof RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses];
+
+export type EnableRoutineApiRoutinesRoutineIdEnablePostData = {
+    body: RoutineLifecycleRequest;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}/enable';
+};
+
+export type EnableRoutineApiRoutinesRoutineIdEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableRoutineApiRoutinesRoutineIdEnablePostError = EnableRoutineApiRoutinesRoutineIdEnablePostErrors[keyof EnableRoutineApiRoutinesRoutineIdEnablePostErrors];
+
+export type EnableRoutineApiRoutinesRoutineIdEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: RoutineView;
+};
+
+export type EnableRoutineApiRoutinesRoutineIdEnablePostResponse = EnableRoutineApiRoutinesRoutineIdEnablePostResponses[keyof EnableRoutineApiRoutinesRoutineIdEnablePostResponses];
+
+export type RetireRoutineApiRoutinesRoutineIdRetirePostData = {
+    body: RoutineLifecycleRequest;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}/retire';
+};
+
+export type RetireRoutineApiRoutinesRoutineIdRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireRoutineApiRoutinesRoutineIdRetirePostError = RetireRoutineApiRoutinesRoutineIdRetirePostErrors[keyof RetireRoutineApiRoutinesRoutineIdRetirePostErrors];
+
+export type RetireRoutineApiRoutinesRoutineIdRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: RoutineView;
+};
+
+export type RetireRoutineApiRoutinesRoutineIdRetirePostResponse = RetireRoutineApiRoutinesRoutineIdRetirePostResponses[keyof RetireRoutineApiRoutinesRoutineIdRetirePostResponses];
 
 export type RunRoutineApiRoutinesRoutineIdRunPostData = {
     body: RoutineRunRequest;

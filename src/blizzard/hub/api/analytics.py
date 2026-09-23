@@ -133,10 +133,12 @@ class ScopeFilters:
         )
 
 
-def _operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
+def operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
     """The operational routes' own reading of :meth:`ScopeFilters.normalized` — minted
     here, not on :class:`ScopeFilters` itself, so the shared type stays shared rather
-    than carrying one family's domain-criteria type as though every consumer used it."""
+    than carrying one family's domain-criteria type as though every consumer used it.
+    Shared with the fleet router's own analytics reads (blizzard#545), not this
+    module's alone."""
     n = scope.normalized()
     return OperationalCriteria(graph_id=n.graph_id, source=n.source, since=n.since, until=n.until)
 
@@ -275,7 +277,9 @@ def _events_response(page: EventPage) -> AnalyticsEventsResponse:
     return AnalyticsEventsResponse(events=[_event_view(e) for e in page.events], next_cursor=page.next_cursor)
 
 
-def _counts_response(rows: list[CountRow]) -> AnalyticsCountsResponse:
+def counts_response(rows: list[CountRow]) -> AnalyticsCountsResponse:
+    """Shared with the fleet router's own analytics reads (blizzard#545), not this
+    module's alone."""
     return AnalyticsCountsResponse(counts=[AnalyticsCountView(key=row.key, count=row.count) for row in rows])
 
 
@@ -328,7 +332,7 @@ def counts_by_file(
     """Occurrence counts by file path among ``file_read`` events, honoring every other
     filter. ``kind`` is not offered: this count fixes it to ``file_read``."""
     criteria = scope.criteria(tool=tool, subject_prefix=subject_prefix, node_id=node_id)
-    return _counts_response(services.analytics_events.counts_by_file(criteria))
+    return counts_response(services.analytics_events.counts_by_file(criteria))
 
 
 @router.get("/counts/skills", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
@@ -341,7 +345,7 @@ def counts_by_skill(
     other filter. ``kind`` is not offered (this count fixes it), nor ``tool`` (that kind
     always records ``Skill``), nor ``subject_prefix`` — a skill name is a flat name, so a
     prefix of one narrows nothing a caller could not name outright."""
-    return _counts_response(services.analytics_events.counts_by_skill(scope.criteria(node_id=node_id)))
+    return counts_response(services.analytics_events.counts_by_skill(scope.criteria(node_id=node_id)))
 
 
 @router.get(
@@ -355,7 +359,7 @@ def counts_by_agent_type(
     matching the filters — how much activity happened under which agent type, not
     narrowed to spawn events alone. Filter ``kind=agent_spawn`` on the raw events
     endpoint instead for counts of spawns by the type each one spawned."""
-    return _counts_response(services.analytics_events.counts_by_agent_type(filters.criteria))
+    return counts_response(services.analytics_events.counts_by_agent_type(filters.criteria))
 
 
 @router.get("/counts/nodes", response_model=AnalyticsCountsResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
@@ -369,7 +373,7 @@ def counts_by_node(
     """Occurrence counts by node id, across every kind matching the filters.
     ``node_id`` is not offered: it would select a single group, not narrow the count."""
     criteria = scope.criteria(kind=kind, tool=tool, subject_prefix=subject_prefix)
-    return _counts_response(services.analytics_events.counts_by_node(criteria))
+    return counts_response(services.analytics_events.counts_by_node(criteria))
 
 
 # --- operational datasets: durations, spend, outcomes (blizzard#256 D8) -----------
@@ -394,7 +398,7 @@ def durations_by_node(
 ) -> AnalyticsDurationsResponse:
     """Completed-step duration rollups grouped by node (D2) — see
     ``AnalyticsDurationView`` for the wall-clock semantics (D3)."""
-    return _durations_response(services.operational_analytics.durations_by_node(_operational_criteria(scope)))
+    return _durations_response(services.operational_analytics.durations_by_node(operational_criteria(scope)))
 
 
 @router.get(
@@ -405,10 +409,12 @@ def durations_by_graph(
 ) -> AnalyticsDurationsResponse:
     """The same rollup grouped by the graph the step happened in (D2) — the transition's
     own ``graph_id``, never the chunk's current pin."""
-    return _durations_response(services.operational_analytics.durations_by_graph(_operational_criteria(scope)))
+    return _durations_response(services.operational_analytics.durations_by_graph(operational_criteria(scope)))
 
 
-def _spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
+def spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
+    """Shared with the fleet router's own analytics reads (blizzard#545), not this
+    module's alone."""
     return AnalyticsSpendResponse(
         spend=[
             AnalyticsSpendView(
@@ -419,6 +425,7 @@ def _spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
                 cache_create_tokens=s.total.cache_create_tokens,
                 cost_usd=s.total.cost_usd,
                 cost_partial=s.total.cost_partial,
+                estimated_cost_usd=s.total.estimated_cost_usd,
             )
             for s in stats
         ]
@@ -431,7 +438,7 @@ def spend_by_node(
 ) -> AnalyticsSpendResponse:
     """Usage/cost rollups grouped by node (D6) — the same lower-bound + PARTIAL contract
     ``GET /api/spend`` publishes."""
-    return _spend_response(services.operational_analytics.spend_by_node(_operational_criteria(scope)))
+    return spend_response(services.operational_analytics.spend_by_node(operational_criteria(scope)))
 
 
 @router.get("/spend/graphs", response_model=AnalyticsSpendResponse, dependencies=[Depends(require(TRANSCRIPT_READ))])
@@ -441,7 +448,7 @@ def spend_by_graph(
     """The same rollup grouped by each usage fact's chunk's *current* graph pin — a
     chunk that migrated attributes every usage fact it ever recorded to where it lives
     today (D6)."""
-    return _spend_response(services.operational_analytics.spend_by_graph(_operational_criteria(scope)))
+    return spend_response(services.operational_analytics.spend_by_graph(operational_criteria(scope)))
 
 
 def _chunk_spend_view(record: SpendStats) -> AnalyticsChunkSpendView:
@@ -453,6 +460,7 @@ def _chunk_spend_view(record: SpendStats) -> AnalyticsChunkSpendView:
         cache_create_tokens=record.total.cache_create_tokens,
         cost_usd=record.total.cost_usd,
         cost_partial=record.total.cost_partial,
+        estimated_cost_usd=record.total.estimated_cost_usd,
     )
 
 
@@ -488,7 +496,7 @@ def spend_by_chunk(
     wide window, unlike the per-node/per-graph groupings, so this takes a cursor rather
     than a single envelope."""
     try:
-        page = services.operational_analytics.spend_by_chunk(_operational_criteria(scope), cursor=cursor, limit=limit)
+        page = services.operational_analytics.spend_by_chunk(operational_criteria(scope), cursor=cursor, limit=limit)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     return AnalyticsChunkSpendResponse(spend=[_chunk_spend_view(r) for r in page.records], next_cursor=page.next_cursor)
@@ -508,7 +516,7 @@ def stream_chunk_spend(
     """Every chunk's spend rollup matching the same filters as the paginated route,
     streamed one JSON object per line in the same order."""
     return StreamingResponse(
-        chunk_spend_ndjson_lines(services.operational_analytics, _operational_criteria(scope)),
+        chunk_spend_ndjson_lines(services.operational_analytics, operational_criteria(scope)),
         media_type="application/x-ndjson",
     )
 
@@ -532,4 +540,4 @@ def outcomes_by_node(
     a judged failure edge and a retry-consuming attempt failure reported separately,
     never blended into one rate. A delivery kick-back (``chunk_bounces``) counts as
     neither."""
-    return _outcomes_response(services.operational_analytics.outcomes_by_node(_operational_criteria(scope)))
+    return _outcomes_response(services.operational_analytics.outcomes_by_node(operational_criteria(scope)))

@@ -12,11 +12,22 @@ from typing import Any
 from sqlalchemy import Select, and_, func, insert, or_, select
 
 from blizzard.foundation.store.utc import as_utc, iso_utc
-from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalPage, IWriteGardenProposalRepository
+from blizzard.hub.domain.garden_proposal_closure import (
+    GardenProposalClosureKind,
+    GardenProposalCountBucket,
+    GardenProposalItemOutcome,
+    classify_proposal_count_bucket,
+)
+from blizzard.hub.domain.garden_proposals import (
+    GardenProposal,
+    GardenProposalCounts,
+    GardenProposalPage,
+    IWriteGardenProposalRepository,
+)
 from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
-from blizzard.hub.store.schema import garden_proposal_findings, garden_proposals
+from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
 
 #: `list_page`'s cursor, already total: `(created_at, proposal_id)` (blizzard#526 D4).
 _CURSOR_ARITY = 2
@@ -139,13 +150,46 @@ class GardenProposalStore:
             findings = self._findings_for(conn, [row.proposal_id for row in rows])
             return [self._of(row, findings[row.proposal_id]) for row in rows]
 
-    def count_by_class(self, routine_name: str, class_: str) -> int:
-        with self._store.read("count_by_class") as conn:
-            return conn.execute(
-                select(func.count())
-                .select_from(garden_proposals)
-                .where(garden_proposals.c.routine_name == routine_name, garden_proposals.c.class_ == class_)
-            ).scalar_one()
+    def counts_by_class(
+        self, *, since: datetime, until: datetime, routine_name: str | None = None
+    ) -> list[GardenProposalCounts]:
+        """One `GROUP BY` query over a left join to `garden_proposal_closures` — a
+        proposal with no closure row still groups in (as `NULL`/`NULL`, `OPEN`'s own
+        shape), folded through :func:`classify_proposal_count_bucket` in Python rather
+        than a Python-side fold over ungrouped rows (`GardenRunStore._fact_counts_by_set`'s
+        own shape)."""
+        c = garden_proposals.c
+        closures_c = garden_proposal_closures.c
+        stmt = (
+            select(c.routine_name, c.class_, closures_c.closure, closures_c.item_outcome, func.count().label("n"))
+            .select_from(garden_proposals.outerjoin(garden_proposal_closures, closures_c.proposal_id == c.proposal_id))
+            .where(c.created_at >= since, c.created_at < until)
+        )
+        if routine_name is not None:
+            stmt = stmt.where(c.routine_name == routine_name)
+        stmt = stmt.group_by(c.routine_name, c.class_, closures_c.closure, closures_c.item_outcome)
+        with self._store.read("counts_by_class") as conn:
+            rows = conn.execute(stmt).all()
+        accumulator: dict[tuple[str, str], dict[GardenProposalCountBucket, int]] = {}
+        for row in rows:
+            key = (row.routine_name, row.class_)
+            buckets = accumulator.setdefault(key, dict.fromkeys(GardenProposalCountBucket, 0))
+            bucket = classify_proposal_count_bucket(
+                GardenProposalClosureKind(row.closure) if row.closure is not None else None,
+                GardenProposalItemOutcome(row.item_outcome) if row.item_outcome is not None else None,
+            )
+            buckets[bucket] += row.n
+        return [
+            GardenProposalCounts(
+                routine_name=routine_name,
+                class_=class_,
+                open=buckets[GardenProposalCountBucket.OPEN],
+                passed=buckets[GardenProposalCountBucket.PASSED],
+                accepted_with_item=buckets[GardenProposalCountBucket.ACCEPTED_WITH_ITEM],
+                accepted_without_item=buckets[GardenProposalCountBucket.ACCEPTED_WITHOUT_ITEM],
+            )
+            for (routine_name, class_), buckets in sorted(accumulator.items())
+        ]
 
     def _findings(self, conn, proposal_id: str) -> list[str]:  # type: ignore[no-untyped-def]
         rows = conn.execute(

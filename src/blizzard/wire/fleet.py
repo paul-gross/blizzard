@@ -11,9 +11,10 @@ from pydantic import BaseModel
 
 
 class FleetSpendView(BaseModel):
-    """The fleet's usage/cost total since ``since`` and, when the caller bounded the
-    window, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``
-    marks ``cost_usd`` as a lower bound."""
+    """The fleet's usage/cost total since ``since`` and, when the caller bounded the window, strictly
+    before ``until`` (``None`` for the open-ended tail). ``cost_partial`` is ``True`` iff some summed row
+    carries neither a billed nor an estimated amount, so ``cost_usd`` is then a lower bound;
+    ``estimated_cost_usd`` is ``None`` unless some summed row carried one, and never enters ``cost_usd``."""
 
     since: str
     until: str | None = None
@@ -23,6 +24,7 @@ class FleetSpendView(BaseModel):
     cache_create_tokens: int
     cost_usd: float
     cost_partial: bool
+    estimated_cost_usd: float | None = None
 
 
 class FleetSummaryView(BaseModel):

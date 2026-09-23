@@ -31,8 +31,14 @@ class RoutineEditRequest(BaseModel):
     default_harnesses: list[str] = []
 
 
+class RoutineLifecycleRequest(BaseModel):
+    """Retire or re-enable a routine — records who flipped it."""
+
+    by: str = "operator"
+
+
 class RoutineView(BaseModel):
-    """A routine as served by the create/list/read/edit routes."""
+    """A routine as served by the create/list/read/edit/lifecycle routes."""
 
     routine_id: str
     name: str
@@ -42,6 +48,7 @@ class RoutineView(BaseModel):
     default_effort: str | None = None
     default_harnesses: list[str] = []
     created_at: str
+    retired: bool = False
 
 
 class RoutineRunRequest(BaseModel):

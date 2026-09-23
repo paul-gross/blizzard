@@ -9,8 +9,9 @@ from typing import Any, ClassVar
 
 @dataclass(frozen=True)
 class Cost:
-    """A derived cost total (issue #60) — always to the cent, with a leading ``~`` when
-    partial, i.e. a lower bound never presented as exact."""
+    """A derived billed-cost total — always to the cent, with a leading ``~`` when partial,
+    i.e. a lower bound never presented as exact. When a total is partial:
+    ``src/blizzard/hub/domain/work.py``'s ``UsageTotal``."""
 
     cost_usd: float
     partial: bool
@@ -27,6 +28,30 @@ class Cost:
 
 
 @dataclass(frozen=True)
+class CostEstimate:
+    """A derived cost estimate — the one CLI formatter for ``estimated_cost_usd``, always labeled
+    ``est.`` and never prefixed ``~``: an estimate is labeled as such, not a lower bound. ``of`` is
+    ``None`` and ``suffix`` (the figure trailing a billed cost on one line) is empty when the wire
+    carried none, so a caller renders an estimate only when one exists."""
+
+    amount_usd: float
+
+    @classmethod
+    def of(cls, cost: dict[str, Any] | None) -> CostEstimate | None:
+        amount = (cost or {}).get("estimated_cost_usd")
+        return cls(amount) if amount is not None else None
+
+    @property
+    def rendered(self) -> str:
+        return f"${self.amount_usd:.2f} est."
+
+    @classmethod
+    def suffix(cls, cost: dict[str, Any] | None) -> str:
+        estimate = cls.of(cost)
+        return f"  {estimate.rendered}" if estimate is not None else ""
+
+
+@dataclass(frozen=True)
 class ChunkRow:
     row: dict[str, Any]
     #: True renders the node's name when known; false renders its id.
@@ -38,10 +63,12 @@ class ChunkRow:
         return name or self.row.get("current_node_id") or "-"
 
     def line(self) -> str:
-        rendered = Cost.of(self.row.get("cost")).rendered
+        cost = self.row.get("cost")
+        rendered = Cost.of(cost).rendered
+        estimate = CostEstimate.suffix(cost)
         blocked = self.row.get("blocked")
         marking = f"  [blocked on {blocked['prerequisite_chunk_id']}]" if blocked else ""
-        return f"{self.row['chunk_id']}  {self.row['status']:<16} @ {self.node}  {rendered:>10}{marking}"
+        return f"{self.row['chunk_id']}  {self.row['status']:<16} @ {self.node}  {rendered:>10}{estimate}{marking}"
 
 
 @dataclass(frozen=True)

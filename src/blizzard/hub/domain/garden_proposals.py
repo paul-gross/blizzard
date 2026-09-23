@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
@@ -17,7 +18,7 @@ from blizzard.hub.domain.findings import Finding
 if TYPE_CHECKING:
     # Deferred to break the cycle: `garden_proposal_closure.py` itself imports
     # `GardenProposal` from this module.
-    from blizzard.hub.domain.garden_proposal_closure import IReadGardenProposalClosureRepository
+    from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure, IReadGardenProposalClosureRepository
 
 
 class DuplicateProposalFindingError(ValueError):
@@ -39,6 +40,25 @@ class GardenProposal:
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
+
+
+@dataclass(frozen=True)
+class GardenProposalCounts:
+    """One routine/class pair's garden-proposal counts over a window (blizzard#547):
+    `open`, `passed`, `accepted_with_item`, `accepted_without_item` — each a
+    closure-state bucket. `created` is always their sum, derived rather than stored, so
+    it can never disagree with the four it sums."""
+
+    routine_name: str
+    class_: str
+    open: int
+    passed: int
+    accepted_with_item: int
+    accepted_without_item: int
+
+    @property
+    def created(self) -> int:
+        return self.open + self.passed + self.accepted_with_item + self.accepted_without_item
 
 
 @dataclass(frozen=True)
@@ -70,10 +90,13 @@ class IReadGardenProposalRepository(Protocol):
         narrowed further."""
         ...
 
-    def count_by_class(self, routine_name: str, class_: str) -> int:
-        """How often `class_` recurs among `routine_name`'s proposals
-        (blizzard-context:/domain/findings-and-proposals.md §`class` and `locus` are
-        opaque) — a count, never the rows themselves."""
+    def counts_by_class(
+        self, *, since: datetime, until: datetime, routine_name: str | None = None
+    ) -> list[GardenProposalCounts]:
+        """Garden-proposal counts (blizzard#547) grouped by routine and class, over
+        `[since, until)` on `created_at` — current closure state, not closure time.
+        `routine_name` narrows to one routine when given, else every routine. Rows
+        ordered `(routine_name, class_)`."""
         ...
 
 
@@ -125,10 +148,21 @@ class GardenProposalAuthoring:
         )
 
 
+class RoutineProposalState(StrEnum):
+    """Which of a routine's garden proposals `OpenGardenProposalReader.list_for_routine`
+    returns: `OPEN` (the default) excludes any proposal already closed, `CLOSED` returns
+    only closed ones with their closure, `ALL` returns every proposal with its closure
+    when one exists."""
+
+    OPEN = "open"
+    CLOSED = "closed"
+    ALL = "all"
+
+
 class OpenGardenProposalReader:
-    """A routine's open garden proposals — `list_for_routine`'s own composed reader,
-    filtering out any proposal a closure already exists for. Open means still awaiting a
-    person's pass or accept."""
+    """A routine's garden proposals, filtered by `RoutineProposalState` and paired with
+    each one's closure — `list_for_routine`'s own composed reader. Open means still
+    awaiting a person's pass or accept."""
 
     def __init__(
         self, *, proposals: IReadGardenProposalRepository, closures: IReadGardenProposalClosureRepository
@@ -137,6 +171,15 @@ class OpenGardenProposalReader:
         self._closures = closures
 
     def list_open_for_routine(self, routine_name: str) -> list[GardenProposal]:
+        return [p for p, _ in self.list_for_routine(routine_name, RoutineProposalState.OPEN)]
+
+    def list_for_routine(
+        self, routine_name: str, state: RoutineProposalState = RoutineProposalState.OPEN
+    ) -> list[tuple[GardenProposal, GardenProposalClosure | None]]:
         proposals = self._proposals.list_for_routine(routine_name)
-        closed = self._closures.get_many([p.proposal_id for p in proposals])
-        return [p for p in proposals if p.proposal_id not in closed]
+        closures = self._closures.get_many([p.proposal_id for p in proposals])
+        if state is RoutineProposalState.OPEN:
+            return [(p, None) for p in proposals if p.proposal_id not in closures]
+        if state is RoutineProposalState.CLOSED:
+            return [(p, closures[p.proposal_id]) for p in proposals if p.proposal_id in closures]
+        return [(p, closures.get(p.proposal_id)) for p in proposals]

@@ -77,10 +77,10 @@ class AnalyticsDurationsResponse(BaseModel):
 
 
 class AnalyticsSpendView(BaseModel):
-    """One grouping key's usage/cost rollup (blizzard#256 D6) — ``key`` is a node id or
-    a graph id, whichever dataset served it. The same lower-bound + PARTIAL contract
-    ``GET /api/spend`` publishes: ``cost_usd`` sums only the rows that carried a cost
-    envelope, and ``cost_partial`` is ``True`` iff any summed row lacked one."""
+    """One grouping key's usage/cost rollup — ``key`` is a node id or a graph id, whichever dataset
+    served it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed
+    row carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some
+    summed row carried one."""
 
     key: str
     input_tokens: int
@@ -89,6 +89,7 @@ class AnalyticsSpendView(BaseModel):
     cache_create_tokens: int
     cost_usd: float
     cost_partial: bool
+    estimated_cost_usd: float | None = None
 
 
 class AnalyticsSpendResponse(BaseModel):
@@ -100,7 +101,8 @@ class AnalyticsSpendResponse(BaseModel):
 
 class AnalyticsChunkSpendView(BaseModel):
     """One chunk's own usage/cost rollup (blizzard#256 D8) — the per-chunk grouping's
-    unbounded, cursor-paged row."""
+    unbounded, cursor-paged row. ``cost_partial`` is ``True`` iff some summed row carried neither a billed
+    nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some summed row carried one."""
 
     chunk_id: str
     input_tokens: int
@@ -109,6 +111,7 @@ class AnalyticsChunkSpendView(BaseModel):
     cache_create_tokens: int
     cost_usd: float
     cost_partial: bool
+    estimated_cost_usd: float | None = None
 
 
 class AnalyticsChunkSpendResponse(BaseModel):

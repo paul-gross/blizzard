@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import click
 
+from blizzard.runner.cli.analytics import analytics_group
 from blizzard.runner.cli.artifact import artifact_group
 from blizzard.runner.cli.control import pause, requeue, selftest, start, status, takeover
 from blizzard.runner.cli.external_usage import external_usage_group
@@ -48,6 +49,7 @@ runner.add_command(artifact_group)
 runner.add_command(garden_group)
 runner.add_command(finding_group)
 runner.add_command(scope_group)
+runner.add_command(analytics_group)
 
 runner.add_command(status)
 runner.add_command(pause)

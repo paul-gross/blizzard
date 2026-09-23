@@ -46,6 +46,13 @@ that set. Both are idempotent and never mint or retire a scope — naming one `s
 `routine_id` no routine holds, refuses rather than creating either. `scope remove` also refuses removing the routine's
 own default scope, which stays a member of its set for as long as it is the default.
 
+`routine retire <name> [--by operator]` and `routine enable <name> [--by operator]` are a routine's own reversible,
+append-only brake, the scope lifecycle's own shape: retiring appends `routine.retired`, `enable` appends
+`routine.enabled`, and neither touches the stored row, its findings, proposals, or closures. `routine list
+--include-retired` includes a retired routine in the listing, marked; every other verb still resolves a retired
+routine's `name` to its `routine_id` the same way a live one does, so it reaches the domain's own retired refusal
+rather than reading as unknown.
+
 ## Running one
 
 `blizzard hub routine run <name> [--scope <slug>] [--mode full|delta] [--note <text>]` mints, ingests, and promotes a
@@ -54,8 +61,8 @@ list; `--scope` overrides the routine's own default with a scope already linked 
 naming one that is not, or a slug no scope row holds, refuses rather than minting it (`routine scope add` links one
 first). `--mode` defaults to `full`; a requested `delta` against a routine/scope pair with no recorded baseline
 downgrades to `full` rather than refusing — the CLI names the downgrade in its output, and the item's own charge does
-too. A retired effective scope, or a routine whose graph has lost every enabled mint, refuses the run rather than
-running it anyway.
+too. A retired routine, a retired effective scope, or a routine whose graph has lost every enabled mint, refuses the run
+rather than running it anyway — a retired routine is checked first, before any scope is resolved.
 
 The hub board's Gardening tab offers the same act as a dialog on its Routines sub-tab, reachable from the selected
 routine's own panel. The scope picker offers only the routine's own related, non-retired scopes — the same set `scope
@@ -79,10 +86,16 @@ measurement series, the opaque text each delivered set records, cut to `--since`
 table, the measurement series is windowed: a scope swept months ago still reads its true last-swept instant, never
 "never".
 
-The hub board's Gardening tab renders both reads on that same Routines sub-tab, plus a routine's stored record, its own
-related scopes — marking its default among them — and the effective graph's own node prompts, as read-only prose, and
-the Run action above it. A routine whose graph has lost every enabled mint shows as blocked there instead of offering a
-run.
+`blizzard hub routine proposal-counts [<name>] --since <time> --until <time>` reports how many garden proposals landed
+in the window, broken out by routine and class into still-open, passed, accepted-with-item, and accepted-without-item
+counts. Name a routine to see only its rows, or omit it to see every routine's rows at once.
+
+The hub board's Gardening tab renders the trend, sweeps, and proposal-counts reads on that same Routines sub-tab, plus a
+routine's stored record, its own related scopes — marking its default among them — and the effective graph's own node
+prompts, as read-only prose, and the Run action above it. A routine whose graph has lost every enabled mint shows as
+blocked there instead of offering a run. The same panel retires and re-enables the routine itself — gated on
+`graph:edit`, the same permission its Retire/Enable action on a scope takes — and offers no Run action while the routine
+is retired.
 
 ## Reading runs
 

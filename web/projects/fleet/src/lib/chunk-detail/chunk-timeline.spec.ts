@@ -75,6 +75,28 @@ const PARTIAL_COST_DETAIL: ChunkDetail = {
   ],
 };
 
+// A subscription step: no billed cost, only a runner-reported estimate — a row carrying
+// only an estimate is not partial, so this step reads not-partial, unlike
+// PARTIAL_COST_DETAIL above.
+const ESTIMATE_COST_DETAIL: ChunkDetail = {
+  ...COST_DETAIL,
+  chunk_id: 'ch_01estimate0000000000000000000',
+  usage: [
+    {
+      node_id: 'nd_build',
+      epoch: 1,
+      kind: 'spawn',
+      model: 'claude-opus-4-8',
+      input_tokens: 900,
+      output_tokens: 400,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: null,
+      estimated_cost_usd: 0.07,
+    },
+  ],
+};
+
 const NAMED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01named000000000000000000000',
   graph_id: 'gr_1',
@@ -274,6 +296,31 @@ describe('ChunkTimeline', () => {
     );
     expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('~$0.00');
     expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-partial"]')).not.toBeNull();
+  });
+
+  it("renders a step's own separate cost estimate, apart from the billed figure, and marks it not-partial for an estimate-only row", async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', ESTIMATE_COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const firstStepUsage = el.querySelectorAll('[data-testid="history-step"]')[0].querySelector(
+      '[data-testid="history-step-usage"]',
+    );
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('$0.00');
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-estimate"]')?.textContent?.trim()).toBe(
+      '$0.07 est.',
+    );
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-partial"]')).toBeNull();
+  });
+
+  it('renders no cost-estimate figure for a step with no estimate', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="history-step-cost-estimate"]')).toBeNull();
   });
 
   it("renders a step's own recorded harness id and version beside its usage (blizzard#441)", async () => {

@@ -78,7 +78,10 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/routines"): FLEET_VIEW,
     ("GET", "/api/routines/{routine_id}"): FLEET_VIEW,
     ("PATCH", "/api/routines/{routine_id}"): GRAPH_EDIT,
+    ("POST", "/api/routines/{routine_id}/retire"): GRAPH_EDIT,
+    ("POST", "/api/routines/{routine_id}/enable"): GRAPH_EDIT,
     ("GET", "/api/routines/trend"): FLEET_VIEW,  # blizzard#394 Phase 4
+    ("GET", "/api/routines/proposal-counts"): FLEET_VIEW,  # blizzard#547 Phase 2
     ("GET", "/api/routines/{routine_id}/sweeps"): FLEET_VIEW,
     # A routine's scope membership (blizzard#488) — reads take FLEET_VIEW, writes take
     # GRAPH_EDIT, the same split as scopes/routines themselves (D8).
@@ -211,6 +214,15 @@ _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals"),
+    # A worker's own routine-run read of the counts/spend summaries (blizzard#545) — the
+    # same operator-plane query criteria and response shaping, gated on the chunk's own
+    # run context rather than operator credentials.
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/files"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/skills"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/nodes"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/nodes"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/graphs"),
     ("GET", "/api/fleet/scopes"),
     ("GET", "/api/fleet/chunks/{chunk_id}/findings"),
     ("GET", "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"),

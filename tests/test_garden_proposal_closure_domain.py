@@ -19,10 +19,12 @@ from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosure,
     GardenProposalClosureKind,
     GardenProposalClosureService,
+    GardenProposalCountBucket,
     GardenProposalItemOutcome,
     GardenProposalPassReasonRequired,
     IWriteGardenProposalClosureRepository,
     _compose_minted_body,
+    classify_proposal_count_bucket,
 )
 from blizzard.hub.domain.garden_proposals import GardenProposal
 from blizzard.hub.domain.work_items import WorkItemEditService
@@ -248,3 +250,37 @@ def test_compose_returns_the_body_unchanged_when_findings_is_empty() -> None:
     body = _compose_minted_body("the case", [])
 
     assert body == "the case"
+
+
+# --- classify_proposal_count_bucket (blizzard#547) -----------------------------
+
+
+def test_classify_no_closure_is_open() -> None:
+    assert classify_proposal_count_bucket(None, None) == GardenProposalCountBucket.OPEN
+
+
+@pytest.mark.parametrize("item_outcome", [None, GardenProposalItemOutcome.MINTED, GardenProposalItemOutcome.DECLINED])
+def test_classify_passed_closure_is_passed_regardless_of_item_outcome(
+    item_outcome: GardenProposalItemOutcome | None,
+) -> None:
+    bucket = classify_proposal_count_bucket(GardenProposalClosureKind.PASSED, item_outcome)
+    assert bucket == GardenProposalCountBucket.PASSED
+
+
+def test_classify_accepted_minted_is_accepted_with_item() -> None:
+    assert (
+        classify_proposal_count_bucket(GardenProposalClosureKind.ACCEPTED, GardenProposalItemOutcome.MINTED)
+        == GardenProposalCountBucket.ACCEPTED_WITH_ITEM
+    )
+
+
+def test_classify_accepted_declined_is_accepted_without_item() -> None:
+    assert (
+        classify_proposal_count_bucket(GardenProposalClosureKind.ACCEPTED, GardenProposalItemOutcome.DECLINED)
+        == GardenProposalCountBucket.ACCEPTED_WITHOUT_ITEM
+    )
+
+
+def test_classify_accepted_with_no_item_outcome_raises() -> None:
+    with pytest.raises(ValueError, match="accepted"):
+        classify_proposal_count_bucket(GardenProposalClosureKind.ACCEPTED, None)

@@ -285,6 +285,58 @@ describe('ChunkDetailPage', () => {
     expect(el.querySelector('[data-testid="transcripts-empty"]')?.textContent).toContain('NO TRANSCRIPT SEGMENTS YET');
   });
 
+  it("renders the hub-sourced cost estimate on the General tab's token breakdown and the Node history tab's timeline, labeled, apart from the billed figure", async () => {
+    stub.restore();
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) {
+        return {
+          ...DETAIL,
+          cost: {
+            input_tokens: 900,
+            output_tokens: 400,
+            cache_read_tokens: 0,
+            cache_create_tokens: 0,
+            cost_usd: 0,
+            cost_partial: false,
+            estimated_cost_usd: 0.07,
+          },
+          usage: [
+            {
+              node_id: 'nd_build',
+              epoch: 1,
+              kind: 'spawn',
+              model: 'claude-opus-4-8',
+              input_tokens: 900,
+              output_tokens: 400,
+              cache_read_tokens: 0,
+              cache_create_tokens: 0,
+              cost_usd: null,
+              estimated_cost_usd: 0.07,
+            },
+          ],
+        };
+      }
+      return routes()(method, path);
+    });
+
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+    let el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="cost-estimate-usd"]')?.textContent?.trim()).toBe('$0.07 est.');
+
+    el.querySelector<HTMLButtonElement>('[data-testid="tab-node-history"]')?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="selection-step-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+  });
+
+  it('renders no cost-estimate figures when the hub-sourced detail carries none — exactly as before this field existed', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector('[data-testid="cost-estimate-usd"]')).toBeNull();
+  });
+
   it('renders the open escalation through the shared awaiting-human section', async () => {
     // The proxied aggregate carries `escalation` (issue #314), so a needs_human chunk
     // reads the same on this route as on the hub board. Asserting the takeover command

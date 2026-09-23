@@ -49,16 +49,19 @@ const VM: RoutinePanelVm = {
   ],
   windowLabel: 'last 28 days',
   relatedScopes: [{ slug: 'blizzard', isDefault: true }],
+  retired: false,
+  renderedRetired: false,
 };
 
-async function render() {
+async function render(vm: RoutinePanelVm = VM, canEdit = false) {
   await TestBed.configureTestingModule({
     imports: [FleetRoutinePanel],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(FleetRoutinePanel);
   fixture.componentRef.setInput('state', 'ready');
-  fixture.componentRef.setInput('vm', VM);
+  fixture.componentRef.setInput('vm', vm);
+  fixture.componentRef.setInput('canEdit', canEdit);
   await fixture.whenStable();
   return fixture;
 }
@@ -152,4 +155,35 @@ describe('gardening routine record label column shell sweep (web:shell-sweep)', 
       root.remove();
     }
   });
+});
+
+describe('gardening routine panel lifecycle controls shell sweep (web:shell-sweep)', () => {
+  it.each([1280, 390, 320])(
+    'renders the retired state badge and the Re-enable control with no overflow at %ipx',
+    async (width) => {
+      const fixture = await render({ ...VM, retired: true, renderedRetired: true }, true);
+      const root = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(root);
+      await fixture.whenStable();
+
+      try {
+        await page.viewport(width, 900);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const record = root.querySelector<HTMLElement>('[data-testid="gardening-routine-record"]')!;
+        expect(
+          record.scrollWidth,
+          `record header overflows at ${width}px (${record.scrollWidth} > ${record.clientWidth})`,
+        ).toBeLessThanOrEqual(record.clientWidth);
+
+        const state = root.querySelector('[data-testid="gardening-routine-panel-state"]');
+        expect(state?.textContent?.trim()).toBe('retired');
+        expect(root.querySelector('[data-testid="gardening-routine-panel-enable"]')).not.toBeNull();
+        expect(root.querySelector('[data-testid="gardening-routine-run"]')).toBeNull();
+        expect(root.querySelector('[data-testid="gardening-routine-retired-notice"]')).not.toBeNull();
+      } finally {
+        root.remove();
+      }
+    },
+  );
 });

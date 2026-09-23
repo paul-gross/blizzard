@@ -1,4 +1,5 @@
-"""Routine routes — create, list, read, edit, run, trend, and sweep (issue #389, blizzard#392).
+"""Routine routes — create, list, read, edit, retire, enable, run, trend, and sweep
+(issue #389, blizzard#392).
 
 The controller stays read-only (``bzh:controller-read-only``), resolving a ``routine_id``
 before delegating to the domain. ``GET /routines/trend`` is declared ahead of ``GET
@@ -21,11 +22,12 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.garden_proposals import GardenProposalCounts
 from blizzard.hub.domain.garden_sweeps import GardenSweeps
 from blizzard.hub.domain.garden_trend import Trend
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.routine_baselines import RoutineBaseline
-from blizzard.hub.domain.routine_run import RunResult, ScopeNotRelatedError, ScopeRetiredError
+from blizzard.hub.domain.routine_run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.routines import (
     Routine,
     RoutineDefaultScopeUnlinkError,
@@ -37,6 +39,7 @@ from blizzard.hub.domain.routines import (
 from blizzard.hub.domain.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.wire.chunk import ChunkIngestConflict
+from blizzard.wire.garden_proposal_counts import GardenProposalCountsRowView, GardenProposalCountsView
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
 from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
 from blizzard.wire.routine import (
@@ -44,6 +47,7 @@ from blizzard.wire.routine import (
     RoutineBaselineView,
     RoutineCreateRequest,
     RoutineEditRequest,
+    RoutineLifecycleRequest,
     RoutineRunRequest,
     RoutineRunResponse,
     RoutineView,
@@ -52,7 +56,7 @@ from blizzard.wire.routine import (
 router = APIRouter(prefix="/api", tags=["routines"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _routine_view(routine: Routine) -> RoutineView:
+def _routine_view(routine: Routine, *, retired: bool) -> RoutineView:
     return RoutineView(
         routine_id=routine.routine_id,
         name=routine.name,
@@ -62,6 +66,7 @@ def _routine_view(routine: Routine) -> RoutineView:
         default_effort=routine.default_effort,
         default_harnesses=list(routine.default_harnesses),
         created_at=iso_utc(routine.created_at),
+        retired=retired,
     )
 
 
@@ -104,13 +109,22 @@ def create_routine(
         )
     except (ScopeSlugError, RoutineNameTakenError, RoutineGraphUnresolvedError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return _routine_view(routine)
+    return _routine_view(routine, retired=False)
 
 
 @router.get("/routines", response_model=list[RoutineView], dependencies=[Depends(require(FLEET_VIEW))])
-def list_routines(services: Annotated[HubServices, Depends(get_services)]) -> list[RoutineView]:
-    """Every routine, newest first."""
-    return [_routine_view(r) for r in services.routines.list_all()]
+def list_routines(
+    services: Annotated[HubServices, Depends(get_services)],
+    include_retired: Annotated[bool, Query()] = False,
+) -> list[RoutineView]:
+    """Every routine, newest first — a retired routine excluded by default, included and
+    marked when ``include_retired``."""
+    retired = services.routines.retired_ids()
+    return [
+        _routine_view(r, retired=r.routine_id in retired)
+        for r in services.routines.list_all()
+        if include_retired or r.routine_id not in retired
+    ]
 
 
 def _parse_instant(value: str, *, field: str) -> datetime:
@@ -219,13 +233,56 @@ def routine_trend(
     return _trend_view(trend)
 
 
+def _proposal_counts_row_view(counts: GardenProposalCounts) -> GardenProposalCountsRowView:
+    # `class_`'s alias is the Python keyword `class` — constructed by alias via
+    # `model_validate`, the `garden_runs.py` `_set_delta_view` shape.
+    return GardenProposalCountsRowView.model_validate(
+        {
+            "routine_name": counts.routine_name,
+            "class": counts.class_,
+            "open": counts.open,
+            "passed": counts.passed,
+            "accepted_with_item": counts.accepted_with_item,
+            "accepted_without_item": counts.accepted_without_item,
+            "created": counts.created,
+        }
+    )
+
+
+@router.get(
+    "/routines/proposal-counts", response_model=GardenProposalCountsView, dependencies=[Depends(require(FLEET_VIEW))]
+)
+def routine_proposal_counts(
+    services: Annotated[HubServices, Depends(get_services)],
+    since: Annotated[str, Query()],
+    until: Annotated[str, Query()],
+    routine: Annotated[str | None, Query()] = None,
+) -> GardenProposalCountsView:
+    """Garden-proposal counts (blizzard#547) per routine and class over `[since,
+    until)`, split into open/passed/accepted-with-item/accepted-without-item —
+    `created` is their sum. `routine` narrows to one routine by name when given; 404 on
+    an unknown one. 422 on a malformed instant or `until <= since`."""
+    parsed_since = _parse_instant(since, field="since")
+    parsed_until = _parse_instant(until, field="until")
+    _require_until_after_since(parsed_since, parsed_until)
+    if routine is not None and services.routines.get_by_name(routine) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
+    rows = services.garden_proposals.counts_by_class(since=parsed_since, until=parsed_until, routine_name=routine)
+    return GardenProposalCountsView(
+        since=iso_utc(parsed_since),
+        until=iso_utc(parsed_until),
+        routine=routine,
+        rows=[_proposal_counts_row_view(c) for c in rows],
+    )
+
+
 @router.get("/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(FLEET_VIEW))])
 def get_routine(routine_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RoutineView:
     """One routine's whole record; 404 on an unknown id."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
-    return _routine_view(routine)
+    return _routine_view(routine, retired=services.routines.is_retired(routine_id))
 
 
 def _baseline_view(baseline: RoutineBaseline) -> RoutineBaselineView:
@@ -350,7 +407,41 @@ def edit_routine(
         )
     except (ScopeSlugError, RoutineNameImmutableError, RoutineGraphUnresolvedError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return _routine_view(edited)
+    return _routine_view(edited, retired=services.routines.is_retired(routine_id))
+
+
+@router.post(
+    "/routines/{routine_id}/retire",
+    response_model=RoutineView,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(GRAPH_EDIT))],
+)
+def retire_routine(
+    routine_id: str, request: RoutineLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> RoutineView:
+    """Retire a routine — a reversible brake; 404 on an unknown id."""
+    routine = services.routines.get(routine_id)
+    if routine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    services.routine_lifecycle.retire(routine, by=request.by)
+    return _routine_view(routine, retired=True)
+
+
+@router.post(
+    "/routines/{routine_id}/enable",
+    response_model=RoutineView,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(GRAPH_EDIT))],
+)
+def enable_routine(
+    routine_id: str, request: RoutineLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> RoutineView:
+    """Re-enable a retired routine; idempotent, 404 on an unknown id."""
+    routine = services.routines.get(routine_id)
+    if routine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    services.routine_lifecycle.enable(routine, by=request.by)
+    return _routine_view(routine, retired=False)
 
 
 @dataclass(frozen=True)
@@ -449,13 +540,19 @@ def run_routine(
     """Mint, ingest, and promote a hub work item from the routine, in one act
     (blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
     ``mode``, or an effective scope no scope row holds or outside the routine's own
-    related set (blizzard#399 D1, D4 — never minted); 503 on a retired effective scope or
-    a graph name with no enabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s
-    own retired-default-graph shape); 409 on an out-of-band ingest already holding the
+    related set (blizzard#399 D1, D4 — never minted); 503 on a retired routine
+    (checked first, before the mode or scope is even parsed), a retired effective
+    scope, or a graph name with no
+    enabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s own
+    retired-default-graph shape); 409 on an out-of-band ingest already holding the
     allocated ref's pointer."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    try:
+        services.routine_run.refuse_if_retired(routine)
+    except RoutineRetiredError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     try:
         mode = RunMode(request.mode)
     except ValueError as exc:
@@ -490,7 +587,7 @@ def run_routine(
                 f"`blizzard hub routine scope add {exc.routine_id} {exc.slug}`"
             ),
         ) from exc
-    except (RoutineGraphUnresolvedError, ScopeRetiredError) as exc:
+    except (RoutineGraphUnresolvedError, ScopeRetiredError, RoutineRetiredError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except IngestConflict as exc:
         conflict = ChunkIngestConflict(

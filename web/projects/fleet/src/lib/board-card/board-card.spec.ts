@@ -13,6 +13,7 @@ const BASE: BoardCard = {
   pointerLabels: [],
   costUsd: 0,
   costPartial: false,
+  estimatedCostUsd: null,
   completedAt: '2026-07-13T00:00:01+00:00',
   blockedOn: null,
   blockedCount: 0,
@@ -116,6 +117,28 @@ describe('BoardCardComponent work-ref chips (issue #176)', () => {
     const el = await render({ ...BASE, pointerLabels: [] });
 
     expect(el.querySelectorAll('[data-testid="work-ref-chip"]')).toHaveLength(0);
+  });
+});
+
+describe('BoardCardComponent cost estimate', () => {
+  it('renders the estimate, labeled, apart from the billed figure', async () => {
+    const el = await render({ ...BASE, costUsd: 0, costPartial: false, estimatedCostUsd: 0.07 });
+
+    expect(el.querySelector('[data-testid="card-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(el.querySelector('[data-testid="card-cost"]')).toBeNull();
+  });
+
+  it('renders no estimate for a card with none — exactly as before this field existed', async () => {
+    const el = await render(BASE);
+
+    expect(el.querySelector('[data-testid="card-cost-estimate"]')).toBeNull();
+  });
+
+  it('renders both a billed cost and its own estimate on the same card, never merged', async () => {
+    const el = await render({ ...BASE, costUsd: 0.42, costPartial: false, estimatedCostUsd: 0.07 });
+
+    expect(el.querySelector('[data-testid="card-cost"]')?.textContent?.trim()).toBe('$0.42');
+    expect(el.querySelector('[data-testid="card-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
   });
 });
 

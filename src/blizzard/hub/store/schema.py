@@ -224,6 +224,17 @@ routine_scopes = Table(
 
 Index("ix_routine_scopes_scope_slug", routine_scopes.c.scope_slug)
 
+# The routine's reversible retire/enable brake — scope_lifecycle_facts's own shape.
+routine_lifecycle_facts = Table(
+    "routine_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("routine_id", String, ForeignKey("routines.routine_id"), nullable=False),
+    Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
 # --- Chunks and their work refs (chunk.minted) ------------------------------
 
 chunks = Table(
@@ -903,7 +914,10 @@ usage_facts = Table(
     Column("output_tokens", Integer, nullable=False),
     Column("cache_read_tokens", Integer, nullable=False),
     Column("cache_create_tokens", Integer, nullable=False),
-    Column("cost_usd", Float, nullable=True),  # None = no envelope for this invocation — never fabricated
+    Column("cost_usd", Float, nullable=True),  # None = no billed figure for this invocation — never fabricated
+    # A runner-side estimate, kept apart from `cost_usd` — nullable, un-backfilled; see
+    # `docs/deployment/spend.md`'s "Estimated cost" section.
+    Column("estimated_cost_usd", Float, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_usage_facts_chunk_id", usage_facts.c.chunk_id)

@@ -255,7 +255,7 @@
         "type": "object"
       },
       "AnalyticsChunkSpendView": {
-        "description": "One chunk's own usage/cost rollup (blizzard#256 D8) \u2014 the per-chunk grouping's\nunbounded, cursor-paged row.",
+        "description": "One chunk's own usage/cost rollup (blizzard#256 D8) \u2014 the per-chunk grouping's\nunbounded, cursor-paged row. ``cost_partial`` is ``True`` iff some summed row carried neither a billed\nnor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some summed row carried one.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -276,6 +276,17 @@
           "cost_usd": {
             "title": "Cost Usd",
             "type": "number"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "input_tokens": {
             "title": "Input Tokens",
@@ -622,7 +633,7 @@
         "type": "object"
       },
       "AnalyticsSpendView": {
-        "description": "One grouping key's usage/cost rollup (blizzard#256 D6) \u2014 ``key`` is a node id or\na graph id, whichever dataset served it. The same lower-bound + PARTIAL contract\n``GET /api/spend`` publishes: ``cost_usd`` sums only the rows that carried a cost\nenvelope, and ``cost_partial`` is ``True`` iff any summed row lacked one.",
+        "description": "One grouping key's usage/cost rollup \u2014 ``key`` is a node id or a graph id, whichever dataset\nserved it. The same contract ``GET /api/spend`` publishes: ``cost_partial`` is ``True`` iff some summed\nrow carried neither a billed nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some\nsummed row carried one.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -639,6 +650,17 @@
           "cost_usd": {
             "title": "Cost Usd",
             "type": "number"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "input_tokens": {
             "title": "Input Tokens",
@@ -2051,8 +2073,13 @@
         "type": "object"
       },
       "ChunkUsageTotalView": {
-        "description": "A chunk's derived usage/cost total, summed over every recorded invocation (issue #59) \u2014 never a\nstored column. ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd``.",
+        "description": "A chunk's derived usage/cost total, summed over every recorded invocation \u2014 never a stored column.\n``cost_partial`` is ``True`` iff some summed row carries neither a billed nor an estimated amount;\n``billed_partial`` iff some carries no billed amount, so ``cost_usd`` is then a lower bound of billed\nspend. ``estimated_cost_usd`` is ``None`` iff no row carried one, and never enters ``cost_usd``.",
         "properties": {
+          "billed_partial": {
+            "default": false,
+            "title": "Billed Partial",
+            "type": "boolean"
+          },
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
             "type": "integer"
@@ -2068,6 +2095,17 @@
           "cost_usd": {
             "title": "Cost Usd",
             "type": "number"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "input_tokens": {
             "title": "Input Tokens",
@@ -2090,7 +2128,7 @@
         "type": "object"
       },
       "ChunkUsageView": {
-        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no result envelope\nexisted for this invocation \u2014 never fabricated.",
+        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was\nrecorded for this invocation \u2014 never fabricated. ``estimated_cost_usd`` is the runner's own reported\nestimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -2114,6 +2152,17 @@
           "epoch": {
             "title": "Epoch",
             "type": "integer"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "harness_id": {
             "anyOf": [
@@ -3473,7 +3522,7 @@
         "type": "object"
       },
       "FleetSpendView": {
-        "description": "The fleet's usage/cost total since ``since`` and, when the caller bounded the\nwindow, strictly before ``until`` (``None`` for the open-ended tail). ``cost_partial``\nmarks ``cost_usd`` as a lower bound.",
+        "description": "The fleet's usage/cost total since ``since`` and, when the caller bounded the window, strictly\nbefore ``until`` (``None`` for the open-ended tail). ``cost_partial`` is ``True`` iff some summed row\ncarries neither a billed nor an estimated amount, so ``cost_usd`` is then a lower bound;\n``estimated_cost_usd`` is ``None`` unless some summed row carried one, and never enters ``cost_usd``.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -3490,6 +3539,17 @@
           "cost_usd": {
             "title": "Cost Usd",
             "type": "number"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "input_tokens": {
             "title": "Input Tokens",
@@ -3783,6 +3843,89 @@
           "ref"
         ],
         "title": "GardenProposalClosureView",
+        "type": "object"
+      },
+      "GardenProposalCountsRowView": {
+        "description": "One routine/class pair's garden-proposal counts over the requested window.",
+        "properties": {
+          "accepted_with_item": {
+            "title": "Accepted With Item",
+            "type": "integer"
+          },
+          "accepted_without_item": {
+            "title": "Accepted Without Item",
+            "type": "integer"
+          },
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "routine_name",
+          "class",
+          "open",
+          "passed",
+          "accepted_with_item",
+          "accepted_without_item",
+          "created"
+        ],
+        "title": "GardenProposalCountsRowView",
+        "type": "object"
+      },
+      "GardenProposalCountsView": {
+        "description": "`GET /api/routines/proposal-counts`'s own response \u2014 `routine` echoes the\noptional filter, `None` when unfiltered.",
+        "properties": {
+          "routine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/GardenProposalCountsRowView"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until",
+          "routine",
+          "rows"
+        ],
+        "title": "GardenProposalCountsView",
         "type": "object"
       },
       "GardenProposalItemOutcome": {
@@ -6240,6 +6383,28 @@
         "title": "RoutineEditRequest",
         "type": "object"
       },
+      "RoutineLifecycleRequest": {
+        "description": "Retire or re-enable a routine \u2014 records who flipped it.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "RoutineLifecycleRequest",
+        "type": "object"
+      },
+      "RoutineProposalState": {
+        "description": "Which of a routine's garden proposals `OpenGardenProposalReader.list_for_routine`\nreturns: `OPEN` (the default) excludes any proposal already closed, `CLOSED` returns\nonly closed ones with their closure, `ALL` returns every proposal with its closure\nwhen one exists.",
+        "enum": [
+          "open",
+          "closed",
+          "all"
+        ],
+        "title": "RoutineProposalState",
+        "type": "string"
+      },
       "RoutineRunRequest": {
         "additionalProperties": false,
         "description": "``POST /api/routines/{routine_id}/run`` (blizzard#392) \u2014 ``scope_slug`` omitted\nor ``None`` defaults to the routine's own; ``mode`` is ``\"full\"`` or ``\"delta\"``, a\nrequested ``\"delta\"`` with no recorded baseline downgrading to ``\"full\"`` on the\nresponse rather than refusing.",
@@ -6360,7 +6525,7 @@
         "type": "object"
       },
       "RoutineView": {
-        "description": "A routine as served by the create/list/read/edit routes.",
+        "description": "A routine as served by the create/list/read/edit/lifecycle routes.",
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -6404,6 +6569,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
           },
           "routine_id": {
             "title": "Routine Id",
@@ -13450,6 +13620,426 @@
         ]
       }
     },
+    "/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types": {
+      "get": {
+        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/agent-types`` (blizzard#545).",
+        "operationId": "get_chunk_analytics_counts_agent_types_api_fleet_chunks__chunk_id__analytics_counts_agent_types_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Analytics Counts Agent Types",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/analytics/counts/files": {
+      "get": {
+        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/files`` \u2014 the same\nrows, over the window it names, gated on the chunk carrying a run context rather than\non operator credentials (blizzard#545).",
+        "operationId": "get_chunk_analytics_counts_files_api_fleet_chunks__chunk_id__analytics_counts_files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Analytics Counts Files",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/analytics/counts/nodes": {
+      "get": {
+        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/nodes`` (blizzard#545).",
+        "operationId": "get_chunk_analytics_counts_nodes_api_fleet_chunks__chunk_id__analytics_counts_nodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Analytics Counts Nodes",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/analytics/counts/skills": {
+      "get": {
+        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/skills`` (blizzard#545).",
+        "operationId": "get_chunk_analytics_counts_skills_api_fleet_chunks__chunk_id__analytics_counts_skills_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Analytics Counts Skills",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/analytics/spend/graphs": {
+      "get": {
+        "description": "A worker's own routine-run read of ``GET /api/analytics/spend/graphs`` (blizzard#545).",
+        "operationId": "get_chunk_analytics_spend_graphs_api_fleet_chunks__chunk_id__analytics_spend_graphs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Analytics Spend Graphs",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/analytics/spend/nodes": {
+      "get": {
+        "description": "A worker's own routine-run read of ``GET /api/analytics/spend/nodes`` (blizzard#545).",
+        "operationId": "get_chunk_analytics_spend_nodes_api_fleet_chunks__chunk_id__analytics_spend_nodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Analytics Spend Nodes",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
     "/api/fleet/chunks/{chunk_id}/completions": {
       "post": {
         "description": "Apply a node-step's completion atomically; reply carries the next envelope.",
@@ -13804,7 +14394,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/garden/proposals": {
       "get": {
-        "description": "A worker's own routine's open garden proposals \u2014 the chunk's own run context\nderives the routine; no caller-supplied flag can name another, and no scope filter\napplies (a proposal carries no scope column). 404 both for an unknown chunk and for\none carrying no run context (not a routine run): a chunk with nothing to read is\nrefused rather than answered with an empty bucket.",
+        "description": "A worker's own routine's garden proposals, filtered by `state` (`open` by\ndefault, plus `closed` and `all`, each closed entry carrying its closure) \u2014 the\nchunk's own run context derives the routine; no caller-supplied flag can name\nanother, and no scope filter applies (a proposal carries no scope column). 404 both\nfor an unknown chunk and for one carrying no run context (not a routine run): a\nchunk with nothing to read is refused rather than answered with an empty bucket.",
         "operationId": "get_garden_proposals_api_fleet_chunks__chunk_id__garden_proposals_get",
         "parameters": [
           {
@@ -13814,6 +14404,15 @@
             "schema": {
               "title": "Chunk Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/RoutineProposalState",
+              "default": "open"
             }
           }
         ],
@@ -15533,8 +16132,20 @@
     },
     "/api/routines": {
       "get": {
-        "description": "Every routine, newest first.",
+        "description": "Every routine, newest first \u2014 a retired routine excluded by default, included and\nmarked when ``include_retired``.",
         "operationId": "list_routines_api_routines_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15549,6 +16160,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Routines",
@@ -15592,6 +16213,74 @@
           }
         },
         "summary": "Create Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/proposal-counts": {
+      "get": {
+        "description": "Garden-proposal counts (blizzard#547) per routine and class over `[since,\nuntil)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum. `routine` narrows to one routine by name when given; 404 on\nan unknown one. 422 on a malformed instant or `until <= since`.",
+        "operationId": "routine_proposal_counts_api_routines_proposal_counts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": true,
+            "schema": {
+              "title": "Until",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "routine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Routine"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalCountsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Routine Proposal Counts",
         "tags": [
           "routines"
         ]
@@ -15818,9 +16507,115 @@
         ]
       }
     },
+    "/api/routines/{routine_id}/enable": {
+      "post": {
+        "description": "Re-enable a retired routine; idempotent, 404 on an unknown id.",
+        "operationId": "enable_routine_api_routines__routine_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutineLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/{routine_id}/retire": {
+      "post": {
+        "description": "Retire a routine \u2014 a reversible brake; 404 on an unknown id.",
+        "operationId": "retire_routine_api_routines__routine_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutineLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
     "/api/routines/{routine_id}/run": {
       "post": {
-        "description": "Mint, ingest, and promote a hub work item from the routine, in one act\n(blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown\n``mode``, or an effective scope no scope row holds or outside the routine's own\nrelated set (blizzard#399 D1, D4 \u2014 never minted); 503 on a retired effective scope or\na graph name with no enabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s\nown retired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
+        "description": "Mint, ingest, and promote a hub work item from the routine, in one act\n(blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown\n``mode``, or an effective scope no scope row holds or outside the routine's own\nrelated set (blizzard#399 D1, D4 \u2014 never minted); 503 on a retired routine\n(checked first, before the mode or scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
         "operationId": "run_routine_api_routines__routine_id__run_post",
         "parameters": [
           {

@@ -142,4 +142,112 @@ describe('GlanceView', () => {
 
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="done-today-count"]')).toBeNull();
   });
+
+  it("renders the in-motion row's own estimate, and the spend panel's own estimate, rather than a plain billed $0.00", async () => {
+    const fixture = render({ inMotionState: 'ready' });
+    fixture.componentRef.setInput('inMotion', [
+      {
+        chunkId: 'ch_01estimate0000000000000000',
+        shortId: 'C-0001',
+        runnerId: 'r1',
+        node: 'build',
+        pillLabel: 'run',
+        costUsd: 0,
+        costPartial: false,
+        estimatedCostUsd: 0.07,
+      },
+    ]);
+    fixture.componentRef.setInput('spend', {
+      since: '2026-07-20T00:00:00Z',
+      input_tokens: 900,
+      output_tokens: 400,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: 0,
+      cost_partial: false,
+      estimated_cost_usd: 0.07,
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="in-motion-cost"]')).toBeNull();
+    expect(el.querySelector('[data-testid="in-motion-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(el.querySelector('[data-testid="glance-spend-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(el.querySelector('[data-testid="glance-spend-row"]')?.textContent).not.toContain('$0.00');
+  });
+
+  it('renders both a billed cost and its own estimate on the same in-motion row, never merged', async () => {
+    const fixture = render({ inMotionState: 'ready' });
+    fixture.componentRef.setInput('inMotion', [
+      {
+        chunkId: 'ch_01billedandestimate00000000',
+        shortId: 'C-0003',
+        runnerId: 'r1',
+        node: 'build',
+        pillLabel: 'run',
+        costUsd: 0.05,
+        costPartial: false,
+        estimatedCostUsd: 2,
+      },
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('$0.05');
+    expect(el.querySelector('[data-testid="in-motion-cost-estimate"]')?.textContent?.trim()).toBe('$2.00 est.');
+  });
+
+  it('renders no estimate figures for a chunk/spend read with none — exactly as before this field existed', async () => {
+    const fixture = render({ inMotionState: 'ready' });
+    fixture.componentRef.setInput('inMotion', [
+      {
+        chunkId: 'ch_01billedonly000000000000000',
+        shortId: 'C-0002',
+        runnerId: 'r1',
+        node: 'build',
+        pillLabel: 'run',
+        costUsd: 2.03,
+        costPartial: false,
+        estimatedCostUsd: null,
+      },
+    ]);
+    fixture.componentRef.setInput('spend', {
+      since: '2026-07-20T00:00:00Z',
+      input_tokens: 900,
+      output_tokens: 400,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: 18.4,
+      cost_partial: false,
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent).toContain('$2.03');
+    expect(el.querySelector('[data-testid="in-motion-cost-estimate"]')).toBeNull();
+    expect(el.querySelector('[data-testid="glance-spend-row"]')?.textContent).toContain('$18.40');
+    expect(el.querySelector('[data-testid="glance-spend-estimate"]')).toBeNull();
+  });
+
+  it('renders no cost figure at all on an in-motion row that has spent nothing and carries no estimate', async () => {
+    const fixture = render({ inMotionState: 'ready' });
+    fixture.componentRef.setInput('inMotion', [
+      {
+        chunkId: 'ch_01nothingspent0000000000000',
+        shortId: 'C-0004',
+        runnerId: 'r1',
+        node: 'build',
+        pillLabel: 'run',
+        costUsd: 0,
+        costPartial: false,
+        estimatedCostUsd: null,
+      },
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="in-motion-row"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="in-motion-cost"]')).toBeNull();
+    expect(el.querySelector('[data-testid="in-motion-cost-estimate"]')).toBeNull();
+  });
 });

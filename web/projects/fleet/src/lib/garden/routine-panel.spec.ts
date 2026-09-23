@@ -31,10 +31,18 @@ const VM: RoutinePanelVm = {
   ],
   windowLabel: 'last 28 days',
   relatedScopes: [{ slug: 'blizzard', isDefault: true }],
+  retired: false,
+  renderedRetired: false,
 };
 
 describe('FleetRoutinePanel', () => {
-  async function mount(inputs: { vm?: RoutinePanelVm | null; state?: 'loading' | 'error' | 'empty' | 'ready' }) {
+  async function mount(inputs: {
+    vm?: RoutinePanelVm | null;
+    state?: 'loading' | 'error' | 'empty' | 'ready';
+    canEdit?: boolean;
+    actionError?: string | null;
+    lifecyclePending?: boolean;
+  }) {
     await TestBed.configureTestingModule({
       imports: [FleetRoutinePanel],
       providers: [provideZonelessChangeDetection()],
@@ -44,6 +52,9 @@ describe('FleetRoutinePanel', () => {
     // this panel has its own rendering for, and must not fall back to `VM`.
     fixture.componentRef.setInput('vm', 'vm' in inputs ? inputs.vm : VM);
     fixture.componentRef.setInput('state', inputs.state ?? 'ready');
+    fixture.componentRef.setInput('canEdit', inputs.canEdit ?? false);
+    fixture.componentRef.setInput('actionError', inputs.actionError ?? null);
+    fixture.componentRef.setInput('lifecyclePending', inputs.lifecyclePending ?? false);
     await fixture.whenStable();
     return fixture;
   }
@@ -276,5 +287,115 @@ describe('FleetRoutinePanel', () => {
     expect(el.textContent).not.toContain('hub routine show');
     expect(el.textContent).not.toContain('hub routine trend');
     expect(el.textContent).not.toContain('hub routine sweeps');
+  });
+
+  // --- Lifecycle: retire/enable, `FleetScopePanel`'s own shape -------
+
+  it('renders the enabled state and shows no lifecycle control without graph:edit', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-state"]')?.textContent).toContain('enabled');
+    expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-enable"]')).toBeNull();
+  });
+
+  it('marks a retired routine distinctly', async () => {
+    const fixture = await mount({ vm: { ...VM, retired: true, renderedRetired: true } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-state"]')?.textContent).toContain('retired');
+  });
+
+  it('shows Retire for an identity with graph:edit, and Re-enable once retired', async () => {
+    const fixture = await mount({ canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-enable"]')).toBeNull();
+
+    fixture.componentRef.setInput('vm', { ...VM, retired: true, renderedRetired: true });
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-enable"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeNull();
+  });
+
+  it('disables the lifecycle control while its mutation is pending', async () => {
+    const fixture = await mount({ canEdit: true, lifecyclePending: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-retire"]')?.disabled).toBe(
+      true,
+    );
+  });
+
+  it('emits retire once the operator confirms', async () => {
+    const fixture = await mount({ canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+    let emitted = false;
+    fixture.componentInstance.retire.subscribe(() => (emitted = true));
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+
+    expect(emitted).toBe(true);
+  });
+
+  it('emits nothing when the operator cancels the retire confirm', async () => {
+    const fixture = await mount({ canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+    let emitted = false;
+    fixture.componentInstance.retire.subscribe(() => (emitted = true));
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-cancel"]')?.click();
+
+    expect(emitted).toBe(false);
+  });
+
+  it('emits enable once the operator confirms', async () => {
+    const fixture = await mount({ vm: { ...VM, retired: true, renderedRetired: true }, canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+    let emitted = false;
+    fixture.componentInstance.enable.subscribe(() => (emitted = true));
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-enable"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+
+    expect(emitted).toBe(true);
+  });
+
+  it('renders a lifecycle action error', async () => {
+    const fixture = await mount({ canEdit: true, actionError: 'Retire failed.' });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-error"]')?.textContent).toContain(
+      'Retire failed.',
+    );
+  });
+
+  it('hides Run and shows a retired notice while renderedRetired, even though not blocked', async () => {
+    const fixture = await mount({ vm: { ...VM, retired: true, renderedRetired: true } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-run"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-routine-retired-notice"]')?.textContent).toContain('Retired');
+  });
+
+  it('keeps the control choice keyed off the real retired, not the rendered override', async () => {
+    // The real state is enabled; only an in-flight retire's own predicted outcome
+    // is retired. The control offered must still be Retire, not Re-enable, so a
+    // second click cannot fire the wrong verb (`scope-panel.spec.ts`'s own
+    // "renders the retired badge from renderedRetired" pairing).
+    const fixture = await mount({ vm: { ...VM, retired: false, renderedRetired: true }, canEdit: true });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-state"]')?.textContent).toContain('retired');
+    expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-enable"]')).toBeNull();
   });
 });

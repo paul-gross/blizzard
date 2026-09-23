@@ -19,8 +19,20 @@ from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.ingest import IngestConflict
-from blizzard.hub.domain.routine_run import RunService, ScopeNotRelatedError, ScopeRetiredError, compose_charge
-from blizzard.hub.domain.routines import IReadRoutineScopeRepository, Routine, RoutineGraphUnresolvedError, RunMode
+from blizzard.hub.domain.routine_run import (
+    RoutineRetiredError,
+    RunService,
+    ScopeNotRelatedError,
+    ScopeRetiredError,
+    compose_charge,
+)
+from blizzard.hub.domain.routines import (
+    IReadRoutineRepository,
+    IReadRoutineScopeRepository,
+    Routine,
+    RoutineGraphUnresolvedError,
+    RunMode,
+)
 from blizzard.hub.domain.scopes import IReadScopeRepository, Scope
 from blizzard.hub.domain.work import (
     Chunk,
@@ -52,6 +64,17 @@ class _FakeGraphs:
 
     def get_enabled_by_name(self, name: str) -> Graph | None:
         return self.resolvable.get(name)
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"should not touch {name!r}")
+
+
+@dataclass
+class _FakeRoutines:
+    retired: set[str] = field(default_factory=set)
+
+    def is_retired(self, routine_id: str) -> bool:
+        return routine_id in self.retired
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"should not touch {name!r}")
@@ -157,6 +180,7 @@ class _FakeItems:
 
 def _service(
     *,
+    routines: _FakeRoutines | None = None,
     scopes: _FakeScopes | None = None,
     routine_scopes: _FakeRoutineScopes | None = None,
     graphs: _FakeGraphs | None = None,
@@ -165,6 +189,7 @@ def _service(
     chunks: _FakeChunks | None = None,
 ) -> tuple[RunService, _FakeItems, _FakeScopes, _FakeChunks]:
     clock = FixedClock(instant=_T0)
+    routines = routines or _FakeRoutines()
     scopes = scopes or _FakeScopes()
     routine_scopes = routine_scopes or _FakeRoutineScopes()
     graphs = graphs or _FakeGraphs()
@@ -172,6 +197,7 @@ def _service(
     items = items or _FakeItems()
     chunks = chunks or _FakeChunks()
     service = RunService(
+        routines=cast(IReadRoutineRepository, routines),
         scopes=cast(IReadScopeRepository, scopes),
         routine_scopes=cast(IReadRoutineScopeRepository, routine_scopes),
         graphs=cast(IReadGraphRepository, graphs),
@@ -186,6 +212,49 @@ def _service(
 
 
 _AUTHOR = WorkItemAuthor.user("usr_1")
+
+
+def test_run_retired_routine_is_refused_naming_it() -> None:
+    service, *_ = _service(routines=_FakeRoutines(retired={"rtn_1"}))
+
+    with pytest.raises(RoutineRetiredError, match="gardening"):
+        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
+
+
+def test_run_refuses_a_retired_routine_before_the_graph_check() -> None:
+    """The retire check runs first — a retired routine whose graph is
+    also unresolved is refused for being retired, not for the graph."""
+    service, *_ = _service(routines=_FakeRoutines(retired={"rtn_1"}), graphs=_FakeGraphs(resolvable={}))
+
+    with pytest.raises(RoutineRetiredError):
+        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
+
+
+@dataclass
+class _RetiringItems(_FakeItems):
+    """Retires the routine from inside the one-act write — a retire landing after
+    the check passed and before the mint has committed."""
+
+    routines: _FakeRoutines = field(default_factory=_FakeRoutines)
+
+    def create_with_chunk_and_promote(self, **kwargs: Any) -> tuple[WorkItemRecord, int | None]:
+        self.routines.retired.add(_ROUTINE.routine_id)
+        return super().create_with_chunk_and_promote(**kwargs)
+
+
+def test_a_retire_landing_mid_mint_neither_refuses_nor_unwinds_the_run() -> None:
+    """The brake is checked once, up front: a run already past it is in flight and
+    completes, and only the next run addressed at the routine is refused."""
+    routines = _FakeRoutines()
+    items = _RetiringItems(routines=routines)
+    service, *_ = _service(routines=routines, items=items)
+
+    result = service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
+
+    assert result.item.work_item_id == "wi_1"
+    assert len(items.calls) == 1
+    with pytest.raises(RoutineRetiredError):
+        service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR, statuses={})
 
 
 def test_run_unresolved_graph_raises_naming_it() -> None:

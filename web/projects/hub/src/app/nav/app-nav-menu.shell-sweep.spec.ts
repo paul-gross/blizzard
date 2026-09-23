@@ -46,16 +46,19 @@ class TestHubShell {
     current_node_id: 'nd_build',
     work_refs: [],
   }));
+  // Carries its own estimate line too — the header's own widest natural content now
+  // includes it, so this sweep still tests the tightest fit the header ever renders.
   readonly spendToday: hubApi.FleetSpendView = {
     cost_usd: 12.34,
     cost_partial: false,
+    estimated_cost_usd: 0.07,
     input_tokens: 0,
     output_tokens: 0,
     cache_create_tokens: 0,
     cache_read_tokens: 0,
     since: '2026-07-29T00:00:00.000Z',
   };
-  readonly spendYesterday: hubApi.FleetSpendView = { ...this.spendToday, cost_usd: 56.78 };
+  readonly spendYesterday: hubApi.FleetSpendView = { ...this.spendToday, cost_usd: 56.78, estimated_cost_usd: 0.11 };
 }
 
 // 1400 down to 320 — spans a wide monitor to the narrowest common phone,
