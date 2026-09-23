@@ -231,3 +231,43 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert len(long_identity_runners) == 1, sorted(runners)
         long_runner = runners[long_identity_runners[0]]
         assert long_runner["workspace_id"] == "workspace-stress", long_runner
+
+
+def test_create_garden_proposal_seeds_a_proposal_citing_no_findings(tmp_path: Path) -> None:
+    """``create garden-proposal`` (blizzard#543) is the only seam that can land a garden
+    proposal with no findings — the board's manual no-findings case needs one against a
+    real hub, and nothing else composes that shape."""
+    bin_dir = _require_mock_data_binary()
+    hub_dir = tmp_path / "hub"
+    port = _free_port()
+
+    with _zero_work_source_hub(hub_dir, port) as hub:
+        proposal_id = _mock_data(
+            bin_dir,
+            "create",
+            "garden-proposal",
+            "--store",
+            "hub",
+            "--dir",
+            str(hub_dir),
+            "--routine",
+            "nightly",
+            "--class",
+            "mechanize",
+            "--title",
+            "a mock-data-seeded proposal",
+            "--body",
+            "its body",
+        ).strip()
+
+        resp = hub.get("/api/garden-proposals")
+        assert resp.status_code == 200, resp.text
+        proposals = {p["proposal_id"]: p for p in resp.json()["proposals"]}
+        assert proposal_id in proposals, sorted(proposals)
+        proposal = proposals[proposal_id]
+        assert proposal["routine_name"] == "nightly", proposal
+        assert proposal["class"] == "mechanize", proposal
+        assert proposal["title"] == "a mock-data-seeded proposal", proposal
+        assert proposal["body"] == "its body", proposal
+        assert proposal["findings"] == [], proposal
+        assert proposal["closure"] is None, proposal
