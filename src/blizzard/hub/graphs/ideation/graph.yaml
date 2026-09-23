@@ -52,9 +52,9 @@ nodes:
     produces:
       - survey                   # candidate gaps, no ids yet — empty on the undeclared
                                  # path
-      - delta                    # the empty skeleton the undeclared and clean-empty
-                                 # paths deliver directly; see propose.md for the path
-                                 # that corrects its measurement
+      - delta                    # the empty skeleton the `empty` and `nothing-new`
+                                 # paths deliver directly; propose republishes it with
+                                 # the measurement corrected, `undeclared` delivers nothing
     judgement:
       prompt: ./prompts/survey.judgement.md
       choices:
@@ -116,10 +116,9 @@ nodes:
       - name: materialize-garden-artifacts
         command: python3 -m blizzard.hub.graphs.scripts.garden_deliver --delta delta --proposals docket
     # The same script `garden-routine` runs: it validates each artifact's shape and
-    # nothing else, reads none of the prose. On success it mints nothing this graph ever
-    # asks it to — no `add` op ever reaches it, and every proposal's `findings` is `[]` —
-    # and attaches the surviving proposals to the routine. A run that reached here clean
-    # records its measurement.
+    # nothing else, reads none of the prose. On success it records the run's finding set
+    # — the measurement, never a finding, since no `add` op ever reaches it — and
+    # attaches the docket's proposals, each with `findings` `[]`, to the routine.
     judgement:
       choices:
         recorded:

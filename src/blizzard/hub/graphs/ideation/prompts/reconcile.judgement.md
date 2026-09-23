@@ -7,7 +7,6 @@ Choose `nothing-new` only when the shortlist is empty and you are confident ever
 already answered by an open, accepted, or still-holding passed proposal, checked against
 `blizzard runner garden proposals --state all`.
 
-If the proposals read failed outright, choose neither. This is the opposite of a delivery lane's own reconcile: there,
-a failed proposals read still degrades to a choice that gets another look. Here, it must not — a shortlist assembled
-without knowing what has already been decided would re-propose ideas a person already declined, and that is worse than
-a retry or an escalation costing another pass.
+If the proposals read failed outright, choose neither: a shortlist assembled without knowing what has already been
+decided would re-propose ideas a person already declined, and that is worse than a retry or an escalation costing
+another pass.

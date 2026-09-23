@@ -101,8 +101,8 @@ def test_ideation_propose_findings_are_always_empty() -> None:
     """This graph never cites a finding — it has none — so every proposal's `findings`
     is asserted `[]` in the prompt itself, not left to the worker's own judgment."""
     prompt = _doc().node("propose").prompt  # type: ignore[union-attr]
-    assert "findings: []" in prompt or "`findings`" in prompt  # type: ignore[operator]
-    assert "always `[]`" in prompt  # type: ignore[operator]
+    assert "this graph has no\nfindings to cite" in prompt  # type: ignore[operator]
+    assert "always `[]` here" in prompt  # type: ignore[operator]
 
 
 def test_ideation_propose_keeps_the_docket_and_delta_publish_and_no_hub_verb() -> None:
@@ -146,7 +146,8 @@ def test_ideation_reconcile_judgement_selects_neither_choice_on_a_failed_proposa
     prompt = judgement.prompt
     assert prompt is not None
     assert "choose neither" in prompt
-    assert "opposite" in prompt
+    assert "re-propose ideas a person already declined" in prompt
+    assert "delivery lane" not in prompt
 
 
 def test_ideation_session_policy_is_load_bearing() -> None:

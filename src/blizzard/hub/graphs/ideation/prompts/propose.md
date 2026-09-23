@@ -21,8 +21,8 @@ empty, proceed on the restatement above. Publish the docket with `blizzard runne
 `classes` artifact carries what each means and who a proposal is for; read it live with
 `blizzard runner artifact get classes --scope graph --content`; if that read fails or comes back empty, proceed on
 this restatement: `direction` is a capability the target does not yet offer at all, `tweak` is one it offers only
-partway or unevenly across surfaces, `retire` is one it still offers that the charter no longer asks for. Hold `class`
-self-consistent within this run.
+partway or unevenly, `retire` is one it still offers that the intent no longer asks for. Hold `class` self-consistent
+within this run.
 
 ## When a shortlist entry revives a pass
 

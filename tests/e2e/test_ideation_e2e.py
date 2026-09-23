@@ -2,8 +2,8 @@
 standing e2e smoke: ``test_garden_routine_e2e.py``'s shape for the survey -> reconcile ->
 propose -> deliver loop, ``test_ask_answer_e2e.py``'s for the ask-parks-then-answer
 mechanics the undeclared-axis path and the delivery-bounce escalation depend on. The real
-packaged YAML is minted with only its prompts swapped for scripts; every delta this graph
-delivers carries ``findings: []``, and an undeclared axis ends in `ask`, not a finding."""
+packaged YAML is minted with its prompts swapped for scripts and its deliver command wrapped
+in a crash-once shim; every delta carries ``findings: []``, and an undeclared axis ends in `ask`."""
 
 from __future__ import annotations
 
@@ -46,12 +46,13 @@ _SCOPE_NOVEL = "ideation-novel"
 _SCOPE_CLEAN = "ideation-clean"
 _SCOPE_NONE = "ideation-none"
 _SCOPE_INVALID = "ideation-invalid"
+_SCOPE_FAILURE = "ideation-failure"
 _SCOPE_ESCALATE = "ideation-escalate"
 _SCOPE_UNDECLARED = "ideation-undeclared"
 _SCOPE_DECLARED_LATER = "ideation-declared-later"
 
 
-def _common() -> str:
+def _common(crash_dir: Path) -> str:
     """The shared preamble: the charge parsed off the real work item and the worker
     artifact verbs — no findings bucket, since this graph has none. `staged()` reads this
     node-step's own not-yet-published submissions (`artifact staged --content`): a
@@ -72,6 +73,18 @@ def _common() -> str:
         "    entries = json.loads(sh('blizzard', 'runner', 'artifact', 'staged', '--content'))\n"
         "    return next(e['content'] for e in entries if e['name'] == name)\n"
         "axis_marker = pathlib.Path(f'.ideation-axis-{chunk_id}')\n"
+        "armed_marker = pathlib.Path(f'.ideation-crash-armed-{chunk_id}')\n"
+        f"crash_trigger = pathlib.Path({str(crash_dir)!r}) / chunk_id\n"
+    )
+
+
+def _crash_once_command(crash_dir: Path) -> str:
+    """The deliver command behind a shim that exits 1 once, iff propose left this chunk's
+    trigger — so the real ``garden_deliver`` runs on every other visit unchanged."""
+    return (
+        f'sh -c \'m={str(crash_dir)!r}/$BZ_HUB_CHUNK_ID; if [ -e "$m" ]; then rm -f "$m"; '
+        'echo "simulated delivery crash" >&2; exit 1; fi; '
+        "exec python3 -m blizzard.hub.graphs.scripts.garden_deliver --delta delta --proposals docket'"
     )
 
 
@@ -85,21 +98,24 @@ _SURVEY = (
     "        'declare it or confirm its absence?'\n"
     "    )\n"
     "    ask(question, ['declared', 'still-undeclared'])\n"
-    "if path in ('novel', 'invalid', 'escalate', 'reconcile-drop'):\n"
+    "if path in ('novel', 'invalid', 'escalate', 'failure', 'reconcile-drop'):\n"
     "    cands = [\n"
-    "        {'ref': 'C1', 'locus': f'{scope}: persona-a direction gap',\n"
+    "        {'ref': 'C1', 'class': 'missing-capability', 'locus': f'{scope}: persona-a direction gap',\n"
     "         'summary': 'persona A cannot do the core workflow at all'},\n"
-    "        {'ref': 'C2', 'locus': f'{scope}: persona-b tweak gap',\n"
+    "        {'ref': 'C2', 'class': 'partial-capability', 'locus': f'{scope}: persona-b tweak gap',\n"
     "         'summary': 'persona B only gets this on one surface'},\n"
-    "        {'ref': 'C3', 'locus': f'{scope}: persona-c retire gap',\n"
+    "        {'ref': 'C3', 'class': 'unwanted-capability', 'locus': f'{scope}: persona-c retire gap',\n"
     "         'summary': 'a surface the charter no longer asks for'},\n"
     "    ]\n"
+    "elif path == 'revive':\n"
+    "    cands = [{'ref': 'C2', 'class': 'partial-capability', 'locus': f'{scope}: persona-b tweak gap',\n"
+    "              'summary': 'changed since the pass: the parity gap is no longer intentional'}]\n"
     "elif path == 'none':\n"
-    "    cands = [{'ref': 'C1', 'locus': f'{scope}: persona-d minor gap',\n"
+    "    cands = [{'ref': 'C1', 'class': 'minor-gap', 'locus': f'{scope}: persona-d minor gap',\n"
     "              'summary': 'a minor gap not worth a proposal'}]\n"
     "else:\n"
     "    cands = []\n"
-    "measurement = f'e2e ideation sweep of {scope}: {len(cands)} flagged'\n"
+    "measurement = f'e2e ideation sweep of {scope}: {len(cands)} flagged, 0 proposed'\n"
     "publish('survey', json.dumps({'scope': scope, 'revisions': {}, 'measurement': measurement, 'candidates': cands}))\n"
     "publish('delta', json.dumps({'scope': scope, 'revisions': {}, 'measurement': measurement, 'findings': []}))\n"
 )
@@ -109,8 +125,8 @@ _SURVEY_JUDGEMENT = (
     "    choice = 'undeclared' if axis_marker.read_text().strip() == 'undeclared' else 'empty'\n"
     "else:\n"
     "    choice = {\n"
-    "        'novel': 'found', 'invalid': 'found', 'escalate': 'found', 'reconcile-drop': 'found',\n"
-    "        'none': 'found', 'clean': 'empty',\n"
+    "        'novel': 'found', 'invalid': 'found', 'escalate': 'found', 'failure': 'found',\n"
+    "        'reconcile-drop': 'found', 'revive': 'found', 'none': 'found', 'clean': 'empty',\n"
     "    }[path]\n"
     "verdict(choice, 'scripted sweep')\n"
 )
@@ -142,21 +158,33 @@ _ANSWER_STILL_UNDECLARED = _answer_axis_script("undeclared", "axis still undecla
 _ANSWER_NOW_DECLARED = _answer_axis_script("declared", "0 flagged after the registry was updated")
 _ASK_AXIS_SUBSTR = "ideation-e2e axis"
 
-# reconcile: drop a candidate whose locus an open, accepted, or passed proposal already names.
+# reconcile: open/accepted drop; a pass drops unless the candidate says what changed since its reason.
 _RECONCILE = (
     "survey_asset = json.loads(sh('blizzard', 'runner', 'artifact', 'get', 'survey', '--content'))\n"
     "proposals = json.loads(sh('blizzard', 'runner', 'garden', 'proposals', '--state', 'all'))\n"
-    "def already_answered(cand):\n"
+    "def weigh(cand):\n"
     "    for p in proposals:\n"
     "        if cand['locus'] not in p['title']:\n"
     "            continue\n"
     "        closure = p.get('closure')\n"
-    "        if closure is None:\n"
-    "            return True  # open — still waiting on a person\n"
-    "        if closure['closure'] in ('accepted', 'passed'):\n"
-    "            return True\n"
-    "    return False\n"
-    "shortlist = [c for c in survey_asset['candidates'] if not already_answered(c)]\n"
+    "        if closure is None or closure['closure'] == 'accepted':\n"
+    "            return 'drop', None\n"
+    "        assert closure['closure'] == 'passed', closure\n"
+    "        assert closure['reason'], f'passed proposal {p[\"proposal_id\"]} carried no reason to weigh'\n"
+    "        if cand['summary'].startswith('changed since the pass'):\n"
+    "            return 'revive', p\n"
+    "        return 'drop', None\n"
+    "    return 'keep', None\n"
+    "shortlist = []\n"
+    "for cand in survey_asset['candidates']:\n"
+    "    outcome, earlier = weigh(cand)\n"
+    "    if outcome == 'drop':\n"
+    "        continue\n"
+    "    entry = dict(cand)\n"
+    "    if outcome == 'revive':\n"
+    "        entry['revives'] = earlier['proposal_id']\n"
+    "        entry['changed'] = cand['summary']\n"
+    "    shortlist.append(entry)\n"
     "publish('shortlist', json.dumps(shortlist))\n"
 )
 
@@ -178,9 +206,14 @@ _PROPOSE = (
     "    docket = [\n"
     "        {'ref': f\"P-{c['ref']}\", 'class': class_by_ref.get(c['ref'], 'tweak'),\n"
     "         'title': f\"ideation proposal: {c['locus']}\",\n"
-    "         'body': f\"scripted proposal citing no findings, addressing: {c['summary']}\", 'findings': []}\n"
+    "         'body': (f\"revives {c['revives']} — {c['changed']}\" if 'revives' in c\n"
+    "                  else f\"scripted proposal citing no findings, addressing: {c['summary']}\"),\n"
+    "         'findings': []}\n"
     "        for c in shortlist\n"
     "    ]\n"
+    "if path == 'failure' and not armed_marker.exists():\n"
+    "    crash_trigger.write_text('crash once')\n"
+    "    armed_marker.write_text('armed')\n"
     "measurement = f'e2e ideation sweep of {scope}: {len(docket)} proposed'\n"
     "delta_scope = ('not-' + scope) if path in ('invalid', 'escalate') else scope\n"
     "publish('docket', json.dumps(docket))\n"
@@ -210,6 +243,21 @@ _PROPOSE_FROM_DELIVER_INVALID = (
     "                                  'findings': []}))\n"
 )
 
+# The `failure` addendum, appended to propose's re-entry: confirm, republish unchanged, bound the loop.
+_PROPOSE_FROM_DELIVER_FAILURE = (
+    "history = json.loads(sh('blizzard', 'runner', 'chunk', 'history'))\n"
+    "failure_count = sum(\n"
+    "    1 for r in history\n"
+    "    if r.get('kind') == 'transition' and r.get('from_node') == 'deliver' and r.get('choice') == 'failure'\n"
+    ")\n"
+    "assert failure_count >= 1, f'the failure addendum ran with no failure transition on record: {history}'\n"
+    "if failure_count >= 2:\n"
+    "    ask(f'ideation delivery for {scope} failed twice — repair the delivery path?', ['retry', 'abandon'])\n"
+    "assert json.loads(staged('docket')) == docket, 'the docket changed across the failure bounce'\n"
+    "publish('docket', json.dumps(docket))\n"
+    "publish('delta', json.dumps({'scope': scope, 'revisions': {}, 'measurement': measurement, 'findings': []}))\n"
+)
+
 # The answer to the escalation ask: a self-contained script that fixes the delta's scope.
 _ANSWER_ESCALATE_RESOLVED = (
     "import json, os, subprocess\n"
@@ -231,13 +279,12 @@ _ANSWER_ESCALATE_RESOLVED = (
 _ESCALATE_QUESTION_SUBSTR = "bounced invalid twice"
 
 
-def _scripted_ideation_graph_yaml() -> str:
-    """The real packaged ``ideation`` body with only its prompts swapped for scripts —
-    nodes, edges, session pools, the `classes` graph-scoped artifact, and the deliver
-    command stay verbatim, exactly as `test_garden_routine_e2e.py`'s own
-    `_scripted_garden_graph_yaml` leaves `garden-routine`'s own machinery untouched."""
+def _scripted_ideation_graph_yaml(crash_dir: Path) -> str:
+    """The real packaged ``ideation`` body with its prompts swapped for scripts and its
+    deliver command behind the crash-once shim — nodes, edges, session pools, and the
+    `classes` graph-scoped artifact stay verbatim."""
     body = PACKAGED.named("ideation").body
-    common = _common()
+    common = _common(crash_dir)
     nodes: dict[str, object] = body["nodes"]  # type: ignore[assignment]
     nodes["survey"]["prompt"] = common + _SURVEY  # type: ignore[index]
     nodes["survey"]["judgement"]["prompt"] = common + _SURVEY_JUDGEMENT  # type: ignore[index]
@@ -246,6 +293,8 @@ def _scripted_ideation_graph_yaml() -> str:
     nodes["propose"]["prompt"] = common + _PROPOSE  # type: ignore[index]
     nodes["propose"]["judgement"]["prompt"] = common + _PROPOSE_JUDGEMENT  # type: ignore[index]
     nodes["deliver"]["judgement"]["choices"]["invalid"]["prompt_addendum"] = _PROPOSE_FROM_DELIVER_INVALID  # type: ignore[index]
+    nodes["deliver"]["judgement"]["choices"]["failure"]["prompt_addendum"] = _PROPOSE_FROM_DELIVER_FAILURE  # type: ignore[index]
+    nodes["deliver"]["run"][0]["command"] = _crash_once_command(crash_dir)  # type: ignore[index]
     return yaml.safe_dump(body, sort_keys=False)
 
 
@@ -257,9 +306,9 @@ def _edges(hub, chunk_id: str) -> list[tuple[str | None, str | None]]:
 
 
 def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
-    """One routine, several runs over the packaged `ideation` graph: novel candidates in
-    all three classes closed by a person, reconcile dropping what is answered, an empty
-    sweep, a decline, one self-correcting bounce, a double bounce that asks, both ask branches."""
+    """One routine, several runs over the packaged `ideation` graph: three classes proposed
+    and closed by a person, a drop and a revive off the pass reason, an empty sweep, a
+    decline, an invalid bounce, a crash bounce, a double bounce that asks, both ask branches."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
@@ -285,6 +334,8 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
     )
     workspace = scratch / FIXTURE_ENV / "workspace"
     (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
+    crash_dir = tmp_path / "crash-once"
+    crash_dir.mkdir()
 
     forge_port, hub_port = _free_port(), _free_port()
     runner_dir = tmp_path / "runner"
@@ -292,7 +343,7 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
         _forge(bin_dir, scratch / FIXTURE_ENV / "origins", forge_port),
         _hub(tmp_path / "hub", forge_port, hub_port) as hub,
     ):
-        minted = hub.post("/api/graphs", json={"definition_yaml": _scripted_ideation_graph_yaml()})
+        minted = hub.post("/api/graphs", json={"definition_yaml": _scripted_ideation_graph_yaml(crash_dir)})
         assert minted.status_code == 201, minted.text
 
         created = hub.post(
@@ -312,6 +363,7 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
             _SCOPE_CLEAN,
             _SCOPE_NONE,
             _SCOPE_INVALID,
+            _SCOPE_FAILURE,
             _SCOPE_ESCALATE,
             _SCOPE_UNDECLARED,
             _SCOPE_DECLARED_LATER,
@@ -432,6 +484,23 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
         assert _edges(hub, drop_chunk) == [("survey", "found"), ("reconcile", "nothing-new"), ("deliver", "recorded")]
         after_proposals = hub.get("/api/garden-proposals").json()["proposals"]
         assert len([p for p in after_proposals if p["routine_name"] == _ROUTINE]) == 3, after_proposals
+        (drop_set,) = hub.get(f"/api/runs/{drop_chunk}").json()["sets"]
+        assert drop_set["measurement"] == f"e2e ideation sweep of {_SCOPE_NOVEL}: 3 flagged, 0 proposed"
+
+        # -- revive: the same passed candidate returns saying what changed since the pass
+        #    reason; reconcile keeps it and propose names the earlier proposal ------------
+        revive_chunk = run("revive", _SCOPE_NOVEL)
+        assert _edges(hub, revive_chunk) == [
+            ("survey", "found"),
+            ("reconcile", "novel"),
+            ("propose", "proposed"),
+            ("deliver", "recorded"),
+        ]
+        revived = [p for p in hub.get("/api/garden-proposals").json()["proposals"] if p["routine_name"] == _ROUTINE]
+        assert len(revived) == 4, revived
+        (revival,) = [p for p in revived if p["closure"] is None and p["class"] == "tweak"]
+        assert tweak_proposal["proposal_id"] in revival["body"], revival
+        assert revival["findings"] == []
 
         # -- clean: survey straight to deliver; the empty delta's datapoint recorded --
         clean_chunk = run("clean", _SCOPE_CLEAN)
@@ -440,7 +509,7 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
         (clean_set,) = clean_delta["sets"]
         assert clean_set["added"] == [] and clean_set["observed"] == [] and clean_set["gone"] == []
         assert clean_set["revisions"] == {}
-        assert clean_set["measurement"] == f"e2e ideation sweep of {_SCOPE_CLEAN}: 0 flagged"
+        assert clean_set["measurement"] == f"e2e ideation sweep of {_SCOPE_CLEAN}: 0 flagged, 0 proposed"
 
         # -- none: propose declines; the republished delta still delivers -------------
         none_chunk = run("none", _SCOPE_NONE)
@@ -470,6 +539,29 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
         invalid_delta = hub.get(f"/api/runs/{invalid_chunk}").json()
         (invalid_set,) = invalid_delta["sets"]
         assert invalid_set["added"] == [] and invalid_set["observed"] == [] and invalid_set["gone"] == []
+
+        # -- failure: the shim crashes deliver once; the `failure` addendum republishes the
+        #    docket unchanged and the retry records it exactly once -----------------------
+        failure_chunk = run("failure", _SCOPE_FAILURE)
+        assert _edges(hub, failure_chunk) == [
+            ("survey", "found"),
+            ("reconcile", "novel"),
+            ("propose", "proposed"),
+            ("deliver", "failure"),
+            ("propose", "proposed"),
+            ("deliver", "recorded"),
+        ]
+        failure_proposals = [
+            p for p in hub.get("/api/garden-proposals").json()["proposals"] if _SCOPE_FAILURE in p["title"]
+        ]
+        assert len(failure_proposals) == 3, failure_proposals
+        assert not list(crash_dir.iterdir()), "the crash trigger was not consumed by the shim"
+        failure_logs = [
+            a
+            for a in hub.get(f"/api/chunks/{failure_chunk}").json()["artifacts"]
+            if "simulated delivery crash" in (a.get("content") or "")
+        ]
+        assert failure_logs, "the deliver exec log did not record the shim's crash"
 
         # -- escalate: two consecutive invalid bounces, then the loop bound asks instead
         #    of resubmitting a third time; the answer resolves the delta and it records ---

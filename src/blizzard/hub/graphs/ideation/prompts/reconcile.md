@@ -23,20 +23,20 @@ A candidate matching a passed proposal whose reason no longer holds survives —
 it is worth raising again. Carry the earlier proposal's id and what changed forward on the shortlist entry; propose
 needs both to write a proposal that names the earlier pass rather than pretending this is the first time.
 
-Matching is judgment, not string comparison: two candidates naming the same gap for the same persona are the same
-thing worded differently; two at the same surface objecting to different things are not. When unsure, keep the
+Matching is judgment, not string comparison: two candidates naming the same gap at the same locus are the same thing
+worded differently; two at the same locus objecting to different things are not. When unsure, keep the
 candidate on the shortlist rather than dropping it — a duplicate proposal costs a person one moment of recognition; a
 wrongly dropped idea costs a gap nobody hears about again.
 
 ## If the proposals read fails
 
 If you could not fetch the routine's proposals at all, choose neither judgement — say so, and let the retry or the
-escalation handle it. This is the opposite of a shape a delivery lane might tolerate: without that read, novelty
-cannot be judged, and a run publishing a shortlist here would re-propose ideas already declined.
+escalation handle it: without that read, novelty cannot be judged, and a shortlist published anyway would re-propose
+ideas already declined.
 
 ## Publish
 
-A shortlist entry carries the survey candidate's own `ref`, `locus`, and `summary` unchanged, plus — only when it
+A shortlist entry carries the survey candidate's own `ref`, `class`, `locus`, and `summary` unchanged, plus — only when it
 survives against a passed proposal whose reason no longer holds — `revives` (the earlier proposal's id) and `changed`
 (what makes the old reason stop holding). Publish with `blizzard runner artifact create --name shortlist` (content on
 stdin, a JSON list). An empty list is itself a statement: every candidate this run saw is already answered.
