@@ -79,10 +79,14 @@ measurement series, the opaque text each delivered set records, cut to `--since`
 table, the measurement series is windowed: a scope swept months ago still reads its true last-swept instant, never
 "never".
 
-The hub board's Gardening tab renders both reads on that same Routines sub-tab, plus a routine's stored record, its own
-related scopes — marking its default among them — and the effective graph's own node prompts, as read-only prose, and
-the Run action above it. A routine whose graph has lost every enabled mint shows as blocked there instead of offering a
-run.
+`blizzard hub routine proposal-counts [<name>] --since <time> --until <time>` reports how many garden proposals landed
+in the window, broken out by routine and class into still-open, passed, accepted-with-item, and accepted-without-item
+counts. Name a routine to see only its rows, or omit it to see every routine's rows at once.
+
+The hub board's Gardening tab renders the trend and sweeps reads on that same Routines sub-tab, plus a routine's stored
+record, its own related scopes — marking its default among them — and the effective graph's own node prompts, as
+read-only prose, and the Run action above it. A routine whose graph has lost every enabled mint shows as blocked there
+instead of offering a run.
 
 ## Reading runs
 
