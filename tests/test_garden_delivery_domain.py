@@ -131,8 +131,8 @@ def test_parse_proposals_rejects_malformed_json() -> None:
 
 
 def test_parse_proposals_rejects_a_shape_mismatch() -> None:
-    # `findings` is required and non-empty (D7) — an empty list fails the wire shape.
-    body = '[{"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": []}]'
+    # `findings` must be a list — a bare string fails the wire shape.
+    body = '[{"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": "not-a-list"}]'
     with pytest.raises(GardenDeliveryRejected, match=re.escape("proposals.json")):
         parse_proposals("proposals.json", body)
 
@@ -192,6 +192,12 @@ def test_check_proposal_rejects_a_finding_not_live_on_this_routine() -> None:
 
 def test_check_proposal_accepts_a_live_finding() -> None:
     proposal = _proposal(findings=[_FIN1])
+
+    check_proposal(proposal, run=_RUN, live_findings=_live())  # does not raise
+
+
+def test_check_proposal_accepts_a_proposal_citing_no_findings() -> None:
+    proposal = _proposal(findings=[])
 
     check_proposal(proposal, run=_RUN, live_findings=_live())  # does not raise
 

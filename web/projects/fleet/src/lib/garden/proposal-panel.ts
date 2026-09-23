@@ -88,6 +88,11 @@ export interface ProposalPanelVm {
   readonly body: string;
   readonly closure: ProposalClosureVm | null;
   readonly createdAt: string;
+  /** Whether the proposal cites any findings at all — decided from the proposal's
+   * own citation count, never from whether the live evidence read resolved to
+   * anything. Gates the Evidence section's presence outright, kept separate from
+   * `evidenceState`'s own empty/error/pending triad. */
+  readonly hasFindings: boolean;
 }
 
 /**

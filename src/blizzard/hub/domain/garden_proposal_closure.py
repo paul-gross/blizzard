@@ -145,11 +145,11 @@ class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository
 
 
 def _compose_minted_body(body: str, findings: Sequence[Finding]) -> str:
-    """Wrap ``body`` with a "Related findings" section — one bullet per ``findings``
-    entry, each carrying finding id, class, locus, and state as of this accept, in that
-    order — and the two lease-scoped verbs a worker holding the minted item's own lease
-    reads their current state with (blizzard#397). The bullet's state is a snapshot, not
-    a live value: it does not update as the finding's own state changes after mint."""
+    """Wrap ``body`` with a "Related findings" section — one snapshot bullet per
+    ``findings`` entry plus the two lease-scoped read verbs (blizzard#397). Empty
+    ``findings`` returns ``body`` unchanged — no section, no preamble."""
+    if not findings:
+        return body
     bullets = "\n".join(f"- `{f.finding_id}` — {f.class_} — {f.locus} — {f.state}" for f in findings)
     return (
         f"{body}\n\n"
@@ -210,9 +210,10 @@ class GardenProposalClosureService:
     ) -> AcceptedGardenProposal:
         """Accept ``proposal``: minting is the default (``mint=True``, requiring
         ``graph``), linking a hub work item whose body wraps ``body`` or the proposal's
-        own in the "Related findings" template (``_compose_minted_body``), built from
-        ``findings`` — already-loaded objects the caller resolves
-        (``bzh:domain-takes-objects``), never read from ``proposal.findings`` here;
+        own in the "Related findings" template when ``findings`` names any, or left
+        bare otherwise (``_compose_minted_body``) — built from ``findings``,
+        already-loaded objects the caller resolves (``bzh:domain-takes-objects``), never
+        read from ``proposal.findings`` here;
         ``mint=False`` records the acceptance without minting, or composing anything.
         Raises :class:`GardenProposalAlreadyClosed` when already closed, and
         :class:`~blizzard.hub.domain.ingest.IngestConflict` on a raced ref."""

@@ -456,6 +456,33 @@
       ]
     },
     {
+      "id": "garden-proposal-findings-optional",
+      "statement": "A garden proposal's findings are optional; the hub enforces no minimum, empty or not, and whether a graph's own proposals must cite one is that graph's own decision, never the hub's.",
+      "owner": "blizzard-context:/domain/findings-and-proposals.md#a-proposals-findings-are-optional",
+      "owner_kind": "domain",
+      "owner_assert": {
+        "quote": "the hub enforces no minimum"
+      },
+      "markers": [
+        "the hub enforces no minimum",
+        "stores groups and counts whatever a proposal names"
+      ],
+      "sites": [
+        {
+          "file": "src/blizzard/hub/system_artifacts/garden/proposal-format.md",
+          "symbol": "the-proposal-a-run-submits",
+          "role": "allowed",
+          "reason": "Published surface: this system artifact is validated directly against a garden routine's own delivered submission, and a routine author has no source tree to point at — the relaxed rule is restated plainly here rather than left as a bare pointer, the same structural cause as this registry's docs/deployment/ survivors."
+        },
+        {
+          "file": "docs/deployment/findings-and-proposals.md",
+          "symbol": "garden-proposals",
+          "role": "allowed",
+          "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivors: an operator reading `garden-proposal list`/`show` output from outside the workspace cannot resolve a domain-doc path, so the relaxed rule is restated plainly here rather than left as a bare pointer."
+        }
+      ]
+    },
+    {
       "id": "usage-cost-partial-neither-amount",
       "statement": "The hub's derived usage/cost total (UsageTotal) flags cost_partial iff some summed row carries neither a billed nor an estimated amount; an estimate never enters cost_usd. The spend caps' own PARTIAL is billed_partial, a separate reading.",
       "owner": "src/blizzard/hub/domain/work.py#UsageTotal",

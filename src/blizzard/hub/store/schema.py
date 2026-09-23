@@ -451,8 +451,9 @@ Index("ix_finding_sets_chunk_id", finding_sets.c.chunk_id)
 Index("ix_finding_sets_routine_scope", finding_sets.c.routine_name, finding_sets.c.scope_slug)
 
 # --- Garden proposals (blizzard#390) ---------------------------------------------
-# A proposed response to one or more findings — never `proposals`, so neither this nor
-# `work_item_proposals` inherits an unqualified name a call site could confuse (D1).
+# A proposed response — never `proposals`, so neither this nor `work_item_proposals`
+# inherits an unqualified name a call site could confuse (D1). What a proposal is, and
+# whether it needs a finding, is `blizzard-context:/domain/findings-and-proposals.md`'s own.
 
 garden_proposals = Table(
     "garden_proposals",
@@ -480,8 +481,8 @@ Index(
 )
 
 # The findings a proposal answers (D7) — a join, not a JSON list, so which-work-resolved-
-# which-findings is a query rather than a scan (`bzh:sql-portable`). Required and
-# non-empty is enforced in the domain service.
+# which-findings is a query rather than a scan (`bzh:sql-portable`). May carry no rows at
+# all for a proposal citing none.
 
 garden_proposal_findings = Table(
     "garden_proposal_findings",

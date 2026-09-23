@@ -124,6 +124,30 @@ def test_garden_proposal_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
+def test_garden_proposal_show_omits_the_findings_line_when_there_are_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            {
+                "proposal_id": "gprop_1",
+                "routine_name": "nightly",
+                "class": "fix-the-source",
+                "title": "Author a docstring standard",
+                "body": "the case",
+                "findings": [],
+                "created_at": "t0",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["garden-proposal", "show", "gprop_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "gprop_1" in result.output
+    assert "findings:" not in result.output
+
+
+@pytest.mark.unit
 def test_garden_proposal_show_unknown_id_reports_404(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown garden proposal gprop_ghost"})

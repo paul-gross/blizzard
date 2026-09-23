@@ -1,6 +1,7 @@
-"""Garden-proposal domain model — a proposed response to one or more findings
-(blizzard#390). Named `garden_proposals`/`GardenProposal` throughout — never the bare
-`proposal`/`Proposal` a work-item proposal already claims (D1)."""
+"""Garden-proposal domain model (blizzard#390) —
+`blizzard-context:/domain/findings-and-proposals.md` owns what a proposal is and
+whether it needs a finding. Named `garden_proposals`/`GardenProposal` throughout —
+never the bare `proposal`/`Proposal` a work-item proposal already claims (D1)."""
 
 from __future__ import annotations
 
@@ -18,13 +19,6 @@ if TYPE_CHECKING:
     # Deferred to break the cycle: `garden_proposal_closure.py` itself imports
     # `GardenProposal` from this module.
     from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure, IReadGardenProposalClosureRepository
-
-
-class EmptyProposalFindingsError(ValueError):
-    """A proposal names no findings (D7) — required and non-empty."""
-
-    def __init__(self) -> None:
-        super().__init__("a garden proposal must name at least one finding")
 
 
 class DuplicateProposalFindingError(ValueError):
@@ -121,14 +115,14 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         at: datetime,
     ) -> GardenProposal:
         """Insert the proposal row and its `garden_proposal_findings` link rows (D7), in
-        one transaction. Non-empty `findings` is enforced by
-        :class:`GardenProposalAuthoring` before this is called."""
+        one transaction. `findings` may be empty."""
         ...
 
 
 class GardenProposalAuthoring:
     """Create a garden proposal from loaded findings (`bzh:domain-takes-objects`),
-    rejecting an empty or duplicate-naming `findings` list (D7, blizzard#390)."""
+    rejecting only a duplicate-naming `findings` list (D7, blizzard#390) — an empty
+    one is accepted."""
 
     def __init__(self, *, proposals: IWriteGardenProposalRepository, clock: IClock) -> None:
         self._proposals = proposals
@@ -137,8 +131,6 @@ class GardenProposalAuthoring:
     def create(
         self, *, routine_name: str, class_: str, title: str, body: str, findings: Sequence[Finding]
     ) -> GardenProposal:
-        if not findings:
-            raise EmptyProposalFindingsError()
         finding_ids = [f.finding_id for f in findings]
         seen: set[str] = set()
         for finding_id in finding_ids:

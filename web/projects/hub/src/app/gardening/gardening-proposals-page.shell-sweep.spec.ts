@@ -293,3 +293,59 @@ describe('gardening proposals page independent-scroll shell sweep (web:shell-swe
     }
   });
 });
+
+/**
+ * A proposal citing zero findings withholds the whole Evidence section rather than
+ * a stuck spinner or a spurious empty state — a real-Chromium proof that the missing
+ * section never widens `.gp-layout` past its column at a narrow width, the same
+ * overflow claim the layout sweep above makes for a proposal that does cite findings.
+ */
+describe('gardening proposals page no-findings evidence gating (web:shell-sweep)', () => {
+  it('withholds the Evidence section for a proposal that cites no findings, without breaking the narrow layout', async () => {
+    const NO_FINDINGS_PROPOSAL = { ...PROPOSAL, proposal_id: 'gp_none', findings: [], closure: null };
+    const stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path === '/api/garden-proposals') {
+        return { proposals: [PROPOSAL, NO_FINDINGS_PROPOSAL], next_cursor: null };
+      }
+      if (method === 'GET' && path === '/api/findings/fin_1') return FINDING;
+      return {};
+    });
+
+    await TestBed.configureTestingModule({
+      imports: [TestProposalsShellHost],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter(realDetailRoutes),
+      ],
+    }).compileComponents();
+    const viewport = TestBed.inject(ViewportService);
+    viewport.setOverride('mobile');
+    const fixture = TestBed.createComponent(TestProposalsShellHost);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/gardening/proposals/gp_none');
+    await settle(fixture, 8);
+
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await settle(fixture);
+
+      expect(root.querySelector('[data-testid="gardening-proposal-evidence"]')).toBeNull();
+
+      const layout = root.querySelector<HTMLElement>('.gp-layout')!;
+      expect(
+        layout.scrollWidth,
+        `layout overflows horizontally (${layout.scrollWidth} > ${layout.clientWidth})`,
+      ).toBeLessThanOrEqual(layout.clientWidth);
+    } finally {
+      viewport.setOverride('auto');
+      root.remove();
+      stub.restore();
+    }
+  });
+});

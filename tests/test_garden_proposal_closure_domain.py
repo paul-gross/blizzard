@@ -244,6 +244,14 @@ def test_compose_wraps_a_caller_supplied_override_body() -> None:
     assert body.startswith("a hand-drafted body\n\n## Related findings\n\n")
 
 
+def test_compose_returns_the_body_unchanged_when_findings_is_empty() -> None:
+    """A proposal citing no findings, or one whose cited ids have all since stopped
+    resolving, mints a bare item — no section, no preamble."""
+    body = _compose_minted_body("the case", [])
+
+    assert body == "the case"
+
+
 # --- classify_proposal_count_bucket (blizzard#547) -----------------------------
 
 

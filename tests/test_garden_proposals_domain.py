@@ -1,5 +1,5 @@
 """``GardenProposalAuthoring`` and ``OpenGardenProposalReader`` (unit tier, blizzard#390):
-create over a fake repository — an empty ``findings`` list is refused (D7), a
+create over a fake repository — an empty ``findings`` list is accepted, a
 duplicate-naming one is refused, and a clean one mints a `gprop_` id and delegates with
 the clock's instant (``bzh:domain-core``, the ``tests/test_scope_domain.py`` shape).
 ``OpenGardenProposalReader`` filters out any proposal a closure already exists for."""
@@ -17,7 +17,6 @@ from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure, GardenProposalClosureKind
 from blizzard.hub.domain.garden_proposals import (
     DuplicateProposalFindingError,
-    EmptyProposalFindingsError,
     GardenProposal,
     GardenProposalAuthoring,
     IWriteGardenProposalRepository,
@@ -83,14 +82,14 @@ def _as_write_repo(repo: _FakeGardenProposalRepo) -> IWriteGardenProposalReposit
     return cast(IWriteGardenProposalRepository, repo)
 
 
-def test_create_rejects_an_empty_findings_list() -> None:
+def test_create_accepts_an_empty_findings_list() -> None:
     repo = _FakeGardenProposalRepo()
     authoring = GardenProposalAuthoring(proposals=_as_write_repo(repo), clock=FixedClock(instant=_T0))
 
-    with pytest.raises(EmptyProposalFindingsError):
-        authoring.create(routine_name="nightly", class_="fix-the-source", title="t", body="b", findings=[])
+    proposal = authoring.create(routine_name="nightly", class_="fix-the-source", title="t", body="b", findings=[])
 
-    assert repo.created == []
+    assert proposal.findings == []
+    assert repo.created == [(proposal.proposal_id, "nightly", "fix-the-source", "t", "b", [], _T0)]
 
 
 def test_create_mints_a_gprop_id_and_delegates_with_the_clock_instant() -> None:

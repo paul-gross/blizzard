@@ -45,7 +45,8 @@ class GardenProposalDetail:
         yield f"{body['proposal_id']}  routine={body['routine_name']}  class={body['class']}"
         yield f"  {body['title']}"
         yield f"  {body['body']}"
-        yield f"  findings: {', '.join(body['findings'])}"
+        if body["findings"]:
+            yield f"  findings: {', '.join(body['findings'])}"
         yield from _closure_lines(body.get("closure"))
         chunk_id = body.get("chunk_id")  # the accept response only
         if chunk_id is not None:

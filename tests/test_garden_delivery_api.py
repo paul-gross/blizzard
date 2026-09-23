@@ -257,6 +257,23 @@ def test_a_docket_citing_a_prior_runs_live_id_still_works_unchanged(tmp_path: Pa
     assert link_finding_ids == [finding_id]
 
 
+def test_a_proposal_citing_no_findings_is_recorded_with_no_links(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta())
+    _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[]))
+
+    resp = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcome"] == "recorded"
+    with hub.engine.begin() as conn:
+        proposals = conn.execute(select(s.garden_proposals)).all()
+        assert len(proposals) == 1
+        assert conn.execute(select(s.garden_proposal_findings)).all() == []
+
+
 def test_an_empty_docket_is_recorded(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub, _SCOPE)

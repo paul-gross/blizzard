@@ -156,6 +156,24 @@ def test_create_then_get_round_trips(tmp_path: Path) -> None:
     assert set(fetched.findings) == {"fin_1", "fin_2"}  # type: ignore[union-attr]
 
 
+def test_create_with_no_findings_writes_no_link_rows(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+
+    created = store.create(
+        "gprop_1", routine_name="nightly", class_="fix-the-source", title="t", body="b", findings=[], at=_NOW
+    )
+
+    assert created.findings == []
+    fetched = store.get("gprop_1")
+    assert fetched is not None
+    assert fetched.findings == []
+    with engine.begin() as conn:
+        count = conn.execute(
+            sa.text("SELECT COUNT(*) FROM garden_proposal_findings WHERE proposal_id = 'gprop_1'")
+        ).scalar_one()
+    assert count == 0
+
+
 def test_get_unknown_id_is_none(tmp_path: Path) -> None:
     store = _store(tmp_path)
     assert store.get("gprop_ghost") is None

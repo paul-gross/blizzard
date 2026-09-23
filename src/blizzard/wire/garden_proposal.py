@@ -12,10 +12,10 @@ from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKin
 
 
 class GardenProposalCandidate(BaseModel):
-    """A run's proposed response to one or more findings — no id, minted at delivery.
-    `ref` is stable only within its own submission. `findings` is required and
-    non-empty (D7): a proposal with nothing behind it is an opinion the run was not
-    asked for."""
+    """A run's proposed response — no id, minted at delivery. `ref` is stable only
+    within its own submission. Whether a submission must name any `findings` at all
+    is the submitting graph's own decision, never this wire shape's (see
+    [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md))."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -23,7 +23,7 @@ class GardenProposalCandidate(BaseModel):
     class_: str = Field(alias="class")
     title: str
     body: str
-    findings: list[str] = Field(min_length=1)
+    findings: list[str] = Field(default_factory=list)
 
 
 class GardenProposalClosureView(BaseModel):
