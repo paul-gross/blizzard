@@ -46,6 +46,8 @@ export type {
   RelatedScopeVm,
   RoutinePanelVm,
 } from './routine-panel';
+export { FleetRoutineProposalCounts } from './routine-proposal-counts';
+export type { ProposalCountsRowVm } from './routine-proposal-counts';
 export { injectRunRoutineMutation } from './routine-run.mutations';
 export { defaultRoutineWindow } from './routine-window';
 export {
@@ -53,6 +55,7 @@ export {
   injectHubRoutineTrendQuery,
   injectHubRoutineSweepsQuery,
   injectHubRoutineScopesQuery,
+  injectHubRoutineProposalCountsQuery,
 } from './routines.query';
 export { FleetRunDelta } from './run-delta';
 export type { RunDeltaVm } from './run-delta';

@@ -3,13 +3,21 @@ import { injectQuery } from '@tanstack/angular-query-experimental';
 import {
   listRoutinesApiRoutinesGet,
   listRoutineScopesApiRoutinesRoutineIdScopesGet,
+  routineProposalCountsApiRoutinesProposalCountsGet,
   routineSweepsApiRoutinesRoutineIdSweepsGet,
   routineTrendApiRoutinesTrendGet,
+  type GardenProposalCountsView,
   type GardenSweepsView,
   type RoutineView,
   type TrendView,
 } from '../api/hub';
-import { hubRoutineScopesKey, hubRoutineSweepsKey, hubRoutineTrendKey, hubRoutinesKey } from '../query-keys';
+import {
+  hubRoutineProposalCountsKey,
+  hubRoutineScopesKey,
+  hubRoutineSweepsKey,
+  hubRoutineTrendKey,
+  hubRoutinesKey,
+} from '../query-keys';
 
 /**
  * Hub `GET /api/routines` read — every routine, newest first. Routines change rarely
@@ -82,6 +90,34 @@ export function injectHubRoutineSweepsQuery(routineId: () => string | null, sinc
         });
         if (error) throw error;
         return data as GardenSweepsView;
+      },
+    };
+  });
+}
+
+/**
+ * Hub `GET /api/routines/proposal-counts` read (blizzard#547) — one routine's
+ * garden-proposal counts, per class, over `[since, until)`. Every window argument is
+ * an accessor, `injectHubRoutineTrendQuery`'s own shape; disabled while
+ * `routineName()` is `null`, the same "nothing selected" rest state.
+ */
+export function injectHubRoutineProposalCountsQuery(
+  routineName: () => string | null,
+  since: () => string,
+  until: () => string,
+) {
+  return injectQuery(() => {
+    const name = routineName();
+    return {
+      queryKey: hubRoutineProposalCountsKey(name, since(), until()),
+      enabled: name !== null,
+      queryFn: async (): Promise<GardenProposalCountsView> => {
+        const { data, error } = await routineProposalCountsApiRoutinesProposalCountsGet({
+          query: { routine: name!, since: since(), until: until() },
+          throwOnError: false,
+        });
+        if (error) throw error;
+        return data as GardenProposalCountsView;
       },
     };
   });

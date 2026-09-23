@@ -56,6 +56,23 @@ const TREND = {
   age: { boundary: '2026-01-01T00:00:00Z', recent: 2, older: 0, unattributed: 0 },
 };
 
+const PROPOSAL_COUNTS = {
+  since: '2026-01-01T00:00:00Z',
+  until: '2026-01-29T00:00:00Z',
+  routine: 'nightly',
+  rows: [
+    {
+      routine_name: 'nightly',
+      class: 'stale-docstring',
+      open: 2,
+      passed: 1,
+      accepted_with_item: 3,
+      accepted_without_item: 0,
+      created: 6,
+    },
+  ],
+};
+
 /**
  * Exercises the `/gardening/routines` detail child — the selected routine's
  * record, its related scopes, its read-only strategy, its three
@@ -87,6 +104,7 @@ describe('GardeningRoutineDetail', () => {
       if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
       if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return ['blizzard'];
       if (method === 'GET' && path === '/api/routines/trend') return TREND;
+      if (method === 'GET' && path === '/api/routines/proposal-counts') return PROPOSAL_COUNTS;
       // The gardening run dialog's own baselines read, fired only once its Run trigger opens it.
       if (method === 'GET' && path === '/api/routines/rtn_1/baselines') return [];
       // The run dialog's own scope picker (`gardening-run-dialog.ts`) injects
@@ -122,6 +140,22 @@ describe('GardeningRoutineDetail', () => {
 
     expect(el.querySelector('[data-testid="gardening-routine-panel-empty"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-routine-record"]')).toBeNull();
+  });
+
+  it('renders the proposal counts panel alongside Activity and Strategy once a routine is selected', async () => {
+    const fixture = await render({ params: { routineName: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const panel = el.querySelector('[data-testid="gardening-routine-proposal-counts-panel"]');
+    expect(panel?.tagName.toLowerCase()).toBe('fleet-kit-panel');
+    expect(panel?.textContent).toContain('stale-docstring');
+  });
+
+  it('renders no proposal counts panel while nothing is selected', async () => {
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-proposal-counts-panel"]')).toBeNull();
   });
 
   it('renders no field absent from RoutineView, on no field the hub does not store', async () => {

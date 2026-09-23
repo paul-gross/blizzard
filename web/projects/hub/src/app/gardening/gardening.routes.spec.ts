@@ -152,6 +152,9 @@ describe('the /gardening route subtree', () => {
         return { routine_name: 'nightly', since: '2026-01-01T00:00:00Z', until: '2026-01-29T00:00:00Z', last_swept: [], measurements: [] };
       }
       if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return [];
+      if (method === 'GET' && path === '/api/routines/proposal-counts') {
+        return { since: '2026-01-01T00:00:00Z', until: '2026-01-29T00:00:00Z', routine: 'nightly', rows: [] };
+      }
       if (method === 'GET' && path === '/api/runs') return [];
       if (method === 'GET' && path === '/api/scopes') return [];
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;

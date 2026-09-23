@@ -83,10 +83,10 @@ table, the measurement series is windowed: a scope swept months ago still reads 
 in the window, broken out by routine and class into still-open, passed, accepted-with-item, and accepted-without-item
 counts. Name a routine to see only its rows, or omit it to see every routine's rows at once.
 
-The hub board's Gardening tab renders the trend and sweeps reads on that same Routines sub-tab, plus a routine's stored
-record, its own related scopes — marking its default among them — and the effective graph's own node prompts, as
-read-only prose, and the Run action above it. A routine whose graph has lost every enabled mint shows as blocked there
-instead of offering a run.
+The hub board's Gardening tab renders the trend, sweeps, and proposal-counts reads on that same Routines sub-tab, plus a
+routine's stored record, its own related scopes — marking its default among them — and the effective graph's own node
+prompts, as read-only prose, and the Run action above it. A routine whose graph has lost every enabled mint shows as
+blocked there instead of offering a run.
 
 ## Reading runs
 

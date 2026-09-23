@@ -49,6 +49,7 @@ describe('injectPassGardenProposalMutation', () => {
     const keys = invalidateSpy.mock.calls.map((call) => (call[0] as { queryKey: readonly unknown[] }).queryKey);
     expect(keys).toContainEqual(['hub', 'garden-proposals']);
     expect(keys).toContainEqual(['hub', 'garden-proposal', 'gp_1']);
+    expect(keys).toContainEqual(['hub', 'routine-proposal-counts']);
   });
 });
 
@@ -121,5 +122,6 @@ describe('injectAcceptGardenProposalMutation', () => {
     const keys = invalidateSpy.mock.calls.map((call) => (call[0] as { queryKey: readonly unknown[] }).queryKey);
     expect(keys).toContainEqual(['hub', 'garden-proposals']);
     expect(keys).toContainEqual(['hub', 'garden-proposal', 'gp_1']);
+    expect(keys).toContainEqual(['hub', 'routine-proposal-counts']);
   });
 });

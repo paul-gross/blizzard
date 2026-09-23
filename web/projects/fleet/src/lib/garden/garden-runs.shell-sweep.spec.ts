@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
 import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
+import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routine-proposal-counts';
 import { FleetRunDelta, type RunDeltaVm } from './run-delta';
 import { FleetScopePanel, type ScopePanelVm } from './scope-panel';
 import { FleetRunList, type RunListRowVm } from './run-list';
@@ -290,6 +291,70 @@ describe('gardening panels shell sweep (web:shell-sweep)', () => {
     } finally {
       root.remove();
       await page.viewport(1280, 800);
+    }
+  });
+});
+
+const PROPOSAL_COUNTS_ROWS: readonly ProposalCountsRowVm[] = [
+  { proposalClass: 'stale-docstring', created: 6, open: 2, passed: 1, acceptedWithItem: 3, acceptedWithoutItem: 0 },
+  { proposalClass: 'dead-code', created: 3, open: 0, passed: 2, acceptedWithItem: 0, acceptedWithoutItem: 1 },
+];
+
+/**
+ * The routine detail's garden-proposal counts table (blizzard#547) — reachable from
+ * the hub's mobile bottom tab bar's Gardening tab, same as everything else in this
+ * file (`bzh:narrow-viewport-tier-rule`). Its own real CSS layout claim jsdom cannot
+ * make: the table stays inside its own column at a phone width rather than forcing a
+ * horizontal scroll (`bzh:visual-change-needs-a-render`); and the empty state renders
+ * distinctly through `fleet-kit-async-state` rather than a blank table.
+ */
+describe('FleetRoutineProposalCounts layout shell sweep (web:shell-sweep, blizzard#547)', () => {
+  it('keeps the counts table inside its own column with no horizontal overflow at 390px', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FleetRoutineProposalCounts],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FleetRoutineProposalCounts);
+    fixture.componentRef.setInput('rows', PROPOSAL_COUNTS_ROWS);
+    fixture.componentRef.setInput('state', 'ready');
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 600);
+      await fixture.whenStable();
+
+      expect(
+        root.scrollWidth,
+        `proposal counts table overflows horizontally at 390px (${root.scrollWidth} > ${root.clientWidth})`,
+      ).toBeLessThanOrEqual(root.clientWidth);
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('renders the empty state distinctly from a blank table when there are no rows', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FleetRoutineProposalCounts],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FleetRoutineProposalCounts);
+    fixture.componentRef.setInput('rows', []);
+    fixture.componentRef.setInput('state', 'empty');
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 600);
+      await fixture.whenStable();
+
+      const empty = root.querySelector('[data-testid="gardening-routine-proposal-counts-empty"]');
+      expect(empty?.textContent).toContain('No garden proposals in this window.');
+      expect(root.querySelector('[data-testid="gardening-routine-proposal-counts-table"]')).toBeNull();
+    } finally {
+      root.remove();
     }
   });
 });
