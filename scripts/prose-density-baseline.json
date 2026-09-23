@@ -596,9 +596,9 @@
   },
   "blizzard_mock/mock_data/cli.py": {
    "comments": 16,
-   "docstrings": 127,
+   "docstrings": 132,
    "over_cap": 3,
-   "total": 1295
+   "total": 1399
   },
   "blizzard_mock/mock_data/domain/__init__.py": {
    "comments": 0,
@@ -642,6 +642,12 @@
    "over_cap": 1,
    "total": 62
   },
+  "blizzard_mock/mock_data/domain/hub/garden_proposal_seed.py": {
+   "comments": 4,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 108
+  },
   "blizzard_mock/mock_data/domain/hub/graph_seed.py": {
    "comments": 5,
    "docstrings": 25,
@@ -682,7 +688,7 @@
    "comments": 4,
    "docstrings": 9,
    "over_cap": 1,
-   "total": 60
+   "total": 61
   },
   "blizzard_mock/mock_data/domain/runner/__init__.py": {
    "comments": 0,
@@ -760,7 +766,7 @@
    "comments": 2,
    "docstrings": 11,
    "over_cap": 1,
-   "total": 37
+   "total": 38
   },
   "blizzard_mock/mock_data/internal/__init__.py": {
    "comments": 0,
@@ -1668,7 +1674,7 @@
    "comments": 1,
    "docstrings": 15,
    "over_cap": 1,
-   "total": 140
+   "total": 141
   },
   "blizzard/hub/cli/garden_run.py": {
    "comments": 2,
@@ -2122,9 +2128,9 @@
   },
   "blizzard/hub/domain/garden_proposal_closure.py": {
    "comments": 1,
-   "docstrings": 58,
+   "docstrings": 57,
    "over_cap": 1,
-   "total": 272
+   "total": 273
   },
   "blizzard/hub/domain/garden_proposal_resolution.py": {
    "comments": 0,
@@ -2136,7 +2142,7 @@
    "comments": 4,
    "docstrings": 36,
    "over_cap": 0,
-   "total": 193
+   "total": 185
   },
   "blizzard/hub/domain/garden_run.py": {
    "comments": 4,
@@ -2386,9 +2392,9 @@
   },
   "blizzard/hub/graphs/scripts/land_common.py": {
    "comments": 13,
-   "docstrings": 82,
+   "docstrings": 81,
    "over_cap": 4,
-   "total": 474
+   "total": 473
   },
   "blizzard/hub/graphs/scripts/land_default.py": {
    "comments": 6,
@@ -2580,7 +2586,7 @@
    "comments": 6,
    "docstrings": 20,
    "over_cap": 0,
-   "total": 231
+   "total": 232
   },
   "blizzard/hub/store/internal/garden_run_store.py": {
    "comments": 15,
@@ -3285,10 +3291,10 @@
    "total": 0
   },
   "blizzard/hub/store/schema.py": {
-   "comments": 521,
+   "comments": 522,
    "docstrings": 6,
    "over_cap": 46,
-   "total": 1513
+   "total": 1514
   },
   "blizzard/hub/system_artifacts/__init__.py": {
    "comments": 3,
@@ -5528,7 +5534,7 @@
    "comments": 20,
    "docstrings": 23,
    "over_cap": 0,
-   "total": 344
+   "total": 347
   },
   "e2e/test_escalation_e2e.py": {
    "comments": 17,
@@ -5796,9 +5802,9 @@
   },
   "service/test_mock_data_seeding_service.py": {
    "comments": 17,
-   "docstrings": 22,
+   "docstrings": 25,
    "over_cap": 0,
-   "total": 233
+   "total": 273
   },
   "service/test_opencode_compatibility_service.py": {
    "comments": 17,
@@ -6746,7 +6752,7 @@
    "comments": 10,
    "docstrings": 9,
    "over_cap": 2,
-   "total": 150
+   "total": 161
   },
   "test_fleet_chunk_pause.py": {
    "comments": 1,
@@ -6836,13 +6842,13 @@
    "comments": 20,
    "docstrings": 37,
    "over_cap": 1,
-   "total": 784
+   "total": 801
   },
   "test_garden_delivery_domain.py": {
-   "comments": 34,
+   "comments": 35,
    "docstrings": 33,
    "over_cap": 0,
-   "total": 706
+   "total": 712
   },
   "test_garden_delivery_materialize.py": {
    "comments": 3,
@@ -6866,13 +6872,13 @@
    "comments": 10,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 238
+   "total": 264
   },
   "test_garden_proposal_closure_domain.py": {
    "comments": 2,
-   "docstrings": 7,
+   "docstrings": 9,
    "over_cap": 0,
-   "total": 278
+   "total": 286
   },
   "test_garden_proposal_closure_store.py": {
    "comments": 2,
@@ -6888,15 +6894,15 @@
   },
   "test_garden_proposal_resolution_domain.py": {
    "comments": 4,
-   "docstrings": 13,
+   "docstrings": 15,
    "over_cap": 2,
-   "total": 429
+   "total": 447
   },
   "test_garden_proposal_store.py": {
    "comments": 5,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 362
+   "total": 380
   },
   "test_garden_proposal_wire.py": {
    "comments": 0,
@@ -6908,7 +6914,7 @@
    "comments": 0,
    "docstrings": 5,
    "over_cap": 0,
-   "total": 240
+   "total": 239
   },
   "test_garden_routine_graph.py": {
    "comments": 45,
@@ -7154,7 +7160,7 @@
    "comments": 1,
    "docstrings": 3,
    "over_cap": 0,
-   "total": 135
+   "total": 159
   },
   "test_hub_cli_queue.py": {
    "comments": 9,
