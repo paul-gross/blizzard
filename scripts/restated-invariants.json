@@ -479,6 +479,12 @@
           "symbol": "garden-proposals",
           "role": "allowed",
           "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivors: an operator reading `garden-proposal list`/`show` output from outside the workspace cannot resolve a domain-doc path, so the relaxed rule is restated plainly here rather than left as a bare pointer."
+        },
+        {
+          "file": "src/blizzard/hub/graphs/ideation/prompts/propose.md",
+          "symbol": "shape",
+          "role": "allowed",
+          "reason": "Authored prompt text that reaches a worker verbatim (`bzh:app-agnostic-graphs`): the worker has no source tree to point at, and the prompt's system-scope pointer at `garden/proposal-format` owes a restatement that carries the node-step on its own (`bzh:graph-artifact-pointer-fallback`), so the relaxed rule is restated plainly here rather than left as a bare pointer — the same structural cause as the proposal-format system artifact's own site."
         }
       ]
     },

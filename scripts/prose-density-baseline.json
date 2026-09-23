@@ -5584,6 +5584,12 @@
    "over_cap": 5,
    "total": 462
   },
+  "e2e/test_ideation_e2e.py": {
+   "comments": 40,
+   "docstrings": 29,
+   "over_cap": 0,
+   "total": 606
+  },
   "e2e/test_login_session_e2e.py": {
    "comments": 14,
    "docstrings": 16,
@@ -7269,6 +7275,12 @@
    "docstrings": 35,
    "over_cap": 0,
    "total": 570
+  },
+  "test_ideation_graph.py": {
+   "comments": 40,
+   "docstrings": 37,
+   "over_cap": 0,
+   "total": 262
   },
   "test_idp_authorize.py": {
    "comments": 6,

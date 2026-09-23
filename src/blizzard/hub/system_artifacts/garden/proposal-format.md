@@ -4,8 +4,8 @@ The shape a garden routine's run submits for a proposal. This is blizzard's own 
 `garden/finding-format` is — a garden graph must never carry its own copy of it, since the delivery script validates a
 submission against exactly this shape.
 
-A proposal is a proposed response to the findings behind it. It has no id until delivery mints one; `ref` names it only
-within its own submission, the same way a finding candidate's `ref` does.
+A proposal is a proposed response — to the findings behind it, for a graph that has any. It has no id until delivery
+mints one; `ref` names it only within its own submission, the same way a finding candidate's `ref` does.
 
 ## The proposal a run submits
 
@@ -15,11 +15,11 @@ within its own submission, the same way a finding candidate's `ref` does.
   vocabulary of proposal classes and settles what any of them mean.
 - `title` — a short label for the response.
 - `body` — the case for it, in enough detail that a person can decide without re-reading the findings behind it.
-- `findings` — the findings this proposal answers. May be empty — the hub enforces no minimum, empty or not; whether
-  this routine's own proposals must cite one is `garden-routine`'s own `propose.md` to decide, never the hub's. Each
-  entry given is either a `fin_` id already live on this routine, or the submission-local `ref` an `add` op in a delta
-  delivered by this same call carries — resolved against the id the hub mints for it at delivery, so a proposal may
-  answer a finding this very run opened.
+- `findings` — the findings this proposal answers. May be empty — the hub enforces no minimum, empty or not; whether a
+  submitting graph's own proposals must cite one is that graph's own propose prompt to decide, never the hub's. Each
+  entry given is either a `fin_` id already live on this routine, or the
+  submission-local `ref` an `add` op in a delta delivered by this same call carries — resolved against the id the hub
+  mints for it at delivery, so a proposal may answer a finding this very run opened.
 
 ### GardenProposalCandidate
 

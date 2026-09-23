@@ -1,0 +1,134 @@
+# The ideation graph — one pass judging a target against its own intent: survey the
+# scope, reconcile what was seen against proposals already on record, propose ideas,
+# deliver.
+#
+# Conforms to the canonical authoring schema (`blizzard-context:/domain/graphs.md`):
+# fused choice/edge entries, prompts as file references inlined at mint, retries
+# escaping to escalation, a hub-executed delivery node. It sits beside `garden-routine`
+# rather than inside it — same shape, opposite question: `garden-routine` judges the
+# target against a standard and proposes fixing what drifted from it; this graph judges
+# the target against its own stated intent and proposes what is still missing. Its
+# proposals cite no findings — there is nothing drifting to point at — and its own
+# three-class register lives in ./classes.md rather than ./ladder.md's five-rung one.
+#
+# The target supplies what to judge by, not this graph. Every prompt here reads the
+# routine's own charge — the scope — out of the chunk's work item, and resolves the
+# routine's own name as an axis against the target project's gardening-axes registry,
+# following that entry's own pointers wherever they lead. Nothing in this file names a
+# charter's path, the registry's location, or a data-read verb — one packaged graph
+# drives any deployment unchanged.
+
+name: ideation
+entry: survey
+
+# Same two pools as `garden-routine`, same reasons: `sweep` holds the expensive
+# read-and-judge lineage, `match` is cold-eyes only for reconcile, and `propose` resumes
+# it so the shortlist stays in context.
+sessions:
+  sweep:
+    model: ["blizzard:advanced"]
+  match:
+    model: ["blizzard:advanced"]
+
+# The wire formats a run's artifacts must conform to are NOT declared here, for the same
+# reason `garden-routine` does not carry a copy of them: the hub validates against a
+# shape that ships with its validator, so baking a copy into this mint would make the
+# graph a second owner of a fact it only obeys. Read at runtime from system scope —
+# `blizzard runner artifact get --scope system garden/finding-format` (for `delta`'s
+# shape) and `garden/proposal-format` (for `docket`'s).
+#
+# `classes`, below, is authored text this graph owns outright — the closed proposal-class
+# register — held here, out of the byte-barred prompt tree, the same way `garden-routine`
+# holds `ladder`. On the `artifacts:` key itself, see
+# ../../../../../docs/deployment/artifacts.md#graph-scope-artifacts
+artifacts:
+  classes: ./classes.md
+
+nodes:
+  survey:
+    executor: runner
+    prompt: ./prompts/survey.md
+    session: fresh:sweep         # every run is a cold read of the target
+    produces:
+      - survey                   # candidate gaps, no ids yet — empty on the undeclared
+                                 # path
+      - delta                    # the empty skeleton the `empty` and `nothing-new`
+                                 # paths deliver directly; propose republishes it with
+                                 # the measurement corrected, `undeclared` delivers nothing
+    judgement:
+      prompt: ./prompts/survey.judgement.md
+      choices:
+        found:
+          description: The sweep recorded at least one candidate gap in the survey asset.
+          to: reconcile
+        empty:
+          description: The scope was swept against its own intent and nothing was found wanting. The run still delivers, because its measurement is the product whether or not it found anything.
+          to: deliver
+        undeclared:
+          description: The target's gardening-axes registry declares no entry for this routine's axis, and asking for one left it still undeclared. The survey holds no candidates; nothing is delivered.
+          to: done
+    retries:
+      max: 2
+      exhausted: escalate
+
+  reconcile:
+    executor: runner
+    prompt: ./prompts/reconcile.md
+    session: fresh:match         # cold eyes for matching, per the pool note above
+    produces:
+      - shortlist                 # survey candidates surviving the proposal-history check
+    judgement:
+      prompt: ./prompts/reconcile.judgement.md
+      choices:
+        novel:
+          description: The shortlist holds at least one candidate no open, accepted, or still-holding passed proposal already answers.
+          to: propose
+        nothing-new:
+          description: Every candidate the survey recorded is already answered by an open, accepted, or still-holding passed proposal. The shortlist is empty; deliver the skeleton delta and stop.
+          to: deliver
+    retries:
+      max: 2
+      exhausted: escalate
+
+  propose:
+    executor: runner
+    prompt: ./prompts/propose.md
+    session: resume:match        # the reconcile session already holds the shortlist
+    produces:
+      - docket                   # proposed ideas, per the proposal format
+      - delta                    # the survey skeleton republished with measurement corrected
+    judgement:
+      prompt: ./prompts/propose.judgement.md
+      choices:
+        proposed:
+          description: One or more proposals are drafted, each citing no findings.
+          to: deliver
+        none:
+          description: Nothing on the shortlist warrants a proposal yet. The delta still delivers as the run's measurement.
+          to: deliver
+    retries:
+      max: 2
+      exhausted: escalate
+
+  deliver:
+    executor: hub
+    run:
+      - name: materialize-garden-artifacts
+        command: python3 -m blizzard.hub.graphs.scripts.garden_deliver --delta delta --proposals docket
+    # The same script `garden-routine` runs: it validates each artifact's shape and
+    # nothing else, reads none of the prose. On success it records the run's finding set
+    # — the measurement, never a finding, since no `add` op ever reaches it — and
+    # attaches the docket's proposals, each with `findings` `[]`, to the routine.
+    judgement:
+      choices:
+        recorded:
+          description: The delta and proposals are durable; proposals are attached to the routine.
+          to: done
+        invalid:
+          description: An artifact failed shape validation — malformed entry or a citation where this graph never places one. Nothing was written.
+          to: propose
+          prompt_addendum: ./prompts/propose.from-deliver-invalid.md
+        failure:
+          description: garden_deliver itself failed or crashed rather than reporting a clean outcome — a missing env var, a non-2xx delivery POST, an unrecognized response outcome, or an unauthorized/failed marker write. The docket and delta stand as drafted; routed to propose to re-affirm them and retry.
+          to: propose
+          prompt_addendum: ./prompts/propose.from-deliver-failure.md
