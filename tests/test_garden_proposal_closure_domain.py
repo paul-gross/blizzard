@@ -251,8 +251,12 @@ def test_classify_no_closure_is_open() -> None:
     assert classify_proposal_count_bucket(None, None) == GardenProposalCountBucket.OPEN
 
 
-def test_classify_passed_closure_is_passed_regardless_of_item_outcome() -> None:
-    assert classify_proposal_count_bucket(GardenProposalClosureKind.PASSED, None) == GardenProposalCountBucket.PASSED
+@pytest.mark.parametrize("item_outcome", [None, GardenProposalItemOutcome.MINTED, GardenProposalItemOutcome.DECLINED])
+def test_classify_passed_closure_is_passed_regardless_of_item_outcome(
+    item_outcome: GardenProposalItemOutcome | None,
+) -> None:
+    bucket = classify_proposal_count_bucket(GardenProposalClosureKind.PASSED, item_outcome)
+    assert bucket == GardenProposalCountBucket.PASSED
 
 
 def test_classify_accepted_minted_is_accepted_with_item() -> None:
