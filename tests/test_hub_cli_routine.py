@@ -1,6 +1,7 @@
-"""``blizzard hub routine create|list|show|edit|trend`` (unit tier) — pure clients of the
-routine routes, driven here with ``httpx`` stubbed (blizzard#389; ``trend`` is
-blizzard#394 Phase 4), the ``tests/test_hub_cli_graph.py`` shape."""
+"""``blizzard hub routine create|list|show|edit|trend|proposal-counts`` (unit tier) — pure
+clients of the routine routes, driven here with ``httpx`` stubbed (blizzard#389; ``trend``
+is blizzard#394 Phase 4; ``proposal-counts`` is blizzard#547 Phase 3), the
+``tests/test_hub_cli_graph.py`` shape."""
 
 from __future__ import annotations
 
@@ -751,3 +752,186 @@ def test_routine_trend_renders_periods_and_age(monkeypatch: pytest.MonkeyPatch) 
     assert "outflow=1" in result.output
     assert "recent=1" in result.output
     assert "unattributed=1" in result.output
+
+
+_PROPOSAL_COUNTS_BODY = {
+    "since": "2026-01-01T00:00:00+00:00",
+    "until": "2026-01-15T00:00:00+00:00",
+    "routine": "nightly",
+    "rows": [
+        {
+            "routine_name": "nightly",
+            "class": "lint",
+            "open": 1,
+            "passed": 2,
+            "accepted_with_item": 3,
+            "accepted_without_item": 4,
+            "created": 10,
+        }
+    ],
+}
+
+
+@pytest.mark.unit
+def test_routine_proposal_counts_converts_local_since_until_to_utc(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, str]] = []
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(200, _PROPOSAL_COUNTS_BODY)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
+        result = CliRunner().invoke(
+            hub_group,
+            [
+                "routine",
+                "proposal-counts",
+                "nightly",
+                "--since",
+                "2026-01-01T10:00:00",
+                "--until",
+                "2026-01-15T10:00:00",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        {
+            "since": "2026-01-01T15:00:00+00:00",
+            "until": "2026-01-15T15:00:00+00:00",
+            "routine": "nightly",
+        }
+    ]
+
+
+@pytest.mark.unit
+def test_routine_proposal_counts_omits_routine_param_when_name_not_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, str]] = []
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(200, {**_PROPOSAL_COUNTS_BODY, "routine": None})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    with _local_timezone("UTC"):
+        result = CliRunner().invoke(
+            hub_group,
+            [
+                "routine",
+                "proposal-counts",
+                "--since",
+                "2026-01-01T00:00:00",
+                "--until",
+                "2026-01-15T00:00:00",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        {
+            "since": "2026-01-01T00:00:00+00:00",
+            "until": "2026-01-15T00:00:00+00:00",
+        }
+    ]
+
+
+@pytest.mark.unit
+def test_routine_proposal_counts_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(422, {"detail": "since 'garbage' is not a valid ISO-8601 instant"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        hub_group,
+        [
+            "routine",
+            "proposal-counts",
+            "nightly",
+            "--since",
+            "2026-01-01T00:00:00",
+            "--until",
+            "2026-01-15T00:00:00",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "garbage" in result.output
+
+
+@pytest.mark.unit
+def test_routine_proposal_counts_maps_an_unknown_routine_404_to_a_click_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(404, {"detail": "unknown routine 'ghost'"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        hub_group,
+        [
+            "routine",
+            "proposal-counts",
+            "ghost",
+            "--since",
+            "2026-01-01T00:00:00",
+            "--until",
+            "2026-01-15T00:00:00",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "unknown routine 'ghost'" in result.output
+
+
+@pytest.mark.unit
+def test_routine_proposal_counts_renders_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, _PROPOSAL_COUNTS_BODY)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        hub_group,
+        [
+            "routine",
+            "proposal-counts",
+            "nightly",
+            "--since",
+            "2026-01-01T00:00:00",
+            "--until",
+            "2026-01-15T00:00:00",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "nightly" in result.output
+    assert "lint" in result.output
+    assert "created=10" in result.output
+    assert "open=1" in result.output
+    assert "passed=2" in result.output
+    assert "accepted(item)=3" in result.output
+    assert "accepted(no item)=4" in result.output
+
+
+@pytest.mark.unit
+def test_routine_proposal_counts_renders_empty_rows_distinctly(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, {**_PROPOSAL_COUNTS_BODY, "rows": []})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(
+        hub_group,
+        [
+            "routine",
+            "proposal-counts",
+            "nightly",
+            "--since",
+            "2026-01-01T00:00:00",
+            "--until",
+            "2026-01-15T00:00:00",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "no proposals in this window" in result.output

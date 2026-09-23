@@ -1,5 +1,5 @@
 """``blizzard hub routine`` — operator verbs over routines: create, list, inspect,
-edit, run, and the ``trend``/``sweeps`` gardening reports."""
+edit, run, and the ``trend``/``sweeps``/``proposal-counts`` gardening reports."""
 
 from __future__ import annotations
 
@@ -364,3 +364,47 @@ def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime)
     cli.check(resp, "GET /routines/{id}/sweeps", on_status={404: f"unknown routine {name!r}"})
     body = resp.json()
     cli.show(body, SweepsDetail(body))
+
+
+@dataclass(frozen=True)
+class ProposalCountsDetail:
+    """`routine proposal-counts`'s own render (blizzard#547) — one line per routine/class
+    pair, `created` echoed as the open/passed/accepted-with-item/accepted-without-item sum."""
+
+    body: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        body = self.body
+        routine = body.get("routine")
+        scope = f"  routine={routine}" if routine else ""
+        yield f"{body['since']} .. {body['until']}{scope}"
+        rows = body["rows"]
+        if not rows:
+            yield "  no proposals in this window"
+            return
+        for row in rows:
+            yield (
+                f"  {row['routine_name']}  {row['class']}  created={row['created']}  open={row['open']}  "
+                f"passed={row['passed']}  accepted(item)={row['accepted_with_item']}  "
+                f"accepted(no item)={row['accepted_without_item']}"
+            )
+
+
+@routine_group.command("proposal-counts", cls=FleetCommand)
+@click.argument("name", required=False, default=None)
+@click.option("--since", required=True, type=click.DateTime(), help="The window's start, in local time.")
+@click.option("--until", required=True, type=click.DateTime(), help="The window's end, in local time (exclusive).")
+def routine_proposal_counts(cli: CliContext, name: str | None, since: datetime, until: datetime) -> None:
+    """NAME's garden-proposal counts over --since/--until, split into open/passed/
+    accepted-with-item/accepted-without-item per class, with created as their sum; omit
+    NAME to see every routine's rows at once."""
+    params = {"since": _utc_query_value(since), "until": _utc_query_value(until)}
+    if name is not None:
+        params["routine"] = name
+    resp = cli.send("get", "/api/routines/proposal-counts", params=params)
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        raise click.ClickException(f"proposal counts rejected: {cli.detail(resp, 'validation failed')}")
+    on_status = {404: f"unknown routine {name!r}"} if name is not None else None
+    cli.check(resp, "GET /routines/proposal-counts", on_status=on_status)
+    body = resp.json()
+    cli.show(body, ProposalCountsDetail(body))

@@ -3416,6 +3416,68 @@
           "path": "hub routine list",
           "short_help": "List every routine, newest first \u2014 routine_id, name, graph, default scope."
         },
+        "proposal-counts": {
+          "help": "NAME's garden-proposal counts over --since/--until, split into open/passed/\naccepted-with-item/accepted-without-item per class, with created as their sum; omit\nNAME to see every routine's rows at once.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "since",
+              "opts": [
+                "--since"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "until",
+              "opts": [
+                "--until"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub routine proposal-counts",
+          "short_help": "NAME's garden-proposal counts over --since/--until, split into open/passed/ accepted-with-item/accepted-without-item per class, with created as their sum; omit NAME to see every routine's rows at once."
+        },
         "run": {
           "help": "Mint, ingest, and promote a hub work item from routine NAME, in one act.\n\nNAME is resolved to its routine_id through the routine list (D3).",
           "params": [
