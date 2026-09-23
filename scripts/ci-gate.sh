@@ -5,7 +5,7 @@
 # so an agent or human can reproduce the gate before pushing:
 #   ruff format --check · ruff check · pyright · structural gate (ast-grep scan +
 #   test) · pytest (unit + component) · OpenAPI spec drift · eslint · vitest ·
-#   web structural gate · generated-client drift
+#   web structural gate · bundle composition · generated-client drift
 #
 # Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps run live
 # against the Angular workspace at $WEB_DIR, guarded only so a checkout without
@@ -84,6 +84,9 @@ if [ -f "$WEB_DIR/package.json" ]; then
 
   step "structural gate ($WEB_DIR) (web:structural-gate)"
   ( cd "$WEB_DIR" && npm run structural-gate )
+
+  step "bundle composition ($WEB_DIR) (web:bundle-composition)"
+  ( cd "$WEB_DIR" && npm run bundle-check )
 
   step "generated-client drift ($WEB_DIR): openapi-ts codegen + git diff"
   ( cd "$WEB_DIR" && npm run generate:client >/dev/null )

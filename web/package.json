@@ -8,6 +8,7 @@
     "lint": "ng lint",
     "test": "ng test hub && ng test runner && ng test fleet && ng test local-panel",
     "structural-gate": "node scripts/structural-gate.js",
+    "bundle-check": "node scripts/bundle-check.js",
     "shell-sweep": "node scripts/shell-sweep.js",
     "build": "npm run build:hub && npm run build:runner",
     "build:hub": "ng build hub",

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import type { MeResponse } from '../api/hub';
-import { KitButton } from '../kit';
+import { KitButton } from '../kit/kit-button';
 
 /**
  * The `pending` lobby (issue #93; renamed from the `guest` lobby by issue #210) — an

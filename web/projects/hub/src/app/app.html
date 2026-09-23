@@ -22,7 +22,22 @@
            guarantee only holds when every projected node is the sole
            root of its own branch. -->
       @if (mobile()) {
-        <app-mobile-titlebar shell-header [live]="streamLive()" />
+        <!-- Both menus below are @defer-loaded: their CDK menu/overlay stack
+             is interaction-only chrome, and an eager reference from this
+             template would keep it in the initial chunk. `on immediate`
+             fetches them right after first render, so the shell is usable
+             before they land. -->
+        <!-- A @defer block does not carry its root node's slot attribute
+             through to projection, so the wrapper names the slot instead. -->
+        <ng-container ngProjectAs="[shell-header]">
+          @defer (on immediate) {
+            <app-mobile-titlebar [live]="streamLive()" />
+          } @placeholder {
+            <!-- Holds the titlebar's box so the routed content below does not
+                 shift when the real titlebar arrives. -->
+            <div class="titlebar-placeholder" data-testid="mobile-titlebar-placeholder"></div>
+          }
+        </ng-container>
       } @else {
         <fleet-board-header
           shell-header
@@ -31,7 +46,11 @@
           [spendToday]="spendToday.data() ?? null"
           [spendYesterday]="spendYesterday.data() ?? null"
         >
-          <app-nav-menu header-trailing (logout)="onLogout()" />
+          <ng-container ngProjectAs="[header-trailing]">
+            @defer (on immediate) {
+              <app-nav-menu (logout)="onLogout()" />
+            }
+          </ng-container>
         </fleet-board-header>
       }
       @if (!mobile()) {

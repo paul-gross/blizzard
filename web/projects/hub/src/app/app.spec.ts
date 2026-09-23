@@ -263,6 +263,12 @@ describe('hub App', () => {
       expect(el.querySelector('[data-testid="mobile-tab-bar"]')).not.toBeNull();
       expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
       expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
+
+      // The titlebar is @defer-loaded, and a @defer block does not carry its root's
+      // slot attribute through projection — it must still land in the shell's header
+      // slot (first in the column), not fall through to the default content slot.
+      const shell = el.querySelector('fleet-app-shell .shell');
+      expect(shell?.firstElementChild?.tagName.toLowerCase()).toBe('app-mobile-titlebar');
     });
   });
 

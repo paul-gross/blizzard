@@ -16,7 +16,7 @@ import {
   injectLogoutMutation,
   injectMeQuery,
   redirectToLogin,
-} from 'fleet';
+} from 'fleet/shell';
 
 import { readDemoConfig } from './demo/demo-config';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from './local-day';

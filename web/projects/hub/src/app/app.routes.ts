@@ -1,5 +1,5 @@
 import type { Routes } from '@angular/router';
-import { matchesMobileViewport } from 'fleet';
+import { matchesMobileViewport } from 'fleet/shell';
 
 /**
  * The hub app's top-level route table. `''` redirects to `/board` (today's default

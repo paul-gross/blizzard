@@ -10,3 +10,11 @@ router-outlet {
 .boot {
   height: 100%;
 }
+/* The mobile titlebar's box while its @defer block loads — the fleet
+   titlebar's appbar measures 43px (its trigger chrome inside 10px vertical
+   padding over a 1px bezel); keeping that height here is what stops the
+   routed content from jumping when it arrives. */
+.titlebar-placeholder {
+  flex: none;
+  height: 43px;
+}
