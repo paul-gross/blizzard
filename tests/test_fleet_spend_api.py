@@ -13,7 +13,9 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from tests.support import build_hub, pointer_token, report_lease
+from tests.test_fleet_auth import _seed_enrolled
 
 pytestmark = pytest.mark.component
 
@@ -75,6 +77,19 @@ def test_fleet_spend_sums_usage_across_every_chunk_since_the_cutoff(tmp_path: Pa
     assert body["output_tokens"] == 100
     assert body["cost_usd"] == pytest.approx(0.75)
     assert body["cost_partial"] is False
+
+
+def test_refuses_a_runner_principal(tmp_path: Path) -> None:
+    """``GET /api/spend`` stays operator-only — a routine run reads its fleet-wide
+    spend total nowhere at all (blizzard#545's own out-of-scope, held here since no
+    other test refuses a runner token on this route)."""
+    token = _seed_enrolled(tmp_path, runner_id="runner-a")
+    hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)
+
+    resp = hub.client.get(
+        "/api/spend", params={"since": "2026-01-01T00:00:00Z"}, headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 403
 
 
 def test_fleet_spend_flags_partial_when_any_summed_row_has_no_cost(tmp_path: Path) -> None:

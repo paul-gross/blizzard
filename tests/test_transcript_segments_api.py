@@ -173,6 +173,33 @@ def test_get_segment_is_403_below_transcript_read(tmp_path: Path) -> None:
     assert resp.status_code == 403
 
 
+def _enrolled_runner_token(tmp_path: Path) -> str:
+    """A runner token enrolled through its own throwaway ``warn`` hub over ``tmp_path``
+    (registration is itself auth-checked) — the same two-hub-instances-over-one-store
+    shape ``test_fleet_auth.py``'s own ``_seed_enrolled`` uses."""
+    warn_hub = build_hub(tmp_path)
+    _register(warn_hub, runner_id="runner-a", workspace_id="ws-a")
+    return _enroll(warn_hub, "runner-a")
+
+
+def test_list_segments_refuses_a_runner_principal(tmp_path: Path) -> None:
+    """Blizzard#545's own out-of-scope: a routine run reads no transcript content at
+    all, so this stays refused even though no other test names it."""
+    token = _enrolled_runner_token(tmp_path)
+    hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)
+
+    resp = hub.client.get("/api/chunks/ch_x/transcripts", headers=_bearer(token))
+    assert resp.status_code == 403
+
+
+def test_get_segment_refuses_a_runner_principal(tmp_path: Path) -> None:
+    token = _enrolled_runner_token(tmp_path)
+    hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)
+
+    resp = hub.client.get("/api/chunks/ch_x/transcripts/sg_1", headers=_bearer(token))
+    assert resp.status_code == 403
+
+
 def test_get_segment_is_200_at_contributor_and_returns_decompressed_turns(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)

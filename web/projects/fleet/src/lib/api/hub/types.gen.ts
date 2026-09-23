@@ -7847,6 +7847,240 @@ export type GetChunkApiFleetChunksChunkIdGetResponses = {
 
 export type GetChunkApiFleetChunksChunkIdGetResponse = GetChunkApiFleetChunksChunkIdGetResponses[keyof GetChunkApiFleetChunksChunkIdGetResponses];
 
+export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types';
+};
+
+export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetError = GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors[keyof GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors];
+
+export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetResponse = GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetResponses[keyof GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetResponses];
+
+export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/counts/files';
+};
+
+export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetError = GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors[keyof GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors];
+
+export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponse = GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses[keyof GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses];
+
+export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/counts/nodes';
+};
+
+export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetError = GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors[keyof GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors];
+
+export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetResponse = GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetResponses[keyof GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetResponses];
+
+export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/counts/skills';
+};
+
+export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetError = GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors[keyof GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors];
+
+export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetResponse = GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetResponses[keyof GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetResponses];
+
+export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/spend/graphs';
+};
+
+export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetError = GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors[keyof GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors];
+
+export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetResponse = GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetResponses[keyof GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetResponses];
+
+export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/fleet/chunks/{chunk_id}/analytics/spend/nodes';
+};
+
+export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetError = GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors[keyof GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors];
+
+export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponse = GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponses[keyof GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponses];
+
 export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostData = {
     body: CompletionSubmission;
     path: {
