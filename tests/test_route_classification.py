@@ -78,6 +78,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/routines"): FLEET_VIEW,
     ("GET", "/api/routines/{routine_id}"): FLEET_VIEW,
     ("PATCH", "/api/routines/{routine_id}"): GRAPH_EDIT,
+    ("POST", "/api/routines/{routine_id}/retire"): GRAPH_EDIT,
+    ("POST", "/api/routines/{routine_id}/enable"): GRAPH_EDIT,
     ("GET", "/api/routines/trend"): FLEET_VIEW,  # blizzard#394 Phase 4
     ("GET", "/api/routines/proposal-counts"): FLEET_VIEW,  # blizzard#547 Phase 2
     ("GET", "/api/routines/{routine_id}/sweeps"): FLEET_VIEW,

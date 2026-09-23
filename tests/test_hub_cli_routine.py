@@ -175,6 +175,108 @@ def test_routine_list_on_no_routines_prints_a_friendly_message(monkeypatch: pyte
 
 
 @pytest.mark.unit
+def test_routine_list_marks_a_retired_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            [
+                {
+                    "routine_id": "rtn_1",
+                    "name": "nightly",
+                    "graph_name": "alpha",
+                    "default_scope_slug": "blizzard",
+                    "retired": True,
+                }
+            ],
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["routine", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "retired" in result.output
+
+
+@pytest.mark.unit
+def test_routine_list_include_retired_passes_the_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, str] | None] = []
+
+    def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(200, [])
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["routine", "list", "--include-retired"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"include_retired": "true"}]
+
+
+@pytest.mark.unit
+def test_routine_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    post_calls: list[tuple[str, object]] = []
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "nightly"}])
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        post_calls.append((url, json))
+        return _FakeResponse(202, {"routine_id": "rtn_1", "name": "nightly", "retired": True})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group, ["routine", "retire", "nightly", "--by", "paul"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert post_calls == [("http://hub.local:8421/api/routines/rtn_1/retire", {"by": "paul"})]
+    assert "retired" in result.output
+
+
+@pytest.mark.unit
+def test_routine_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    post_calls: list[tuple[str, object]] = []
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "nightly"}])
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        post_calls.append((url, json))
+        return _FakeResponse(202, {"routine_id": "rtn_1", "name": "nightly", "retired": False})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group, ["routine", "enable", "nightly"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert post_calls == [("http://hub.local:8421/api/routines/rtn_1/enable", {"by": "operator"})]
+    assert "enabled" in result.output
+
+
+@pytest.mark.unit
+def test_routine_retire_unknown_name_raises_without_a_retire_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    post_calls: list[str] = []
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "other"}])
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        post_calls.append(url)
+        return _FakeResponse(202, {})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["routine", "retire", "ghost"])
+
+    assert result.exit_code != 0
+    assert "ghost" in result.output
+    assert post_calls == []
+
+
+@pytest.mark.unit
 def test_routine_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         if url.endswith("/scopes"):
@@ -431,8 +533,10 @@ def test_routine_scope_remove_refuses_the_default_scope(monkeypatch: pytest.Monk
 @pytest.mark.unit
 def test_routine_run_resolves_name_then_posts(monkeypatch: pytest.MonkeyPatch) -> None:
     post_calls: list[tuple[str, object]] = []
+    get_calls: list[dict[str, str]] = []
 
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        get_calls.append(params)
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening", "graph_name": "alpha"}])
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -460,6 +564,7 @@ def test_routine_run_resolves_name_then_posts(monkeypatch: pytest.MonkeyPatch) -
     result = CliRunner().invoke(hub_group, ["routine", "run", "gardening"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
+    assert get_calls == [{"include_retired": "true"}]
     assert post_calls == [
         ("http://hub.local:8421/api/routines/rtn_1/run", {"scope_slug": None, "mode": "full", "note": None})
     ]
@@ -470,7 +575,7 @@ def test_routine_run_resolves_name_then_posts(monkeypatch: pytest.MonkeyPatch) -
 def test_routine_run_threads_scope_mode_and_note(monkeypatch: pytest.MonkeyPatch) -> None:
     post_calls: list[tuple[str, object]] = []
 
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -505,7 +610,7 @@ def test_routine_run_threads_scope_mode_and_note(monkeypatch: pytest.MonkeyPatch
 
 @pytest.mark.unit
 def test_routine_run_names_a_downgrade_in_its_output(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -539,7 +644,7 @@ def test_routine_run_names_a_downgrade_in_its_output(monkeypatch: pytest.MonkeyP
 def test_routine_run_unknown_name_raises_without_a_run_request(monkeypatch: pytest.MonkeyPatch) -> None:
     post_calls: list[str] = []
 
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "other"}])
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -557,7 +662,7 @@ def test_routine_run_unknown_name_raises_without_a_run_request(monkeypatch: pyte
 
 @pytest.mark.unit
 def test_routine_run_maps_a_409_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -573,10 +678,10 @@ def test_routine_run_maps_a_409_to_a_click_exception(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.unit
 def test_routine_run_maps_a_503_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A retired effective scope or an unresolvable graph refuses at 503 (D5), with no
-    bespoke CLI handling; the generic HTTP-failure path still exits non-zero."""
+    """A retired routine, a retired effective scope, or an unresolvable graph refuses at
+    503 — surfaced as the body's own reason, so the operator reads what refused."""
 
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -587,6 +692,7 @@ def test_routine_run_maps_a_503_to_a_click_exception(monkeypatch: pytest.MonkeyP
     result = CliRunner().invoke(hub_group, ["routine", "run", "gardening"])
 
     assert result.exit_code != 0
+    assert "scope 'blizzard' is retired" in result.output
 
 
 @pytest.mark.unit
@@ -601,7 +707,7 @@ def test_routine_run_mode_option_is_choice_restricted(monkeypatch: pytest.Monkey
 
 @pytest.mark.unit
 def test_routine_run_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:

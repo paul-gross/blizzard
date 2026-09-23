@@ -18,6 +18,7 @@ export const resolveDecisionMutationKey = ['hub', 'mutation', 'resolve-decision'
 export const scopeLifecycleMutationKey = ['hub', 'mutation', 'scope-lifecycle'] as const;
 export const editScopeMutationKey = ['hub', 'mutation', 'edit-scope'] as const;
 export const runRoutineMutationKey = ['hub', 'mutation', 'run-routine'] as const;
+export const routineLifecycleMutationKey = ['hub', 'mutation', 'routine-lifecycle'] as const;
 export const resolveFindingsMutationKey = ['hub', 'mutation', 'resolve-findings'] as const;
 export const confirmGoneFindingsMutationKey = ['hub', 'mutation', 'confirm-gone-findings'] as const;
 export const wontFixFindingsMutationKey = ['hub', 'mutation', 'wont-fix-findings'] as const;

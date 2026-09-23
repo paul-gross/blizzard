@@ -4,8 +4,10 @@ import { ActivatedRoute } from '@angular/router';
 import {
   asyncState,
   defaultRoutineWindow,
+  errorMessage,
   FleetRoutinePanel,
   FleetRoutineProposalCounts,
+  hasPermission,
   injectHubGraphQuery,
   injectHubGraphsQuery,
   injectHubRoutineProposalCountsQuery,
@@ -13,12 +15,17 @@ import {
   injectHubRoutineSweepsQuery,
   injectHubRoutineTrendQuery,
   injectHubRoutinesQuery,
+  injectMeQuery,
+  injectPendingMutationVariables,
+  injectRoutineLifecycleMutation,
+  routineLifecycleMutationKey,
   type GraphSummaryView,
   type KitAsyncStateValue,
   type LastSweptRowVm,
   type MeasurementReadingVm,
   type ProposalCountsRowVm,
   type RelatedScopeVm,
+  type RoutineLifecycleVars,
   type RoutinePanelVm,
   type RoutineView,
   type StrategyStepVm,
@@ -62,6 +69,14 @@ export class GardeningRoutineDetail {
 
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly graphsQuery = injectHubGraphsQuery();
+  private readonly meQuery = injectMeQuery();
+  private readonly routineLifecycleMutation = injectRoutineLifecycleMutation();
+
+  /** Every routine id a Retire/Enable mutation is currently pending for, and its own
+   * variables (`bzh:frontend-pending-override`) — `GardeningScopeDetail`'s own
+   * `pendingScopeLifecycle` shape. */
+  private readonly pendingRoutineLifecycle =
+    injectPendingMutationVariables<RoutineLifecycleVars>(routineLifecycleMutationKey);
 
   /** The panel's fixed reporting window (AC 3, AC 4) — computed once at
    * construction, not re-derived per render; a page reload is what refreshes it. */
@@ -91,6 +106,21 @@ export class GardeningRoutineDetail {
   protected readonly blocked = computed<boolean>(() => {
     const routine = this.selectedRoutine();
     return routine !== null && isRoutineBlocked(this.graphs(), this.graphsQuery.isPending(), routine.graph_name);
+  });
+
+  /** Whether the current identity may retire/enable a routine (`graph:edit`, the
+   * scope panel's own permission) — `null`/pending resolves to `false`,
+   * `GardeningScopeDetail.canEditScopes`'s own shape. */
+  protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
+
+  /** The selected routine's `retired` flag as it will read once a currently pending
+   * Retire/Enable settles (`bzh:frontend-pending-override`) — `GardeningScopeDetail
+   * .overrideRetired`'s own shape. */
+  private readonly overrideRetired = computed<boolean | null>(() => {
+    const routine = this.selectedRoutine();
+    if (routine === null) return null;
+    const pending = this.pendingRoutineLifecycle().find((vars) => vars.routineId === routine.routine_id);
+    return pending ? pending.retired : null;
   });
 
   private readonly graphQuery = injectHubGraphQuery(() => this.effectiveGraph()?.graph_id ?? null);
@@ -196,6 +226,8 @@ export class GardeningRoutineDetail {
       lastSwept: this.lastSwept(),
       windowLabel: this.window.label,
       relatedScopes: this.relatedScopes(),
+      retired: routine.retired ?? false,
+      renderedRetired: this.overrideRetired() ?? (routine.retired ?? false),
     };
   });
 
@@ -224,5 +256,34 @@ export class GardeningRoutineDetail {
 
   protected closeDialog(): void {
     this.runningRoutine.set(null);
+  }
+
+  /** Set on a failed retire/enable; cleared at the start of the next attempt —
+   * `GardeningScopeDetail.scopeActionError`'s own shape. */
+  protected readonly lifecycleActionError = signal<string | null>(null);
+
+  /** Whether the retire/enable mutation is in flight for this routine, threaded to
+   * {@link FleetRoutinePanel}'s Re-enable/Retire buttons — only one of the two is ever
+   * shown for the routine's current lifecycle state. */
+  protected readonly lifecyclePending = computed(() => this.routineLifecycleMutation.isPending());
+
+  protected onRetireRoutine(): void {
+    const routineId = this.selectedRoutine()?.routine_id;
+    if (routineId === undefined) return;
+    this.lifecycleActionError.set(null);
+    this.routineLifecycleMutation.mutate(
+      { routineId, retired: true },
+      { onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, 'Retire failed.')) },
+    );
+  }
+
+  protected onEnableRoutine(): void {
+    const routineId = this.selectedRoutine()?.routine_id;
+    if (routineId === undefined) return;
+    this.lifecycleActionError.set(null);
+    this.routineLifecycleMutation.mutate(
+      { routineId, retired: false },
+      { onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, 'Enable failed.')) },
+    );
   }
 }

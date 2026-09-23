@@ -21,6 +21,7 @@ from blizzard.hub.domain.routines import (
     RoutineAuthoring,
     RoutineDefaultScopeUnlinkError,
     RoutineGraphUnresolvedError,
+    RoutineLifecycle,
     RoutineNameImmutableError,
     RoutineNameTakenError,
     RoutineScopeMembership,
@@ -71,6 +72,7 @@ class _FakeRoutineRepo:
     by_id: dict[str, Routine] = field(default_factory=dict)
     by_name: dict[str, Routine] = field(default_factory=dict)
     edited: list[dict[str, Any]] = field(default_factory=list)
+    recorded: list[tuple[str, bool, str, datetime]] = field(default_factory=list)
 
     def get(self, routine_id: str) -> Routine | None:
         return self.by_id.get(routine_id)
@@ -118,6 +120,9 @@ class _FakeRoutineRepo:
         )
         self.by_id[routine_id] = updated
         return updated
+
+    def record_lifecycle(self, routine_id: str, *, retired: bool, at: datetime, by: str) -> None:
+        self.recorded.append((routine_id, retired, by, at))
 
 
 def _as_write_routines(fake: _FakeRoutineRepo) -> IWriteRoutineRepository:
@@ -325,3 +330,50 @@ class TestRoutineScopeMembership:
             membership.unlink(routine, self._scope("blizzard"))
 
         assert repo.list_scopes(routine.routine_id) == ["blizzard"]
+
+
+# --- RoutineLifecycle (unit tier) — the ScopeLifecycle shape ------------
+
+
+def _routine(**overrides: object) -> Routine:
+    fields: dict[str, object] = {
+        "routine_id": "rtn_1",
+        "name": "nightly",
+        "graph_name": "alpha",
+        "default_scope_slug": "blizzard",
+        "created_at": _T0,
+    }
+    fields.update(overrides)
+    return Routine(**fields)  # type: ignore[arg-type]
+
+
+def test_lifecycle_retire_records_a_retired_true_fact() -> None:
+    clock = FixedClock(instant=_T0)
+    repo = _FakeRoutineRepo()
+    lifecycle = RoutineLifecycle(routines=_as_write_routines(repo), clock=clock)
+
+    lifecycle.retire(_routine(), by="operator")
+
+    assert repo.recorded == [("rtn_1", True, "operator", _T0)]
+
+
+def test_lifecycle_enable_records_a_retired_false_fact() -> None:
+    clock = FixedClock(instant=_T0)
+    repo = _FakeRoutineRepo()
+    lifecycle = RoutineLifecycle(routines=_as_write_routines(repo), clock=clock)
+
+    lifecycle.enable(_routine(), by="operator")
+
+    assert repo.recorded == [("rtn_1", False, "operator", _T0)]
+
+
+def test_lifecycle_retire_twice_is_a_harmless_no_op() -> None:
+    clock = FixedClock(instant=_T0)
+    repo = _FakeRoutineRepo()
+    lifecycle = RoutineLifecycle(routines=_as_write_routines(repo), clock=clock)
+    routine = _routine()
+
+    lifecycle.retire(routine, by="operator")
+    lifecycle.retire(routine, by="operator")
+
+    assert repo.recorded == [("rtn_1", True, "operator", _T0), ("rtn_1", True, "operator", _T0)]

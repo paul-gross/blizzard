@@ -20,14 +20,19 @@ import {
 } from '../query-keys';
 
 /**
- * Hub `GET /api/routines` read — every routine, newest first. Routines change rarely
- * and carry no SSE event of their own, `injectHubGraphsQuery`'s own standing.
+ * Hub `GET /api/routines` read — every routine, newest first, including a retired one
+ * marked as such: every consumer of this one query renders a routine's
+ * full history regardless of its lifecycle state. Routines change rarely and carry no
+ * SSE event of their own, `injectHubGraphsQuery`'s own standing.
  */
 export function injectHubRoutinesQuery() {
   return injectQuery(() => ({
     queryKey: hubRoutinesKey,
     queryFn: async (): Promise<RoutineView[]> => {
-      const { data, error } = await listRoutinesApiRoutinesGet({ throwOnError: false });
+      const { data, error } = await listRoutinesApiRoutinesGet({
+        query: { include_retired: true },
+        throwOnError: false,
+      });
       if (error) throw error;
       return data ?? [];
     },

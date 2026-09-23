@@ -1,4 +1,5 @@
-"""Routine routes — create, list, read, edit, run, trend, and sweep (issue #389, blizzard#392).
+"""Routine routes — create, list, read, edit, retire, enable, run, trend, and sweep
+(issue #389, blizzard#392).
 
 The controller stays read-only (``bzh:controller-read-only``), resolving a ``routine_id``
 before delegating to the domain. ``GET /routines/trend`` is declared ahead of ``GET
@@ -26,7 +27,7 @@ from blizzard.hub.domain.garden_sweeps import GardenSweeps
 from blizzard.hub.domain.garden_trend import Trend
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.routine_baselines import RoutineBaseline
-from blizzard.hub.domain.routine_run import RunResult, ScopeNotRelatedError, ScopeRetiredError
+from blizzard.hub.domain.routine_run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
 from blizzard.hub.domain.routines import (
     Routine,
     RoutineDefaultScopeUnlinkError,
@@ -46,6 +47,7 @@ from blizzard.wire.routine import (
     RoutineBaselineView,
     RoutineCreateRequest,
     RoutineEditRequest,
+    RoutineLifecycleRequest,
     RoutineRunRequest,
     RoutineRunResponse,
     RoutineView,
@@ -54,7 +56,7 @@ from blizzard.wire.routine import (
 router = APIRouter(prefix="/api", tags=["routines"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _routine_view(routine: Routine) -> RoutineView:
+def _routine_view(routine: Routine, *, retired: bool) -> RoutineView:
     return RoutineView(
         routine_id=routine.routine_id,
         name=routine.name,
@@ -64,6 +66,7 @@ def _routine_view(routine: Routine) -> RoutineView:
         default_effort=routine.default_effort,
         default_harnesses=list(routine.default_harnesses),
         created_at=iso_utc(routine.created_at),
+        retired=retired,
     )
 
 
@@ -106,13 +109,22 @@ def create_routine(
         )
     except (ScopeSlugError, RoutineNameTakenError, RoutineGraphUnresolvedError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return _routine_view(routine)
+    return _routine_view(routine, retired=False)
 
 
 @router.get("/routines", response_model=list[RoutineView], dependencies=[Depends(require(FLEET_VIEW))])
-def list_routines(services: Annotated[HubServices, Depends(get_services)]) -> list[RoutineView]:
-    """Every routine, newest first."""
-    return [_routine_view(r) for r in services.routines.list_all()]
+def list_routines(
+    services: Annotated[HubServices, Depends(get_services)],
+    include_retired: Annotated[bool, Query()] = False,
+) -> list[RoutineView]:
+    """Every routine, newest first — a retired routine excluded by default, included and
+    marked when ``include_retired``."""
+    retired = services.routines.retired_ids()
+    return [
+        _routine_view(r, retired=r.routine_id in retired)
+        for r in services.routines.list_all()
+        if include_retired or r.routine_id not in retired
+    ]
 
 
 def _parse_instant(value: str, *, field: str) -> datetime:
@@ -270,7 +282,7 @@ def get_routine(routine_id: str, services: Annotated[HubServices, Depends(get_se
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
-    return _routine_view(routine)
+    return _routine_view(routine, retired=services.routines.is_retired(routine_id))
 
 
 def _baseline_view(baseline: RoutineBaseline) -> RoutineBaselineView:
@@ -395,7 +407,41 @@ def edit_routine(
         )
     except (ScopeSlugError, RoutineNameImmutableError, RoutineGraphUnresolvedError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return _routine_view(edited)
+    return _routine_view(edited, retired=services.routines.is_retired(routine_id))
+
+
+@router.post(
+    "/routines/{routine_id}/retire",
+    response_model=RoutineView,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(GRAPH_EDIT))],
+)
+def retire_routine(
+    routine_id: str, request: RoutineLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> RoutineView:
+    """Retire a routine — a reversible brake; 404 on an unknown id."""
+    routine = services.routines.get(routine_id)
+    if routine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    services.routine_lifecycle.retire(routine, by=request.by)
+    return _routine_view(routine, retired=True)
+
+
+@router.post(
+    "/routines/{routine_id}/enable",
+    response_model=RoutineView,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(GRAPH_EDIT))],
+)
+def enable_routine(
+    routine_id: str, request: RoutineLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> RoutineView:
+    """Re-enable a retired routine; idempotent, 404 on an unknown id."""
+    routine = services.routines.get(routine_id)
+    if routine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    services.routine_lifecycle.enable(routine, by=request.by)
+    return _routine_view(routine, retired=False)
 
 
 @dataclass(frozen=True)
@@ -494,13 +540,19 @@ def run_routine(
     """Mint, ingest, and promote a hub work item from the routine, in one act
     (blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
     ``mode``, or an effective scope no scope row holds or outside the routine's own
-    related set (blizzard#399 D1, D4 — never minted); 503 on a retired effective scope or
-    a graph name with no enabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s
-    own retired-default-graph shape); 409 on an out-of-band ingest already holding the
+    related set (blizzard#399 D1, D4 — never minted); 503 on a retired routine
+    (checked first, before the mode or scope is even parsed), a retired effective
+    scope, or a graph name with no
+    enabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s own
+    retired-default-graph shape); 409 on an out-of-band ingest already holding the
     allocated ref's pointer."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+    try:
+        services.routine_run.refuse_if_retired(routine)
+    except RoutineRetiredError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     try:
         mode = RunMode(request.mode)
     except ValueError as exc:
@@ -535,7 +587,7 @@ def run_routine(
                 f"`blizzard hub routine scope add {exc.routine_id} {exc.slug}`"
             ),
         ) from exc
-    except (RoutineGraphUnresolvedError, ScopeRetiredError) as exc:
+    except (RoutineGraphUnresolvedError, ScopeRetiredError, RoutineRetiredError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except IngestConflict as exc:
         conflict = ChunkIngestConflict(

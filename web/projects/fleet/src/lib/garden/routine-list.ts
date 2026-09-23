@@ -17,6 +17,9 @@ export interface RoutineListRowVm {
    * container's own `blocked` resolution, generalized from the selected routine
    * alone to every row in the list. */
   readonly blocked: boolean;
+  /** Whether the routine's own retire/enable brake reads retired —
+   * `ScopeRowVm.retired`'s own shape. */
+  readonly retired: boolean;
 }
 
 /**

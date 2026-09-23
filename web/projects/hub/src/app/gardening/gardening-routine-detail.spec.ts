@@ -2,11 +2,21 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { settle, stubRequestClient, type RequestClientStub } from 'fleet/testing';
+import { hubClient, type MeResponse } from 'fleet';
+import { OPERATOR_ME_RESPONSE, settle, stubError, stubRequestClient, type RequestClientStub } from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
+import { vi } from 'vitest';
 
 import { GardeningRoutineDetail } from './gardening-routine-detail';
+
+/** A read-only identity — every permission `OPERATOR_ME_RESPONSE` carries except
+ * `graph:edit` — the default for tests unconcerned with the panel's gated
+ * retire/enable controls (`gardening-scope-detail.spec.ts`'s own
+ * `VIEWER_ME_RESPONSE`). */
+const VIEWER_ME_RESPONSE: MeResponse = {
+  ...OPERATOR_ME_RESPONSE,
+  permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'graph:edit'),
+};
 
 const ROUTINE = {
   routine_id: 'rtn_1',
@@ -89,12 +99,14 @@ describe('GardeningRoutineDetail', () => {
     opts: {
       routines?: readonly unknown[];
       graphs?: readonly unknown[];
+      me?: MeResponse;
       routeOverride?: (method: string, path: string) => unknown;
       params?: Record<string, string>;
     } = {},
   ) {
     const routines = opts.routines ?? [ROUTINE];
     const graphs = opts.graphs ?? [EFFECTIVE_GRAPH_SUMMARY];
+    const me = opts.me ?? VIEWER_ME_RESPONSE;
     stub = stubRequestClient(hubClient, (method, path) => {
       const overridden = opts.routeOverride?.(method, path);
       if (overridden !== undefined) return overridden;
@@ -110,6 +122,7 @@ describe('GardeningRoutineDetail', () => {
       // The run dialog's own scope picker (`gardening-run-dialog.ts`) injects
       // `injectHubScopesQuery` independently of this pane.
       if (method === 'GET' && path === '/api/scopes') return [];
+      if (method === 'GET' && path === '/api/me') return me;
       return {};
     });
     const paramMap$ = new BehaviorSubject(convertToParamMap(opts.params ?? {}));
@@ -256,5 +269,86 @@ describe('GardeningRoutineDetail', () => {
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="gardening-run-dialog"]')).toBeNull();
+  });
+
+  // --- Lifecycle: retire/enable, `GardeningScopeDetail`'s own shape --
+
+  it('shows no lifecycle control for a read-only identity', async () => {
+    const fixture = await render({ params: { routineName: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeNull();
+  });
+
+  it('shows the lifecycle control for an identity with graph:edit', async () => {
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineName: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeTruthy();
+  });
+
+  it('retires a routine through POST /api/routines/{id}/retire once confirmed', async () => {
+    const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { routineName: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/routines/rtn_1/retire', 'POST')).toHaveLength(1);
+  });
+
+  it('hides Run once a retired routine reads back, and offers Re-enable instead of Retire', async () => {
+    const fixture = await render({
+      routines: [{ ...ROUTINE, retired: true }],
+      me: OPERATOR_ME_RESPONSE,
+      params: { routineName: 'nightly' },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-run"]')).toBeNull();
+    expect(el.querySelector('[data-testid="gardening-routine-retired-notice"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-enable"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeNull();
+  });
+
+  it('renders the retired override while Retire is pending, reverting to the real state on rejection', async () => {
+    const fixture = await render({
+      me: OPERATOR_ME_RESPONSE,
+      params: { routineName: 'nightly' },
+      routeOverride: (method, path) =>
+        method === 'POST' && path === '/api/routines/rtn_1/retire'
+          ? stubError(404, { detail: 'unknown routine rtn_1' })
+          : undefined,
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    const queryClient = TestBed.inject(QueryClient);
+    let resolveInvalidate!: () => void;
+    vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+
+    el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-retire"]')?.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-state"]')?.textContent?.trim()).toBe('retired');
+    expect(el.querySelector('[data-testid="gardening-routine-run"]')).toBeNull();
+    // The control choice stays keyed off the real, unoverridden `retired` — the
+    // routine is still enabled until the mutation settles, so Retire (not
+    // Re-enable) is what the next click must fire.
+    expect(el.querySelector('[data-testid="gardening-routine-panel-retire"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-routine-panel-enable"]')).toBeNull();
+
+    resolveInvalidate();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="gardening-routine-panel-state"]')?.textContent?.trim()).toBe('enabled');
+    expect(el.querySelector('[data-testid="gardening-routine-panel-error"]')?.textContent).toContain(
+      'unknown routine rtn_1',
+    );
   });
 });

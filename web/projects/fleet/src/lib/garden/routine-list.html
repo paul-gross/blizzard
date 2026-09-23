@@ -20,6 +20,9 @@
           @if (row.blocked) {
             <span class="rt-blocked">blocked</span>
           }
+          @if (row.retired) {
+            <span class="rt-retired">retired</span>
+          }
         </fleet-kit-select-row>
       </li>
     }

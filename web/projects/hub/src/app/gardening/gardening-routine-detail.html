@@ -1,4 +1,13 @@
-<fleet-routine-panel [vm]="panelVm()" [state]="panelState()" (run)="run()" />
+<fleet-routine-panel
+  [vm]="panelVm()"
+  [state]="panelState()"
+  [canEdit]="canEdit()"
+  [actionError]="lifecycleActionError()"
+  [lifecyclePending]="lifecyclePending()"
+  (run)="run()"
+  (retire)="onRetireRoutine()"
+  (enable)="onEnableRoutine()"
+/>
 
 @if (panelVm(); as panel) {
   <fleet-routine-proposal-counts [rows]="proposalCountsRows()" [state]="proposalCountsState()" />

@@ -28,6 +28,23 @@ fleet-kit-panel {
 }
 .rp-record h3 {
   margin: 0 0 6px;
+  display: inline-block;
+}
+.rp-state {
+  margin-left: 8px;
+  color: var(--label);
+  font-size: var(--fs-sm);
+}
+.rp-state--retired {
+  color: var(--red);
+}
+.rp-lifecycle-actions {
+  display: flex;
+}
+.rp-error {
+  margin: 0;
+  color: var(--red);
+  font-size: var(--fs-xs);
 }
 /* The kit fact grid's own 74px label column is narrower than `default effort`
    and its two `default …` siblings, which wrap onto a second line against it.

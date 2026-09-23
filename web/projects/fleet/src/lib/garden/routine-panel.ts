@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
 import { KitButton } from '../kit/kit-button';
+import { KitConfirmDialog } from '../kit/kit-confirm-dialog';
 import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 import { KitPanel } from '../kit/kit-panel';
 import { KitProseBlock } from '../kit/kit-prose-block';
@@ -75,6 +76,16 @@ export interface RoutinePanelVm {
    * own default (D8) — `null` while the relation read is still pending, `trend`'s
    * own nullable-secondary-read shape. */
   readonly relatedScopes: readonly RelatedScopeVm[] | null;
+  /** The routine's real, unoverridden lifecycle flag — which control
+   * renders (Retire/Re-enable) stays keyed off this, never off {@link
+   * renderedRetired} (`ScopePanelVm.retired`'s own shape), so a pending lifecycle
+   * mutation's own predicted outcome can never flip which verb the next click would
+   * fire. */
+  readonly retired: boolean;
+  /** The lifecycle badge's rendered value, and what hides the Run action, merged with
+   * any currently pending Retire/Enable's own predicted outcome
+   * (`bzh:frontend-pending-override`, `ScopePanelVm.renderedRetired`'s own shape). */
+  readonly renderedRetired: boolean;
 }
 
 /**
@@ -93,15 +104,19 @@ export interface RoutinePanelVm {
  * say without a `vm()` and are absent until there is one.
  *
  * Also the panel's own Run trigger: a `run` output, emitted only while `blockedReason`
- * is unset. The container decides what running the selected routine then does — this
- * component still injects nothing. Only that action is gated on blocked-ness: a
- * routine's strategy is part of its definition, so the Strategy panel reads the same
- * whether or not a run is currently offered.
+ * is unset and the routine is not (rendered-)retired. The container decides what
+ * running the selected routine then does — this component still injects nothing. Only
+ * that action is gated on blocked-ness/retirement: a routine's strategy is part of its
+ * definition, so the Strategy panel reads the same whether or not a run is currently
+ * offered.
+ *
+ * Retire/enable confirm before emitting — `FleetScopePanel`'s own confirm-then-emit
+ * pattern.
  */
 @Component({
   selector: 'fleet-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitFactList, KitPanel, KitProseBlock],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })
@@ -109,7 +124,30 @@ export class FleetRoutinePanel {
   readonly vm = input<RoutinePanelVm | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
 
+  /** Whether the current identity may retire/enable this routine (`graph:edit`) —
+   * withholds the lifecycle controls when `false`, `FleetScopePanel.canEdit`'s own
+   * shape. */
+  readonly canEdit = input(false);
+
+  /** Set on a failed retire/enable; rendered beside the controls that raise it. */
+  readonly actionError = input<string | null>(null);
+
+  /** Whether the retire/enable mutation is in flight — disables both Re-enable and
+   * Retire, since only one is ever shown for this routine's current lifecycle
+   * state. */
+  readonly lifecyclePending = input(false);
+
   readonly run = output<void>();
+  readonly retire = output<void>();
+  readonly enable = output<void>();
+
+  protected readonly pendingConfirm = signal<{
+    readonly heading: string;
+    readonly message: string;
+    readonly confirmLabel: string;
+    readonly variant: 'primary' | 'danger';
+    readonly run: () => void;
+  } | null>(null);
 
   /** The record as an aligned fact grid (`fleet-kit-fact-list`, `KitFact`'s own
    * shape) — a method, not a stored computed, since it depends on the selected
@@ -132,5 +170,41 @@ export class FleetRoutinePanel {
       { label: 'withdrawn', value: String(trend.withdrawn) },
       { label: 'reopened', value: String(trend.reopened) },
     ];
+  }
+
+  /** Open a confirmation before emitting `retire` for the container's mutation to fire. */
+  protected onRetire(): void {
+    const name = this.vm()?.record.name;
+    if (name === undefined) return;
+    this.pendingConfirm.set({
+      heading: `Retire routine ${name}`,
+      message: `Retire routine ${name}? It stops offering a run; its runs, findings, proposals, and closures stay live, queryable, and attributable.`,
+      confirmLabel: 'Retire',
+      variant: 'danger',
+      run: () => this.retire.emit(),
+    });
+  }
+
+  /** Open a confirmation before emitting `enable` for the container's mutation to fire. */
+  protected onEnable(): void {
+    const name = this.vm()?.record.name;
+    if (name === undefined) return;
+    this.pendingConfirm.set({
+      heading: `Re-enable routine ${name}`,
+      message: `Re-enable routine ${name}? It resumes offering a run.`,
+      confirmLabel: 'Re-enable',
+      variant: 'primary',
+      run: () => this.enable.emit(),
+    });
+  }
+
+  protected onConfirmed(): void {
+    const pending = this.pendingConfirm();
+    this.pendingConfirm.set(null);
+    pending?.run();
+  }
+
+  protected onCancelled(): void {
+    this.pendingConfirm.set(null);
   }
 }
