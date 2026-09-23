@@ -201,7 +201,9 @@ def test_open_reader_is_empty_for_a_routine_with_no_proposals() -> None:
 
 
 def test_list_for_routine_closed_returns_only_closed_proposals_with_their_closure() -> None:
-    proposals = _FakeReadGardenProposalRepo(by_routine={"nightly": [_proposal("gprop_open"), _proposal("gprop_closed")]})
+    proposals = _FakeReadGardenProposalRepo(
+        by_routine={"nightly": [_proposal("gprop_open"), _proposal("gprop_closed")]}
+    )
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_closed": _closure("gprop_closed")})
     reader = OpenGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
@@ -214,7 +216,9 @@ def test_list_for_routine_closed_returns_only_closed_proposals_with_their_closur
 
 
 def test_list_for_routine_all_returns_every_proposal_with_its_closure_when_one_exists() -> None:
-    proposals = _FakeReadGardenProposalRepo(by_routine={"nightly": [_proposal("gprop_open"), _proposal("gprop_closed")]})
+    proposals = _FakeReadGardenProposalRepo(
+        by_routine={"nightly": [_proposal("gprop_open"), _proposal("gprop_closed")]}
+    )
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_closed": _closure("gprop_closed")})
     reader = OpenGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
