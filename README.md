@@ -178,9 +178,9 @@ roles, what each node produces, how a verdict is rendered. Every edit mints a ne
 trust it forever, and a chunk moves between graphs only through an explicit migration. The same graph drives twenty
 unrelated applications unchanged.
 
-**Delivery is deterministic and hub-executed.** The deliver node runs at the hub, not in an agent's shell: it merges to
-the main branch in the baseline, or opens a pull request where a graph configures a human-review gate, and resolves when
-that PR merges. Landed chunks close their work items back at their own source.
+**Delivery is deterministic and hub-executed.** The deliver node runs at the hub, not in an agent's shell. Fleet lanes
+open a pull request for each repository with work to land and wait for green checks before landing with a merge commit
+that preserves branch history. Landed chunks close their work items back at their own source.
 
 ### What Blizzard deliberately isn't
 
@@ -216,7 +216,7 @@ to solve one problem exceptionally well, and to stay replaceable everywhere else
 | **Work source**    | The system holding the backlog, ingested by item id       | GitHub issues                                                       |
 | **Coding harness** | The agent that actually does the work                     | Claude Code                                                         |
 | **Workflow**       | How work moves: graphs of nodes, judgements, and gates    | Hub-defined YAML workflow graphs                                    |
-| **Delivery**       | Integrates finished work, executed at the hub             | Merge to the main branch, or a GitHub pull request at a gate        |
+| **Delivery**       | Integrates finished work, executed at the hub             | Checked GitHub pull requests merged into the main branch            |
 | **Human channel**  | Reaches people for questions, escalations, and visibility | The mission-control board                                           |
 
 Winter is the opinionated preference for the workspace, because it cuts both ways: a human uses it directly for

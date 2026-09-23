@@ -350,9 +350,9 @@ class PullRequest:
 
     @classmethod
     def of(cls, run: LandRun, commit: dict[str, str]) -> PullRequest:
-        """The PR for ``commit``'s branch: an already-merged one first — rebase-merge
-        rewrites shas, so re-entry can no longer recognize a landed PR via
-        :meth:`~LandRun.contains` (``bzh:hub-node-step-idempotence``) — then the open one,
+        """The PR for ``commit``'s branch: an already-merged one first, so re-entry
+        recovers a merge even when its marker write was interrupted
+        (``bzh:hub-node-step-idempotence``) — then the open one,
         opening one first when neither exists, then read live. Raises
         :class:`PullRequestOpenError` or :class:`PullRequestLookupError` on a forge hiccup."""
         repo = run.repo(commit["repo"])
@@ -451,8 +451,7 @@ class PullRequest:
         return status, ((body or {}).get("message", "") if isinstance(body, dict) else "")
 
     def merge(self, sha: str, *, method: str = "merge") -> str:
-        """Merge at ``sha`` with ``method`` and return the landed commit — the caller's
-        choice, so a script that wants a linear history passes ``"rebase"``.
+        """Merge at ``sha`` with ``method`` and return the landed commit.
 
         An already-merged PR is a prior run's un-marked merge, a no-op to redo
         (``bzh:hub-node-step-idempotence``); anything else raises :class:`MergeDidNotLand`."""

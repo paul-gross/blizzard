@@ -18,9 +18,8 @@
 # merge conflict on the PR is a moved base, not a wrong change, and is resolved by
 # rebasing without re-earning the frontier build.
 #
-# Delivery runs the packaged `land_pr_ci` script — the PR + CI-watch delivery policy,
-# which opens a PR per repo and polls until every PR merges cleanly, using GitHub's
-# rebase-merge so history stays linear.
+# Delivery runs the packaged `land_pr_ci` script — the PR + CI-watch delivery policy
+# (blizzard-context:/workflows/feature-delivery.md).
 #
 # A landing closes on `retrospective`, same as `bas-dwf` — the lightweight lane is cut
 # down on *gates*, not on learning from itself.

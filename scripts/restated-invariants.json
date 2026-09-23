@@ -497,6 +497,26 @@
           "reason": "Published rendered surface: this wire model's class docstring generates into openapi/ and the client's JSDoc, whose reader has no source tree, so it states the PARTIAL rule locally rather than pointing at UsageTotal."
         }
       ]
+    },
+    {
+      "id": "fleet-pr-merge-commit-policy",
+      "statement": "In merge-to-main delivery, repositories with work land by pull request only after green checks, using a merge commit that preserves branch history.",
+      "owner": "blizzard-context:/workflows/feature-delivery.md#what-the-platform-owns",
+      "owner_kind": "doc-section",
+      "owner_assert": {
+        "quote": "the hub merges it with a merge commit only after a terminal-green check verdict"
+      },
+      "markers": [
+        "merge commit that preserves branch history"
+      ],
+      "sites": [
+        {
+          "file": "README.md",
+          "symbol": "-how-it-works",
+          "role": "allowed",
+          "reason": "Public README delivery overview: its reader has no workspace context to resolve the workflow convention, so the behavior is stated inline."
+        }
+      ]
     }
   ]
 }

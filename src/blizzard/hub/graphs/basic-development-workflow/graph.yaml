@@ -18,15 +18,14 @@
 # still rides back into `review` for cold eyes, and `clean` proceeds straight to
 # delivery.
 #
-# Delivery runs the packaged `land_pr_ci` script — the PR + CI-watch delivery policy,
-# which opens a PR per repo and polls until every PR merges cleanly, using GitHub's
-# rebase-merge so history stays linear. A dirty PR (a real merge conflict) reports
-# `conflict`, routed back to `pre-push` — NOT to `build`. That edge is the point of
-# having a pre-push node at all: a real conflict means the base moved under the chunk,
-# not that the work is wrong, so the recovery is to rebase again, not to rebuild a change
-# that already passed review. A repo's own CI check failing on the PR reports `failure`
-# the same way, also routed to `pre-push`, which reads `delivery-findings` to tell a
-# mechanical land-script hiccup from a real defect and triages accordingly. `pre-push`
+# Delivery runs the packaged `land_pr_ci` script — the PR + CI-watch delivery policy
+# (blizzard-context:/workflows/feature-delivery.md).
+# A dirty PR (a real merge conflict) reports `conflict`, routed back to `pre-push` — NOT to
+# `build`. That edge is the point of having a pre-push node at all: a real conflict means
+# the base moved under the chunk, not that the work is wrong. Recovery rebases instead of
+# rebuilding a change that already passed review. A repo's own CI check failing on the PR
+# reports `failure` the same way, also routed to `pre-push`. It reads `delivery-findings`
+# to tell a mechanical land-script hiccup from a real defect and triages accordingly. `pre-push`
 # re-triages and returns to delivery; the hub node's bounce_cap bounds the loop if the
 # base keeps moving under it.
 #
