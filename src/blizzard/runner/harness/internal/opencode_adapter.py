@@ -169,7 +169,7 @@ class OpenCodeAdapter:
         binary: str = "opencode",
         *,
         model: str = "",
-        env_passthrough: Sequence[str] = (),
+        worker_env: AllowlistedEnv,
         model_aliases: Sequence[tuple[str, str]] = (),
         effort_aliases: Sequence[tuple[str, str]] = (),
         worker_config_path: str | None = None,
@@ -187,7 +187,9 @@ class OpenCodeAdapter:
         self._effort_aliases = dict(effort_aliases)
         self._unrecognized_efforts: set[str] = set()
         self._unrecognized_compaction_windows: set[str] = set()
-        self._env_passthrough = tuple(env_passthrough)
+        # The one allowlisted env (``bzh:worker-env-allowlist``) every child this adapter
+        # launches is built from — the declared passthrough plus any `PATH` prepend.
+        self._worker_env = worker_env
         # The runner-owned permission/plugin document (D7); `None` when this runtime
         # predates the OpenCode binding, or a deployment chose not to scaffold one.
         self._worker_config_path = worker_config_path
@@ -363,7 +365,7 @@ class OpenCodeAdapter:
         env = (
             self.identity_env(preamble, chunk_id, session_id, elicitation=True)
             if preamble is not None
-            else AllowlistedEnv.of(self._env_passthrough).variables
+            else self._worker_env.variables
         )
         try:
             with harness_shared.stdout_target(output_path, mode="wb") as stdout_file:
@@ -405,11 +407,7 @@ class OpenCodeAdapter:
             variant=effort,
             auto=True,
         )
-        env = (
-            self.identity_env(preamble, chunk_id, session_id)
-            if preamble is not None
-            else AllowlistedEnv.of(self._env_passthrough).variables
-        )
+        env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
         # Deferred (F1, D4): a resume gets the same ownership spawn/judge get — `dormant.py::_wake`
         # calls `confirm_durable()` right after its own durable `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
@@ -446,7 +444,7 @@ class OpenCodeAdapter:
         """Shared base with Claude Code (``harness_shared.build_identity_env``), layering
         this binding's own runner-owned OpenCode config vars on top."""
         env = harness_shared.build_identity_env(
-            preamble, chunk_id, session_id, self._env_passthrough, elicitation=elicitation
+            preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
         )
         if self._worker_config_path:
             # The runner-owned permission/plugin document (D7) — supplied both as a path and

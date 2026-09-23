@@ -27,6 +27,7 @@ from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
@@ -153,7 +154,9 @@ def _fake_opencode_binary(tmp_path: Path) -> str:
 def _app_with_harness(tmp_path: Path, binary: str) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     probe = LinuxProcessProbe()
-    adapter = ClaudeCodeAdapter(binary=binary, process=probe, launcher=ProcessLauncher(probe))
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()), binary=binary, process=probe, launcher=ProcessLauncher(probe)
+    )
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     return TestClient(create_app(config, harnesses=harnesses))
 

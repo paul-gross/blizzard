@@ -16,6 +16,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
@@ -231,7 +232,9 @@ def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_env
     stdout_dir.mkdir()
     _write_stdout(stdout_dir, "lease_1", 1, _SIGINT_ENVELOPE)
     worker_files = WorkerStdoutFiles(str(stdout_dir), store)
-    adapter = ClaudeCodeAdapter(process=FakeProbe(), launcher=ProcessLauncher(FakeProbe()))
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()), process=FakeProbe(), launcher=ProcessLauncher(FakeProbe())
+    )
     registry = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source())}
     )
@@ -305,6 +308,7 @@ def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_
     _write_stdout(stdout_dir, "lease_1", 1, stdout)
     probe = FakeProbe()
     adapter = OpenCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
         process=probe,
         launcher=ProcessLauncher(probe),
         model="openai/gpt-5.6-luna",

@@ -47,6 +47,7 @@ def _adapter(**kwargs: Any) -> ClaudeCodeAdapter:
     and ``launcher`` to a real one over it — most cases here don't care which they get."""
     process = kwargs.setdefault("process", FakeProbe())
     kwargs.setdefault("launcher", ProcessLauncher(process))
+    kwargs.setdefault("worker_env", AllowlistedEnv.of(()))
     return ClaudeCodeAdapter(**kwargs)
 
 
@@ -250,7 +251,9 @@ def test_spawn_stamps_process_start_time_from_the_injected_probe(monkeypatch: py
     # nothing — proving the stamp came from the injected probe, not a fallback to `/proc`.
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
     probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-start-time-token")})
-    adapter = ClaudeCodeAdapter(binary="claude", process=probe, launcher=ProcessLauncher(probe))
+    adapter = ClaudeCodeAdapter(
+        binary="claude", worker_env=AllowlistedEnv.of(()), process=probe, launcher=ProcessLauncher(probe)
+    )
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
@@ -270,7 +273,9 @@ def test_judge_stamps_process_start_time_from_the_injected_probe(
 ) -> None:
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
     probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-judge-start-time")})
-    adapter = ClaudeCodeAdapter(binary="claude", process=probe, launcher=ProcessLauncher(probe))
+    adapter = ClaudeCodeAdapter(
+        binary="claude", worker_env=AllowlistedEnv.of(()), process=probe, launcher=ProcessLauncher(probe)
+    )
     workdir = tmp_path / "e1"
     workdir.mkdir()
 
@@ -289,7 +294,9 @@ def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durabl
     `ResumeHandle`'s bare no-op default."""
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
     probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-resume-start-time")})
-    adapter = ClaudeCodeAdapter(binary="claude", process=probe, launcher=ProcessLauncher(probe))
+    adapter = ClaudeCodeAdapter(
+        binary="claude", worker_env=AllowlistedEnv.of(()), process=probe, launcher=ProcessLauncher(probe)
+    )
 
     resumed = adapter.resume_with_message("/ws", "sess-123", "continue")
 
@@ -490,7 +497,7 @@ def test_resume_with_message_child_env_excludes_the_elicitation_marker(tmp_path:
 @pytest.mark.unit
 def test_spawn_env_forwards_a_named_passthrough_var(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MY_HARNESS_QUIRK", "needed-by-the-real-binary")
-    adapter = _adapter(binary="claude", env_passthrough=("MY_HARNESS_QUIRK",))
+    adapter = _adapter(binary="claude", worker_env=AllowlistedEnv.of(("MY_HARNESS_QUIRK",)))
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     preamble = WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],

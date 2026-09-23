@@ -584,6 +584,66 @@ def test_worker_env_passthrough_parses_from_a_hand_written_worker_table(tmp_path
 
 
 @pytest.mark.unit
+def test_worker_path_prepend_defaults_absent(tmp_path: Path) -> None:
+    assert RunnerConfig.scaffold(tmp_path).worker_path_prepend == ()
+
+
+@pytest.mark.unit
+def test_worker_path_prepend_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    edited = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        worker_path_prepend=("/opt/mise/shims",),
+    )
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.worker_path_prepend == ("/opt/mise/shims",)
+
+
+@pytest.mark.unit
+def test_worker_path_prepend_expands_a_leading_tilde(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[worker]\npath_prepend = ["~/.local/share/mise/shims"]\n'
+    )
+    config = RunnerConfig.load(root)
+    assert config.worker_path_prepend == (str(tmp_path / ".local" / "share" / "mise" / "shims"),)
+
+
+@pytest.mark.unit
+def test_worker_path_prepend_rejects_a_relative_entry(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[worker]\npath_prepend = ["relative/shims"]\n'
+    )
+    with pytest.raises(ConfigError, match=r"\[worker\] path_prepend"):
+        RunnerConfig.load(root)
+
+
+@pytest.mark.unit
+def test_worker_env_exposes_the_configured_path_prepend(tmp_path: Path) -> None:
+    config = RunnerConfig(
+        root=tmp_path, db_url="sqlite://", worker_env_passthrough=("MY_VAR",), worker_path_prepend=("/opt/shims",)
+    )
+    assert config.worker_env.passthrough == ("MY_VAR",)
+    assert config.worker_env.path_prepend == ("/opt/shims",)
+
+
+@pytest.mark.unit
+def test_missing_worker_path_prepend_entries_names_only_what_is_absent(tmp_path: Path) -> None:
+    present = tmp_path / "present-shims"
+    present.mkdir()
+    absent = tmp_path / "absent-shims"
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", worker_path_prepend=(str(present), str(absent)))
+    assert config.missing_worker_path_prepend_entries == (str(absent),)
+
+
+@pytest.mark.unit
 def test_missing_workspace_prompt_file_raises(tmp_path: Path) -> None:
     from blizzard.runner.config import ConfigError
 

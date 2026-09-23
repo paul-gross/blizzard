@@ -15,6 +15,7 @@ from typing import Any
 
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
@@ -96,6 +97,18 @@ DEFAULT_WORKER_STDOUT_RETENTION_DAYS = 14
 
 class ConfigError(RuntimeError):
     """A runtime directory is missing its config — it was never initialized."""
+
+
+def _expanded_path_prepend(raw: tuple[str, ...]) -> tuple[str, ...]:
+    """Expand ``~`` in each ``[worker] path_prepend`` entry and store it absolute; a
+    still-relative entry after expansion raises, naming the offending key (D3)."""
+    expanded: list[str] = []
+    for entry in raw:
+        path = Path(entry).expanduser()
+        if not path.is_absolute():
+            raise ConfigError(f"[worker] path_prepend entries must be absolute (~ allowed), got {entry!r}")
+        expanded.append(str(path))
+    return tuple(expanded)
 
 
 def _cap_line(key: str, value: int | None, default: int) -> str:
@@ -487,6 +500,8 @@ class RunnerConfig:
     #: The declared extension to the worker spawn-environment allowlist (issue #88) — a
     #: worker's env is that allowlist, never a full ``os.environ`` copy.
     worker_env_passthrough: tuple[str, ...] = ()
+    #: Absolute directories (``~`` expanded at load) led onto every worker's ``PATH`` ahead of the daemon's own.
+    worker_path_prepend: tuple[str, ...] = ()
     #: Every browser-reachable origin this runner answers on, authored as `public_url` — one URL or
     #: a list; first is canonical, empty registers no federation identity (issues #95, #287).
     public_urls: tuple[str, ...] = ()
@@ -522,6 +537,20 @@ class RunnerConfig:
     #: the periodic sweep prunes them (``[worker_stdout] retention_days``, issue #58) —
     #: independent of lease release, which leaves them in place.
     worker_stdout_retention_days: int = DEFAULT_WORKER_STDOUT_RETENTION_DAYS
+
+    @property
+    def worker_env(self) -> AllowlistedEnv:
+        """The one allowlisted env every runner-spawned child is built from
+        (``bzh:worker-env-allowlist``) — the sole accessor a composition root reads instead
+        of constructing an :class:`AllowlistedEnv` from the raw fields itself."""
+        return AllowlistedEnv.of(self.worker_env_passthrough, path_prepend=self.worker_path_prepend)
+
+    @property
+    def missing_worker_path_prepend_entries(self) -> tuple[str, ...]:
+        """Every configured ``[worker] path_prepend`` entry absent on disk right now —
+        ``host``'s own startup warning reads this; a missing entry still starts the runner,
+        it just never contributes to a spawned child's ``PATH``."""
+        return tuple(entry for entry in self.worker_path_prepend if not Path(entry).exists())
 
     @property
     def public_origins(self) -> PublicOrigins:
@@ -853,6 +882,12 @@ class RunnerConfig:
             + "# BLIZZARD_* identity vars are injected per spawn/judge/resume, not passed through.\n"
             + "[worker]\n"
             + f"env_passthrough = [{', '.join(f'"{v}"' for v in self.worker_env_passthrough)}]\n"
+            + "# Absolute directories (~ allowed) led onto every worker's PATH, ahead of the\n"
+            + "# daemon's own — e.g. a mise shims dir, so a spawned worker resolves the same\n"
+            + "# version-manager tools an operator's shell does. A relative entry fails config\n"
+            + "# load. `runner host` warns at startup for any entry missing on disk, but still\n"
+            + "# starts. Empty = the daemon's own PATH, unchanged.\n"
+            + f"path_prepend = [{', '.join(f'"{p}"' for p in self.worker_path_prepend)}]\n"
             + "\n# Runner-local role resolution, keyed by hub username (issue #95) — lives only here,\n"
             + '# never in the hub store/admin page. `hub_role_default` is "mirror" or a fixed cap\n'
             + '# ("contributor"/"guest"/"pending"); `superuser` names this runner\'s own sovereign.\n'
@@ -955,6 +990,7 @@ class RunnerConfig:
             context_warn_tokens=context.warn_tokens,
             context_sample_interval_seconds=context.sample_interval_seconds,
             worker_env_passthrough=Table.of(raw.get("worker")).names("env_passthrough"),
+            worker_path_prepend=_expanded_path_prepend(Table.of(raw.get("worker")).names("path_prepend")),
             public_urls=PublicOrigins.entries(raw.get("public_url"), ConfigError),
             auth_superuser=auth.superuser,
             auth_hub_role_default=auth.hub_role_default,

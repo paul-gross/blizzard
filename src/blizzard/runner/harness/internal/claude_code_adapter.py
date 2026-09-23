@@ -143,7 +143,7 @@ class ClaudeCodeAdapter:
         settings_path: str | None = None,
         permission_mode: str | None = None,
         model: str = DEFAULT_WORKER_MODEL,
-        env_passthrough: Sequence[str] = (),
+        worker_env: AllowlistedEnv,
         model_aliases: Sequence[tuple[str, str]] = (),
         effort_aliases: Sequence[tuple[str, str]] = (),
         transcript_source: IHarnessTranscriptSource | None = None,
@@ -163,9 +163,9 @@ class ClaudeCodeAdapter:
         # A non-interactive worker has no one to approve tool use, so the default mode
         # lets it inspect but never build. ``None`` omits the flag.
         self._permission_mode = permission_mode
-        # The declared extension to the spawn-environment allowlist (issue #88), forwarded
-        # to every child alongside the fixed base allowlist.
-        self._env_passthrough = tuple(env_passthrough)
+        # The one allowlisted env (``bzh:worker-env-allowlist``) every child this adapter
+        # launches is built from — the declared passthrough plus any `PATH` prepend.
+        self._worker_env = worker_env
         # Injected, never self-constructed (`bzh:dependency-injection`); the null source
         # serves the construction sites that need no real one.
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
@@ -355,7 +355,7 @@ class ClaudeCodeAdapter:
         env = (
             self.identity_env(preamble, chunk_id, session_id, elicitation=True)
             if preamble is not None
-            else AllowlistedEnv.of(self._env_passthrough).variables
+            else self._worker_env.variables
         )
         # Detached (blizzard#443): the reply lands in `output_path`, never a pipe this
         # call waits on — the collect half reads it back once the process has exited.
@@ -407,11 +407,7 @@ class ClaudeCodeAdapter:
         cmd.append(message)
         # Re-supply the per-lease identity: a resume inherits none of the spawn env, and
         # the token plaintext is never persisted, so the caller re-mints it.
-        env = (
-            self.identity_env(preamble, chunk_id, session_id)
-            if preamble is not None
-            else AllowlistedEnv.of(self._env_passthrough).variables
-        )
+        env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
         # Injected per-lease file (epic #57); unset (``None``) inherits the runner's own.
         # Deferred (F1, D4) like spawn/judge — `dormant.py::_wake` confirms after `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
@@ -618,7 +614,7 @@ class ClaudeCodeAdapter:
         issue #258) all build from this, so a daemon resume is as fully identified as a
         fresh one — ``--resume`` does not inherit the original spawn env."""
         return harness_shared.build_identity_env(
-            preamble, chunk_id, session_id, self._env_passthrough, elicitation=elicitation
+            preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
         )
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:

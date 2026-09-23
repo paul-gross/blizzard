@@ -79,6 +79,8 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     directory = HostDirectory(directory, dir_option).path
     with click_exception_on(ConfigError):
         config = RunnerConfig.load(Path(directory), host=host_, port=port)
+    for missing in config.missing_worker_path_prepend_entries:
+        click.echo(f"warning: [worker] path_prepend entry does not exist: {missing}")
     with click_exception_on(RevisionMismatchError):
         ensure_current_revision(config)
     # One broker for the process (D2): `host` is the one composer building both the
