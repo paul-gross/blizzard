@@ -1,6 +1,6 @@
-"""``blizzard runner analytics`` — a worker's own routine-run read of the file, skill,
-agent-type, and node usage counts, and the per-node and per-graph spend summaries, over
-a window it names (blizzard#545)."""
+"""``blizzard runner analytics`` — a worker's own routine-run read of the fleet-wide file,
+skill, agent-type, and node usage counts, and the per-node and per-graph spend summaries,
+over a window it names (blizzard#545)."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ from blizzard.runner.cli.worker_call import WorkerCall
 
 @click.group("analytics")
 def analytics_group() -> None:
-    """Worker: read this run's own usage-counts and spend summaries over a window —
-    the routine and scope are both derived server-side from the worker's own lease, so
-    no verb here takes a flag naming either."""
+    """Worker: read fleet-wide usage-counts and spend summaries over a window — access
+    is gated server-side on the worker's own lease naming a routine-run chunk, but the
+    rows returned are fleet-wide rollups, not scoped to that run."""
 
 
 @analytics_group.group("counts")

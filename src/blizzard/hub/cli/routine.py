@@ -272,7 +272,7 @@ class TrendDetail:
 
 
 def _utc_query_value(value: datetime) -> str:
-    """See `src/blizzard/hub/cli/analytics.py`'s own `_utc_query_value` (D6)."""
+    """See `blizzard.cli.window.utc_query_value` (D6)."""
     return iso_utc(value.astimezone(UTC))
 
 

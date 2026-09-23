@@ -20,6 +20,13 @@ refusing an unresolved or wrong-runner token even under `warn`; the capability-m
 (`POST /api/fleet/queue/peek`) refuses the same way, demanding a resolvable principal in every mode rather than
 answering an unenrolled runner a permanently empty queue it could mistake for an idle fleet.
 
+The chunk-scoped fleet reads — garden findings/proposals and the six analytics counts/spend reads
+(`GET /api/fleet/chunks/{chunk_id}/garden/...`, `.../analytics/...`) — take the opposite position: they serve an
+unresolved token under `warn` like any other fleet route, an accepted exposure rather than an oversight. Each is
+confined only to the chunk carrying a routine run's context, never to the calling runner's own identity, so a
+resolved principal would add no narrowing a wrong-runner token could exploit; `enforce` still closes the window the
+same way it does for the rest of the fleet router.
+
 ## Enrollment
 
 Enrollment requires prior registration: a runner registers itself with the hub on its own pull, reporting the
