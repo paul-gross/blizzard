@@ -3785,6 +3785,89 @@
         "title": "GardenProposalClosureView",
         "type": "object"
       },
+      "GardenProposalCountsRowView": {
+        "description": "One routine/class pair's garden-proposal counts over the requested window.",
+        "properties": {
+          "accepted_with_item": {
+            "title": "Accepted With Item",
+            "type": "integer"
+          },
+          "accepted_without_item": {
+            "title": "Accepted Without Item",
+            "type": "integer"
+          },
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "routine_name": {
+            "title": "Routine Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "routine_name",
+          "class",
+          "open",
+          "passed",
+          "accepted_with_item",
+          "accepted_without_item",
+          "created"
+        ],
+        "title": "GardenProposalCountsRowView",
+        "type": "object"
+      },
+      "GardenProposalCountsView": {
+        "description": "`GET /api/routines/proposal-counts`'s own response \u2014 `routine` echoes the\noptional filter, `None` when unfiltered.",
+        "properties": {
+          "routine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/GardenProposalCountsRowView"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until",
+          "routine",
+          "rows"
+        ],
+        "title": "GardenProposalCountsView",
+        "type": "object"
+      },
       "GardenProposalItemOutcome": {
         "description": "Whether an accepted proposal minted a work item \u2014 recorded positively rather than\ninferred from an absent link, so a declined mint reads as a decision, not a gap.",
         "enum": [
@@ -16031,6 +16114,74 @@
           }
         },
         "summary": "Create Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/proposal-counts": {
+      "get": {
+        "description": "Garden-proposal counts (blizzard#547) per routine and class over `[since,\nuntil)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum. `routine` narrows to one routine by name when given; 404 on\nan unknown one. 422 on a malformed instant or `until <= since`. Declared ahead of\n`GET /routines/{routine_id}` so the literal path wins (this file's own routing-order\nrule).",
+        "operationId": "routine_proposal_counts_api_routines_proposal_counts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": true,
+            "schema": {
+              "title": "Until",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "routine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Routine"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalCountsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Routine Proposal Counts",
         "tags": [
           "routines"
         ]

@@ -79,6 +79,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/routines/{routine_id}"): FLEET_VIEW,
     ("PATCH", "/api/routines/{routine_id}"): GRAPH_EDIT,
     ("GET", "/api/routines/trend"): FLEET_VIEW,  # blizzard#394 Phase 4
+    ("GET", "/api/routines/proposal-counts"): FLEET_VIEW,  # blizzard#547 Phase 2
     ("GET", "/api/routines/{routine_id}/sweeps"): FLEET_VIEW,
     # A routine's scope membership (blizzard#488) — reads take FLEET_VIEW, writes take
     # GRAPH_EDIT, the same split as scopes/routines themselves (D8).

@@ -49,6 +49,27 @@ class GardenProposal:
 
 
 @dataclass(frozen=True)
+class GardenProposalCounts:
+    """One routine/class pair's garden-proposal counts over a window (blizzard#547),
+    split by current closure state — `open` (no closure row), `passed`
+    (`closure=passed`), `accepted_with_item` (`closure=accepted`,
+    `item_outcome=minted`), `accepted_without_item` (`closure=accepted`,
+    `item_outcome=declined`). `created` is always their sum — derived, never a stored or
+    passed-in field, so it can never disagree with the four it sums."""
+
+    routine_name: str
+    class_: str
+    open: int
+    passed: int
+    accepted_with_item: int
+    accepted_without_item: int
+
+    @property
+    def created(self) -> int:
+        return self.open + self.passed + self.accepted_with_item + self.accepted_without_item
+
+
+@dataclass(frozen=True)
 class GardenProposalPage:
     """A bounded, keyset-paginated page of :meth:`IReadGardenProposalRepository.list_page`
     (blizzard#526 D4) — ``next_cursor`` is ``None`` on the last one."""
@@ -77,10 +98,13 @@ class IReadGardenProposalRepository(Protocol):
         narrowed further."""
         ...
 
-    def count_by_class(self, routine_name: str, class_: str) -> int:
-        """How often `class_` recurs among `routine_name`'s proposals
-        (blizzard-context:/domain/findings-and-proposals.md §`class` and `locus` are
-        opaque) — a count, never the rows themselves."""
+    def counts_by_class(
+        self, *, since: datetime, until: datetime, routine_name: str | None = None
+    ) -> list[GardenProposalCounts]:
+        """Garden-proposal counts (blizzard#547) grouped by routine and class, over
+        `[since, until)` on `created_at` — current closure state, not closure time.
+        `routine_name` narrows to one routine when given, else every routine. Rows
+        ordered `(routine_name, class_)`."""
         ...
 
 

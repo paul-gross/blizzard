@@ -21,6 +21,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.garden_proposals import GardenProposalCounts
 from blizzard.hub.domain.garden_sweeps import GardenSweeps
 from blizzard.hub.domain.garden_trend import Trend
 from blizzard.hub.domain.ingest import IngestConflict
@@ -37,6 +38,7 @@ from blizzard.hub.domain.routines import (
 from blizzard.hub.domain.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.wire.chunk import ChunkIngestConflict
+from blizzard.wire.garden_proposal_counts import GardenProposalCountsRowView, GardenProposalCountsView
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
 from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
 from blizzard.wire.routine import (
@@ -217,6 +219,51 @@ def routine_trend(
         introduced_boundary=window.introduced_boundary,
     )
     return _trend_view(trend)
+
+
+def _proposal_counts_row_view(counts: GardenProposalCounts) -> GardenProposalCountsRowView:
+    # `class_`'s alias is the Python keyword `class` — constructed by alias via
+    # `model_validate`, the `garden_runs.py` `_set_delta_view` shape.
+    return GardenProposalCountsRowView.model_validate(
+        {
+            "routine_name": counts.routine_name,
+            "class": counts.class_,
+            "open": counts.open,
+            "passed": counts.passed,
+            "accepted_with_item": counts.accepted_with_item,
+            "accepted_without_item": counts.accepted_without_item,
+            "created": counts.created,
+        }
+    )
+
+
+@router.get(
+    "/routines/proposal-counts", response_model=GardenProposalCountsView, dependencies=[Depends(require(FLEET_VIEW))]
+)
+def routine_proposal_counts(
+    services: Annotated[HubServices, Depends(get_services)],
+    since: Annotated[str, Query()],
+    until: Annotated[str, Query()],
+    routine: Annotated[str | None, Query()] = None,
+) -> GardenProposalCountsView:
+    """Garden-proposal counts (blizzard#547) per routine and class over `[since,
+    until)`, split into open/passed/accepted-with-item/accepted-without-item —
+    `created` is their sum. `routine` narrows to one routine by name when given; 404 on
+    an unknown one. 422 on a malformed instant or `until <= since`. Declared ahead of
+    `GET /routines/{routine_id}` so the literal path wins (this file's own routing-order
+    rule)."""
+    parsed_since = _parse_instant(since, field="since")
+    parsed_until = _parse_instant(until, field="until")
+    _require_until_after_since(parsed_since, parsed_until)
+    if routine is not None and services.routines.get_by_name(routine) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
+    rows = services.garden_proposals.counts_by_class(since=parsed_since, until=parsed_until, routine_name=routine)
+    return GardenProposalCountsView(
+        since=iso_utc(parsed_since),
+        until=iso_utc(parsed_until),
+        routine=routine,
+        rows=[_proposal_counts_row_view(c) for c in rows],
+    )
 
 
 @router.get("/routines/{routine_id}", response_model=RoutineView, dependencies=[Depends(require(FLEET_VIEW))])
