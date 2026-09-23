@@ -193,10 +193,10 @@
           "short_help": "Worker: read one of the spend summaries."
         }
       },
-      "help": "Worker: read this run's own usage-counts and spend summaries over a window \u2014\nthe routine and scope are both derived server-side from the worker's own lease, so\nno verb here takes a flag naming either.",
+      "help": "Worker: read fleet-wide usage-counts and spend summaries over a window \u2014 access\nis gated server-side on the worker's own lease naming a routine-run chunk, but the\nrows returned are fleet-wide rollups, not scoped to that run.",
       "params": [],
       "path": "runner analytics",
-      "short_help": "Worker: read this run's own usage-counts and spend summaries over a window \u2014 the routine and scope are both derived server-side from the worker's own lease, so no verb here takes a flag naming either."
+      "short_help": "Worker: read fleet-wide usage-counts and spend summaries over a window \u2014 access is gated server-side on the worker's own lease naming a routine-run chunk, but the rows returned are fleet-wide rollups, not scoped to that run."
     },
     "artifact": {
       "commands": {

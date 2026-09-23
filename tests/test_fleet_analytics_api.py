@@ -9,7 +9,7 @@ routes still refuse a runner principal (the existing sweep in ``test_analytics_e
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -191,7 +191,9 @@ def test_422s_without_since(tmp_path: Path, suffix: str) -> None:
 
 
 @pytest.mark.parametrize("suffix", _ROUTES)
-def test_until_alone_is_accepted(tmp_path: Path, suffix: str) -> None:
+def test_a_since_until_pair_is_accepted(tmp_path: Path, suffix: str) -> None:
+    """`until` is optional alongside the required `since` — supplying both 200s. This
+    proves nothing about `until` narrowing the query; that's the pair of tests below."""
     hub, chunk_id = _seeded_hub(tmp_path)
     resp = hub.client.get(
         _fleet_path(chunk_id, suffix), params={"since": "2020-01-01T00:00:00Z", "until": "2030-01-01T00:00:00Z"}
@@ -230,6 +232,43 @@ def test_a_window_excluding_the_seed_returns_no_rows(tmp_path: Path, suffix: str
     key = "counts" if suffix.startswith("counts/") else "spend"
     assert fleet.json()[key] == []
     assert fleet.json() == operator.json()
+
+
+@pytest.mark.parametrize("suffix", _COUNTS_ROUTES)
+def test_until_narrows_the_window(tmp_path: Path, suffix: str) -> None:
+    """`until` must reach the query, not just gate a 200 (blizzard#545 review F4): a
+    window ending before the seed's later turns excludes the rows they alone produce,
+    so deleting `until` from `AnalyticsWindow.scope` would turn this case red."""
+    hub, chunk_id = _seeded_hub(tmp_path)
+    since = {"since": "2020-01-01T00:00:00Z"}
+
+    full = hub.client.get(_fleet_path(chunk_id, suffix), params=since)
+    narrowed = hub.client.get(_fleet_path(chunk_id, suffix), params={**since, "until": "2026-08-12T09:30:00Z"})
+
+    assert full.status_code == 200, full.text
+    assert narrowed.status_code == 200, narrowed.text
+    assert narrowed.json() != full.json()
+
+
+@pytest.mark.parametrize("suffix", _SPEND_ROUTES)
+def test_until_narrows_the_window_for_spend(tmp_path: Path, suffix: str) -> None:
+    """`until` narrows the spend rollups too (blizzard#545 review F4): a window ending
+    before the second usage fact's `recorded_at` excludes the cost it alone adds."""
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    node_id = "nd_build"
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=1, cost_usd=0.1)
+    hub.clock.advance(timedelta(days=1))
+    cutoff = hub.clock.now().isoformat()
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=0.2)
+    since = {"since": "2020-01-01T00:00:00Z"}
+
+    full = hub.client.get(_fleet_path(chunk_id, suffix), params=since)
+    narrowed = hub.client.get(_fleet_path(chunk_id, suffix), params={**since, "until": cutoff})
+
+    assert full.status_code == 200, full.text
+    assert narrowed.status_code == 200, narrowed.text
+    assert narrowed.json() != full.json()
 
 
 # --- no extra filter reaches the route ----------------------------------------------

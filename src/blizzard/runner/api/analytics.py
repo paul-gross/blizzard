@@ -17,6 +17,13 @@ from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendRespo
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
+# A single-attempt-sized whole-forward budget (matching HubProxy's own per-attempt bound),
+# not the module's larger multi-retry ceiling: an unindexed counts/spend scan (blizzard#545)
+# can legitimately run the whole per-attempt timeout, and retrying it would open a second
+# pool connection while the first is still draining. A fast failure (a gateway mid-swap)
+# still has budget left over to retry; a genuinely slow scan does not.
+_ANALYTICS_HUB_TIMEOUT = 15.0
+
 
 def _window_params(since: str | None, until: str | None) -> dict[str, str]:
     return {k: v for k, v in {"since": since, "until": until}.items() if v is not None}
@@ -30,6 +37,7 @@ def _counts(
         f"/api/fleet/chunks/{lease.chunk_id}/analytics/counts/{suffix}",
         params=_window_params(since, until),
         chunk_id=lease.chunk_id,
+        timeout=_ANALYTICS_HUB_TIMEOUT,
     )
     return AnalyticsCountsResponse.model_validate(upstream.json())
 
@@ -42,6 +50,7 @@ def _spend(
         f"/api/fleet/chunks/{lease.chunk_id}/analytics/spend/{suffix}",
         params=_window_params(since, until),
         chunk_id=lease.chunk_id,
+        timeout=_ANALYTICS_HUB_TIMEOUT,
     )
     return AnalyticsSpendResponse.model_validate(upstream.json())
 
