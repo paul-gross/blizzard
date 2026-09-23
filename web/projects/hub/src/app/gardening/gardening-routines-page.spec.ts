@@ -124,6 +124,12 @@ describe('GardeningRoutinesPage', () => {
     expect(el.querySelector('[data-testid="gardening-routine-row-nightly"]')?.textContent).toContain('blocked');
   });
 
+  it('marks a retired routine in the list', async () => {
+    const { el } = await render({ routines: [{ ...ROUTINE, retired: true }] });
+
+    expect(el.querySelector('[data-testid="gardening-routine-row-nightly"]')?.textContent).toContain('retired');
+  });
+
   it('navigates to the routine route when a routine row is picked', async () => {
     const { fixture, router, el } = await render();
 

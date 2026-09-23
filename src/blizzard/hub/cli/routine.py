@@ -30,7 +30,11 @@ class RoutineListing(Listing):
     empty = "no routines yet"
 
     def line(self, row: Any) -> str:
-        return f"{row['routine_id']}  name={row['name']}  graph={row['graph_name']}  scope={row['default_scope_slug']}"
+        marker = "  retired" if row.get("retired") else ""
+        return (
+            f"{row['routine_id']}  name={row['name']}  graph={row['graph_name']}  "
+            f"scope={row['default_scope_slug']}{marker}"
+        )
 
 
 @dataclass(frozen=True)
@@ -94,9 +98,13 @@ def routine_create(
 
 
 @routine_group.command("list", cls=FleetCommand)
-def routine_list(cli: CliContext) -> None:
-    """List every routine, newest first — routine_id, name, graph, default scope."""
-    rows = cli.get("/api/routines", "GET /routines").json()
+@click.option("--include-retired", is_flag=True, default=False, help="Include retired routines.")
+def routine_list(cli: CliContext, include_retired: bool) -> None:
+    """List every routine, newest first — routine_id, name, graph, default scope.
+
+    Excludes a retired routine unless --include-retired."""
+    params = {"include_retired": "true"} if include_retired else None
+    rows = cli.get("/api/routines", "GET /routines", params=params).json()
     cli.show(rows, RoutineListing(rows))
 
 
@@ -207,6 +215,46 @@ def routine_scope_remove(cli: CliContext, routine_id: str, scope_slug: str) -> N
     )
 
 
+def _resolve_routine_id(cli: CliContext, name: str) -> str:
+    """Resolve NAME to its routine_id, including a retired routine — so a
+    retired routine resolves and reaches the domain's own retired refusal, not an
+    ``unknown routine`` one."""
+    rows = cli.get("/api/routines", "GET /routines", params={"include_retired": "true"}).json()
+    matched = next((r for r in rows if r["name"] == name), None)
+    if matched is None:
+        raise click.ClickException(f"unknown routine {name!r}")
+    return str(matched["routine_id"])
+
+
+@routine_group.command("retire", cls=FleetCommand)
+@click.argument("name")
+@click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
+def routine_retire(cli: CliContext, name: str, by: str) -> None:
+    """Retire routine NAME — a reversible brake; in-flight runs are untouched."""
+    _set_routine_lifecycle(cli, name, verb="retire", by=by)
+
+
+@routine_group.command("enable", cls=FleetCommand)
+@click.argument("name")
+@click.option("--by", "by", default="operator", help="Who is re-enabling (recorded on the fact).")
+def routine_enable(cli: CliContext, name: str, by: str) -> None:
+    """Re-enable a retired routine NAME."""
+    _set_routine_lifecycle(cli, name, verb="enable", by=by)
+
+
+def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str) -> None:
+    routine_id = _resolve_routine_id(cli, name)
+    resp = cli.post(
+        f"/api/routines/{routine_id}/{verb}",
+        f"POST /routines/{{id}}/{verb}",
+        json_body={"by": by},
+        on_status={404: f"unknown routine {name!r}"},
+    )
+    body = resp.json()
+    state = "retired" if body.get("retired") else "enabled"
+    cli.show_lines(body, f"routine {name!r} is now {state}")
+
+
 @routine_group.command("run", cls=FleetCommand)
 @click.argument("name")
 @click.option(
@@ -225,21 +273,23 @@ def routine_scope_remove(cli: CliContext, routine_id: str, scope_slug: str) -> N
 def routine_run(cli: CliContext, name: str, scope_slug: str | None, mode: str, note: str | None) -> None:
     """Mint, ingest, and promote a hub work item from routine NAME, in one act.
 
-    NAME is resolved to its routine_id through the routine list (D3)."""
-    rows = cli.get("/api/routines", "GET /routines").json()
-    matched = next((r for r in rows if r["name"] == name), None)
-    if matched is None:
-        raise click.ClickException(f"unknown routine {name!r}")
+    NAME is resolved to its routine_id through the routine list, including a retired
+    routine — so it reaches the domain's own retired refusal."""
+    routine_id = _resolve_routine_id(cli, name)
     resp = cli.send(
         "post",
-        f"/api/routines/{matched['routine_id']}/run",
+        f"/api/routines/{routine_id}/run",
         json_body={"scope_slug": scope_slug, "mode": mode, "note": note},
     )
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"run rejected: {cli.detail(resp, 'validation failed')}")
     if resp.status_code == httpx.codes.CONFLICT:
         raise click.ClickException(f"run refused: {cli.detail(resp, 'conflict')}")
-    cli.check(resp, "POST /routines/{id}/run", on_status={404: f"unknown routine {name!r}"})
+    cli.check(
+        resp,
+        "POST /routines/{id}/run",
+        on_status={404: f"unknown routine {name!r}", 503: f"routine {name!r} refused to run"},
+    )
     body = resp.json()
     lines = [f"minted {body['chunk_id']} from routine {name!r} — mode={body['effective_mode']}"]
     if body["downgraded"]:
@@ -347,16 +397,11 @@ class SweepsDetail:
 def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime) -> None:
     """NAME's per-scope last-swept table — its declared scope set, retired scopes
     filtered out unless already swept while linked — and its measurement series over
-    --since/--until.
-
-    NAME is resolved to its routine_id through the routine list (D3)."""
-    rows = cli.get("/api/routines", "GET /routines").json()
-    matched = next((r for r in rows if r["name"] == name), None)
-    if matched is None:
-        raise click.ClickException(f"unknown routine {name!r}")
+    --since/--until."""
+    routine_id = _resolve_routine_id(cli, name)
     resp = cli.send(
         "get",
-        f"/api/routines/{matched['routine_id']}/sweeps",
+        f"/api/routines/{routine_id}/sweeps",
         params={"since": _utc_query_value(since), "until": _utc_query_value(until)},
     )
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:

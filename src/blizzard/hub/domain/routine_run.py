@@ -22,10 +22,25 @@ from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.graph import IReadGraphRepository
 from blizzard.hub.domain.promote import tail_position
-from blizzard.hub.domain.routines import IReadRoutineScopeRepository, Routine, RoutineGraphUnresolvedError, RunMode
+from blizzard.hub.domain.routines import (
+    IReadRoutineRepository,
+    IReadRoutineScopeRepository,
+    Routine,
+    RoutineGraphUnresolvedError,
+    RunMode,
+)
 from blizzard.hub.domain.scopes import IReadScopeRepository, Scope
 from blizzard.hub.domain.work import IWriteWorkItemRepository, WorkItemAuthor, WorkItemRecord
 from blizzard.hub.domain.work_items import prepare_mint
+
+
+class RoutineRetiredError(ValueError):
+    """A run is addressed at a retired routine: refused first, before any
+    scope check — a routine that cannot run at all makes no claim about a scope."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"routine {name!r} is retired")
+        self.name = name
 
 
 class ScopeRetiredError(ValueError):
@@ -99,6 +114,7 @@ class RunService:
     def __init__(
         self,
         *,
+        routines: IReadRoutineRepository,
         scopes: IReadScopeRepository,
         routine_scopes: IReadRoutineScopeRepository,
         graphs: IReadGraphRepository,
@@ -109,6 +125,7 @@ class RunService:
         queue: IReadChunkQueueRepository,
         clock: IClock,
     ) -> None:
+        self._routines = routines
         self._scopes = scopes
         self._routine_scopes = routine_scopes
         self._graphs = graphs
@@ -118,6 +135,12 @@ class RunService:
         self._record = record
         self._queue = queue
         self._clock = clock
+
+    def refuse_if_retired(self, routine: Routine) -> None:
+        """The retired-routine refusal on its own, so an edge can apply it before it
+        resolves the run's scope — :meth:`run` applies it again first thing."""
+        if self._routines.is_retired(routine.routine_id):
+            raise RoutineRetiredError(routine.name)
 
     def run(
         self,
@@ -129,6 +152,7 @@ class RunService:
         author: WorkItemAuthor,
         statuses: Mapping[str, ChunkStatus],
     ) -> RunResult:
+        self.refuse_if_retired(routine)
         graph = self._graphs.get_enabled_by_name(routine.graph_name)
         if graph is None:
             raise RoutineGraphUnresolvedError(routine.graph_name)

@@ -6383,6 +6383,18 @@
         "title": "RoutineEditRequest",
         "type": "object"
       },
+      "RoutineLifecycleRequest": {
+        "description": "Retire or re-enable a routine \u2014 records who flipped it.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "RoutineLifecycleRequest",
+        "type": "object"
+      },
       "RoutineProposalState": {
         "description": "Which of a routine's garden proposals `OpenGardenProposalReader.list_for_routine`\nreturns: `OPEN` (the default) excludes any proposal already closed, `CLOSED` returns\nonly closed ones with their closure, `ALL` returns every proposal with its closure\nwhen one exists.",
         "enum": [
@@ -6513,7 +6525,7 @@
         "type": "object"
       },
       "RoutineView": {
-        "description": "A routine as served by the create/list/read/edit routes.",
+        "description": "A routine as served by the create/list/read/edit/lifecycle routes.",
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -6557,6 +6569,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
           },
           "routine_id": {
             "title": "Routine Id",
@@ -16115,8 +16132,20 @@
     },
     "/api/routines": {
       "get": {
-        "description": "Every routine, newest first.",
+        "description": "Every routine, newest first \u2014 a retired routine excluded by default, included and\nmarked when ``include_retired``.",
         "operationId": "list_routines_api_routines_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -16131,6 +16160,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Routines",
@@ -16468,9 +16507,115 @@
         ]
       }
     },
+    "/api/routines/{routine_id}/enable": {
+      "post": {
+        "description": "Re-enable a retired routine; idempotent, 404 on an unknown id.",
+        "operationId": "enable_routine_api_routines__routine_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutineLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
+    "/api/routines/{routine_id}/retire": {
+      "post": {
+        "description": "Retire a routine \u2014 a reversible brake; 404 on an unknown id.",
+        "operationId": "retire_routine_api_routines__routine_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "routine_id",
+            "required": true,
+            "schema": {
+              "title": "Routine Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutineLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Routine",
+        "tags": [
+          "routines"
+        ]
+      }
+    },
     "/api/routines/{routine_id}/run": {
       "post": {
-        "description": "Mint, ingest, and promote a hub work item from the routine, in one act\n(blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown\n``mode``, or an effective scope no scope row holds or outside the routine's own\nrelated set (blizzard#399 D1, D4 \u2014 never minted); 503 on a retired effective scope or\na graph name with no enabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s\nown retired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
+        "description": "Mint, ingest, and promote a hub work item from the routine, in one act\n(blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown\n``mode``, or an effective scope no scope row holds or outside the routine's own\nrelated set (blizzard#399 D1, D4 \u2014 never minted); 503 on a retired routine\n(checked first, before the mode or scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
         "operationId": "run_routine_api_routines__routine_id__run_post",
         "parameters": [
           {

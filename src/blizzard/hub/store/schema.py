@@ -224,6 +224,17 @@ routine_scopes = Table(
 
 Index("ix_routine_scopes_scope_slug", routine_scopes.c.scope_slug)
 
+# The routine's reversible retire/enable brake — scope_lifecycle_facts's own shape.
+routine_lifecycle_facts = Table(
+    "routine_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("routine_id", String, ForeignKey("routines.routine_id"), nullable=False),
+    Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
 # --- Chunks and their work refs (chunk.minted) ------------------------------
 
 chunks = Table(

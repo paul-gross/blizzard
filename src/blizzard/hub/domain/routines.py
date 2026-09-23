@@ -85,6 +85,19 @@ class IReadRoutineRepository(Protocol):
 
     def list_all(self) -> list[Routine]: ...
 
+    def is_retired(self, routine_id: str) -> bool:
+        """Whether ``routine_id``'s newest lifecycle fact reads retired.
+
+        ``False`` for a routine with no lifecycle fact at all — every freshly minted
+        routine starts enabled."""
+        ...
+
+    def retired_ids(self) -> set[str]:
+        """Every routine id whose newest lifecycle fact reads retired —
+        the bulk counterpart to :meth:`is_retired`, mirroring
+        ``IReadScopeRepository.retired_slugs``."""
+        ...
+
 
 class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
     """Read-write routine access. Only the domain layer depends on this variant."""
@@ -106,6 +119,11 @@ class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
         default_harnesses: list[str],
     ) -> Routine:
         """Change everything but ``name``/``routine_id`` in place (D3)."""
+        ...
+
+    def record_lifecycle(self, routine_id: str, *, retired: bool, at: datetime, by: str) -> None:
+        """Append a ``routine.retired``/``routine.enabled`` fact — newest-fact-wins
+        . Never touches the ``routines`` row itself."""
         ...
 
 
@@ -241,3 +259,22 @@ class RoutineScopeMembership:
         if scope.slug == routine.default_scope_slug:
             raise RoutineDefaultScopeUnlinkError(routine.routine_id, scope.slug)
         self._routine_scopes.unlink(routine.routine_id, scope.slug)
+
+
+class RoutineLifecycle:
+    """Set or clear a routine's retired brake without touching its row — the
+    ``ScopeLifecycle`` shape."""
+
+    def __init__(self, *, routines: IWriteRoutineRepository, clock: IClock) -> None:
+        self._routines = routines
+        self._clock = clock
+
+    def retire(self, routine: Routine, *, by: str) -> None:
+        """Append ``routine.retired``. Idempotent: retiring an already-retired routine
+        just appends another ``retired=True`` fact, a harmless no-op via
+        newest-fact-wins."""
+        self._routines.record_lifecycle(routine.routine_id, retired=True, at=self._clock.now(), by=by)
+
+    def enable(self, routine: Routine, *, by: str) -> None:
+        """Append ``routine.enabled``. Idempotent on an already-enabled routine."""
+        self._routines.record_lifecycle(routine.routine_id, retired=False, at=self._clock.now(), by=by)

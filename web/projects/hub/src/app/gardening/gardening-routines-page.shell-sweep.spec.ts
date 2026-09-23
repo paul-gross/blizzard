@@ -246,6 +246,57 @@ describe('gardening routines page layout shell sweep (web:shell-sweep, blizzard#
   });
 });
 
+describe('gardening routines page retired-marker shell sweep (web:shell-sweep)', () => {
+  it.each([1280, 390, 320])('renders a retired routine row with no horizontal overflow at %ipx', async (width) => {
+    const RETIRED_ROUTINE = { ...ROUTINE, routine_id: 'rtn_2', name: 'weekly-audit', retired: true };
+    const stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/routines') return [ROUTINE, RETIRED_ROUTINE];
+      if (method === 'GET' && path === '/api/graphs') return [EFFECTIVE_GRAPH_SUMMARY];
+      if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
+      if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
+      if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return [ROUTINE.default_scope_slug];
+      if (method === 'GET' && path === '/api/routines/trend') return TREND;
+      if (method === 'GET' && path === '/api/scopes') return SCOPES;
+      if (method === 'GET' && path === '/api/me') return ME;
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [TestRoutinesShellHost],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter(routes),
+      ],
+    }).compileComponents();
+    const viewport = TestBed.inject(ViewportService);
+    viewport.setOverride('desktop');
+    const fixture = TestBed.createComponent(TestRoutinesShellHost);
+    await TestBed.inject(Router).navigateByUrl('/gardening/routines');
+    await settle(fixture, 12);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(width, 800);
+      await settle(fixture);
+
+      const row = root.querySelector<HTMLElement>('[data-testid="gardening-routine-row-weekly-audit"]')!;
+      expect(row, `${width}px: no retired routine row in the DOM`).not.toBeNull();
+      expect(row.textContent).toContain('retired');
+      const left = root.querySelector<HTMLElement>('.gr-left')!;
+      expect(
+        left.scrollWidth,
+        `${width}px: routine list overflows horizontally (${left.scrollWidth} > ${left.clientWidth})`,
+      ).toBeLessThanOrEqual(left.clientWidth);
+    } finally {
+      viewport.setOverride('auto');
+      root.remove();
+      stub.restore();
+    }
+  });
+});
+
 describe('gardening routines page independent-scroll shell sweep (web:shell-sweep)', () => {
   it('scrolls the left column and the right column separately above 720px, without dragging one along with the other', async () => {
     const MANY_ROUTINES = Array.from({ length: 30 }, (_, i) => ({

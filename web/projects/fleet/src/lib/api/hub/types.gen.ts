@@ -4070,6 +4070,18 @@ export type RoutineEditRequest = {
 };
 
 /**
+ * RoutineLifecycleRequest
+ *
+ * Retire or re-enable a routine — records who flipped it.
+ */
+export type RoutineLifecycleRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
  * RoutineProposalState
  *
  * Which of a routine's garden proposals `OpenGardenProposalReader.list_for_routine`
@@ -4165,7 +4177,7 @@ export type RoutineRunResponse = {
 /**
  * RoutineView
  *
- * A routine as served by the create/list/read/edit routes.
+ * A routine as served by the create/list/read/edit/lifecycle routes.
  */
 export type RoutineView = {
     /**
@@ -4196,6 +4208,10 @@ export type RoutineView = {
      * Name
      */
     name: string;
+    /**
+     * Retired
+     */
+    retired?: boolean;
     /**
      * Routine Id
      */
@@ -9512,9 +9528,23 @@ export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiR
 export type ListRoutinesApiRoutinesGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
     url: '/api/routines';
 };
+
+export type ListRoutinesApiRoutinesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRoutinesApiRoutinesGetError = ListRoutinesApiRoutinesGetErrors[keyof ListRoutinesApiRoutinesGetErrors];
 
 export type ListRoutinesApiRoutinesGetResponses = {
     /**
@@ -9727,6 +9757,66 @@ export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses = {
 };
 
 export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponse = RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses[keyof RoutineBaselinesApiRoutinesRoutineIdBaselinesGetResponses];
+
+export type EnableRoutineApiRoutinesRoutineIdEnablePostData = {
+    body: RoutineLifecycleRequest;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}/enable';
+};
+
+export type EnableRoutineApiRoutinesRoutineIdEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableRoutineApiRoutinesRoutineIdEnablePostError = EnableRoutineApiRoutinesRoutineIdEnablePostErrors[keyof EnableRoutineApiRoutinesRoutineIdEnablePostErrors];
+
+export type EnableRoutineApiRoutinesRoutineIdEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: RoutineView;
+};
+
+export type EnableRoutineApiRoutinesRoutineIdEnablePostResponse = EnableRoutineApiRoutinesRoutineIdEnablePostResponses[keyof EnableRoutineApiRoutinesRoutineIdEnablePostResponses];
+
+export type RetireRoutineApiRoutinesRoutineIdRetirePostData = {
+    body: RoutineLifecycleRequest;
+    path: {
+        /**
+         * Routine Id
+         */
+        routine_id: string;
+    };
+    query?: never;
+    url: '/api/routines/{routine_id}/retire';
+};
+
+export type RetireRoutineApiRoutinesRoutineIdRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireRoutineApiRoutinesRoutineIdRetirePostError = RetireRoutineApiRoutinesRoutineIdRetirePostErrors[keyof RetireRoutineApiRoutinesRoutineIdRetirePostErrors];
+
+export type RetireRoutineApiRoutinesRoutineIdRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: RoutineView;
+};
+
+export type RetireRoutineApiRoutinesRoutineIdRetirePostResponse = RetireRoutineApiRoutinesRoutineIdRetirePostResponses[keyof RetireRoutineApiRoutinesRoutineIdRetirePostResponses];
 
 export type RunRoutineApiRoutinesRoutineIdRunPostData = {
     body: RoutineRunRequest;

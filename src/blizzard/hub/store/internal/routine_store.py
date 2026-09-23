@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import insert, select, update
 
 from blizzard.hub.domain.routines import IWriteRoutineRepository, Routine
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.schema import routines
+from blizzard.hub.store.schema import routine_lifecycle_facts, routines
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,42 @@ class RoutineStore:
         with self._store.read("list_all") as conn:
             rows = conn.execute(select(routines).order_by(routines.c.created_at.desc())).all()
         return [self._of(row) for row in rows]
+
+    def is_retired(self, routine_id: str) -> bool:
+        with self._store.read("is_retired") as conn:
+            return self._is_retired(conn, routine_id)
+
+    def _is_retired(self, conn, routine_id: str) -> bool:  # type: ignore[no-untyped-def]
+        """Newest ``routine_lifecycle_facts`` row for ``routine_id`` wins; no row reads
+        not-retired (a freshly minted routine starts enabled)."""
+        row = conn.execute(
+            select(routine_lifecycle_facts.c.retired)
+            .where(routine_lifecycle_facts.c.routine_id == routine_id)
+            .order_by(routine_lifecycle_facts.c.id.desc())
+            .limit(1)
+        ).first()
+        return bool(row.retired) if row is not None else False
+
+    def retired_ids(self) -> set[str]:
+        """Every routine id whose newest lifecycle fact reads retired — mirrors
+        ``ScopeStore.retired_slugs``."""
+        with self._store.read("retired_ids") as conn:
+            rows = conn.execute(
+                select(routine_lifecycle_facts.c.routine_id, routine_lifecycle_facts.c.retired).order_by(
+                    routine_lifecycle_facts.c.id
+                )
+            ).all()
+        newest: dict[str, bool] = {}
+        for row in rows:
+            newest[row.routine_id] = row.retired  # newest-fact-wins: ascending id order overwrites
+        return {routine_id for routine_id, retired in newest.items() if retired}
+
+    def record_lifecycle(self, routine_id: str, *, retired: bool, at: datetime, by: str) -> None:
+        """Append a ``routine.retired``/``routine.enabled`` fact — newest-fact-wins."""
+        with self._store.write("record_lifecycle") as conn:
+            conn.execute(
+                insert(routine_lifecycle_facts).values(routine_id=routine_id, retired=retired, set_at=at, set_by=by)
+            )
 
     @staticmethod
     def _of(row) -> Routine:  # type: ignore[no-untyped-def]

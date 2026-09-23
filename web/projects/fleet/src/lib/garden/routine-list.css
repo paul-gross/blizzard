@@ -42,7 +42,8 @@
   color: var(--label-dim);
   white-space: nowrap;
 }
-.rt-blocked {
+.rt-blocked,
+.rt-retired {
   display: inline-block;
   color: var(--red);
   font-size: var(--fs-label);

@@ -4,12 +4,19 @@ import { TestBed } from '@angular/core/testing';
 import { FleetRoutineList, type RoutineListRowVm } from './routine-list';
 
 const ROWS: readonly RoutineListRowVm[] = [
-  { routineId: 'rtn_01ABCDEFGHJKMNPQRSTVWXYZ0123', name: 'nightly', graphName: 'garden-routine', blocked: false },
+  {
+    routineId: 'rtn_01ABCDEFGHJKMNPQRSTVWXYZ0123',
+    name: 'nightly',
+    graphName: 'garden-routine',
+    blocked: false,
+    retired: false,
+  },
   {
     routineId: 'rtn_01FEDCBAZYXWVUTSRQPNMKJHG9876',
     name: 'weekly-audit',
     graphName: 'architecture',
     blocked: true,
+    retired: false,
   },
 ];
 
@@ -58,6 +65,19 @@ describe('FleetRoutineList', () => {
 
     expect(el.querySelector('[data-testid="gardening-routine-row-nightly"]')?.textContent).not.toContain('blocked');
     expect(el.querySelector('[data-testid="gardening-routine-row-weekly-audit"]')?.textContent).toContain('blocked');
+  });
+
+  it('marks a retired routine distinctly from an enabled one', async () => {
+    const fixture = await mount({
+      rows: [
+        { routineId: 'rtn_01ABCDEFGHJKMNPQRSTVWXYZ0123', name: 'nightly', graphName: 'garden-routine', blocked: false, retired: false },
+        { routineId: 'rtn_01FEDCBAZYXWVUTSRQPNMKJHG9876', name: 'weekly-audit', graphName: 'architecture', blocked: false, retired: true },
+      ],
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-row-nightly"]')?.textContent).not.toContain('retired');
+    expect(el.querySelector('[data-testid="gardening-routine-row-weekly-audit"]')?.textContent).toContain('retired');
   });
 
   it('reflects selectedName onto the matching row only', async () => {
