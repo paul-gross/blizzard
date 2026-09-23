@@ -111,6 +111,9 @@ jobs:
         name: structural gate
         run: cd web && npm run structural-gate
       - if: steps.detect.outputs.present == 'true'
+        name: bundle composition
+        run: cd web && npm run bundle-check
+      - if: steps.detect.outputs.present == 'true'
         name: generated-client drift
         run: |
           cd web && npm run generate:client
