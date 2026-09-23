@@ -37,7 +37,9 @@ routine running the `garden-routine` graph resolves its axis from this same `nam
 registry must declare an entry under it. Naming one the registry does not declare is not refused at create time: every
 run instead bails out with a single `undeclared-axis` finding, at full model cost. Because `name` is immutable, that
 cannot be fixed with `routine edit` either — only a new routine, starting its own baselines and trend history over,
-corrects it.
+corrects it. A routine running the `ideation` graph resolves its axis the same way, but an undeclared axis parks the
+run on a question instead: the run asks and waits rather than filing a finding, and delivers nothing until the
+registry declares the axis or the run gives up on that pass.
 
 `show` also reports the routine's full linked-scopes list, beside its default scope, graph, and model/effort fields. A
 routine sweeps a set of scopes, not only its default; `blizzard hub routine scope add <routine_id> <scope_slug>` and
