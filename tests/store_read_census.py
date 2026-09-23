@@ -1809,8 +1809,8 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadGardenProposalRepository, "list_for_routine"): lambda w: w.hub.services.garden_proposals.list_for_routine(
         "gardening"
     ),
-    (IReadGardenProposalRepository, "count_by_class"): lambda w: w.hub.services.garden_proposals.count_by_class(
-        "gardening", "remediate"
+    (IReadGardenProposalRepository, "counts_by_class"): lambda w: w.hub.services.garden_proposals.counts_by_class(
+        since=_ht(11), until=_ht(14)
     ),
     (IReadGardenRunRepository, "runs_in_window"): lambda w: w.garden_run.runs_in_window(
         since=_HUB_BASE, until=_HUB_UNTIL

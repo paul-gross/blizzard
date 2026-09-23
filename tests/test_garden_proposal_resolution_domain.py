@@ -24,7 +24,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalItemOutcome,
 )
 from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
-from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalPage
+from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalCounts, GardenProposalPage
 from blizzard.hub.domain.work import Chunk, WorkRef
 
 pytestmark = pytest.mark.unit
@@ -118,7 +118,9 @@ class _FakeProposals:
     def list_page(self, *, cursor: str | None = None, limit: int) -> GardenProposalPage:
         raise NotImplementedError
 
-    def count_by_class(self, routine_name: str, class_: str) -> int:
+    def counts_by_class(
+        self, *, since: datetime, until: datetime, routine_name: str | None = None
+    ) -> list[GardenProposalCounts]:
         raise NotImplementedError
 
 

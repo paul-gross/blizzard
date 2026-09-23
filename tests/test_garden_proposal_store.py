@@ -3,7 +3,7 @@ tier). Migrated-to-head sqlite-on-disk — the ``tests/test_routine_store.py`` s
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -12,14 +12,63 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
+from blizzard.hub.domain.garden_proposals import GardenProposalCounts
+from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from tests.support import count_queries, hub_store_connections
 
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
+
+
+def _pass(engine: Engine, proposal_id: str, *, at: datetime = _NOW) -> None:
+    store_connections = hub_store_connections(engine)
+    with store_connections.write("seed_pass") as conn:
+        insert_garden_proposal_closure_row(
+            conn,
+            proposal_id=proposal_id,
+            closure=GardenProposalClosureKind.PASSED,
+            reason="not worth it",
+            closed_by="operator",
+            at=at,
+            item_outcome=None,
+            pointer=None,
+        )
+
+
+def _accept_decline(engine: Engine, proposal_id: str, *, at: datetime = _NOW) -> None:
+    store_connections = hub_store_connections(engine)
+    with store_connections.write("seed_accept_decline") as conn:
+        insert_garden_proposal_closure_row(
+            conn,
+            proposal_id=proposal_id,
+            closure=GardenProposalClosureKind.ACCEPTED,
+            reason=None,
+            closed_by="operator",
+            at=at,
+            item_outcome=GardenProposalItemOutcome.DECLINED,
+            pointer=None,
+        )
+
+
+def _accept_mint(engine: Engine, proposal_id: str, *, at: datetime = _NOW) -> None:
+    store_connections = hub_store_connections(engine)
+    with store_connections.write("seed_accept_mint") as conn:
+        insert_garden_proposal_closure_row(
+            conn,
+            proposal_id=proposal_id,
+            closure=GardenProposalClosureKind.ACCEPTED,
+            reason=None,
+            closed_by="operator",
+            at=at,
+            item_outcome=GardenProposalItemOutcome.MINTED,
+            pointer=WorkRef(source="hub", ref=proposal_id),
+        )
 
 
 def _store_and_engine(tmp_path: Path) -> tuple[GardenProposalStore, Engine]:
@@ -158,7 +207,7 @@ def test_list_for_routine_is_empty_for_an_unseen_routine(tmp_path: Path) -> None
     assert store.list_for_routine("ghost-routine") == []
 
 
-def test_count_by_class_counts_across_the_named_routine(tmp_path: Path) -> None:
+def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.create(
         "gprop_1", routine_name="nightly", class_="fix-the-source", title="t1", body="b", findings=["fin_1"], at=_NOW
@@ -167,10 +216,120 @@ def test_count_by_class_counts_across_the_named_routine(tmp_path: Path) -> None:
         "gprop_2", routine_name="nightly", class_="fix-the-source", title="t2", body="b", findings=["fin_2"], at=_NOW
     )
     store.create("gprop_3", routine_name="nightly", class_="wontfix", title="t3", body="b", findings=["fin_1"], at=_NOW)
+    store.create(
+        "gprop_4",
+        routine_name="other-routine",
+        class_="fix-the-source",
+        title="t4",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
 
-    assert store.count_by_class("nightly", "fix-the-source") == 2
-    assert store.count_by_class("nightly", "wontfix") == 1
-    assert store.count_by_class("nightly", "unseen-class") == 0
+    rows = store.counts_by_class(since=_NOW - timedelta(hours=1), until=_NOW + timedelta(hours=1))
+
+    assert rows == [
+        GardenProposalCounts(
+            routine_name="nightly",
+            class_="fix-the-source",
+            open=2,
+            passed=0,
+            accepted_with_item=0,
+            accepted_without_item=0,
+        ),
+        GardenProposalCounts(
+            routine_name="nightly", class_="wontfix", open=1, passed=0, accepted_with_item=0, accepted_without_item=0
+        ),
+        GardenProposalCounts(
+            routine_name="other-routine",
+            class_="fix-the-source",
+            open=1,
+            passed=0,
+            accepted_with_item=0,
+            accepted_without_item=0,
+        ),
+    ]
+    assert [r.created for r in rows] == [2, 1, 1]
+
+
+def test_counts_by_class_since_is_inclusive_and_until_is_exclusive(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    since = _NOW
+    until = _NOW + timedelta(hours=1)
+    store.create(
+        "gprop_at_since", routine_name="nightly", class_="c", title="t1", body="b", findings=["fin_1"], at=since
+    )
+    store.create(
+        "gprop_at_until", routine_name="nightly", class_="c", title="t2", body="b", findings=["fin_2"], at=until
+    )
+
+    rows = store.counts_by_class(since=since, until=until)
+
+    assert rows == [
+        GardenProposalCounts(
+            routine_name="nightly", class_="c", open=1, passed=0, accepted_with_item=0, accepted_without_item=0
+        )
+    ]
+
+
+def test_counts_by_class_splits_minted_and_declined_accepts(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    store.create("gprop_open", routine_name="nightly", class_="c", title="t1", body="b", findings=["fin_1"], at=_NOW)
+    store.create("gprop_passed", routine_name="nightly", class_="c", title="t2", body="b", findings=["fin_2"], at=_NOW)
+    store.create("gprop_minted", routine_name="nightly", class_="c", title="t3", body="b", findings=["fin_1"], at=_NOW)
+    store.create(
+        "gprop_declined", routine_name="nightly", class_="c", title="t4", body="b", findings=["fin_2"], at=_NOW
+    )
+    _pass(engine, "gprop_passed")
+    _accept_mint(engine, "gprop_minted")
+    _accept_decline(engine, "gprop_declined")
+
+    rows = store.counts_by_class(since=_NOW - timedelta(hours=1), until=_NOW + timedelta(hours=1))
+
+    assert rows == [
+        GardenProposalCounts(
+            routine_name="nightly", class_="c", open=1, passed=1, accepted_with_item=1, accepted_without_item=1
+        )
+    ]
+    assert rows[0].created == 4
+
+
+def test_counts_by_class_is_empty_for_a_routine_with_no_proposals_in_window(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    rows = store.counts_by_class(since=_NOW - timedelta(hours=1), until=_NOW + timedelta(hours=1))
+
+    assert rows == []
+
+
+def test_counts_by_class_routine_name_filter_narrows_to_one_routine(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create("gprop_1", routine_name="nightly", class_="c", title="t1", body="b", findings=["fin_1"], at=_NOW)
+    store.create("gprop_2", routine_name="other-routine", class_="c", title="t2", body="b", findings=["fin_2"], at=_NOW)
+
+    rows = store.counts_by_class(
+        since=_NOW - timedelta(hours=1), until=_NOW + timedelta(hours=1), routine_name="nightly"
+    )
+
+    assert rows == [
+        GardenProposalCounts(
+            routine_name="nightly", class_="c", open=1, passed=0, accepted_with_item=0, accepted_without_item=0
+        )
+    ]
+
+
+def test_counts_by_class_query_count_is_flat_regardless_of_proposal_count(tmp_path: Path) -> None:
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small, small_engine = _sized_store(tmp_path / "small", 5)
+    large, large_engine = _sized_store(tmp_path / "large", 15)  # 3x the small fixture
+
+    since, until = _NOW - timedelta(hours=1), _NOW + timedelta(hours=1)
+    small_count = count_queries(small_engine, lambda: small.counts_by_class(since=since, until=until))
+    large_count = count_queries(large_engine, lambda: large.counts_by_class(since=since, until=until))
+
+    assert len(small.counts_by_class(since=since, until=until)) > 0
+    assert small_count == large_count
 
 
 def test_two_proposals_with_overlapping_findings_stay_distinguished(tmp_path: Path) -> None:
