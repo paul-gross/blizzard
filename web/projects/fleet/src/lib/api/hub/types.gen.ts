@@ -3980,6 +3980,16 @@ export type RoutineEditRequest = {
 };
 
 /**
+ * RoutineProposalState
+ *
+ * Which of a routine's garden proposals `OpenGardenProposalReader.list_for_routine`
+ * returns: `OPEN` (the default) excludes any proposal already closed, `CLOSED` returns
+ * only closed ones with their closure, `ALL` returns every proposal with its closure
+ * when one exists.
+ */
+export type RoutineProposalState = 'open' | 'closed' | 'all';
+
+/**
  * RoutineRunRequest
  *
  * ``POST /api/routines/{routine_id}/run`` (blizzard#392) — ``scope_slug`` omitted
@@ -8067,7 +8077,9 @@ export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetData = {
          */
         chunk_id: string;
     };
-    query?: never;
+    query?: {
+        state?: RoutineProposalState;
+    };
     url: '/api/fleet/chunks/{chunk_id}/garden/proposals';
 };
 

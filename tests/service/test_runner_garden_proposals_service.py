@@ -76,6 +76,51 @@ def test_a_workers_garden_proposals_read_proxies_through_to_the_mock_hubs_bucket
                 runner_client.close()
 
 
+def test_a_workers_state_flag_reaches_the_mock_hubs_closed_bucket(tmp_path: Path) -> None:
+    """`--state closed` rides the worker's own call through a real runner, hub-proxied
+    to a real mock hub, and reaches the closed proposal the real hub route would answer
+    the same way — the whole wire the `bzh:wire-change-extends-mock` companion covers."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        spec = _garden_proposals_chunk_spec(_WORK_REF_URL)
+        spec["garden_proposals"].append(
+            {
+                "proposal_id": "prop_closed",
+                "class": "mechanize",
+                "title": "t",
+                "body": "b",
+                "findings": ["fin_1"],
+                "closure": {"closure": "passed", "reason": "not worth it"},
+            }
+        )
+        seeded = hub.post("/_seed/chunk", json=spec)
+        assert seeded.status_code == 201, seeded.text
+        chunk_id = seeded.json()["chunk_id"]
+
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
+
+        with _runner_api(config):
+            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            try:
+                lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
+                worker = _worker_credential(config, lease_id)
+
+                proposals = runner_client.get(
+                    f"/api/leases/{lease_id}/garden/proposals", params={"state": "closed"}, headers=worker
+                )
+                assert proposals.status_code == 200, proposals.text
+                rows = proposals.json()
+                assert [r["proposal_id"] for r in rows] == ["prop_closed"]
+                assert rows[0]["closure"]["reason"] == "not worth it"
+            finally:
+                runner_client.close()
+
+
 def test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_list(tmp_path: Path) -> None:
     """A chunk that is not a routine run — no seeded ``garden_run`` — refuses the read
     rather than answering an empty docket, forwarded verbatim from the mock hub."""

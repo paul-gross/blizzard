@@ -69,9 +69,10 @@ class HubProxy:
         expect: int = status.HTTP_200_OK,
         timeout: float | None = None,
         severity: str = "error",
+        params: dict[str, str] | None = None,
         **fields: object,
     ) -> httpx.Response:
-        return self.forward("GET", path, expect=expect, timeout=timeout, severity=severity, **fields)
+        return self.forward("GET", path, expect=expect, timeout=timeout, severity=severity, params=params, **fields)
 
     def post(
         self,
@@ -80,9 +81,10 @@ class HubProxy:
         expect: int = status.HTTP_202_ACCEPTED,
         timeout: float | None = None,
         severity: str = "error",
+        params: dict[str, str] | None = None,
         **fields: object,
     ) -> httpx.Response:
-        return self.forward("POST", path, expect=expect, timeout=timeout, severity=severity, **fields)
+        return self.forward("POST", path, expect=expect, timeout=timeout, severity=severity, params=params, **fields)
 
     def forward(
         self,
@@ -92,6 +94,7 @@ class HubProxy:
         expect: int,
         timeout: float | None = None,
         severity: str = "error",
+        params: dict[str, str] | None = None,
         **fields: object,
     ) -> httpx.Response:
         """Forward ``method path``, or raise ``502`` unreachable / the upstream status verbatim.
@@ -118,7 +121,9 @@ class HubProxy:
             remaining = budget if retries == 0 else budget - (time.monotonic() - started)
             attempt_timeout = max(min(_HUB_TIMEOUT, remaining), 0.001) if retryable else budget
             try:
-                upstream = self.client.request(method, url, headers=self.config.auth_headers(), timeout=attempt_timeout)
+                upstream = self.client.request(
+                    method, url, headers=self.config.auth_headers(), timeout=attempt_timeout, params=params
+                )
             except httpx.HTTPError as exc:
                 if retryable and self._may_retry(retries, budget, started):
                     self.delay(_backoff(retries))

@@ -815,11 +815,12 @@ export const getGardenFindingsApiFleetChunksChunkIdGardenFindingsGet = <ThrowOnE
 /**
  * Get Garden Proposals
  *
- * A worker's own routine's open garden proposals — the chunk's own run context
- * derives the routine; no caller-supplied flag can name another, and no scope filter
- * applies (a proposal carries no scope column). 404 both for an unknown chunk and for
- * one carrying no run context (not a routine run): a chunk with nothing to read is
- * refused rather than answered with an empty bucket.
+ * A worker's own routine's garden proposals, filtered by `state` (`open` by
+ * default, plus `closed` and `all`, each closed entry carrying its closure) — the
+ * chunk's own run context derives the routine; no caller-supplied flag can name
+ * another, and no scope filter applies (a proposal carries no scope column). 404 both
+ * for an unknown chunk and for one carrying no run context (not a routine run): a
+ * chunk with nothing to read is refused rather than answered with an empty bucket.
  */
 export const getGardenProposalsApiFleetChunksChunkIdGardenProposalsGet = <ThrowOnError extends boolean = false>(options: Options<GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetData, ThrowOnError>): RequestResult<GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetResponses, GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetErrors, ThrowOnError> => (options.client ?? client).get<GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetResponses, GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/garden/proposals', ...options });
 

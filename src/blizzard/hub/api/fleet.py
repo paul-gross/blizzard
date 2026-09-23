@@ -40,6 +40,7 @@ from blizzard.hub.domain.claim import (
     ClaimDeniedTerminal,
 )
 from blizzard.hub.domain.envelope import Arrival, Envelope
+from blizzard.hub.domain.garden_proposals import RoutineProposalState
 from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
 from blizzard.hub.domain.registry import RunnerCapability
 from blizzard.hub.domain.work import (
@@ -365,13 +366,16 @@ def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(
 
 @router.get("/chunks/{chunk_id}/garden/proposals", response_model=list[GardenProposalView])
 def get_garden_proposals(
-    chunk_id: str, services: Annotated[HubServices, Depends(get_services)]
+    chunk_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+    state: Annotated[RoutineProposalState, Query()] = RoutineProposalState.OPEN,
 ) -> list[GardenProposalView]:
-    """A worker's own routine's open garden proposals — the chunk's own run context
-    derives the routine; no caller-supplied flag can name another, and no scope filter
-    applies (a proposal carries no scope column). 404 both for an unknown chunk and for
-    one carrying no run context (not a routine run): a chunk with nothing to read is
-    refused rather than answered with an empty bucket."""
+    """A worker's own routine's garden proposals, filtered by `state` (`open` by
+    default, plus `closed` and `all`, each closed entry carrying its closure) — the
+    chunk's own run context derives the routine; no caller-supplied flag can name
+    another, and no scope filter applies (a proposal carries no scope column). 404 both
+    for an unknown chunk and for one carrying no run context (not a routine run): a
+    chunk with nothing to read is refused rather than answered with an empty bucket."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -382,7 +386,8 @@ def get_garden_proposals(
             detail=f"chunk {chunk_id} carries no run context — not a routine run",
         )
     return [
-        garden_proposal_view(p, None) for p in services.open_garden_proposals.list_open_for_routine(run.routine_name)
+        garden_proposal_view(p, closure)
+        for p, closure in services.open_garden_proposals.list_for_routine(run.routine_name, state)
     ]
 
 

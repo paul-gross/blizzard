@@ -309,8 +309,10 @@ export const listGardenFindingsApiLeasesLeaseIdGardenFindingsGet = <ThrowOnError
  * List Garden Proposals
  *
  * Forward this lease's chunk's garden-proposals read to the hub — the layered
- * pass-through. A chunk with no run context (not a routine run) reaches this only as
- * the hub's own refusal, forwarded verbatim rather than answered as an empty bucket.
+ * pass-through, `state` carried through unvalidated (the hub is the one source of
+ * truth for which values it accepts). A chunk with no run context (not a routine run)
+ * reaches this only as the hub's own refusal, forwarded verbatim rather than answered
+ * as an empty bucket.
  */
 export const listGardenProposalsApiLeasesLeaseIdGardenProposalsGet = <ThrowOnError extends boolean = false>(options: Options<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetData, ThrowOnError>): RequestResult<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors, ThrowOnError> => (options.client ?? client).get<ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetResponses, ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/garden/proposals', ...options });
 

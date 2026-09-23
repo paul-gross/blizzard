@@ -68,6 +68,44 @@ def test_proposals_gets_the_lease_scoped_route_with_inherited_identity_and_token
 
 
 @pytest.mark.unit
+def test_proposals_defaults_state_to_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    def fake_get(url: str, *, params: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(text=_PROPOSALS_TEXT)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["garden", "proposals"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"state": "open"}]
+
+
+@pytest.mark.unit
+def test_proposals_state_flag_is_forwarded_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    def fake_get(url: str, *, params: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+        calls.append(params)
+        return _FakeResponse(text="[]")
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["garden", "proposals", "--state", "closed"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"state": "closed"}]
+
+
+@pytest.mark.unit
+def test_proposals_rejects_an_unknown_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    result = CliRunner().invoke(runner_group, ["garden", "proposals", "--state", "bogus"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "Invalid value for '--state'" in result.output
+
+
+@pytest.mark.unit
 def test_proposals_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 

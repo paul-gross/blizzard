@@ -84,9 +84,11 @@ resolve`, this is provisional: the owning garden routine's next run re-checks it
 holds or reviving it to `live` if it does not. Re-delivering the same item delivers nothing a second time. Either
 closing verb answers 409, naming the proposal's existing closure, when called again — closure is terminal.
 
-A running pass reads its own routine's open proposals a different way: `blizzard runner garden proposals`, flagless —
-the routine is derived server-side from the lease's own chunk, so a worker cannot point this read at another routine's
-docket, and a closed proposal never appears in it. It needs no hub credential in its child environment either, the
+A running pass reads its own routine's proposals a different way: `blizzard runner garden proposals [--state
+open|closed|all]` — the routine is derived server-side from the lease's own chunk, so a worker cannot point this read
+at another routine's docket. `--state` defaults to `open`, excluding any closed proposal exactly as before; `closed`
+and `all` each carry every returned proposal's closure and pass reason, letting a reconcile step compare a new idea
+against what the routine has already had declined. It needs no hub credential in its child environment either, the
 same shape `blizzard runner garden findings` above takes;
 [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shape.
 
