@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
-import { KitTab, KitTabStrip } from 'fleet';
+import { KitTab, KitTabStrip } from 'fleet/shell';
 
 /**
  * The top nav's tab strip — one `routerLink` per top-level route, with
