@@ -50,12 +50,10 @@ class GardenProposal:
 
 @dataclass(frozen=True)
 class GardenProposalCounts:
-    """One routine/class pair's garden-proposal counts over a window (blizzard#547),
-    split by current closure state — `open` (no closure row), `passed`
-    (`closure=passed`), `accepted_with_item` (`closure=accepted`,
-    `item_outcome=minted`), `accepted_without_item` (`closure=accepted`,
-    `item_outcome=declined`). `created` is always their sum — derived, never a stored or
-    passed-in field, so it can never disagree with the four it sums."""
+    """One routine/class pair's garden-proposal counts over a window (blizzard#547):
+    `open`, `passed`, `accepted_with_item`, `accepted_without_item` — each a
+    closure-state bucket. `created` is always their sum, derived rather than stored, so
+    it can never disagree with the four it sums."""
 
     routine_name: str
     class_: str
