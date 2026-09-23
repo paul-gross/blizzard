@@ -5,6 +5,89 @@ export type ClientOptions = {
 };
 
 /**
+ * AnalyticsCountView
+ *
+ * One grouping key and how many events fell under it (blizzard#255). ``key`` names
+ * whichever dimension this response is grouped by — a file path, a skill name, an
+ * agent type, or a node id.
+ */
+export type AnalyticsCountView = {
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Key
+     */
+    key: string;
+};
+
+/**
+ * AnalyticsCountsResponse
+ *
+ * Every grouping key matching the filters, most-frequent first with the key
+ * ascending as the tiebreak — a total order two identical calls agree on.
+ */
+export type AnalyticsCountsResponse = {
+    /**
+     * Counts
+     */
+    counts: Array<AnalyticsCountView>;
+};
+
+/**
+ * AnalyticsSpendResponse
+ *
+ * Every grouping key matching the filters, key ascending — a total order two
+ * identical calls agree on, the same convention the durations/counts responses use.
+ */
+export type AnalyticsSpendResponse = {
+    /**
+     * Spend
+     */
+    spend: Array<AnalyticsSpendView>;
+};
+
+/**
+ * AnalyticsSpendView
+ *
+ * One grouping key's usage/cost rollup (blizzard#256 D6) — ``key`` is a node id or
+ * a graph id, whichever dataset served it. The same lower-bound + PARTIAL contract
+ * ``GET /api/spend`` publishes: ``cost_usd`` sums only the rows that carried a cost
+ * envelope, and ``cost_partial`` is ``True`` iff any summed row lacked one.
+ */
+export type AnalyticsSpendView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cost Partial
+     */
+    cost_partial: boolean;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
+};
+
+/**
  * ArtifactKind
  *
  * The union discriminator.
@@ -3246,6 +3329,240 @@ export type ListLeasesApiLeasesGetResponses = {
 };
 
 export type ListLeasesApiLeasesGetResponse = ListLeasesApiLeasesGetResponses[keyof ListLeasesApiLeasesGetResponses];
+
+export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/counts/agent-types';
+};
+
+export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetError = GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors[keyof GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetErrors];
+
+export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponse = GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses[keyof GetAnalyticsCountsAgentTypesApiLeasesLeaseIdAnalyticsCountsAgentTypesGetResponses];
+
+export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/counts/files';
+};
+
+export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetError = GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors[keyof GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetErrors];
+
+export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponse = GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses[keyof GetAnalyticsCountsFilesApiLeasesLeaseIdAnalyticsCountsFilesGetResponses];
+
+export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/counts/nodes';
+};
+
+export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetError = GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors[keyof GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetErrors];
+
+export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponse = GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses[keyof GetAnalyticsCountsNodesApiLeasesLeaseIdAnalyticsCountsNodesGetResponses];
+
+export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/counts/skills';
+};
+
+export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetError = GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors[keyof GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetErrors];
+
+export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsCountsResponse;
+};
+
+export type GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponse = GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses[keyof GetAnalyticsCountsSkillsApiLeasesLeaseIdAnalyticsCountsSkillsGetResponses];
+
+export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/spend/graphs';
+};
+
+export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetError = GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors[keyof GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetErrors];
+
+export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponse = GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses[keyof GetAnalyticsSpendGraphsApiLeasesLeaseIdAnalyticsSpendGraphsGetResponses];
+
+export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Until
+         */
+        until?: string | null;
+    };
+    url: '/api/leases/{lease_id}/analytics/spend/nodes';
+};
+
+export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetError = GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors[keyof GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetErrors];
+
+export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalyticsSpendResponse;
+};
+
+export type GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponse = GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses[keyof GetAnalyticsSpendNodesApiLeasesLeaseIdAnalyticsSpendNodesGetResponses];
 
 export type ListArtifactsApiLeasesLeaseIdArtifactsGetData = {
     body?: never;

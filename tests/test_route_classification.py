@@ -211,6 +211,15 @@ _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals"),
+    # A worker's own routine-run read of the counts/spend summaries (blizzard#545) — the
+    # same operator-plane query criteria and response shaping, gated on the chunk's own
+    # run context rather than operator credentials.
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/files"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/skills"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/nodes"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/nodes"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/analytics/spend/graphs"),
     ("GET", "/api/fleet/scopes"),
     ("GET", "/api/fleet/chunks/{chunk_id}/findings"),
     ("GET", "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"),

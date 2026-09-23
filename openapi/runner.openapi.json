@@ -1,6 +1,103 @@
 {
   "components": {
     "schemas": {
+      "AnalyticsCountView": {
+        "description": "One grouping key and how many events fell under it (blizzard#255). ``key`` names\nwhichever dimension this response is grouped by \u2014 a file path, a skill name, an\nagent type, or a node id.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "count"
+        ],
+        "title": "AnalyticsCountView",
+        "type": "object"
+      },
+      "AnalyticsCountsResponse": {
+        "description": "Every grouping key matching the filters, most-frequent first with the key\nascending as the tiebreak \u2014 a total order two identical calls agree on.",
+        "properties": {
+          "counts": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsCountView"
+            },
+            "title": "Counts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "counts"
+        ],
+        "title": "AnalyticsCountsResponse",
+        "type": "object"
+      },
+      "AnalyticsSpendResponse": {
+        "description": "Every grouping key matching the filters, key ascending \u2014 a total order two\nidentical calls agree on, the same convention the durations/counts responses use.",
+        "properties": {
+          "spend": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsSpendView"
+            },
+            "title": "Spend",
+            "type": "array"
+          }
+        },
+        "required": [
+          "spend"
+        ],
+        "title": "AnalyticsSpendResponse",
+        "type": "object"
+      },
+      "AnalyticsSpendView": {
+        "description": "One grouping key's usage/cost rollup (blizzard#256 D6) \u2014 ``key`` is a node id or\na graph id, whichever dataset served it. The same lower-bound + PARTIAL contract\n``GET /api/spend`` publishes: ``cost_usd`` sums only the rows that carried a cost\nenvelope, and ``cost_partial`` is ``True`` iff any summed row lacked one.",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cost_partial": {
+            "title": "Cost Partial",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd",
+          "cost_partial"
+        ],
+        "title": "AnalyticsSpendView",
+        "type": "object"
+      },
       "ArtifactKind": {
         "description": "The union discriminator.",
         "enum": [
@@ -5161,6 +5258,456 @@
           }
         },
         "summary": "List Leases",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/counts/agent-types": {
+      "get": {
+        "description": "Forward this lease's chunk's counts-by-agent-type read to the hub over the window.",
+        "operationId": "get_analytics_counts_agent_types_api_leases__lease_id__analytics_counts_agent_types_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Counts Agent Types",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/counts/files": {
+      "get": {
+        "description": "Forward this lease's chunk's counts-by-file read to the hub over the window.",
+        "operationId": "get_analytics_counts_files_api_leases__lease_id__analytics_counts_files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Counts Files",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/counts/nodes": {
+      "get": {
+        "description": "Forward this lease's chunk's counts-by-node read to the hub over the window.",
+        "operationId": "get_analytics_counts_nodes_api_leases__lease_id__analytics_counts_nodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Counts Nodes",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/counts/skills": {
+      "get": {
+        "description": "Forward this lease's chunk's counts-by-skill read to the hub over the window.",
+        "operationId": "get_analytics_counts_skills_api_leases__lease_id__analytics_counts_skills_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Counts Skills",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/spend/graphs": {
+      "get": {
+        "description": "Forward this lease's chunk's spend-by-graph read to the hub over the window.",
+        "operationId": "get_analytics_spend_graphs_api_leases__lease_id__analytics_spend_graphs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Spend Graphs",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/analytics/spend/nodes": {
+      "get": {
+        "description": "Forward this lease's chunk's spend-by-node read to the hub over the window.",
+        "operationId": "get_analytics_spend_nodes_api_leases__lease_id__analytics_spend_nodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSpendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analytics Spend Nodes",
         "tags": [
           "runner"
         ]

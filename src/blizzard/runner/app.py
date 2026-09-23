@@ -28,6 +28,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend
+from blizzard.runner.api.analytics import router as analytics_router
 from blizzard.runner.api.artifacts import router as artifacts_router
 from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.attachments import router as attachments_router
@@ -137,6 +138,7 @@ _UNGATED = (
     garden_router,
     finding_router,
     scope_router,
+    analytics_router,
 )
 # The human web lane: the local panel's own reads and writes (issue #51), the runner's own
 # pause brake reachable with the hub down (#43), and the pass-throughs proxied to the hub.
