@@ -51,11 +51,10 @@ def classify_proposal_count_bucket(
     closure: GardenProposalClosureKind | None, item_outcome: GardenProposalItemOutcome | None
 ) -> GardenProposalCountBucket:
     """A proposal's count bucket (blizzard#547) from its current closure state: no
-    closure is `OPEN` regardless of `item_outcome`; `PASSED` closure is `PASSED`;
-    `ACCEPTED` splits on `item_outcome` into `ACCEPTED_WITH_ITEM`/`ACCEPTED_WITHOUT_ITEM`.
-    An `ACCEPTED` closure never carries a `None` `item_outcome` in real data
-    (`GardenProposalClosureService.accept` always sets one) — raises rather than
-    silently misclassifying one that somehow does."""
+    closure is `OPEN`, `PASSED` is `PASSED`, and `ACCEPTED` splits on `item_outcome`
+    into `ACCEPTED_WITH_ITEM`/`ACCEPTED_WITHOUT_ITEM`. Raises rather than misclassify
+    an `ACCEPTED` closure with no `item_outcome` — `GardenProposalClosureService.accept`
+    never leaves one unset."""
     if closure is None:
         return GardenProposalCountBucket.OPEN
     if closure is GardenProposalClosureKind.PASSED:

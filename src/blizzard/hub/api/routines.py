@@ -249,9 +249,7 @@ def routine_proposal_counts(
     """Garden-proposal counts (blizzard#547) per routine and class over `[since,
     until)`, split into open/passed/accepted-with-item/accepted-without-item —
     `created` is their sum. `routine` narrows to one routine by name when given; 404 on
-    an unknown one. 422 on a malformed instant or `until <= since`. Declared ahead of
-    `GET /routines/{routine_id}` so the literal path wins (this file's own routing-order
-    rule)."""
+    an unknown one. 422 on a malformed instant or `until <= since`."""
     parsed_since = _parse_instant(since, field="since")
     parsed_until = _parse_instant(until, field="until")
     _require_until_after_since(parsed_since, parsed_until)
