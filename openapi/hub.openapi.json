@@ -6240,6 +6240,16 @@
         "title": "RoutineEditRequest",
         "type": "object"
       },
+      "RoutineProposalState": {
+        "description": "Which of a routine's garden proposals `OpenGardenProposalReader.list_for_routine`\nreturns: `OPEN` (the default) excludes any proposal already closed, `CLOSED` returns\nonly closed ones with their closure, `ALL` returns every proposal with its closure\nwhen one exists.",
+        "enum": [
+          "open",
+          "closed",
+          "all"
+        ],
+        "title": "RoutineProposalState",
+        "type": "string"
+      },
       "RoutineRunRequest": {
         "additionalProperties": false,
         "description": "``POST /api/routines/{routine_id}/run`` (blizzard#392) \u2014 ``scope_slug`` omitted\nor ``None`` defaults to the routine's own; ``mode`` is ``\"full\"`` or ``\"delta\"``, a\nrequested ``\"delta\"`` with no recorded baseline downgrading to ``\"full\"`` on the\nresponse rather than refusing.",
@@ -13804,7 +13814,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/garden/proposals": {
       "get": {
-        "description": "A worker's own routine's open garden proposals \u2014 the chunk's own run context\nderives the routine; no caller-supplied flag can name another, and no scope filter\napplies (a proposal carries no scope column). 404 both for an unknown chunk and for\none carrying no run context (not a routine run): a chunk with nothing to read is\nrefused rather than answered with an empty bucket.",
+        "description": "A worker's own routine's garden proposals, filtered by `state` (`open` by\ndefault, plus `closed` and `all`, each closed entry carrying its closure) \u2014 the\nchunk's own run context derives the routine; no caller-supplied flag can name\nanother, and no scope filter applies (a proposal carries no scope column). 404 both\nfor an unknown chunk and for one carrying no run context (not a routine run): a\nchunk with nothing to read is refused rather than answered with an empty bucket.",
         "operationId": "get_garden_proposals_api_fleet_chunks__chunk_id__garden_proposals_get",
         "parameters": [
           {
@@ -13814,6 +13824,15 @@
             "schema": {
               "title": "Chunk Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/RoutineProposalState",
+              "default": "open"
             }
           }
         ],

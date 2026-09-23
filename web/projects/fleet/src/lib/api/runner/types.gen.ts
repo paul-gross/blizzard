@@ -3525,7 +3525,12 @@ export type ListGardenProposalsApiLeasesLeaseIdGardenProposalsGetData = {
          */
         lease_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * State
+         */
+        state?: string;
+    };
     url: '/api/leases/{lease_id}/garden/proposals';
 };
 

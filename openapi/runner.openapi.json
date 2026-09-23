@@ -5612,7 +5612,7 @@
     },
     "/api/leases/{lease_id}/garden/proposals": {
       "get": {
-        "description": "Forward this lease's chunk's garden-proposals read to the hub \u2014 the layered\npass-through. A chunk with no run context (not a routine run) reaches this only as\nthe hub's own refusal, forwarded verbatim rather than answered as an empty bucket.",
+        "description": "Forward this lease's chunk's garden-proposals read to the hub \u2014 the layered\npass-through, `state` carried through unvalidated (the hub is the one source of\ntruth for which values it accepts). A chunk with no run context (not a routine run)\nreaches this only as the hub's own refusal, forwarded verbatim rather than answered\nas an empty bucket.",
         "operationId": "list_garden_proposals_api_leases__lease_id__garden_proposals_get",
         "parameters": [
           {
@@ -5621,6 +5621,16 @@
             "required": true,
             "schema": {
               "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "title": "State",
               "type": "string"
             }
           }

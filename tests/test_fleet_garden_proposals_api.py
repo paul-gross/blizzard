@@ -1,9 +1,9 @@
 """``GET /api/fleet/chunks/{chunk_id}/garden/proposals`` — the worker-scoped fleet read
-of a routine's open garden-proposal docket (component tier). Derives the routine from the
+of a routine's garden-proposal docket, filtered by a ``state`` selector (``open`` by
+default, plus ``closed`` and ``all``) (component tier). Derives the routine from the
 chunk's own ``RunContext``, reuses ``garden_proposals.py``'s own ``garden_proposal_view``, and
 refuses — rather than answering an empty bucket — an unknown chunk or one with no run
-context. No scope column exists here, so unlike findings there is no scope case, only
-the closed-proposal exclusion."""
+context. No scope column exists here, so unlike findings there is no scope case."""
 
 from __future__ import annotations
 
@@ -113,6 +113,46 @@ def test_excludes_a_closed_proposal(tmp_path: Path) -> None:
     resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals")
     assert resp.status_code == 200, resp.text
     assert [row["proposal_id"] for row in resp.json()] == ["gprop_open"]
+
+
+def test_state_closed_returns_only_closed_proposals_with_their_pass_reason(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, "gprop_open")
+    _seed_proposal(hub, "gprop_closed")
+    _pass_proposal(hub, "gprop_closed")
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals", params={"state": "closed"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [row["proposal_id"] for row in body] == ["gprop_closed"]
+    assert body[0]["closure"]["closure"] == "passed"
+    assert body[0]["closure"]["reason"] == "not worth it"
+
+
+def test_state_all_returns_open_and_closed_proposals(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_proposal(hub, "gprop_open")
+    _seed_proposal(hub, "gprop_closed")
+    _pass_proposal(hub, "gprop_closed")
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals", params={"state": "all"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [row["proposal_id"] for row in body] == ["gprop_open", "gprop_closed"]
+    assert body[0]["closure"] is None
+    assert body[1]["closure"]["reason"] == "not worth it"
+
+
+def test_state_closed_404s_for_a_chunk_with_no_run_context(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub, with_run_context=False)
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals", params={"state": "closed"})
+    assert resp.status_code == 404, resp.text
+    assert "no run context" in resp.json()["detail"]
 
 
 def test_takes_no_routine_flag(tmp_path: Path) -> None:

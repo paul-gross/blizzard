@@ -162,8 +162,22 @@ def test_forwards_to_the_hub_chunks_garden_proposals_route_and_returns_the_docke
     with TestClient(app) as client:
         resp = client.get("/api/leases/lease_1/garden/proposals", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 200, resp.text
-    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals"]
+    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals?state=open"]
     assert resp.json() == _DOCKET
+
+
+@pytest.mark.component
+def test_forwards_the_state_query_param(tmp_path: Path) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    seen: list[str] = []
+    _stub_hub(app, 200, _DOCKET, seen)
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/garden/proposals?state=closed", headers={"X-Blizzard-Lease-Token": _TOKEN}
+        )
+    assert resp.status_code == 200, resp.text
+    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/garden/proposals?state=closed"]
 
 
 @pytest.mark.component
