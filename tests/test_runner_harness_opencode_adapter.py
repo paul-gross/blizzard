@@ -19,6 +19,7 @@ import pytest
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, WorkerIdentityError, WorkerPreamble
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.internal.opencode_adapter import (
@@ -86,6 +87,7 @@ def _opencode_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
 def _adapter(**kwargs: Any) -> OpenCodeAdapter:
     process = kwargs.setdefault("process", FakeProbe())
     kwargs.setdefault("launcher", ProcessLauncher(process))
+    kwargs.setdefault("worker_env", AllowlistedEnv.of(()))
     return OpenCodeAdapter(**kwargs)
 
 
@@ -717,7 +719,9 @@ def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durabl
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     probe = FakeProbe(alive={(9_999_999, "fake-resume-start-time")})
-    adapter = OpenCodeAdapter(binary="opencode", process=probe, launcher=ProcessLauncher(probe))
+    adapter = OpenCodeAdapter(
+        worker_env=AllowlistedEnv.of(()), binary="opencode", process=probe, launcher=ProcessLauncher(probe)
+    )
 
     resumed = adapter.resume_with_message("/ws", "ses_recorded", "continue")
 

@@ -13,6 +13,7 @@ import pytest
 import structlog
 from structlog.testing import capture_logs
 
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_export import IOpenCodeExporter, OpenCodeExportError
@@ -534,7 +535,9 @@ def test_read_raw_lines_returns_the_range_and_round_trips_through_the_adapter() 
     assert decoded["info"]["id"] == "m-a2"
 
     process = FakeProbe()
-    adapter = OpenCodeAdapter(binary="opencode", process=process, launcher=ProcessLauncher(process))
+    adapter = OpenCodeAdapter(
+        worker_env=AllowlistedEnv.of(()), binary="opencode", process=process, launcher=ProcessLauncher(process)
+    )
     usage = adapter.sum_transcript_usage(lines, "resume")
     assert usage.input_tokens == 20
 

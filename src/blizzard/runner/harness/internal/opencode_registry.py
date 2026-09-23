@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_export import SubprocessOpenCodeExporter
 from blizzard.runner.harness.internal.opencode_price_cache import FileOpenCodePriceCatalog, resolve_price_cache_path
@@ -26,17 +25,17 @@ def build_opencode_binding(
     ``process``/``launcher`` pair the Claude Code binding also receives (D4). Wires one
     :class:`OpenCodeTranscriptSource` into both the adapter and the binding, exactly as
     Claude Code's own binding wires its transcript source, plus a price catalog resolved
-    from the same worker-env passthrough — never a constant path."""
+    from the same worker env — never a constant path."""
+    worker_env = config.worker_env
     transcript_source = OpenCodeTranscriptSource(
-        SubprocessOpenCodeExporter(binary=config.opencode_binary, env_passthrough=config.worker_env_passthrough),
+        SubprocessOpenCodeExporter(binary=config.opencode_binary, worker_env=worker_env),
         TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript")),
     )
-    worker_env = AllowlistedEnv.of(config.worker_env_passthrough).variables
-    cache_path = resolve_price_cache_path(worker_env)
+    cache_path = resolve_price_cache_path(worker_env.variables)
     price_catalog = FileOpenCodePriceCatalog(cache_path) if cache_path is not None else None
     adapter = OpenCodeAdapter(
         binary=config.opencode_binary,
-        env_passthrough=config.worker_env_passthrough,
+        worker_env=worker_env,
         model_aliases=config.opencode_model_aliases,
         effort_aliases=config.opencode_effort_aliases,
         worker_config_path=config.opencode_worker_config_path,

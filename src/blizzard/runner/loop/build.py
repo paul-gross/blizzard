@@ -200,7 +200,7 @@ class LoopWiring:
             process=LinuxProcessProbe(),
             worktree_git=SubprocessWorktreeGit(),
             # The check-runner seam (issue #114) — see `runner/loop/checks.py`.
-            check_runner=SubprocessCheckRunner(env_passthrough=config.worker_env_passthrough),
+            check_runner=SubprocessCheckRunner(worker_env=config.worker_env),
             config=loop_config,
             worker_files=_worker_files,
             elicitation_files=_elicitation_files,

@@ -41,11 +41,12 @@ def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
     # Built and injected here (`bzh:dependency-injection`), not `ProcessLauncher`'s own
     # module-level default — this composition root is the one place that belongs (D4).
     launcher = ProcessLauncher(process, executor=_LAUNCH_EXECUTOR)
+    worker_env = config.worker_env
     adapter = ClaudeCodeAdapter(
         binary=config.harness_binary,
         settings_path=config.worker_settings_path,
         permission_mode=config.harness_permission_mode,
-        env_passthrough=config.worker_env_passthrough,
+        worker_env=worker_env,
         model_aliases=config.model_aliases,
         effort_aliases=config.effort_aliases,
         transcript_source=transcript_source,

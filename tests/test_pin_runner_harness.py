@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal import claude_code_adapter as adapter_module
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.process_launch import ProcessLauncher
@@ -20,7 +21,13 @@ def test_an_unmapped_tier_alias_never_substitutes_downward(monkeypatch: pytest.M
     entry is unresolvable, not substituted with the next tier down."""
     monkeypatch.setattr(adapter_module, "_BUILTIN_TIERS", {"blizzard:advanced": "opus", "blizzard:basic": "sonnet"})
     probe = FakeProbe()
-    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5", process=probe, launcher=ProcessLauncher(probe))
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        binary="claude",
+        model="claude-opus-5",
+        process=probe,
+        launcher=ProcessLauncher(probe),
+    )
 
     assert adapter.resolve_model(["blizzard:frontier"]) == "claude-opus-5"
     # …and an author who wants a fallback writes one into the list.

@@ -28,7 +28,10 @@ from blizzard.runner.domain.takeover import (
 )
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.spawn import Spawner
@@ -688,3 +691,23 @@ def test_takeover_env_is_bounded_to_identity_plus_path_and_home(tmp_path) -> Non
     assert "TERM" not in opened.env
     assert "FAKE_PASSTHROUGH_SECRET" not in opened.env
     assert set(opened.env) == {"PATH", "HOME"} | {k for k in opened.env if k.startswith("BLIZZARD_")}
+
+
+def test_takeover_path_carries_the_workers_path_prepend(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """D6: the takeover's forwarded ``PATH`` is built from the same configured
+    :class:`AllowlistedEnv` the worker's own spawn/resume used, so an operator resuming a
+    worker's session resolves the same ``[worker] path_prepend`` tools the worker did."""
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+    process = FakeProbe()
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of((), path_prepend=("/opt/mise/shims",)),
+        process=process,
+        launcher=ProcessLauncher(process),
+    )
+
+    opened = _service(store, harness=adapter).open(_open_scope(store), force=False)
+
+    assert opened.env["PATH"] == "/opt/mise/shims:/usr/bin:/bin"

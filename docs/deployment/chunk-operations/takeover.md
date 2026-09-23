@@ -27,7 +27,9 @@ unchanged in id, node, and epoch.
 
 The daemon supplies a bounded environment — the lease's `BLIZZARD_*` identity vars plus its own `PATH` and `HOME` —
 layered over your terminal's; nothing more leaves the daemon, and the terminal environment underneath carries an
-operator caveat owned by [worker-spawn.md](../worker-spawn.md). Under it, the session's `blizzard runner` verbs
+operator caveat owned by [worker-spawn.md](../worker-spawn.md). That `PATH` already carries the operator's `[worker]
+path_prepend`, the same worker-spawn setting owns, so a takeover resolves the same version-manager tools the taken-over
+session did. Under it, the session's `blizzard runner` verbs
 (`attach`, `ask`, `artifact`) reach the runner, and the bare `blizzard` binary resolves to the deployment's venv. The
 exec reasserts `harness_permission_mode` from `blizzard-runner.toml` — scaffold default `bypassPermissions`, per-tool
 approval prompts disabled exactly as for the daemon-spawned worker; set another mode, or empty to omit the flag, to make

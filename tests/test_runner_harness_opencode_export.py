@@ -9,7 +9,10 @@ import subprocess
 
 import pytest
 
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.opencode_export import OpenCodeExportError, SubprocessOpenCodeExporter
+
+_EMPTY = AllowlistedEnv.of(())
 
 
 @pytest.mark.unit
@@ -23,7 +26,7 @@ def test_export_returns_stdout_on_success(monkeypatch: pytest.MonkeyPatch) -> No
         return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
 
     monkeypatch.setattr(subprocess, "run", _run)
-    exporter = SubprocessOpenCodeExporter(binary="opencode")
+    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY)
 
     assert exporter.export("sess-1") == '{"info": {}}'
     assert captured["cmd"] == ["opencode", "export", "sess-1"]
@@ -43,7 +46,7 @@ def test_export_captures_stdout_through_a_file_never_a_pipe(monkeypatch: pytest.
         return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
 
     monkeypatch.setattr(subprocess, "run", _run)
-    exporter = SubprocessOpenCodeExporter(binary="opencode")
+    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY)
 
     assert len(exporter.export("sess-1")) == 200_000
     assert "capture_output" not in captured["kwargs"]  # type: ignore[operator]
@@ -66,7 +69,7 @@ def test_export_env_excludes_the_hub_token_and_an_unlisted_sentinel(monkeypatch:
         return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
 
     monkeypatch.setattr(subprocess, "run", _run)
-    exporter = SubprocessOpenCodeExporter(binary="opencode")
+    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY)
 
     exporter.export("sess-1")
 
@@ -88,7 +91,7 @@ def test_export_env_passthrough_admits_an_operator_named_var(monkeypatch: pytest
         return subprocess.CompletedProcess(cmd, 0, stdout=None, stderr="")
 
     monkeypatch.setattr(subprocess, "run", _run)
-    exporter = SubprocessOpenCodeExporter(binary="opencode", env_passthrough=("MY_HARNESS_QUIRK",))
+    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=AllowlistedEnv.of(("MY_HARNESS_QUIRK",)))
 
     exporter.export("sess-1")
 
@@ -101,7 +104,7 @@ def test_export_nonzero_exit_raises_with_a_stderr_tail(monkeypatch: pytest.Monke
     monkeypatch.setattr(
         subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(a[0], 1, stdout=None, stderr="session gone")
     )
-    exporter = SubprocessOpenCodeExporter(binary="opencode")
+    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY)
 
     with pytest.raises(OpenCodeExportError, match="session gone"):
         exporter.export("sess-1")
@@ -113,7 +116,7 @@ def test_export_timeout_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         raise subprocess.TimeoutExpired(cmd="opencode", timeout=5)
 
     monkeypatch.setattr(subprocess, "run", _hung)
-    exporter = SubprocessOpenCodeExporter(binary="opencode", timeout=5)
+    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY, timeout=5)
 
     with pytest.raises(OpenCodeExportError):
         exporter.export("sess-1")
@@ -125,7 +128,7 @@ def test_export_missing_binary_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         raise OSError("no such file or directory: 'opencode'")
 
     monkeypatch.setattr(subprocess, "run", _missing)
-    exporter = SubprocessOpenCodeExporter(binary="opencode")
+    exporter = SubprocessOpenCodeExporter(binary="opencode", worker_env=_EMPTY)
 
     with pytest.raises(OpenCodeExportError):
         exporter.export("sess-1")

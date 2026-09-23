@@ -26,6 +26,7 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.preamble import (
@@ -523,7 +524,11 @@ def test_harness_selection_single_member_selects_regardless_of_model_resolvabili
     runs at all, and `resolve_model`'s own left-to-right-then-adapter-default fallback is
     left to compute the stamp exactly as it does today."""
     adapter = ClaudeCodeAdapter(
-        binary="claude", model="claude-opus-5", process=FakeProbe(), launcher=ProcessLauncher(FakeProbe())
+        worker_env=AllowlistedEnv.of(()),
+        binary="claude",
+        model="claude-opus-5",
+        process=FakeProbe(),
+        launcher=ProcessLauncher(FakeProbe()),
     )
     registry = HarnessRegistry({"h1": HarnessBinding(adapter=adapter, transcript_source=NullTranscriptSource())})
     envelope = make_envelope(
@@ -561,7 +566,11 @@ def test_harness_selection_single_member_with_an_authored_tier_it_cannot_map_is_
 @pytest.mark.unit
 def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_other_harness():  # type: ignore[no-untyped-def]
     claude = ClaudeCodeAdapter(
-        binary="claude", model="claude-opus-5", process=FakeProbe(), launcher=ProcessLauncher(FakeProbe())
+        worker_env=AllowlistedEnv.of(()),
+        binary="claude",
+        model="claude-opus-5",
+        process=FakeProbe(),
+        launcher=ProcessLauncher(FakeProbe()),
     )
     foreign = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     foreign.resolved_model_strict = None  # "sonnet" means nothing to a harness that isn't claude_code

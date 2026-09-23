@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -41,10 +40,14 @@ class SubprocessOpenCodeExporter:
     export resolves a session by id from any working directory."""
 
     def __init__(
-        self, binary: str, *, env_passthrough: Sequence[str] = (), timeout: float = DEFAULT_EXPORT_TIMEOUT_SECONDS
+        self,
+        binary: str,
+        *,
+        worker_env: AllowlistedEnv,
+        timeout: float = DEFAULT_EXPORT_TIMEOUT_SECONDS,
     ) -> None:
         self._binary = binary
-        self._env_passthrough = tuple(env_passthrough)
+        self._worker_env = worker_env
         self._timeout = timeout
 
     def export(self, session_id: str) -> str:
@@ -58,7 +61,7 @@ class SubprocessOpenCodeExporter:
                         [self._binary, "export", session_id],
                         # `bzh:worker-env-allowlist` — never a full `os.environ` copy into
                         # a plugin-capable third-party CLI.
-                        env=AllowlistedEnv.of(self._env_passthrough).variables,
+                        env=self._worker_env.variables,
                         stdin=subprocess.DEVNULL,
                         stdout=out_file,
                         stderr=subprocess.PIPE,

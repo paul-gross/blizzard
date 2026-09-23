@@ -76,7 +76,7 @@ def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: P
     harness = ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
 
     assert isinstance(harness, ClaudeCodeAdapter)
-    assert harness._env_passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
+    assert harness._worker_env.passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
 
 
 @pytest.mark.unit

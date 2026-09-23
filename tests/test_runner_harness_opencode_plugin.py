@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_plugin import (
     LEASE_ENV_VARS,
@@ -136,7 +137,11 @@ def test_a_plugin_bearing_worker_config_does_not_change_the_adapters_parsed_turn
         stdout_path = tmp_path / f"lease-{label}.stdout"
         probe = LinuxProcessProbe()
         adapter = OpenCodeAdapter(
-            binary=binary, process=probe, launcher=ProcessLauncher(probe), worker_config_path=worker_config_path
+            worker_env=AllowlistedEnv.of(()),
+            binary=binary,
+            process=probe,
+            launcher=ProcessLauncher(probe),
+            worker_config_path=worker_config_path,
         )
         pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
         pending.confirm_durable()  # F1: stands in for `Spawner.spawn`'s own call

@@ -8,7 +8,6 @@ runs arbitrary repo tooling, so a daemon credential must be absent by constructi
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
@@ -54,13 +53,12 @@ class CheckOutput:
 class SubprocessCheckRunner:
     """Run a node's ``checks:`` command in a leased worktree, via the shell."""
 
-    def __init__(self, *, env_passthrough: Sequence[str] = ()) -> None:
-        # The operator's declared worker-env passthrough — the same widening the harness children
-        # get, so a check needing an operator-declared var behaves like the worker did.
-        self._env_passthrough = tuple(env_passthrough)
+    def __init__(self, *, worker_env: AllowlistedEnv) -> None:
+        # The same allowlist the harness children get, so a check behaves like the worker did.
+        self._worker_env = worker_env
 
     def run(self, command: str, cwd: str, timeout: int) -> CheckOutcome:
-        env = AllowlistedEnv.of(self._env_passthrough).variables
+        env = self._worker_env.variables
         try:
             result = subprocess.run(
                 command,

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
@@ -70,7 +71,12 @@ def test_claude_code_probe_and_cache_read_available_against_the_real_mock_binary
 
     probe = ClaudeCodeHealthProbe(str(mock_claude_code), credentials_path=str(credentials_path))
     process = LinuxProcessProbe()
-    adapter = ClaudeCodeAdapter(binary=str(mock_claude_code), process=process, launcher=ProcessLauncher(process))
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        binary=str(mock_claude_code),
+        process=process,
+        launcher=ProcessLauncher(process),
+    )
     cache = HarnessHealthCache(
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)), probes={"claude_code": probe}, selftest_results=None
     )

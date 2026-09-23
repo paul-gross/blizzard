@@ -19,6 +19,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.process_launch import ProcessLauncher
@@ -543,6 +544,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
             {
                 CLAUDE_CODE_HARNESS_ID: HarnessBinding(
                     adapter=ClaudeCodeAdapter(
+                        worker_env=AllowlistedEnv.of(()),
                         binary="claude",
                         permission_mode="bypassPermissions",
                         process=probe,

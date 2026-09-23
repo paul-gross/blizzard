@@ -21,19 +21,32 @@ LOCALE_PREFIX = "LC_"
 
 @dataclass(frozen=True)
 class AllowlistedEnv:
-    """The child env built from the base allowlist + ``LC_*`` + the operator's passthrough.
+    """The child env built from the base allowlist + ``LC_*`` + the operator's passthrough,
+    with ``path_prepend`` leading ``PATH`` (``[worker] path_prepend``).
 
     Never a full ``os.environ`` copy (``bzh:worker-env-allowlist``) — see the module docstring."""
 
     passthrough: tuple[str, ...]
+    #: Absolute directories, already validated, led onto every child's ``PATH`` ahead of the daemon's own.
+    path_prepend: tuple[str, ...] = ()
 
     @classmethod
-    def of(cls, passthrough: Sequence[str]) -> AllowlistedEnv:
-        return cls(tuple(passthrough))
+    def of(cls, passthrough: Sequence[str], *, path_prepend: Sequence[str] = ()) -> AllowlistedEnv:
+        return cls(tuple(passthrough), tuple(path_prepend))
 
     @property
     def variables(self) -> dict[str, str]:
         names = set(BASE_ALLOWLIST_VARS) | set(self.passthrough)
         env = {name: os.environ[name] for name in names if name in os.environ}
         env.update((k, v) for k, v in os.environ.items() if k.startswith(LOCALE_PREFIX))
+        if self.path_prepend:
+            env["PATH"] = self._composed_path()
         return env
+
+    def _composed_path(self) -> str:
+        """Configured entries first, in listed order, each once; a daemon ``PATH`` element
+        equal to a prepended entry is dropped; no daemon ``PATH`` yields the prepend alone."""
+        prepend = list(dict.fromkeys(self.path_prepend))
+        daemon_entries = os.environ.get("PATH", "").split(os.pathsep) if "PATH" in os.environ else []
+        rest = [entry for entry in daemon_entries if entry not in prepend]
+        return os.pathsep.join(prepend + rest)

@@ -198,3 +198,12 @@ never to be added through `env_passthrough`; the guarantee covers daemon-spawned
 An operator takeover session inverts this: your shell is the base with only a bounded daemon-side set on top — the
 lease's `BLIZZARD_*` identity vars plus the daemon's `PATH` and `HOME`; `env_passthrough` is not forwarded and no
 allowlist filters your shell ([chunk-operations/takeover.md](./chunk-operations/takeover.md) owns the verb).
+
+`[worker]` `path_prepend` leads every one of those same child environments' `PATH` with the listed absolute
+directories — a mise shims directory, say — ahead of the daemon's own, so a spawned worker resolves the same
+version-manager tools an operator's shell does; entries repeat the daemon's own if already present rather than
+duplicating, and an empty list leaves `PATH` exactly as the daemon's. Each entry may use `~` for the operator's home,
+expanded once at config load; anything still relative after that fails config load, naming the key. A configured
+directory absent on disk does not fail startup — `runner host` warns about it once and still starts, and that entry
+simply never reaches a child's `PATH` until it exists. Because the takeover's own forwarded `PATH` above is the
+daemon's, an operator taking over a worker's session resolves the same prepended tools that worker did.

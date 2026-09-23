@@ -106,7 +106,7 @@ def build_identity_env(
     preamble: WorkerPreamble,
     chunk_id: str,
     session_id: str,
-    env_passthrough: Sequence[str],
+    worker_env: AllowlistedEnv,
     *,
     elicitation: bool = False,
 ) -> dict[str, str]:
@@ -115,7 +115,7 @@ def build_identity_env(
     worker reads to reach the runner. A resumed invocation inherits none of the original
     spawn env, so this rebuilds it exactly like a fresh one; a harness with its own extra
     identity vars layers them on top, never instead."""
-    env = AllowlistedEnv.of(env_passthrough).variables
+    env = worker_env.variables
     env["BLIZZARD_ENV_IDS"] = ",".join(e.environment_id for e in preamble.environments)
     env["BLIZZARD_ENV_WORKDIRS"] = ",".join(e.workdir for e in preamble.environments)
     env["BLIZZARD_SESSION_ID"] = session_id
