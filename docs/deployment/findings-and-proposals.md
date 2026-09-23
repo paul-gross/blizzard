@@ -1,7 +1,7 @@
 # Findings and garden proposals
 
-A **finding** is one observation a routine's run recorded; a **garden proposal** is a proposed response to one or more
-findings. Both are hub-stored records, and both now carry closing verbs of their own.
+A **finding** is one observation a routine's run recorded; a **garden proposal** is a proposed response to the findings
+behind it — it may name none at all. Both are hub-stored records, and both now carry closing verbs of their own.
 [`domain/findings-and-proposals.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md)
 owns the concept; this covers the verbs only.
 
@@ -67,7 +67,8 @@ child environment, the same shape the other `blizzard runner` reads on this page
 ## Garden proposals
 
 `blizzard hub garden-proposal list` and `show <proposal_id>` read every proposal, or one by id, each naming the findings
-it answers and the closure it carries once one exists. Neither takes a filter yet.
+it answers — the hub enforces no minimum, empty or not — and the closure it carries once one exists. Neither takes a
+filter yet.
 
 `blizzard hub garden-proposal pass <proposal_id> --reason <text>` records that the proposal was considered and declined,
 with a reason required.
@@ -76,8 +77,9 @@ with a reason required.
 agreement: by default it mints a linked hub work item, resting behind the ordinary promote gate, whose body wraps the
 proposal's own — or `--body-file`'s override (`-` for stdin) — with a "Related findings" section listing every finding
 the proposal answers (id, class, locus, and state) and naming the worker's own `blizzard runner finding list`/
-`finding get <finding_id>` reads; `--no-work-item` declines to mint, and the decline is recorded rather than left to
-read as an absent link. Acceptance itself never promotes the minted item and never changes a finding's state — but
+`finding get <finding_id>` reads, when it answers any at all — left bare otherwise; `--no-work-item` declines to mint,
+and the decline is recorded rather than left to read as an absent link. Acceptance itself never promotes the minted
+item and never changes a finding's state — but
 delivering the item it minted does: once that item closes, every finding the proposal named that is still live is
 closed to `delivered`, attributed to the proposal, requiring no verb of its own — unlike a hand `blizzard hub finding
 resolve`, this is provisional: the owning garden routine's next run re-checks it, settling it to `resolved` if it still

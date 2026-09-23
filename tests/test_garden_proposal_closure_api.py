@@ -130,6 +130,32 @@ def test_accept_with_no_body_override_mints_the_proposals_body_wrapped_in_the_te
     assert chunk["status"] == "not_ready"  # rests behind the ordinary promote gate
 
 
+def test_accept_a_proposal_citing_no_findings_mints_a_bare_item(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    with hub.engine.begin() as conn:
+        conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
+    GardenProposalStore(hub_store_connections(hub.engine)).create(
+        "gprop_1",
+        routine_name="nightly",
+        class_="fix-the-source",
+        title="Author a docstring standard",
+        body="the proposal's own body",
+        findings=[],
+        at=_NOW,
+    )
+
+    resp = hub.client.post("/api/garden-proposals/gprop_1/accept", json={})
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["closure"]["item_outcome"] == "minted"
+    source, ref = body["closure"]["source"], body["closure"]["ref"]
+
+    item = hub.client.get(f"/api/work-sources/{source}/items/{ref}").json()
+    assert item["body"] == "the proposal's own body"
+    assert "Related findings" not in item["body"]
+
+
 def test_accept_with_a_body_override_mints_that_body_wrapped_in_the_template(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed(hub, body="the proposal's own body")

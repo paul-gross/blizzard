@@ -31,14 +31,14 @@ def test_a_well_formed_candidate_parses() -> None:
     assert candidate.findings == ["fin_1", "fin_2"]
 
 
-def test_an_empty_findings_list_is_refused() -> None:
-    with pytest.raises(ValidationError):
-        GardenProposalCandidate.model_validate(_candidate(findings=[]))
+def test_an_empty_findings_list_is_accepted() -> None:
+    candidate = GardenProposalCandidate.model_validate(_candidate(findings=[]))
+    assert candidate.findings == []
 
 
-def test_a_missing_findings_list_is_refused() -> None:
-    with pytest.raises(ValidationError):
-        GardenProposalCandidate.model_validate({k: v for k, v in _candidate().items() if k != "findings"})
+def test_a_missing_findings_list_defaults_to_empty() -> None:
+    candidate = GardenProposalCandidate.model_validate({k: v for k, v in _candidate().items() if k != "findings"})
+    assert candidate.findings == []
 
 
 def test_a_candidate_missing_its_class_is_refused() -> None:

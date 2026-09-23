@@ -409,6 +409,24 @@ def test_a_minted_chunk_resolves_its_proposals_findings_in_order() -> None:
     assert [f.finding_id for f in resolved] == ["fin_2", "fin_1"]
 
 
+def test_a_minted_chunk_whose_proposal_cites_no_findings_resolves_an_empty_list() -> None:
+    """`[]` (answered, with nothing) is distinct from `None` (no answer at all,
+    checked above) — a minted chunk always has an accepted proposal behind it."""
+    closures = _FakeClosures(
+        by_item={
+            (_POINTER.source, _POINTER.ref): _closure(
+                kind=GardenProposalClosureKind.ACCEPTED, item_outcome=GardenProposalItemOutcome.MINTED
+            )
+        }
+    )
+    proposals = _FakeProposals(by_id={"gprop_1": _proposal(findings=[])})
+    resolution = _answered_findings_resolution(closures=closures, proposals=proposals, findings=_FakeFindings())
+
+    resolved = resolution.resolve_for_chunk(_chunk())
+
+    assert resolved == []
+
+
 def test_a_proposal_finding_id_that_no_longer_resolves_is_skipped() -> None:
     closures = _FakeClosures(
         by_item={

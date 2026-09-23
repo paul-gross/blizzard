@@ -18,6 +18,7 @@ const BASE_VM: ProposalPanelVm = {
   body: 'Seventeen modules narrate their own change history.',
   closure: null,
   createdAt: new Date(2026, 6, 18, 9, 5, 3).toISOString(),
+  hasFindings: true,
 };
 
 const EVIDENCE: readonly ProposalEvidenceRowVm[] = [
@@ -119,6 +120,21 @@ describe('FleetProposalPanel', () => {
     const link = live?.querySelector<HTMLAnchorElement>('[data-testid="gardening-proposal-finding-link-fin_1"]');
     expect(link?.textContent).toBe('F-1');
     expect(link?.getAttribute('href')).toBe('/gardening/findings/fin_1');
+  });
+
+  it('renders the Evidence section for a proposal that cites findings', async () => {
+    const fixture = await mount({ vm: { ...BASE_VM, hasFindings: true } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-evidence"]')).toBeTruthy();
+  });
+
+  it('withholds the Evidence section outright for a proposal that cites no findings', async () => {
+    const fixture = await mount({ vm: { ...BASE_VM, hasFindings: false } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-proposal-evidence"]')).toBeNull();
+    expect(el.querySelector('.pp-evidence')).toBeNull();
   });
 
   it("names each evidence row's own state inline, off the shared mapping", async () => {

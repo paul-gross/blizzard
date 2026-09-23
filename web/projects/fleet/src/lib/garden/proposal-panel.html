@@ -81,76 +81,78 @@
           </div>
         }
 
-        <section class="pp-sec pp-evidence" data-testid="gardening-proposal-evidence">
-          <span class="tag">Evidence</span>
-          <fleet-kit-async-state
-            [state]="evidenceState()"
-            placement="inline"
-            emptyText="No findings on record."
-            emptyTestid="gardening-proposal-evidence-empty"
-          >
-            <ul>
-              @for (row of evidence(); track row.findingId) {
-                <li [attr.data-testid]="'gardening-proposal-finding-' + row.findingId">
-                  <p class="pp-finding-head">
-                    <a
-                      class="pp-finding-ref"
-                      [routerLink]="['/gardening', 'findings', row.findingId]"
-                      [attr.data-testid]="'gardening-proposal-finding-link-' + row.findingId"
-                    >{{ compactRef(row.findingId) }}</a>
-                    <span class="pp-sep" aria-hidden="true">·</span>
-                    <span class="pp-finding-locus">{{ row.locus }}</span>
-                    <span class="pp-sep" aria-hidden="true">·</span>
-                    <fleet-kit-badge
-                      class="pp-finding-state"
-                      [attr.data-testid]="'gardening-proposal-finding-state-' + row.findingId"
-                      [tone]="stateTone(row)"
-                      variant="text"
-                      >{{ row.state }}</fleet-kit-badge
-                    >
-                    <!-- Offered on any row that has not exited: an exit verb has nothing
-                         to do to a finding already out of the bucket, and the state beside
-                         it already says so. That includes a `gone`-flagged row, which is
-                         still open and is precisely what Confirm gone is for — hence the
-                         classification off `state`, never off the wire's `live` boolean.
-                         Withheld without `chunk:control`, the same permission the exit
-                         routes require, rather than offering a button that 403s. -->
-                    @if (canControl() && !isExited(row.state)) {
-                      <span class="pp-finding-actions">
-                        @for (action of actions; track action.verb) {
-                          <fleet-kit-button
-                            [testid]="'gardening-proposal-finding-' + action.verb + '-' + row.findingId"
-                            (click)="evidenceTriage.emit({ findingId: row.findingId, verb: action.verb })"
-                            >{{ action.label }}</fleet-kit-button
-                          >
-                        }
-                      </span>
-                    }
-                  </p>
-                  <fleet-kit-prose-block
-                    [text]="row.summary"
-                    [testid]="'gardening-proposal-finding-summary-' + row.findingId"
-                  />
-                  @if (row.workItem) {
-                    <p class="pp-work-item">
-                      Work item:
-                      @if (row.workItem.webUrl; as url) {
-                        <a
-                          [href]="url"
-                          [attr.data-testid]="'gardening-proposal-finding-work-item-link-' + row.findingId"
-                        >{{ row.workItem.label }}</a>
-                      } @else {
-                        <span [attr.data-testid]="'gardening-proposal-finding-work-item-label-' + row.findingId">{{
-                          row.workItem.label
-                        }}</span>
+        @if (panel.hasFindings) {
+          <section class="pp-sec pp-evidence" data-testid="gardening-proposal-evidence">
+            <span class="tag">Evidence</span>
+            <fleet-kit-async-state
+              [state]="evidenceState()"
+              placement="inline"
+              emptyText="No findings on record."
+              emptyTestid="gardening-proposal-evidence-empty"
+            >
+              <ul>
+                @for (row of evidence(); track row.findingId) {
+                  <li [attr.data-testid]="'gardening-proposal-finding-' + row.findingId">
+                    <p class="pp-finding-head">
+                      <a
+                        class="pp-finding-ref"
+                        [routerLink]="['/gardening', 'findings', row.findingId]"
+                        [attr.data-testid]="'gardening-proposal-finding-link-' + row.findingId"
+                      >{{ compactRef(row.findingId) }}</a>
+                      <span class="pp-sep" aria-hidden="true">·</span>
+                      <span class="pp-finding-locus">{{ row.locus }}</span>
+                      <span class="pp-sep" aria-hidden="true">·</span>
+                      <fleet-kit-badge
+                        class="pp-finding-state"
+                        [attr.data-testid]="'gardening-proposal-finding-state-' + row.findingId"
+                        [tone]="stateTone(row)"
+                        variant="text"
+                        >{{ row.state }}</fleet-kit-badge
+                      >
+                      <!-- Offered on any row that has not exited: an exit verb has nothing
+                           to do to a finding already out of the bucket, and the state beside
+                           it already says so. That includes a `gone`-flagged row, which is
+                           still open and is precisely what Confirm gone is for — hence the
+                           classification off `state`, never off the wire's `live` boolean.
+                           Withheld without `chunk:control`, the same permission the exit
+                           routes require, rather than offering a button that 403s. -->
+                      @if (canControl() && !isExited(row.state)) {
+                        <span class="pp-finding-actions">
+                          @for (action of actions; track action.verb) {
+                            <fleet-kit-button
+                              [testid]="'gardening-proposal-finding-' + action.verb + '-' + row.findingId"
+                              (click)="evidenceTriage.emit({ findingId: row.findingId, verb: action.verb })"
+                              >{{ action.label }}</fleet-kit-button
+                            >
+                          }
+                        </span>
                       }
                     </p>
-                  }
-                </li>
-              }
-            </ul>
-          </fleet-kit-async-state>
-        </section>
+                    <fleet-kit-prose-block
+                      [text]="row.summary"
+                      [testid]="'gardening-proposal-finding-summary-' + row.findingId"
+                    />
+                    @if (row.workItem) {
+                      <p class="pp-work-item">
+                        Work item:
+                        @if (row.workItem.webUrl; as url) {
+                          <a
+                            [href]="url"
+                            [attr.data-testid]="'gardening-proposal-finding-work-item-link-' + row.findingId"
+                          >{{ row.workItem.label }}</a>
+                        } @else {
+                          <span [attr.data-testid]="'gardening-proposal-finding-work-item-label-' + row.findingId">{{
+                            row.workItem.label
+                          }}</span>
+                        }
+                      </p>
+                    }
+                  </li>
+                }
+              </ul>
+            </fleet-kit-async-state>
+          </section>
+        }
       </section>
     }
   </fleet-kit-async-state>

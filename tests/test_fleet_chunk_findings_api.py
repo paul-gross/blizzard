@@ -104,6 +104,17 @@ def test_returns_the_proposals_findings_via_the_shared_projection(tmp_path: Path
         assert row == by_id[row["finding_id"]]
 
 
+def test_returns_200_empty_for_a_proposal_citing_no_findings(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_proposal(hub, findings=[])
+    chunk_id = _accept(hub)
+
+    resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/findings")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
 # --------------------------------------------------------------------------- #
 # GET /chunks/{chunk_id}/findings/{finding_id}
 

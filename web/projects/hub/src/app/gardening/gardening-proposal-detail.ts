@@ -140,6 +140,7 @@ export class GardeningProposalDetail {
       body: proposal.body,
       closure: proposal.closure ? this.closureVm(proposal.closure) : null,
       createdAt: proposal.created_at,
+      hasFindings: proposal.findings.length > 0,
     };
   });
 

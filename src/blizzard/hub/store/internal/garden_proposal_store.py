@@ -76,10 +76,11 @@ class GardenProposalStore:
                     created_at=at,
                 )
             )
-            conn.execute(
-                insert(garden_proposal_findings),
-                [{"proposal_id": proposal_id, "finding_id": finding_id} for finding_id in findings],
-            )
+            if findings:
+                conn.execute(
+                    insert(garden_proposal_findings),
+                    [{"proposal_id": proposal_id, "finding_id": finding_id} for finding_id in findings],
+                )
         return GardenProposal(
             proposal_id=proposal_id,
             routine_name=routine_name,

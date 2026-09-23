@@ -140,10 +140,10 @@ def accept_garden_proposal(
 ) -> object:
     """Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default,
     wrapping `body` (or the proposal's own, when none is given) in the "Related
-    findings" template, or records the decline when `mint_work_item` is false — never
-    inferred from an absent link. Promotes nothing and changes no finding's state. 404
-    unknown proposal, 409 already closed or a raced ingest, 503 the packaged default
-    graph retired."""
+    findings" template when the proposal names any finding, or left bare when it names
+    none, or records the decline when `mint_work_item` is false — never inferred from an
+    absent link. Promotes nothing and changes no finding's state. 404 unknown proposal,
+    409 already closed or a raced ingest, 503 the packaged default graph retired."""
     proposal = _get_or_404(proposal_id, services)
     existing = services.garden_proposal_closures.get(proposal_id)
     if existing is not None:

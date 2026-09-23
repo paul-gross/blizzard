@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient, type MeResponse } from 'fleet';
@@ -34,6 +35,17 @@ const WAITING_B = {
   body: 'Nothing calls it.',
   created_at: '2026-01-02T00:00:00Z',
   findings: ['fin_3'],
+  closure: null,
+};
+
+const NO_FINDINGS = {
+  proposal_id: 'gp_none',
+  routine_name: 'comments',
+  class: 'fix-the-source',
+  title: 'A proposal citing nothing',
+  body: 'This routine found no findings worth citing.',
+  created_at: '2026-01-01T12:00:00Z',
+  findings: [],
   closure: null,
 };
 
@@ -161,6 +173,24 @@ describe('GardeningProposalDetail', () => {
     expect(el.querySelector('[data-testid="gardening-proposal-case"]')?.textContent).toContain(
       'Delete the dead helper',
     );
+  });
+
+  it('sets panelVm().hasFindings true for a proposal that cites findings', async () => {
+    const { fixture } = await render([WAITING_A, NO_FINDINGS], VIEWER_ME_RESPONSE, 'gp_1');
+    const panel = fixture.debugElement.query(By.css('fleet-proposal-panel'));
+    expect(panel.componentInstance.vm()?.hasFindings).toBe(true);
+  });
+
+  it('sets panelVm().hasFindings false for a proposal citing none, off its own citation count, not the live evidence read', async () => {
+    const { fixture } = await render([WAITING_A, NO_FINDINGS], VIEWER_ME_RESPONSE, 'gp_none');
+    const panel = fixture.debugElement.query(By.css('fleet-proposal-panel'));
+    expect(panel.componentInstance.vm()?.hasFindings).toBe(false);
+  });
+
+  it('withholds the Evidence section outright for a proposal that cites no findings', async () => {
+    const { el } = await render([NO_FINDINGS], VIEWER_ME_RESPONSE, 'gp_none');
+
+    expect(el.querySelector('[data-testid="gardening-proposal-evidence"]')).toBeNull();
   });
 
   it("links each evidence row's compact ref to the finding detail route", async () => {
