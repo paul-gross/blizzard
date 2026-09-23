@@ -17,8 +17,8 @@ repo's worktree first, then check:
 
 1. **That repo's PR is merged** — read its merge state from inside that repo's worktree so the query targets the right
    forge (on GitHub, `gh pr view --json state,mergedAt`).
-2. **The merged sha is reachable from base** — the PR's own landed tip (`gh pr view --json mergeCommit`), never the
-   declared sha: rebase-merge rewrites that one out of history at merge. `git merge-base --is-ancestor <merged sha>
+2. **The merged sha is reachable from base** — the PR's own merge commit (`gh pr view --json mergeCommit`), not the
+   declared branch sha. `git merge-base --is-ancestor <merged sha>
    origin/<base>` exits 0.
 3. **The chunk's originating work item is closed** — `blizzard runner work-items <chunk-id>` gives each ref's `web_url`;
    ask the forge. An open item is a finding — never on its own a reason to select `delivery-incomplete`; only legs 1 and

@@ -17,8 +17,7 @@ pre-push pushed, not the merged sha — read each PR's own state rather than ass
 
 Fetch in each repo's worktree before verifying — its base-branch view dates from environment acquisition. Per repo,
 check its PR's merge state from inside that repo's worktree so the query targets the right forge (on GitHub,
-`gh pr view --json state,mergedAt`), then test the merged sha's reachability — never the sha pre-push declared, which
-rebase-merge rewrites out of history the moment the PR merges — with
+`gh pr view --json state,mergedAt`), then test the PR merge commit's reachability, not the sha pre-push declared, with
 `git merge-base --is-ancestor <merged sha> origin/<base>` (`origin/master` unless the repo records another;
 `gh pr view --json mergeCommit` gives the merged sha) — that predicate specifically, not branch-tip comparison or log
 reading.

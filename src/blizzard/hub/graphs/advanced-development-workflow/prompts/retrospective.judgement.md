@@ -7,7 +7,7 @@ reported plainly.
 Select `recorded` when the landing verification found nothing wrong, or found only a red merge-commit gate result and/or
 an open work item — each is logged as a finding, and neither alone withholds `recorded`. The chunk closes.
 
-Select `delivery-incomplete` when the landing verification found a real discrepancy: a declared sha not reachable from
+Select `delivery-incomplete` when the landing verification found a real discrepancy: a PR merge commit not reachable from
 its repo's base branch, or a repo's PR unmerged. Name the specific discrepancy in your `retrospective` asset before
 selecting it; `resolve` reads it from there.
 

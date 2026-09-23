@@ -319,10 +319,10 @@ def test_clean_pr_waits_while_its_checks_are_still_pending(
     assert not any(url.endswith("/merge") for url in _urls(calls, "PUT")), "a clean-but-not-green PR must not merge"
 
 
-def test_clean_merge_body_asserts_a_rebase_merge_method(
+def test_clean_merge_body_requests_a_merge_commit(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """`land_pr_ci` merges for a linear history."""
+    """A green PR requests a merge commit, preserving its branch history."""
     _set_base_env(monkeypatch, feature_title="t")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     monkeypatch.setattr(
@@ -334,7 +334,7 @@ def test_clean_merge_body_asserts_a_rebase_merge_method(
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "landed"
     merge = [body for m, url, body in calls if m == "PUT" and url.endswith("/merge") and body is not None]
-    assert merge and merge[0]["merge_method"] == "rebase"
+    assert merge and merge[0]["merge_method"] == "merge"
 
 
 # land_pr_ci terminal CI check failure + CI-watch findings (issue #232): asserts the

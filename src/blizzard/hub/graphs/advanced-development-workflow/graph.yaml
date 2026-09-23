@@ -11,10 +11,9 @@
 # improvement-tier findings into the reviewed-plan it publishes — the asset build
 # implements — and bounces to plan only on must-fix. Every backward edge carries its
 # findings asset into the node it re-enters — a bounce is contention, not failure.
-# Delivery is authored as graph content: `deliver` is a generic hub command node
-# running the packaged land_pr_ci script — the PR + CI-watch delivery policy, which
-# polls until every PR is cleanly mergeable rather than merging straight through as
-# the default graph's land_default does.
+# Delivery is authored as graph content: `deliver` runs the packaged `land_pr_ci`
+# script. The PR + CI-watch delivery policy is in
+# blizzard-context:/workflows/feature-delivery.md.
 
 name: adv-dwf
 entry: plan
@@ -390,7 +389,7 @@ nodes:
           description: The retrospective is written as the retrospective asset; the work is complete.
           to: done
         delivery-incomplete:
-          description: Re-derived landing verification found a repo's declared sha not reachable from base, or a repo's PR unmerged — a partial landing, not a pre-merge blocker. Routed to resolve for a targeted repair. Intended as a single round-trip per chunk, held to that by the judgement prompt's own loop-bound check (reading blizzard runner chunk history) rather than by an authored counter here — neither retries (below) nor bounce_cap observes this edge.
+          description: Re-derived landing verification found a repo's PR merge commit not reachable from base, or a repo's PR unmerged — a partial landing, not a pre-merge blocker. Routed to resolve for a targeted repair. Intended as a single round-trip per chunk, held to that by the judgement prompt's own loop-bound check (reading blizzard runner chunk history) rather than by an authored counter here — neither retries (below) nor bounce_cap observes this edge.
           to: resolve
           prompt_addendum: ./prompts/resolve.from-retrospective.md
     retries:
