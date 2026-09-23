@@ -1,5 +1,9 @@
 <fleet-routine-panel [vm]="panelVm()" [state]="panelState()" (run)="run()" />
 
+@if (panelVm(); as panel) {
+  <fleet-routine-proposal-counts [rows]="proposalCountsRows()" [state]="proposalCountsState()" />
+}
+
 @if (runningRoutine(); as routine) {
   <app-gardening-run-dialog
     [routineId]="routine.routine_id"

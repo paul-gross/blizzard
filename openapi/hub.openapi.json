@@ -16121,7 +16121,7 @@
     },
     "/api/routines/proposal-counts": {
       "get": {
-        "description": "Garden-proposal counts (blizzard#547) per routine and class over `[since,\nuntil)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum. `routine` narrows to one routine by name when given; 404 on\nan unknown one. 422 on a malformed instant or `until <= since`. Declared ahead of\n`GET /routines/{routine_id}` so the literal path wins (this file's own routing-order\nrule).",
+        "description": "Garden-proposal counts (blizzard#547) per routine and class over `[since,\nuntil)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum. `routine` narrows to one routine by name when given; 404 on\nan unknown one. 422 on a malformed instant or `until <= since`.",
         "operationId": "routine_proposal_counts_api_routines_proposal_counts_get",
         "parameters": [
           {

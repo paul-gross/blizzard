@@ -5,7 +5,12 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { client as hubClient } from '../api/hub/client.gen';
 import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
 import { settle } from '../testing/settle';
-import { injectHubRoutineSweepsQuery, injectHubRoutineTrendQuery, injectHubRoutinesQuery } from './routines.query';
+import {
+  injectHubRoutineProposalCountsQuery,
+  injectHubRoutineSweepsQuery,
+  injectHubRoutineTrendQuery,
+  injectHubRoutinesQuery,
+} from './routines.query';
 
 @Component({
   selector: 'fleet-test-routines-query-host',
@@ -51,6 +56,32 @@ class TestRoutineSweepsQueryHost {
 })
 class TestRoutineSweepsDisabledQueryHost {
   readonly query = injectHubRoutineSweepsQuery(
+    () => null,
+    () => '2026-01-01T00:00:00Z',
+    () => '2026-01-15T00:00:00Z',
+  );
+}
+
+@Component({
+  selector: 'fleet-test-routine-proposal-counts-query-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '',
+})
+class TestRoutineProposalCountsQueryHost {
+  readonly query = injectHubRoutineProposalCountsQuery(
+    () => 'nightly',
+    () => '2026-01-01T00:00:00Z',
+    () => '2026-01-15T00:00:00Z',
+  );
+}
+
+@Component({
+  selector: 'fleet-test-routine-proposal-counts-disabled-query-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '',
+})
+class TestRoutineProposalCountsDisabledQueryHost {
+  readonly query = injectHubRoutineProposalCountsQuery(
     () => null,
     () => '2026-01-01T00:00:00Z',
     () => '2026-01-15T00:00:00Z',
@@ -155,6 +186,58 @@ describe('injectHubRoutineSweepsQuery', () => {
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
     });
     const fixture = TestBed.createComponent(TestRoutineSweepsDisabledQueryHost);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.query.isPending()).toBe(true);
+    expect(stub.requests).toHaveLength(0);
+  });
+});
+
+describe('injectHubRoutineProposalCountsQuery', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub?.restore());
+
+  it('reads the counts off GET /api/routines/proposal-counts', async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/routines/proposal-counts') {
+        return {
+          since: '2026-01-01T00:00:00Z',
+          until: '2026-01-15T00:00:00Z',
+          routine: 'nightly',
+          rows: [
+            {
+              routine_name: 'nightly',
+              class: 'stale-docstring',
+              open: 2,
+              passed: 1,
+              accepted_with_item: 3,
+              accepted_without_item: 0,
+              created: 6,
+            },
+          ],
+        };
+      }
+      return {};
+    });
+    TestBed.configureTestingModule({
+      imports: [TestRoutineProposalCountsQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestRoutineProposalCountsQueryHost);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.query.data()?.rows).toHaveLength(1);
+    const calls = stub.forRoute('/api/routines/proposal-counts', 'GET');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('stays disabled while no routine is selected', async () => {
+    stub = stubRequestClient(hubClient);
+    TestBed.configureTestingModule({
+      imports: [TestRoutineProposalCountsDisabledQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+    });
+    const fixture = TestBed.createComponent(TestRoutineProposalCountsDisabledQueryHost);
     await settle(fixture);
 
     expect(fixture.componentInstance.query.isPending()).toBe(true);

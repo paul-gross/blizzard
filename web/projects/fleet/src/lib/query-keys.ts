@@ -127,6 +127,27 @@ export function hubRoutineSweepsKey(routineId: string | null, since: string, unt
   return ['hub', 'routine-sweeps', routineId, since, until];
 }
 
+/** One routine's garden-proposal counts read's key prefix — `GET
+ * /api/routines/proposal-counts` (blizzard#547), appended with the selected routine
+ * and window so a different one is its own cache entry, {@link hubRoutineTrendKey}'s
+ * own window-in-key shape. A pass/accept garden-proposal mutation doesn't know which
+ * routine or window is currently cached, so it invalidates this bare prefix instead
+ * (TanStack's default prefix match on `invalidateQueries`) — every cached
+ * routine/window combination closes at once, {@link hubFindingPrefixKey}'s own
+ * shape. */
+export const hubRoutineProposalCountsPrefixKey = ['hub', 'routine-proposal-counts'] as const;
+
+/** @see hubRoutineProposalCountsPrefixKey — `routineName` is nullable,
+ * `hubRoutineTrendKey`'s own null-tolerant shape, for the disabled-query rest state
+ * while no routine is selected. */
+export function hubRoutineProposalCountsKey(
+  routineName: string | null,
+  since: string,
+  until: string,
+): readonly unknown[] {
+  return [...hubRoutineProposalCountsPrefixKey, routineName, since, until];
+}
+
 /** One routine's recorded scope baselines, keyed by routine id — `GET
  * /api/routines/{routine_id}/baselines`. */
 export function hubRoutineBaselinesKey(routineId: string): readonly unknown[] {

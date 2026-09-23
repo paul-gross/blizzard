@@ -5,8 +5,10 @@ import {
   asyncState,
   defaultRoutineWindow,
   FleetRoutinePanel,
+  FleetRoutineProposalCounts,
   injectHubGraphQuery,
   injectHubGraphsQuery,
+  injectHubRoutineProposalCountsQuery,
   injectHubRoutineScopesQuery,
   injectHubRoutineSweepsQuery,
   injectHubRoutineTrendQuery,
@@ -15,6 +17,7 @@ import {
   type KitAsyncStateValue,
   type LastSweptRowVm,
   type MeasurementReadingVm,
+  type ProposalCountsRowVm,
   type RelatedScopeVm,
   type RoutinePanelVm,
   type RoutineView,
@@ -28,25 +31,29 @@ import { GardeningRunDialog } from './gardening-run-dialog';
 /**
  * The selected routine's own detail — the right-hand child of
  * `/gardening/routines` (`gardening-routines-page.ts` owns the list beside it):
- * the record, its read-only strategy, and its three health readings. Mounted by
- * both of that route's children, so the bare one renders the panel's own
- * "nothing selected" empty state. D1 ships no New/Edit affordance here.
+ * the record, its read-only strategy, its three health readings, and its
+ * garden-proposal counts (blizzard#547). Mounted by both of that route's children,
+ * so the bare one renders the panel's own "nothing selected" empty state. D1 ships
+ * no New/Edit affordance here.
  *
- * A container: it injects the routine, graph, trend, sweeps, and scopes queries
- * and forwards a plain view model to the presentational {@link FleetRoutinePanel},
- * which injects no query of its own. The routine and graph reads are the same
- * cache-keyed queries the list beside it already holds, so resolving the routed
- * routine independently costs no second fetch. The scopes read renders the
- * routine's related scope set, each marked whether it is this routine's own
- * default (D8).
+ * A container: it injects the routine, graph, trend, sweeps, scopes, and
+ * proposal-counts queries and forwards a plain view model to the presentational
+ * {@link FleetRoutinePanel}, which injects no query of its own. The routine and
+ * graph reads are the same cache-keyed queries the list beside it already holds, so
+ * resolving the routed routine independently costs no second fetch. The scopes read
+ * renders the routine's related scope set, each marked whether it is this routine's
+ * own default (D8). The proposal-counts read feeds a separate presentational
+ * component, {@link FleetRoutineProposalCounts}, gated on its own `asyncState`
+ * independently of {@link panelState} (`bzh:frontend-empty-state-gated`).
  *
  * The reporting window is this pane's alone — nothing in the list is cut to it —
- * so it is computed here, once, at construction.
+ * so it is computed here, once, at construction. The proposal-counts read shares
+ * that same window rather than one of its own.
  */
 @Component({
   selector: 'app-gardening-routine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRoutinePanel, GardeningRunDialog],
+  imports: [FleetRoutinePanel, FleetRoutineProposalCounts, GardeningRunDialog],
   templateUrl: './gardening-routine-detail.html',
   styleUrl: './gardening-detail-host.css',
 })
@@ -100,6 +107,11 @@ export class GardeningRoutineDetail {
     () => this.window.until,
   );
   private readonly scopesQuery = injectHubRoutineScopesQuery(() => this.selectedRoutine()?.routine_id ?? null);
+  private readonly proposalCountsQuery = injectHubRoutineProposalCountsQuery(
+    () => this.selectedRoutine()?.name ?? null,
+    () => this.window.since,
+    () => this.window.until,
+  );
 
   private readonly strategy = computed<readonly StrategyStepVm[]>(() =>
     (this.graphQuery.data()?.nodes ?? []).map((n) => ({ name: n.name, prompt: n.prompt ?? null })),
@@ -135,6 +147,28 @@ export class GardeningRoutineDetail {
     if (slugs === undefined || routine === null) return null;
     return slugs.map((slug) => ({ slug, isDefault: slug === routine.default_scope_slug }));
   });
+
+  /** The proposal-counts table's own rows (blizzard#547) — mapped off the read's
+   * `rows`, already scoped to the one selected routine by the query's own `routine`
+   * filter. */
+  protected readonly proposalCountsRows = computed<readonly ProposalCountsRowVm[]>(() =>
+    (this.proposalCountsQuery.data()?.rows ?? []).map((row) => ({
+      proposalClass: row.class,
+      created: row.created,
+      open: row.open,
+      passed: row.passed,
+      acceptedWithItem: row.accepted_with_item,
+      acceptedWithoutItem: row.accepted_without_item,
+    })),
+  );
+
+  /** The proposal-counts panel's own async state, independent of {@link panelState}
+   * (`bzh:frontend-empty-state-gated`) — its own loading/error/empty resolve on this
+   * one read, not gated on the record/graph reads the rest of the page renders
+   * around. */
+  protected readonly proposalCountsState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.proposalCountsQuery, (this.proposalCountsQuery.data()?.rows.length ?? 0) === 0),
+  );
 
   protected readonly panelVm = computed<RoutinePanelVm | null>(() => {
     const routine = this.selectedRoutine();

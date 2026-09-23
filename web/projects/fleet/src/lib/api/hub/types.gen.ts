@@ -2383,6 +2383,67 @@ export type GardenProposalClosureView = {
 };
 
 /**
+ * GardenProposalCountsRowView
+ *
+ * One routine/class pair's garden-proposal counts over the requested window.
+ */
+export type GardenProposalCountsRowView = {
+    /**
+     * Accepted With Item
+     */
+    accepted_with_item: number;
+    /**
+     * Accepted Without Item
+     */
+    accepted_without_item: number;
+    /**
+     * Class
+     */
+    class: string;
+    /**
+     * Created
+     */
+    created: number;
+    /**
+     * Open
+     */
+    open: number;
+    /**
+     * Passed
+     */
+    passed: number;
+    /**
+     * Routine Name
+     */
+    routine_name: string;
+};
+
+/**
+ * GardenProposalCountsView
+ *
+ * `GET /api/routines/proposal-counts`'s own response — `routine` echoes the
+ * optional filter, `None` when unfiltered.
+ */
+export type GardenProposalCountsView = {
+    /**
+     * Routine
+     */
+    routine: string | null;
+    /**
+     * Rows
+     */
+    rows: Array<GardenProposalCountsRowView>;
+    /**
+     * Since
+     */
+    since: string;
+    /**
+     * Until
+     */
+    until: string;
+};
+
+/**
  * GardenProposalItemOutcome
  *
  * Whether an accepted proposal minted a work item — recorded positively rather than
@@ -9461,6 +9522,44 @@ export type CreateRoutineApiRoutinesPostResponses = {
 };
 
 export type CreateRoutineApiRoutinesPostResponse = CreateRoutineApiRoutinesPostResponses[keyof CreateRoutineApiRoutinesPostResponses];
+
+export type RoutineProposalCountsApiRoutinesProposalCountsGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until: string;
+        /**
+         * Routine
+         */
+        routine?: string | null;
+    };
+    url: '/api/routines/proposal-counts';
+};
+
+export type RoutineProposalCountsApiRoutinesProposalCountsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RoutineProposalCountsApiRoutinesProposalCountsGetError = RoutineProposalCountsApiRoutinesProposalCountsGetErrors[keyof RoutineProposalCountsApiRoutinesProposalCountsGetErrors];
+
+export type RoutineProposalCountsApiRoutinesProposalCountsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalCountsView;
+};
+
+export type RoutineProposalCountsApiRoutinesProposalCountsGetResponse = RoutineProposalCountsApiRoutinesProposalCountsGetResponses[keyof RoutineProposalCountsApiRoutinesProposalCountsGetResponses];
 
 export type RoutineTrendApiRoutinesTrendGetData = {
     body?: never;

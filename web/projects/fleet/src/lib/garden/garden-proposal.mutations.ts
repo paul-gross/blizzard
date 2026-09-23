@@ -8,7 +8,7 @@ import {
   type GardenProposalView,
 } from '../api/hub';
 import { acceptGardenProposalMutationKey, passGardenProposalMutationKey } from '../mutation-keys';
-import { hubGardenProposalKey, hubGardenProposalsKey } from '../query-keys';
+import { hubGardenProposalKey, hubGardenProposalsKey, hubRoutineProposalCountsPrefixKey } from '../query-keys';
 
 /** `POST /api/garden-proposals/{proposal_id}/pass` with `{ reason }` —
  * `blizzard hub garden-proposal pass <id> --reason <text>`'s own body. */
@@ -22,7 +22,10 @@ export interface GardenProposalPassVars {
  * run raising the same response as though it were new. Garden proposals carry no SSE
  * event of their own (`hubGardenProposalsKey`'s own doc comment), so a successful
  * pass invalidates the docket list and this proposal's own detail read directly,
- * `scope-edit.mutations.ts`'s own shape.
+ * `scope-edit.mutations.ts`'s own shape — plus every cached garden-proposal-counts
+ * window/routine variant (`hubRoutineProposalCountsPrefixKey`), since a pass changes
+ * a proposal's own closure count and this mutation doesn't know which window or
+ * routine the counts panel currently has cached.
  */
 export function injectPassGardenProposalMutation() {
   const queryClient = inject(QueryClient);
@@ -41,6 +44,7 @@ export function injectPassGardenProposalMutation() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: hubGardenProposalsKey }),
         queryClient.invalidateQueries({ queryKey: hubGardenProposalKey(vars.proposalId) }),
+        queryClient.invalidateQueries({ queryKey: hubRoutineProposalCountsPrefixKey }),
       ]),
   }));
 }
@@ -60,7 +64,8 @@ export interface GardenProposalAcceptVars {
  * declining to mint when `mintWorkItem` is `false`, itself recorded rather than left
  * to read as an absent link. Neither promotes the minted item nor changes any
  * finding's state — the closing route itself owns that guarantee. Same
- * direct-invalidation shape as {@link injectPassGardenProposalMutation}.
+ * direct-invalidation shape as {@link injectPassGardenProposalMutation}, including the
+ * same garden-proposal-counts prefix invalidation.
  */
 export function injectAcceptGardenProposalMutation() {
   const queryClient = inject(QueryClient);
@@ -83,6 +88,7 @@ export function injectAcceptGardenProposalMutation() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: hubGardenProposalsKey }),
         queryClient.invalidateQueries({ queryKey: hubGardenProposalKey(vars.proposalId) }),
+        queryClient.invalidateQueries({ queryKey: hubRoutineProposalCountsPrefixKey }),
       ]),
   }));
 }

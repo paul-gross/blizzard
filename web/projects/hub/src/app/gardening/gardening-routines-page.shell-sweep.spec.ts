@@ -82,6 +82,13 @@ const TREND = {
   age: { boundary: '2026-01-01T00:00:00Z', recent: 2, older: 0, unattributed: 0 },
 };
 
+const PROPOSAL_COUNTS = {
+  since: '2026-01-01T00:00:00Z',
+  until: '2026-01-29T00:00:00Z',
+  routine: 'nightly',
+  rows: [],
+};
+
 /**
  * Stands in for `GardeningPage`'s own shell around the tab — `gardening-page.css`'s
  * `:host` flex column and its `.body` outlet wrapper, reproduced here so the height
@@ -148,6 +155,7 @@ async function render() {
     if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
     if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return [ROUTINE.default_scope_slug];
     if (method === 'GET' && path === '/api/routines/trend') return TREND;
+    if (method === 'GET' && path === '/api/routines/proposal-counts') return PROPOSAL_COUNTS;
     if (method === 'GET' && path === '/api/scopes') return SCOPES;
     if (method === 'GET' && path === '/api/me') return ME;
     return {};
@@ -259,6 +267,7 @@ describe('gardening routines page independent-scroll shell sweep (web:shell-swee
       if (method === 'GET' && path === '/api/routines/rtn_0/sweeps') return SWEEPS_LONG;
       if (method === 'GET' && path === '/api/routines/rtn_0/scopes') return [ROUTINE.default_scope_slug];
       if (method === 'GET' && path === '/api/routines/trend') return TREND;
+      if (method === 'GET' && path === '/api/routines/proposal-counts') return PROPOSAL_COUNTS;
       if (method === 'GET' && path === '/api/scopes') return SCOPES;
       if (method === 'GET' && path === '/api/me') return ME;
       return {};
