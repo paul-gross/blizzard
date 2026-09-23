@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -16,6 +17,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.tokens import TokenHash
+from blizzard.runner.api import hub_proxy
+from blizzard.runner.api.analytics import _ANALYTICS_HUB_TIMEOUT
+from blizzard.runner.api.hub_proxy import _HUB_TIMEOUT
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
@@ -202,6 +206,38 @@ def test_forwards_the_window_params_and_returns_the_hub_body(tmp_path: Path, suf
         f"?since=2020-01-01T00%3A00%3A00Z&until=2030-01-01T00%3A00%3A00Z"
     ]
     assert resp.json() == body
+
+
+@pytest.mark.parametrize("suffix", _ROUTES)
+def test_a_scan_that_runs_the_whole_attempt_is_not_retried(
+    tmp_path: Path, suffix: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The forward's whole budget is one attempt's worth, not the proxy's multi-retry
+    ceiling: a counts/spend scan that legitimately runs the full per-attempt bound has
+    nothing left to retry with, so the hub never fields a second, overlapping scan while
+    the first still drains its pool connection. A fast failure keeps its retries."""
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    clock = [1000.0]
+    monkeypatch.setattr(hub_proxy, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        clock[0] += request.extensions["timeout"]["pool"]
+        raise httpx.ReadTimeout("the scan ran the whole attempt")
+
+    app.state.hub_router.handler = handler
+    with TestClient(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/analytics/{suffix}",
+            params={"since": "2020-01-01T00:00:00Z"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 502, resp.text
+    assert attempts == 1
+    assert _ANALYTICS_HUB_TIMEOUT == _HUB_TIMEOUT
 
 
 @pytest.mark.parametrize("suffix", _ROUTES)
