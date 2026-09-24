@@ -139,10 +139,10 @@ def test_spend_chunks_dataset_renders_the_chunk_spend_shape(monkeypatch: pytest.
 
     assert result.exit_code == 0, result.output
     assert "ch_1" in result.output
-    assert "~$0.02" in result.output
+    assert "$0.02+" in result.output
 
 
-def test_a_spend_row_carrying_an_estimate_renders_it_beside_the_billed_cost(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_spend_row_carrying_an_estimate_folds_it_into_the_one_cost_figure(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_get, _ = _get_returning(
         {
             "spend": [
@@ -164,10 +164,10 @@ def test_a_spend_row_carrying_an_estimate_renders_it_beside_the_billed_cost(monk
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes"])
 
     assert result.exit_code == 0, result.output
-    assert "nd_build  $0.00  $0.75 est.  in=100" in result.output
+    assert "nd_build  ~$0.75  in=100" in result.output
 
 
-def test_a_spend_row_with_no_estimate_renders_no_est_label(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_spend_row_with_no_estimate_carries_no_tilde(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_get, _ = _get_returning(
         {
             "spend": [
@@ -189,7 +189,8 @@ def test_a_spend_row_with_no_estimate_renders_no_est_label(monkeypatch: pytest.M
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes"])
 
     assert result.exit_code == 0, result.output
-    assert "est." not in result.output
+    assert "$1.50" in result.output
+    assert "~$" not in result.output
 
 
 def test_outcomes_dataset_renders_the_outcomes_shape(monkeypatch: pytest.MonkeyPatch) -> None:

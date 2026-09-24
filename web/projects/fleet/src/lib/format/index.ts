@@ -6,7 +6,7 @@
  */
 
 export { compactRef, ENTITY_DISPLAY, type EntityDisplay } from '../compact-ref';
-export { formatCost, formatCostEstimate, formatTokens } from '../cost-format';
+export { formatCost, formatTokens, hasCostFigure } from '../cost-format';
 export { errorMessage } from '../error-message';
 export { harnessName } from '../harness-name';
 export { nodeStepKey, parseNodeStepKey } from '../node-step';

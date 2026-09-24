@@ -124,7 +124,7 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
 
-  it('renders a step’s own cost estimate on both the timeline and the Node history Selection list, labeled, with no overflow at ~390px', async () => {
+  it('renders a step’s own estimate folded into its one cost figure on both the timeline and the Node history Selection list, with no overflow at ~390px', async () => {
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
@@ -154,12 +154,12 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
       await page.viewport(390, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      const timelineEstimate = timelineRoot.querySelector<HTMLElement>('[data-testid="history-step-cost-estimate"]');
-      expect(timelineEstimate?.textContent?.trim()).toBe('$0.07 est.');
+      const timelineCosts = timelineRoot.querySelectorAll<HTMLElement>('[data-testid="history-step-cost"]');
+      expect(timelineCosts[1]?.textContent?.trim()).toBe('~$0.07');
       expect(timelineRoot.querySelector('[data-testid="history-step-cost-partial"]')).toBeNull();
 
-      const selectionEstimate = selectionRoot.querySelector<HTMLElement>('[data-testid="selection-step-cost-estimate"]');
-      expect(selectionEstimate?.textContent?.trim()).toBe('$0.07 est.');
+      const selectionCosts = selectionRoot.querySelectorAll<HTMLElement>('[data-testid="selection-step-cost"]');
+      expect(selectionCosts[1]?.textContent?.trim()).toBe('~$0.07');
       expect(selectionRoot.querySelector('[data-testid="selection-step-cost-partial"]')).toBeNull();
 
       const timelineList = timelineRoot.querySelector<HTMLElement>('.timeline') ?? timelineRoot;

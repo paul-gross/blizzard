@@ -522,7 +522,7 @@ def test_show_gains_no_lines_when_no_blocked_marking_or_edges(monkeypatch: pytes
 
 
 @pytest.mark.unit
-def test_show_prints_a_cost_estimate_line_labeled_est_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_folds_an_estimate_into_the_cost_line_with_a_tilde(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _detail("ch_1", cost={"cost_usd": 0.0, "cost_partial": False, "estimated_cost_usd": 0.03})
 
@@ -530,11 +530,11 @@ def test_show_prints_a_cost_estimate_line_labeled_est_when_present(monkeypatch: 
     result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
-    assert "cost estimate: $0.03 est." in result.output
+    assert "cost: ~$0.03" in result.output
 
 
 @pytest.mark.unit
-def test_show_prints_no_cost_estimate_line_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_marks_no_estimate_when_none_was_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _detail("ch_1", cost={"cost_usd": 0.10, "cost_partial": False})
 
@@ -542,7 +542,8 @@ def test_show_prints_no_cost_estimate_line_when_absent(monkeypatch: pytest.Monke
     result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
-    assert "cost estimate" not in result.output
+    assert "cost: $0.10" in result.output
+    assert "~$" not in result.output
 
 
 # `chunk depend` / `chunk release-dependency` (issue #476) — pure clients of the two
@@ -766,7 +767,7 @@ def test_chunk_list_marks_a_blocked_chunk(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.unit
-def test_chunk_list_renders_an_estimate_beside_the_billed_cost(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chunk_list_folds_an_estimate_into_the_one_cost_figure(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         return _FakeResponse(
             200,
@@ -790,8 +791,8 @@ def test_chunk_list_renders_an_estimate_beside_the_billed_cost(monkeypatch: pyte
 
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
-    assert lines[0].endswith("$0.00  $0.12 est.  [blocked on ch_prereq]")
-    assert "est." not in lines[1]
+    assert lines[0].endswith("~$0.12  [blocked on ch_prereq]")
+    assert lines[1].endswith("$0.50")
 
 
 @pytest.mark.unit

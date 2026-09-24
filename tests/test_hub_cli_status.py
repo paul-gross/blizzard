@@ -1,8 +1,8 @@
 """``blizzard hub status`` — the per-chunk cost column and fleet total (issue #60).
 
 Stubs ``httpx.get`` with canned responses keyed by URL, proving the CLI's own
-rendering — the per-chunk cost column, the fleet total, and the lower-bound PARTIAL
-marker — without a running hub.
+rendering — the per-chunk cost column, the fleet total, and the ``~``-estimated/
+``+``-partial markers — without a running hub.
 """
 
 from __future__ import annotations
@@ -96,8 +96,9 @@ def test_status_renders_a_per_chunk_cost_column_and_the_fleet_total(monkeypatch:
     assert "ch_1" in result.output
     assert "$0.42" in result.output
     assert "fleet spend" in result.output.lower()
-    # Exactly the chunk row's figure and the fleet total's — no stray partial marker.
-    assert "~" not in result.output
+    assert result.output.count("$0.42") == 2
+    assert "~$" not in result.output
+    assert "$0.42+" not in result.output
 
 
 def test_status_marks_a_partial_total_on_both_the_chunk_row_and_the_fleet_total(
@@ -110,10 +111,10 @@ def test_status_marks_a_partial_total_on_both_the_chunk_row_and_the_fleet_total(
 
     assert result.exit_code == 0, result.output
     # The chunk row and the fleet total both carry the lower-bound marker.
-    assert result.output.count("~$0.10") == 2
+    assert result.output.count("$0.10+") == 2
 
 
-def test_status_renders_the_estimate_beside_the_chunk_row_and_the_fleet_total(
+def test_status_folds_the_estimate_into_the_chunk_row_and_the_fleet_total(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cost = {**_cost(0.0, partial=False), "estimated_cost_usd": 0.31}
@@ -122,9 +123,9 @@ def test_status_renders_the_estimate_beside_the_chunk_row_and_the_fleet_total(
     result = CliRunner().invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
-    # A subscription-only chunk never reads a bare, exact-looking $0.00.
-    assert result.output.count("$0.00  $0.31 est.") == 2
-    assert "~" not in result.output
+    # A subscription-only chunk folds its estimate into one `~`-marked figure, never a bare $0.00.
+    assert result.output.count("~$0.31") == 2
+    assert "est." not in result.output
 
 
 def test_status_renders_no_estimate_where_none_was_reported(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -134,7 +135,8 @@ def test_status_renders_no_estimate_where_none_was_reported(monkeypatch: pytest.
     result = CliRunner().invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
-    assert "est." not in result.output
+    assert result.output.count("$0.42") == 2
+    assert "~$" not in result.output
 
 
 def test_status_names_a_ceiling_pause_reason_inline(monkeypatch: pytest.MonkeyPatch) -> None:

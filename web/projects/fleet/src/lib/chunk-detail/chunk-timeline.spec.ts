@@ -294,11 +294,11 @@ describe('ChunkTimeline', () => {
     const firstStepUsage = el.querySelectorAll('[data-testid="history-step"]')[0].querySelector(
       '[data-testid="history-step-usage"]',
     );
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('~$0.00');
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('$0.00+');
     expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-partial"]')).not.toBeNull();
   });
 
-  it("renders a step's own separate cost estimate, apart from the billed figure, and marks it not-partial for an estimate-only row", async () => {
+  it("renders a step's own estimate folded into its one cost figure, marked ~, and not-partial for an estimate-only row", async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', ESTIMATE_COST_DETAIL);
     await fixture.whenStable();
@@ -307,20 +307,20 @@ describe('ChunkTimeline', () => {
     const firstStepUsage = el.querySelectorAll('[data-testid="history-step"]')[0].querySelector(
       '[data-testid="history-step-usage"]',
     );
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('$0.00');
-    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-estimate"]')?.textContent?.trim()).toBe(
-      '$0.07 est.',
-    );
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent?.trim()).toBe('~$0.07');
     expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-partial"]')).toBeNull();
   });
 
-  it('renders no cost-estimate figure for a step with no estimate', async () => {
+  it('renders no ~ marker on a step with no estimate', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     fixture.componentRef.setInput('detail', COST_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="history-step-cost-estimate"]')).toBeNull();
+    const firstStepUsage = el.querySelectorAll('[data-testid="history-step"]')[0].querySelector(
+      '[data-testid="history-step-usage"]',
+    );
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent?.trim()).toBe('$0.42');
   });
 
   it("renders a step's recorded harness as a short name beside its usage (blizzard#441)", async () => {

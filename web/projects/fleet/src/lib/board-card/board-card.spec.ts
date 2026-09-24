@@ -120,25 +120,29 @@ describe('BoardCardComponent work-ref chips (issue #176)', () => {
   });
 });
 
-describe('BoardCardComponent cost estimate', () => {
-  it('renders the estimate, labeled, apart from the billed figure', async () => {
+describe('BoardCardComponent cost figure', () => {
+  it('renders an entirely estimated card as the estimate alone, marked ~', async () => {
     const el = await render({ ...BASE, costUsd: 0, costPartial: false, estimatedCostUsd: 0.07 });
 
-    expect(el.querySelector('[data-testid="card-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(el.querySelector('[data-testid="card-cost"]')?.textContent?.trim()).toBe('~$0.07');
+  });
+
+  it('renders no cost figure for a card with no billed cost, no estimate, and not partial', async () => {
+    const el = await render(BASE);
+
     expect(el.querySelector('[data-testid="card-cost"]')).toBeNull();
   });
 
-  it('renders no estimate for a card with none — exactly as before this field existed', async () => {
-    const el = await render(BASE);
-
-    expect(el.querySelector('[data-testid="card-cost-estimate"]')).toBeNull();
-  });
-
-  it('renders both a billed cost and its own estimate on the same card, never merged', async () => {
+  it('folds a billed cost and its own estimate into one figure, marked ~', async () => {
     const el = await render({ ...BASE, costUsd: 0.42, costPartial: false, estimatedCostUsd: 0.07 });
 
-    expect(el.querySelector('[data-testid="card-cost"]')?.textContent?.trim()).toBe('$0.42');
-    expect(el.querySelector('[data-testid="card-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(el.querySelector('[data-testid="card-cost"]')?.textContent?.trim()).toBe('~$0.49');
+  });
+
+  it('marks a partial billed cost with a trailing +', async () => {
+    const el = await render({ ...BASE, costUsd: 0.42, costPartial: true, estimatedCostUsd: null });
+
+    expect(el.querySelector('[data-testid="card-cost"]')?.textContent?.trim()).toBe('$0.42+');
   });
 });
 

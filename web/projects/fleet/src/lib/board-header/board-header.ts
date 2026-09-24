@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import type { ChunkSummary, FleetSpendView } from '../api/hub';
 import { LANES, laneFor } from '../chunk-lanes';
 import { BrandMark } from '../design/brand-mark';
-import { formatCost, formatCostEstimate } from '../cost-format';
+import { formatCost } from '../cost-format';
 
 /** One header stat cell — a label over its live count, optionally shown as a
  * `value/capacity` fraction (e.g. the runner's `envs 2/4`). `capacity` is
@@ -73,7 +73,6 @@ interface SpendCellView {
 })
 export class BoardHeader {
   protected readonly formatCost = formatCost;
-  protected readonly formatCostEstimate = formatCostEstimate;
 
   /** A short connection/health status shown in the header (e.g. `ok`, `offline`). */
   readonly connection = input('—');

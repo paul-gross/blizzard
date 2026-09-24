@@ -285,7 +285,7 @@ describe('ChunkDetailPage', () => {
     expect(el.querySelector('[data-testid="transcripts-empty"]')?.textContent).toContain('NO TRANSCRIPT SEGMENTS YET');
   });
 
-  it("renders the hub-sourced cost estimate on the General tab's token breakdown and the Node history tab's timeline, labeled, apart from the billed figure", async () => {
+  it("renders the hub-sourced cost estimate folded into the one cost figure on the General tab's token breakdown and the Node history tab's timeline", async () => {
     stub.restore();
     stub = stubRequestClient(runnerClient, (method, path) => {
       if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}`) {
@@ -323,18 +323,18 @@ describe('ChunkDetailPage', () => {
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
     await settle(harness.fixture);
     let el = harness.fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="cost-estimate-usd"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent?.trim()).toBe('~$0.07');
 
     el.querySelector<HTMLButtonElement>('[data-testid="tab-node-history"]')?.click();
     await settle(harness.fixture);
     el = harness.fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="selection-step-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(el.querySelector('[data-testid="selection-step-cost"]')?.textContent?.trim()).toBe('~$0.07');
   });
 
-  it('renders no cost-estimate figures when the hub-sourced detail carries none — exactly as before this field existed', async () => {
+  it('renders no ~ marker when the hub-sourced detail carries no estimate — exactly as before this field existed', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
-    expect(el.querySelector('[data-testid="cost-estimate-usd"]')).toBeNull();
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent?.trim()).not.toContain('~');
   });
 
   it('renders the open escalation through the shared awaiting-human section', async () => {

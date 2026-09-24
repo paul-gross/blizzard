@@ -332,7 +332,7 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-testid="card-cost"]')?.textContent).toContain('$1.23');
   });
 
-  it("marks a card's cost badge with the lower-bound prefix when the total is PARTIAL (issue #60)", async () => {
+  it("marks a card's cost badge with the lower-bound suffix when the total is PARTIAL (issue #60)", async () => {
     const chunks: ChunkSummary[] = [
       {
         chunk_id: 'ch_01running000000000000000000',
@@ -356,7 +356,7 @@ describe('BoardShell', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="card-cost"]')?.textContent).toContain('~$0.10');
+    expect(el.querySelector('[data-testid="card-cost"]')?.textContent).toContain('$0.10+');
   });
 
   it('shows no cost badge for a chunk with zero, non-partial spend', async () => {

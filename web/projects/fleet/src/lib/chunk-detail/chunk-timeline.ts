@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../api/hub';
-import { formatCost, formatCostEstimate, formatTokens } from '../cost-format';
+import { formatCost, formatTokens } from '../cost-format';
 import { harnessName } from '../harness-name';
 import { KitAsyncState } from '../kit/kit-async-state';
 import {
@@ -103,7 +103,6 @@ export class ChunkTimeline {
   readonly pickStep = output<string | null>();
 
   protected readonly formatCost = formatCost;
-  protected readonly formatCostEstimate = formatCostEstimate;
   protected readonly formatTokens = formatTokens;
   protected readonly harnessName = harnessName;
 

@@ -1,27 +1,30 @@
 /**
- * A derived billed-cost total's board/CLI legible form — always to the cent, with a
- * leading `~` when the total is `cost_partial`, a **lower bound** rather than the true
- * spend (when a total is partial: `src/blizzard/hub/domain/work.py`'s `UsageTotal`). Every
- * surface that renders a `ChunkUsageTotalView`/`FleetSpendView` billed cost — the board
- * card, the chunk detail panel, and `blizzard hub status` — reads it through this one
- * function so the partial marker never silently drops. A row's own estimate never enters
- * this figure; see {@link formatCostEstimate}.
+ * A derived spend total's one board/CLI legible figure — always to the cent, folding
+ * `costUsd` and `estimatedCostUsd` into the single amount an operator reads as "what
+ * this cost": `costUsd + (estimatedCostUsd ?? 0)`. Two independent markers ride the
+ * one figure rather than a second, separate one: a leading `~` whenever
+ * `estimatedCostUsd` is present (`!= null`, even when it is `0` — some part of the
+ * amount is estimated, not billed), and a trailing `+` whenever `costPartial` is
+ * `true` (some summed row carried no amount at all, so the figure is a **lower
+ * bound** rather than the true spend — `src/blizzard/hub/domain/work.py`'s
+ * `UsageTotal`). The two combine freely: `$4.00`, `~$4.05`, `$4.00+`, `~$4.05+`, and
+ * an entirely-estimated total (nothing billed yet) reads `~$0.07` on its own. Every
+ * surface that renders a `ChunkUsageTotalView`/`FleetSpendView`/`StepUsageTotal`
+ * cost — the board card, the chunk detail panel, the glance board, and
+ * `blizzard hub status` — reads it through this one function so neither marker ever
+ * silently drops.
  */
-export function formatCost(costUsd: number, costPartial: boolean): string {
-  const amount = `$${costUsd.toFixed(2)}`;
-  return costPartial ? `~${amount}` : amount;
+export function formatCost(costUsd: number, estimatedCostUsd: number | null | undefined, costPartial: boolean): string {
+  const amount = costUsd + (estimatedCostUsd ?? 0);
+  const prefix = estimatedCostUsd != null ? '~' : '';
+  const suffix = costPartial ? '+' : '';
+  return `${prefix}$${amount.toFixed(2)}${suffix}`;
 }
 
-/**
- * A cost estimate's board legible form — the one formatter for `estimated_cost_usd`,
- * mirroring `hub/cli/views.py`'s `CostEstimate.rendered`. Always labeled `est.`, never
- * prefixed `~`: an estimate is already labeled as such, not a lower bound of anything
- * (`~` is {@link formatCost}'s own, distinct, partial marker). Every surface that renders
- * an estimate reads it through this one function, alongside `formatCost`, never merged
- * into it.
- */
-export function formatCostEstimate(amountUsd: number): string {
-  return `$${amountUsd.toFixed(2)} est.`;
+/** Whether a total has anything to show — a billed amount, an estimate, or a partial
+ * mark — so a card or row withholds the figure only on an entirely empty total. */
+export function hasCostFigure(costUsd: number, estimatedCostUsd: number | null | undefined, costPartial: boolean): boolean {
+  return costUsd > 0 || estimatedCostUsd != null || costPartial;
 }
 
 /** A token count's board/CLI legible form — `1.2k`/`3.4M` above 1000, exact below,

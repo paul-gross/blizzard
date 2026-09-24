@@ -79,12 +79,9 @@
               <span class="cid">{{ row.shortId }}</span>
               <span class="rid">{{ row.runnerId }} · {{ row.node }}</span>
             </span>
-            @if (row.costUsd > 0 || row.costPartial) {
-              <span class="num" data-testid="in-motion-cost">{{ formatCost(row.costUsd, row.costPartial) }}</span>
-            }
-            @if (row.estimatedCostUsd !== null) {
-              <span class="num est" data-testid="in-motion-cost-estimate">{{
-                formatCostEstimate(row.estimatedCostUsd)
+            @if (hasCostFigure(row.costUsd, row.estimatedCostUsd, row.costPartial)) {
+              <span class="num" data-testid="in-motion-cost">{{
+                formatCost(row.costUsd, row.estimatedCostUsd, row.costPartial)
               }}</span>
             }
           </li>
@@ -169,16 +166,12 @@
     >
       @if (spend(); as s) {
         <div class="row" data-testid="glance-spend-row">
-          <!-- A plain billed $0.00 never stands alone for a window whose only spend is
-               a subscription estimate — the billed figure withholds itself exactly then,
-               so the estimate below is what an operator actually sees. A window with no
-               estimate at all still renders $0.00 exactly as before. -->
-          @if (s.cost_usd > 0 || s.cost_partial || (s.estimated_cost_usd === null || s.estimated_cost_usd === undefined)) {
-            <span class="cid">{{ formatCost(s.cost_usd, s.cost_partial) }}</span>
-          }
-          @if (s.estimated_cost_usd !== null && s.estimated_cost_usd !== undefined) {
-            <span class="cid est" data-testid="glance-spend-estimate">{{ formatCostEstimate(s.estimated_cost_usd) }}</span>
-          }
+          <!-- The combined figure (formatCost) always renders here, whatever mix of
+               billed/estimated/partial the window carries — an estimate-only window
+               reads as its own `~$X.XX` rather than a withheld $0.00. -->
+          <span class="cid" data-testid="glance-spend-value">{{
+            formatCost(s.cost_usd, s.estimated_cost_usd, s.cost_partial)
+          }}</span>
           <span class="sub">{{ formatTokens(totalTokens(s)) }} tok</span>
         </div>
       } @else {

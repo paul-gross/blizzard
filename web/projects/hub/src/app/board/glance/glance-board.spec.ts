@@ -304,7 +304,8 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
 });
 
 // A subscription-only fleet: no billed cost anywhere, only a runner-reported estimate —
-// the glance board must never show a plain billed $0.00 for spend that is estimate-only.
+// the glance board's combined figure reads `~$0.07` on its own rather than a plain
+// billed $0.00.
 const ESTIMATE_CHUNKS = [
   {
     chunk_id: 'ch_01estimaterun0000000000000',
@@ -362,23 +363,20 @@ describe('GlanceBoard — cost estimate, no billed cost', () => {
 
   afterEach(() => stub.restore());
 
-  it("shows the in-motion row's own estimate, labeled, rather than a plain billed $0.00", async () => {
+  it("shows the in-motion row's own entirely-estimated figure as the estimate alone, marked ~", async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     const row = el.querySelector('[data-testid="in-motion-row"]');
-    expect(row?.querySelector('[data-testid="in-motion-cost"]')).toBeNull();
-    expect(row?.querySelector('[data-testid="in-motion-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(row?.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('~$0.07');
   });
 
-  it("shows the spend panel's own estimate, labeled, rather than a plain billed $0.00", async () => {
+  it("shows the spend panel's own entirely-estimated figure as the estimate alone, marked ~", async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    const row = el.querySelector('[data-testid="glance-spend-row"]');
-    expect(row?.querySelector('[data-testid="glance-spend-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
-    expect(row?.textContent).not.toContain('$0.00');
+    expect(el.querySelector('[data-testid="glance-spend-value"]')?.textContent?.trim()).toBe('~$0.07');
   });
 });

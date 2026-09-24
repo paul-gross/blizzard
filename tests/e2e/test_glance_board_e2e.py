@@ -165,8 +165,8 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
 def test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero(
     tmp_path: Path, chromium_available: bool, narrow_viewport: ViewportSize
 ) -> None:
-    """The glance spend panel and in-motion row render the estimate, never a plain billed
-    `$0.00`, for a chunk with no billed cost."""
+    """The glance spend panel and in-motion row render the combined figure, marked `~`,
+    never a plain billed `$0.00`, for a chunk with no billed cost."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     if not _HUB_BUNDLE.is_file():
@@ -221,16 +221,13 @@ def test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero(
                 page.goto(f"http://127.0.0.1:{hub_port}/board", wait_until="load")
                 expect(page.get_by_test_id("glance-board")).to_be_visible()
 
-                # The spend panel: the estimate renders, labeled — never a plain billed
-                # $0.00 in its place.
-                spend_row = page.get_by_test_id("glance-spend-row")
-                expect(spend_row.get_by_test_id("glance-spend-estimate")).to_have_text("$0.07 est.")
-                expect(spend_row).not_to_contain_text("$0.00")
+                # The spend panel: the combined figure renders as the estimate alone, marked
+                # `~` — never a plain billed $0.00 in its place.
+                expect(page.get_by_test_id("glance-spend-value")).to_have_text("~$0.07")
 
-                # The in-motion row: same rule, same label, on the one running chunk.
+                # The in-motion row: same rule, same figure, on the one running chunk.
                 motion_row = page.locator('[data-testid="in-motion-row"][data-chunk="' + chunk_id + '"]')
                 expect(motion_row).to_have_count(1)
-                expect(motion_row.get_by_test_id("in-motion-cost")).to_have_count(0)
-                expect(motion_row.get_by_test_id("in-motion-cost-estimate")).to_have_text("$0.07 est.")
+                expect(motion_row.get_by_test_id("in-motion-cost")).to_have_text("~$0.07")
             finally:
                 browser.close()

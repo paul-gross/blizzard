@@ -110,13 +110,6 @@
 .spend .v {
   color: var(--amber-hi);
 }
-/* The spend cell's own estimate line (never merged into the billed figure above it) —
-   its own stacked row in the same column-flex `.cell`, dimmer than the billed amount
-   since it is a subscription estimate, not metered spend. */
-.spend .v.est {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-}
 /*
  * The trailing cluster shrinks rather than overflowing, but only into
  * whatever its consumer marked shrinkable — a consumer projecting content of

@@ -112,7 +112,7 @@ describe('BoardHeader', () => {
     expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('$3.50');
   });
 
-  it('renders the spend-today estimate, labeled, apart from the billed figure', async () => {
+  it('renders an entirely estimated spend-today figure as the estimate alone, marked ~', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
     fixture.componentRef.setInput('chunks', []);
     fixture.componentRef.setInput('spendToday', {
@@ -128,11 +128,10 @@ describe('BoardHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('$0.00');
-    expect(el.querySelector('[data-testid="spend-today-value-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent?.trim()).toBe('~$0.07');
   });
 
-  it('renders no spend-today estimate when the fleet spend read carries none', async () => {
+  it('renders no ~ marker on the spend-today figure when the fleet spend read carries no estimate', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
     fixture.componentRef.setInput('chunks', []);
     fixture.componentRef.setInput('spendToday', {
@@ -147,7 +146,7 @@ describe('BoardHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="spend-today-value-estimate"]')).toBeNull();
+    expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent?.trim()).toBe('$3.50');
   });
 
   it('renders explicit stat cells in place of the chunk-derived ones, as a capacity fraction (issue #131)', async () => {
@@ -233,7 +232,7 @@ describe('BoardHeader', () => {
     expect(el.querySelector('[data-testid="spend-yesterday-value"]')?.textContent).toContain('$1.25');
   });
 
-  it('marks the spend-today figure with the lower-bound prefix when PARTIAL (issue #60)', async () => {
+  it('marks the spend-today figure with the lower-bound suffix when PARTIAL (issue #60)', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
     fixture.componentRef.setInput('chunks', []);
     fixture.componentRef.setInput('spendToday', {
@@ -248,7 +247,7 @@ describe('BoardHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('~$0.10');
+    expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('$0.10+');
   });
 
   /*

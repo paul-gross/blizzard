@@ -35,11 +35,11 @@ scope count does reach model work its per-invocation counts leave out, but its f
 happens, so the reading still lands right; an adapter that was invocation-scoped and billed uncounted work would not.
 
 Nothing of this is visible while it goes right: a chunk's cost column and the fleet total simply read what the fleet
-spent. A rejected figure shows as the PARTIAL tilde, and the runner log carries one line naming the reported figure that
-read below its session — the one place the two causes of an absent cost separate, a crashed worker being the other. A
-session already running when a runner upgrades onto this reading keeps whatever its earlier facts banked: every
-invocation from the upgrade forward is charged its own share, while the dollars those earlier rows recorded stay as they
-were recorded, so that one session's lifetime total can read high until it ends.
+spent. A rejected figure shows as the PARTIAL `+` suffix, and the runner log carries one line naming the reported
+figure that read below its session — the one place the two causes of an absent cost separate, a crashed worker being
+the other. A session already running when a runner upgrades onto this reading keeps whatever its earlier facts
+banked: every invocation from the upgrade forward is charged its own share, while the dollars those earlier rows
+recorded stay as they were recorded, so that one session's lifetime total can read high until it ends.
 
 ## The two caps
 
@@ -74,7 +74,8 @@ the harness's own report.
 
 When a worker dies before the harness emits its final usage envelope, the attempt's tokens are recorded from the
 transcript but its cost is genuinely unknown: an absent-cost row contributes its tokens and zero billed dollars. A row
-flags its total PARTIAL (a tilde on the board and in `hub status`) only when it carries **neither** a billed cost nor a
+flags its total PARTIAL (a trailing `+` on its figure, on the board and in `hub status`) only when it carries
+**neither** a billed cost nor a
 reported estimate — see [Estimated cost](#estimated-cost) below; a row carrying only an estimate is not a lower bound
 and does not flag PARTIAL. The runner's own two caps are a separate reading: both trip on the billed lower bound
 alone, never on an estimate, and each surfaces its own PARTIAL on its own carrier — the escalation, or the recorded
@@ -88,7 +89,7 @@ each marked worker's own SIGINT-triggered envelope, so only a worker SIGKILLed a
 on SIGINT without writing an envelope, or an outright crash still lands cost-absent.
 
 `blizzard hub status` shows the per-chunk cost column, the fleet total, and a paused runner's ceiling reason;
-[Estimated cost](#estimated-cost) below owns which surfaces add the estimate beside the billed figure.
+[Estimated cost](#estimated-cost) below owns how an estimate folds into that same figure.
 
 ## Estimated cost
 
@@ -119,16 +120,18 @@ from all of that, the hub accepts and stores a reported `estimated_cost_usd` for
 its own total, never folded into `cost_usd`. A chunk's or the fleet's billed cost is never inflated by an estimate,
 and an estimate is never presented as billed spend.
 
-The estimate renders labeled `$X.XX est.`, only where a total carries one: on `blizzard hub chunk show` on its own
-line; beside the billed figure in `hub status`'s per-chunk column and fleet total, in `hub chunk list`, and in
-`hub analytics summary`'s spend rows, so a chunk whose cost is entirely estimated reads `$0.00  $X.XX est.` there
-rather than a bare `$0.00`; and on the board: chunk cards, the board header's spend figure, the chunk detail dock and
-its timeline, the mobile glance board, and the runner panel's chunk detail.
+Every surface — the CLI's `hub status`, `hub chunk list`, `hub chunk show`, and `hub analytics summary`, and every
+board figure — renders a total as **one** amount, `cost_usd + estimated_cost_usd`, to the cent, carrying two
+independent markers: a leading `~` whenever the total carries an estimate, meaning some part of the amount is
+estimated rather than billed, and a trailing `+` whenever it is PARTIAL, meaning some row carried neither amount and
+the figure is a lower bound. A total therefore reads `$4.00`, `~$4.05`, `$4.00+`, or `~$4.05+`, and a chunk whose
+cost is entirely estimated reads `~$0.07` rather than a bare `$0.00`.
 
 An estimate never feeds either cap. `runner_ceiling_usd` and `chunk_cap_usd` ([The two caps](#the-two-caps) above) are
 both checked against billed cost alone: a chunk or a runner can run up real, uncapped subscription spend while every
 one of its steps shows only an estimate, and the caps stay blind to it — an operator relying on either cap to bound
-subscription spend needs to watch the estimate figure itself.
+subscription spend needs to watch the `~`-marked figure itself, the tilde being the one sign that part of a total never
+reached the caps.
 
 ## External subscription usage
 

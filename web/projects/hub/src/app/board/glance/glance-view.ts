@@ -7,8 +7,8 @@ import {
   KitPanel,
   KitSkeleton,
   formatCost,
-  formatCostEstimate,
   formatTokens,
+  hasCostFigure,
   type FleetSpendView,
   type KitAsyncStateValue,
   type Tone,
@@ -39,9 +39,9 @@ export interface MotionRow {
   readonly pillLabel: 'run' | 'deliver';
   readonly costUsd: number;
   readonly costPartial: boolean;
-  /** The chunk's derived spend estimate — `null` iff no summed row reported one. Kept
-   * apart from {@link costUsd}, never merged into it; rendered alongside it ({@link
-   * GlanceView}'s own row markup) when both are present. */
+  /** The chunk's derived spend estimate — `null` iff no summed row reported one. Folded
+   * into {@link costUsd} by {@link formatCost} for display ({@link GlanceView}'s own
+   * row markup), rather than rendered as a figure of its own. */
   readonly estimatedCostUsd: number | null;
 }
 
@@ -92,7 +92,7 @@ export interface Vitals {
 })
 export class GlanceView {
   protected readonly formatCost = formatCost;
-  protected readonly formatCostEstimate = formatCostEstimate;
+  protected readonly hasCostFigure = hasCostFigure;
   protected readonly formatTokens = formatTokens;
 
   readonly vitals = input.required<Vitals>();

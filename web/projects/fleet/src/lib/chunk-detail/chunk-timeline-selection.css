@@ -136,9 +136,6 @@ a.gr:focus-visible {
 .line3 .cost {
   white-space: nowrap;
 }
-.line3 .cost-estimate {
-  white-space: nowrap;
-}
 .partial-badge {
   margin-left: 4px;
   padding: 0 4px;

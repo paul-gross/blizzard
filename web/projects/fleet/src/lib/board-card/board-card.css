@@ -147,18 +147,14 @@
   margin-left: auto;
   min-width: 0;
 }
-/* The chunk's derived spend total (issue #60) — the leading-tilde lower-bound
-   prefix (formatCost) is the card's whole PARTIAL marker; no separate badge on a
-   card this small. */
+/* The chunk's one derived cost figure (issue #60) — `formatCost` folds a billed
+   amount and its estimate into this single number, with its own leading `~`
+   (estimated) and trailing `+` (partial, a lower bound) markers; no separate badge
+   or figure on a card this small. */
 .cost {
   color: var(--amber-hi);
   font-size: var(--fs-xs);
   white-space: nowrap;
-}
-/* The card's own estimate figure (never merged into the billed one above) — dimmer
-   than the billed amber, since it is a subscription estimate rather than metered spend. */
-.cost-estimate {
-  color: var(--label-dim);
 }
 /* The done-lane completion stamp (issue #173) — dim like the status label it
    sits beside, not a separate accent; it is a timestamp, not a state. */

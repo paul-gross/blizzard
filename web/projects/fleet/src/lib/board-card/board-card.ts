@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import type { ChunkStatus } from '../api/hub';
 import { STATUS_LANE } from '../chunk-lanes';
 import { compactRef } from '../compact-ref';
-import { formatCost, formatCostEstimate } from '../cost-format';
+import { formatCost, hasCostFigure } from '../cost-format';
 import { FleetWhen } from '../when-display';
 
 /** One rendered board card — the derived-status view of a chunk. */
@@ -25,8 +25,8 @@ export interface BoardCard {
    * `cost_partial` (`src/blizzard/hub/domain/work.py`). */
   readonly costPartial: boolean;
   /** The chunk's derived spend estimate, from `ChunkSummary.cost.estimated_cost_usd` —
-   * `null` iff no summed row reported one. Kept apart from {@link costUsd}; never merged
-   * into it. */
+   * `null` iff no summed row reported one. Folded into {@link costUsd} by
+   * {@link formatCost} for display, rather than rendered as a figure of its own. */
   readonly estimatedCostUsd: number | null;
   /** The chunk's derived completion instant (issue #173), from `ChunkSummary.completed_at`
    * — null for every non-terminal status. Rendered only on a done-lane card
@@ -82,7 +82,7 @@ export interface BoardCard {
 })
 export class BoardCardComponent {
   protected readonly formatCost = formatCost;
-  protected readonly formatCostEstimate = formatCostEstimate;
+  protected readonly hasCostFigure = hasCostFigure;
 
   /** The card's derived-status view of one chunk. */
   readonly card = input.required<BoardCard>();

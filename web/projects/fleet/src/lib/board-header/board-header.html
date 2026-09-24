@@ -16,18 +16,16 @@
   <div class="spacer"></div>
   <!-- The fleet-wide spend-since reads (issue #60; yesterday added issue #183) —
        each cell withholds itself until its own read resolves, independently, so
-       neither ever shows a misleading $0.00; the cost-absent lower bound is
-       marked, never presented as exact (a leading tilde, formatCost). -->
+       neither ever shows a misleading $0.00; the combined figure (formatCost)
+       marks an estimated amount with a leading `~` and a cost-absent lower bound
+       with a trailing `+`. -->
   @for (cell of spendCells(); track cell.key) {
     @if (cell.spend; as spend) {
       <div class="cell spend" [class.spend-yesterday]="cell.key === 'yesterday'" [attr.data-testid]="cell.testid">
         <span class="stat-lbl">{{ cell.label }}</span>
-        <span class="v" [attr.data-testid]="cell.valueTestid">{{ formatCost(spend.cost_usd, spend.cost_partial) }}</span>
-        @if (spend.estimated_cost_usd !== null && spend.estimated_cost_usd !== undefined) {
-          <span class="v est" [attr.data-testid]="cell.valueTestid + '-estimate'">{{
-            formatCostEstimate(spend.estimated_cost_usd)
-          }}</span>
-        }
+        <span class="v" [attr.data-testid]="cell.valueTestid">{{
+          formatCost(spend.cost_usd, spend.estimated_cost_usd, spend.cost_partial)
+        }}</span>
       </div>
     }
   }

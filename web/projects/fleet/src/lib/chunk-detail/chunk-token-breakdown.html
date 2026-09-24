@@ -1,6 +1,6 @@
 <div class="s-head"><span class="tag">Usage</span></div>
 <ng-template #costValue>
-  <span data-testid="cost-total-usd">{{ formatCost(cost().cost_usd, cost().cost_partial) }}</span>
+  <span data-testid="cost-total-usd">{{ formatCost(cost().cost_usd, cost().estimated_cost_usd, cost().cost_partial) }}</span>
   @if (cost().cost_partial) {
     <span
       class="partial-badge"
@@ -9,9 +9,6 @@
       >PARTIAL</span
     >
   }
-</ng-template>
-<ng-template #costEstimateValue>
-  <span data-testid="cost-estimate-usd">{{ costEstimateLabel() }}</span>
 </ng-template>
 <ng-template #inputValue>
   <span [class.zero]="cost().input_tokens === 0">{{ formatTokens(cost().input_tokens) }}</span>
@@ -28,5 +25,5 @@
 <fleet-kit-fact-list
   class="ctb-facts"
   testid="chunk-usage"
-  [rows]="factRows(costValue, costEstimateValue, inputValue, outputValue, cacheReadValue, cacheCreationValue)"
+  [rows]="factRows(costValue, inputValue, outputValue, cacheReadValue, cacheCreationValue)"
 />

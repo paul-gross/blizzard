@@ -10,7 +10,7 @@ import click
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import ChunkRow, Cost, CostEstimate, QuestionRow, RunnerRow
+from blizzard.hub.cli.views import ChunkRow, Cost, QuestionRow, RunnerRow
 
 # The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend`` (issue #60).
 _FLEET_SPEND_SINCE = "1970-01-01T00:00:00+00:00"
@@ -33,8 +33,7 @@ class FleetStatus:
         yield f"\nopen questions ({len(self.questions)}):"
         for question in self.questions:
             yield f"  {QuestionRow(question).line()}"
-        billed = Cost(self.spend["cost_usd"], self.spend["cost_partial"]).rendered
-        yield f"\nfleet spend (all time): {billed}{CostEstimate.suffix(self.spend)}"
+        yield f"\nfleet spend (all time): {Cost.of(self.spend).rendered}"
 
 
 @click.command(cls=FleetCommand)
