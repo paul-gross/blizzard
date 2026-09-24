@@ -65,17 +65,14 @@ class UsageRecorder:
         if session is None:
             return
         harness = self._resolved_harness(session)
-        lines = (
-            self.judge_transcript_lines(lease, bindings, generation=generation)
-            if harness.needs_usage_transcript(judge_output)
-            else []
-        )
-        judge_sample = harness.parse_usage(
-            judge_output,
-            "judge",
-            model=lease.resolved_model,
-            transcript_lines=lines,
-        )
+        model = lease.resolved_model
+        needs_transcript = (model is None and self.transcripts_wired) or harness.needs_usage_transcript(judge_output)
+        lines = self.judge_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
+        if model is None and lines:
+            # blizzard#629 D4: the lease asked for nothing, so ask the judge's own transcript
+            # range what actually ran — the same rule `_worker_sample` applies below.
+            model = harness.observed_model(lines)
+        judge_sample = harness.parse_usage(judge_output, "judge", model=model, transcript_lines=lines)
         if judge_sample is not None:
             self.record_sample(lease, generation=generation, sample=judge_sample)
 
@@ -120,21 +117,25 @@ class UsageRecorder:
         if session is None:
             return None
         harness = self._resolved_harness(session)
-        lines = (
-            self.worker_transcript_lines(lease, bindings, generation=generation)
-            if output and harness.needs_usage_transcript(output)
-            else []
+        model = lease.resolved_model
+        needs_transcript = (model is None and self.transcripts_wired) or (
+            bool(output) and harness.needs_usage_transcript(output)
         )
-        sample = (
-            harness.parse_usage(output, kind, model=lease.resolved_model, transcript_lines=lines) if output else None
-        )
+        lines = self.worker_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
+        if model is None and lines:
+            # blizzard#629 D4: the lease asked for nothing, so read this generation's own
+            # transcript range once and ask it what actually ran — before `parse_usage`, since
+            # a harness whose stdout envelope carries usage but no model (OpenCode's run
+            # events) can only price it once this observation is handed in as `model`.
+            model = harness.observed_model(lines)
+        sample = harness.parse_usage(output, kind, model=model, transcript_lines=lines) if output else None
         if sample is not None:
             return sample
         if not lines:
             lines = self.worker_transcript_lines(lease, bindings, generation=generation)
         if not lines:
             return None
-        return harness.sum_transcript_usage(lines, kind, model=lease.resolved_model)
+        return harness.sum_transcript_usage(lines, kind, model=model)
 
     def worker_transcript_lines(
         self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int
