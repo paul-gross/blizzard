@@ -497,7 +497,7 @@ class Advance(Step):
         ctx = self.ctx
         pending = ctx.stores.outbound.pending_submission_lease_ids()
         ask_parked = ctx.stores.asks.ask_parked_lease_ids()
-        pause_parked = ctx.stores.pause.pause_parked_lease_ids()
+        open_parks = ctx.stores.pause.open_pause_parks()  # hoisted: the parks' teardown facts, one read per tick
         backing_off = backing_off_facts(ctx.stores.overload, ctx.stores.liveness, ctx.stores.elicitations)
         resume_intents = ctx.stores.resume_intent.resume_intent_lease_ids()
         taken_over = ctx.stores.takeover.open_takeover_chunk_ids()
@@ -510,8 +510,10 @@ class Advance(Step):
                 continue  # RESUME hasn't re-attached (or abandoned) it yet — not exited work
             if lease.lease_id in pending:
                 continue  # outcome elicited, awaiting flush — the node boundary
-            if lease.lease_id in pause_parked:
-                DormantSession(ctx, lease).on_unpause()  # dormant on an operator pause — resume when it lifts
+            park = open_parks.get(lease.lease_id)
+            if park is not None:
+                # Dormant on an operator pause — finish the park's teardown, resume when it lifts.
+                DormantSession(ctx, lease).on_unpause(park)
                 continue
             if lease.lease_id in ask_parked:
                 DormantSession(ctx, lease).on_answer()  # dormant on a question — resume on the answer

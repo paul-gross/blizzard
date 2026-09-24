@@ -19,7 +19,7 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.process import kill_owned_process
+from blizzard.runner.loop.process import interrupt_owned_process, kill_owned_process
 from blizzard.runner.loop.session import SkippedHarness
 from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.runner.loop.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
@@ -52,10 +52,9 @@ _CP_ABANDON_AFTER_RELEASE = crashpoint(
     "abandon.after-release.before-closure", "environments released; the lease's closure not yet recorded"
 )
 
-# PAUSE — the operator's per-chunk pause park (issue #46): the worker dies, the claim, route,
-# epoch and envs survive. A crash before the park is recovered by RESUME.
-_CP_PAUSE_PARK_AFTER_KILL = crashpoint(
-    "pause.after-kill.before-park", "paused worker killed; pause-park not yet durable"
+# PAUSE — the per-chunk pause park (issue #46): interrupted, claim kept; RESUME's re-run re-signals only a live group.
+_CP_PAUSE_PARK_AFTER_INTERRUPT = crashpoint(
+    "pause.after-interrupt.before-park", "paused worker interrupted; pause-park not yet durable"
 )
 
 # PREEMPT — the operator restart's teardown (#370). Between the kill and the closure the lease
@@ -361,17 +360,33 @@ class Attempt:
         )
 
     def park_paused(self, *, via: str) -> None:
-        """Kill a paused chunk's worker and park its lease — the claim is **kept** (issue #46).
-
-        The deliberate inverse of :meth:`abandon`: no environment released, no closure, no epoch
-        bump, no lease minted — **no retry is consumed**, and the route, epoch and session all
-        survive. Not gated by the local brake: a kill is not a spawn."""
+        """Interrupt a paused chunk's worker and park its lease — the claim is **kept** (issue #46): the
+        inverse of :meth:`abandon`, nothing released, closed, bumped, or minted, no retry consumed. Multi-tick
+        (blizzard#627): this only SIGINTs the worker's and any in-flight elicitation's groups, then records the
+        park naming that elicitation; ``DormantSession.on_unpause`` finishes the teardown on later ticks — a
+        survivor is SIGKILLed only past ``SHUTDOWN_DRAIN_DEADLINE`` from ``parked_at`` — so the envelope survives."""
         lease = self.lease
         now = self.ctx.clock.now()
-        self._kill_process()
-        self._kill_in_flight_elicitation()
-        _CP_PAUSE_PARK_AFTER_KILL.reached()  # worker dead; the park is not yet durable
-        self.ctx.stores.pause.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
+        interrupt_owned_process(
+            self.ctx.process, pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid
+        )
+        elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
+        interrupted_elicitation_id: int | None = None
+        if elicitation is not None:
+            interrupt_owned_process(
+                self.ctx.process,
+                pid=elicitation.pid,
+                process_start_time=elicitation.process_start_time,
+                pgid=elicitation.pgid,
+            )
+            interrupted_elicitation_id = elicitation.id
+        _CP_PAUSE_PARK_AFTER_INTERRUPT.reached()  # worker signalled; the park is not yet durable
+        self.ctx.stores.pause.record_pause_park(
+            lease_id=lease.lease_id,
+            chunk_id=lease.chunk_id,
+            parked_at=now,
+            interrupted_elicitation_id=interrupted_elicitation_id,
+        )
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         if self.ctx.events is not None:
             # Same "dormant" cause `park_on_ask` publishes (dormant.py) — this write flips the

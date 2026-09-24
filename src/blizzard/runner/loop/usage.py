@@ -124,10 +124,8 @@ class UsageRecorder:
         model = lease.resolved_model
         lines: list[str] | None = None
         if model is None and self.transcripts_wired:
-            # blizzard#629 D4: the lease asked for nothing, so read this generation's own
-            # transcript range once and ask it what actually ran — before `parse_usage`, since
-            # a harness whose stdout envelope carries usage but no model (OpenCode's run
-            # events) can only price it once this observation is handed in as `model`.
+            # blizzard#629: the lease asked for nothing, so read the range once and observe what ran —
+            # before `parse_usage`, which prices a model-less stdout envelope only off this `model`.
             lines = self.worker_transcript_lines(lease, bindings, generation=generation)
             if lines:
                 model = harness.observed_model(lines)

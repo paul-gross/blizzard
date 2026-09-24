@@ -13,10 +13,15 @@ cross-verb distinctions the help text does not draw.
 ## Pause and resume
 
 `chunk pause`, or the board's Pause control in the chunk detail dock, targets one chunk: on a live claim the runner
-kills that chunk's worker but keeps the claim — lease, route, epoch, held environments, and retry budget all survive;
-only the process dies. Pause is also allowed on a still-unclaimed `ready` chunk, where it holds the chunk out of the
-queue: the chunk derives `paused` and FILL skips it until resumed. Pause is refused (409) on a `done`, `stopped`, or
-`delivering` chunk, and deliberately allowed on `waiting_on_human` and `needs_human` — it is a broad lever.
+interrupts that chunk's worker but keeps the claim — lease, route, epoch, held environments, and retry budget all
+survive; only the process ends. The interrupt is a SIGINT, the same signal a graceful restart's drain sends, so a
+harness that ends its turn on one gets to write its usage envelope: the runner kills the process outright only if it
+is still alive once the drain's own budget (`SHUTDOWN_DRAIN_DEADLINE`, 60 seconds from the park) has passed, and the
+paused generation's usage is recorded when the chunk resumes, just as a drained worker's is. A pause never waits inside
+a tick: the park lands on the tick that discovers the pause, and the process is checked on the ticks after. Pause is
+also allowed on a still-unclaimed `ready` chunk, where it holds the chunk out of the queue: the chunk derives `paused`
+and FILL skips it until resumed. Pause is refused (409) on a `done`, `stopped`, or `delivering` chunk, and deliberately
+allowed on `waiting_on_human` and `needs_human` — it is a broad lever.
 
 A pause-parked chunk still occupies an agent slot: FILL claims only into open slots, and a `chunk pause` deliberately
 keeps the lease active with environments held warm for the in-place resume, so a paused lease counts against
@@ -51,7 +56,7 @@ tears the running attempt down on its next tick and re-enters the named node wit
 the kill, is restart's guarantee: a completion the displaced worker submits afterward is rejected as stale rather than
 advancing the chunk.
 
-pause and restart are the two verbs that kill a live worker while keeping the claim, differing in what survives of the
+pause and restart are the two verbs that end a live worker while keeping the claim, differing in what survives of the
 attempt: pause keeps lease, epoch, and session so the resume lands in place; restart discards all three so the re-entry
 starts clean. restart keeps the claim: route, tenure, and held environments survive, so the re-entry lands in the same
 worktree with the work on disk and the superseded step's artifacts readable — and like pause, no retry is consumed, so

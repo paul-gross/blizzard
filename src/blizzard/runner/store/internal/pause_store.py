@@ -8,8 +8,8 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.pause import IWritePauseRepository
-from blizzard.runner.store.internal.base import PAUSE_PARKED_LEASE_IDS, RunnerStoreConnections
+from blizzard.runner.domain.pause import IWritePauseRepository, PauseParkRecord
+from blizzard.runner.store.internal.base import OPEN_PAUSE_PARK, PAUSE_PARKED_LEASE_IDS, RunnerStoreConnections
 from blizzard.runner.store.schema import (
     daemon_liveness,
     hub_control,
@@ -60,6 +60,29 @@ class PauseStore:
 
     def pause_parked_lease_ids(self) -> set[str]:
         return {str(r.lease_id) for r in self._store.all(PAUSE_PARKED_LEASE_IDS)}
+
+    def open_pause_parks(self) -> dict[str, PauseParkRecord]:
+        rows = self._store.all(
+            select(
+                pause_parks.c.lease_id,
+                pause_parks.c.chunk_id,
+                pause_parks.c.parked_at,
+                pause_parks.c.interrupted_elicitation_id,
+            )
+            .where(OPEN_PAUSE_PARK.clause)
+            .order_by(pause_parks.c.id)
+        )
+        parks: dict[str, PauseParkRecord] = {}
+        for r in rows:  # ascending id: a lease's newest open park overwrites an earlier re-park's
+            parks[str(r.lease_id)] = PauseParkRecord(
+                lease_id=str(r.lease_id),
+                chunk_id=str(r.chunk_id),
+                parked_at=r.parked_at,
+                interrupted_elicitation_id=(
+                    int(r.interrupted_elicitation_id) if r.interrupted_elicitation_id is not None else None
+                ),
+            )
+        return parks
 
     def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
         with self._store.begin() as conn:
@@ -116,10 +139,24 @@ class PauseStore:
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
-    def record_pause_park(self, *, lease_id: str, chunk_id: str, parked_at: datetime) -> None:
+    def record_pause_park(
+        self, *, lease_id: str, chunk_id: str, parked_at: datetime, interrupted_elicitation_id: int | None = None
+    ) -> None:
         with self._store.begin() as conn:
-            conn.execute(pause_parks.insert().values(lease_id=lease_id, chunk_id=chunk_id, parked_at=parked_at))
-        _log.info("chunk parked on operator pause", lease_id=lease_id, chunk_id=chunk_id)
+            conn.execute(
+                pause_parks.insert().values(
+                    lease_id=lease_id,
+                    chunk_id=chunk_id,
+                    parked_at=parked_at,
+                    interrupted_elicitation_id=interrupted_elicitation_id,
+                )
+            )
+        _log.info(
+            "chunk parked on operator pause",
+            lease_id=lease_id,
+            chunk_id=chunk_id,
+            interrupted_elicitation_id=interrupted_elicitation_id,
+        )
 
     def record_pause_park_resume(self, *, lease_id: str, resumed_at: datetime) -> None:
         with self._store.begin() as conn:

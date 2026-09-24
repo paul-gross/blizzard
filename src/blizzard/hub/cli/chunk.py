@@ -243,10 +243,11 @@ def chunk_promote(cli: CliContext, chunk_id: str) -> None:
 @click.argument("chunk_id")
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
-    """Pause CHUNK — the runner kills and parks the worker but keeps the claim (issue #46).
+    """Pause CHUNK — the runner interrupts and parks the worker but keeps the claim (issue #46).
 
-    A pure client of the hub API: ``POST /api/chunks/{id}/pause``. 409 when the chunk is
-    done/stopped/delivering."""
+    The worker is SIGINTed, and killed only if it outlives the shutdown drain's budget, so its usage
+    envelope survives to be recorded on resume. A pure client of the hub API:
+    ``POST /api/chunks/{id}/pause``. 409 when the chunk is done/stopped/delivering."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/pause",
         "POST /chunks/{id}/pause",

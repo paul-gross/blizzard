@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
@@ -11,7 +12,19 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 
-__all__ = ["IReadPauseRepository", "IWritePauseRepository", "PauseService"]
+__all__ = ["IReadPauseRepository", "IWritePauseRepository", "PauseParkRecord", "PauseService"]
+
+
+@dataclass(frozen=True)
+class PauseParkRecord:
+    """One open pause park (issue #46, blizzard#627) — the facts the park's own teardown
+    reads back each tick until nothing of the lease's is alive."""
+
+    lease_id: str
+    chunk_id: str
+    parked_at: datetime
+    #: The elicitation record this park's interrupt signalled; unnamed-and-standing means a usage-limit judge park.
+    interrupted_elicitation_id: int | None
 
 
 class IReadPauseRepository(Protocol):
@@ -60,6 +73,13 @@ class IReadPauseRepository(Protocol):
         :meth:`~blizzard.runner.domain.asks.IReadAskRepository.parked_lease_ids`'s union."""
         ...
 
+    def open_pause_parks(self) -> dict[str, PauseParkRecord]:
+        """Every open pause park by lease id — :meth:`pause_parked_lease_ids`'s leases, each with
+        its ``parked_at`` and the elicitation its interrupt signalled (blizzard#627). Hoisted once
+        per tick (``bzh:bulk-reconstitution``) for the teardown ADVANCE completes over later
+        ticks. A lease re-parked across a crash reads its newest park."""
+        ...
+
 
 class IWritePauseRepository(IReadPauseRepository, Protocol):
     """Read-write pause-brake and daemon-liveness store — held only by the domain."""
@@ -94,8 +114,13 @@ class IWritePauseRepository(IReadPauseRepository, Protocol):
         can read it back locally, not only through the hub-bound report (blizzard#594)."""
         ...
 
-    def record_pause_park(self, *, lease_id: str, chunk_id: str, parked_at: datetime) -> None:
-        """Park a lease on an operator pause — dormant, its env bindings held (issue #46)."""
+    def record_pause_park(
+        self, *, lease_id: str, chunk_id: str, parked_at: datetime, interrupted_elicitation_id: int | None = None
+    ) -> None:
+        """Park a lease on an operator pause — dormant, its env bindings held (issue #46).
+        ``interrupted_elicitation_id`` names the in-flight elicitation the park's own
+        interrupt signalled, in the same insert (``bzh:facts-not-status``); ``None`` when it
+        signalled none."""
         ...
 
     def record_pause_park_resume(self, *, lease_id: str, resumed_at: datetime) -> None:

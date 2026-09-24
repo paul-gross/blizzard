@@ -626,10 +626,8 @@ class OpenCodeAdapter:
             return None
         parts = list(by_id.values())
         input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(parts)
-        # `output` is always run events here, never an export: a run event never carries a
-        # step's provider/model (only an export does), so there is nothing here for this
-        # method's own output to observe — every zero-cost step falls back to the
-        # invocation's own provider/model, and the fallback chain below is the only source.
+        # `output` is run events, never an export, and a run event never carries a step's
+        # provider/model: nothing here to observe, so the fallback chain is the only source.
         provider, resolved_model = self._invocation_model_reference(model)
         estimated: list[float] = []
         prices: dict[tuple[str, str], OpenCodeModelPrice | None] = {}
@@ -715,9 +713,8 @@ class OpenCodeAdapter:
             estimated_cost_usd = sum(a for a in amounts if a is not None) if complete else None
         return UsageSample(
             kind=kind,
-            # The export's own observed provider/model over a passed-in or configured one
-            # (blizzard#629 D2): an export line names the model that actually ran, which a
-            # passed-in `model` can only ever approximate.
+            # The export's own provider/model over a passed-in or configured one (blizzard#629):
+            # an export line names the model that actually ran, which `model` only approximates.
             model=self.observed_model(lines) or model or self._model or "opencode",
             input_tokens=input_tokens,
             output_tokens=output_tokens,

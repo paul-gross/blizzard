@@ -269,6 +269,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
         process_start_time=start,
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
         spawned_at=_NOW,
+        pgid=pid,
     )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
@@ -922,7 +923,7 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
     `_resume_if_unpaused` is gated, since its resume is a real spawn primitive."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    probe = FakeProbe(alive={(100, "start-100")})  # a live worker for the pause to kill
+    probe = FakeProbe(alive={(100, "start-100")}, groups_alive={100})  # a live worker for the pause to interrupt
     hub = FakeHub()
     hub.paused = False  # the hub's *runner* brake (D-043) is off — not the lever under test
     hub.chunks["ch_1"] = ChunkStatusView(
@@ -939,10 +940,11 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
 
     tick(ctx)
 
-    # The hub's instruction about this chunk is honored despite the local brake: killed, parked.
-    assert probe.killed == [100]
+    # The hub's instruction about this chunk is honored despite the local brake: interrupted, parked.
+    assert probe.interrupted_groups == [100] and probe.killed_groups == []
     assert store.pause_parked_lease_ids() == {"lease_1"}
     assert store.active_lease("lease_1") is not None  # and the claim is kept, as ever
+    probe.alive, probe.groups_alive = set(), set()  # the worker exits on its SIGINT
 
     # Brake 1 clears: the operator resumes the CHUNK, but the runner is still locally paused.
     hub.chunks["ch_1"] = _running_chunk()

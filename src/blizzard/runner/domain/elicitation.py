@@ -16,6 +16,7 @@ class ElicitationRecord:
     only in the un-armable gap between the durable record and the process actually
     starting (``advance.after-elicit-record.before-launch``)."""
 
+    id: int  # the store's own row id — what a pause park names the record it interrupted by
     lease_id: str
     epoch: int
     pid: int | None

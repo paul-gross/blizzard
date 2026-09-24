@@ -114,5 +114,21 @@ def kill_owned_process(
         process.kill(pid)
 
 
+def interrupt_owned_process(
+    process: IProcessProbe, *, pid: int | None, process_start_time: str | None, pgid: int | None
+) -> bool:
+    """Best-effort SIGINT to an owned worker's recorded group (D3), gated on the same
+    leader-identity guard :func:`kill_owned_process` applies — a recycled pgid is never
+    signalled. The one shared owner of the guarded interrupt: the shutdown drain and the
+    pause park both reach it here rather than each keeping its own copy of the guard.
+    ``False`` when nothing was signalled: no recorded group, or a leader already dead."""
+    if pgid is None or pid is None or process_start_time is None:
+        return False
+    if not process.is_alive(pid, process_start_time):
+        return False
+    process.interrupt_group(pgid)
+    return True
+
+
 def _conforms_process_probe(x: LinuxProcessProbe) -> IProcessProbe:
     return x

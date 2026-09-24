@@ -131,6 +131,7 @@ def _judge_fact(**overrides: object) -> OverloadFactRecord:
 
 def _elicitation(*, first_launched_at: datetime) -> ElicitationRecord:
     return ElicitationRecord(
+        id=1,
         lease_id="lease_1",
         epoch=1,
         pid=200,

@@ -31,6 +31,7 @@ class ElicitationStore:
             return None
         r = row[0]
         return ElicitationRecord(
+            id=int(r.id),
             lease_id=str(r.lease_id),
             epoch=int(r.epoch),
             pid=int(r.pid) if r.pid is not None else None,

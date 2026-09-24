@@ -229,6 +229,8 @@ pause_parks = Table(
     Column("lease_id", String, nullable=False),
     Column("chunk_id", String, nullable=False),
     Column("parked_at", UtcDateTime, nullable=False),
+    # The in-flight elicitation the park's interrupt signalled (blizzard#627), or NULL.
+    Column("interrupted_elicitation_id", Integer, nullable=True),
 )
 
 pause_park_resumes = Table(

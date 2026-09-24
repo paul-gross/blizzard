@@ -174,3 +174,35 @@ def test_mark_crash_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type
     store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=later)
 
     assert ResumeIntents(make_stores(store)).mark_crashed(process=probe, now=_NOW + timedelta(seconds=2)) == 0
+
+
+def test_open_pause_parks_carries_each_parks_teardown_facts(tmp_path):  # type: ignore[no-untyped-def]
+    """The plural ADVANCE hoists once per tick (blizzard#627): every open park by lease id,
+    each with its ``parked_at`` and the elicitation its interrupt named — ``None`` on a
+    park that named none, and absent once resumed."""
+    store = _store(tmp_path)
+    store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, interrupted_elicitation_id=7)
+    store.record_pause_park(lease_id="lease_2", chunk_id="ch_2", parked_at=_NOW)
+    store.record_pause_park(lease_id="lease_3", chunk_id="ch_3", parked_at=_NOW, interrupted_elicitation_id=9)
+    store.record_pause_park_resume(lease_id="lease_3", resumed_at=_NOW + timedelta(seconds=1))
+
+    parks = store.open_pause_parks()
+
+    assert set(parks) == {"lease_1", "lease_2"} == store.pause_parked_lease_ids()
+    assert (parks["lease_1"].chunk_id, parks["lease_1"].parked_at) == ("ch_1", _NOW)
+    assert parks["lease_1"].interrupted_elicitation_id == 7
+    assert parks["lease_2"].interrupted_elicitation_id is None
+
+
+def test_open_pause_parks_reads_a_re_parked_leases_newest_park(tmp_path):  # type: ignore[no-untyped-def]
+    """A crash between the interrupt and the park re-runs the park; the deadline counts
+    from the newest durable ``parked_at``, and the newest park's own named elicitation."""
+    store = _store(tmp_path)
+    store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, interrupted_elicitation_id=7)
+    later = _NOW + timedelta(seconds=30)
+    store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=later, interrupted_elicitation_id=None)
+
+    park = store.open_pause_parks()["lease_1"]
+
+    assert park.parked_at == later
+    assert park.interrupted_elicitation_id is None

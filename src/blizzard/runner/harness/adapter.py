@@ -313,12 +313,11 @@ class IHarnessUsageAccounting(Protocol):
         ...
 
     def observed_model(self, lines: Sequence[str]) -> str | None:
-        """The model a transcript range names as having actually run, or ``None`` when the
-        range carries none — never a fallback literal, so a caller can tell "observed
-        nothing" apart from "observed the configured default". Claude Code reads the
-        per-record ``message.model`` :meth:`sum_transcript_usage` already reads; OpenCode
-        reads an exported message's ``message.info`` provider and model, formatted as
-        ``provider/model`` — a run event alone (no export line in ``lines``) carries neither."""
+        """The model a transcript range names as having actually run, or ``None`` when it names
+        none — never a fallback literal, so "observed nothing" reads apart from "observed the
+        default". Claude Code reads the per-record ``message.model`` :meth:`sum_transcript_usage`
+        reads; OpenCode reads an exported message's ``message.info`` provider and model as
+        ``provider/model`` — a run event alone carries neither."""
         ...
 
 

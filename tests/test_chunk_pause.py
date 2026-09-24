@@ -1,6 +1,6 @@
 """The runner loop honors a hub-side chunk pause (issue #46) — loop component tier.
 
-A pause must keep the claim — kill the worker, park the lease, hold environments — and
+A pause must keep the claim — interrupt the worker, park the lease, hold environments — and
 resume the same session when it clears; a pause is not a detach. Every test drives the
 full composed tick since this subsystem's bugs are step-ordering bugs.
 """
@@ -19,11 +19,15 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.loop.attempt import Attempt
+from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.loop.steps import Advance, Fill, ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store import schema as runner_schema
 from blizzard.wire.chunk import ChunkStatusView, PauseView
-from blizzard.wire.facts import ESCALATION_RECORDED, RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
+from blizzard.wire.facts import ESCALATION_RECORDED, RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED, USAGE_RECORDED
 from blizzard.wire.question import QuestionView
 from tests.runner_fakes import (
     FakeHarness,
@@ -68,8 +72,19 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
         process_start_time=start,
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
+        pgid=pid,
     )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+
+class _ExitingProbe(FakeProbe):
+    """A worker that exits on its SIGINT, the way a real harness does (blizzard#627) — the
+    pause's interrupt is what ends it, never a kill."""
+
+    def interrupt_group(self, pgid: int) -> None:
+        super().interrupt_group(pgid)
+        self.alive = {(p, st) for (p, st) in self.alive if p != pgid}
+        self.groups_alive.discard(pgid)
 
 
 def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):  # type: ignore[no-untyped-def]
@@ -205,13 +220,13 @@ def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type:
 # Row 9 — PULL kills and parks, and gives up nothing else.
 
 
-def test_pull_kills_the_worker_and_parks_the_lease_keeping_everything_else(tmp_path):  # type: ignore[no-untyped-def]
-    """A pause discovered on a live tick kills the worker and parks — the inverse of an
-    abandon. Each omission (release, closure, epoch bump, requeue) is asserted separately
-    (plan §3.1)."""
+def test_pull_interrupts_the_worker_and_parks_the_lease_keeping_everything_else(tmp_path):  # type: ignore[no-untyped-def]
+    """A pause discovered on a live tick interrupts the worker and parks on that same tick —
+    the inverse of an abandon, and never a SIGKILL (blizzard#627). Each omission (release,
+    closure, epoch bump, requeue) is asserted separately (plan §3.1)."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    probe = FakeProbe(alive={(100, "start-100")})  # a LIVE worker — the pause has to kill it
+    probe = FakeProbe(alive={(100, "start-100")}, groups_alive={100})  # a LIVE worker — the pause signals it
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -221,7 +236,8 @@ def test_pull_kills_the_worker_and_parks_the_lease_keeping_everything_else(tmp_p
 
     tick(ctx)
 
-    assert probe.killed == [100]  # the worker is stopped — that is what a pause means
+    assert probe.interrupted_groups == [100]  # the worker is asked to stop — that is what a pause means
+    assert probe.killed == [] and probe.killed_groups == []
     assert store.pause_parked_lease_ids() == {"lease_1"}
     # Everything else survives: claim, route, epoch, session, environments, retry budget.
     lease = store.active_lease("lease_1")
@@ -240,7 +256,7 @@ def test_pull_parks_a_standing_pause_only_once_across_many_ticks(tmp_path):  # t
     db_url = f"sqlite:///{tmp_path / 'runner.db'}"
     store = make_store(db_url)
     _seed_running_lease(store)
-    probe = FakeProbe(alive={(100, "start-100")})
+    probe = _ExitingProbe(alive={(100, "start-100")}, groups_alive={100})
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -252,7 +268,7 @@ def test_pull_parks_a_standing_pause_only_once_across_many_ticks(tmp_path):  # t
     assert store.pause_parked_lease_ids() == {"lease_1"}
     # The kill happened once, on the tick that discovered the pause; the later ticks saw an
     # already-parked lease and did nothing at all.
-    assert probe.killed == [100]
+    assert probe.interrupted_groups == [100]
     # Counted over the real rows, because the accessor above is a set: it cannot see a
     # duplicate, which is exactly what an unguarded park would produce.
     engine = create_engine_from_url(db_url)
@@ -274,7 +290,7 @@ def test_reap_never_reaps_a_pause_parked_lease_however_long_it_stands(tmp_path):
     (D-055)."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    probe = FakeProbe(alive={(100, "start-100")})
+    probe = _ExitingProbe(alive={(100, "start-100")}, groups_alive={100})
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -312,7 +328,7 @@ def test_a_pause_landing_between_two_ticks_is_reconciled_on_the_next_one(tmp_pat
     it on PULL's sweep."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    probe = FakeProbe(alive={(100, "start-100")})
+    probe = _ExitingProbe(alive={(100, "start-100")}, groups_alive={100})
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()  # not paused yet
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -322,13 +338,13 @@ def test_a_pause_landing_between_two_ticks_is_reconciled_on_the_next_one(tmp_pat
     tick(ctx)
 
     # Untouched: a live worker on an unpaused chunk is simply left running.
-    assert probe.killed == [] and store.pause_parked_lease_ids() == set()
+    assert probe.interrupted_groups == [] and store.pause_parked_lease_ids() == set()
     assert store.active_lease("lease_1") is not None
 
     hub.chunks["ch_1"] = _paused_chunk()  # the operator pauses it between the two ticks
     tick(ctx)
 
-    assert probe.killed == [100]
+    assert probe.interrupted_groups == [100]
     assert store.pause_parked_lease_ids() == {"lease_1"}
     assert _closure_reasons(store) == []
     assert store.held_environment_ids() == ["e1"]
@@ -343,7 +359,7 @@ def test_resuming_the_chunk_restarts_the_same_session_under_the_same_lease(tmp_p
     lease, epoch, and session, only the pid rewritten."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    probe = FakeProbe(alive={(100, "start-100")})
+    probe = _ExitingProbe(alive={(100, "start-100")}, groups_alive={100})
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -502,7 +518,7 @@ def test_fill_does_not_reconcile_a_pause_parked_chunk_as_an_interrupted_claim(tm
     a worker into it while paused."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    probe = FakeProbe(alive={(100, "start-100")})
+    probe = _ExitingProbe(alive={(100, "start-100")}, groups_alive={100})
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -525,7 +541,7 @@ def test_advance_does_not_drive_a_pause_parked_chunk_as_a_held_chunk(tmp_path): 
     (D-055)."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    probe = FakeProbe(alive={(100, "start-100")})
+    probe = _ExitingProbe(alive={(100, "start-100")}, groups_alive={100})
     hub = FakeHub()
     hub.chunks["ch_1"] = _paused_chunk()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
@@ -565,3 +581,175 @@ def test_pausing_an_unheld_ready_chunk_simply_keeps_it_out_of_the_queue(tmp_path
     assert store.pause_parked_lease_ids() == set()  # nothing to park — no lease was ever held
     assert store.list_active_leases() == []
     assert store.held_environment_ids() == []
+
+
+# --------------------------------------------------------------------------- #
+# The interrupt-then-kill park (blizzard#627): envelope recorded, survivor killed only past the budget, no waits.
+
+
+def _usage_payloads(store):  # type: ignore[no-untyped-def]
+    return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
+
+
+def _sample(kind: str, *, cost_usd: float | None) -> UsageSample:
+    return UsageSample(
+        kind=kind,  # type: ignore[arg-type]
+        model="fake-model",
+        input_tokens=7,
+        output_tokens=3,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=cost_usd,
+    )
+
+
+class _EnvelopeWritingProbe(_ExitingProbe):
+    """A worker that answers its SIGINT the way Claude Code does: it writes its result
+    envelope to its generation's stdout file, then exits."""
+
+    def __init__(self, stdout_path, **kw):  # type: ignore[no-untyped-def]
+        super().__init__(**kw)
+        self._stdout_path = stdout_path
+
+    def interrupt_group(self, pgid: int) -> None:
+        self._stdout_path.write_text('{"type": "result", "subtype": "error_during_execution", "is_error": true}')
+        super().interrupt_group(pgid)
+
+
+def test_a_worker_that_exits_on_its_interrupt_has_its_generation_recorded_after_the_resume(tmp_path):  # type: ignore[no-untyped-def]
+    """AC1/AC3: the park is durable on the tick that interrupts, the worker is never
+    SIGKILLed, and once the operator resumes, the paused generation's tokens and billed cost
+    are recorded off the envelope its SIGINT let it write."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    probe = _EnvelopeWritingProbe(stdout_dir / "lease_1.1.stdout", alive={(100, "start-100")}, groups_alive={100})
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _paused_chunk()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"spawn": _sample("spawn", cost_usd=0.42)})
+    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, worker_stdout_dir=str(stdout_dir))
+    ctx = _make_ctx(store, hub, harness, probe, config=config)
+
+    tick(ctx)
+
+    assert probe.interrupted_groups == [100] and probe.killed_groups == [] and probe.killed == []
+    assert store.pause_parked_lease_ids() == {"lease_1"}  # parked on the interrupting tick itself
+
+    hub.chunks["ch_1"] = _running_chunk()
+    tick(ctx)
+
+    assert len(harness.resumed) == 1
+    spawn_payloads = [p for p in _usage_payloads(store) if p["kind"] == "spawn"]
+    assert len(spawn_payloads) == 1
+    assert spawn_payloads[0]["input_tokens"] == 7
+    assert spawn_payloads[0]["cost_usd"] == 0.42
+
+
+def test_a_worker_that_ignores_its_interrupt_is_killed_only_once_the_drain_budget_passes(tmp_path):  # type: ignore[no-untyped-def]
+    """AC4/AC6: before ``parked_at + SHUTDOWN_DRAIN_DEADLINE`` the survivor is neither
+    killed nor woken, even with the pause lifted; the first tick at or past it SIGKILLs
+    it; and the session wakes only once nothing of the lease's is alive. No tick sleeps."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    probe = FakeProbe(alive={(100, "start-100")}, groups_alive={100})  # ignores SIGINT: stays alive
+    clock = FixedClock(_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _paused_chunk()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = _make_ctx(store, hub, harness, probe, clock=clock)
+
+    tick(ctx)
+    assert probe.interrupted_groups == [100] and probe.killed_groups == []
+    assert store.open_pause_parks()["lease_1"].parked_at == _NOW
+
+    hub.chunks["ch_1"] = _running_chunk()  # the operator resumes it right away
+    clock.advance(timedelta(seconds=SHUTDOWN_DRAIN_DEADLINE - 1))
+    tick(ctx)
+
+    assert probe.killed_groups == [] and probe.killed == []  # within the budget: left alone
+    assert harness.resumed == []  # and not woken beside its live predecessor
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+
+    clock.advance(timedelta(seconds=1))
+    tick(ctx)
+
+    assert probe.killed_groups == [100]  # the first tick at the deadline kills the survivor
+    assert harness.resumed == []  # the leader still reads alive this tick — no wake beside it
+
+    probe.alive = set()  # the SIGKILL has taken
+    tick(ctx)
+
+    assert len(harness.resumed) == 1
+    assert store.pause_parked_lease_ids() == set()
+    lease = store.active_lease("lease_1")
+    assert lease is not None and (lease.epoch, lease.session_id, lease.pid) == (1, "sess-a", 4321)
+
+
+def test_an_in_flight_elicitation_is_interrupted_and_its_judge_usage_booked_before_the_resume(tmp_path):  # type: ignore[no-untyped-def]
+    """The park names the elicitation it interrupted; once that process has exited, the
+    teardown books its ``judge`` usage against the paused generation and clears the
+    record — ahead of the pause-lifted gate — and resume then wakes the worker."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    probe = _ExitingProbe()  # the worker has already exited on its own; the judge is what's live
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_by_kind={"judge": _sample("judge", cost_usd=0.05)})
+    ctx = _make_ctx(store, hub, harness, probe)
+
+    tick(ctx)  # ADVANCE launches the verdict elicitation
+    elicitation = store.in_flight_elicitation("lease_1", 1)
+    assert elicitation is not None and elicitation.pid == 8888
+    probe.alive, probe.groups_alive = {(8888, "judge-start")}, {8888}
+
+    hub.chunks["ch_1"] = _paused_chunk()
+    tick(ctx)
+
+    assert probe.interrupted_groups == [8888] and probe.killed_groups == []
+    assert store.open_pause_parks()["lease_1"].interrupted_elicitation_id == elicitation.id
+    # The elicitation exited on its SIGINT within this same tick, so the teardown already
+    # booked and cleared it — before the still-standing pause was ever consulted.
+    assert store.in_flight_elicitation("lease_1", 1) is None
+    judge_payloads = [p for p in _usage_payloads(store) if p["kind"] == "judge"]
+    assert len(judge_payloads) == 1
+    assert judge_payloads[0]["cost_usd"] == 0.05
+    assert harness.resumed == []  # still paused
+
+    hub.chunks["ch_1"] = _running_chunk()
+    tick(ctx)
+
+    assert len(harness.resumed) == 1
+    assert store.pause_parked_lease_ids() == set()
+
+
+def test_a_usage_limit_judge_parks_standing_record_is_left_untouched_by_the_teardown(tmp_path):  # type: ignore[no-untyped-def]
+    """AC5: a park that named no elicitation owns none — the usage-limit judge park's
+    deliberately standing record is neither signalled nor cleared while it stands."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    probe = FakeProbe()
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _running_chunk()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = _make_ctx(store, hub, harness, probe)
+
+    tick(ctx)  # ADVANCE launches the verdict elicitation
+    elicitation = store.in_flight_elicitation("lease_1", 1)
+    assert elicitation is not None
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    Attempt(ctx, lease).park_usage_limited()  # the judge's own usage-limit park: record left standing
+    assert store.open_pause_parks()["lease_1"].interrupted_elicitation_id is None
+
+    hub.chunks["ch_1"] = _paused_chunk()
+    tick(ctx)
+    tick(ctx)
+
+    assert probe.interrupted_groups == [] and probe.killed_groups == []
+    assert store.in_flight_elicitation("lease_1", 1) == elicitation
+    assert _usage_payloads(store) == []
