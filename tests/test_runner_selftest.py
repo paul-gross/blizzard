@@ -412,6 +412,9 @@ class _HangingAdapter:
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         raise AssertionError("unreachable — spawn never returns")
 
+    def observed_model(self, lines: Sequence[str]) -> str | None:
+        raise AssertionError("unreachable — spawn never returns")
+
     def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
         raise AssertionError("unreachable — spawn never returns")
 
@@ -565,6 +568,9 @@ class _FixedPidAdapter:
         return ()
 
     def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
+        return None
+
+    def observed_model(self, lines: Sequence[str]) -> str | None:
         return None
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:

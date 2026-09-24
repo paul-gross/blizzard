@@ -512,6 +512,28 @@ class ClaudeCodeAdapter:
             cost_usd=None,
         )
 
+    def observed_model(self, lines: Sequence[str]) -> str | None:
+        # The last assistant record's own `message.model`, the same field
+        # `sum_transcript_usage` reads — `None` when no record ever names one.
+        observed: str | None = None
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict) or record.get("type") != "assistant":
+                continue
+            message = record.get("message")
+            if not isinstance(message, dict):
+                continue
+            record_model = message.get("model")
+            if isinstance(record_model, str) and record_model:
+                observed = record_model
+        return observed
+
     def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
         # The signal is the synthetic transcript record (blizzard#594), never `output`:
         # a limited invocation's own stdout carries no result envelope to read `is_error`

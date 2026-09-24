@@ -626,8 +626,10 @@ class OpenCodeAdapter:
             return None
         parts = list(by_id.values())
         input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(parts)
-        # A run event never carries per-step message info (only an export does), so every
-        # zero-cost step here falls back to the invocation's own provider/model.
+        # `output` is always run events here, never an export: a run event never carries a
+        # step's provider/model (only an export does), so there is nothing here for this
+        # method's own output to observe — every zero-cost step falls back to the
+        # invocation's own provider/model, and the fallback chain below is the only source.
         provider, resolved_model = self._invocation_model_reference(model)
         estimated: list[float] = []
         prices: dict[tuple[str, str], OpenCodeModelPrice | None] = {}
@@ -713,7 +715,10 @@ class OpenCodeAdapter:
             estimated_cost_usd = sum(a for a in amounts if a is not None) if complete else None
         return UsageSample(
             kind=kind,
-            model=model or self._model or "opencode",
+            # The export's own observed provider/model over a passed-in or configured one
+            # (blizzard#629 D2): an export line names the model that actually ran, which a
+            # passed-in `model` can only ever approximate.
+            model=self.observed_model(lines) or model or self._model or "opencode",
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
@@ -723,6 +728,36 @@ class OpenCodeAdapter:
             cost_usd=None,
             estimated_cost_usd=estimated_cost_usd,
         )
+
+    @staticmethod
+    def _export_provider_model(line: str) -> tuple[str, str] | None:
+        """One transcript line's ``(provider, model)`` when it is an exported message
+        naming both — ``None`` for a run event (which names neither) or an export whose
+        ``message.info`` leaves either field unset."""
+        stripped = line.strip()
+        if not stripped:
+            return None
+        try:
+            decoded = json.loads(stripped)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(decoded, dict):
+            return None
+        try:
+            message = OpenCodeMessage.parse(decoded)
+        except OpenCodeShapeError:
+            return None
+        if message.info.provider_id and message.info.model_id:
+            return message.info.provider_id, message.info.model_id
+        return None
+
+    def observed_model(self, lines: Sequence[str]) -> str | None:
+        observed: tuple[str, str] | None = None
+        for line in lines:
+            found = self._export_provider_model(line)
+            if found is not None:
+                observed = found
+        return f"{observed[0]}/{observed[1]}" if observed is not None else None
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source

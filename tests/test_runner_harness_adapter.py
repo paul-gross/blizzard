@@ -1143,6 +1143,42 @@ def test_sum_transcript_usage_of_empty_transcript_is_zeroed() -> None:
     assert sample.cost_usd is None
 
 
+@pytest.mark.unit
+def test_observed_model_reads_the_last_assistant_records_model() -> None:
+    def _record(model: str | None) -> str:
+        message: dict[str, object] = {"role": "assistant", "usage": {"input_tokens": 1, "output_tokens": 1}}
+        if model is not None:
+            message["model"] = model
+        return json.dumps({"type": "assistant", "message": message})
+
+    lines = [
+        json.dumps({"type": "user", "message": {"role": "user", "content": "hi"}}),
+        _record("claude-opus-5"),
+        _record(None),
+        _record("claude-sonnet-5"),
+    ]
+
+    assert _adapter(model="claude-haiku-4-5").observed_model(lines) == "claude-sonnet-5"
+
+
+@pytest.mark.unit
+def test_observed_model_is_none_when_no_record_names_a_model() -> None:
+    """Never the configured default: a caller must be able to tell "observed nothing"
+    apart from "observed the fallback", which `sum_transcript_usage`'s own model cannot."""
+    lines = [
+        "",
+        "not json",
+        json.dumps({"type": "user", "message": {"role": "user", "content": "hi"}}),
+        json.dumps({"type": "assistant", "message": "not-a-dict"}),
+        json.dumps({"type": "assistant", "message": {"role": "assistant", "model": "", "usage": {}}}),
+        json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {"input_tokens": 3}}}),
+    ]
+    adapter = _adapter(model="claude-sonnet-5")
+
+    assert adapter.observed_model(lines) is None
+    assert adapter.observed_model([]) is None
+
+
 # --------------------------------------------------------------------------- #
 # Injected per-lease stdout redirect (epic #57): spawn / resume_with_message
 

@@ -66,7 +66,15 @@ class UsageRecorder:
         session = lease.session
         if session is None:
             return
-        judge_sample = self._resolved_harness(session).parse_usage(judge_output, "judge", model=lease.resolved_model)
+        harness = self._resolved_harness(session)
+        model = lease.resolved_model
+        if model is None and self.transcripts_wired:
+            # blizzard#629 D4: the lease asked for nothing, so ask the judge's own transcript
+            # range what actually ran — the same rule `_worker_sample` applies below.
+            lines = self.judge_transcript_lines(lease, bindings, generation=generation)
+            if lines:
+                model = harness.observed_model(lines)
+        judge_sample = harness.parse_usage(judge_output, "judge", model=model)
         if judge_sample is not None:
             self.record_sample(lease, generation=generation, sample=judge_sample)
 
@@ -113,13 +121,24 @@ class UsageRecorder:
         # Same attribution fallback as the judge fact (issue #144): on a resume the stamp is
         # what the session was MINTED with, not what a fresh resolution would produce now.
         harness = self._resolved_harness(session)
-        sample = harness.parse_usage(output, kind, model=lease.resolved_model) if output else None
+        model = lease.resolved_model
+        lines: list[str] | None = None
+        if model is None and self.transcripts_wired:
+            # blizzard#629 D4: the lease asked for nothing, so read this generation's own
+            # transcript range once and ask it what actually ran — before `parse_usage`, since
+            # a harness whose stdout envelope carries usage but no model (OpenCode's run
+            # events) can only price it once this observation is handed in as `model`.
+            lines = self.worker_transcript_lines(lease, bindings, generation=generation)
+            if lines:
+                model = harness.observed_model(lines)
+        sample = harness.parse_usage(output, kind, model=model) if output else None
         if sample is not None:
             return sample
-        lines = self.worker_transcript_lines(lease, bindings, generation=generation)
+        if lines is None:
+            lines = self.worker_transcript_lines(lease, bindings, generation=generation)
         if not lines:
             return None
-        return harness.sum_transcript_usage(lines, kind, model=lease.resolved_model)
+        return harness.sum_transcript_usage(lines, kind, model=model)
 
     def worker_transcript_lines(
         self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int

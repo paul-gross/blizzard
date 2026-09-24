@@ -1260,6 +1260,112 @@ def test_sum_transcript_usage_keeps_an_export_lines_model_when_a_run_event_repea
     assert sample.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
 
 
+@pytest.mark.unit
+def test_sum_transcript_usage_records_the_exports_model_over_a_passed_in_or_configured_one() -> None:
+    line = json.dumps(
+        _export_message(
+            session_id="ses_obs",
+            message_id="msg_obs",
+            provider_id="openai",
+            model_id="gpt-5.6-luna",
+            part_id="prt_obs",
+            cost=0.0,
+            tokens=_ZERO_TOKENS,
+        )
+    )
+    adapter = _adapter(model="anthropic/claude-configured")
+
+    assert adapter.sum_transcript_usage([line], "spawn", model="anthropic/claude-passed").model == "openai/gpt-5.6-luna"
+    assert adapter.sum_transcript_usage([line], "spawn").model == "openai/gpt-5.6-luna"
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_keeps_the_fallback_chain_when_no_export_names_a_model() -> None:
+    event_line = json.dumps(
+        _step_finish_event(session_id="ses_ev", part_id="prt_ev", message_id="msg_ev", cost=0.0, tokens=_ZERO_TOKENS)
+    )
+
+    assert _adapter(model="anthropic/c").sum_transcript_usage([event_line], "spawn", model="p/m").model == "p/m"
+    assert _adapter(model="anthropic/c").sum_transcript_usage([event_line], "spawn").model == "anthropic/c"
+    assert _adapter().sum_transcript_usage([event_line], "spawn").model == "opencode"
+
+
+@pytest.mark.unit
+def test_parse_usage_over_run_events_keeps_the_fallback_chain_since_run_events_carry_no_model() -> None:
+    """A run event names no provider/model (only an export does), so `parse_usage` has
+    nothing of its own to observe: the passed-in model, then the configured one, then the
+    bare harness label — and, with no model at all, no invented estimate and no raise."""
+    output = _jsonl(
+        [_step_finish_event(session_id="ses_ev", part_id="prt_ev", message_id="msg_ev", cost=0.0, tokens=_ZERO_TOKENS)]
+    )
+
+    passed = _adapter(model="anthropic/c", price_catalog=_luna_catalog()).parse_usage(
+        output, "spawn", model="openai/gpt-5.6-luna"
+    )
+    assert passed is not None
+    assert passed.model == "openai/gpt-5.6-luna"
+    assert passed.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
+
+    configured = _adapter(model="anthropic/c", price_catalog=_luna_catalog()).parse_usage(output, "spawn")
+    assert configured is not None
+    assert configured.model == "anthropic/c"
+
+    bare = _adapter(price_catalog=_luna_catalog()).parse_usage(output, "spawn")
+    assert bare is not None
+    assert bare.model == "opencode"
+    assert bare.estimated_cost_usd is None
+    assert bare.input_tokens == 40
+
+
+@pytest.mark.unit
+def test_observed_model_reads_the_exports_provider_and_model_as_one_reference() -> None:
+    line = json.dumps(
+        _export_message(
+            session_id="ses_obs",
+            message_id="msg_obs",
+            provider_id="openai",
+            model_id="gpt-5.6-luna",
+            part_id="prt_obs",
+            cost=0.0,
+            tokens=_ZERO_TOKENS,
+        )
+    )
+
+    assert _adapter(model="anthropic/claude-configured").observed_model([line]) == "openai/gpt-5.6-luna"
+
+
+@pytest.mark.unit
+def test_observed_model_is_none_for_run_events_and_model_less_exports() -> None:
+    """Never the configured default — a run event names nothing, and an export whose
+    `message.info` leaves the pair unset names nothing either."""
+    model_less = _export_message(
+        session_id="ses_none",
+        message_id="msg_none",
+        provider_id="openai",
+        model_id="gpt-5.6-luna",
+        part_id="prt_none",
+        cost=0.0,
+        tokens=_ZERO_TOKENS,
+    )
+    del model_less["info"]["providerID"]
+    del model_less["info"]["modelID"]
+    lines = [
+        "",
+        "not json",
+        json.dumps([1, 2]),
+        json.dumps(
+            _step_finish_event(
+                session_id="ses_ev", part_id="prt_ev", message_id="msg_ev", cost=0.0, tokens=_ZERO_TOKENS
+            )
+        ),
+        json.dumps(model_less),
+    ]
+    adapter = _adapter(model="anthropic/claude-configured")
+
+    assert adapter.observed_model(lines) is None
+    assert adapter.observed_model([]) is None
+
+
 @dataclass
 class _CountingPriceCatalog:
     inner: _FakePriceCatalog

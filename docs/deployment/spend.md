@@ -104,11 +104,13 @@ file is missing or unreadable, stays cost-absent: never a raise, never a guess p
 The runner reads the cache from `XDG_CACHE_HOME/opencode/models.json` when `[worker] env_passthrough` passes
 `XDG_CACHE_HOME` through to the worker, or from `HOME/.cache/opencode/models.json` otherwise — the default OpenCode
 itself writes to. This is the same worker-owned environment mapping the worker's own identity is built from, never a
-constant path, so relocating a fleet's OpenCode cache is a passthrough change, not a runner one. For an invocation that
-ends with a usage envelope, a worker running on OpenCode's own configured default model — with no `provider/model` the
-runner ever resolved for it — gets no estimate: the process's own stdout events never name a step's provider or model,
-so there is nothing there to price it by. The transcript fallback below differs: its exported lines carry each step's
-own `providerID`/`modelID` regardless.
+constant path, so relocating a fleet's OpenCode cache is a passthrough change, not a runner one. A worker running on
+OpenCode's own configured default model — with no `provider/model` the runner ever resolved for it — still gets an
+estimate: the process's own stdout events never name a step's provider or model, but when the lease's model is
+unpinned and transcripts are wired, the runner reads that invocation's own transcript export, whose lines carry each
+step's `providerID`/`modelID` regardless, and prices from the model it observes there. A pinned lease never pays for
+that export read, since its own stamp already names what ran; with transcripts unwired, or an export naming no model
+either, the step stays unestimated.
 
 For an invocation that ends with a usage envelope, a billed step and a zero-cost, estimated step can both appear
 together: its billed steps sum into `cost_usd`, and its estimated steps separately sum into `estimated_cost_usd` — the
