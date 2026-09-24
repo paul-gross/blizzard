@@ -40,7 +40,7 @@
                     [attr.data-segment-id]="seg.segment_id"
                     (click)="pickSegment.emit(seg.segment_id)"
                   >
-                    <span>Segment {{ seg.spawn_generation + 1 }}</span>
+                    <span>Segment {{ seg.spawn_generation }}</span>
                     @if (seg.harness_id) {
                       <span
                         class="tag"

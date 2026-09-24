@@ -23,7 +23,7 @@ function seam(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptS
     segment_id: 'sg_prev',
     node_id: 'nd_build',
     epoch: 1,
-    spawn_generation: 0,
+    spawn_generation: 1,
     turn_range_start: 0,
     turn_range_end: 10,
     final: true,
@@ -112,7 +112,7 @@ describe('TranscriptSegmentView', () => {
   });
 
   it('renders continued-from/continues-in seams and emits pickSegment when followed', async () => {
-    const prev = seam({ segment_id: 'sg_prev', spawn_generation: 0 });
+    const prev = seam({ segment_id: 'sg_prev', spawn_generation: 1 });
     const next = seam({ segment_id: 'sg_next', spawn_generation: 2 });
     const { el, fixture } = await render({ continuedFrom: prev, continuesIn: next });
     const emitted: string[] = [];
@@ -123,7 +123,7 @@ describe('TranscriptSegmentView', () => {
     back?.click();
 
     const forward = el.querySelector<HTMLButtonElement>('[data-testid="transcript-continues-in"]');
-    expect(forward?.textContent).toContain('segment 3');
+    expect(forward?.textContent).toContain('segment 2');
     forward?.click();
 
     expect(emitted).toEqual(['sg_prev', 'sg_next']);

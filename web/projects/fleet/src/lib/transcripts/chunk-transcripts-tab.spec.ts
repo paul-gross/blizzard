@@ -79,7 +79,7 @@ function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): Transcri
     segment_id: 'seg-1',
     node_id: 'build',
     epoch: 1,
-    spawn_generation: 0,
+    spawn_generation: 1,
     turn_range_start: 0,
     turn_range_end: 10,
     final: true,
@@ -97,7 +97,7 @@ describe('ChunkTranscriptsTab', () => {
     const { el } = await render({ history: HISTORY, segments: [segment()] });
 
     expect(el.querySelectorAll('[data-testid="transcript-step"]')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="transcript-segment-item"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-item"]')?.textContent).toContain('Segment 1');
     expect(el.querySelector('[data-testid="transcript-segment-empty"]')?.textContent).toContain('SELECT A SEGMENT');
   });
 
@@ -150,11 +150,13 @@ describe('ChunkTranscriptsTab', () => {
   it('renders continued-from and continues-in links resolving to each other, for a multi-segment step', async () => {
     const { el, fixture } = await render({
       history: HISTORY,
-      segments: [segment({ segment_id: 'seg-1', spawn_generation: 0 }), segment({ segment_id: 'seg-2', spawn_generation: 1 })],
+      segments: [segment({ segment_id: 'seg-1', spawn_generation: 1 }), segment({ segment_id: 'seg-2', spawn_generation: 2 })],
       segmentId: 'seg-2',
       segmentData: { segment_id: 'seg-2', final: true, truncated: false, turns: [] },
     });
 
+    const items = el.querySelectorAll('[data-testid="transcript-segment-item"]');
+    expect(Array.from(items, (item) => item.textContent?.trim())).toEqual(['Segment 1', 'Segment 2']);
     const back = el.querySelector<HTMLButtonElement>('[data-testid="transcript-continued-from"]');
     expect(back?.textContent).toContain('segment 1');
     expect(el.querySelector('[data-testid="transcript-continues-in"]')).toBeNull();

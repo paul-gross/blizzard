@@ -33,7 +33,7 @@ function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): Transcri
     segment_id: 'sg_1',
     node_id: 'nd_build',
     epoch: 1,
-    spawn_generation: 0,
+    spawn_generation: 1,
     turn_range_start: 0,
     turn_range_end: 10,
     final: true,
@@ -47,8 +47,8 @@ function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): Transcri
 }
 
 const SEGMENTS: readonly TranscriptSegmentIndexEntry[] = [
-  segment({ segment_id: 'sg_claude', spawn_generation: 0, harness_id: 'claude_code', harness_version: '1.2.3' }),
-  segment({ segment_id: 'sg_codex', spawn_generation: 1, harness_id: 'codex', harness_version: '4.5.6' }),
+  segment({ segment_id: 'sg_claude', spawn_generation: 1, harness_id: 'claude_code', harness_version: '1.2.3' }),
+  segment({ segment_id: 'sg_codex', spawn_generation: 2, harness_id: 'codex', harness_version: '4.5.6' }),
 ];
 
 describe('chunk transcripts harness-provenance layout shell sweep (web:shell-sweep, blizzard#441)', () => {
@@ -84,6 +84,10 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
 
       const badges = [...root.querySelectorAll<HTMLElement>('[data-testid="transcripts-tab-nav"] [data-testid="transcript-segment-harness"]')];
       expect(badges).toHaveLength(2);
+      const labels = [...root.querySelectorAll('[data-testid="transcript-segment-item"]')].map((item) =>
+        item.querySelector('span')?.textContent?.trim(),
+      );
+      expect(labels).toEqual(['Segment 1', 'Segment 2']);
 
       const claude = root.querySelector<HTMLElement>('[data-testid="transcripts-tab-nav"] [data-harness-id="claude_code"]')!;
       const codex = root.querySelector<HTMLElement>('[data-testid="transcripts-tab-nav"] [data-harness-id="codex"]')!;
@@ -100,6 +104,17 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
         tab.scrollWidth,
         `tab overflows horizontally at 390px (${tab.scrollWidth} > ${tab.clientWidth})`,
       ).toBeLessThanOrEqual(tab.clientWidth);
+
+      fixture.componentRef.setInput('segmentId', 'sg_codex');
+      fixture.componentRef.setInput('segmentState', 'ready');
+      fixture.componentRef.setInput('segmentData', { segment_id: 'sg_codex', final: true, truncated: false, turns: [] });
+      await fixture.whenStable();
+      expect(root.querySelector('[data-testid="transcript-continued-from"]')?.textContent).toContain('segment 1');
+
+      fixture.componentRef.setInput('segmentId', 'sg_claude');
+      fixture.componentRef.setInput('segmentData', { segment_id: 'sg_claude', final: true, truncated: false, turns: [] });
+      await fixture.whenStable();
+      expect(root.querySelector('[data-testid="transcript-continues-in"]')?.textContent).toContain('segment 2');
     } finally {
       root.remove();
       window.removeEventListener('error', onError);
