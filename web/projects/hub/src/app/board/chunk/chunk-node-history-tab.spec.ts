@@ -220,7 +220,7 @@ describe('ChunkNodeHistoryTab', () => {
       selectedKey: 'nd_build:1',
       segmentState: 'ready',
       segmentData: { final: true, segment_id: 'sg_2', truncated: false, turns: [] },
-      continuedFrom: { segment_id: 'sg_1', spawn_generation: 0 },
+      continuedFrom: { segment_id: 'sg_1', spawn_generation: 1 },
       continuesIn: { segment_id: 'sg_3', spawn_generation: 2 },
     });
     const el = fixture.nativeElement as HTMLElement;
@@ -234,7 +234,7 @@ describe('ChunkNodeHistoryTab', () => {
     back?.click();
 
     const forward = el.querySelector<HTMLButtonElement>('[data-testid="transcript-continues-in"]');
-    expect(forward?.textContent).toContain('segment 3');
+    expect(forward?.textContent).toContain('segment 2');
     forward?.click();
 
     expect(emitted).toEqual(['sg_1', 'sg_3']);

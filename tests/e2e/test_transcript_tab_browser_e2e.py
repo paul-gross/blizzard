@@ -73,7 +73,7 @@ def _segment_one(chunk_id: str) -> dict:
         "chunk_id": chunk_id,
         "node_id": "nd_build",
         "epoch": 1,
-        "spawn_generation": 0,
+        "spawn_generation": 1,
         "turn_range_start": 0,
         "turn_range_end": 2,
         "final": True,
@@ -129,7 +129,7 @@ def _segment_one(chunk_id: str) -> dict:
 
 
 def _segment_two(chunk_id: str) -> dict:
-    """The step's second segment (``spawn_generation`` 1, so it continues the first) —
+    """The step's second segment (``spawn_generation`` 2, so it continues the first) —
     carries an *unlinked* sidechain, opened standalone in the scenario."""
     return {
         "seq": 2,
@@ -137,7 +137,7 @@ def _segment_two(chunk_id: str) -> dict:
         "chunk_id": chunk_id,
         "node_id": "nd_build",
         "epoch": 1,
-        "spawn_generation": 1,
+        "spawn_generation": 2,
         "turn_range_start": 2,
         "turn_range_end": 3,
         "final": True,
@@ -213,6 +213,8 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
                 # matches no history row — the tab's *unmatched* bucket (D5, `review:F9`).
                 expect(page.get_by_test_id("transcript-step")).to_have_count(1)
                 expect(page.get_by_test_id("transcript-step")).to_contain_text("unmatched")
+                expect(page.get_by_test_id("transcript-segment-item").nth(0)).to_contain_text("Segment 1")
+                expect(page.get_by_test_id("transcript-segment-item").nth(1)).to_contain_text("Segment 2")
 
                 # Open the step's first segment.
                 page.locator('[data-testid="transcript-segment-item"][data-segment-id="sg_1"]').click()
@@ -232,6 +234,7 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
                 expect(nested).to_contain_text("surveying callers now")
 
                 # Follow the continues-in link to the second segment.
+                expect(page.get_by_test_id("transcript-continues-in")).to_contain_text("segment 2")
                 page.get_by_test_id("transcript-continues-in").click()
                 expect(page.locator('[data-testid="transcript-segment-item"][data-segment-id="sg_2"]')).to_have_class(
                     re.compile("active")
@@ -245,6 +248,7 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
                 expect(page.get_by_test_id("transcript-sidechain-back")).to_have_count(0)
 
                 # Follow the continued-from link back to the first segment.
+                expect(page.get_by_test_id("transcript-continued-from")).to_contain_text("segment 1")
                 page.get_by_test_id("transcript-continued-from").click()
                 expect(page.locator('[data-testid="transcript-segment-item"][data-segment-id="sg_1"]')).to_have_class(
                     re.compile("active")
