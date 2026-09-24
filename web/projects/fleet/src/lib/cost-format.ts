@@ -21,6 +21,12 @@ export function formatCost(costUsd: number, estimatedCostUsd: number | null | un
   return `${prefix}$${amount.toFixed(2)}${suffix}`;
 }
 
+/** Whether a total has anything to show — a billed amount, an estimate, or a partial
+ * mark — so a card or row withholds the figure only on an entirely empty total. */
+export function hasCostFigure(costUsd: number, estimatedCostUsd: number | null | undefined, costPartial: boolean): boolean {
+  return costUsd > 0 || estimatedCostUsd != null || costPartial;
+}
+
 /** A token count's board/CLI legible form — `1.2k`/`3.4M` above 1000, exact below,
  * so a large chunk's tokens-by-class breakdown stays scannable in a narrow column. */
 export function formatTokens(count: number): string {

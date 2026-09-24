@@ -223,8 +223,7 @@ def test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero(
 
                 # The spend panel: the combined figure renders as the estimate alone, marked
                 # `~` — never a plain billed $0.00 in its place.
-                spend_row = page.get_by_test_id("glance-spend-row")
-                expect(spend_row.locator(".cid")).to_have_text("~$0.07")
+                expect(page.get_by_test_id("glance-spend-value")).to_have_text("~$0.07")
 
                 # The in-motion row: same rule, same figure, on the one running chunk.
                 motion_row = page.locator('[data-testid="in-motion-row"][data-chunk="' + chunk_id + '"]')

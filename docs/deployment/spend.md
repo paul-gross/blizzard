@@ -130,7 +130,8 @@ cost is entirely estimated reads `~$0.07` rather than a bare `$0.00`.
 An estimate never feeds either cap. `runner_ceiling_usd` and `chunk_cap_usd` ([The two caps](#the-two-caps) above) are
 both checked against billed cost alone: a chunk or a runner can run up real, uncapped subscription spend while every
 one of its steps shows only an estimate, and the caps stay blind to it — an operator relying on either cap to bound
-subscription spend needs to watch the estimate figure itself.
+subscription spend needs to watch the `~`-marked figure itself, the tilde being the one sign that part of a total never
+reached the caps.
 
 ## External subscription usage
 

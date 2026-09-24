@@ -8,6 +8,7 @@ import {
   KitSkeleton,
   formatCost,
   formatTokens,
+  hasCostFigure,
   type FleetSpendView,
   type KitAsyncStateValue,
   type Tone,
@@ -91,6 +92,7 @@ export interface Vitals {
 })
 export class GlanceView {
   protected readonly formatCost = formatCost;
+  protected readonly hasCostFigure = hasCostFigure;
   protected readonly formatTokens = formatTokens;
 
   readonly vitals = input.required<Vitals>();

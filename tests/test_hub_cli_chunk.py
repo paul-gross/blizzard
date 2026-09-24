@@ -542,7 +542,8 @@ def test_show_marks_no_estimate_when_none_was_reported(monkeypatch: pytest.Monke
     result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
-    assert "~" not in result.output
+    assert "cost: $0.10" in result.output
+    assert "~$" not in result.output
 
 
 # `chunk depend` / `chunk release-dependency` (issue #476) — pure clients of the two
@@ -791,7 +792,7 @@ def test_chunk_list_folds_an_estimate_into_the_one_cost_figure(monkeypatch: pyte
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
     assert lines[0].endswith("~$0.12  [blocked on ch_prereq]")
-    assert "~" not in lines[1]
+    assert lines[1].endswith("$0.50")
 
 
 @pytest.mark.unit

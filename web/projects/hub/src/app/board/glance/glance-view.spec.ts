@@ -171,7 +171,7 @@ describe('GlanceView', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('~$0.07');
-    expect(el.querySelector('[data-testid="glance-spend-row"] .cid')?.textContent?.trim()).toBe('~$0.07');
+    expect(el.querySelector('[data-testid="glance-spend-value"]')?.textContent?.trim()).toBe('~$0.07');
   });
 
   it('folds a billed cost and its own estimate into one in-motion figure, marked ~', async () => {

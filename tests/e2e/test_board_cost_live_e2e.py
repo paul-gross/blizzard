@@ -162,9 +162,7 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                     cache_create_tokens=100,
                 )
 
-                # The card's cost figure appears live, and the header spend-today figure
-                # moves off zero live — both off the same fact. Neither carries a marker:
-                # nothing here is estimated or partial yet.
+                # Card figure and header spend-today both appear live off one fact, unmarked.
                 expect(card.get_by_test_id("card-cost")).to_have_text("$0.42")
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.42")
 
@@ -192,7 +190,6 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.42+")
 
                 # --- A second, subscription-only chunk: an estimate, no billed cost -------
-                # A separate claim from the null-cost chunk above.
                 estimate_chunk_id, estimate_node_id = _ingest_promote_claim(forge, hub, "chunk — cost estimate render")
                 estimate_card = page.locator(f'[data-chunk="{estimate_chunk_id}"]')
                 expect(estimate_card).to_have_count(1)
@@ -215,14 +212,12 @@ def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_a
                 # as the estimate alone, marked `~`, and never a separate billed figure.
                 expect(estimate_card.get_by_test_id("card-cost")).to_have_text("~$0.07")
 
-                # The header's spend-today figure folds in the fleet-wide combined total:
-                # the first chunk's $0.42 billed and PARTIAL, plus this chunk's own $0.07
-                # estimate — both markers on the one figure.
+                # The header's spend-today figure is fleet-wide: the first chunk's $0.42
+                # billed-and-PARTIAL plus this chunk's $0.07 estimate, both markers on one figure.
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("~$0.49+")
 
-                # The detail dock: this chunk's own combined figure, marked `~` since it is
-                # entirely estimated, and no partial marker — an estimate-only row does not
-                # make this chunk PARTIAL.
+                # The detail dock: this chunk's own figure, marked `~` (entirely estimated) and
+                # never `+` — an estimate-only row does not make a chunk PARTIAL.
                 estimate_card.click()
                 expect(page.get_by_test_id("cost-total-usd")).to_have_text("~$0.07")
                 expect(page.get_by_test_id("cost-partial-badge")).to_have_count(0)

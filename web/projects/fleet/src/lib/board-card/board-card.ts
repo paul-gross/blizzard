@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import type { ChunkStatus } from '../api/hub';
 import { STATUS_LANE } from '../chunk-lanes';
 import { compactRef } from '../compact-ref';
-import { formatCost } from '../cost-format';
+import { formatCost, hasCostFigure } from '../cost-format';
 import { FleetWhen } from '../when-display';
 
 /** One rendered board card — the derived-status view of a chunk. */
@@ -82,6 +82,7 @@ export interface BoardCard {
 })
 export class BoardCardComponent {
   protected readonly formatCost = formatCost;
+  protected readonly hasCostFigure = hasCostFigure;
 
   /** The card's derived-status view of one chunk. */
   readonly card = input.required<BoardCard>();

@@ -189,7 +189,8 @@ def test_a_spend_row_with_no_estimate_carries_no_tilde(monkeypatch: pytest.Monke
     result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes"])
 
     assert result.exit_code == 0, result.output
-    assert "~" not in result.output
+    assert "$1.50" in result.output
+    assert "~$" not in result.output
 
 
 def test_outcomes_dataset_renders_the_outcomes_shape(monkeypatch: pytest.MonkeyPatch) -> None:

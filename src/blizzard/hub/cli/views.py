@@ -9,13 +9,10 @@ from typing import Any, ClassVar
 
 @dataclass(frozen=True)
 class Cost:
-    """A derived cost total — the one CLI formatter for a spend figure, always to the cent
-    and always one amount: ``cost_usd + (estimated_cost_usd ?? 0)``. Two independent markers
-    ride the figure, never a second number: a leading ``~`` when ``estimated_cost_usd`` is
-    present (even ``0.0``) — some part of the amount is estimated, not billed — and a
-    trailing ``+`` when partial — some row carried no amount, so the figure is a lower bound.
-    Four renderings follow: ``$4.00``, ``~$4.05``, ``$4.00+``, ``~$4.05+``. When a total is
-    partial: ``src/blizzard/hub/domain/work.py``'s ``UsageTotal``."""
+    """The one CLI cost formatter: one amount, ``cost_usd + (estimated_cost_usd ?? 0)``, to
+    the cent, with two independent markers — a leading ``~`` when an estimate is present
+    (even ``0.0``) and a trailing ``+`` when partial, a lower bound. The renderings are pinned
+    by tests/test_hub_cli_views.py; docs/deployment/spend.md owns the vocabulary."""
 
     cost_usd: float
     estimated_cost_usd: float | None

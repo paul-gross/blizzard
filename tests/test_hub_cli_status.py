@@ -96,8 +96,9 @@ def test_status_renders_a_per_chunk_cost_column_and_the_fleet_total(monkeypatch:
     assert "ch_1" in result.output
     assert "$0.42" in result.output
     assert "fleet spend" in result.output.lower()
-    # Exactly the chunk row's figure and the fleet total's — no stray partial marker.
-    assert "~" not in result.output
+    assert result.output.count("$0.42") == 2
+    assert "~$" not in result.output
+    assert "$0.42+" not in result.output
 
 
 def test_status_marks_a_partial_total_on_both_the_chunk_row_and_the_fleet_total(
@@ -122,8 +123,7 @@ def test_status_folds_the_estimate_into_the_chunk_row_and_the_fleet_total(
     result = CliRunner().invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
-    # A subscription-only chunk never reads a bare, exact-looking $0.00 — the estimate
-    # folds into the one figure with a leading `~`.
+    # A subscription-only chunk folds its estimate into one `~`-marked figure, never a bare $0.00.
     assert result.output.count("~$0.31") == 2
     assert "est." not in result.output
 
@@ -135,7 +135,8 @@ def test_status_renders_no_estimate_where_none_was_reported(monkeypatch: pytest.
     result = CliRunner().invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
-    assert "~" not in result.output
+    assert result.output.count("$0.42") == 2
+    assert "~$" not in result.output
 
 
 def test_status_names_a_ceiling_pause_reason_inline(monkeypatch: pytest.MonkeyPatch) -> None:

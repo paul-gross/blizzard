@@ -79,7 +79,7 @@
               <span class="cid">{{ row.shortId }}</span>
               <span class="rid">{{ row.runnerId }} · {{ row.node }}</span>
             </span>
-            @if (row.costUsd > 0 || row.estimatedCostUsd !== null || row.costPartial) {
+            @if (hasCostFigure(row.costUsd, row.estimatedCostUsd, row.costPartial)) {
               <span class="num" data-testid="in-motion-cost">{{
                 formatCost(row.costUsd, row.estimatedCostUsd, row.costPartial)
               }}</span>
@@ -169,7 +169,9 @@
           <!-- The combined figure (formatCost) always renders here, whatever mix of
                billed/estimated/partial the window carries — an estimate-only window
                reads as its own `~$X.XX` rather than a withheld $0.00. -->
-          <span class="cid">{{ formatCost(s.cost_usd, s.estimated_cost_usd, s.cost_partial) }}</span>
+          <span class="cid" data-testid="glance-spend-value">{{
+            formatCost(s.cost_usd, s.estimated_cost_usd, s.cost_partial)
+          }}</span>
           <span class="sub">{{ formatTokens(totalTokens(s)) }} tok</span>
         </div>
       } @else {

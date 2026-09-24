@@ -1,4 +1,4 @@
-import { formatCost, formatTokens } from './cost-format';
+import { formatCost, formatTokens, hasCostFigure } from './cost-format';
 
 describe('formatCost', () => {
   it('renders neither marker when the total is fully billed and not partial', () => {
@@ -24,6 +24,26 @@ describe('formatCost', () => {
 
   it('still marks an estimate of exactly 0 with ~, since the amount is estimated rather than absent', () => {
     expect(formatCost(4, 0, false)).toBe('~$4.00');
+  });
+});
+
+describe('hasCostFigure', () => {
+  it('is false only for an entirely empty total: nothing billed, no estimate, not partial', () => {
+    expect(hasCostFigure(0, null, false)).toBe(false);
+    expect(hasCostFigure(0, undefined, false)).toBe(false);
+  });
+
+  it('is true on a billed amount alone', () => {
+    expect(hasCostFigure(0.42, null, false)).toBe(true);
+  });
+
+  it('is true on an estimate alone, even one of exactly 0', () => {
+    expect(hasCostFigure(0, 0.07, false)).toBe(true);
+    expect(hasCostFigure(0, 0, false)).toBe(true);
+  });
+
+  it('is true on a partial mark alone, so a $0.00+ lower bound still shows', () => {
+    expect(hasCostFigure(0, null, true)).toBe(true);
   });
 });
 

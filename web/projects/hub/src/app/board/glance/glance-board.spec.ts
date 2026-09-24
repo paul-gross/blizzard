@@ -377,7 +377,6 @@ describe('GlanceBoard — cost estimate, no billed cost', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    const row = el.querySelector('[data-testid="glance-spend-row"]');
-    expect(row?.querySelector('.cid')?.textContent?.trim()).toBe('~$0.07');
+    expect(el.querySelector('[data-testid="glance-spend-value"]')?.textContent?.trim()).toBe('~$0.07');
   });
 });

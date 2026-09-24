@@ -1,7 +1,4 @@
-"""``blizzard.hub.cli.views.Cost`` (unit tier) — the one CLI cost formatter: one amount,
-``cost_usd + (estimated_cost_usd ?? 0)``, with two independent markers, a leading ``~``
-when estimated and a trailing ``+`` when partial.
-"""
+"""``blizzard.hub.cli.views.Cost`` (unit tier): one amount, ``~`` when estimated, ``+`` when partial."""
 
 from __future__ import annotations
 

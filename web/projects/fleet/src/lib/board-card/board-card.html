@@ -54,7 +54,7 @@
         @if (isDoneLane(card().status) && card().completedAt; as completedAt) {
           <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />
         }
-        @if (card().costUsd > 0 || card().estimatedCostUsd !== null || card().costPartial) {
+        @if (hasCostFigure(card().costUsd, card().estimatedCostUsd, card().costPartial)) {
           <span class="cost" data-testid="card-cost">{{
             formatCost(card().costUsd, card().estimatedCostUsd, card().costPartial)
           }}</span>
