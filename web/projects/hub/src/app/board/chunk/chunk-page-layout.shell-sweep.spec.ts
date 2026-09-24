@@ -74,7 +74,7 @@ const ASK_DETAIL: hubApi.ChunkDetail = {
 
 /** A subscription step: the total and its own history step each carry a runner-reported
  * estimate but no billed cost (an estimate-only total is kept non-partial) — proves the
- * token-breakdown's own estimate row and the timeline's own estimate figure both fit at
+ * token-breakdown's and the timeline's own combined `~$X.XX` cost figures both fit at
  * phone widths. */
 const ESTIMATE_DETAIL: hubApi.ChunkDetail = {
   ...DETAIL,
@@ -168,7 +168,7 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#2
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
 
-  it('renders the token-breakdown and timeline cost-estimate rows without overflow at ~390px', async () => {
+  it('renders the token-breakdown and timeline combined cost figures without overflow at ~390px', async () => {
     const fixture = await render(ESTIMATE_DETAIL);
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
@@ -178,11 +178,11 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#2
       await page.viewport(390, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      const breakdownEstimate = root.querySelector<HTMLElement>('[data-testid="cost-estimate-usd"]');
-      expect(breakdownEstimate?.textContent?.trim()).toBe('$0.07 est.');
+      const breakdownCost = root.querySelector<HTMLElement>('[data-testid="cost-total-usd"]');
+      expect(breakdownCost?.textContent?.trim()).toBe('~$0.07');
 
-      const timelineEstimate = root.querySelector<HTMLElement>('[data-testid="history-step-cost-estimate"]');
-      expect(timelineEstimate?.textContent?.trim()).toBe('$0.07 est.');
+      const timelineCost = root.querySelector<HTMLElement>('[data-testid="history-step-cost"]');
+      expect(timelineCost?.textContent?.trim()).toBe('~$0.07');
 
       const general = root.querySelector<HTMLElement>('[data-testid="chunk-general-tab"]')!;
       expect(

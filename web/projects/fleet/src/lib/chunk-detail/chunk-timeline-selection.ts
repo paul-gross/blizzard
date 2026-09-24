@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../api/hub';
-import { formatCost, formatCostEstimate, formatTokens } from '../cost-format';
+import { formatCost, formatTokens } from '../cost-format';
 import { KitAsyncState } from '../kit/kit-async-state';
 import { deriveActiveRow, deriveHistoryRows, deriveMultiGraph, type HistoryRow, usageForStep as sumStepUsage } from './chunk-timeline-rows';
 
@@ -56,7 +56,6 @@ export class ChunkTimelineSelection {
   readonly pickStep = output<string | null>();
 
   protected readonly formatCost = formatCost;
-  protected readonly formatCostEstimate = formatCostEstimate;
   protected readonly formatTokens = formatTokens;
 
   protected onActivate(key: string | null, event?: Event): void {

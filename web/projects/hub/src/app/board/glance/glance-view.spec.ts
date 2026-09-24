@@ -143,7 +143,7 @@ describe('GlanceView', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="done-today-count"]')).toBeNull();
   });
 
-  it("renders the in-motion row's own estimate, and the spend panel's own estimate, rather than a plain billed $0.00", async () => {
+  it("renders the in-motion row's and the spend panel's own entirely-estimated figure as the estimate alone, marked ~", async () => {
     const fixture = render({ inMotionState: 'ready' });
     fixture.componentRef.setInput('inMotion', [
       {
@@ -170,13 +170,11 @@ describe('GlanceView', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="in-motion-cost"]')).toBeNull();
-    expect(el.querySelector('[data-testid="in-motion-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
-    expect(el.querySelector('[data-testid="glance-spend-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
-    expect(el.querySelector('[data-testid="glance-spend-row"]')?.textContent).not.toContain('$0.00');
+    expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('~$0.07');
+    expect(el.querySelector('[data-testid="glance-spend-row"] .cid')?.textContent?.trim()).toBe('~$0.07');
   });
 
-  it('renders both a billed cost and its own estimate on the same in-motion row, never merged', async () => {
+  it('folds a billed cost and its own estimate into one in-motion figure, marked ~', async () => {
     const fixture = render({ inMotionState: 'ready' });
     fixture.componentRef.setInput('inMotion', [
       {
@@ -193,11 +191,10 @@ describe('GlanceView', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('$0.05');
-    expect(el.querySelector('[data-testid="in-motion-cost-estimate"]')?.textContent?.trim()).toBe('$2.00 est.');
+    expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('~$2.05');
   });
 
-  it('renders no estimate figures for a chunk/spend read with none — exactly as before this field existed', async () => {
+  it('renders no ~ marker for a chunk/spend read with no estimate — exactly as before this field existed', async () => {
     const fixture = render({ inMotionState: 'ready' });
     fixture.componentRef.setInput('inMotion', [
       {
@@ -223,10 +220,8 @@ describe('GlanceView', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent).toContain('$2.03');
-    expect(el.querySelector('[data-testid="in-motion-cost-estimate"]')).toBeNull();
+    expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('$2.03');
     expect(el.querySelector('[data-testid="glance-spend-row"]')?.textContent).toContain('$18.40');
-    expect(el.querySelector('[data-testid="glance-spend-estimate"]')).toBeNull();
   });
 
   it('renders no cost figure at all on an in-motion row that has spent nothing and carries no estimate', async () => {
@@ -248,6 +243,5 @@ describe('GlanceView', () => {
 
     expect(el.querySelector('[data-testid="in-motion-row"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="in-motion-cost"]')).toBeNull();
-    expect(el.querySelector('[data-testid="in-motion-cost-estimate"]')).toBeNull();
   });
 });

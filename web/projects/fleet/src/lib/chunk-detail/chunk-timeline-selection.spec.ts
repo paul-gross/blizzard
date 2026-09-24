@@ -139,15 +139,14 @@ describe('ChunkTimelineSelection', () => {
     expect(active.querySelector('[data-testid="selection-step-usage"]')).toBeNull();
   });
 
-  it("renders a step's own separate cost estimate, apart from the billed figure, with no PARTIAL marker for an estimate-only row", async () => {
+  it("renders a step's own estimate folded into its one cost figure, marked ~, with no PARTIAL marker for an estimate-only row", async () => {
     const fixture = TestBed.createComponent(ChunkTimelineSelection);
     fixture.componentRef.setInput('detail', ESTIMATE_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     const usage = el.querySelector('[data-testid="selection-step-usage"]')!;
-    expect(usage.querySelector('[data-testid="selection-step-cost"]')?.textContent).toContain('$0.00');
-    expect(usage.querySelector('[data-testid="selection-step-cost-estimate"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(usage.querySelector('[data-testid="selection-step-cost"]')?.textContent?.trim()).toBe('~$0.07');
     expect(usage.querySelector('[data-testid="selection-step-cost-partial"]')).toBeNull();
   });
 

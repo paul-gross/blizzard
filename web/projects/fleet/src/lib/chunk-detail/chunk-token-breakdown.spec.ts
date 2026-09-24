@@ -83,7 +83,7 @@ describe('ChunkTokenBreakdown', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('~$0.10');
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('$0.10+');
     expect(el.querySelector('[data-testid="cost-partial-badge"]')).not.toBeNull();
   });
 
@@ -115,24 +115,22 @@ describe('ChunkTokenBreakdown', () => {
     expect(zeroed('fact-tokens-cache-creation')).toBe(true);
   });
 
-  it('renders a separate, labeled cost-estimate row only when the total carries one, apart from the billed figure', async () => {
+  it('folds the total carrying only an estimate into the one cost figure, marked ~', async () => {
     const fixture = TestBed.createComponent(ChunkTokenBreakdown);
     fixture.componentRef.setInput('detail', ESTIMATE_COST_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('$0.00');
-    expect(el.querySelector('[data-testid="cost-estimate-usd"]')?.textContent?.trim()).toBe('$0.07 est.');
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent?.trim()).toBe('~$0.07');
   });
 
-  it('renders no cost-estimate row for a chunk with no estimate — exactly as before this total carried one', async () => {
+  it('renders no ~ marker for a chunk with no estimate', async () => {
     const fixture = TestBed.createComponent(ChunkTokenBreakdown);
     fixture.componentRef.setInput('detail', COST_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="cost-estimate-usd"]')).toBeNull();
-    expect(el.querySelector('[data-testid="fact-cost-estimate"]')).toBeNull();
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent?.trim()).toBe('$0.42');
   });
 
   it('does not mute a non-zero cache count — the rule is "zero", not "cache"', async () => {

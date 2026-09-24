@@ -64,8 +64,9 @@ export interface StepUsageTotal {
   readonly tokens: number;
   readonly costUsd: number;
   readonly costPartial: boolean;
-  /** The step's summed estimate, `null` iff no summed row carried one — kept apart from
-   * `costUsd`, never merged into it. */
+  /** The step's summed estimate, `null` iff no summed row carried one — folded into
+   * `costUsd` by {@link formatCost} for display, rather than rendered as a figure
+   * of its own. */
   readonly estimatedCostUsd: number | null;
   /** The step's own recorded harness identity (blizzard#441) — read off whichever of
    * its own summed rows recorded one, newest first, never derived from `model`. `null`

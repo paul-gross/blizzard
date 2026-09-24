@@ -51,12 +51,9 @@
           @if (usageForStep(row); as u) {
             <div class="line3" data-testid="selection-step-usage">
               <span class="tok" data-testid="selection-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
-              <span class="cost" data-testid="selection-step-cost">{{ formatCost(u.costUsd, u.costPartial) }}</span>
-              @if (u.estimatedCostUsd !== null) {
-                <span class="cost-estimate" data-testid="selection-step-cost-estimate">{{
-                  formatCostEstimate(u.estimatedCostUsd)
-                }}</span>
-              }
+              <span class="cost" data-testid="selection-step-cost">{{
+                formatCost(u.costUsd, u.estimatedCostUsd, u.costPartial)
+              }}</span>
               @if (u.costPartial) {
                 <span
                   class="partial-badge"

@@ -11,7 +11,7 @@ import click
 from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import Cost, CostEstimate, Listing
+from blizzard.hub.cli.views import Cost, Listing
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class SpendRow:
 
     def line(self) -> str:
         row = self.row
-        cost = Cost(row["cost_usd"], row["cost_partial"]).rendered + CostEstimate.suffix(row)
+        cost = Cost.of(row).rendered
         return (
             f"{row[self.key_field]}  {cost}  in={row['input_tokens']} out={row['output_tokens']} "
             f"cache_read={row['cache_read_tokens']} cache_create={row['cache_create_tokens']}"

@@ -7,9 +7,9 @@ import { BoardCardComponent } from './board-card';
 
 /**
  * The card's right-hand meta group at its fullest — a done-lane card carrying its
- * completion stamp, a billed cost, and a cost estimate side by side, each
+ * completion stamp and its one combined cost figure side by side, each
  * `white-space: nowrap` — a real layout claim jsdom cannot make: it never lays out
- * `board-card.css`'s flex row, so `web:unit-test` cannot see the three figures overlap
+ * `board-card.css`'s flex row, so `web:unit-test` cannot see the two figures overlap
  * one another, wrap off their shared line, or push past the card's own edge. Swept at
  * 800px (wider than any real board column) and at 390px/320px
  * (`bzh:narrow-viewport-tier-rule`).
@@ -53,10 +53,10 @@ async function renderCard(width: number): Promise<HTMLElement> {
 
 describe('board card cost figures shell sweep (web:shell-sweep)', () => {
   for (const width of WIDTHS) {
-    it(`keeps the done-at stamp, billed cost, and estimate on one line inside the card at width ${width}`, async () => {
+    it(`keeps the done-at stamp and the cost figure on one line inside the card at width ${width}`, async () => {
       const root = await renderCard(width);
       try {
-        const ids = ['chunk-done-at', 'card-cost', 'card-cost-estimate'];
+        const ids = ['chunk-done-at', 'card-cost'];
         const rects = ids.map((id) => {
           const el = root.querySelector<HTMLElement>(`[data-testid="${id}"]`);
           expect(el, `width ${width}: fixture defect — ${id} did not render`).not.toBeNull();
