@@ -10,7 +10,7 @@
           [tone]="toneFor(capability)"
           [attr.aria-label]="ariaLabel(capability)"
         >
-          {{ capability.harness_id }}{{ capability.version ? ' ' + capability.version : '' }}
+          {{ harnessName(capability.harness_id) }}
         </fleet-kit-badge>
       </li>
     }

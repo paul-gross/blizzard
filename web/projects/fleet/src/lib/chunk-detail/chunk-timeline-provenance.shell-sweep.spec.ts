@@ -105,6 +105,8 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
       const codex = root.querySelector<HTMLElement>('[data-harness-id="codex"]')!;
       expect(claude).not.toBeNull();
       expect(codex).not.toBeNull();
+      expect(claude.textContent?.trim()).toBe('claude code');
+      expect(codex.textContent?.trim()).toBe('codex');
       // Two distinct rows, not overlapping.
       expect(claude.getBoundingClientRect().top).toBeLessThan(codex.getBoundingClientRect().top);
 

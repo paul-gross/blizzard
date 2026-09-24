@@ -88,8 +88,8 @@
                   class="harness-badge"
                   data-testid="history-step-harness"
                   [attr.data-harness-id]="harnessId"
-                  [attr.aria-label]="harnessLabel(u)"
-                  >{{ harnessId }}{{ u.harnessVersion ? ' ' + u.harnessVersion : '' }}</span
+                  [attr.aria-label]="harnessName(harnessId)"
+                  >{{ harnessName(harnessId) }}</span
                 >
               }
             </span>

@@ -75,7 +75,7 @@ describe('MachineDetailView', () => {
     expect(el.querySelector('[data-testid="detail-resume"]')?.textContent).toContain('blizzard runner resume sess-new');
   });
 
-  it('renders the escalated session’s own recorded harness id and version (blizzard#441)', async () => {
+  it('renders the escalated session’s harness as a short name (blizzard#441)', async () => {
     const { el } = await render({
       lease: LEASE,
       escalation: {
@@ -91,9 +91,9 @@ describe('MachineDetailView', () => {
     });
 
     const badge = el.querySelector('[data-testid="detail-resume-harness"]');
-    expect(badge?.textContent?.trim()).toBe('claude_code 1.2.3');
+    expect(badge?.textContent?.trim()).toBe('claude code');
     expect(badge?.getAttribute('data-harness-id')).toBe('claude_code');
-    expect(badge?.getAttribute('aria-label')).toBe('claude_code version 1.2.3');
+    expect(badge?.getAttribute('aria-label')).toBe('claude code');
   });
 
   it('renders no harness affordance when the escalation recorded none', async () => {

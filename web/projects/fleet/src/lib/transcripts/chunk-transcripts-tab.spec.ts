@@ -175,11 +175,13 @@ describe('ChunkTranscriptsTab', () => {
     });
 
     const listBadge = el.querySelector('[data-testid="transcript-segment-harness"][data-harness-id="claude_code"]');
-    expect(listBadge?.textContent?.trim()).toBe('claude_code 1.2.3');
+    expect(listBadge?.textContent?.trim()).toBe('claude code');
+    expect(listBadge?.getAttribute('aria-label')).toBe('claude code');
 
     // Both the nav-list badge and the open segment body's own badge render — two
     // distinct affordances, one per surface.
     expect(el.querySelectorAll('[data-testid="transcript-segment-harness"]')).toHaveLength(2);
+    expect(el.querySelectorAll('[data-testid="transcript-segment-harness"]')[1].textContent?.trim()).toBe('claude code');
   });
 
   it('renders no harness affordance at all for a segment that recorded none', async () => {

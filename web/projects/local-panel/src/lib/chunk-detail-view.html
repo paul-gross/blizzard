@@ -23,8 +23,8 @@
               class="resume-harness"
               data-testid="detail-resume-harness"
               [attr.data-harness-id]="harnessId"
-              [attr.aria-label]="harnessLabel(esc)"
-              >{{ harnessId }}{{ esc.harness_version ? ' ' + esc.harness_version : '' }}</span
+              [attr.aria-label]="harnessName(harnessId)"
+              >{{ harnessName(harnessId) }}</span
             >
           }
         </div>

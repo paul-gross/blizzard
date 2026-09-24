@@ -13,7 +13,7 @@ const SESSIONS: readonly GraphSessionView[] = [
   {
     name: 'code',
     model: ['blizzard:basic', 'gpt-5.3-codex'],
-    harnesses: ['claude', 'codex'],
+    harnesses: ['claude_code', 'opencode'],
     effort: 'medium',
     compaction_window: '100000',
     rotate: { max_context_tokens: 120000, max_invocations: 30 },
@@ -43,7 +43,7 @@ describe('GraphSessionTable', () => {
 
     const code = el.querySelector('[data-session-name="code"]') as HTMLElement;
     expect(code.textContent).toContain('blizzard:basic, gpt-5.3-codex');
-    expect(code.textContent).toContain('claude, codex');
+    expect(code.textContent).toContain('claude code, opencode');
     expect(code.textContent).toContain('medium');
     expect(code.textContent).toContain('100000');
     // Only the two thresholds the declaration actually set, and `max_invocations`

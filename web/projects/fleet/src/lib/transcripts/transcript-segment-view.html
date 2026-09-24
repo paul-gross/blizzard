@@ -3,8 +3,8 @@
     class="tag"
     data-testid="transcript-segment-harness"
     [attr.data-harness-id]="id"
-    [attr.aria-label]="harnessLabel()"
-    >{{ id }}{{ harnessVersion() ? ' ' + harnessVersion() : '' }}</span
+    [attr.aria-label]="harnessName(id)"
+    >{{ harnessName(id) }}</span
   >
 }
 @if (continuedFrom(); as prev) {

@@ -21,18 +21,20 @@ describe('CapabilityBadgeGroup', () => {
 
   it('renders one distinct, aria-labelled badge per reported capability', async () => {
     const el = await render([
-      { harness_id: 'claude', version: '1.2.3', tiers: ['sonnet'], default: true, available: true },
-      { harness_id: 'codex', version: null, tiers: [], default: false, available: true },
+      { harness_id: 'claude_code', version: '2.1.281 (Claude Code)', tiers: ['sonnet'], default: true, available: true },
+      { harness_id: 'opencode', version: '1.28.32', tiers: [], default: false, available: true },
     ]);
 
     const badges = el.querySelectorAll('[data-testid="runner-capability-badge"]');
     expect(badges).toHaveLength(2);
 
-    const claude = el.querySelector('[data-harness-id="claude"]');
-    expect(claude?.getAttribute('aria-label')).toBe('claude version 1.2.3, available');
+    const claude = el.querySelector('[data-harness-id="claude_code"]');
+    expect(claude?.textContent?.trim()).toBe('claude code');
+    expect(claude?.getAttribute('aria-label')).toBe('claude code, available');
 
-    const codex = el.querySelector('[data-harness-id="codex"]');
-    expect(codex?.getAttribute('aria-label')).toBe('codex with no reported version, available');
+    const opencode = el.querySelector('[data-harness-id="opencode"]');
+    expect(opencode?.textContent?.trim()).toBe('opencode');
+    expect(opencode?.getAttribute('aria-label')).toBe('opencode, available');
   });
 
   it('distinguishes an unavailable capability from an available one', async () => {
@@ -46,7 +48,7 @@ describe('CapabilityBadgeGroup', () => {
     expect(claude?.getAttribute('data-available')).toBe('true');
     expect(codex?.getAttribute('data-available')).toBe('false');
     expect(claude?.getAttribute('aria-label')).toContain('available');
-    expect(codex?.getAttribute('aria-label')).toBe('codex version 2.0.0, unavailable');
+    expect(codex?.getAttribute('aria-label')).toBe('codex, unavailable');
   });
 
   it('renders a labelled empty branch for a runner with no reported capabilities', async () => {

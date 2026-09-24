@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 import type { RunnerCapability } from '../api/hub';
+import { harnessName } from '../harness-name';
 import { KitBadge } from '../kit/kit-badge';
 import type { Tone } from '../kit/tone';
 
@@ -24,6 +25,7 @@ import type { Tone } from '../kit/tone';
 export class CapabilityBadgeGroup {
   /** Every capability this runner reported, in registration order. */
   readonly capabilities = input.required<readonly RunnerCapability[]>();
+  protected readonly harnessName = harnessName;
 
   /** `done` (green) for an available binding, `needs` (red) for one whose own health
    * check failed — the same tone ladder the claim-status badges already use, so
@@ -33,12 +35,9 @@ export class CapabilityBadgeGroup {
     return capability.available ? 'done' : 'needs';
   }
 
-  /** Names harness, version, and availability explicitly, since {@link KitBadge}
-   * renders a bare, unlabelled `<span>` of its own — the same computed-label form the
-   * pause/resume toggle already uses (`runner-view.html`'s `aria-label`). */
+  /** Names harness and availability for the badge's accessible label. */
   protected ariaLabel(capability: RunnerCapability): string {
-    const version = capability.version ? ` version ${capability.version}` : ' with no reported version';
     const availability = capability.available ? 'available' : 'unavailable';
-    return `${capability.harness_id}${version}, ${availability}`;
+    return `${harnessName(capability.harness_id)}, ${availability}`;
   }
 }

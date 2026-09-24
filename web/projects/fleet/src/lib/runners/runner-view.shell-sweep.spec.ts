@@ -115,8 +115,8 @@ const MULTI_HARNESS_ROW: RunnerRow = {
   used: 1,
   subscriptionPaces: [],
   capabilities: [
-    { harness_id: 'claude', version: '1.2.3', tiers: ['sonnet'], default: true, available: true },
-    { harness_id: 'codex', version: '4.5.6', tiers: ['sonnet'], default: false, available: false },
+    { harness_id: 'claude_code', version: '2.1.281 (Claude Code)', tiers: ['sonnet'], default: true, available: true },
+    { harness_id: 'opencode', version: '1.28.32', tiers: ['sonnet'], default: false, available: false },
   ],
 };
 
@@ -383,8 +383,10 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
       expect(lefts[0] === lefts[1] && tops[0] === tops[1]).toBe(false);
 
       // Mixed availability reads distinguishably.
-      const available = host.querySelector('[data-harness-id="claude"]')!;
-      const unavailable = host.querySelector('[data-harness-id="codex"]')!;
+      const available = host.querySelector('[data-harness-id="claude_code"]')!;
+      const unavailable = host.querySelector('[data-harness-id="opencode"]')!;
+      expect(available.textContent?.trim()).toBe('claude code');
+      expect(unavailable.textContent?.trim()).toBe('opencode');
       expect(available.getAttribute('data-available')).toBe('true');
       expect(unavailable.getAttribute('data-available')).toBe('false');
       expect(available.getAttribute('aria-label')).not.toBe(unavailable.getAttribute('aria-label'));
