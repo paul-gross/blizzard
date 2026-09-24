@@ -596,9 +596,9 @@
   },
   "blizzard_mock/mock_data/cli.py": {
    "comments": 16,
-   "docstrings": 132,
+   "docstrings": 134,
    "over_cap": 3,
-   "total": 1399
+   "total": 1418
   },
   "blizzard_mock/mock_data/domain/__init__.py": {
    "comments": 0,
@@ -682,7 +682,7 @@
    "comments": 2,
    "docstrings": 8,
    "over_cap": 1,
-   "total": 62
+   "total": 64
   },
   "blizzard_mock/mock_data/domain/ids.py": {
    "comments": 4,
@@ -1644,7 +1644,7 @@
    "comments": 3,
    "docstrings": 79,
    "over_cap": 1,
-   "total": 551
+   "total": 548
   },
   "blizzard/hub/cli/command.py": {
    "comments": 1,
@@ -1776,13 +1776,13 @@
    "comments": 1,
    "docstrings": 2,
    "over_cap": 0,
-   "total": 57
+   "total": 56
   },
   "blizzard/hub/cli/views.py": {
    "comments": 1,
    "docstrings": 10,
-   "over_cap": 0,
-   "total": 122
+   "over_cap": 1,
+   "total": 108
   },
   "blizzard/hub/composition.py": {
    "comments": 92,
@@ -5513,10 +5513,10 @@
    "total": 527
   },
   "e2e/test_board_cost_live_e2e.py": {
-   "comments": 23,
+   "comments": 28,
    "docstrings": 15,
-   "over_cap": 0,
-   "total": 228
+   "over_cap": 3,
+   "total": 230
   },
   "e2e/test_checks_gate_e2e.py": {
    "comments": 9,
@@ -5576,7 +5576,7 @@
    "comments": 12,
    "docstrings": 11,
    "over_cap": 1,
-   "total": 236
+   "total": 234
   },
   "e2e/test_graphs_diagram_browser_e2e.py": {
    "comments": 39,
@@ -7205,10 +7205,16 @@
    "total": 71
   },
   "test_hub_cli_status.py": {
-   "comments": 5,
+   "comments": 6,
    "docstrings": 19,
    "over_cap": 0,
-   "total": 241
+   "total": 242
+  },
+  "test_hub_cli_views.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 40
   },
   "test_hub_command_node.py": {
    "comments": 63,
