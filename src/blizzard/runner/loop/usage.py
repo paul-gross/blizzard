@@ -61,12 +61,21 @@ class UsageRecorder:
         that elicited its verdict — each its own fact."""
         self.record_worker(lease, bindings)
         generation = self.leases.lease_generation(lease.lease_id)
-        # Attribute to the lease's own `resolved_model` stamp (issue #144), not the adapter
-        # default: a judge turn on a sonnet session would otherwise book its spend against opus.
         session = lease.session
         if session is None:
             return
-        judge_sample = self._resolved_harness(session).parse_usage(judge_output, "judge", model=lease.resolved_model)
+        harness = self._resolved_harness(session)
+        lines = (
+            self.judge_transcript_lines(lease, bindings, generation=generation)
+            if harness.needs_usage_transcript(judge_output)
+            else []
+        )
+        judge_sample = harness.parse_usage(
+            judge_output,
+            "judge",
+            model=lease.resolved_model,
+            transcript_lines=lines,
+        )
         if judge_sample is not None:
             self.record_sample(lease, generation=generation, sample=judge_sample)
 
@@ -110,13 +119,19 @@ class UsageRecorder:
         session = lease.session
         if session is None:
             return None
-        # Same attribution fallback as the judge fact (issue #144): on a resume the stamp is
-        # what the session was MINTED with, not what a fresh resolution would produce now.
         harness = self._resolved_harness(session)
-        sample = harness.parse_usage(output, kind, model=lease.resolved_model) if output else None
+        lines = (
+            self.worker_transcript_lines(lease, bindings, generation=generation)
+            if output and harness.needs_usage_transcript(output)
+            else []
+        )
+        sample = (
+            harness.parse_usage(output, kind, model=lease.resolved_model, transcript_lines=lines) if output else None
+        )
         if sample is not None:
             return sample
-        lines = self.worker_transcript_lines(lease, bindings, generation=generation)
+        if not lines:
+            lines = self.worker_transcript_lines(lease, bindings, generation=generation)
         if not lines:
             return None
         return harness.sum_transcript_usage(lines, kind, model=lease.resolved_model)

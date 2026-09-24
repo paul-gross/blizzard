@@ -60,7 +60,14 @@ def _build_envelope(chunk="ch_1"):  # type: ignore[no-untyped-def]
 
 
 def _seed_running_lease(  # type: ignore[no-untyped-def]
-    store, *, chunk="ch_1", lease="lease_1", session="sess-a", epoch=1, harness_id=CLAUDE_CODE_HARNESS_ID
+    store,
+    *,
+    chunk="ch_1",
+    lease="lease_1",
+    session="sess-a",
+    epoch=1,
+    harness_id=CLAUDE_CODE_HARNESS_ID,
+    resolved_model=None,
 ):
     """A build lease already spawned into env e1, plus its binding."""
     store.record_lease(
@@ -73,6 +80,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
             epoch=epoch,
             runner_id="r1",
             retries_max=2,
+            resolved_model=resolved_model,
             created_at=_NOW,
         )
     )
@@ -258,6 +266,77 @@ def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_env
     assert payloads[0]["input_tokens"] == 80
 
 
+@pytest.mark.unit
+def test_record_attempt_uses_the_judge_transcripts_actual_model_when_result_omits_it(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_running_lease(store, resolved_model="claude-opus-5")
+    store.record_boundary_open(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        kind="judge",
+        start_position="judge-start",
+        opened_at=_NOW,
+    )
+
+    class RangeSource(FakeTranscriptSource):
+        def read_raw_lines(
+            self,
+            session_id: str,
+            *,
+            spawn_cwd: str | None,
+            start: TranscriptPosition | None = None,
+            end: TranscriptPosition | None = None,
+        ) -> list[str]:
+            super().read_raw_lines(session_id, spawn_cwd=spawn_cwd, start=start, end=end)
+            model = "claude-fable-5-1" if start == TranscriptPosition("judge-start") else "claude-opus-5"
+            return [json.dumps({"type": "assistant", "message": {"model": model, "usage": {"input_tokens": 1}}})]
+
+    transcript = RangeSource(tail_positions_by_session={"sess-a": TranscriptPosition("judge-end")})
+    probe = FakeProbe()
+    adapter = ClaudeCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        process=probe,
+        launcher=ProcessLauncher(probe),
+        transcript_source=transcript,
+    )
+    registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=transcript)})
+    recorder = UsageRecorder(
+        leases=store,
+        usage=store,
+        clock=FixedClock(_NOW),
+        worker_files=WorkerStdoutFiles("", store),
+        workspace_root="/ws",
+        harnesses=registry,
+        invocation_boundaries=store,
+        transcripts_wired=True,
+    )
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+    output = json.dumps(
+        {
+            "type": "result",
+            "usage": {"input_tokens": 5},
+            "total_cost_usd": 0.2,
+            "modelUsage": {"claude-opus-5": {"inputTokens": 20}, "claude-fable-5-1": {"inputTokens": 5}},
+        }
+    )
+
+    recorder.record_attempt(lease, store.bindings_for_chunk("ch_1"), judge_output=output)
+
+    judge = next(p for p in _usage_payloads(store) if p["kind"] == "judge")
+    assert judge["model"] == "claude-fable-5-1"
+    assert judge["cost_usd"] == 0.2
+    assert store.usage_since(_NOW).cost_usd == pytest.approx(0.2)
+    assert (
+        "sess-a",
+        TranscriptPosition("judge-start"),
+        TranscriptPosition("judge-end"),
+    ) in transcript.read_raw_lines_calls
+
+
 class _LunaPriceCatalog:
     """One priced OpenCode model, dollars per 1,000,000 tokens — never file I/O."""
 
@@ -307,16 +386,16 @@ def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_
     )
     _write_stdout(stdout_dir, "lease_1", 1, stdout)
     probe = FakeProbe()
+    transcript = FakeTranscriptSource(lines_by_session={"sess-a": ["would require an export"]})
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
         launcher=ProcessLauncher(probe),
         model="openai/gpt-5.6-luna",
         price_catalog=_LunaPriceCatalog(),
+        transcript_source=transcript,
     )
-    registry = HarnessRegistry(
-        {OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source())}
-    )
+    registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=transcript)})
     recorder = UsageRecorder(
         leases=store,
         usage=store,
@@ -325,6 +404,7 @@ def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_
         workspace_root="/ws",
         harnesses=registry,
         invocation_boundaries=store,
+        transcripts_wired=True,
     )
     lease = store.active_lease("lease_1")
     assert lease is not None
@@ -336,6 +416,7 @@ def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_
     assert payloads[0]["cost_usd"] == pytest.approx(0.004)
     assert payloads[0]["estimated_cost_usd"] == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
     assert payloads[0]["input_tokens"] == 140
+    assert transcript.read_raw_lines_calls == []  # successful usage must not export the session
 
 
 @pytest.mark.unit

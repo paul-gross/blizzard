@@ -65,6 +65,7 @@ class _AttachingOnResumeHarness(FakeHarness):
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
@@ -75,6 +76,7 @@ class _AttachingOnResumeHarness(FakeHarness):
             stdout_path,
             preamble=preamble,
             chunk_id=chunk_id,
+            model=model,
             effort=effort,
             compaction_window=compaction_window,
         )
@@ -131,6 +133,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
@@ -141,6 +144,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
             stdout_path,
             preamble=preamble,
             chunk_id=chunk_id,
+            model=model,
             effort=effort,
             compaction_window=compaction_window,
         )
@@ -158,7 +162,9 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
         return resumed
 
 
-def _seed_exited_lease(store, *, lease_id: str, chunk_id: str, node_id: str, epoch: int) -> None:
+def _seed_exited_lease(
+    store, *, lease_id: str, chunk_id: str, node_id: str, epoch: int, resolved_model: str | None = None
+) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease_id,
@@ -169,6 +175,7 @@ def _seed_exited_lease(store, *, lease_id: str, chunk_id: str, node_id: str, epo
             epoch=epoch,
             runner_id="r1",
             retries_max=2,
+            resolved_model=resolved_model,
             created_at=_NOW,
         )
     )
@@ -244,7 +251,9 @@ def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Pa
     the assessment fallback."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(_NOW)
-    _seed_exited_lease(store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_review", epoch=1)
+    _seed_exited_lease(
+        store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_review", epoch=1, resolved_model="sonnet"
+    )
 
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope(
@@ -280,7 +289,9 @@ def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Pa
     Pull(ctx).run()
 
     assert len(harness.resumed) == 1, "exactly one resume — the attach closed the gap"
+    assert harness.resume_models == ["sonnet"]
     assert len(harness.judged) == 1, "exactly one verdict elicited, on the second exit"
+    assert harness.judge_model_effort == [("sonnet", None)]
 
     _, submission = hub.completions[0]
     by_name = {a.name: a for a in submission.artifacts}

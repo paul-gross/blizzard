@@ -625,9 +625,8 @@ def test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed(tmp
 
 
 def test_takeover_composes_its_command_from_the_sessions_own_stamps(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A read, not a re-resolution: the operator continues under exactly the
-    configuration the session ran with — the deliberate exception to mint-only, which
-    exists for prompt-cache efficiency on runner-driven resumes only."""
+    """A read, not a re-resolution: the operator continues under the session's
+    recorded model and effort rather than the runner's current defaults."""
     store = _store(tmp_path)
     _seed_lease(store, session_name="code", resolved_model="opus", resolved_effort="high")
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)

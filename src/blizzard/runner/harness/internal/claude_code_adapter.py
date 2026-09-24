@@ -71,6 +71,10 @@ _RATE_LIMIT_RESET_RE = re.compile(r"resets\s+(\d{1,2}):(\d{2})\s*([ap]m)\s*\(([^
 _OVERLOAD_TEXT_RE = re.compile(r"529|overloaded", re.IGNORECASE)
 
 
+def _matches_model(expected: str, observed: str) -> bool:
+    return observed == expected or observed.startswith(f"{expected}-") or observed.startswith(f"claude-{expected}-")
+
+
 @dataclass(frozen=True)
 class ResultEnvelope:
     """A worker invocation's final ``--output-format json`` envelope.
@@ -267,9 +271,9 @@ class ClaudeCodeAdapter:
         # non-empty above, so the fallback is always a real workdir here.
         workdir = SpawnCwd(preamble.workspace_root, preamble.environments[0].workdir).path
         cmd = [self._binary, "-p", "--output-format", "json"]
-        # `--model` at MINT ONLY (a resume restores it); `--effort`/`--autocompact` on EVERY
-        # invocation — neither is sticky (issue #144, blizzard#343).
-        if not resume_from:
+        # Claude Code does not reliably restore the model on --resume; reassert every
+        # request parameter so the continuation keeps the worker's cache identity.
+        if model or not resume_from:
             cmd += ["--model", model or self._model]
         if effort:
             cmd += ["--effort", effort]
@@ -339,8 +343,8 @@ class ClaudeCodeAdapter:
         if not output_path:
             raise HarnessSpawnError("judge requires an output path — a detached verdict is unrecoverable without one")
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
-        # No `--model` (sticky); `--effort`/`--autocompact` ARE reasserted. `model` is taken
-        # only to attribute usage below, never to switch the session (issue #144, blizzard#343).
+        if model:
+            cmd += ["--model", model]
         if effort:
             cmd += ["--effort", effort]
         if compaction_window:
@@ -389,11 +393,13 @@ class ClaudeCodeAdapter:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
-        # As on `judge`: no `--model` (sticky), `--effort`/`--autocompact` reasserted (not sticky).
+        if model:
+            cmd += ["--model", model]
         if effort:
             cmd += ["--effort", effort]
         if compaction_window:
@@ -449,14 +455,54 @@ class ClaudeCodeAdapter:
         """The reply text following ``</Choice>`` — the worker's prose assessment."""
         return harness_shared.text_after_choice_close(self._result_text(output)) or ""
 
-    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
+    def needs_usage_transcript(self, output: str) -> bool:
+        envelope = ResultEnvelope.of(output)
+        if envelope is None or envelope.usage is None or envelope.model:
+            return False
+        breakdown = envelope.fields.get("modelUsage")
+        return not isinstance(breakdown, dict) or len(breakdown) != 1
+
+    def parse_usage(
+        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+    ) -> UsageSample | None:
         envelope = ResultEnvelope.of(output)
         if envelope is None or envelope.usage is None:
             return None
         usage = envelope.usage
+        observed = envelope.model
+        # The result envelope commonly has no top-level model. The invocation's own
+        # assistant records identify its model even when modelUsage includes earlier turns.
+        for raw_line in transcript_lines:
+            try:
+                record = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(record, dict)
+                and record.get("type") == "assistant"
+                and not record.get("isApiErrorMessage")
+                and not record.get("isSidechain")
+            ):
+                message = record.get("message")
+                if (
+                    isinstance(message, dict)
+                    and isinstance(message.get("model"), str)
+                    and message["model"] != "<synthetic>"
+                ):
+                    observed = message["model"]
+        if observed is None:
+            breakdown = envelope.fields.get("modelUsage")
+            if isinstance(breakdown, dict) and len(breakdown) == 1:
+                observed = next(iter(breakdown))
+        if model and observed and not _matches_model(model, observed):
+            _log.warning(
+                "harness usage model differs from session model", expected_model=model, observed_model=observed
+            )
+        if observed is None:
+            _log.warning("harness usage model unavailable", expected_model=model, kind=kind)
         return UsageSample(
             kind=kind,
-            model=envelope.model or model or self._model,
+            model=observed or "unknown",
             input_tokens=int(usage.get("input_tokens") or 0),
             output_tokens=int(usage.get("output_tokens") or 0),
             cache_read_tokens=int(usage.get("cache_read_input_tokens") or 0),
@@ -467,7 +513,7 @@ class ClaudeCodeAdapter:
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         input_tokens = output_tokens = cache_read_tokens = cache_create_tokens = 0
-        resolved = model or self._model
+        resolved = "unknown"
         # A reply carrying several content blocks is written as several records that each
         # repeat their message's ONE usage, so summing per record overcounts (measured 1.7x
         # against the billed figure on a long session). Every field here is per-message.
@@ -486,7 +532,12 @@ class ClaudeCodeAdapter:
             if not isinstance(message, dict):
                 continue
             record_model = message.get("model")
-            if isinstance(record_model, str) and record_model:
+            if (
+                isinstance(record_model, str)
+                and record_model
+                and record_model != "<synthetic>"
+                and not record.get("isSidechain")
+            ):
                 resolved = record_model
             usage = message.get("usage")
             if not isinstance(usage, dict):
@@ -502,6 +553,12 @@ class ClaudeCodeAdapter:
             output_tokens += int(usage.get("output_tokens") or 0)
             cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)
             cache_create_tokens += int(usage.get("cache_creation_input_tokens") or 0)
+        if model and resolved != "unknown" and not _matches_model(model, resolved):
+            _log.warning(
+                "harness usage model differs from session model", expected_model=model, observed_model=resolved
+            )
+        if resolved == "unknown":
+            _log.warning("harness usage model unavailable", expected_model=model, kind=kind)
         return UsageSample(
             kind=kind,
             model=resolved,

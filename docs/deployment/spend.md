@@ -41,6 +41,17 @@ the other. A session already running when a runner upgrades onto this reading ke
 banked: every invocation from the upgrade forward is charged its own share, while the dollars those earlier rows
 recorded stay as they were recorded, so that one session's lifetime total can read high until it ends.
 
+## Usage models
+
+Each runner usage fact names the model attributed to that invocation, including a separate fact for the judgement
+resume; node and chunk totals include its cost. For Claude Code, the runner reads the actual model from the invocation's
+assistant transcript records, the result envelope when it names a model, or an unambiguous single-model cost breakdown.
+The reported model may differ from the session's expected model — the runner logs the mismatch rather than labeling the
+observed spend with the expectation. When none of these sources identifies a model, the fact records `unknown` instead
+of guessing from the session stamp or the runner's default. This attribution names an invocation, not every model whose
+tokens a session-scoped cost figure covers ([The two readings of a reported figure](#the-two-readings-of-a-reported-figure)
+above).
+
 ## The two caps
 
 `runner_ceiling_usd`, summed over a rolling window of `window_hours` (default 24, consulted only when the ceiling is

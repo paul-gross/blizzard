@@ -779,6 +779,7 @@ class FakeHarness:
         # call, for per-call-site assertions.
         self.spawn_model_effort: list[tuple[str | None, str | None]] = []
         self.judge_model_effort: list[tuple[str | None, str | None]] = []
+        self.resume_models: list[str | None] = []
         self.resume_efforts: list[str | None] = []
         # The compaction window each invocation was handed (blizzard#343) — one entry per
         # call, mirroring the effort lists above.
@@ -898,10 +899,12 @@ class FakeHarness:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
         self.resumed.append((session_cwd, session_id, message))
+        self.resume_models.append(model)
         self.resume_efforts.append(effort)
         self.resume_compaction_windows.append(compaction_window)
         # Captured separately so existing 3-tuple unpackers of `.resumed` keep working while
@@ -976,7 +979,12 @@ class FakeHarness:
     def parse_assessment(self, output: str) -> str:
         return self.assessment
 
-    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
+    def needs_usage_transcript(self, output: str) -> bool:
+        return False
+
+    def parse_usage(
+        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+    ) -> UsageSample | None:
         self.usage_models.append(model)
         if self.usage_by_kind is not None and kind in self.usage_by_kind:
             return self.usage_by_kind[kind]

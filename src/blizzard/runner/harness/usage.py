@@ -23,7 +23,8 @@ class UsageSample:
     """Token usage + cost for one harness invocation.
 
     The four token counts are kept apart because they price differently, and are always
-    this invocation's own. ``model`` is the harness-reported id, never a configured one."""
+    this invocation's own. ``model`` is the binding's attribution for this invocation;
+    ``unknown`` marks a model it could not observe or infer."""
 
     kind: UsageKind
     model: str
