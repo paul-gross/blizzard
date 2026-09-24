@@ -121,12 +121,12 @@ tier in the list is skipped instead: such an entry was deliberately authored for
 never a "maybe this wasn't meant for me" native name, so silently substituting the runner's ambient default would spawn
 under a capability nobody asked for.
 
-A session's model is applied at mint and on no resume after, resting on the harness restoring a resumed session's own
-model — a harness configuration that defeats that restore runs the lineage on the wrong model with every test tier still
-green, so the constraints here are requirements, not preferences. Effort differs: Claude Code does not restore a
-session's effort across `--resume` (it reverts to the settings-resolved default), so a mint-only effort would silently
-drop on every member of a resuming pool — the runner therefore passes `--effort` on every invocation, at a small
-measured cost.
+For a session with a resolved model stamp, Claude Code reasserts that model on every invocation, including judgement
+and later resumes: `--resume` can choose the ambient default instead of the previous worker model. A newly minted
+session resolves its own pool's model; a session predating model stamps retains an unknown stamp and resumes without an
+explicit `--model`, so its model continuity cannot be guaranteed. Claude Code also does not restore a session's effort
+across `--resume` (it reverts to the settings-resolved default), so the runner passes `--effort` on every invocation
+when the session has an effort stamp.
 
 ## Acceptable harness set
 
@@ -193,7 +193,7 @@ construction unless deliberately named there.
 
 For Claude Code a worker must never see the `ANTHROPIC_MODEL` family: absent from the base allowlist by construction,
 never to be added through `env_passthrough`; the guarantee covers daemon-spawned children only — a shell exporting
-`ANTHROPIC_MODEL` moves a takeover session off its sticky model, so unset it before taking over.
+`ANTHROPIC_MODEL` can override a takeover session's model, so unset it before taking over.
 
 An operator takeover session inverts this: your shell is the base with only a bounded daemon-side set on top — the
 lease's `BLIZZARD_*` identity vars plus the daemon's `PATH` and `HOME`; `env_passthrough` is not forwarded and no

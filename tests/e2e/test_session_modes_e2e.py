@@ -259,7 +259,7 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
     )
 
 
-# Named session pools end to end (issue #144). The mint-only model check is argv-only,
+# Named session pools end to end (issue #144). The session-model check is argv-only,
 # a known gap the verifiability matrix records.
 
 
@@ -294,9 +294,9 @@ def _session_invocations(workspace: Path, session_id: str) -> list[dict]:
     return list(json.loads(state_path.read_text())["invocations"])
 
 
-def test_a_named_pool_threads_one_session_across_nodes_and_applies_model_at_mint_only(tmp_path: Path) -> None:
+def test_a_named_pool_threads_one_session_across_nodes_and_reasserts_its_model(tmp_path: Path) -> None:
     """`fresh:code` mints; `resume:code` at a *different* node continues it; the mint
-    carried the resolved model and no resume did."""
+    and every resume carry the same resolved model."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
@@ -364,15 +364,15 @@ def test_a_named_pool_threads_one_session_across_nodes_and_applies_model_at_mint
     pool_order = [session for node in ("build", "review") for session in by_node.get(node, [])]
     assert set(pool_order) == set(build_sessions), f"a session appeared outside the pool's heads: {by_node}"
 
-    # The mint-only model contract, off the mock's own recorded argv. Note this asserts
+    # The session-model contract, off the mock's own recorded argv. Note this asserts
     # the FLAG, not the effective model — the facade sees argv and nothing else.
     for head in set(build_sessions):
         invocations = _session_invocations(workspace, head)
         mints = [i for i in invocations if i["kind"] == "spawn"]
         resumes = [i for i in invocations if i["kind"] == "resume"]
         assert mints, f"session {head} recorded no mint: {invocations}"
-        assert all(i["model"] for i in mints), f"a mint carried no model: {mints}"
+        assert all(i["model"] == "sonnet" for i in mints), f"the basic pool did not mint on sonnet: {mints}"
         assert resumes, f"session {head} recorded no resume — the contract would pass vacuously"
-        assert all(i["model"] is None for i in resumes), f"a resume carried a model flag: {resumes}"
+        assert all(i["model"] == mints[0]["model"] for i in resumes), f"a resume changed the session model: {resumes}"
         # Effort IS reasserted on every turn — it is not session-sticky (the D5 probe).
         assert all(i["effort"] == "medium" for i in invocations), f"effort was not reasserted: {invocations}"

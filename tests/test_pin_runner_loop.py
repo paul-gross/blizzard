@@ -201,6 +201,7 @@ class _RecordingResumeHarness(FakeHarness):
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
@@ -212,6 +213,7 @@ class _RecordingResumeHarness(FakeHarness):
             stdout_path,
             preamble=preamble,
             chunk_id=chunk_id,
+            model=model,
             effort=effort,
             compaction_window=compaction_window,
         )

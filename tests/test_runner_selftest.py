@@ -348,6 +348,7 @@ class _HangingAdapter:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
@@ -406,7 +407,12 @@ class _HangingAdapter:
     def resolvable_tier_ids(self) -> tuple[str, ...]:
         return ()
 
-    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
+    def needs_usage_transcript(self, output: str) -> bool:
+        return False
+
+    def parse_usage(
+        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+    ) -> UsageSample | None:
         raise AssertionError("unreachable — spawn never returns")
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
@@ -502,6 +508,7 @@ class _FixedPidAdapter:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
@@ -564,7 +571,12 @@ class _FixedPidAdapter:
     def resolvable_tier_ids(self) -> tuple[str, ...]:
         return ()
 
-    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
+    def needs_usage_transcript(self, output: str) -> bool:
+        return False
+
+    def parse_usage(
+        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+    ) -> UsageSample | None:
         return None
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:

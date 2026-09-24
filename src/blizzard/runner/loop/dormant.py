@@ -474,6 +474,7 @@ class DormantSession:
             stdout_path=spawner.stdout_path(lease.lease_id),
             preamble=spawner.preamble(lease, bindings),
             chunk_id=lease.chunk_id,
+            model=lease.resolved_model,
             # Reasserted, not sticky (issue #144) — see the judge call site's note.
             effort=lease.resolved_effort,
             # Reasserted, not sticky either (blizzard#343) — mirrors effort's treatment.

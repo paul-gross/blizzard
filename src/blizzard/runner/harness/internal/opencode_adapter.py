@@ -397,9 +397,11 @@ class OpenCodeAdapter:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
+        del model  # OpenCode's session selects its own model on resume.
         cmd = self._command.build(
             OpenCodeInvocationKind.NUDGE,
             prompt=message,
@@ -617,7 +619,13 @@ class OpenCodeAdapter:
         # surfacing in its place; anything else is legitimately empty.
         return self._session_error(events) or ""
 
-    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
+    def needs_usage_transcript(self, output: str) -> bool:
+        return False
+
+    def parse_usage(
+        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+    ) -> UsageSample | None:
+        del transcript_lines  # OpenCode's invocation stream carries its own step usage.
         finishes = self._root_step_finishes(self._parse_events(output))
         # Deduplicated by part identity: the same completed step is never counted twice
         # even were it to appear more than once on this one capture.

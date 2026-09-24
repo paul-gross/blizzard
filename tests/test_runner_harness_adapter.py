@@ -824,12 +824,22 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path:
     settings = tmp_path / "worker-settings.json"
     adapter = _adapter(binary=binary, settings_path=str(settings), permission_mode="bypassPermissions")
 
-    resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue", effort="high")
+    resumed = adapter.resume_with_message(
+        str(workdir), "sess-123", "continue", model="sonnet", effort="high", compaction_window="150k"
+    )
     resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
     resumed_prefix, _, resumed_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
-    judge_handle = adapter.judge(str(workdir), "sess-123", "assess", str(workdir / "judge-output.json"), effort="high")
+    judge_handle = adapter.judge(
+        str(workdir),
+        "sess-123",
+        "assess",
+        str(workdir / "judge-output.json"),
+        model="sonnet",
+        effort="high",
+        compaction_window="150k",
+    )
     judge_handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
     os.waitpid(judge_handle.pid, 0)
     judge_prefix, _, judge_arg = (workdir / "argv.txt").read_text().rpartition(" ")
@@ -839,7 +849,43 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path:
     assert judge_arg == "assess"
     assert f"--settings {settings}" in judge_prefix
     assert "--effort high" in judge_prefix
+    assert "--model sonnet" in judge_prefix
+    assert "--autocompact 150k" in judge_prefix
     assert "--permission-mode bypassPermissions" in judge_prefix
+
+
+@pytest.mark.unit
+def test_worker_judge_and_resumes_keep_a_model_different_from_the_ambient_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture()
+    adapter._model = "fable"
+    expected = {"--model": "opus", "--effort": "high", "--autocompact": "150k"}
+
+    adapter.spawn(envelope, preamble, session_hint="sid", model="opus", effort="high", compaction_window="150k")
+    for flag, value in expected.items():
+        assert captured["cmd"][captured["cmd"].index(flag) + 1] == value
+
+    adapter.judge(
+        "/ws", "sid", "assess", str(tmp_path / "judge.json"), model="opus", effort="high", compaction_window="150k"
+    )
+    for flag, value in expected.items():
+        assert captured["cmd"][captured["cmd"].index(flag) + 1] == value
+
+    adapter.resume_with_message("/ws", "sid", "continue", model="opus", effort="high", compaction_window="150k")
+    for flag, value in expected.items():
+        assert captured["cmd"][captured["cmd"].index(flag) + 1] == value
+
+    adapter.spawn(
+        envelope, preamble, session_hint="sid", resume_from="sid", model="opus", effort="high", compaction_window="150k"
+    )
+    for flag, value in expected.items():
+        assert captured["cmd"][captured["cmd"].index(flag) + 1] == value
+
+    adapter.spawn(envelope, preamble, session_hint="other", model="sonnet")
+    assert captured["cmd"][captured["cmd"].index("--model") + 1] == "sonnet"
 
 
 @pytest.mark.component
@@ -988,7 +1034,7 @@ def test_parse_usage_returns_none_when_envelope_has_no_usage_object() -> None:
 
 
 @pytest.mark.unit
-def test_parse_usage_falls_back_to_the_configured_model_when_envelope_omits_it() -> None:
+def test_parse_usage_marks_model_unknown_when_envelope_and_transcript_omit_it() -> None:
     envelope = json.dumps(
         {
             "type": "result",
@@ -1004,7 +1050,7 @@ def test_parse_usage_falls_back_to_the_configured_model_when_envelope_omits_it()
     )
     sample = _adapter(model="claude-sonnet-5").parse_usage(envelope, "resume")
     assert sample is not None
-    assert sample.model == "claude-sonnet-5"
+    assert sample.model == "unknown"
     assert sample.cost_usd is None  # no `total_cost_usd` in this envelope — absent, never fabricated
 
 
@@ -1138,7 +1184,7 @@ def test_sum_transcript_usage_of_empty_transcript_is_zeroed() -> None:
     sample = _adapter(model="claude-sonnet-5").sum_transcript_usage([], "judge")
 
     assert sample.kind == "judge"
-    assert sample.model == "claude-sonnet-5"  # nothing to read — falls back to the configured default
+    assert sample.model == "unknown"  # nothing to read — no observed model
     assert sample.input_tokens == 0
     assert sample.cost_usd is None
 
@@ -1481,8 +1527,7 @@ def test_a_missing_compaction_window_is_silently_none_never_logged() -> None:
     assert not [entry for entry in logs if "compaction window" in entry["event"]]
 
 
-# The application contract (issue #144): `--model` at mint only (restored on `--resume`);
-# `--effort` on every invocation (D5: effort is not sticky).
+# The session's resolved model and effort are both reasserted on every invocation.
 
 
 @pytest.mark.unit
@@ -1499,7 +1544,7 @@ def test_spawn_at_mint_carries_the_resolved_model_and_effort(monkeypatch: pytest
 
 
 @pytest.mark.unit
-def test_spawn_on_a_resume_carries_the_effort_but_never_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_spawn_on_a_resume_reasserts_the_session_model_and_effort(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture()
@@ -1507,7 +1552,7 @@ def test_spawn_on_a_resume_carries_the_effort_but_never_the_model(monkeypatch: p
     adapter.spawn(envelope, preamble, session_hint="sid", resume_from="prior", model="sonnet", effort="high")
 
     cmd = captured["cmd"]
-    assert "--model" not in cmd  # the harness restores the session's own
+    assert cmd[cmd.index("--model") + 1] == "sonnet"
     assert cmd[cmd.index("--effort") + 1] == "high"  # not sticky, so reasserted
 
 
@@ -1586,7 +1631,7 @@ def test_spawn_supplying_neither_behaves_exactly_as_before(monkeypatch: pytest.M
 
 
 @pytest.mark.unit
-def test_judge_carries_the_effort_but_never_the_model(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_judge_reasserts_the_session_model_and_effort(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
@@ -1595,19 +1640,19 @@ def test_judge_carries_the_effort_but_never_the_model(monkeypatch: pytest.Monkey
     )
 
     cmd = captured["cmd"]
-    assert "--model" not in cmd
+    assert cmd[cmd.index("--model") + 1] == "sonnet"
     assert cmd[cmd.index("--effort") + 1] == "high"
 
 
 @pytest.mark.unit
-def test_resume_with_message_carries_the_effort_but_never_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resume_with_message_reasserts_the_session_model_and_effort(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
 
-    _adapter(binary="claude").resume_with_message("/ws", "sid", "msg", effort="high")
+    _adapter(binary="claude").resume_with_message("/ws", "sid", "msg", model="sonnet", effort="high")
 
     cmd = captured["cmd"]
-    assert "--model" not in cmd
+    assert cmd[cmd.index("--model") + 1] == "sonnet"
     assert cmd[cmd.index("--effort") + 1] == "high"
 
 
@@ -1616,14 +1661,14 @@ def test_resume_with_message_carries_the_effort_but_never_the_model(monkeypatch:
 
 
 @pytest.mark.unit
-def test_parse_usage_attributes_to_the_supplied_model_when_the_harness_reports_none() -> None:
+def test_parse_usage_does_not_attribute_an_unobserved_model_to_the_expectation() -> None:
     adapter = _adapter(binary="claude", model="claude-opus-5")
     output = json.dumps({"result": "x", "usage": {"input_tokens": 5}})
 
     sample = adapter.parse_usage(output, "spawn", model="sonnet")
 
     assert sample is not None
-    assert sample.model == "sonnet"
+    assert sample.model == "unknown"
 
 
 @pytest.mark.unit
@@ -1638,32 +1683,92 @@ def test_parse_usage_still_prefers_what_the_harness_itself_reports() -> None:
 
 
 @pytest.mark.unit
-def test_parse_usage_without_a_supplied_model_keeps_the_adapter_default() -> None:
+def test_parse_usage_without_an_observed_model_does_not_assume_the_adapter_default() -> None:
     adapter = _adapter(binary="claude", model="claude-opus-5")
     output = json.dumps({"result": "x", "usage": {"input_tokens": 5}})
 
     sample = adapter.parse_usage(output, "spawn")
 
     assert sample is not None
-    assert sample.model == "claude-opus-5"
+    assert sample.model == "unknown"
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_attributes_to_the_supplied_model_when_no_line_names_one() -> None:
+def test_parse_usage_attributes_envelope_without_model_to_this_invocations_transcript() -> None:
+    adapter = _adapter(binary="claude", model="fable")
+    output = json.dumps(
+        {
+            "type": "result",
+            "usage": {"input_tokens": 5, "cache_read_input_tokens": 100},
+            "total_cost_usd": 0.2,
+            "modelUsage": {
+                "claude-opus-5": {"inputTokens": 20},
+                "claude-fable-5-1": {"inputTokens": 5},
+            },
+        }
+    )
+    lines = [json.dumps({"type": "assistant", "message": {"model": "claude-fable-5-1"}})]
+
+    with capture_logs() as logs:
+        sample = adapter.parse_usage(output, "judge", model="claude-opus-5", transcript_lines=lines)
+
+    assert sample is not None
+    assert sample.model == "claude-fable-5-1"
+    assert sample.cost_usd == 0.2
+    assert any(
+        log["event"] == "harness usage model differs from session model" and log["observed_model"] == "claude-fable-5-1"
+        for log in logs
+    )
+
+
+@pytest.mark.unit
+def test_parse_usage_ignores_an_inline_sidechains_model_after_the_worker_reply() -> None:
+    adapter = _adapter(binary="claude")
+    output = json.dumps(
+        {
+            "type": "result",
+            "usage": {"input_tokens": 5},
+            "modelUsage": {"claude-sonnet-5": {"inputTokens": 5}, "claude-haiku-4-5": {"inputTokens": 2}},
+        }
+    )
+    lines = [
+        transcript_fixtures.assistant_usage(model="claude-sonnet-5", message_id="worker"),
+        transcript_fixtures.assistant_usage(model="claude-haiku-4-5", message_id="subagent", sidechain=True),
+    ]
+
+    assert adapter.needs_usage_transcript(output)
+    sample = adapter.parse_usage(output, "judge", model="sonnet", transcript_lines=lines)
+    assert sample is not None
+    assert sample.model == "claude-sonnet-5"
+    assert adapter.sum_transcript_usage(lines, "spawn", model="sonnet").model == "claude-sonnet-5"
+
+
+@pytest.mark.unit
+def test_parse_usage_uses_a_single_model_usage_entry_when_no_transcript_is_available() -> None:
+    output = json.dumps(
+        {"type": "result", "usage": {"input_tokens": 5}, "modelUsage": {"claude-sonnet-5": {"inputTokens": 5}}}
+    )
+
+    sample = _adapter().parse_usage(output, "judge", model="fable")
+
+    assert sample is not None
+    assert sample.model == "claude-sonnet-5"
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_keeps_model_unknown_when_no_line_names_one() -> None:
     adapter = _adapter(binary="claude", model="claude-opus-5")
     lines = [json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 3}}})]
 
     sample = adapter.sum_transcript_usage(lines, "spawn", model="sonnet")
 
-    assert sample.model == "sonnet"
+    assert sample.model == "unknown"
     assert sample.input_tokens == 3
 
 
 @pytest.mark.unit
 def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Issue #144's one deployment requirement, pinned: `ANTHROPIC_MODEL` and its family
-    override the restored-session stickiness the mint-only `--model` contract rests on,
-    and a leaked one would run every resuming pool member on the wrong model."""
+    """A leaked model override can move a resumed worker off its session's model."""
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
     monkeypatch.setenv("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-haiku-4-5")
 
@@ -1672,8 +1777,7 @@ def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pyt
     assert not [name for name in env if name.startswith("ANTHROPIC_")]
 
 
-# resume_command (D4, issue #144): the one deliberate exception to mint-only — an
-# operator's interactive takeover is neither cache-sensitive nor implicit.
+# resume_command (D4, issue #144) composes a command for an attended takeover.
 
 
 @pytest.mark.unit

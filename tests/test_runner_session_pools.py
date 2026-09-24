@@ -371,8 +371,8 @@ def test_a_mint_stamps_what_it_resolved(tmp_path):  # type: ignore[no-untyped-de
 @pytest.mark.component
 def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tmp_path):  # type: ignore[no-untyped-def]
     """The case that makes stamp-inheritance load-bearing: `retrospective` carries a
-    bare `resume:` (no pool, no declaration) that resumes the `code` pool's session with
-    no `--model` — stamping the fresh preference would book spend against the wrong model."""
+    bare `resume:` (no pool, no declaration) that resumes the `code` pool's session —
+    stamping the fresh preference would switch models and misattribute spend."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -413,7 +413,7 @@ def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tm
     # …but the stamp is the SESSION's, inherited — not the fresh preference.
     assert (lease.resolved_model, lease.resolved_effort) == ("sonnet", "medium")
     assert lease.resolved_compaction_window == "150000"
-    # And no model reached the harness on the resume, so the process really is on sonnet.
+    # The inherited session model reaches the harness on the resume.
     assert h2.spawn_model_effort == [("sonnet", "medium")]
     assert h2.spawn_compaction_windows == ["150000"]
 

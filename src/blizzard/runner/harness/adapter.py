@@ -140,9 +140,9 @@ class IHarnessWorkerLifecycle(Protocol):
     ) -> PendingWorkerHandle:
         """Start a headless worker; return its pending handle (D1) — pid, start time, and
         process group, before identity is confirmed. ``model``/``effort``/
-        ``compaction_window`` (issue #144, blizzard#343) arrive already resolved; ``model``
-        applies at **mint only**, the other two on **every** invocation. ``resume_from``
-        (#115) continues a session; ``await_identity``'s result is authoritative."""
+        ``compaction_window`` (issue #144, blizzard#343) arrive already resolved. Each
+        binding applies the knobs its harness needs per invocation; ``resume_from`` (#115)
+        continues a session. ``await_identity``'s result is authoritative."""
         ...
 
     def honors_session_hint(self) -> bool:
@@ -167,6 +167,7 @@ class IHarnessWorkerLifecycle(Protocol):
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        model: str | None = None,
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
@@ -174,7 +175,8 @@ class IHarnessWorkerLifecycle(Protocol):
         launcher-recorded process group (D3), never a caller-inferred ``pgid=pid``. Kill
         first. ``stdout_path`` is the injected stdout capture; empty inherits stdout.
         ``preamble``/``chunk_id`` re-supply the per-lease identity ``--resume`` inherits
-        none of. ``compaction_window`` reasserts like ``effort``."""
+        none of. The caller supplies the session's resolved ``model``/``effort``/
+        ``compaction_window``; the binding applies its supported resume parameters."""
         ...
 
     def judge(
@@ -195,9 +197,10 @@ class IHarnessWorkerLifecycle(Protocol):
 
         Mirrors ``spawn``: the reply lands in ``output_path`` (never empty — an unwritable
         target raises ``HarnessSpawnError`` rather than proceeding uncollectable, D4) and the
-        caller reads it back once the returned handle's process has exited. ``model`` only
-        attributes usage, never passed on. ``preamble``/``chunk_id`` re-supply worker
-        identity. ``compaction_window`` reasserts like ``effort``."""
+        caller reads it back once the returned handle's process has exited. ``model``
+        supplies the session stamp to bindings that reassert it. ``preamble``/``chunk_id``
+        re-supply worker identity. Supported bindings reassert ``compaction_window`` and
+        ``effort`` as needed."""
         ...
 
     def resume_command(
@@ -296,12 +299,21 @@ class IHarnessUsageAccounting(Protocol):
     (``bzh:seam-size-ceiling``) — the result-envelope path and the envelope-less
     transcript-sum fallback."""
 
-    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
+    def needs_usage_transcript(self, output: str) -> bool:
+        """Whether this envelope needs invocation-scoped transcript evidence to identify its model."""
+        ...
+
+    def parse_usage(
+        self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
+    ) -> UsageSample | None:
         """Translate a result envelope's ``usage`` + its cost figure into a sample.
 
-        ``kind`` names which invocation produced ``output`` — never inferred; ``model`` attributes it only when the
-        harness reports none. ``None`` when no envelope. Cost rides verbatim, its scope on ``cost_scope_tokens`` —
-        unresolved, and never folded into the sample's separate ``estimated_cost_usd``."""
+        ``kind`` names which invocation produced ``output`` — never inferred; ``model`` is the expected session
+        model for comparison or a fallback where the binding supports it. ``transcript_lines`` are this
+        invocation's own assistant records for bindings whose envelope omits the observed model. ``None``
+        when no envelope.
+        Cost rides verbatim, its scope on ``cost_scope_tokens`` — unresolved, and never
+        folded into the sample's separate ``estimated_cost_usd``."""
         ...
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
@@ -309,7 +321,7 @@ class IHarnessUsageAccounting(Protocol):
 
         The envelope-less fallback for a worker killed before its result envelope: token counts
         and ``cost_usd=None`` (a transcript carries no billed figure), maybe an estimate.
-        ``model`` is the same attribution fallback :meth:`parse_usage` takes."""
+        ``model`` is the expected session model for comparison or a binding-specific fallback."""
         ...
 
 
