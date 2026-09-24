@@ -846,6 +846,7 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         host="127.0.0.1",
         port=port,
         hub_url=f"http://127.0.0.1:{hub_port}",
+        workspace_provider="winter",
         workspace_root=str(workspace),
         workspace_envs=(RUNNER_ENV,),
         # The mock façade's own fence-relative default (``ClaudeTranscriptWriter``'s

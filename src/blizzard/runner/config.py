@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,6 +78,7 @@ DEFAULT_BASE_BRANCH = "main"
 # variable name only, never the secret.
 DEFAULT_TOKEN_ENV = "BZ_HUB_TOKEN"
 DEFAULT_ENV_POOL: tuple[str, ...] = ("e1",)
+DEFAULT_MAX_ENVIRONMENTS = 10
 # The runner-ceiling rolling window's default length (issue #61b) — a ceiling with no
 # declared window still needs one to sum over.
 DEFAULT_RUNNER_CEILING_WINDOW_HOURS = 24.0
@@ -97,6 +99,34 @@ DEFAULT_WORKER_STDOUT_RETENTION_DAYS = 14
 
 class ConfigError(RuntimeError):
     """A runtime directory is missing its config — it was never initialized."""
+
+
+@dataclass(frozen=True)
+class WorkspaceRepo:
+    """A repository cloned into a basic workspace's shared projects directory."""
+
+    name: str
+    url: str
+
+
+def _workspace_repos(raw: object) -> tuple[WorkspaceRepo, ...]:
+    if not isinstance(raw, list):
+        raise ConfigError("[[workspace_repo]] must be an array of tables")
+    repos: list[WorkspaceRepo] = []
+    for entry in raw:
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("name"), str)
+            or not isinstance(entry.get("url"), str)
+        ):
+            raise ConfigError("[[workspace_repo]] requires name and url strings")
+        name, url = entry["name"], entry["url"]
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name) or not url.strip():
+            raise ConfigError(f"invalid [[workspace_repo]] name or url: {entry!r}")
+        if any(repo.name == name for repo in repos):
+            raise ConfigError(f"duplicate [[workspace_repo]] name {name!r}")
+        repos.append(WorkspaceRepo(name, url))
+    return tuple(repos)
 
 
 def _expanded_path_prepend(raw: tuple[str, ...]) -> tuple[str, ...]:
@@ -439,6 +469,9 @@ class RunnerConfig:
     token_env: str = DEFAULT_TOKEN_ENV
     hub_token: str = ""
     workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
+    workspace_provider: str = "winter"
+    workspace_repos: tuple[WorkspaceRepo, ...] = ()
+    max_environments: int = DEFAULT_MAX_ENVIRONMENTS
     workspace_envs: tuple[str, ...] = DEFAULT_ENV_POOL  # the provider's static env pool
     harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod
     harness_permission_mode: str | None = None  # `claude -p --permission-mode` (headless); None omits it
@@ -581,6 +614,16 @@ class RunnerConfig:
         return self.root / DATA_DIRNAME
 
     @property
+    def effective_workspace_root(self) -> str:
+        """An absolute root shared by the hosted app and loop, independent of their cwd."""
+        path = Path(self.workspace_root) if self.workspace_root else self.root / "workspace"
+        return str((path if path.is_absolute() else self.root / path).resolve())
+
+    @property
+    def provider_workspace_root(self) -> str:
+        return self.effective_workspace_root if self.workspace_provider == "basic" else self.workspace_root
+
+    @property
     def socket_path(self) -> Path:
         return self.socket_path_for(self.root)
 
@@ -700,6 +743,7 @@ class RunnerConfig:
             token_env=DEFAULT_TOKEN_ENV,
             hub_token=os.environ.get(DEFAULT_TOKEN_ENV, ""),
             workspace_root=os.environ.get(ENV_WORKSPACE_ROOT, ""),
+            workspace_provider="basic" if not os.environ.get(ENV_WORKSPACE_ROOT) else "winter",
             workspace_envs=tuple(e.strip() for e in envs.split(",") if e.strip()) if envs else DEFAULT_ENV_POOL,
             harness_binary=os.environ.get(ENV_HARNESS_BINARY, DEFAULT_HARNESS_BINARY),
             harness_permission_mode=os.environ.get(ENV_HARNESS_PERMISSION_MODE, DEFAULT_HARNESS_PERMISSION_MODE)
@@ -763,7 +807,13 @@ class RunnerConfig:
             f'runner_id = "{self.runner_id}"\n'
             f'workspace_id = "{self.workspace_id}"\n'
             f'workspace_root = "{self.workspace_root}"\n'
+            f'workspace_provider = "{self.workspace_provider}"\n'
+            f"max_environments = {self.max_environments}\n"
             f"workspace_envs = [{envs}]\n"
+            "# Basic: add a [[workspace_repo]] for each git origin (name and url).\n"
+            "# Released folders remain for inspection until the cap needs room; oldest\n"
+            "# unheld folders are evicted first. Reacquisition resets all repo worktrees.\n"
+            "# A commented [[workspace_repo]] example is at the end of this file.\n"
             f'harness_binary = "{self.harness_binary}"\n'
             f'harness_permission_mode = "{self.harness_permission_mode or ""}"\n'
             f"worker_settings_path = {settings}\n"
@@ -923,6 +973,15 @@ class RunnerConfig:
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.opencode_model_aliases)
             + "\n[opencode.effort.aliases]\n"
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.opencode_effort_aliases)
+            + "".join(
+                f"\n[[workspace_repo]]\nname = {json.dumps(repo.name)}\nurl = {json.dumps(repo.url)}\n"
+                for repo in self.workspace_repos
+            )
+            + (
+                '\n# [[workspace_repo]]\n# name = "my-repo"\n# url = "https://github.com/you/my-repo.git"\n'
+                if not self.workspace_repos
+                else ""
+            )
         )
 
     @classmethod
@@ -946,6 +1005,13 @@ class RunnerConfig:
         # (blizzard#436) actually happens, from this config's own resolved fields.
         subscriptions = SubscriptionDeclaration.declared(raw.get("subscription", []))
         opencode = Table.of(raw.get("opencode"))
+        provider = raw.get("workspace_provider", "winter")
+        if provider not in ("basic", "winter"):
+            raise ConfigError(f"workspace_provider must be 'basic' or 'winter', got {provider!r}")
+        cap = raw.get("max_environments", DEFAULT_MAX_ENVIRONMENTS)
+        if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
+            raise ConfigError(f"max_environments must be a positive integer, got {cap!r}")
+        repos = _workspace_repos(raw.get("workspace_repo", []))
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
@@ -957,6 +1023,9 @@ class RunnerConfig:
             runner_id=str(raw.get("runner_id", DEFAULT_RUNNER_ID)),
             workspace_id=str(raw.get("workspace_id", DEFAULT_WORKSPACE_ID)),
             workspace_root=str(raw.get("workspace_root", "")),
+            workspace_provider=provider,
+            workspace_repos=repos,
+            max_environments=cap,
             workspace_envs=Table.of(raw).listed("workspace_envs", DEFAULT_ENV_POOL),
             harness_binary=str(raw.get("harness_binary", DEFAULT_HARNESS_BINARY)),
             harness_permission_mode=(str(raw["harness_permission_mode"]) or None)

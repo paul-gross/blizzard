@@ -39,6 +39,12 @@ def _init_runner(tmp_path: Path) -> Path:
     root = tmp_path / "runner"
     result = CliRunner().invoke(runner_group, ["init", str(root)])
     assert result.exit_code == 0, result.output
+    # These fixtures seed winter-style /ws/e* workdirs, rather than the new basic
+    # provider's per-chunk folders. Pin the provider so takeover cwd stays /ws/e*.
+    config_path = root / "blizzard-runner.toml"
+    config_path.write_text(
+        config_path.read_text().replace('workspace_provider = "basic"', 'workspace_provider = "winter"')
+    )
     return root
 
 

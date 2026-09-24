@@ -25,8 +25,8 @@
 </p>
 
 Blizzard runs **the loops around the work**. Ingest items from your backlog, sequence them, and blizzard's runners take
-the work to completion. Each one is leased an isolated environment in **your own workspace**
-([winter](https://github.com/paul-gross/winter) enabled), what it returns is judged, the result is driven to delivery,
+the work to completion. Each one is leased an isolated environment in **your own workspace**,
+what it returns is judged, the result is driven to delivery,
 and every step recovers correctly when any of it is interrupted. Those loops, and the facts they record, are the whole
 product.
 
@@ -134,20 +134,30 @@ Set up a runner on the machine that will run the agents. The same wheel carries 
 blizzard runner init .      # scaffold blizzard-runner.toml + its own sqlite store
 ```
 
-Then point `blizzard-runner.toml` at the hub and at the workspace this runner leases environments out of. That is a
-[winter](https://github.com/paul-gross/winter) workspace, not a bare checkout: a root whose `.winter/config.toml`
-declares your repos, with `winter` available on the box. Give it an absolute path, not `~`:
+Edit `blizzard-runner.toml` to declare a git origin. A new runner defaults to the built-in `basic` workspace: it clones
+repos into `workspace/projects/` under the runner directory and creates one worktree per repo under each chunk's folder.
+No winter installation is needed. Set the hub URL and add a `[[workspace_repo]]` at the **end** of the config:
 
 ```toml
 hub_url = "http://127.0.0.1:8421"
-workspace_root = "/home/you/projects/todo-mvc-workspace"
-workspace_envs = ["alpha", "beta"]   # the env pool; the runner creates each one on first use
+workspace_provider = "basic"
+workspace_root = "workspace"           # relative to blizzard-runner.toml; empty uses this default
+max_environments = 10
 max_agents = 2
+
+[[workspace_repo]]
+name = "todo-mvc"
+url = "https://github.com/you/todo-mvc.git"
 ```
 
 ```bash
 blizzard runner host .      # register with the hub and start pulling work
 ```
+
+Released environments stay on disk for inspection until the cap needs room; the oldest unheld folders are evicted first.
+On reacquisition their worktrees are reset. To use a [winter](https://github.com/paul-gross/winter) workspace instead,
+set `workspace_provider = "winter"`, `workspace_root` to its absolute root, and `workspace_envs = ["alpha", "beta"]`;
+the winter CLI must be available. Winter also provides provisioning and service orchestration for those environments.
 
 Work does not need a forge to exist. The built-in `hub` work source is always seated, needs no credential, and authoring
 an item at it mints that item's chunk in the same call:
@@ -212,7 +222,7 @@ to solve one problem exceptionally well, and to stay replaceable everywhere else
 
 | Seam               | What plugs in                                             | Reference binding                                                   |
 | ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------- |
-| **Workspace**      | Provides isolated, poly-repo execution environments       | [winter](https://github.com/paul-gross/winter) feature environments |
+| **Workspace**      | Provides isolated, poly-repo execution environments       | Built-in worktrees or [winter](https://github.com/paul-gross/winter) feature environments |
 | **Work source**    | The system holding the backlog, ingested by item id       | GitHub issues                                                       |
 | **Coding harness** | The agent that actually does the work                     | Claude Code                                                         |
 | **Workflow**       | How work moves: graphs of nodes, judgements, and gates    | Hub-defined YAML workflow graphs                                    |

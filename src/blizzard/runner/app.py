@@ -81,7 +81,7 @@ from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
-from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
+from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
@@ -371,10 +371,8 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
             OPENCODE_HARNESS_ID: config.opencode_model_aliases,
         },
     )
-    workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(
-        workspace_root=config.workspace_root or str(config.root),
-        env_pool=config.workspace_envs,
-        base_branch=config.base_branch,
+    workspace_provider: IWorkspaceProvider = build_workspace_provider(
+        config, held_ids=runner_stores.environments.held_environment_ids
     )
     harnesses = build_production_harness_registry(config)
     # ``stale_after`` is left at its default so the two readers never desync (#28).
@@ -395,7 +393,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         environments=runner_stores.environments,
         transcripts=HarnessTranscriptRepositories(harnesses),
         archived=archived_transcripts,
-        workspace_root=config.workspace_root,
+        workspace_root=config.provider_workspace_root,
     )
     # The clock/probe instances below are per-service: both are stateless, so a second
     # instance is equivalent to sharing one.
@@ -406,9 +404,9 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         hub_url=config.hub_url,
-        env_pool=config.workspace_envs,
+        env_pool=config.workspace_envs if config.workspace_provider == "winter" else (),
         harnesses=harnesses,
-        workspace_root=config.workspace_root,
+        workspace_root=config.provider_workspace_root,
     )
     takeover = TakeoverService(
         runner_stores,
@@ -417,7 +415,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
         harnesses=harnesses,
-        workspace_root=config.workspace_root,
+        workspace_root=config.provider_workspace_root,
         events=events,
     )
     requeue = RequeueService(runner_stores.requeue, SystemClock())
