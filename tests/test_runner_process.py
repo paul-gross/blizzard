@@ -15,7 +15,7 @@ import time
 import pytest
 
 from blizzard.foundation.process import ProcStat
-from blizzard.runner.loop.process import LinuxProcessProbe, kill_owned_process
+from blizzard.runner.loop.process import LinuxProcessProbe, interrupt_owned_process, kill_owned_process
 from tests.runner_fakes import FakeProbe
 
 _START = "start-token"
@@ -174,3 +174,40 @@ def _await_start_time(probe: LinuxProcessProbe, pid: int) -> str:
             return start
         time.sleep(0.01)
     raise AssertionError("never read the child's start time")
+
+
+# `interrupt_owned_process` — the shared guarded SIGINT the shutdown drain and the pause park
+# both route through: the same leader-identity guard `kill_owned_process` keeps.
+
+
+@pytest.mark.unit
+def test_an_owned_interrupt_signals_the_recorded_group_of_a_live_leader() -> None:
+    probe = FakeProbe(alive={(4242, _START)}, groups_alive={4242})
+    assert interrupt_owned_process(probe, pid=4242, process_start_time=_START, pgid=4242) is True
+    assert probe.interrupted_groups == [4242]
+    assert probe.killed == [] and probe.killed_groups == []
+
+
+@pytest.mark.unit
+def test_an_owned_interrupt_skips_a_dead_leader_even_when_its_group_reads_alive() -> None:
+    """A dead leader means a recycled pgid could belong to an unrelated process by now —
+    never signalled, exactly as the drain's own guard reads it."""
+    probe = FakeProbe(alive=set(), groups_alive={4242})
+    assert interrupt_owned_process(probe, pid=4242, process_start_time=_START, pgid=4242) is False
+    assert probe.interrupted_groups == []
+
+
+@pytest.mark.unit
+def test_an_owned_interrupt_skips_a_leader_whose_start_time_no_longer_matches() -> None:
+    probe = FakeProbe(alive={(4242, "some-other-start")}, groups_alive={4242})
+    assert interrupt_owned_process(probe, pid=4242, process_start_time=_START, pgid=4242) is False
+    assert probe.interrupted_groups == []
+
+
+@pytest.mark.unit
+def test_an_owned_interrupt_with_no_recorded_group_pid_or_start_time_signals_nothing() -> None:
+    probe = FakeProbe(alive={(4242, _START)}, groups_alive={4242})
+    assert interrupt_owned_process(probe, pid=4242, process_start_time=_START, pgid=None) is False
+    assert interrupt_owned_process(probe, pid=None, process_start_time=_START, pgid=4242) is False
+    assert interrupt_owned_process(probe, pid=4242, process_start_time=None, pgid=4242) is False
+    assert probe.interrupted_groups == []

@@ -152,7 +152,7 @@ _ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
 
 # The pause CI subset (#46): the family's lone point, the regression fence on the
 # issue's central bug.
-_PAUSE_CI_SUBSET = ("pause.after-kill.before-park",)
+_PAUSE_CI_SUBSET = ("pause.after-interrupt.before-park",)
 
 # The hub command node CI subset (#65): the family's first-declared member is its own CI
 # representative.

@@ -902,7 +902,7 @@
           "short_help": "Set, overwrite, or clear CHUNK's standing migration intent (issue #124)."
         },
         "pause": {
-          "help": "Pause CHUNK \u2014 the runner kills and parks the worker but keeps the claim (issue #46).\n\nA pure client of the hub API: ``POST /api/chunks/{id}/pause``. 409 when the chunk is\ndone/stopped/delivering.",
+          "help": "Pause CHUNK \u2014 the runner interrupts and parks the worker but keeps the claim (issue #46).\n\nThe worker is SIGINTed, and killed only if it outlives the shutdown drain's budget, so its usage\nenvelope survives to be recorded on resume. A pure client of the hub API:\n``POST /api/chunks/{id}/pause``. 409 when the chunk is done/stopped/delivering.",
           "params": [
             {
               "hidden": false,
@@ -950,7 +950,7 @@
             }
           ],
           "path": "hub chunk pause",
-          "short_help": "Pause CHUNK \u2014 the runner kills and parks the worker but keeps the claim (issue #46)."
+          "short_help": "Pause CHUNK \u2014 the runner interrupts and parks the worker but keeps the claim (issue #46)."
         },
         "pm": {
           "help": "Deprecated alias for ``blizzard hub chunk work-items`` (issue #55).",

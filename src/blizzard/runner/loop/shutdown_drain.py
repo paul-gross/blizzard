@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import LeaseRecord
-from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.process import IProcessProbe, interrupt_owned_process
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -58,12 +58,8 @@ class ShutdownDrain:
         )
 
     def _interrupt(self, lease: LeaseRecord) -> bool:
-        """SIGINT this lease's recorded group, gated on the same leader-identity guard
-        ``kill_owned_process`` uses — a recycled pgid is never signalled. ``False`` for a
+        """The shared guarded interrupt over this lease's recorded group — ``False`` for a
         lease with nothing recorded to signal (no pgid, or an already-dead leader)."""
-        if lease.pgid is None or lease.pid is None or lease.process_start_time is None:
-            return False
-        if not self.process.is_alive(lease.pid, lease.process_start_time):
-            return False
-        self.process.interrupt_group(lease.pgid)
-        return True
+        return interrupt_owned_process(
+            self.process, pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid
+        )

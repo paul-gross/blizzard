@@ -304,9 +304,10 @@ def test_closing_a_lease_kills_its_in_flight_elicitation(tmp_path):  # type: ign
     assert store.in_flight_elicitation("lease_1", 1) is None
 
 
-def test_pause_park_kills_the_in_flight_elicitation_and_the_later_unpause_re_mints_cleanly(tmp_path):  # type: ignore[no-untyped-def]
-    """D6/D7: closing on an operator pause kills the elicitation before parking, so the later
-    resume re-mints a token for a lease with nothing left in flight to race."""
+def test_pause_park_interrupts_the_in_flight_elicitation_and_the_later_unpause_clears_it_first(tmp_path):  # type: ignore[no-untyped-def]
+    """D6/D7 under blizzard#627: parking on an operator pause interrupts the elicitation
+    rather than killing it, and names it on the park; once it has exited, the unpause
+    clears the record before re-minting, so nothing is left in flight to race."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -322,14 +323,18 @@ def test_pause_park_kills_the_in_flight_elicitation_and_the_later_unpause_re_min
     assert lease is not None
     Attempt(ctx, lease).park_paused(via="test")
 
-    assert elicitation.pgid in probe.killed_groups
-    assert store.in_flight_elicitation("lease_1", 1) is None
+    assert probe.interrupted_groups == [elicitation.pgid]
+    assert probe.killed_groups == []
+    assert store.in_flight_elicitation("lease_1", 1) is not None
+    park = store.open_pause_parks()["lease_1"]
+    assert park.interrupted_elicitation_id == elicitation.id
 
-    # The later unpause re-mints the lease token — no in-flight record left to race it.
+    # The elicitation exits on its SIGINT; the unpause clears its record, then re-mints.
     probe.alive = set()
     parked_lease = store.active_lease("lease_1")
     assert parked_lease is not None
-    DormantSession(ctx, parked_lease).on_unpause()
+    DormantSession(ctx, parked_lease).on_unpause(park)
+    assert store.in_flight_elicitation("lease_1", 1) is None
     assert store.active_lease("lease_1") is not None
 
 
