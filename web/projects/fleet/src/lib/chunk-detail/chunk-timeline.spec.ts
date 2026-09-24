@@ -323,7 +323,7 @@ describe('ChunkTimeline', () => {
     expect(el.querySelector('[data-testid="history-step-cost-estimate"]')).toBeNull();
   });
 
-  it("renders a step's own recorded harness id and version beside its usage (blizzard#441)", async () => {
+  it("renders a step's recorded harness as a short name beside its usage (blizzard#441)", async () => {
     const detail: ChunkDetail = {
       ...COST_DETAIL,
       chunk_id: 'ch_01harness0000000000000000000',
@@ -335,9 +335,9 @@ describe('ChunkTimeline', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const badge = el.querySelector('[data-testid="history-step-harness"]');
-    expect(badge?.textContent?.trim()).toBe('claude_code 1.2.3');
+    expect(badge?.textContent?.trim()).toBe('claude code');
     expect(badge?.getAttribute('data-harness-id')).toBe('claude_code');
-    expect(badge?.getAttribute('aria-label')).toBe('claude_code version 1.2.3');
+    expect(badge?.getAttribute('aria-label')).toBe('claude code');
   });
 
   it('renders no harness affordance for a step whose usage recorded none (blizzard#441)', async () => {

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import type { TransitionView } from '../api/hub';
+import { harnessName } from '../harness-name';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBackBar } from '../kit/kit-back-bar';
 import { encodeSidechainPath, parseSidechainPath, resolveSidechainByPath } from './transcript-sidechain-path';
@@ -99,7 +100,7 @@ export class ChunkTranscriptsTab {
   protected readonly continuesIn = computed<TranscriptSegmentIndexEntry | null>(() => this.seams().continuesIn);
 
   /** The open segment's own index entry (blizzard#441) — carries the recorded
-   * `harness_id`/`harness_version` {@link TranscriptSegmentView} renders; `null` while
+   * `harness_id` {@link TranscriptSegmentView} renders; `null` while
    * nothing is open or the id names none of {@link steps}' own segments. */
   protected readonly openSegmentEntry = computed<TranscriptSegmentIndexEntry | null>(() => {
     const id = this.segmentId();
@@ -111,12 +112,7 @@ export class ChunkTranscriptsTab {
     return null;
   });
 
-  /** Names harness and version explicitly for the segment-list badge's accessible name
-   * (`bzh:frontend-kit-floor`'s computed-label form) — a plain `<span class="tag">` here
-   * carries no label of its own. */
-  protected harnessLabel(seg: TranscriptSegmentIndexEntry): string {
-    return seg.harness_version ? `${seg.harness_id} version ${seg.harness_version}` : `${seg.harness_id}`;
-  }
+  protected readonly harnessName = harnessName;
 
   /** {@link segmentData}'s turns with every late link folded onto its call (blizzard#338).
    * Derived ONCE, shared between {@link TranscriptSegmentView} (which caps and renders

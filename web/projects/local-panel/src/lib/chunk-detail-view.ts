@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
-import { KitAsyncState, type KitFact, KitFactList, type runnerApi } from 'fleet';
+import { harnessName, KitAsyncState, type KitFact, KitFactList, type runnerApi } from 'fleet';
 
 import { HeartbeatFreshness } from './heartbeat-freshness';
 
@@ -18,6 +18,8 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
   styleUrl: './chunk-detail-view.css',
 })
 export class MachineDetailView {
+  protected readonly harnessName = harnessName;
+
   /** The chunk's newest attempt, or `null` when nothing is selected — the rest
    * state renders in its place. */
   readonly lease = input<runnerApi.LeaseView | null>(null);
@@ -48,12 +50,5 @@ export class MachineDetailView {
       { label: 'workdir', template: workdirValue },
       { label: 'heartbeat', template: heartbeatValue },
     ];
-  }
-
-  /** Names harness and version explicitly for the resume box's harness badge
-   * (`bzh:frontend-kit-floor`'s computed-label form) — a plain `<span>` here carries no
-   * label of its own. */
-  protected harnessLabel(esc: runnerApi.EscalationView): string {
-    return esc.harness_version ? `${esc.harness_id} version ${esc.harness_version}` : `${esc.harness_id}`;
   }
 }

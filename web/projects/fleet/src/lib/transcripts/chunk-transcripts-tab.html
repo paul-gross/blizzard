@@ -46,8 +46,8 @@
                         class="tag"
                         data-testid="transcript-segment-harness"
                         [attr.data-harness-id]="seg.harness_id"
-                        [attr.aria-label]="harnessLabel(seg)"
-                        >{{ seg.harness_id }}{{ seg.harness_version ? ' ' + seg.harness_version : '' }}</span
+                        [attr.aria-label]="harnessName(seg.harness_id)"
+                        >{{ harnessName(seg.harness_id) }}</span
                       >
                     }
                     @if (seg.truncated) {
@@ -97,7 +97,6 @@
               [continuedFrom]="continuedFrom()"
               [continuesIn]="continuesIn()"
               [harnessId]="openSegmentEntry()?.harness_id ?? null"
-              [harnessVersion]="openSegmentEntry()?.harness_version ?? null"
               (pickSegment)="pickSegment.emit($event)"
               (openStandalone)="onTopLevelOpenStandalone($event)"
             />

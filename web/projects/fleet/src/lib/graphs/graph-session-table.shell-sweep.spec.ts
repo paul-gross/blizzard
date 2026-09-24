@@ -35,7 +35,7 @@ const SESSIONS: readonly GraphSessionView[] = [
   {
     name: 'code',
     model: ['blizzard:basic', 'gpt-5.3-codex'],
-    harnesses: ['claude', 'codex'],
+    harnesses: ['claude_code', 'opencode'],
     effort: 'medium',
     compaction_window: '100000',
     rotate: { max_context_tokens: 120000, max_invocations: 30 },
@@ -93,7 +93,7 @@ describe('graph session table shell sweep (web:shell-sweep)', () => {
       }
 
       // The harness list actually rendered in its own column, not collapsed away.
-      expect(dataCells[2].textContent?.trim()).toBe('claude, codex');
+      expect(dataCells[2].textContent?.trim()).toBe('claude code, opencode');
     } finally {
       root.remove();
     }

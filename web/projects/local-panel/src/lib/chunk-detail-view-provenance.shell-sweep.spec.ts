@@ -76,6 +76,7 @@ describe('local-panel escalation harness-provenance layout shell sweep (web:shel
       const badge = root.querySelector<HTMLElement>('[data-testid="detail-resume-harness"]')!;
       expect(badge).not.toBeNull();
       expect(badge.getAttribute('data-harness-id')).toBe('claude_code');
+      expect(badge.textContent?.trim()).toBe('claude code');
 
       expect(
         box.scrollWidth,

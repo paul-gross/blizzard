@@ -3,13 +3,13 @@ import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail } from '../api/hub';
 import { formatCost, formatCostEstimate, formatTokens } from '../cost-format';
+import { harnessName } from '../harness-name';
 import { KitAsyncState } from '../kit/kit-async-state';
 import {
   deriveActiveRow,
   deriveHistoryRows,
   deriveMultiGraph,
   type HistoryRow,
-  type StepUsageTotal,
   usageForStep as sumStepUsage,
 } from './chunk-timeline-rows';
 
@@ -105,13 +105,7 @@ export class ChunkTimeline {
   protected readonly formatCost = formatCost;
   protected readonly formatCostEstimate = formatCostEstimate;
   protected readonly formatTokens = formatTokens;
-
-  /** Names harness and version explicitly for the badge's accessible name
-   * (`bzh:frontend-kit-floor`'s computed-label form) — a plain `<span>` here carries no
-   * label of its own. */
-  protected harnessLabel(usage: StepUsageTotal): string {
-    return usage.harnessVersion ? `${usage.harnessId} version ${usage.harnessVersion}` : `${usage.harnessId}`;
-  }
+  protected readonly harnessName = harnessName;
 
   protected readonly chunkId = computed(() => this.detail().chunk_id);
 

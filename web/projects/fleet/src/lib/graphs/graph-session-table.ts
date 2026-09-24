@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 import type { GraphSessionView } from '../api/hub';
+import { harnessName } from '../harness-name';
 
 /**
  * The graph detail's **session declaration** table (issue #144) — the graph-level
@@ -43,5 +44,9 @@ export class GraphSessionTable {
 
   protected listOrDash(values: readonly string[] | undefined): string {
     return values && values.length > 0 ? values.join(', ') : '—';
+  }
+
+  protected harnesses(session: GraphSessionView): string {
+    return session.harnesses?.length ? session.harnesses.map(harnessName).join(', ') : '—';
   }
 }

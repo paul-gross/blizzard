@@ -67,7 +67,9 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
     fixture.componentRef.setInput('history', HISTORY);
     fixture.componentRef.setInput('segments', SEGMENTS);
     fixture.componentRef.setInput('indexState', 'ready');
-    fixture.componentRef.setInput('segmentState', 'empty');
+    fixture.componentRef.setInput('segmentState', 'ready');
+    fixture.componentRef.setInput('segmentId', 'sg_claude');
+    fixture.componentRef.setInput('segmentData', { segment_id: 'sg_claude', final: true, truncated: false, turns: [] });
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
@@ -80,13 +82,17 @@ describe('chunk transcripts harness-provenance layout shell sweep (web:shell-swe
       const tab = root.querySelector<HTMLElement>('[data-testid="chunk-transcripts-tab"]')!;
       expect(tab).not.toBeNull();
 
-      const badges = [...root.querySelectorAll<HTMLElement>('[data-testid="transcript-segment-harness"]')];
+      const badges = [...root.querySelectorAll<HTMLElement>('[data-testid="transcripts-tab-nav"] [data-testid="transcript-segment-harness"]')];
       expect(badges).toHaveLength(2);
 
-      const claude = root.querySelector<HTMLElement>('[data-harness-id="claude_code"]')!;
-      const codex = root.querySelector<HTMLElement>('[data-harness-id="codex"]')!;
+      const claude = root.querySelector<HTMLElement>('[data-testid="transcripts-tab-nav"] [data-harness-id="claude_code"]')!;
+      const codex = root.querySelector<HTMLElement>('[data-testid="transcripts-tab-nav"] [data-harness-id="codex"]')!;
       expect(claude).not.toBeNull();
       expect(codex).not.toBeNull();
+      expect(claude.textContent?.trim()).toBe('claude code');
+      expect(codex.textContent?.trim()).toBe('codex');
+      const openBadge = root.querySelector<HTMLElement>('[data-testid="transcript-segment-body"] [data-harness-id="claude_code"]')!;
+      expect(openBadge.textContent?.trim()).toBe('claude code');
       // Two distinct rows, not overlapping.
       expect(claude.getBoundingClientRect().top).toBeLessThan(codex.getBoundingClientRect().top);
 

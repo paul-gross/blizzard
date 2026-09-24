@@ -71,7 +71,6 @@ export interface StepUsageTotal {
    * its own summed rows recorded one, newest first, never derived from `model`. `null`
    * when no row at this step recorded a stamp (a pre-provenance row, or none at all). */
   readonly harnessId: string | null;
-  readonly harnessVersion: string | null;
 }
 
 /**
@@ -185,6 +184,5 @@ export function usageForStep(detail: ChunkDetail, row: HistoryRow): StepUsageTot
     costPartial: rows.some((u) => u.cost_usd === null && u.estimated_cost_usd == null),
     estimatedCostUsd: estimatedRows.length > 0 ? estimatedRows.reduce((sum, amount) => sum + amount, 0) : null,
     harnessId: stamped?.harness_id ?? null,
-    harnessVersion: stamped?.harness_version ?? null,
   };
 }

@@ -17,7 +17,7 @@
           <tr data-testid="graph-detail-session-row" [attr.data-session-name]="session.name">
             <td class="sid">{{ session.name }}</td>
             <td>{{ listOrDash(session.model) }}</td>
-            <td>{{ listOrDash(session.harnesses) }}</td>
+            <td>{{ harnesses(session) }}</td>
             <td>{{ session.effort ?? '—' }}</td>
             <td>{{ session.compaction_window ?? '—' }}</td>
             <td>{{ rotateLabel(session) }}</td>
