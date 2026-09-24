@@ -1,9 +1,8 @@
 """The workspace-provider seam.
 
-Allocates clean environments by opaque id, each with its working directory. Two
-invariants the interface encodes: **allocation-stateless** — a provider keeps no
-allocation state, and picks from its static pool minus the held ids passed in — and
-**clean by contract** — cleaning happens on the *next* acquire, not on release."""
+Allocates clean environments by opaque id, each with its working directory. Held ids
+are supplied by the runner store on acquire; cleaning happens on the *next* acquire,
+not on release. A provider may retain released folders for inspection."""
 
 from __future__ import annotations
 
@@ -63,7 +62,7 @@ class IWorkspaceProvider(Protocol):
         ...
 
     def release(self, environment_id: str) -> None:
-        """Release an environment. No-op if unknown/already released; cleaning defers."""
+        """Release an environment. Idempotent; cleaning defers to next acquire."""
         ...
 
     def repos(self, environment_id: str) -> list[RepoBinding]:

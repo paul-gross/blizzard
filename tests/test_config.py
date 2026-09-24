@@ -23,6 +23,7 @@ from blizzard.runner.config import (
     ConfigError,
     RunnerConfig,
     SubscriptionDeclaration,
+    WorkspaceRepo,
 )
 from blizzard.runner.config import ENV_PORT as RUNNER_ENV_PORT
 from blizzard.runner.harness.workspace_prompts import PACKAGED
@@ -83,6 +84,29 @@ def test_runner_loop_seams_fall_back_to_defaults_without_env(tmp_path: Path) -> 
     assert config.workspace_root == ""
     assert config.workspace_envs == ("e1",)
     assert config.harness_binary == "claude"
+
+
+@pytest.mark.unit
+def test_basic_workspace_config_round_trip_and_provider_validation(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    scaffold = dataclasses.replace(
+        RunnerConfig.scaffold(root), workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),)
+    )
+    assert scaffold.workspace_provider == "basic"
+    path = scaffold.config_path
+    path.write_text(scaffold.to_toml())
+    loaded = RunnerConfig.load(root)
+    assert loaded.workspace_repos == scaffold.workspace_repos
+    assert loaded.max_environments == 10
+    assert loaded.effective_workspace_root == str(root / "workspace")
+    path.write_text(path.read_text().replace('workspace_provider = "basic"', 'workspace_provider = "typo"'))
+    with pytest.raises(ConfigError, match="workspace_provider"):
+        RunnerConfig.load(root)
+    path.write_text(path.read_text().replace('workspace_provider = "typo"', 'workspace_provider = "basic"'))
+    path.write_text(path.read_text().replace("max_environments = 10", "max_environments = 0"))
+    with pytest.raises(ConfigError, match="max_environments"):
+        RunnerConfig.load(root)
 
 
 @pytest.mark.unit

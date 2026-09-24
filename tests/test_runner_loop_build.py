@@ -20,11 +20,14 @@ from blizzard.runner.config import (
     ConfigError,
     RunnerConfig,
     SubscriptionDeclaration,
+    WorkspaceRepo,
 )
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
 from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
@@ -33,6 +36,46 @@ from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPI
 from tests.runner_fakes import FakeHub, FakeProbe, make_store, make_stores
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.unit
+def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: Path) -> None:
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_provider="basic",
+        workspace_root="scratch",
+        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
+        max_environments=3,
+    )
+    hosted = build_hosted_app(config).app
+    loop = LoopWiring(config, "", "").context(FakeHub())
+
+    assert isinstance(hosted.state.workspace_provider, BasicWorkspaceProvider)
+    assert isinstance(loop.provider, BasicWorkspaceProvider)
+    assert loop.config.env_capacity == 3
+    assert loop.config.workspace_root == ""
+    assert loop.usage.workspace_root == loop.config.workspace_root
+    assert hosted.state.workspace_provider._root == loop.provider._root == tmp_path / "scratch"
+    assert SpawnCwd.of_session(loop.config.workspace_root, str(tmp_path / "scratch" / "chunk")) == str(
+        tmp_path / "scratch" / "chunk"
+    )
+    assert hosted.state.runner_status._env_pool == ()
+
+
+@pytest.mark.unit
+def test_basic_default_root_is_shared_with_transcript_usage(tmp_path: Path) -> None:
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_provider="basic",
+        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
+    )
+
+    loop = LoopWiring(config, "", "").context(FakeHub())
+
+    assert loop.config.workspace_root == ""
+    assert loop.usage.workspace_root == loop.config.workspace_root
 
 
 def _seeded_running_lease_store(tmp_path: Path):  # type: ignore[no-untyped-def]

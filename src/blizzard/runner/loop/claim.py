@@ -167,7 +167,7 @@ class ReadyQueue:
                 chunk_id=entry.chunk_id,
                 lease_id=None,
                 node_name=None,
-                command=f"winter env-prep step: {exc.step}",
+                command=f"environment preparation step: {exc.step}",
                 stderr_tail=str(exc),
             )
             return None

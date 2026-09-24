@@ -19,7 +19,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import build_stores
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
+from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.harness_registry import (
@@ -114,9 +114,7 @@ class LoopWiring:
         if engine is None:
             engine = create_engine_from_url(config.db_url)
         stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
-        provider = WinterWorkspaceProvider(
-            config.workspace_root, env_pool=config.workspace_envs, base_branch=config.base_branch
-        )
+        provider = build_workspace_provider(config, held_ids=stores.environments.held_environment_ids)
         harnesses = build_production_harness_registry(config)
         # A startup guard: this composition's transcripts lane requires the default
         # harness's own binding to resolve one, not merely to be registered at all.
@@ -162,14 +160,16 @@ class LoopWiring:
             workspace_id=config.workspace_id,
             max_agents=config.max_agents,
             base_branch=config.base_branch,
-            env_capacity=len(config.workspace_envs),  # issue #69
+            env_capacity=(
+                config.max_environments if config.workspace_provider == "basic" else len(config.workspace_envs)
+            ),
             public_url=config.public_url,  # issue #95 — this runner's own federation identity
             redirect_uris=config.redirect_uris,
             local_api_url=config.local_api_url,
             gates=config.gates,
-            # The spawn cwd + static workspace-prompt fallback (issue #17). The prompt file is
-            # resolved once here at loop-context build, not re-read per spawn.
-            workspace_root=config.workspace_root,
+            # Basic workers run in their acquired workdir, away from shared clones.
+            # Winter keeps its configured workspace-wide spawn cwd (issue #17).
+            workspace_root="" if config.workspace_provider == "basic" else config.workspace_root,
             workspace_prompt=self.workspace_prompt,
             runner_prompt=self.runner_prompt,
             worker_stdout_dir=str(worker_stdout_dir),
@@ -209,7 +209,7 @@ class LoopWiring:
                 usage=stores.usage,
                 clock=_clock,
                 worker_files=_worker_files,
-                workspace_root=config.workspace_root,
+                workspace_root=loop_config.workspace_root,
                 harnesses=harnesses,
                 invocation_boundaries=stores.invocation_boundaries,
                 transcripts_wired=True,
