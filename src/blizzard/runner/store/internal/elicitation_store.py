@@ -57,6 +57,7 @@ class ElicitationStore:
                 if key not in wanted:
                     continue
                 result[key] = ElicitationRecord(
+                    id=int(r.id),
                     lease_id=key[0],
                     epoch=key[1],
                     pid=int(r.pid) if r.pid is not None else None,
