@@ -984,8 +984,11 @@ class FakeHarness:
     def parse_assessment(self, output: str) -> str:
         return self.assessment
 
-    def needs_usage_transcript(self, output: str) -> bool:
-        return False
+    def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
+        # Mirrors a binding with no configured default of its own (blizzard#629 D4): an
+        # unresolved `model` always needs the observation; a resolved one never does.
+        del output
+        return model is None
 
     def parse_usage(
         self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()

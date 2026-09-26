@@ -66,7 +66,7 @@ class UsageRecorder:
             return
         harness = self._resolved_harness(session)
         model = lease.resolved_model
-        needs_transcript = (model is None and self.transcripts_wired) or harness.needs_usage_transcript(judge_output)
+        needs_transcript = self.transcripts_wired and harness.needs_usage_transcript(judge_output, model=model)
         lines = self.judge_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
         if model is None and lines:
             # blizzard#629: the lease asked for nothing, so ask the judge's own transcript
@@ -118,8 +118,8 @@ class UsageRecorder:
             return None
         harness = self._resolved_harness(session)
         model = lease.resolved_model
-        needs_transcript = (model is None and self.transcripts_wired) or (
-            bool(output) and harness.needs_usage_transcript(output)
+        needs_transcript = (
+            self.transcripts_wired and bool(output) and harness.needs_usage_transcript(output, model=model)
         )
         lines = self.worker_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
         if model is None and lines:

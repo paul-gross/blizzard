@@ -407,7 +407,7 @@ class _HangingAdapter:
     def resolvable_tier_ids(self) -> tuple[str, ...]:
         return ()
 
-    def needs_usage_transcript(self, output: str) -> bool:
+    def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
         return False
 
     def parse_usage(
@@ -574,7 +574,7 @@ class _FixedPidAdapter:
     def resolvable_tier_ids(self) -> tuple[str, ...]:
         return ()
 
-    def needs_usage_transcript(self, output: str) -> bool:
+    def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
         return False
 
     def parse_usage(

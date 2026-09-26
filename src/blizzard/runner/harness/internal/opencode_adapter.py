@@ -619,8 +619,14 @@ class OpenCodeAdapter:
         # surfacing in its place; anything else is legitimately empty.
         return self._session_error(events) or ""
 
-    def needs_usage_transcript(self, output: str) -> bool:
-        return False
+    def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
+        # A run event never carries a step's provider/model — `output` alone never
+        # resolves this binding's own gap. The only recovery is the export `model`'s
+        # absence forces (blizzard#629 D4), and only when this binding has no configured
+        # default of its own to price against instead (blizzard#640: never pay for a read
+        # a pinned or pre-configured invocation didn't need).
+        del output
+        return model is None and not self._model
 
     def parse_usage(
         self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
