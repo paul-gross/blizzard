@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from blizzard.hub.api.chunk_events import ChunkChanged
+from blizzard.hub.api.chunk_events import ChunkChanged, ChunkFrameState
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.facts import FactIngestResult
 from blizzard.hub.events.broker import ChunkChangeCause
@@ -46,20 +46,34 @@ class IngestBroadcast:
     def before_ingest(cls, services: HubServices, batch: RunnerFactBatch) -> IngestBroadcast:
         """One pre-mutation snapshot per distinct chunk, reused across the batch — this is the
         hot path (issue #212)."""
-        changes: dict[str, ChunkChanged] = {}
-        for fact in batch.facts:
-            chunk_id = fact.payload.get("chunk_id")
-            if isinstance(chunk_id, str) and chunk_id not in changes:
-                changes[chunk_id] = ChunkChanged.before(services, chunk_id)
+        chunk_ids = [chunk_id for fact in batch.facts if isinstance(chunk_id := fact.payload.get("chunk_id"), str)]
+        changes = ChunkChanged.before_many(services, chunk_ids)
         return cls(services=services, batch=batch, changes=changes)
 
     def publish(self, result: FactIngestResult) -> None:
         applied = set(result.ack.applied)
-        for fact in self.batch.facts:
-            if fact.seq in applied:
-                self._publish_one(fact, result.row_id_by_seq.get(fact.seq))
+        applied_facts = [fact for fact in self.batch.facts if fact.seq in applied]
+        chunk_ids = [cid for fact in applied_facts if (cid := self._chunk_arm_id(fact)) is not None]
+        states = ChunkFrameState.load_many(self.services, chunk_ids)
+        for fact in applied_facts:
+            self._publish_one(fact, result.row_id_by_seq.get(fact.seq), states)
 
-    def _publish_one(self, fact: RunnerFact, row_id: int | None) -> None:
+    @staticmethod
+    def _chunk_arm_id(fact: RunnerFact) -> str | None:
+        """The chunk id ``_publish_one``'s chunk arm dispatches ``fact`` to, or ``None`` for
+        a runner-scoped kind or a chunk-scoped payload missing its id."""
+        if fact.kind in (
+            RUNNER_LOCALLY_PAUSED,
+            RUNNER_LOCALLY_RESUMED,
+            EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+            EXTERNAL_SUBSCRIPTION_USAGE_MISSED,
+            EVENT_RECORDED,
+        ):
+            return None
+        chunk_id = fact.payload.get("chunk_id")
+        return chunk_id if isinstance(chunk_id, str) else None
+
+    def _publish_one(self, fact: RunnerFact, row_id: int | None, states: dict[str, ChunkFrameState]) -> None:
         """The runner-scoped kinds dispatch first: carrying no ``chunk_id``, the chunk arm drops them."""
         if fact.kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
             self._runner_pause(fact, row_id)
@@ -68,9 +82,9 @@ class IngestBroadcast:
         elif fact.kind == EVENT_RECORDED:
             pass  # already published by EventLogService.record
         else:
-            chunk_id = fact.payload.get("chunk_id")
-            if isinstance(chunk_id, str):
-                self._chunk_changed(fact, row_id, chunk_id)
+            chunk_id = self._chunk_arm_id(fact)
+            if chunk_id is not None:
+                self._chunk_changed(fact, row_id, chunk_id, states[chunk_id])
 
     def _runner_pause(self, fact: RunnerFact, row_id: int | None) -> None:
         """The frame carries the fact's own ``by``/``reason`` (issue #151), with the same ``by``
@@ -85,17 +99,17 @@ class IngestBroadcast:
             key=f"runner_local_pause_facts:{row_id}" if row_id is not None else None,
         )
 
-    def _chunk_changed(self, fact: RunnerFact, row_id: int | None, chunk_id: str) -> None:
+    def _chunk_changed(self, fact: RunnerFact, row_id: int | None, chunk_id: str, state: ChunkFrameState) -> None:
         """Published on the fact rather than on a status *change*, so a fact that moves no status
         (``answer.delivered``, issue #165) still stales the chunk read."""
-        key = self._dedupe_key(fact, row_id, chunk_id)
+        key = self._dedupe_key(fact, row_id, state)
         question_id = fact.payload.get("question_id")
         if fact.kind == QUESTION_ASKED and isinstance(question_id, str):
             self.services.events.publish_question_asked(chunk_id, question_id, key=key)
-        change = self.changes.get(chunk_id) or ChunkChanged.of(self.services, chunk_id, prev_status=None)
-        change.publish(cause=_CAUSE_BY_FACT_KIND.get(fact.kind), key=key)
+        change = self.changes[chunk_id]
+        change.publish_from(state, cause=_CAUSE_BY_FACT_KIND.get(fact.kind), key=key)
 
-    def _dedupe_key(self, fact: RunnerFact, row_id: int | None, chunk_id: str) -> str | None:
+    def _dedupe_key(self, fact: RunnerFact, row_id: int | None, state: ChunkFrameState) -> str | None:
         """The stream key a lost-ack replay of this fact dedupes against."""
         if fact.kind in (QUESTION_ASKED, ANSWER_DELIVERED):
             question_id = fact.payload.get("question_id")
@@ -108,7 +122,7 @@ class IngestBroadcast:
         if fact.kind == LEASE_MINTED:
             # This site writes a `lease_facts` row, but its `claimed` cause maps to `route_created`
             # (issue #213), so a lost-ack replay dedupes against the live route.
-            route = self.services.chunks.route.route_of(chunk_id)
+            route = state.route
             if route is not None and route.route_id is not None:
                 return f"route_created:{route.route_id}"
         return None
