@@ -513,7 +513,6 @@ class ClaudeCodeAdapter:
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         input_tokens = output_tokens = cache_read_tokens = cache_create_tokens = 0
-        resolved = "unknown"
         # A reply carrying several content blocks is written as several records that each
         # repeat their message's ONE usage, so summing per record overcounts (measured 1.7x
         # against the billed figure on a long session). Every field here is per-message.
@@ -531,14 +530,6 @@ class ClaudeCodeAdapter:
             message = record.get("message")
             if not isinstance(message, dict):
                 continue
-            record_model = message.get("model")
-            if (
-                isinstance(record_model, str)
-                and record_model
-                and record_model != "<synthetic>"
-                and not record.get("isSidechain")
-            ):
-                resolved = record_model
             usage = message.get("usage")
             if not isinstance(usage, dict):
                 continue
@@ -553,15 +544,18 @@ class ClaudeCodeAdapter:
             output_tokens += int(usage.get("output_tokens") or 0)
             cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)
             cache_create_tokens += int(usage.get("cache_creation_input_tokens") or 0)
-        if model and resolved != "unknown" and not _matches_model(model, resolved):
+        resolved = self.observed_model(lines)
+        if model and resolved and not _matches_model(model, resolved):
             _log.warning(
                 "harness usage model differs from session model", expected_model=model, observed_model=resolved
             )
-        if resolved == "unknown":
+        if resolved is None:
             _log.warning("harness usage model unavailable", expected_model=model, kind=kind)
         return UsageSample(
             kind=kind,
-            model=resolved,
+            # The transcript's own observed model over a passed-in or configured one — the
+            # same one `observed_model` derives, so the two never drift.
+            model=resolved or model or self._model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
@@ -570,8 +564,10 @@ class ClaudeCodeAdapter:
         )
 
     def observed_model(self, lines: Sequence[str]) -> str | None:
-        # The last assistant record's own `message.model`, the same field
-        # `sum_transcript_usage` reads — `None` when no record ever names one.
+        # The last assistant record's own `message.model` — `None` when no record ever
+        # names one. A synthetic `isApiErrorMessage` record (a rate-limit or provider-
+        # overload placeholder, blizzard#594/#595) never names a model that actually ran,
+        # so it is skipped rather than read as `"<synthetic>"`.
         observed: str | None = None
         for raw_line in lines:
             line = raw_line.strip()
@@ -582,6 +578,8 @@ class ClaudeCodeAdapter:
             except json.JSONDecodeError:
                 continue
             if not isinstance(record, dict) or record.get("type") != "assistant":
+                continue
+            if record.get("isApiErrorMessage") is True:
                 continue
             message = record.get("message")
             if not isinstance(message, dict):

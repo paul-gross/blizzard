@@ -333,7 +333,7 @@ def test_pause_park_interrupts_the_in_flight_elicitation_and_the_later_unpause_c
     probe.alive = set()
     parked_lease = store.active_lease("lease_1")
     assert parked_lease is not None
-    DormantSession(ctx, parked_lease).on_unpause(park)
+    DormantSession(ctx, parked_lease).on_unpause(park, elicitation)
     assert store.in_flight_elicitation("lease_1", 1) is None
     assert store.active_lease("lease_1") is not None
 

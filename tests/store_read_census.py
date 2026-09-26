@@ -728,6 +728,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadElicitationRepository, "in_flight_elicitations"): lambda w: w.read.elicitations.in_flight_elicitations(
         [(w.lease_7, 1)]
     ),
+    (IReadElicitationRepository, "in_flight_elicitations_by_lease"): lambda w: (
+        w.read.elicitations.in_flight_elicitations_by_lease()
+    ),
     (IReadInvocationBoundaryRepository, "boundary"): lambda w: w.read.invocation_boundaries.boundary(
         w.lease_2, 2, "resume"
     ),

@@ -23,8 +23,9 @@ def get_chunk(chunk_id: str, request: Request) -> ChunkDetail:
 
 @router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def pause_chunk(chunk_id: str, request: Request) -> ChunkSummary:
-    """Forward a chunk pause to the hub — kills the active worker, keeps the claim
-    (issue #46). ``409`` when the chunk is not in a pausable state."""
+    """Forward a chunk pause to the hub — interrupts the active worker, force-stopping it only if
+    it hasn't wound down within its grace period, and keeps the claim (issue #46). ``409`` when the
+    chunk is not in a pausable state."""
     upstream = HubProxy.of(request, "chunk-detail").post(f"/api/fleet/chunks/{chunk_id}/pause")
     return ChunkSummary.model_validate(upstream.json())
 

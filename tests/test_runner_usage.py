@@ -949,7 +949,7 @@ def test_on_unpause_records_the_paused_generations_usage_before_waking(tmp_path)
     assert lease is not None
 
     park = PauseParkRecord(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, interrupted_elicitation_id=None)
-    DormantSession(ctx, lease).on_unpause(park)
+    DormantSession(ctx, lease).on_unpause(park, None)
 
     payloads = _usage_payloads(store)
     resume_payload = next(p for p in payloads if p["kind"] == "resume")

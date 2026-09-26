@@ -69,7 +69,7 @@ class UsageRecorder:
         needs_transcript = (model is None and self.transcripts_wired) or harness.needs_usage_transcript(judge_output)
         lines = self.judge_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
         if model is None and lines:
-            # blizzard#629 D4: the lease asked for nothing, so ask the judge's own transcript
+            # blizzard#629: the lease asked for nothing, so ask the judge's own transcript
             # range what actually ran — the same rule `_worker_sample` applies below.
             model = harness.observed_model(lines)
         judge_sample = harness.parse_usage(judge_output, "judge", model=model, transcript_lines=lines)

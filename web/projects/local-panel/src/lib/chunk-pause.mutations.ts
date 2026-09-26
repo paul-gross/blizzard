@@ -6,8 +6,9 @@ import { chunkPauseMutationKey } from './mutation-keys';
 import { runnerChunkDetailKey, runnerLeasesKey } from './query-keys';
 
 /** Toggle a chunk's operator pause brake from the machine panel (issue #185): pausing
- * holds the claim, kills the active worker, and takes it off the ready queue; resuming
- * clears the brake — mirrors the hub board's `injectChunkPauseMutation`. */
+ * holds the claim, interrupts the active worker (force-stopping it only if it hasn't wound
+ * down within its grace period), and takes it off the ready queue; resuming clears the
+ * brake — mirrors the hub board's `injectChunkPauseMutation`. */
 export interface ChunkPauseVars {
   readonly chunkId: string;
   readonly paused: boolean;

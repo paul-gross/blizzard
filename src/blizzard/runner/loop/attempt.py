@@ -548,10 +548,12 @@ class Attempt:
 
     def _kill_in_flight_elicitation(self) -> None:
         """Closing a lease kills its in-flight elicitation, if any (blizzard#443, D7) — every
-        closing path (fail, abandon, park, preempt) reaches here, so no path may leave a
-        launched elicitation running against a lease nothing will ever collect. Its output
-        files are swept alongside the record — this is the one place every
-        closing path already has the record, with its ``relaunch_count``, in hand."""
+        closing path but park (fail, abandon, preempt) reaches here, so no path may leave a
+        launched elicitation running against a lease nothing will ever collect. A pause park
+        interrupts rather than kills, and leaves the elicitation standing for
+        :class:`~blizzard.runner.loop.dormant.DormantSession` to tear down on its own. Its
+        output files are swept alongside the record — this is the one place every closing
+        path already has the record, with its ``relaunch_count``, in hand."""
         lease = self.lease
         elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
         if elicitation is None:

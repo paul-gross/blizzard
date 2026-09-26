@@ -17,7 +17,7 @@ class ElicitationRecord:
     only in the un-armable gap between the durable record and the process actually
     starting (``advance.after-elicit-record.before-launch``)."""
 
-    id: int  # the store's own row id — what a pause park names the record it interrupted by
+    id: int  # the store's own row id, stable for the record's lifetime
     lease_id: str
     epoch: int
     pid: int | None
@@ -46,6 +46,13 @@ class IReadElicitationRepository(Protocol):
         """Every lease id with an in-flight elicitation record, regardless of epoch (D6): no
         path may re-mint or resume a lease while its elicitation is in flight, matching the
         already-established ``parked_lease_ids``/``pending_submission_lease_ids`` shape."""
+        ...
+
+    def in_flight_elicitations_by_lease(self) -> dict[str, ElicitationRecord]:
+        """Every in-flight elicitation record, by lease id (regardless of epoch, matching
+        :meth:`in_flight_elicitation_lease_ids`'s own shape). Hoisted once per tick
+        (``bzh:bulk-reconstitution``) beside ``open_pause_parks`` for the pause park's
+        teardown over later ticks, rather than one singular read per park per tick."""
         ...
 
 

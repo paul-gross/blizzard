@@ -17,8 +17,8 @@ __all__ = ["IReadPauseRepository", "IWritePauseRepository", "PauseParkRecord", "
 
 @dataclass(frozen=True)
 class PauseParkRecord:
-    """One open pause park (issue #46, blizzard#627) — the facts the park's own teardown
-    reads back each tick until nothing of the lease's is alive."""
+    """One open pause park (issue #46, blizzard#627): a lease dormant on an operator pause,
+    its interrupt's own facts."""
 
     lease_id: str
     chunk_id: str
@@ -77,7 +77,9 @@ class IReadPauseRepository(Protocol):
         """Every open pause park by lease id — :meth:`pause_parked_lease_ids`'s leases, each with
         its ``parked_at`` and the elicitation its interrupt signalled (blizzard#627). Hoisted once
         per tick (``bzh:bulk-reconstitution``) for the teardown ADVANCE completes over later
-        ticks. A lease re-parked across a crash reads its newest park."""
+        ticks. A lease re-parked across a crash reads its newest park. Closes on a terminal
+        chunk-end via the hub: a terminated lease is no longer active, so ADVANCE's
+        ``list_active_leases`` filter drops it out of this read from then on."""
         ...
 
 
