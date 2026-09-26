@@ -17,6 +17,7 @@ from typing import Any, Literal
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import (
@@ -105,6 +106,24 @@ class _OutstandingBudget:
         self.bytes += n
 
 
+@dataclass
+class _ShippedBytesMirror:
+    """This run's own local mirror of each chunk's ``shipped_bytes`` total — seeded from
+    ONE plural read over every chunk this run's segments touch, then advanced locally
+    exactly where :meth:`_OutstandingBudget.accept` advances today, so a later segment of
+    the same chunk in the same run sees the current total without re-querying the store.
+    Never cross-tick: each ``run()``/``pump_lease()``/``drain_segment`` call seeds its own,
+    fresh — the per-tick re-derivation ``crash-correctness/transcripts.md`` relies on."""
+
+    totals: dict[str, int]
+
+    def before(self, chunk_id: str) -> int:
+        return self.totals.get(chunk_id, 0)
+
+    def accept(self, chunk_id: str, n: int) -> None:
+        self.totals[chunk_id] = self.before(chunk_id) + n
+
+
 @dataclass(frozen=True)
 class TranscriptPump:
     """Advances every live segment one tick's worth forward — the lane's only producer
@@ -131,14 +150,17 @@ class TranscriptPump:
         reserving the rest for the flush."""
         if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
             return
-        # One store read for the whole run (blizzard#246) — each segment this run ships
-        # advances `budget` locally, so a later segment sees the current total without
-        # re-querying a store this same run's own writes would otherwise make stale.
+        segments = self.ctx.stores.transcript_ledger.open_transcript_segments()
+        # One store read each for the whole run (blizzard#246) — each segment this run
+        # ships advances `budget`/`shipped` locally, so a later segment sees the current
+        # totals without re-querying a store this same run's own writes would make stale.
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
-        for segment in self.ctx.stores.transcript_ledger.open_transcript_segments():
+        shipped = self._shipped_bytes_mirror(segments)
+        bindings_by_chunk = self._bindings_by_chunk(segments)
+        for segment in segments:
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 break  # this run's bound reached — the rest catch up on a later tick
-            self._pump_one_safe(segment, budget=budget)
+            self._pump_one_safe(segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk)
 
     def pump_lease(self, lease_id: str, *, deadline: datetime | None = None) -> None:
         """Drain a closing lease's own still-open segment(s) before finalization excludes
@@ -148,15 +170,23 @@ class TranscriptPump:
         before ``deadline`` is marked truncated too, same as a partially-drained one."""
         if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
             return
-        segments = [s for s in self.ctx.stores.transcript_ledger.open_transcript_segments() if s.lease_id == lease_id]
+        segments = self.ctx.stores.transcript_ledger.open_transcript_segments_for_lease(lease_id)
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
+        shipped = self._shipped_bytes_mirror(segments)
+        bindings_by_chunk = self._bindings_by_chunk(segments)
         for i, segment in enumerate(segments):
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 # Every remaining segment loses just as silently as a partially-drained one.
                 for remaining in segments[i:]:
                     self._mark_record_truncated(remaining, _LEASE_CLOSURE_INCOMPLETE)
                 return
-            self.drain_segment(segment.segment_id, deadline=deadline, budget=budget)
+            self.drain_segment(
+                segment.segment_id,
+                deadline=deadline,
+                budget=budget,
+                shipped=shipped,
+                bindings_by_chunk=bindings_by_chunk,
+            )
 
     def drain_segment(
         self,
@@ -165,6 +195,8 @@ class TranscriptPump:
         deadline: datetime | None,
         incomplete_reason: str = _LEASE_CLOSURE_INCOMPLETE,
         budget: _OutstandingBudget | None = None,
+        shipped: _ShippedBytesMirror | None = None,
+        bindings_by_chunk: dict[str, list[EnvBindingRecord]] | None = None,
     ) -> bool:
         """Read one segment forward until it is caught up, ``deadline`` passes, or reading
         again would gain nothing — marking ``incomplete_reason`` in the latter two cases.
@@ -172,11 +204,19 @@ class TranscriptPump:
         must not do so on ``False``, or content it never read is sealed away."""
         if budget is None:
             budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
+        if shipped is None or bindings_by_chunk is None:
+            segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
+            if segment is None:
+                return False  # nothing to seed against — the caller's next read finds the same
+            if shipped is None:
+                shipped = self._shipped_bytes_mirror([segment])
+            if bindings_by_chunk is None:
+                bindings_by_chunk = self._bindings_by_chunk([segment])
         for _ in range(_PUMP_LEASE_MAX_ITERATIONS):
             segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
             if segment is None:
                 return False  # the segment vanished from under us — nothing left to drain
-            outcome = self._pump_one_safe(segment, budget=budget)
+            outcome = self._pump_one_safe(segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk)
             if outcome == _CAUGHT_UP:
                 return True  # caught up — nothing more to gain from reading again right now
             if outcome in (_NOT_ATTEMPTED, _STUCK):
@@ -193,13 +233,37 @@ class TranscriptPump:
             self._mark_record_truncated(segment, incomplete_reason)
         return False
 
-    def _pump_one_safe(self, segment: TranscriptSegmentLedgerRow, *, budget: _OutstandingBudget) -> _PumpOutcome:
+    def _shipped_bytes_mirror(self, segments: list[TranscriptSegmentLedgerRow]) -> _ShippedBytesMirror:
+        """Seed a fresh per-run mirror over exactly the chunks ``segments`` touch — never
+        cross-tick, never cross-call: each ``run()``/``pump_lease()``/``drain_segment`` seeds
+        its own, so ``crash-correctness/transcripts.md``'s "re-derived fresh every tick"
+        claim about the chunk budget stays true."""
+        chunk_ids = sorted({segment.chunk_id for segment in segments})
+        totals = self.ctx.stores.transcript_ledger.chunk_transcript_shipped_bytes(chunk_ids)
+        return _ShippedBytesMirror(totals)
+
+    def _bindings_by_chunk(self, segments: list[TranscriptSegmentLedgerRow]) -> dict[str, list[EnvBindingRecord]]:
+        """Every held binding this call's segments could need, grouped by chunk — skipped
+        entirely with no segments to pump, the same short-circuit an empty chunk set already
+        gets :meth:`_shipped_bytes_mirror`'s own read for free."""
+        if not segments:
+            return {}
+        return group_bindings_by_chunk(self.ctx.stores.environments.held_bindings())
+
+    def _pump_one_safe(
+        self,
+        segment: TranscriptSegmentLedgerRow,
+        *,
+        budget: _OutstandingBudget,
+        shipped: _ShippedBytesMirror,
+        bindings_by_chunk: dict[str, list[EnvBindingRecord]],
+    ) -> _PumpOutcome:
         """One segment's own failure must not abort the loop. Returns
         ``_NOT_ATTEMPTED`` on a caught exception — a raising segment must
         not spin ``pump_lease``'s drain loop, but at lease closure it must not read as
         caught-up either, or whatever the source held finalizes with no truncation trace."""
         try:
-            return self._pump_one(segment, budget=budget)
+            return self._pump_one(segment, budget=budget, shipped=shipped, bindings_by_chunk=bindings_by_chunk)
         except Exception:
             _log.exception(
                 "transcript pump: failed to pump segment — continuing with the rest",
@@ -208,7 +272,14 @@ class TranscriptPump:
             )
             return _NOT_ATTEMPTED
 
-    def _pump_one(self, segment: TranscriptSegmentLedgerRow, *, budget: _OutstandingBudget) -> _PumpOutcome:
+    def _pump_one(
+        self,
+        segment: TranscriptSegmentLedgerRow,
+        *,
+        budget: _OutstandingBudget,
+        shipped: _ShippedBytesMirror,
+        bindings_by_chunk: dict[str, list[EnvBindingRecord]],
+    ) -> _PumpOutcome:
         """Advance ``segment`` one read window forward. ``_NOT_ATTEMPTED``:
         nothing was read at all — ``pump_lease`` treats this as incomplete, not caught-up,
         since a finalizing segment gets no later tick to make up a read it never took.
@@ -217,7 +288,7 @@ class TranscriptPump:
         if segment.shipping_stopped_reason is not None:
             return _CAUGHT_UP  # permanently stopped past the per-chunk budget (D4)
         chunk_max_bytes = self._chunk_max_bytes
-        budget_before = self.ctx.stores.transcript_ledger.chunk_transcript_shipped_bytes(segment.chunk_id)
+        budget_before = shipped.before(segment.chunk_id)
         if budget_before >= chunk_max_bytes:
             self._stop_shipping(segment, _CHUNK_BUDGET_EXCEEDED)
             return _CAUGHT_UP
@@ -226,7 +297,7 @@ class TranscriptPump:
             # Transient backpressure, not a latch — self-clears once the drain catches up.
             return _NOT_ATTEMPTED
 
-        bindings = self.ctx.stores.environments.bindings_for_chunk(segment.chunk_id)
+        bindings = bindings_by_chunk.get(segment.chunk_id, [])
         spawn_cwd = SpawnCwd(self.ctx.config.workspace_root, bindings[0].workdir if bindings else None).path
         try:
             source = self.ctx.transcript_source_for(segment.session)
@@ -321,6 +392,7 @@ class TranscriptPump:
             agent_tool_use_ids=batch.agent_tool_use_ids,
         )
         budget.accept(total_bytes)
+        shipped.accept(segment.chunk_id, total_bytes)
         # Order here does not matter: the store keeps the worse of the two
         # by the explicit severity each call carries, not by which call happened last.
         if any_shrunk:
@@ -400,6 +472,9 @@ def _tool_wire(tool: ToolCall) -> dict[str, Any]:
         "output_truncated": tool.output_truncated,
         # Not a harness-seam field: only the shrink pass, mutating this dict, ever sets it True.
         "input_truncated": False,
+        # Only `_output_patch_wire` sets this True; written explicit here so the stored payload
+        # already carries every wire-model default `TranscriptDrain._estimated_size` sizes from.
+        "output_patch": False,
     }
 
 
@@ -474,6 +549,9 @@ def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
         "agent_type": sidechain.agent_type,
         "link": sidechain.link,
         "turns": [_turn_wire(t, i) for i, t in enumerate(sidechain.turns)],
+        # Only `_late_sidechain_wire` overrides this; written explicit here for the same reason
+        # `_tool_wire`'s own `output_patch` is — see there.
+        "parent_tool_use_id": None,
     }
 
 

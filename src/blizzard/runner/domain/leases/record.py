@@ -18,6 +18,12 @@ class IReadLeaseRecordRepository(Protocol):
         """Leases with no closure fact — the attempts currently in flight."""
         ...
 
+    def count_active_leases(self) -> int:
+        """How many leases have no closure fact — a scalar probe, never reconstituting
+        every :class:`LeaseRecord` through the lease+context join just to take ``len()``
+        of the result (`bzh:bulk-reconstitution`)."""
+        ...
+
     def active_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
         """The chunk's single active lease, if any (P6: at most one — MAX_AGENTS math)."""
         ...

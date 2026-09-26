@@ -220,8 +220,11 @@ class InterruptedClaims:
         ``test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover`` and
         ``test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed``."""
         requeue_pending = self.ctx.stores.requeue.pending_requeue_chunk_ids()  # one read per FILL, not per chunk
+        # One read before the loop, not one `active_lease_for_chunk` per chunk
+        # (`bzh:bulk-reconstitution`) — safe because each iteration only mutates its own chunk.
+        active_chunk_ids = {lease.chunk_id for lease in self.ctx.stores.lease_record.list_active_leases()}
         for chunk_id in self.ctx.stores.environments.live_tenure_chunk_ids():
-            if self.ctx.stores.lease_record.active_lease_for_chunk(chunk_id) is None:
+            if chunk_id not in active_chunk_ids:
                 self._reconcile_one(chunk_id, requeued=chunk_id in requeue_pending)
             # else a live worker holds it — REAP/ADVANCE own it
 

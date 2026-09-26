@@ -6,6 +6,7 @@ Local per-segment state, never shipped as-is — distinct from the wire's own
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
@@ -100,8 +101,20 @@ class IReadTranscriptLedgerRepository(Protocol):
         """The segment by id, or ``None`` — the pump and drain's per-segment read (issue #246)."""
         ...
 
+    def transcript_segments(self, segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentLedgerRow]:
+        """:meth:`transcript_segment` for every id in ``segment_ids``, in one grouped read.
+        An id with no row is absent, exactly as the singular answers ``None`` for it."""
+        ...
+
     def open_transcript_segments(self) -> list[TranscriptSegmentLedgerRow]:
         """Segments with no final marker yet — the pump's per-tick work list (issue #246)."""
+        ...
+
+    def open_transcript_segments_for_lease(self, lease_id: str) -> list[TranscriptSegmentLedgerRow]:
+        """This lease's own open segments — :meth:`open_transcript_segments` narrowed to one
+        lease (`bzh:bulk-reconstitution`), rather than reading every open segment in the
+        store and filtering to one lease in Python. A lease ordinarily holds at most one,
+        but a re-ship can leave a second beside its source."""
         ...
 
     def transcript_segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentLedgerRow]:
@@ -110,17 +123,19 @@ class IReadTranscriptLedgerRepository(Protocol):
         A chunk this store holds no lease for returns ``[]``."""
         ...
 
-    def chunk_transcript_shipped_bytes(self, chunk_id: str) -> int:
-        """Sum of ``shipped_bytes`` across every one of this chunk's segments, open or
-        finalized — the running total the 64 MB per-chunk budget (D4) is measured against."""
+    def chunk_transcript_shipped_bytes(self, chunk_ids: Sequence[str]) -> dict[str, int]:
+        """Sum of ``shipped_bytes`` across each id in ``chunk_ids``'s own segments, open or
+        finalized, in one grouped read (`bzh:bulk-reconstitution`) — the running total the
+        64 MB per-chunk budget is measured against. A chunk with no segments at all is
+        absent, read the same as a ``0`` sum."""
         ...
 
     def outstanding_transcript_buffer_bytes(self) -> int:
         """Sum of ``payload`` bytes across every UNACKED row of the transcript outbound
         buffer, across every segment — the resident total a prolonged hub outage can leave
         unbounded in SQLite absent a bound on it. Distinct from
-        :meth:`chunk_transcript_shipped_bytes`, which bounds one chunk's SHIPPED total,
-        not the buffer's own resident total."""
+        :meth:`chunk_transcript_shipped_bytes`, which bounds a queried chunk's own SHIPPED
+        total, not the buffer's own resident total."""
         ...
 
     def has_unshipped_transcript_content(self, chunk_id: str) -> bool:

@@ -723,3 +723,120 @@ def test_drain_run_survives_the_pump_itself_raising_outside_the_segment_loop() -
     drain_failures = [e for e in logs if "transcript drain failed" in e["event"]]
     assert drain_failures == []  # caught at the pump-call site, not the outer whole-tick catch
     assert hub.transcripts_pushed != []  # the buffered flush still ran despite the pump's own raise
+
+
+def test_estimated_size_bounds_the_actual_rendered_length_for_non_final_and_final_records() -> None:
+    """`_batches` sizes from the delta's own stored fields alone, never a render — this pins
+    that the estimate never under-counts what `_deliver_batch` actually renders, for both a
+    content delta and a final marker."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    content_payload = json.dumps(
+        {
+            "segment_id": segment_id,
+            "chunk_id": "ch_1",
+            "node_id": "nd_build",
+            "epoch": 1,
+            "spawn_generation": 1,
+            "turn_range_start": 0,
+            "turn_range_end": 2,
+            "final": False,
+            "harness_id": CLAUDE_CODE_HARNESS_ID,
+            "normalizer_version": "claude-code/1.2",
+            "harness_version": "1.2.3",
+            "model": "claude-sonnet-5",
+            "effort": "high",
+            "record_truncated": False,
+            "supersedes": None,
+            "turns": [
+                {
+                    "index": 0,
+                    "kind": "asst",
+                    "timestamp": None,
+                    "text": "a real turn of reasonable length " * 20,
+                    "tool": None,
+                    "thinking_redacted": False,
+                    "sidechain": None,
+                    "truncated": False,
+                }
+            ],
+        }
+    )
+    ctx.stores.transcript_ledger.record_transcript_deltas(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor="tok-1",
+        shipped_bytes=100,
+        shipped_turns=1,
+        normalizer_version="claude-code/1.2",
+        harness_version="1.2.3",
+        payloads=[content_payload],
+        created_at=_NOW,
+    )
+    drain = TranscriptDrain(ctx)
+    content_delta = ctx.stores.transcript_ledger.pending_transcript_outbound()[0]
+    rendered = drain._render(content_delta, {})
+    assert drain._estimated_size(content_delta) >= len(rendered.model_dump_json().encode("utf-8"))
+
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    final_delta = next(d for d in ctx.stores.transcript_ledger.pending_transcript_outbound() if d.final)
+    final_segments = ctx.stores.transcript_ledger.transcript_segments([final_delta.segment_id])
+    final_rendered = drain._render(final_delta, final_segments)
+    assert drain._estimated_size(final_delta) >= len(final_rendered.model_dump_json().encode("utf-8"))
+
+
+def test_deliver_batch_reads_final_marker_segments_through_one_batched_call() -> None:
+    """Two final markers landing in the SAME batch read their segment rows through one
+    `transcript_segments(ids)` call, not one `transcript_segment` each."""
+    hub = FakeHub()
+    ctx = _ctx(hub)
+    segment_1 = _spawn_one_segment(ctx)
+    ctx.stores.environments.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    ctx.stores.lease_record.record_lease(
+        NewLease(
+            lease_id="lease_2",
+            chunk_id="ch_2",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    ctx.stores.liveness.record_spawn(
+        "lease_2",
+        pid=2,
+        process_start_time="2",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-b"),
+        spawned_at=_NOW,
+    )
+    segment_2 = next(
+        s.segment_id for s in ctx.stores.transcript_ledger.open_transcript_segments() if s.chunk_id == "ch_2"
+    )
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    assert {d.segment_id for d in ctx.stores.transcript_ledger.pending_transcript_outbound()} == {segment_1, segment_2}
+
+    real_transcript_segments = ctx.stores.transcript_ledger.transcript_segments
+    calls: list[list[str]] = []
+
+    def _counting_transcript_segments(segment_ids):  # type: ignore[no-untyped-def]
+        calls.append(list(segment_ids))
+        return real_transcript_segments(segment_ids)
+
+    ctx.stores.transcript_ledger.transcript_segments = _counting_transcript_segments  # type: ignore[method-assign]
+
+    delivered = TranscriptDrain(ctx).flush(limit=50, deadline=None)
+
+    assert delivered == 2
+    assert len(calls) == 1  # both finals batched together, read through one call
+    assert set(calls[0]) == {segment_1, segment_2}

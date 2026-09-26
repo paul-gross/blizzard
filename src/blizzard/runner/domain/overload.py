@@ -7,6 +7,7 @@ durable and append-only (``bzh:facts-not-status``), mirroring
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal, Protocol
@@ -115,7 +116,7 @@ class _IReadLeaseGeneration(Protocol):
     :class:`~blizzard.runner.domain.leases.LocalLeaseService`'s own use of
     :func:`backing_off_facts` (a cycle either direction's concrete import would close)."""
 
-    def lease_generation(self, lease_id: str) -> int: ...
+    def lease_generations(self, lease_ids: Sequence[str]) -> dict[str, int]: ...
 
 
 def backing_off_facts(
@@ -125,14 +126,21 @@ def backing_off_facts(
     like ``pause_parked_lease_ids`` (D7). A candidate closes implicitly: a worker's own
     generation moving past the recorded one, or a judge's elicitation relaunching under a
     fresh identity, both mean this invocation was already acted on, with no separate
-    closing write."""
+    closing write. The per-fact generation and elicitation reads are each collapsed into
+    one bulk read up front, keyed by exactly the ids this open-facts set names
+    (`bzh:bulk-reconstitution`)."""
+    facts = overload.open_overload_facts()
+    generations = liveness.lease_generations([fact.lease_id for fact in facts if fact.invocation_kind == "worker"])
+    elicitations_by_pair = elicitations.in_flight_elicitations(
+        [(fact.lease_id, fact.epoch) for fact in facts if fact.invocation_kind != "worker"]
+    )
     result: dict[str, OverloadFactRecord] = {}
-    for fact in overload.open_overload_facts():
+    for fact in facts:
         if fact.invocation_kind == "worker":
-            if str(liveness.lease_generation(fact.lease_id)) != fact.invocation_identity:
+            if str(generations.get(fact.lease_id, 0)) != fact.invocation_identity:
                 continue
         else:
-            elicitation = elicitations.in_flight_elicitation(fact.lease_id, fact.epoch)
+            elicitation = elicitations_by_pair.get((fact.lease_id, fact.epoch))
             if elicitation is None or iso_utc(elicitation.first_launched_at) != fact.invocation_identity:
                 continue
         result[fact.lease_id] = fact

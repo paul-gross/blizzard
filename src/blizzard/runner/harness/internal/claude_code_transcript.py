@@ -8,6 +8,7 @@ A :class:`TranscriptPosition` token is this module's own JSON, opaque to every c
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -31,6 +32,11 @@ MAX_BATCH_BYTES = 8 * 1024 * 1024
 #: The first tail window a context read scans, and the factor it widens by when it held no turn.
 CONTEXT_TAIL_BYTES = 1024 * 1024
 _CONTEXT_WIDEN = 8
+
+#: Bounds the locator's resolved-path cache — this source's instance lives for the whole
+#: process (`build_production_harness_registry` builds it once), so unbounded growth across
+#: a long-lived runner's whole session history would otherwise never be reclaimed.
+_RESOLVED_PATH_CACHE_MAX_ENTRIES = 2048
 
 
 @dataclass(frozen=True)
@@ -241,6 +247,10 @@ class ClaudeCodeTranscriptSource:
     def __init__(self, projects_root: str, error_factory: TranscriptErrorFactory) -> None:
         self._projects_root = Path(projects_root)
         self._errors = error_factory
+        # Only an UNAMBIGUOUS resolution is cached — a sole match, or the one the
+        # spawn-cwd hint selected. An mtime-fallback pick is never cached (a newer file
+        # could legitimately appear later), so it is re-globbed on every call.
+        self._resolved: OrderedDict[tuple[str, str | None], Path] = OrderedDict()
 
     @staticmethod
     def mangle_cwd(cwd: str) -> str:
@@ -253,13 +263,12 @@ class ClaudeCodeTranscriptSource:
     def turns_since(
         self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
     ) -> TranscriptBatch:
-        matches = self._matches(session_id)
-        if not matches:
+        path = self._resolve(session_id, spawn_cwd)
+        if path is None:
             self._errors.not_found(session_id=session_id, projects_root=str(self._projects_root))
             return self._unavailable(session_id, "not_found")
 
         try:
-            path = self._locate(matches, spawn_cwd)
             position = Position.of(since)
             # An offset past the current size would make the read's delta negative and
             # inflate the remaining budget; treated as any other corrupt hint.
@@ -273,6 +282,7 @@ class ClaudeCodeTranscriptSource:
                 main_read = FileRead.forward(path, start_offset=position.main, budget=MAX_BATCH_BYTES)
                 remaining_budget = MAX_BATCH_BYTES - (main_read.next_offset - position.main)
         except OSError as exc:
+            self._evict(session_id, spawn_cwd)
             self._errors.from_io(exc, f"transcript unreadable: {session_id}", session_id=session_id)
             return self._unavailable(session_id, "unreadable")
 
@@ -313,11 +323,10 @@ class ClaudeCodeTranscriptSource:
         start: TranscriptPosition | None = None,
         end: TranscriptPosition | None = None,
     ) -> list[str]:
-        matches = self._matches(session_id)
-        if not matches:
+        path = self._resolve(session_id, spawn_cwd)
+        if path is None:
             return []
         try:
-            path = self._locate(matches, spawn_cwd)
             if start is None and end is None:
                 # start-of-file -> current tail, preserving the pre-range whole-session read
                 # (the envelope-less usage fallback's own historical call shape).
@@ -332,20 +341,21 @@ class ClaudeCodeTranscriptSource:
             stop = min(max(stop, begin), size)
             return FileRead.forward(path, start_offset=begin, budget=stop - begin).lines
         except OSError as exc:
+            self._evict(session_id, spawn_cwd)
             # Recovered, not a boundary failure: an empty reply reads as "no signal".
             self._errors.from_io_recovered(exc, f"transcript unreadable: {session_id}", session_id=session_id)
             return []
 
     def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
-        matches = self._matches(session_id)
-        if not matches:
+        path = self._resolve(session_id, spawn_cwd)
+        if path is None:
             return None
         try:
-            path = self._locate(matches, spawn_cwd)
             # Newline-aligned like every `turns_since` `next_position` (F11) — reusing
             # `FileRead.cold`'s own tail-seek holds back a trailing partial line.
             main = FileRead.cold(path).next_offset
         except OSError as exc:
+            self._evict(session_id, spawn_cwd)
             self._errors.from_io_recovered(exc, f"transcript unreadable: {session_id}", session_id=session_id)
             return None
         return Position(main=main, sidecars={}).token
@@ -356,12 +366,13 @@ class ClaudeCodeTranscriptSource:
         Deliberately a ``stat``, not a read: this is the file that has grown too large to keep
         resuming into. Subagent sidecars are excluded for the same reason
         :meth:`context_tokens` excludes them — a resume re-reads neither."""
-        matches = self._matches(session_id)
-        if not matches:
+        path = self._resolve(session_id, spawn_cwd)
+        if path is None:
             return None
         try:
-            return self._locate(matches, spawn_cwd).stat().st_size
+            return path.stat().st_size
         except OSError as exc:
+            self._evict(session_id, spawn_cwd)
             # Recovered, not a boundary failure — see `read_raw_lines` above.
             self._errors.from_io_recovered(exc, f"transcript unreadable: {session_id}", session_id=session_id)
             return None
@@ -371,12 +382,11 @@ class ClaudeCodeTranscriptSource:
 
         Subagents are excluded because a subagent's context never returns to the parent — only
         its closing report does — so counting it overstates what a resume pays for."""
-        matches = self._matches(session_id)
-        if not matches:
+        path = self._resolve(session_id, spawn_cwd)
+        if path is None:
             self._errors.not_found(session_id=session_id, projects_root=str(self._projects_root))
             return None
         try:
-            path = self._locate(matches, spawn_cwd)
             size = path.stat().st_size
             # Bounded by the module's per-file read cap, not by file size: a newest measurable
             # turn beyond it reads as unmeasurable, which the seam already models.
@@ -388,6 +398,7 @@ class ClaudeCodeTranscriptSource:
                     return tokens
                 window = min(window * _CONTEXT_WIDEN, ceiling)
         except OSError as exc:
+            self._evict(session_id, spawn_cwd)
             # Recovered, not a boundary failure — see `read_raw_lines` above.
             self._errors.from_io_recovered(exc, f"transcript unreadable: {session_id}", session_id=session_id)
             return None
@@ -415,20 +426,57 @@ class ClaudeCodeTranscriptSource:
                 return tokens
         return None
 
+    def _resolve(self, session_id: str, spawn_cwd: str | None) -> Path | None:
+        """The session's transcript file — cached when the earlier resolution was
+        unambiguous, else re-globbed. ``None`` when no match exists, or when the mtime
+        tie-break's own ``stat()`` loses a race against a file removed after the glob."""
+        key = (session_id, spawn_cwd)
+        cached = self._resolved.get(key)
+        if cached is not None:
+            self._resolved.move_to_end(key)
+            return cached
+        matches = self._matches(session_id)
+        if not matches:
+            return None
+        try:
+            path, cacheable = self._locate(matches, spawn_cwd)
+        except OSError:
+            return None
+        if cacheable:
+            self._cache_path(key, path)
+        return path
+
+    def _cache_path(self, key: tuple[str, str | None], path: Path) -> None:
+        self._resolved[key] = path
+        self._resolved.move_to_end(key)
+        if len(self._resolved) > _RESOLVED_PATH_CACHE_MAX_ENTRIES:
+            self._resolved.popitem(last=False)
+
+    def _evict(self, session_id: str, spawn_cwd: str | None) -> None:
+        """Drop a cached resolution after a read against it failed — a moved or
+        rotated-away file re-resolves on this session's next call, rather than staying
+        wedged on a path that no longer works."""
+        self._resolved.pop((session_id, spawn_cwd), None)
+
     def _matches(self, session_id: str) -> list[Path]:
         return sorted(self._projects_root.glob(f"*/{session_id}.jsonl"))
 
     @classmethod
-    def _locate(cls, matches: list[Path], spawn_cwd: str | None) -> Path:
-        """The session's file: the sole match, else the spawn-cwd hint, else newest by mtime."""
+    def _locate(cls, matches: list[Path], spawn_cwd: str | None) -> tuple[Path, bool]:
+        """The session's file: the sole match, else the spawn-cwd hint, else newest by mtime —
+        paired with whether the pick is cacheable: unambiguous (a sole match agreeing with the
+        hint when one is given, or the hint's own match), never a sole match disagreeing with
+        the hint or an mtime fallback, since a newer or better-matching file could legitimately
+        appear later."""
         if len(matches) == 1:
-            return matches[0]
+            match = matches[0]
+            return match, spawn_cwd is None or match.parent.name == cls.mangle_cwd(spawn_cwd)
         if spawn_cwd:
             wanted = cls.mangle_cwd(spawn_cwd)
             for match in matches:
                 if match.parent.name == wanted:
-                    return match
-        return max(matches, key=lambda p: p.stat().st_mtime)
+                    return match, True
+        return max(matches, key=lambda p: p.stat().st_mtime), False
 
     @staticmethod
     def _unavailable(session_id: str, reason: TranscriptReadReason) -> TranscriptBatch:

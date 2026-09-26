@@ -23,6 +23,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.leases import LeaseRecord, Liveness, as_utc
 from blizzard.runner.domain.overload import backing_off_facts
 from blizzard.runner.domain.pause import PauseService
+from blizzard.runner.domain.usage import ContextSampleState
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import (
@@ -159,8 +160,12 @@ class Reap(Step):
         now = ctx.clock.now()
         parked = ctx.stores.asks.parked_lease_ids()
         taken_over = ctx.stores.takeover.open_takeover_chunk_ids()
+        active_leases = ctx.stores.lease_record.list_active_leases()
+        # One bulk read for every candidate's heartbeat/spawn (`bzh:bulk-reconstitution`),
+        # rather than `Liveness.of` re-reading both per lease.
+        liveness_facts = ctx.stores.liveness.liveness_facts([lease.lease_id for lease in active_leases])
         deferred = 0
-        for lease in ctx.stores.lease_record.list_active_leases():
+        for lease in active_leases:
             if lease.chunk_id in taken_over:
                 continue  # the human holds this session — no loop step touches it
             if lease.lease_id in parked:
@@ -177,7 +182,14 @@ class Reap(Step):
                 continue
             if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
                 continue  # exited — ADVANCE's (exit-is-done)
-            if Liveness.of(ctx.stores.liveness, lease).stale(now):
+            facts = liveness_facts.get(lease.lease_id)
+            liveness = Liveness.of(
+                ctx.stores.liveness,
+                lease,
+                heartbeat=facts.latest_heartbeat if facts is not None else None,
+                spawn=facts.latest_spawn if facts is not None else None,
+            )
+            if liveness.stale(now):
                 if local_paused:
                     # Do not kill a live worker while the brake is on — a pause is not a
                     # drain. The first tick after it clears reaps this lease as it would now.
@@ -471,7 +483,7 @@ class Fill(Step):
                 local_paused=local_paused,
             )
             return
-        slots = ctx.config.max_agents - len(ctx.stores.lease_record.list_active_leases())
+        slots = ctx.config.max_agents - ctx.stores.lease_record.count_active_leases()
         # Whether this runner asserts capabilities at all is a registry-shape question —
         # read from the registry, never by building a snapshot that probes every binary.
         if ctx.harnesses.known_harnesses:
@@ -526,10 +538,13 @@ class Advance(Step):
                 continue  # worker still running
             self._advance_exited_worker(lease)
 
+        # Read AFTER the loop above, not the same set it started with (`bzh:bulk-reconstitution`):
+        # that loop can close a lease whose chunk this one must now drive in the same pass.
+        active_chunk_ids = {lease.chunk_id for lease in ctx.stores.lease_record.list_active_leases()}
         for chunk_id in ctx.stores.environments.live_tenure_chunk_ids():
             if chunk_id in taken_over:
                 continue  # the human holds this chunk — no gate/hub-node poll while they do
-            if ctx.stores.lease_record.active_lease_for_chunk(chunk_id) is None:
+            if chunk_id not in active_chunk_ids:
                 HeldChunk(ctx, chunk_id).drive()
 
     def _advance_exited_worker(self, lease: LeaseRecord) -> None:
@@ -636,21 +651,23 @@ class ContextSample(Step):
             return
         try:
             leases = ctx.stores.lease_record.list_active_leases()
+            # One bulk read for the whole active set (`bzh:bulk-reconstitution`); each
+            # lease below filters "due" itself from its own already-fetched state.
+            states = ctx.stores.usage.context_sample_states([lease.lease_id for lease in leases])
         except Exception as exc:  # this step is not last in the tick — see ExternalUsageSample
             _log.warning("context sample step failed", detail=str(exc))
             return
         for lease in leases:
             try:
-                self._sample(lease, warn_tokens)
+                self._sample(lease, warn_tokens, states.get(lease.lease_id))
             except Exception as exc:  # one lease's read must not end the sweep
                 _log.warning("context sample failed", lease_id=lease.lease_id, detail=str(exc))
 
-    def _sample(self, lease: LeaseRecord, warn_tokens: int) -> None:
+    def _sample(self, lease: LeaseRecord, warn_tokens: int, state: ContextSampleState | None) -> None:
         ctx = self.ctx
         session = lease.session
         if session is None or not ctx.transcripts_wired:
             return  # a lease whose spawn has not yet minted a session has nothing to read
-        state = ctx.stores.usage.context_sample_state(lease.lease_id)
         now = ctx.clock.now()
         if state is not None and now - state.last_sampled_at < timedelta(
             seconds=ctx.config.context_sample_interval_seconds

@@ -6,15 +6,17 @@ cross-concept write D1 keeps inside this one ``store/internal/`` package."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from sqlalchemy import Connection, and_, func, select
 
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.domain.leases import IWriteLeaseLivenessRepository
+from blizzard.runner.domain.leases import IWriteLeaseLivenessRepository, LeaseLivenessFacts
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, RunnerStoreConnections, enqueue_transcript_final
+from blizzard.runner.store.internal.batching import id_batches
 from blizzard.runner.store.schema import heartbeats, lease_context, lease_spawns, leases, transcript_segments
 
 _log = get_logger("blizzard.runner.store")
@@ -145,6 +147,49 @@ class LeaseLivenessStore:
         with self._store.connect() as conn:
             value = conn.execute(stmt).scalar_one_or_none()
         return value
+
+    def liveness_facts(self, lease_ids: Sequence[str]) -> dict[str, LeaseLivenessFacts]:
+        if not lease_ids:
+            return {}
+        heartbeat_by_lease: dict[str, datetime] = {}
+        spawn_by_lease: dict[str, datetime] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(lease_ids):
+                hb_stmt = (
+                    select(heartbeats.c.lease_id, func.max(heartbeats.c.beat_at).label("beat_at"))
+                    .where(heartbeats.c.lease_id.in_(batch))
+                    .group_by(heartbeats.c.lease_id)
+                )
+                for row in conn.execute(hb_stmt):
+                    heartbeat_by_lease[str(row.lease_id)] = row.beat_at
+                sp_stmt = (
+                    select(lease_spawns.c.lease_id, func.max(lease_spawns.c.spawned_at).label("spawned_at"))
+                    .where(lease_spawns.c.lease_id.in_(batch))
+                    .group_by(lease_spawns.c.lease_id)
+                )
+                for row in conn.execute(sp_stmt):
+                    spawn_by_lease[str(row.lease_id)] = row.spawned_at
+        return {
+            lease_id: LeaseLivenessFacts(
+                latest_heartbeat=heartbeat_by_lease.get(lease_id), latest_spawn=spawn_by_lease.get(lease_id)
+            )
+            for lease_id in set(heartbeat_by_lease) | set(spawn_by_lease)
+        }
+
+    def lease_generations(self, lease_ids: Sequence[str]) -> dict[str, int]:
+        if not lease_ids:
+            return {}
+        result: dict[str, int] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(lease_ids):
+                stmt = (
+                    select(lease_spawns.c.lease_id, func.count().label("n"))
+                    .where(lease_spawns.c.lease_id.in_(batch))
+                    .group_by(lease_spawns.c.lease_id)
+                )
+                for row in conn.execute(stmt):
+                    result[str(row.lease_id)] = int(row.n)
+        return result
 
     def lease_generation(self, lease_id: str) -> int:
         stmt = select(func.count()).select_from(lease_spawns).where(lease_spawns.c.lease_id == lease_id)

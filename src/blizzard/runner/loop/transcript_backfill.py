@@ -82,14 +82,15 @@ class TranscriptBackfill:
             return TranscriptBackfillReport(imported=0, already_present=0, gone=0, deferred=0, capped=0)
 
         unfinished = self._unfinished()
-        imported = already = gone = deferred = capped = 0
+        imported = already = gone = deferred = 0
+        imported_segment_ids: list[str] = []
         seen = {segment.session for segment in unfinished}
         for segment in unfinished:
             if dry_run:
                 imported += 1
             elif self._finish(segment.segment_id):
                 imported += 1
-                capped += self._was_capped(segment.segment_id)
+                imported_segment_ids.append(segment.segment_id)
             else:
                 deferred += 1
 
@@ -119,10 +120,11 @@ class TranscriptBackfill:
                 segment_id = self._open(lease)
                 if self._finish(segment_id):
                     imported += 1
-                    capped += self._was_capped(segment_id)
+                    imported_segment_ids.append(segment_id)
                 else:
                     deferred += 1
 
+        capped = self._capped_count(imported_segment_ids)
         report = TranscriptBackfillReport(imported, already, gone, deferred, capped)
         _log.info(
             "transcript backfill complete",
@@ -244,21 +246,27 @@ class TranscriptBackfill:
             pass
         return caught_up
 
-    def _was_capped(self, segment_id: str) -> int:
-        """1 when the hub refused this segment's content or the runner stopped shipping it —
-        an import the local counts alone would report as whole."""
-        segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
-        if segment is None:
+    def _capped_count(self, segment_ids: list[str]) -> int:
+        """How many of ``segment_ids`` the hub refused, or the runner stopped shipping —
+        one bulk read after the import loops, rather than one
+        :meth:`~IReadTranscriptLedgerRepository.transcript_segment` per imported segment."""
+        if not segment_ids:
             return 0
-        return int(segment.truncated_reason == HUB_CAPPED or segment.shipping_stopped_reason is not None)
+        segments = self.ctx.stores.transcript_ledger.transcript_segments(segment_ids)
+        return sum(
+            1
+            for segment in segments.values()
+            if segment.truncated_reason == HUB_CAPPED or segment.shipping_stopped_reason is not None
+        )
 
     def _unfinished(self) -> list[TranscriptSegmentLedgerRow]:
         """Segments still open on an already-closed lease — an interrupted earlier run's
         own. A live lease's segment belongs to the tick's pump, never here."""
+        active_lease_ids = {lease.lease_id for lease in self.ctx.stores.lease_record.list_active_leases()}
         return [
             segment
             for segment in self.ctx.stores.transcript_ledger.open_transcript_segments()
-            if self.ctx.stores.lease_record.active_lease(segment.lease_id) is None
+            if segment.lease_id not in active_lease_ids
         ]
 
     def _spawn_cwd(self, chunk_id: str) -> str | None:

@@ -1036,7 +1036,7 @@ def test_record_spawn_carries_the_cursor_forward_and_closes_the_prior_segment_on
 
     # The chunk-budget sum counts each segment's own contribution exactly once — no double
     # count from carrying the cursor forward, no loss from starting gen2's counters at zero.
-    assert store.chunk_transcript_shipped_bytes("ch_1") == 100
+    assert store.chunk_transcript_shipped_bytes(["ch_1"]) == {"ch_1": 100}
 
 
 @pytest.mark.unit

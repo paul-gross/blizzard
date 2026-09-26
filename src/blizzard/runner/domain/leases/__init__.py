@@ -21,6 +21,7 @@ from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.domain.leases.liveness import (
     IReadLeaseLivenessRepository,
     IWriteLeaseLivenessRepository,
+    LeaseLivenessFacts,
 )
 from blizzard.runner.domain.leases.record import (
     IReadLeaseRecordRepository,
@@ -35,7 +36,7 @@ from blizzard.runner.domain.leases.session import (
     IWriteLeaseSessionRepository,
 )
 from blizzard.runner.domain.overload import backing_off_facts
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.environments.repository import group_bindings_by_chunk
 from blizzard.runner.harness.identity import SessionReference
 
 if TYPE_CHECKING:
@@ -56,6 +57,7 @@ __all__ = [
     "IWriteLeaseResumeIntentRepository",
     "IWriteLeaseSessionRepository",
     "LeaseActivity",
+    "LeaseLivenessFacts",
     "LeaseRecord",
     "LeaseState",
     "Liveness",
@@ -189,11 +191,20 @@ class Liveness:
 
     @classmethod
     def of(
-        cls, store: IReadLeaseLivenessRepository, lease: LeaseRecord, *, heartbeat: datetime | None | _Unread = _UNREAD
+        cls,
+        store: IReadLeaseLivenessRepository,
+        lease: LeaseRecord,
+        *,
+        heartbeat: datetime | None | _Unread = _UNREAD,
+        spawn: datetime | None | _Unread = _UNREAD,
     ) -> Liveness:
-        """Read the lease's activity facts, taking an already-read ``heartbeat`` if offered."""
+        """Read the lease's activity facts, taking an already-read ``heartbeat``/``spawn``
+        if either is offered — a bulk caller pre-reads both via
+        :meth:`~IReadLeaseLivenessRepository.liveness_facts` and passes them through, so
+        this classmethod issues no store call of its own at all."""
         beat = store.latest_heartbeat(lease.lease_id) if isinstance(heartbeat, _Unread) else heartbeat
-        facts = (beat, store.latest_spawn(lease.lease_id))
+        spawned = store.latest_spawn(lease.lease_id) if isinstance(spawn, _Unread) else spawn
+        facts = (beat, spawned)
         return cls(max([as_utc(lease.created_at), *(as_utc(fact) for fact in facts if fact is not None)]))
 
     def stale(self, now: datetime, *, threshold: timedelta = HEARTBEAT_STALENESS_THRESHOLD) -> bool:
@@ -284,16 +295,28 @@ class LocalLeaseService:
         """Every active lease, joined with its binding and derived state.
 
         The reported heartbeat and the staleness baseline are different questions, but
-        share one heartbeat read. The remaining per-lease N+1 is accepted."""
+        share one bulk :meth:`~IReadLeaseLivenessRepository.liveness_facts` read, and
+        bindings come from one :meth:`~IReadEnvironmentRepository.held_bindings` read
+        grouped by chunk — no remaining per-lease reads."""
         now = self._clock.now()
         parked = self._stores.asks.parked_lease_ids()
         backing_off = backing_off_facts(self._stores.overload, self._stores.liveness, self._stores.elicitations)
+        leases = self._stores.lease_record.list_active_leases()
+        facts_by_lease = self._stores.liveness.liveness_facts([lease.lease_id for lease in leases])
+        bindings_by_chunk = group_bindings_by_chunk(self._stores.environments.held_bindings())
         activities: list[LeaseActivity] = []
-        for lease in self._stores.lease_record.list_active_leases():
-            last_heartbeat = self._stores.liveness.latest_heartbeat(lease.lease_id)
-            liveness = Liveness.of(self._stores.liveness, lease, heartbeat=last_heartbeat)
+        for lease in leases:
+            facts = facts_by_lease.get(lease.lease_id)
+            last_heartbeat = facts.latest_heartbeat if facts is not None else None
+            liveness = Liveness.of(
+                self._stores.liveness,
+                lease,
+                heartbeat=last_heartbeat,
+                spawn=facts.latest_spawn if facts is not None else None,
+            )
             alive = self._is_alive(lease)
-            binding = self._first_binding(lease.chunk_id)
+            bindings = bindings_by_chunk.get(lease.chunk_id, [])
+            binding = bindings[0] if bindings else None
             activities.append(
                 LeaseActivity(
                     lease=lease,
@@ -338,7 +361,3 @@ class LocalLeaseService:
         if lease.pid is None:
             return False  # spawning — `LeaseActivity.state` short-circuits before this matters
         return self._process.is_alive(lease.pid, lease.process_start_time or "")
-
-    def _first_binding(self, chunk_id: str) -> EnvBindingRecord | None:
-        bindings = self._stores.environments.bindings_for_chunk(chunk_id)
-        return bindings[0] if bindings else None

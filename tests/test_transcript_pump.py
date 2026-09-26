@@ -37,12 +37,15 @@ from blizzard.runner.loop.transcript_pump import (
     TranscriptPump,
     _record_envelope,
     _record_overhead,
+    _sidechain_wire,
+    _tool_wire,
     _turn_wire,
 )
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
     TranscriptSegmentLedgerRow,
 )
+from blizzard.wire.transcript_segment import TurnSegmentView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -571,6 +574,33 @@ def test_record_overhead_bounds_every_group_envelope_the_batch_can_produce() -> 
         for end in (start, start + 9, turn_count):
             envelope = _record_envelope(segment, batch, turn_range_start=start, turn_range_end=end)
             assert len(json.dumps(envelope).encode("utf-8")) <= budgeted, f"under-counted at {start}..{end}"
+
+
+def test_sidechain_and_tool_wire_never_omit_a_defaulted_wire_field() -> None:
+    """`_sidechain_wire`/`_tool_wire` write every optional field the wire model can default
+    explicitly, rather than omitting it — the stored payload's own byte length is what
+    `TranscriptDrain._estimated_size` bounds a delta's actual rendered length by, and an
+    omitted key there renders bigger once the model fills its own default back in."""
+    tool_wire = _tool_wire(_tool_call(""))
+    assert "output_patch" in tool_wire
+    sidechain_wire = _sidechain_wire(
+        SidechainConversation(agent_id="sub_1", agent_type="general", link="linked", turns=[])
+    )
+    assert "parent_tool_use_id" in sidechain_wire
+
+    turn = NormalizedTurn(
+        index=0,
+        kind="tool",
+        timestamp=None,
+        text="",
+        tool=_tool_call(""),
+        thinking_redacted=False,
+        sidechain=SidechainConversation(agent_id="sub_1", agent_type="general", link="linked", turns=[]),
+        truncated=False,
+    )
+    wire = _turn_wire(turn, 0)
+    rendered = TurnSegmentView.model_validate(wire).model_dump_json()
+    assert len(json.dumps(wire).encode("utf-8")) >= len(rendered.encode("utf-8"))
 
 
 def test_pump_splits_many_small_turns_instead_of_emptying_the_whole_batch() -> None:

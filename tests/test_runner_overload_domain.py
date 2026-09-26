@@ -6,6 +6,7 @@ exercised here against minimal in-memory fakes, no I/O."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -66,6 +67,9 @@ class _FakeLeaseGeneration:
     def lease_generation(self, lease_id: str) -> int:
         return self.generations[lease_id]
 
+    def lease_generations(self, lease_ids: Sequence[str]) -> dict[str, int]:
+        return {lease_id: self.generations[lease_id] for lease_id in lease_ids if lease_id in self.generations}
+
 
 @dataclass
 class _FakeElicitations:
@@ -73,6 +77,9 @@ class _FakeElicitations:
 
     def in_flight_elicitation(self, lease_id: str, epoch: int) -> ElicitationRecord | None:
         return self.records.get((lease_id, epoch))
+
+    def in_flight_elicitations(self, pairs: Sequence[tuple[str, int]]) -> dict[tuple[str, int], ElicitationRecord]:
+        return {pair: self.records[pair] for pair in pairs if pair in self.records}
 
     def in_flight_elicitation_lease_ids(self) -> set[str]:
         raise NotImplementedError  # unused by backing_off_facts

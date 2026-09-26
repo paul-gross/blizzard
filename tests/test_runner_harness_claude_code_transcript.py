@@ -114,6 +114,37 @@ def test_turns_since_multi_match_falls_back_to_newest_mtime_without_a_hint(tmp_p
 
 
 @pytest.mark.unit
+def test_a_match_removed_before_the_mtime_tie_break_reads_as_not_found_not_raised(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kept = _write_main(tmp_path, [fx.user_env("kept")], project_dir="-home-user-a")
+    removed = _write_main(tmp_path, [fx.user_env("removed")], project_dir="-home-user-b")
+    stale_matches = sorted([kept, removed])
+    monkeypatch.setattr(ClaudeCodeTranscriptSource, "_matches", lambda self, session_id: stale_matches)
+    removed.unlink()  # gone by the time the mtime tie-break's own `stat()` runs
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    batch = source.turns_since("sess-1", spawn_cwd=None, since=None)
+
+    assert batch.available is False
+    assert batch.reason == "not_found"
+
+
+@pytest.mark.unit
+def test_a_sole_match_disagreeing_with_the_hint_is_not_cached_so_a_later_sibling_is_found(tmp_path: Path) -> None:
+    _write_main(tmp_path, [fx.user_env("from other dir")], project_dir="-home-user-other")
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    first = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
+    assert first.turns[0].text == "from other dir"  # the only match there is, hint or not
+
+    _write_main(tmp_path, [fx.user_env("from wanted dir")], project_dir="-home-user-workspace")
+    second = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=None)
+
+    assert second.turns[0].text == "from wanted dir"  # re-globbed, not served the stale cached pick
+
+
+@pytest.mark.unit
 def test_mangle_cwd_replaces_slashes_with_dashes() -> None:
     assert ClaudeCodeTranscriptSource.mangle_cwd("/home/user/foo") == "-home-user-foo"
 

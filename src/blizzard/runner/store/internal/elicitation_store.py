@@ -3,6 +3,7 @@ blizzard#443)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import and_, select
@@ -10,6 +11,7 @@ from sqlalchemy import and_, select
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.elicitation import ElicitationRecord, IWriteElicitationRepository
 from blizzard.runner.store.internal.base import RunnerStoreConnections
+from blizzard.runner.store.internal.batching import id_batches
 from blizzard.runner.store.schema import in_flight_elicitations
 
 _log = get_logger("blizzard.runner.store")
@@ -40,6 +42,30 @@ class ElicitationStore:
             first_launched_at=r.first_launched_at,
             relaunch_count=int(r.relaunch_count),
         )
+
+    def in_flight_elicitations(self, pairs: Sequence[tuple[str, int]]) -> dict[tuple[str, int], ElicitationRecord]:
+        if not pairs:
+            return {}
+        wanted = set(pairs)
+        lease_ids = sorted({lease_id for lease_id, _ in pairs})
+        result: dict[tuple[str, int], ElicitationRecord] = {}
+        for batch in id_batches(lease_ids):
+            rows = self._store.all(select(in_flight_elicitations).where(in_flight_elicitations.c.lease_id.in_(batch)))
+            for r in rows:
+                key = (str(r.lease_id), int(r.epoch))
+                if key not in wanted:
+                    continue
+                result[key] = ElicitationRecord(
+                    lease_id=key[0],
+                    epoch=key[1],
+                    pid=int(r.pid) if r.pid is not None else None,
+                    process_start_time=str(r.process_start_time) if r.process_start_time is not None else None,
+                    pgid=int(r.pgid) if r.pgid is not None else None,
+                    output_path=str(r.output_path),
+                    first_launched_at=r.first_launched_at,
+                    relaunch_count=int(r.relaunch_count),
+                )
+        return result
 
     def in_flight_elicitation_lease_ids(self) -> set[str]:
         rows = self._store.all(select(in_flight_elicitations.c.lease_id))

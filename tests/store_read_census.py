@@ -608,6 +608,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadLeaseRecordRepository, "attempt_count"): lambda w: w.read.lease_record.attempt_count(w.chunk_1, w.node_a),
     (IReadLeaseRecordRepository, "latest_epoch"): lambda w: w.read.lease_record.latest_epoch(w.chunk_1),
     (IReadLeaseRecordRepository, "lease_ids_for_chunk"): lambda w: w.read.lease_record.lease_ids_for_chunk(w.chunk_1),
+    (IReadLeaseRecordRepository, "count_active_leases"): lambda w: w.read.lease_record.count_active_leases(),
     (IReadLeaseSessionRepository, "latest_session"): lambda w: w.read.session.latest_session(w.chunk_1, None),
     (IReadLeaseSessionRepository, "pool_head"): lambda w: w.read.session.pool_head(w.chunk_1, "pool-a"),
     (IReadLeaseSessionRepository, "session_invocation_count"): lambda w: w.read.session.session_invocation_count(
@@ -624,6 +625,8 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadLeaseLivenessRepository, "latest_spawn_harness_version"): lambda w: (
         w.read.liveness.latest_spawn_harness_version(w.lease_2)
     ),
+    (IReadLeaseLivenessRepository, "liveness_facts"): lambda w: w.read.liveness.liveness_facts([w.lease_2]),
+    (IReadLeaseLivenessRepository, "lease_generations"): lambda w: w.read.liveness.lease_generations([w.lease_2]),
     (IReadLeaseResumeIntentRepository, "resume_intent_lease_ids"): lambda w: (
         w.read.resume_intent.resume_intent_lease_ids()
     ),
@@ -634,14 +637,20 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadTranscriptLedgerRepository, "transcript_segment"): lambda w: w.read.transcript_ledger.transcript_segment(
         w.transcript_segment_id
     ),
+    (IReadTranscriptLedgerRepository, "transcript_segments"): lambda w: w.read.transcript_ledger.transcript_segments(
+        [w.transcript_segment_id]
+    ),
     (IReadTranscriptLedgerRepository, "open_transcript_segments"): lambda w: (
         w.read.transcript_ledger.open_transcript_segments()
+    ),
+    (IReadTranscriptLedgerRepository, "open_transcript_segments_for_lease"): lambda w: (
+        w.read.transcript_ledger.open_transcript_segments_for_lease(w.lease_1)
     ),
     (IReadTranscriptLedgerRepository, "transcript_segments_for_chunk"): lambda w: (
         w.read.transcript_ledger.transcript_segments_for_chunk(w.chunk_1)
     ),
     (IReadTranscriptLedgerRepository, "chunk_transcript_shipped_bytes"): lambda w: (
-        w.read.transcript_ledger.chunk_transcript_shipped_bytes(w.chunk_1)
+        w.read.transcript_ledger.chunk_transcript_shipped_bytes([w.chunk_1])
     ),
     (IReadTranscriptLedgerRepository, "outstanding_transcript_buffer_bytes"): lambda w: (
         w.read.transcript_ledger.outstanding_transcript_buffer_bytes()
@@ -686,6 +695,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadUsageRepository, "usage_since"): lambda w: w.read.usage.usage_since(_BASE),
     (IReadUsageRepository, "context_sample_state"): lambda w: w.read.usage.context_sample_state(w.lease_1),
+    (IReadUsageRepository, "context_sample_states"): lambda w: w.read.usage.context_sample_states([w.lease_1]),
     (IReadUsageRepository, "last_external_usage_attempt_at"): lambda w: w.read.usage.last_external_usage_attempt_at(
         w.usage_slug
     ),
@@ -713,6 +723,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadElicitationRepository, "in_flight_elicitation_lease_ids"): lambda w: (
         w.read.elicitations.in_flight_elicitation_lease_ids()
+    ),
+    (IReadElicitationRepository, "in_flight_elicitations"): lambda w: w.read.elicitations.in_flight_elicitations(
+        [(w.lease_7, 1)]
     ),
     (IReadInvocationBoundaryRepository, "boundary"): lambda w: w.read.invocation_boundaries.boundary(
         w.lease_2, 2, "resume"

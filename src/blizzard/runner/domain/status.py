@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from blizzard.foundation.clock import IClock
 from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.outbound import OutboundFactRecord
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -242,12 +242,13 @@ class RunnerStatusService:
         ]
 
     def escalations(self) -> list[EscalationView]:
+        held_by_chunk = group_bindings_by_chunk(self._stores.environments.held_bindings())
         views = []
         for escalation in self._stores.escalations.open_escalations():
             resume_command = ""
             session = escalation.session
             if session is not None:
-                bindings = self._stores.environments.bindings_for_chunk(escalation.chunk_id)
+                bindings = held_by_chunk.get(escalation.chunk_id, [])
                 if bindings:
                     # Composed from the escalation's own stamps (issue #144), not a fresh
                     # resolution: the operator lands in the configuration it ran with.
