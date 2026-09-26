@@ -407,7 +407,7 @@ class _HangingAdapter:
     def resolvable_tier_ids(self) -> tuple[str, ...]:
         return ()
 
-    def needs_usage_transcript(self, output: str) -> bool:
+    def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
         return False
 
     def parse_usage(
@@ -416,6 +416,9 @@ class _HangingAdapter:
         raise AssertionError("unreachable — spawn never returns")
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
+        raise AssertionError("unreachable — spawn never returns")
+
+    def observed_model(self, lines: Sequence[str]) -> str | None:
         raise AssertionError("unreachable — spawn never returns")
 
     def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
@@ -571,12 +574,15 @@ class _FixedPidAdapter:
     def resolvable_tier_ids(self) -> tuple[str, ...]:
         return ()
 
-    def needs_usage_transcript(self, output: str) -> bool:
+    def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
         return False
 
     def parse_usage(
         self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
     ) -> UsageSample | None:
+        return None
+
+    def observed_model(self, lines: Sequence[str]) -> str | None:
         return None
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:

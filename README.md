@@ -61,8 +61,9 @@ engineer's agents show up on the same board.
   subagents where the work splits.
 - **Cheap human takeover.** When the fleet escalates, one pasted command drops you into the stuck agent's full session
   context, not a cold reconstruction of what it was doing.
-- **Full control over work in flight.** Every chunk is steerable from the hub: pause it and the worker is killed and
-  parked with its claim intact, resume it and that worker picks up in place, restart it onto any node (or onto a
+- **Full control over work in flight.** Every chunk is steerable from the hub: pause it and the worker is interrupted
+  and given a grace period to wind down before being force-stopped, parked with its claim intact, resume it and that
+  worker picks up in place, restart it onto any node (or onto a
   different graph entirely) on a fresh session, requeue an escalated one where it stands, reprioritize it, make it wait
   on another chunk, or stop it outright and release its environment. A control is recorded as a fact, and the runner
   acts on it at its next contact, so an order given at the board reaches the agent on the machine doing the work.

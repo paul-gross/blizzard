@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.asks import AskRecord
+from blizzard.runner.domain.elicitation import ElicitationRecord
 from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.overload import OverloadFactRecord
+from blizzard.runner.domain.pause import PauseParkRecord
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
@@ -20,7 +22,8 @@ from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.process import kill_owned_process
+from blizzard.runner.loop.process import kill_owned_process, owned_process_alive
+from blizzard.runner.loop.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.loop.spawn import Spawner
 
 _log = get_logger("blizzard.runner.loop")
@@ -175,12 +178,18 @@ class DormantSession:
         OutboundFacts(self.ctx).answer_delivered(lease, park.question_id, at=now)
         _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
 
-    def on_unpause(self) -> None:
-        """Poll a pause-parked lease's chunk; once the operator resumes it, restart its session.
-
-        The pause cost the chunk a process, not an attempt. An **ask-parked** lease returns early
-        even once unpaused, so a lift never conjures an absent answer (issue #46)."""
+    def on_unpause(self, park: PauseParkRecord, elicitation: ElicitationRecord | None) -> None:
+        """Finish a pause park's teardown, then poll its chunk; once the operator resumes it, restart
+        its session. The teardown runs ahead of every gate below — brake, hub, the pause itself —
+        since a kill is not a spawn and the interrupted envelope is owed its recording regardless
+        (blizzard#627). The pause cost the chunk a process, not an attempt; an **ask-parked** lease
+        returns early even once unpaused, so a lift never conjures an absent answer (issue #46).
+        ``elicitation`` is the tick's hoisted read (``bzh:bulk-reconstitution``) of this lease's
+        in-flight elicitation, if any — the settled-check's own use of it below; the later,
+        far rarer resume-time check reads fresh, since settling may have just cleared it."""
         lease = self.lease
+        if not self._pause_park_settled(park, elicitation):
+            return
         if Spawner(self.ctx).suppressed(via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
             return
         try:
@@ -223,6 +232,72 @@ class DormantSession:
             epoch=lease.epoch,
             pid=pid,
         )
+
+    def _pause_park_settled(self, park: PauseParkRecord, elicitation: ElicitationRecord | None) -> bool:
+        """True once nothing of the lease's is alive after `park_paused`'s interrupt — the worker's
+        group and the elicitation the park names (blizzard#627). Alive within the drain budget of
+        ``parked_at``: left alone, no wake. Past it: SIGKILLed. A named elicitation that has exited
+        books its ``judge`` usage, then clears — ``Judgement.collect``'s own order, both replays
+        idempotent. An unnamed standing record is a usage-limit judge park's, left for its relaunch.
+        ``elicitation`` is the tick's hoisted read of this lease's in-flight elicitation, if any."""
+        lease = self.lease
+        past_deadline = self.ctx.clock.now() >= park.parked_at + timedelta(seconds=SHUTDOWN_DRAIN_DEADLINE)
+        if not self._owned_group_settled(
+            pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid, past_deadline=past_deadline
+        ):
+            return False
+        if park.interrupted_elicitation_id is None:
+            return True
+        if elicitation is None or elicitation.id != park.interrupted_elicitation_id:
+            return True
+        if not self._owned_group_settled(
+            pid=elicitation.pid,
+            process_start_time=elicitation.process_start_time,
+            pgid=elicitation.pgid,
+            past_deadline=past_deadline,
+        ):
+            return False
+        bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
+        if self._resolve_harness_for_usage_only(via="pause-park-elicitation-usage") is not None:
+            output = self.ctx.elicitation_files.read(elicitation.output_path)
+            self.ctx.usage.record_attempt(lease, bindings, judge_output=output)
+        self.ctx.stores.elicitations.clear_elicitation(lease.lease_id, lease.epoch)
+        self.ctx.elicitation_files.cleanup(lease.lease_id, lease.epoch, through_attempt=elicitation.relaunch_count)
+        _log.info(
+            "interrupted elicitation recorded and cleared under the pause park",
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            epoch=lease.epoch,
+        )
+        return True
+
+    def _owned_group_settled(
+        self, *, pid: int | None, process_start_time: str | None, pgid: int | None, past_deadline: bool
+    ) -> bool:
+        """True once this owned process and its group are gone. Alive within the budget:
+        left alone. Alive past it: SIGKILLed through the shared liveness-checked kill, and
+        settled once confirmed gone by the same LEADER-identity check — except when the
+        leader already read dead going in, so only the identity-unguarded ``group_alive``
+        was keeping this alive: past the kill, that alone never blocks settlement, the same
+        fire-and-forget posture :class:`~blizzard.runner.loop.shutdown_drain.ShutdownDrain`
+        takes with its own survivors — a stray descendant the kill missed, or a pgid reused
+        for something else entirely, both read alike, and neither may hold resume forever."""
+        if pid is None or process_start_time is None:
+            return True
+        process = self.ctx.process
+        if not owned_process_alive(process, pid=pid, process_start_time=process_start_time, pgid=pgid):
+            return True
+        if not past_deadline:
+            return False
+        leader_alive = process.is_alive(pid, process_start_time)
+        kill_owned_process(process, pid=pid, process_start_time=process_start_time, pgid=pgid)
+        _log.warning(
+            "paused process outlived the interrupt budget — killed",
+            chunk_id=self.lease.chunk_id,
+            lease_id=self.lease.lease_id,
+            pid=pid,
+        )
+        return True if not leader_alive else not process.is_alive(pid, process_start_time)
 
     def on_overload_backoff(self, fact: OverloadFactRecord) -> None:
         """No-op until ``fact.resume_after`` has passed, then resume the same

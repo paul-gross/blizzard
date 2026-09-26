@@ -619,8 +619,14 @@ class OpenCodeAdapter:
         # surfacing in its place; anything else is legitimately empty.
         return self._session_error(events) or ""
 
-    def needs_usage_transcript(self, output: str) -> bool:
-        return False
+    def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
+        # A run event never carries a step's provider/model — `output` alone never
+        # resolves this binding's own gap. The only recovery is the export `model`'s
+        # absence forces (blizzard#629 D4), and only when this binding has no configured
+        # default of its own to price against instead (blizzard#640: never pay for a read
+        # a pinned or pre-configured invocation didn't need).
+        del output
+        return model is None and not self._model
 
     def parse_usage(
         self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
@@ -634,8 +640,8 @@ class OpenCodeAdapter:
             return None
         parts = list(by_id.values())
         input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(parts)
-        # A run event never carries per-step message info (only an export does), so every
-        # zero-cost step here falls back to the invocation's own provider/model.
+        # `output` is run events, never an export, and a run event never carries a step's
+        # provider/model: nothing here to observe, so the fallback chain is the only source.
         provider, resolved_model = self._invocation_model_reference(model)
         estimated: list[float] = []
         prices: dict[tuple[str, str], OpenCodeModelPrice | None] = {}
@@ -659,40 +665,66 @@ class OpenCodeAdapter:
         )
 
     @staticmethod
-    def _finish_parts_from_line(line: str) -> list[tuple[OpenCodePart, str | None, str | None]]:
-        """One transcript line's completed-step parts with the ``(provider, model)`` its shape
-        carries — none for a run event, ``message.info``'s for an exported message. The
-        caller's identity-keyed dedup collapses a step both shapes describe (execution spec).
-        Unparseable lines contribute nothing; never a raise."""
+    def _decode_line(line: str) -> dict | None:
+        """One transcript line, JSON-decoded if it is a well-formed object — shared by every
+        per-line reader below (F18) so one line is decoded at most once per pass over ``lines``."""
         stripped = line.strip()
         if not stripped:
-            return []
+            return None
         try:
             decoded = json.loads(stripped)
         except json.JSONDecodeError:
-            return []
-        if not isinstance(decoded, dict):
-            return []
+            return None
+        return decoded if isinstance(decoded, dict) else None
+
+    @staticmethod
+    def _parts_and_model_from_decoded(
+        decoded: dict,
+    ) -> tuple[list[tuple[OpenCodePart, str | None, str | None]], tuple[str, str] | None]:
+        """One decoded transcript line's completed-step parts with the ``(provider, model)``
+        its shape carries, and the line's own observed ``(provider, model)`` independent of
+        whether it carries a completed step — a run event contributes neither. One shared
+        shape-parse backs both (F18): a caller wanting only one of the two still pays for a
+        single parse rather than two. Unparseable lines contribute nothing; never a raise."""
         try:
             event = parse_run_event(decoded)
         except OpenCodeShapeError:
             pass
         else:
-            return [(event.part, None, None)] if event.type == "step_finish" and event.part is not None else []
+            run_event_parts: list[tuple[OpenCodePart, str | None, str | None]] = (
+                [(event.part, None, None)] if event.type == "step_finish" and event.part is not None else []
+            )
+            return run_event_parts, None
         try:
             message = OpenCodeMessage.parse(decoded)
         except OpenCodeShapeError:
-            return []
-        return [
+            return [], None
+        parts = [
             (part, message.info.provider_id, message.info.model_id)
             for part in message.parts
             if part.type == "step-finish"
         ]
+        observed = (
+            (message.info.provider_id, message.info.model_id)
+            if message.info.provider_id and message.info.model_id
+            else None
+        )
+        return parts, observed
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         by_id: dict[str, tuple[OpenCodePart, str | None, str | None]] = {}
+        observed: tuple[str, str] | None = None
+        # One pass over `lines` (F18): the observed (provider, model) is picked up off the
+        # same decode that yields each line's finish-parts, rather than a second full pass
+        # through `observed_model` re-decoding lines `_worker_sample` may have already read.
         for line in lines:
-            for part, provider, part_model in self._finish_parts_from_line(line):
+            decoded = self._decode_line(line)
+            if decoded is None:
+                continue
+            parts, line_observed = self._parts_and_model_from_decoded(decoded)
+            if line_observed is not None:
+                observed = line_observed
+            for part, provider, part_model in parts:
                 if part.tokens is None:
                     continue
                 if provider is None or part_model is None:
@@ -719,9 +751,12 @@ class OpenCodeAdapter:
             # than silently understated.
             complete = bool(amounts) and all(a is not None for a in amounts)
             estimated_cost_usd = sum(a for a in amounts if a is not None) if complete else None
+        observed_model = f"{observed[0]}/{observed[1]}" if observed is not None else None
         return UsageSample(
             kind=kind,
-            model=model or self._model or "opencode",
+            # The export's own provider/model over a passed-in or configured one (blizzard#629):
+            # an export line names the model that actually ran, which `model` only approximates.
+            model=observed_model or model or self._model or "opencode",
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
@@ -731,6 +766,17 @@ class OpenCodeAdapter:
             cost_usd=None,
             estimated_cost_usd=estimated_cost_usd,
         )
+
+    def observed_model(self, lines: Sequence[str]) -> str | None:
+        observed: tuple[str, str] | None = None
+        for line in lines:
+            decoded = self._decode_line(line)
+            if decoded is None:
+                continue
+            _, line_observed = self._parts_and_model_from_decoded(decoded)
+            if line_observed is not None:
+                observed = line_observed
+        return f"{observed[0]}/{observed[1]}" if observed is not None else None
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         return self._transcript_source

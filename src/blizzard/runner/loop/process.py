@@ -94,24 +94,47 @@ class LinuxProcessProbe:
             return
 
 
+def owned_process_alive(
+    process: IProcessProbe, *, pid: int | None, process_start_time: str | None, pgid: int | None
+) -> bool:
+    """True iff an owned worker's recorded LEADER is alive OR its recorded GROUP still is —
+    a dead leader whose descendant still holds the group reads as alive too. The one shared
+    owner of this liveness check: every owned-process teardown or settled-probe reaches it
+    here rather than reimplementing the check against a possibly-reused pid/pgid."""
+    if pid is None or process_start_time is None:
+        return False
+    return process.is_alive(pid, process_start_time) or (pgid is not None and process.group_alive(pgid))
+
+
 def kill_owned_process(
     process: IProcessProbe, *, pid: int | None, process_start_time: str | None, pgid: int | None
 ) -> None:
     """Best-effort teardown of an owned worker process (D3): by recorded pgid when durable,
-    else by bare pid, gated on the LEADER'S liveness OR the GROUP'S — a dead leader whose
-    descendant still holds the group must still have that group killed. The one shared owner
-    of this liveness-checked, pgid-preferring kill: every owned-process teardown reaches it
-    here rather than reimplementing the check against a possibly-reused pid/pgid."""
+    else by bare pid, gated on :func:`owned_process_alive`."""
     if pid is None or process_start_time is None:
         return
-    leader_alive = process.is_alive(pid, process_start_time)
-    group_still_alive = pgid is not None and process.group_alive(pgid)
-    if not leader_alive and not group_still_alive:
+    if not owned_process_alive(process, pid=pid, process_start_time=process_start_time, pgid=pgid):
         return  # already gone (or replaced by pid/pgid reuse) — nothing of ours to kill
     if pgid is not None:
         process.kill_group(pgid)
     else:
         process.kill(pid)
+
+
+def interrupt_owned_process(
+    process: IProcessProbe, *, pid: int | None, process_start_time: str | None, pgid: int | None
+) -> bool:
+    """Best-effort SIGINT to an owned worker's recorded group, gated on the same
+    leader-identity guard :func:`kill_owned_process` applies — a recycled pgid is never
+    signalled. The one shared owner of the guarded interrupt: every caller reaches it here
+    rather than keeping its own copy of the guard.
+    ``False`` when nothing was signalled: no recorded group, or a leader already dead."""
+    if pgid is None or pid is None or process_start_time is None:
+        return False
+    if not process.is_alive(pid, process_start_time):
+        return False
+    process.interrupt_group(pgid)
+    return True
 
 
 def _conforms_process_probe(x: LinuxProcessProbe) -> IProcessProbe:

@@ -684,6 +684,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadPauseRepository, "local_pause_reason"): lambda w: w.read.pause.local_pause_reason(RUNNER_ID),
     (IReadPauseRepository, "last_daemon_liveness"): lambda w: w.read.pause.last_daemon_liveness(),
     (IReadPauseRepository, "pause_parked_lease_ids"): lambda w: w.read.pause.pause_parked_lease_ids(),
+    (IReadPauseRepository, "open_pause_parks"): lambda w: w.read.pause.open_pause_parks(),
     (IReadTakeoverRepository, "lease_for_open_takeover"): lambda w: w.read.takeover.lease_for_open_takeover(w.lease_5),
     (IReadTakeoverRepository, "open_takeover_for_chunk"): lambda w: w.read.takeover.open_takeover_for_chunk(w.chunk_4),
     (IReadTakeoverRepository, "open_takeover_chunk_ids"): lambda w: w.read.takeover.open_takeover_chunk_ids(),
@@ -726,6 +727,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadElicitationRepository, "in_flight_elicitations"): lambda w: w.read.elicitations.in_flight_elicitations(
         [(w.lease_7, 1)]
+    ),
+    (IReadElicitationRepository, "in_flight_elicitations_by_lease"): lambda w: (
+        w.read.elicitations.in_flight_elicitations_by_lease()
     ),
     (IReadInvocationBoundaryRepository, "boundary"): lambda w: w.read.invocation_boundaries.boundary(
         w.lease_2, 2, "resume"

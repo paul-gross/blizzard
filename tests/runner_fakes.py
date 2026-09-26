@@ -713,6 +713,7 @@ class FakeHarness:
         usage: UsageSample | None = None,
         usage_by_kind: dict[str, UsageSample | None] | None = None,
         transcript_usage: UsageSample | None = None,
+        observed_model: str | None = None,
         transcript_source: IHarnessTranscriptSource | None = None,
         judge_side_effect: Callable[[], None] | None = None,
         judge_pid: int = 8888,
@@ -760,6 +761,10 @@ class FakeHarness:
         # The envelope-less fallback's own reply — distinct from `usage` so a test can
         # script "no envelope, but the transcript sums to this" without the two colliding.
         self.transcript_usage = transcript_usage
+        # `observed_model`'s own scripted reply (blizzard#629) — `None` by default, so a
+        # test that doesn't care about the observation seam reads exactly as before.
+        self._observed_model = observed_model
+        self.observed_model_calls: list[tuple[str, ...]] = []
         self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
         self.resume_froms: list[str | None] = []  # `resume_from` as seen by each spawn (issue #115)
         self.judged: list[tuple[str, str, str]] = []
@@ -979,8 +984,11 @@ class FakeHarness:
     def parse_assessment(self, output: str) -> str:
         return self.assessment
 
-    def needs_usage_transcript(self, output: str) -> bool:
-        return False
+    def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
+        # Mirrors a binding with no configured default of its own (blizzard#629 D4): an
+        # unresolved `model` always needs the observation; a resolved one never does.
+        del output
+        return model is None
 
     def parse_usage(
         self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
@@ -989,6 +997,10 @@ class FakeHarness:
         if self.usage_by_kind is not None and kind in self.usage_by_kind:
             return self.usage_by_kind[kind]
         return self.usage
+
+    def observed_model(self, lines: Sequence[str]) -> str | None:
+        self.observed_model_calls.append(tuple(lines))
+        return self._observed_model
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         self.usage_models.append(model)

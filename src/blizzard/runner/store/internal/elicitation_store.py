@@ -33,6 +33,7 @@ class ElicitationStore:
             return None
         r = row[0]
         return ElicitationRecord(
+            id=int(r.id),
             lease_id=str(r.lease_id),
             epoch=int(r.epoch),
             pid=int(r.pid) if r.pid is not None else None,
@@ -56,6 +57,7 @@ class ElicitationStore:
                 if key not in wanted:
                     continue
                 result[key] = ElicitationRecord(
+                    id=int(r.id),
                     lease_id=key[0],
                     epoch=key[1],
                     pid=int(r.pid) if r.pid is not None else None,
@@ -70,6 +72,23 @@ class ElicitationStore:
     def in_flight_elicitation_lease_ids(self) -> set[str]:
         rows = self._store.all(select(in_flight_elicitations.c.lease_id))
         return {str(r.lease_id) for r in rows}
+
+    def in_flight_elicitations_by_lease(self) -> dict[str, ElicitationRecord]:
+        rows = self._store.all(select(in_flight_elicitations))
+        return {
+            str(r.lease_id): ElicitationRecord(
+                id=int(r.id),
+                lease_id=str(r.lease_id),
+                epoch=int(r.epoch),
+                pid=int(r.pid) if r.pid is not None else None,
+                process_start_time=str(r.process_start_time) if r.process_start_time is not None else None,
+                pgid=int(r.pgid) if r.pgid is not None else None,
+                output_path=str(r.output_path),
+                first_launched_at=r.first_launched_at,
+                relaunch_count=int(r.relaunch_count),
+            )
+            for r in rows
+        }
 
     def record_elicitation_launch(self, lease_id: str, epoch: int, *, output_path: str, at: datetime) -> None:
         # Delete-then-insert: a fresh launch for this (lease, epoch) always starts a clean

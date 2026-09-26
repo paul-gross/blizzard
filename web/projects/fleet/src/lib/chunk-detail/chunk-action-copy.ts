@@ -16,8 +16,8 @@ export function pauseCopy(runnerId: string | null): ChunkActionCopy {
     label: 'Pause',
     subtitle: null,
     text: runnerId
-      ? `Parks the agent within ~30s: its worker is killed but its session is kept. ${runnerId} keeps the claim and its environment. Resume continues the same session.`
-      : `Parks the agent within ~30s: its worker is killed but its session is kept. No runner has claimed it yet, so pausing just holds it out of the queue. Resume continues the same session.`,
+      ? `Parks the agent within ~30s: its worker is interrupted and given a brief grace period to wind down before being force-stopped if it hasn't already exited, but its session is kept. ${runnerId} keeps the claim and its environment. Resume continues the same session.`
+      : `Parks the agent within ~30s: its worker is interrupted and given a brief grace period to wind down before being force-stopped if it hasn't already exited, but its session is kept. No runner has claimed it yet, so pausing just holds it out of the queue. Resume continues the same session.`,
   };
 }
 

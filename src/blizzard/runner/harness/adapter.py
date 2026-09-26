@@ -299,8 +299,14 @@ class IHarnessUsageAccounting(Protocol):
     (``bzh:seam-size-ceiling``) — the result-envelope path and the envelope-less
     transcript-sum fallback."""
 
-    def needs_usage_transcript(self, output: str) -> bool:
-        """Whether this envelope needs invocation-scoped transcript evidence to identify its model."""
+    def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
+        """Whether this invocation needs transcript evidence to price against the right model.
+
+        True either because the envelope itself omits one (Claude Code, independent of
+        ``model``) or because ``model`` is unresolved and this binding has no configured
+        default of its own to fall back on (OpenCode) — never true merely because ``model``
+        is unresolved: a binding with its own default prices off that without paying for
+        a read (blizzard#640)."""
         ...
 
     def parse_usage(
@@ -322,6 +328,12 @@ class IHarnessUsageAccounting(Protocol):
         The envelope-less fallback for a worker killed before its result envelope: token counts
         and ``cost_usd=None`` (a transcript carries no billed figure), maybe an estimate.
         ``model`` is the expected session model for comparison or a binding-specific fallback."""
+        ...
+
+    def observed_model(self, lines: Sequence[str]) -> str | None:
+        """The model a transcript range names as having actually run, or ``None`` when it names
+        none — never a fallback literal, so "observed nothing" reads apart from "observed the
+        default"."""
         ...
 
 

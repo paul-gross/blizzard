@@ -71,8 +71,9 @@ export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false
 /**
  * Pause Chunk
  *
- * Forward a chunk pause to the hub — kills the active worker, keeps the claim
- * (issue #46). ``409`` when the chunk is not in a pausable state.
+ * Forward a chunk pause to the hub — interrupts the active worker, force-stopping it only if
+ * it hasn't wound down within its grace period, and keeps the claim (issue #46). ``409`` when the
+ * chunk is not in a pausable state.
  */
 export const pauseChunkApiChunksChunkIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseChunkApiChunksChunkIdPausePostData, ThrowOnError>): RequestResult<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pause', ...options });
 

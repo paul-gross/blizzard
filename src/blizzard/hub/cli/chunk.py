@@ -240,17 +240,22 @@ def chunk_promote(cli: CliContext, chunk_id: str) -> None:
 @click.argument("chunk_id")
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
-    """Pause CHUNK — the runner kills and parks the worker but keeps the claim (issue #46).
+    """Pause CHUNK — the runner interrupts and parks the worker but keeps the claim (issue #46).
 
-    A pure client of the hub API: ``POST /api/chunks/{id}/pause``. 409 when the chunk is
-    done/stopped/delivering."""
+    The worker gets a brief grace period to wind down before being force-stopped if it hasn't
+    already exited; its spend so far is recorded when it resumes. A pure client of the hub API:
+    ``POST /api/chunks/{id}/pause``. 409 when the chunk is done/stopped/delivering."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/pause",
         "POST /chunks/{id}/pause",
         json_body={"by": by},
         on_status={409: "chunk is not pausable", 404: f"no such chunk {chunk_id}"},
     )
-    cli.finish(resp, f"paused {chunk_id} — its worker will be killed and parked, keeping the claim")
+    cli.finish(
+        resp,
+        f"paused {chunk_id} — its worker is interrupted and given a brief grace period to wind down "
+        "before being force-stopped, keeping the claim",
+    )
 
 
 @chunk_group.command("resume", cls=FleetCommand)

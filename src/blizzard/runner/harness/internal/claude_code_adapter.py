@@ -455,7 +455,10 @@ class ClaudeCodeAdapter:
         """The reply text following ``</Choice>`` — the worker's prose assessment."""
         return harness_shared.text_after_choice_close(self._result_text(output)) or ""
 
-    def needs_usage_transcript(self, output: str) -> bool:
+    def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
+        # The envelope's own shape decides it, independent of `model` (issue #640): a
+        # missing top-level model is a gap this binding has no per-session default for.
+        del model
         envelope = ResultEnvelope.of(output)
         if envelope is None or envelope.usage is None or envelope.model:
             return False
@@ -513,7 +516,6 @@ class ClaudeCodeAdapter:
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         input_tokens = output_tokens = cache_read_tokens = cache_create_tokens = 0
-        resolved = "unknown"
         # A reply carrying several content blocks is written as several records that each
         # repeat their message's ONE usage, so summing per record overcounts (measured 1.7x
         # against the billed figure on a long session). Every field here is per-message.
@@ -531,14 +533,6 @@ class ClaudeCodeAdapter:
             message = record.get("message")
             if not isinstance(message, dict):
                 continue
-            record_model = message.get("model")
-            if (
-                isinstance(record_model, str)
-                and record_model
-                and record_model != "<synthetic>"
-                and not record.get("isSidechain")
-            ):
-                resolved = record_model
             usage = message.get("usage")
             if not isinstance(usage, dict):
                 continue
@@ -553,21 +547,53 @@ class ClaudeCodeAdapter:
             output_tokens += int(usage.get("output_tokens") or 0)
             cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)
             cache_create_tokens += int(usage.get("cache_creation_input_tokens") or 0)
-        if model and resolved != "unknown" and not _matches_model(model, resolved):
+        resolved = self.observed_model(lines)
+        if model and resolved and not _matches_model(model, resolved):
             _log.warning(
                 "harness usage model differs from session model", expected_model=model, observed_model=resolved
             )
-        if resolved == "unknown":
+        if resolved is None:
             _log.warning("harness usage model unavailable", expected_model=model, kind=kind)
         return UsageSample(
             kind=kind,
-            model=resolved,
+            # Never the passed-in or configured default (issue #640): `"unknown"` lets a
+            # caller tell "observed nothing" apart from "observed the fallback" — the same
+            # `observed_model` derives, so the two never drift.
+            model=resolved or "unknown",
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
             cache_create_tokens=cache_create_tokens,
             cost_usd=None,
         )
+
+    def observed_model(self, lines: Sequence[str]) -> str | None:
+        # The last assistant record's own `message.model` — `None` when no record ever
+        # names one. Skipped rather than read as observed: a synthetic `isApiErrorMessage`
+        # record (a rate-limit or provider-overload placeholder, blizzard#594/#595) or a
+        # `"<synthetic>"` model literal, neither of which ever names a model that actually
+        # ran; and a sidechain (subagent) record, which names a different session's model
+        # than the one this generation's own usage is attributed to.
+        observed: str | None = None
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict) or record.get("type") != "assistant":
+                continue
+            if record.get("isApiErrorMessage") is True or record.get("isSidechain"):
+                continue
+            message = record.get("message")
+            if not isinstance(message, dict):
+                continue
+            record_model = message.get("model")
+            if isinstance(record_model, str) and record_model and record_model != "<synthetic>":
+                observed = record_model
+        return observed
 
     def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
         # The signal is the synthetic transcript record (blizzard#594), never `output`:

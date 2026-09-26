@@ -152,7 +152,7 @@ _ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
 
 # The pause CI subset (#46): the family's lone point, the regression fence on the
 # issue's central bug.
-_PAUSE_CI_SUBSET = ("pause.after-kill.before-park",)
+_PAUSE_CI_SUBSET = ("pause.after-interrupt.before-park",)
 
 # The hub command node CI subset (#65): the family's first-declared member is its own CI
 # representative.
@@ -2070,7 +2070,7 @@ def _open_pause_parks(runner_dir: Path) -> set[str]:
 
 @pytest.mark.parametrize("point", _PAUSE_SWEEP)
 def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` between a paused worker's kill and its durable park still keeps the
+    """A ``kill -9`` between a paused worker's interrupt and its durable park still keeps the
     claim (issue #46) — recovery parks the chunk rather than abandoning it, and the resumed
     session lands exactly once under the same lease, no retry consumed."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"

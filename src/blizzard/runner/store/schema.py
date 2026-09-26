@@ -229,6 +229,8 @@ pause_parks = Table(
     Column("lease_id", String, nullable=False),
     Column("chunk_id", String, nullable=False),
     Column("parked_at", UtcDateTime, nullable=False),
+    # The in-flight elicitation the park's interrupt signalled (blizzard#627), or NULL.
+    Column("interrupted_elicitation_id", Integer, nullable=True),
 )
 
 pause_park_resumes = Table(
@@ -492,6 +494,11 @@ in_flight_elicitations = Table(
     Column("output_path", String, nullable=False),
     Column("first_launched_at", UtcDateTime, nullable=False),
     Column("relaunch_count", Integer, nullable=False),
+    # `pause_parks.interrupted_elicitation_id` (blizzard#627) names a row of this table by
+    # `id`; a bare sqlite `INTEGER PRIMARY KEY` reuses a deleted row's rowid, so this pin
+    # matches `outbound_buffer`/`transcript_outbound_buffer`'s own fix
+    # (blizzard-context:/standards/persistence.md) rather than leave that link ambiguous.
+    sqlite_autoincrement=True,
 )
 
 # --- Transcript invocation boundaries (blizzard#437 D6/D11) -------------------

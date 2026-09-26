@@ -84,6 +84,9 @@ class _FakeElicitations:
     def in_flight_elicitation_lease_ids(self) -> set[str]:
         raise NotImplementedError  # unused by backing_off_facts
 
+    def in_flight_elicitations_by_lease(self) -> dict[str, ElicitationRecord]:
+        raise NotImplementedError  # unused by backing_off_facts
+
 
 def _worker_fact(**overrides: object) -> OverloadFactRecord:
     fields: dict[str, object] = {
@@ -138,6 +141,7 @@ def _judge_fact(**overrides: object) -> OverloadFactRecord:
 
 def _elicitation(*, first_launched_at: datetime) -> ElicitationRecord:
     return ElicitationRecord(
+        id=1,
         lease_id="lease_1",
         epoch=1,
         pid=200,
