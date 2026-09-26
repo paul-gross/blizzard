@@ -38,10 +38,10 @@ HUB_CAPPED = "hub_capped"
 #: content was already read, shipped, and hub-confirmed lost, never merely unattempted.
 HUB_CAPPED_SEVERITY = max(TRUNCATION_REASON_SEVERITY.values()) + 1
 
-#: A final marker's own upper bound, no render needed (D6): its shape is a handful of
-#: short ids and scalars with an empty `turns`, well under this even at the widest
-#: realistic id lengths — a declared constant, not a measurement, is the honest fallback
-#: `_batches` sizes it by; `_deliver_batch` alone ever renders one for real.
+#: A final marker's own upper bound, no render needed: its shape is a handful of short
+#: ids and scalars with an empty `turns`, well under this even at the widest realistic id
+#: lengths — a declared constant, not a measurement, is the honest fallback `_batches`
+#: sizes it by; `_deliver_batch` alone ever renders one for real.
 _FINAL_RECORD_SIZE_ESTIMATE_BYTES = 2048
 
 #: A non-final delta's estimate padding, over `len(payload)` alone, for the `seq` field
@@ -110,8 +110,8 @@ class TranscriptDrain:
     def _batches(self, pending: list[BufferedTranscriptDelta]) -> Iterator[list[BufferedTranscriptDelta]]:
         """Greedily group pending deltas into batches at or below the per-record byte cap
         (one oversized record still ships alone). Sizes each delta from its own already-
-        stored fields (D6) — never renders or ``model_dump_json``s a record just to measure
-        it; ``_deliver_batch`` is the one place a record is actually rendered."""
+        stored fields — never renders or ``model_dump_json``s a record just to measure it;
+        ``_deliver_batch`` is the one place a record is actually rendered."""
         cap = self._record_max_bytes
         batch: list[BufferedTranscriptDelta] = []
         batch_bytes = 0
@@ -128,10 +128,12 @@ class TranscriptDrain:
 
     @staticmethod
     def _estimated_size(delta: BufferedTranscriptDelta) -> int:
-        """A delta's estimated wire size, always ``>=`` its actual rendered length (D6): a
-        non-final delta's ``payload`` already IS the wire body sans ``seq``, so its own byte
-        length plus a fixed pad for that field is exact enough to bound; a final marker's
-        payload is not the wire body at all, so it sizes by the declared upper bound instead."""
+        """A delta's estimated wire size, always ``>=`` its actual rendered length: a
+        non-final delta's ``payload`` already IS the wire body sans ``seq``, with every
+        optional field the wire model can default already written explicit rather than
+        omitted, so its own byte length plus a fixed pad for that field is exact enough to
+        bound; a final marker's payload is not the wire body at all, so it sizes by the
+        declared upper bound instead."""
         if delta.final:
             return _FINAL_RECORD_SIZE_ESTIMATE_BYTES
         return len(delta.payload.encode("utf-8")) + _SEQ_FIELD_ESTIMATE_BYTES
@@ -141,7 +143,7 @@ class TranscriptDrain:
         return resolve_record_max_bytes(self.ctx)
 
     def _deliver_batch(self, deltas: list[BufferedTranscriptDelta]) -> bool:
-        # The one render per record (D6) — `_batches` above never renders, only estimates.
+        # The one render per record — `_batches` above never renders, only estimates.
         final_segments = self.ctx.stores.transcript_ledger.transcript_segments(
             [delta.segment_id for delta in deltas if delta.final]
         )
@@ -176,9 +178,9 @@ class TranscriptDrain:
         """A non-final row's ``payload`` already IS the wire body, built by
         :class:`TranscriptPump`. A final marker's is deliberately minimal — every field it
         needs is already frozen on the ledger row, read from ``final_segments`` — one
-        :meth:`~IReadTranscriptLedgerRepository.transcript_segments` call per batch (D6),
-        rather than one :meth:`~IReadTranscriptLedgerRepository.transcript_segment` per
-        final marker — so it reflects an earlier batch's just-applied hub-cap ack."""
+        :meth:`~IReadTranscriptLedgerRepository.transcript_segments` call per batch, rather
+        than one :meth:`~IReadTranscriptLedgerRepository.transcript_segment` per final
+        marker — so it reflects an earlier batch's just-applied hub-cap ack."""
         if not delta.final:
             return TranscriptSegmentRecord.model_validate({"seq": delta.seq, **json.loads(delta.payload)})
         segment = final_segments.get(delta.segment_id)

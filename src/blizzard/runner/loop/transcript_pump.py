@@ -17,7 +17,7 @@ from typing import Any, Literal
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import (
@@ -109,11 +109,11 @@ class _OutstandingBudget:
 @dataclass
 class _ShippedBytesMirror:
     """This run's own local mirror of each chunk's ``shipped_bytes`` total — seeded from
-    ONE plural read over every chunk this run's segments touch (D5), then advanced locally
+    ONE plural read over every chunk this run's segments touch, then advanced locally
     exactly where :meth:`_OutstandingBudget.accept` advances today, so a later segment of
     the same chunk in the same run sees the current total without re-querying the store.
-    Never cross-tick (D5): each ``run()``/``pump_lease()``/``drain_segment`` call seeds its
-    own, fresh — the per-tick re-derivation ``crash-correctness/transcripts.md`` relies on."""
+    Never cross-tick: each ``run()``/``pump_lease()``/``drain_segment`` call seeds its own,
+    fresh — the per-tick re-derivation ``crash-correctness/transcripts.md`` relies on."""
 
     totals: dict[str, int]
 
@@ -122,17 +122,6 @@ class _ShippedBytesMirror:
 
     def accept(self, chunk_id: str, n: int) -> None:
         self.totals[chunk_id] = self.before(chunk_id) + n
-
-
-def _held_bindings_by_chunk(ctx: LoopContext) -> dict[str, list[EnvBindingRecord]]:
-    """Every held binding, grouped by chunk — one :meth:`~IReadEnvironmentRepository.held_bindings`
-    read per pass (D5), rather than :meth:`~IReadEnvironmentRepository.bindings_for_chunk`
-    once per segment. A lease's segments share one chunk, so this is looked up once per
-    chunk regardless of how many open segments it holds."""
-    by_chunk: dict[str, list[EnvBindingRecord]] = {}
-    for binding in ctx.stores.environments.held_bindings():
-        by_chunk.setdefault(binding.chunk_id, []).append(binding)
-    return by_chunk
 
 
 @dataclass(frozen=True)
@@ -162,12 +151,12 @@ class TranscriptPump:
         if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
             return
         segments = self.ctx.stores.transcript_ledger.open_transcript_segments()
-        # One store read each for the whole run (blizzard#246, D5) — each segment this run
+        # One store read each for the whole run (blizzard#246) — each segment this run
         # ships advances `budget`/`shipped` locally, so a later segment sees the current
         # totals without re-querying a store this same run's own writes would make stale.
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         shipped = self._shipped_bytes_mirror(segments)
-        bindings_by_chunk = _held_bindings_by_chunk(self.ctx)
+        bindings_by_chunk = self._bindings_by_chunk(segments)
         for segment in segments:
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 break  # this run's bound reached — the rest catch up on a later tick
@@ -184,7 +173,7 @@ class TranscriptPump:
         segments = self.ctx.stores.transcript_ledger.open_transcript_segments_for_lease(lease_id)
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         shipped = self._shipped_bytes_mirror(segments)
-        bindings_by_chunk = _held_bindings_by_chunk(self.ctx)
+        bindings_by_chunk = self._bindings_by_chunk(segments)
         for i, segment in enumerate(segments):
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 # Every remaining segment loses just as silently as a partially-drained one.
@@ -222,7 +211,7 @@ class TranscriptPump:
             if shipped is None:
                 shipped = self._shipped_bytes_mirror([segment])
             if bindings_by_chunk is None:
-                bindings_by_chunk = _held_bindings_by_chunk(self.ctx)
+                bindings_by_chunk = self._bindings_by_chunk([segment])
         for _ in range(_PUMP_LEASE_MAX_ITERATIONS):
             segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
             if segment is None:
@@ -245,13 +234,21 @@ class TranscriptPump:
         return False
 
     def _shipped_bytes_mirror(self, segments: list[TranscriptSegmentLedgerRow]) -> _ShippedBytesMirror:
-        """Seed a fresh per-run mirror (D5) over exactly the chunks ``segments`` touch — never
+        """Seed a fresh per-run mirror over exactly the chunks ``segments`` touch — never
         cross-tick, never cross-call: each ``run()``/``pump_lease()``/``drain_segment`` seeds
         its own, so ``crash-correctness/transcripts.md``'s "re-derived fresh every tick"
         claim about the chunk budget stays true."""
         chunk_ids = sorted({segment.chunk_id for segment in segments})
-        totals = self.ctx.stores.transcript_ledger.chunk_transcript_shipped_bytes_for_chunks(chunk_ids)
+        totals = self.ctx.stores.transcript_ledger.chunk_transcript_shipped_bytes(chunk_ids)
         return _ShippedBytesMirror(totals)
+
+    def _bindings_by_chunk(self, segments: list[TranscriptSegmentLedgerRow]) -> dict[str, list[EnvBindingRecord]]:
+        """Every held binding this call's segments could need, grouped by chunk — skipped
+        entirely with no segments to pump, the same short-circuit an empty chunk set already
+        gets :meth:`_shipped_bytes_mirror`'s own read for free."""
+        if not segments:
+            return {}
+        return group_bindings_by_chunk(self.ctx.stores.environments.held_bindings())
 
     def _pump_one_safe(
         self,
@@ -475,6 +472,9 @@ def _tool_wire(tool: ToolCall) -> dict[str, Any]:
         "output_truncated": tool.output_truncated,
         # Not a harness-seam field: only the shrink pass, mutating this dict, ever sets it True.
         "input_truncated": False,
+        # Only `_output_patch_wire` sets this True; written explicit here so the stored payload
+        # already carries every wire-model default `TranscriptDrain._estimated_size` sizes from.
+        "output_patch": False,
     }
 
 
@@ -549,6 +549,9 @@ def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
         "agent_type": sidechain.agent_type,
         "link": sidechain.link,
         "turns": [_turn_wire(t, i) for i, t in enumerate(sidechain.turns)],
+        # Only `_late_sidechain_wire` overrides this; written explicit here for the same reason
+        # `_tool_wire`'s own `output_patch` is — see there.
+        "parent_tool_use_id": None,
     }
 
 

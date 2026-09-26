@@ -79,14 +79,7 @@ class TranscriptLedgerStore:
         )
         return [self._row_to_transcript_segment(r) for r in self._store.all(stmt)]
 
-    def chunk_transcript_shipped_bytes(self, chunk_id: str) -> int:
-        stmt = select(func.coalesce(func.sum(transcript_segments.c.shipped_bytes), 0)).where(
-            transcript_segments.c.chunk_id == chunk_id
-        )
-        with self._store.connect() as conn:
-            return int(conn.execute(stmt).scalar_one())
-
-    def chunk_transcript_shipped_bytes_for_chunks(self, chunk_ids: Sequence[str]) -> dict[str, int]:
+    def chunk_transcript_shipped_bytes(self, chunk_ids: Sequence[str]) -> dict[str, int]:
         if not chunk_ids:
             return {}
         result: dict[str, int] = {}

@@ -33,9 +33,9 @@ MAX_BATCH_BYTES = 8 * 1024 * 1024
 CONTEXT_TAIL_BYTES = 1024 * 1024
 _CONTEXT_WIDEN = 8
 
-#: Bounds the locator's resolved-path cache (D7) — this source's instance lives for the
-#: whole process (`build_production_harness_registry` builds it once), so unbounded growth
-#: across a long-lived runner's whole session history would otherwise never be reclaimed.
+#: Bounds the locator's resolved-path cache — this source's instance lives for the whole
+#: process (`build_production_harness_registry` builds it once), so unbounded growth across
+#: a long-lived runner's whole session history would otherwise never be reclaimed.
 _RESOLVED_PATH_CACHE_MAX_ENTRIES = 2048
 
 
@@ -247,7 +247,7 @@ class ClaudeCodeTranscriptSource:
     def __init__(self, projects_root: str, error_factory: TranscriptErrorFactory) -> None:
         self._projects_root = Path(projects_root)
         self._errors = error_factory
-        # D7: only an UNAMBIGUOUS resolution is cached — a sole match, or the one the
+        # Only an UNAMBIGUOUS resolution is cached — a sole match, or the one the
         # spawn-cwd hint selected. An mtime-fallback pick is never cached (a newer file
         # could legitimately appear later), so it is re-globbed on every call.
         self._resolved: OrderedDict[tuple[str, str | None], Path] = OrderedDict()
@@ -428,7 +428,8 @@ class ClaudeCodeTranscriptSource:
 
     def _resolve(self, session_id: str, spawn_cwd: str | None) -> Path | None:
         """The session's transcript file — cached when the earlier resolution was
-        unambiguous (D7), else re-globbed. ``None`` when no match exists at all."""
+        unambiguous, else re-globbed. ``None`` when no match exists, or when the mtime
+        tie-break's own ``stat()`` loses a race against a file removed after the glob."""
         key = (session_id, spawn_cwd)
         cached = self._resolved.get(key)
         if cached is not None:
@@ -437,7 +438,10 @@ class ClaudeCodeTranscriptSource:
         matches = self._matches(session_id)
         if not matches:
             return None
-        path, cacheable = self._locate(matches, spawn_cwd)
+        try:
+            path, cacheable = self._locate(matches, spawn_cwd)
+        except OSError:
+            return None
         if cacheable:
             self._cache_path(key, path)
         return path
@@ -449,7 +453,7 @@ class ClaudeCodeTranscriptSource:
             self._resolved.popitem(last=False)
 
     def _evict(self, session_id: str, spawn_cwd: str | None) -> None:
-        """Drop a cached resolution after a read against it failed (D7) — a moved or
+        """Drop a cached resolution after a read against it failed — a moved or
         rotated-away file re-resolves on this session's next call, rather than staying
         wedged on a path that no longer works."""
         self._resolved.pop((session_id, spawn_cwd), None)
@@ -460,10 +464,13 @@ class ClaudeCodeTranscriptSource:
     @classmethod
     def _locate(cls, matches: list[Path], spawn_cwd: str | None) -> tuple[Path, bool]:
         """The session's file: the sole match, else the spawn-cwd hint, else newest by mtime —
-        paired with whether the pick is cacheable (D7): unambiguous (the first two arms), never
-        an mtime fallback, since a newer file could legitimately appear later."""
+        paired with whether the pick is cacheable: unambiguous (a sole match agreeing with the
+        hint when one is given, or the hint's own match), never a sole match disagreeing with
+        the hint or an mtime fallback, since a newer or better-matching file could legitimately
+        appear later."""
         if len(matches) == 1:
-            return matches[0], True
+            match = matches[0]
+            return match, spawn_cwd is None or match.parent.name == cls.mangle_cwd(spawn_cwd)
         if spawn_cwd:
             wanted = cls.mangle_cwd(spawn_cwd)
             for match in matches:

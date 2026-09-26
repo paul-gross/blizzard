@@ -6,7 +6,7 @@ Two shapes per new plural: it matches its singular sibling and drops an unknown 
 own statement count is flat across a lowered ``BATCH_SIZE`` boundary. The tick tests drive a
 full ``tick(ctx)`` at N=1 and N=10 steady-state leases and pin the statement count equal —
 the test the work item calls out as mattering more than any single fix. The last section does
-the same for ``RunnerStatusService.escalations()`` (hub:143's runner-API read path, Phase 3)."""
+the same for ``RunnerStatusService.escalations()`` (hub:143's runner-API read path)."""
 
 from __future__ import annotations
 
@@ -284,7 +284,7 @@ def _tick_statement_count(tmp_path: Path, n: int, *, ship: bool = False) -> int:
         _seed_steady_state_lease(store, i, at=_NOW)
     # Every session is unscripted (`FakeTranscriptSource.turns_since` reads that as
     # `available=False`), so turning shipping on still ships nothing this tick — the pump
-    # runs its own bulk reads (D5) but writes nothing, keeping the count flat either way.
+    # runs its own bulk reads but writes nothing, keeping the count flat either way.
     source = FakeTranscriptSource(context_tokens_by_session={f"sess-{i}": 100 for i in range(n)})
     # No spawn happens this tick (every lease is already spawned) — the handle is never read.
     handle = WorkerHandle(session_id="unused", pid=1, process_start_time="unused", pgid=1)
@@ -318,16 +318,15 @@ def test_a_full_tick_issues_the_same_statement_count_at_n1_and_n10_alive_leases(
 
 
 def test_a_full_tick_is_still_flat_at_n1_and_n10_with_transcript_shipping_on(tmp_path: Path) -> None:
-    """Phase 2's own extension of the Phase 1 tick test: with shipping on, one open segment
-    per lease (every spawn opens one), the pump's own bulk reads (D5) must not turn the
-    tick's flat statement count back into a per-lease slope."""
+    """With shipping on, one open segment per lease (every spawn opens one), the pump's own
+    bulk reads must not turn the tick's flat statement count back into a per-lease slope."""
     one = _tick_statement_count(tmp_path / "n1", 1, ship=True)
     ten = _tick_statement_count(tmp_path / "n10", 10, ship=True)
 
     assert one == ten
 
 
-# --- RunnerStatusService.escalations() (hub:143, Phase 3) -----------------------------------
+# --- RunnerStatusService.escalations() (hub:143) ---------------------------------------------
 
 
 def _status_service(store: SqlAlchemyRunnerStore) -> RunnerStatusService:
@@ -390,9 +389,9 @@ def _seed_escalated_lease(store: SqlAlchemyRunnerStore, i: int, *, at: datetime)
 
 
 def test_escalations_statement_count_is_flat_across_1_and_10_open_escalations(tmp_path: Path) -> None:
-    """D3's runner-API read path: resolving every parked escalation's resume command must
-    read the fleet's held bindings once, not once per escalation (`bindings_for_chunk` per
-    escalation would slope with the open-escalation count)."""
+    """Resolving every parked escalation's resume command must read the fleet's held
+    bindings once, not once per escalation (`bindings_for_chunk` per escalation would slope
+    with the open-escalation count)."""
     store, engine = _store(tmp_path / "one")
     _seed_escalated_lease(store, 0, at=_NOW)
     one = support.count_queries(engine, lambda: _status_service(store).escalations())

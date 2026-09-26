@@ -116,8 +116,6 @@ class _IReadLeaseGeneration(Protocol):
     :class:`~blizzard.runner.domain.leases.LocalLeaseService`'s own use of
     :func:`backing_off_facts` (a cycle either direction's concrete import would close)."""
 
-    def lease_generation(self, lease_id: str) -> int: ...
-
     def lease_generations(self, lease_ids: Sequence[str]) -> dict[str, int]: ...
 
 

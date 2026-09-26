@@ -650,10 +650,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
         w.read.transcript_ledger.transcript_segments_for_chunk(w.chunk_1)
     ),
     (IReadTranscriptLedgerRepository, "chunk_transcript_shipped_bytes"): lambda w: (
-        w.read.transcript_ledger.chunk_transcript_shipped_bytes(w.chunk_1)
-    ),
-    (IReadTranscriptLedgerRepository, "chunk_transcript_shipped_bytes_for_chunks"): lambda w: (
-        w.read.transcript_ledger.chunk_transcript_shipped_bytes_for_chunks([w.chunk_1])
+        w.read.transcript_ledger.chunk_transcript_shipped_bytes([w.chunk_1])
     ),
     (IReadTranscriptLedgerRepository, "outstanding_transcript_buffer_bytes"): lambda w: (
         w.read.transcript_ledger.outstanding_transcript_buffer_bytes()

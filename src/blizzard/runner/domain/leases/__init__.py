@@ -36,7 +36,7 @@ from blizzard.runner.domain.leases.session import (
     IWriteLeaseSessionRepository,
 )
 from blizzard.runner.domain.overload import backing_off_facts
-from blizzard.runner.environments.repository import EnvBindingRecord
+from blizzard.runner.environments.repository import group_bindings_by_chunk
 from blizzard.runner.harness.identity import SessionReference
 
 if TYPE_CHECKING:
@@ -303,9 +303,7 @@ class LocalLeaseService:
         backing_off = backing_off_facts(self._stores.overload, self._stores.liveness, self._stores.elicitations)
         leases = self._stores.lease_record.list_active_leases()
         facts_by_lease = self._stores.liveness.liveness_facts([lease.lease_id for lease in leases])
-        bindings_by_chunk: dict[str, list[EnvBindingRecord]] = {}
-        for binding in self._stores.environments.held_bindings():
-            bindings_by_chunk.setdefault(binding.chunk_id, []).append(binding)
+        bindings_by_chunk = group_bindings_by_chunk(self._stores.environments.held_bindings())
         activities: list[LeaseActivity] = []
         for lease in leases:
             facts = facts_by_lease.get(lease.lease_id)

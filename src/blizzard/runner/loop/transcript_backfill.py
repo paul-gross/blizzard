@@ -248,7 +248,7 @@ class TranscriptBackfill:
 
     def _capped_count(self, segment_ids: list[str]) -> int:
         """How many of ``segment_ids`` the hub refused, or the runner stopped shipping —
-        one bulk read after the import loops (D8), rather than one
+        one bulk read after the import loops, rather than one
         :meth:`~IReadTranscriptLedgerRepository.transcript_segment` per imported segment."""
         if not segment_ids:
             return 0

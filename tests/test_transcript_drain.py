@@ -726,9 +726,9 @@ def test_drain_run_survives_the_pump_itself_raising_outside_the_segment_loop() -
 
 
 def test_estimated_size_bounds_the_actual_rendered_length_for_non_final_and_final_records() -> None:
-    """review hub:143 fix 3: `_batches` sizes from the delta's own stored fields alone (D6),
-    never a render — this pins that the estimate never under-counts what `_deliver_batch`
-    actually renders, for both a content delta and a final marker."""
+    """`_batches` sizes from the delta's own stored fields alone, never a render — this pins
+    that the estimate never under-counts what `_deliver_batch` actually renders, for both a
+    content delta and a final marker."""
     hub = FakeHub()
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
@@ -789,8 +789,8 @@ def test_estimated_size_bounds_the_actual_rendered_length_for_non_final_and_fina
 
 
 def test_deliver_batch_reads_final_marker_segments_through_one_batched_call() -> None:
-    """review hub:143 fix 3: two final markers landing in the SAME batch read their segment
-    rows through one `transcript_segments(ids)` call, not one `transcript_segment` each."""
+    """Two final markers landing in the SAME batch read their segment rows through one
+    `transcript_segments(ids)` call, not one `transcript_segment` each."""
     hub = FakeHub()
     ctx = _ctx(hub)
     segment_1 = _spawn_one_segment(ctx)
