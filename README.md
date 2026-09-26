@@ -25,10 +25,9 @@
 </p>
 
 Blizzard runs **the loops around the work**. Ingest items from your backlog, sequence them, and blizzard's runners take
-the work to completion. Each one is leased an isolated environment in **your own workspace**,
-what it returns is judged, the result is driven to delivery,
-and every step recovers correctly when any of it is interrupted. Those loops, and the facts they record, are the whole
-product.
+the work to completion. Each one is leased an isolated environment in **your own workspace**, what it returns is judged,
+the result is driven to delivery, and every step recovers correctly when any of it is interrupted. Those loops, and the
+facts they record, are the whole product.
 
 <p align="center">
   <picture>
@@ -44,7 +43,8 @@ stop for a human. One engineer keeps a hand on every station and stays *in* the 
 unattended and stays *on* it. A team grows its fleet by adding machines rather than by coordinating calendars, and every
 engineer's agents show up on the same board.
 
-📚 **Operator docs:** [`docs/index.md`](./docs/index.md) · 🐳 **Start here:** [`docs/install.md`](./docs/install.md)
+📚 **Operator docs:** [`docs/index.md`](./docs/index.md) · 🐳 **Start here:** [`docs/install.md`](./docs/install.md) ·
+🛡️ **Security policy:** [`SECURITY.md`](./SECURITY.md)
 
 ## ✨ Features
 
@@ -220,14 +220,14 @@ reference binding is the first implementation of the interface.
 This is not a claim to have solved harness engineering, or to serve every part of it equally well. The aim is narrower:
 to solve one problem exceptionally well, and to stay replaceable everywhere else.
 
-| Seam               | What plugs in                                             | Reference binding                                                   |
-| ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------- |
+| Seam               | What plugs in                                             | Reference binding                                                                         |
+| ------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | **Workspace**      | Provides isolated, poly-repo execution environments       | Built-in worktrees or [winter](https://github.com/paul-gross/winter) feature environments |
-| **Work source**    | The system holding the backlog, ingested by item id       | GitHub issues                                                       |
-| **Coding harness** | The agent that actually does the work                     | Claude Code                                                         |
-| **Workflow**       | How work moves: graphs of nodes, judgements, and gates    | Hub-defined YAML workflow graphs                                    |
-| **Delivery**       | Integrates finished work, executed at the hub             | Checked GitHub pull requests merged into the main branch            |
-| **Human channel**  | Reaches people for questions, escalations, and visibility | The mission-control board                                           |
+| **Work source**    | The system holding the backlog, ingested by item id       | GitHub issues                                                                             |
+| **Coding harness** | The agent that actually does the work                     | Claude Code                                                                               |
+| **Workflow**       | How work moves: graphs of nodes, judgements, and gates    | Hub-defined YAML workflow graphs                                                          |
+| **Delivery**       | Integrates finished work, executed at the hub             | Checked GitHub pull requests merged into the main branch                                  |
+| **Human channel**  | Reaches people for questions, escalations, and visibility | The mission-control board                                                                 |
 
 Winter is the opinionated preference for the workspace, because it cuts both ways: a human uses it directly for
 efficient local development, and blizzard uses the same thing for efficient agent development. A winter feature
