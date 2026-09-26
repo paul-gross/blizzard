@@ -18,11 +18,12 @@ from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKin
 from blizzard.hub.domain.work import IWriteWorkItemRepository, WorkItemAuthor, WorkRef, mint_chunk
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import build_hub, hub_store_connections
+from tests.support import build_hub, count_queries, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -52,6 +53,91 @@ def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignor
         findings=["fin_1"],
         at=_NOW,
     )
+
+
+def _seed_proposals(hub, proposal_ids: list[str]) -> None:  # type: ignore[no-untyped-def]
+    with hub.engine.begin() as conn:
+        conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
+    store = hub_store_connections(hub.engine)
+    findings = FindingStore(store)
+    proposals = GardenProposalStore(store)
+    for i, proposal_id in enumerate(proposal_ids):
+        finding_id = f"fin_{i}"
+        findings.add(
+            finding_id,
+            routine_name="nightly",
+            scope_slug="blizzard",
+            class_="stale-docstring",
+            locus="a.py:1",
+            summary="s1",
+            introduced=None,
+            at=_NOW,
+        )
+        proposals.create(
+            proposal_id,
+            routine_name="nightly",
+            class_="fix-the-source",
+            title="Author a docstring standard",
+            body="the case",
+            findings=[finding_id],
+            at=_NOW,
+        )
+
+
+def test_get_many_matches_get_across_two_closed_proposals_and_skips_an_unclosed_one(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_proposals(hub, ["gprop_1", "gprop_2", "gprop_3"])
+    closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
+    closures.record_pass("gprop_1", reason="r1", closed_by="u1", at=_NOW)
+    closures.record_accept_decline("gprop_2", reason=None, closed_by="u1", at=_NOW)
+
+    result = closures.get_many(["gprop_1", "gprop_2", "gprop_3", "gprop_ghost"])
+
+    assert set(result) == {"gprop_1", "gprop_2"}
+    assert result["gprop_1"].closure is GardenProposalClosureKind.PASSED
+    assert result["gprop_2"].closure is GardenProposalClosureKind.ACCEPTED
+
+
+def test_get_many_of_no_ids_is_empty(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert GardenProposalClosureStore(hub_store_connections(hub.engine)).get_many([]) == {}
+
+
+def test_get_many_matches_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    hub = build_hub(tmp_path)
+    proposal_ids = [f"gprop_{i}" for i in range(7)]
+    _seed_proposals(hub, proposal_ids)
+    closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
+    for proposal_id in proposal_ids:
+        closures.record_pass(proposal_id, reason="r", closed_by="u1", at=_NOW)
+
+    result = closures.get_many(proposal_ids)
+
+    assert set(result) == set(proposal_ids)
+    for proposal_id in proposal_ids:
+        assert result[proposal_id].closure is GardenProposalClosureKind.PASSED
+
+
+def test_get_many_query_cost_scales_linearly_with_batch_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each batch's own read costs the same regardless of trailing size — the per-batch
+    cost is constant, so the total grows with batch count, not id count."""
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    hub = build_hub(tmp_path)
+    proposal_ids = [f"gprop_{i}" for i in range(7)]
+    _seed_proposals(hub, proposal_ids)
+    closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
+    for proposal_id in proposal_ids:
+        closures.record_pass(proposal_id, reason="r", closed_by="u1", at=_NOW)
+
+    one_batch_count = count_queries(hub.engine, lambda: closures.get_many(proposal_ids[:3]))
+    two_batch_count = count_queries(hub.engine, lambda: closures.get_many(proposal_ids[:6]))
+    three_batch_count = count_queries(hub.engine, lambda: closures.get_many(proposal_ids))
+
+    per_batch_cost = two_batch_count - one_batch_count
+    assert per_batch_cost > 0
+    assert two_batch_count == one_batch_count + per_batch_cost
+    assert three_batch_count == one_batch_count + 2 * per_batch_cost  # the trailing size-1 batch costs the same
 
 
 def test_record_pass_then_get_round_trips(tmp_path: Path) -> None:

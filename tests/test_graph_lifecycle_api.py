@@ -223,7 +223,7 @@ def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path
         )
     # Only the one graph this test itself minted exists — the retire was not undone
     # by a silent re-mint racing ahead of the assertion above.
-    same_name = [g for g in restarted.services.graphs.list_all() if g.name == doc.name]
+    same_name = [g for g in restarted.services.graphs.list_summaries() if g.name == doc.name]
     assert [g.graph_id for g in same_name] == [graph.graph_id]
 
     # The route-level refusal an operator actually hits: ingest against the retired

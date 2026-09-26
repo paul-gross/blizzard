@@ -25,10 +25,8 @@ from blizzard.hub.domain.findings import (
 )
 from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
-
-#: `_facts_for_many`'s per-statement id-batch size — see that method's docstring (review:F6).
-_FACTS_BATCH_SIZE = 500
 
 #: `list_page`'s cursor: a plain `finding_id`, already total (blizzard#526 D4) unlike chunks' `minted_at`.
 _CURSOR_ARITY = 1
@@ -154,15 +152,18 @@ class FindingStore:
         return self._of(row, facts)
 
     def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
-        """`get`'s batched sibling — one row query plus one `_facts_for_many` query for
-        every id in `finding_ids`, so a bulk exit verb's read side never issues one query
-        pair per row (blizzard#394)."""
+        """`get`'s batched sibling (`bzh:bulk-reconstitution`) — one row query and one
+        `_facts_for_many` query per `id_batches` batch over `finding_ids`, so a bulk exit
+        verb's read side never issues one query pair per row (blizzard#394)."""
         if not finding_ids:
             return {}
+        result: dict[str, Finding] = {}
         with self._store.read("get_many") as conn:
-            rows = conn.execute(select(findings).where(findings.c.finding_id.in_(finding_ids))).all()
-            facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
-            return {row.finding_id: self._of(row, facts_by_id[row.finding_id]) for row in rows}
+            for batch in id_batches(finding_ids):
+                rows = conn.execute(select(findings).where(findings.c.finding_id.in_(batch))).all()
+                facts_by_id = self._facts_for_many(conn, [row.finding_id for row in rows])
+                result.update({row.finding_id: self._of(row, facts_by_id[row.finding_id]) for row in rows})
+        return result
 
     def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
         with self._store.read("get_with_facts") as conn:
@@ -287,15 +288,14 @@ class FindingStore:
         return [self._fact_of(r) for r in rows]
 
     def _facts_for_many(self, conn, finding_ids: list[str]) -> dict[str, list[FindingFact]]:  # type: ignore[no-untyped-def]
-        """One query per up-to-`_FACTS_BATCH_SIZE`-id batch (index-backed on
+        """One query per `id_batches` batch over `finding_ids` (index-backed on
         `ix_finding_facts_finding_id_id`) — `list_across_routines` (blizzard#486) can hand
         this an unbounded id list, and one unbatched `IN (...)` would eventually exceed
         the driver's own per-statement bind-parameter ceiling (review:F6)."""
         grouped: dict[str, list[FindingFact]] = {finding_id: [] for finding_id in finding_ids}
         if not finding_ids:
             return grouped
-        for start in range(0, len(finding_ids), _FACTS_BATCH_SIZE):
-            batch = finding_ids[start : start + _FACTS_BATCH_SIZE]
+        for batch in id_batches(finding_ids):
             rows = conn.execute(
                 select(finding_facts)
                 .where(finding_facts.c.finding_id.in_(batch))

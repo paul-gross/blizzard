@@ -303,8 +303,9 @@ class GraphStore:
                 .where(graphs.c.name == name)
                 .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
             ).all()
+            retired = self._retired_among(conn, [row.graph_id for row in rows])
             for row in rows:
-                if not self._is_retired(conn, row.graph_id):
+                if row.graph_id not in retired:
                     return self._reify(conn, row)
             return None
 
@@ -317,10 +318,29 @@ class GraphStore:
                 .where(graphs.c.name == name)
                 .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
             ).all()
+            retired = self._retired_among(conn, [row.graph_id for row in rows])
             for row in rows:
-                if not self._is_retired(conn, row.graph_id):
+                if row.graph_id not in retired:
                     return row.graph_id
             return None
+
+    def _retired_among(self, conn, graph_ids: Sequence[str]) -> set[str]:  # type: ignore[no-untyped-def]
+        """``get_enabled_by_name``/``graph_id_of_enabled_name``'s shared retirement
+        filter — the newest lifecycle fact for each of ``graph_ids`` only, batched
+        through :func:`id_batches`, rather than :meth:`retired_graph_ids`'s every-graph
+        read or one :meth:`_is_retired` query per candidate."""
+        if not graph_ids:
+            return set()
+        newest: dict[str, bool] = {}
+        for batch in id_batches(graph_ids):
+            rows = conn.execute(
+                select(graph_lifecycle_facts.c.graph_id, graph_lifecycle_facts.c.retired)
+                .where(graph_lifecycle_facts.c.graph_id.in_(batch))
+                .order_by(graph_lifecycle_facts.c.id)
+            ).all()
+            for row in rows:
+                newest[row.graph_id] = row.retired  # newest-fact-wins: ascending id order overwrites
+        return {graph_id for graph_id, retired in newest.items() if retired}
 
     def get_many(self, graph_ids: Sequence[str]) -> dict[str, Graph]:
         """``get``'s batched sibling (D11, blizzard#433 Phase 3) — every requested id's
@@ -437,14 +457,9 @@ class GraphStore:
             ).first()
         return str(row.definition_yaml) if row is not None else None
 
-    def list_all(self) -> list[Graph]:
-        with self._store.read("list_all") as conn:
-            rows = conn.execute(select(graphs).order_by(graphs.c.created_at.desc())).all()
-            return [self._reify(conn, row) for row in rows]
-
     def list_summaries(self) -> list[GraphSummary]:
-        """``list_all``'s narrow sibling — every minted graph's listing-shape fields,
-        newest first, with no per-graph fan-out into nodes/edges/sessions/artifacts."""
+        """Every minted graph's listing-shape fields, newest first, with no per-graph
+        fan-out into nodes/edges/sessions/artifacts."""
         with self._store.read("list_summaries") as conn:
             rows = conn.execute(
                 select(graphs.c.graph_id, graphs.c.name, graphs.c.entry_node_id, graphs.c.created_at).order_by(

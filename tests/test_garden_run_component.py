@@ -23,7 +23,7 @@ from blizzard.hub.domain.routines import Routine, RunMode
 from blizzard.hub.domain.scopes import ScopeSlug
 from blizzard.hub.domain.work import Chunk, WorkItemAuthor
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub
+from tests.support import HubHarness, build_hub, count_queries
 
 pytestmark = pytest.mark.component
 
@@ -417,6 +417,38 @@ def test_run_delta_keeps_several_delivered_sets_separately_grouped(tmp_path: Pat
     assert delta is not None
     assert [s.finding_set_id for s in delta.sets] == ["fins_1", "fins_2"]
     assert [s.added[0].finding_id for s in delta.sets] == ["fin_1", "fin_2"]
+
+
+def test_run_delta_query_count_does_not_grow_with_delivered_set_count(tmp_path: Path) -> None:
+    """`delivered_sets`'s own `add`-finding-id read now happens in one grouped query
+    (D3) — a run with many delivered sets must not cost more queries than one with few."""
+    hub = build_hub(tmp_path)
+    routine = _routine(hub)
+
+    few_chunk_id = _run(hub, routine)
+    for i in range(2):
+        findings = [{"op": "add", "class": "a", "locus": "a.py:1", "summary": "s", "introduced": None}]
+        _seed_delivery(hub, few_chunk_id, f"few_fins_{i}", artifact_id=f"few_art_{i}", findings=findings)
+        _seed_add_fact(hub, f"few_fin_{i}", finding_set_id=f"few_fins_{i}")
+
+    many_chunk_id = _run(hub, routine)
+    for i in range(8):
+        findings = [{"op": "add", "class": "a", "locus": "a.py:1", "summary": "s", "introduced": None}]
+        _seed_delivery(hub, many_chunk_id, f"many_fins_{i}", artifact_id=f"many_art_{i}", findings=findings)
+        _seed_add_fact(hub, f"many_fin_{i}", finding_set_id=f"many_fins_{i}")
+
+    few_chunk = hub.services.chunks.record.get(few_chunk_id)
+    many_chunk = hub.services.chunks.record.get(many_chunk_id)
+    assert few_chunk is not None and many_chunk is not None
+
+    few_count = count_queries(hub.engine, lambda: hub.services.garden_run.run_delta(few_chunk))
+    many_count = count_queries(hub.engine, lambda: hub.services.garden_run.run_delta(many_chunk))
+    assert few_count == many_count
+
+    few_delta = hub.services.garden_run.run_delta(few_chunk)
+    many_delta = hub.services.garden_run.run_delta(many_chunk)
+    assert few_delta is not None and len(few_delta.sets) == 2
+    assert many_delta is not None and len(many_delta.sets) == 8
 
 
 def test_run_delta_is_none_for_a_chunk_with_no_run_identity(tmp_path: Path) -> None:

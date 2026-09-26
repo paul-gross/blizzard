@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.registry import STALE_AFTER
-from tests.support import HubHarness, assert_all_timestamps_utc, build_hub, emitted_events
+from tests.support import HubHarness, assert_all_timestamps_utc, build_hub, count_queries, emitted_events
 
 pytestmark = pytest.mark.component
 
@@ -293,3 +293,87 @@ def test_a_local_pause_from_an_unregistered_runner_is_kept(tmp_path: Path) -> No
 
     hub.client.post("/api/fleet/runners", json={"runner_id": "runner-late", "workspace_id": "ws-a"})
     assert hub.client.get("/api/fleet/runners/runner-late").json()["locally_paused"] is True
+
+
+# --- `list_runners`'s query count as fleet size grows (D4) ---
+
+
+def _seed_runner_with_every_fact_family(hub: HubHarness, runner_id: str) -> None:
+    """A runner carrying a hub pause, a local pause with a reason, an external-usage
+    sample, and a miss — one row in each of `list_runners`'s four per-runner fact
+    families."""
+    _register(hub, runner_id=runner_id, workspace_id="ws")
+    hub.client.post(f"/api/runners/{runner_id}/pause", json={"by": "op"})
+    hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": runner_id,
+            "facts": [
+                {
+                    "seq": 1,
+                    "kind": "runner.locally_paused",
+                    "payload": {
+                        "runner_id": runner_id,
+                        "by": "runner-ceiling",
+                        "reason": "spend ceiling $5.00 reached",
+                    },
+                },
+                {
+                    "seq": 2,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": {
+                        "slug": "anthropic",
+                        "sampled_at": "2026-07-01T00:00:00+00:00",
+                        "windows": [
+                            {
+                                "window": "5h",
+                                "utilization_pct": 25.0,
+                                "resets_at": "2026-08-01T17:00:00+00:00",
+                                "window_seconds": 18000,
+                            }
+                        ],
+                    },
+                },
+                {
+                    "seq": 3,
+                    "kind": "external_subscription_usage.missed",
+                    "payload": {
+                        "slug": "openai",
+                        "missed_at": "2026-07-01T00:00:00+00:00",
+                        "reason": "credential_lapsed",
+                    },
+                },
+            ],
+        },
+    )
+
+
+def test_list_runners_query_count_does_not_grow_with_runner_count(tmp_path: Path) -> None:
+    """`list_runners`'s four per-runner fact families now read in one batched query per
+    family (D4) — a fleet of many runners, each carrying a hub pause, a local pause with
+    a reason, an external-usage sample, and a miss, must not cost more queries than a
+    fleet of few."""
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few = build_hub(tmp_path / "few")
+    many = build_hub(tmp_path / "many")
+
+    for i in range(2):
+        _seed_runner_with_every_fact_family(few, f"runner-{i}")
+    for i in range(8):
+        _seed_runner_with_every_fact_family(many, f"runner-{i}")
+
+    few_count = count_queries(few.engine, lambda: few.services.registry.list_runners())
+    many_count = count_queries(many.engine, lambda: many.services.registry.list_runners())
+    assert few_count == many_count
+
+    few_runners = few.services.registry.list_runners()
+    many_runners = many.services.registry.list_runners()
+    assert len(few_runners) == 2
+    assert len(many_runners) == 8
+    for runner in few_runners + many_runners:
+        assert runner.hub_paused is True
+        assert runner.locally_paused is True
+        assert runner.locally_paused_by == "runner-ceiling"
+        assert [u.slug for u in runner.subscription_usage] == ["anthropic"]
+        assert [m.slug for m in runner.subscription_usage_misses] == ["openai"]
