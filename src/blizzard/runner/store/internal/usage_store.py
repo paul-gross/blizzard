@@ -4,6 +4,7 @@ blizzard#410)."""
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from sqlalchemy import Connection, and_, case, func, select
@@ -19,6 +20,7 @@ from blizzard.runner.domain.usage import (
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample, invocation_cost
 from blizzard.runner.store.internal.base import RunnerStoreConnections
+from blizzard.runner.store.internal.batching import id_batches
 from blizzard.runner.store.schema import (
     context_samples,
     external_usage_samples,
@@ -163,6 +165,28 @@ class UsageStore:
             # is only NULL when no row carries a measurement at all.
             max_context_tokens=int(row.max_context_tokens) if row.max_context_tokens is not None else None,
         )
+
+    def context_sample_states(self, lease_ids: Sequence[str]) -> dict[str, ContextSampleState]:
+        if not lease_ids:
+            return {}
+        result: dict[str, ContextSampleState] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(lease_ids):
+                stmt = (
+                    select(
+                        context_samples.c.lease_id,
+                        func.max(context_samples.c.sampled_at).label("last_sampled_at"),
+                        func.max(context_samples.c.context_tokens).label("max_context_tokens"),
+                    )
+                    .where(context_samples.c.lease_id.in_(batch))
+                    .group_by(context_samples.c.lease_id)
+                )
+                for row in conn.execute(stmt):
+                    result[str(row.lease_id)] = ContextSampleState(
+                        last_sampled_at=as_utc(row.last_sampled_at),
+                        max_context_tokens=int(row.max_context_tokens) if row.max_context_tokens is not None else None,
+                    )
+        return result
 
     def record_usage(
         self,

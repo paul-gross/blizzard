@@ -4,6 +4,7 @@ blizzard#410)."""
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -18,6 +19,7 @@ from blizzard.runner.store.internal.base import (
     enqueue_transcript_final,
     lease_select,
 )
+from blizzard.runner.store.internal.batching import id_batches
 from blizzard.runner.store.schema import leases, transcript_outbound_buffer, transcript_segments
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
@@ -41,9 +43,29 @@ class TranscriptLedgerStore:
         rows = self._store.all(select(transcript_segments).where(transcript_segments.c.segment_id == segment_id))
         return self._row_to_transcript_segment(rows[0]) if rows else None
 
+    def transcript_segments(self, segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentLedgerRow]:
+        if not segment_ids:
+            return {}
+        result: dict[str, TranscriptSegmentLedgerRow] = {}
+        for batch in id_batches(segment_ids):
+            stmt = select(transcript_segments).where(transcript_segments.c.segment_id.in_(batch))
+            for r in self._store.all(stmt):
+                row = self._row_to_transcript_segment(r)
+                result[row.segment_id] = row
+        return result
+
     def open_transcript_segments(self) -> list[TranscriptSegmentLedgerRow]:
         stmt = (
             select(transcript_segments)
+            .where(transcript_segments.c.finalized_at.is_(None))
+            .order_by(transcript_segments.c.segment_id)
+        )
+        return [self._row_to_transcript_segment(r) for r in self._store.all(stmt)]
+
+    def open_transcript_segments_for_lease(self, lease_id: str) -> list[TranscriptSegmentLedgerRow]:
+        stmt = (
+            select(transcript_segments)
+            .where(transcript_segments.c.lease_id == lease_id)
             .where(transcript_segments.c.finalized_at.is_(None))
             .order_by(transcript_segments.c.segment_id)
         )
@@ -63,6 +85,24 @@ class TranscriptLedgerStore:
         )
         with self._store.connect() as conn:
             return int(conn.execute(stmt).scalar_one())
+
+    def chunk_transcript_shipped_bytes_for_chunks(self, chunk_ids: Sequence[str]) -> dict[str, int]:
+        if not chunk_ids:
+            return {}
+        result: dict[str, int] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(chunk_ids):
+                stmt = (
+                    select(
+                        transcript_segments.c.chunk_id,
+                        func.sum(transcript_segments.c.shipped_bytes).label("total"),
+                    )
+                    .where(transcript_segments.c.chunk_id.in_(batch))
+                    .group_by(transcript_segments.c.chunk_id)
+                )
+                for row in conn.execute(stmt):
+                    result[str(row.chunk_id)] = int(row.total)
+        return result
 
     def outstanding_transcript_buffer_bytes(self) -> int:
         # Payloads are `json.dumps(ensure_ascii=True)`, so SQL `length()` (chars) agrees

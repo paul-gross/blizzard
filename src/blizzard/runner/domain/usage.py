@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -72,6 +73,13 @@ class IReadUsageRepository(Protocol):
         One read answering both of the sampler's questions — when it last sampled (the
         cadence anchor) and the highest context it has seen (whether the warn line has
         already been crossed, so the warning fires once rather than every sample)."""
+        ...
+
+    def context_sample_states(self, lease_ids: Sequence[str]) -> dict[str, ContextSampleState]:
+        """:meth:`context_sample_state` for every id in ``lease_ids``, in one grouped read
+        (`bzh:bulk-reconstitution`) — the caller filters "due" itself from the returned
+        state. A lease with no samples yet is absent, exactly as the singular getter
+        answers ``None`` for it."""
         ...
 
     def last_external_usage_attempt_at(self, slug: str) -> datetime | None:

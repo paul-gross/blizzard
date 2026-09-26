@@ -6,6 +6,7 @@ Local per-segment state, never shipped as-is — distinct from the wire's own
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
@@ -100,8 +101,20 @@ class IReadTranscriptLedgerRepository(Protocol):
         """The segment by id, or ``None`` — the pump and drain's per-segment read (issue #246)."""
         ...
 
+    def transcript_segments(self, segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentLedgerRow]:
+        """:meth:`transcript_segment` for every id in ``segment_ids``, in one grouped read.
+        An id with no row is absent, exactly as the singular answers ``None`` for it."""
+        ...
+
     def open_transcript_segments(self) -> list[TranscriptSegmentLedgerRow]:
         """Segments with no final marker yet — the pump's per-tick work list (issue #246)."""
+        ...
+
+    def open_transcript_segments_for_lease(self, lease_id: str) -> list[TranscriptSegmentLedgerRow]:
+        """This lease's own open segments — :meth:`open_transcript_segments` narrowed to one
+        lease (`bzh:bulk-reconstitution`), rather than reading every open segment in the
+        store and filtering to one lease in Python. A lease ordinarily holds at most one,
+        but a re-ship (D-supersedes) can leave a second beside its source."""
         ...
 
     def transcript_segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentLedgerRow]:
@@ -113,6 +126,12 @@ class IReadTranscriptLedgerRepository(Protocol):
     def chunk_transcript_shipped_bytes(self, chunk_id: str) -> int:
         """Sum of ``shipped_bytes`` across every one of this chunk's segments, open or
         finalized — the running total the 64 MB per-chunk budget (D4) is measured against."""
+        ...
+
+    def chunk_transcript_shipped_bytes_for_chunks(self, chunk_ids: Sequence[str]) -> dict[str, int]:
+        """:meth:`chunk_transcript_shipped_bytes` for every id in ``chunk_ids``, in one
+        grouped read (`bzh:bulk-reconstitution`). A chunk with no segments at all is absent
+        — the caller reads that the same as the singular's own ``0``."""
         ...
 
     def outstanding_transcript_buffer_bytes(self) -> int:

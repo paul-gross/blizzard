@@ -3,6 +3,7 @@ later reconciliation pass collects, keyed ``(lease_id, epoch)`` (blizzard#443)."
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -32,6 +33,12 @@ class IReadElicitationRepository(Protocol):
     def in_flight_elicitation(self, lease_id: str, epoch: int) -> ElicitationRecord | None:
         """This lease's in-flight elicitation for ``epoch``, or ``None`` once collected,
         cleared on lease closure, or never launched."""
+        ...
+
+    def in_flight_elicitations(self, pairs: Sequence[tuple[str, int]]) -> dict[tuple[str, int], ElicitationRecord]:
+        """:meth:`in_flight_elicitation` for every ``(lease_id, epoch)`` pair in ``pairs``,
+        keyed by that same pair (`bzh:bulk-reconstitution`). A pair with no record is
+        absent, exactly as the singular getter answers ``None`` for it."""
         ...
 
     def in_flight_elicitation_lease_ids(self) -> set[str]:

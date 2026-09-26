@@ -38,6 +38,16 @@ HUB_CAPPED = "hub_capped"
 #: content was already read, shipped, and hub-confirmed lost, never merely unattempted.
 HUB_CAPPED_SEVERITY = max(TRUNCATION_REASON_SEVERITY.values()) + 1
 
+#: A final marker's own upper bound, no render needed (D6): its shape is a handful of
+#: short ids and scalars with an empty `turns`, well under this even at the widest
+#: realistic id lengths — a declared constant, not a measurement, is the honest fallback
+#: `_batches` sizes it by; `_deliver_batch` alone ever renders one for real.
+_FINAL_RECORD_SIZE_ESTIMATE_BYTES = 2048
+
+#: A non-final delta's estimate padding, over `len(payload)` alone, for the `seq` field
+#: `TranscriptSegmentRecord.model_validate` adds that `payload` itself does not carry.
+_SEQ_FIELD_ESTIMATE_BYTES = 24
+
 #: Bounds this drain's own per-``run()`` work — checked only BETWEEN deliveries, so the
 #: REAL worst case is this constant PLUS one in-flight delivery's own push timeout.
 _MAX_RECORDS_PER_RUN = 50
@@ -97,44 +107,53 @@ class TranscriptDrain:
             delivered += len(batch)
         return delivered
 
-    def _batches(
-        self, pending: list[BufferedTranscriptDelta]
-    ) -> Iterator[list[tuple[BufferedTranscriptDelta, TranscriptSegmentRecord]]]:
+    def _batches(self, pending: list[BufferedTranscriptDelta]) -> Iterator[list[BufferedTranscriptDelta]]:
         """Greedily group pending deltas into batches at or below the per-record byte cap
-        (one oversized record still ships alone). Each record renders lazily, right as its
-        batch is built — never the whole backlog up front — so a raise building one record
-        never blocks batches already produced ahead of it."""
+        (one oversized record still ships alone). Sizes each delta from its own already-
+        stored fields (D6) — never renders or ``model_dump_json``s a record just to measure
+        it; ``_deliver_batch`` is the one place a record is actually rendered."""
         cap = self._record_max_bytes
-        batch: list[tuple[BufferedTranscriptDelta, TranscriptSegmentRecord]] = []
+        batch: list[BufferedTranscriptDelta] = []
         batch_bytes = 0
         for delta in pending:
-            record = self._render(delta)
-            record_bytes = len(record.model_dump_json().encode("utf-8"))
+            record_bytes = self._estimated_size(delta)
             if batch and batch_bytes + record_bytes > cap:
                 yield batch
                 batch = []
                 batch_bytes = 0
-            batch.append((delta, record))
+            batch.append(delta)
             batch_bytes += record_bytes
         if batch:
             yield batch
+
+    @staticmethod
+    def _estimated_size(delta: BufferedTranscriptDelta) -> int:
+        """A delta's estimated wire size, always ``>=`` its actual rendered length (D6): a
+        non-final delta's ``payload`` already IS the wire body sans ``seq``, so its own byte
+        length plus a fixed pad for that field is exact enough to bound; a final marker's
+        payload is not the wire body at all, so it sizes by the declared upper bound instead."""
+        if delta.final:
+            return _FINAL_RECORD_SIZE_ESTIMATE_BYTES
+        return len(delta.payload.encode("utf-8")) + _SEQ_FIELD_ESTIMATE_BYTES
 
     @property
     def _record_max_bytes(self) -> int:
         return resolve_record_max_bytes(self.ctx)
 
-    def _deliver_batch(self, records: list[tuple[BufferedTranscriptDelta, TranscriptSegmentRecord]]) -> bool:
-        # A final marker is re-rendered fresh here, not the grouping-time one `_batches` used
-        # only to size the batch — so it reflects an earlier batch's just-applied hub-cap ack.
-        records = [(delta, self._render(delta) if delta.final else record) for delta, record in records]
-        batch = TranscriptSegmentBatch(runner_id=self.ctx.config.runner_id, records=[record for _, record in records])
+    def _deliver_batch(self, deltas: list[BufferedTranscriptDelta]) -> bool:
+        # The one render per record (D6) — `_batches` above never renders, only estimates.
+        final_segments = self.ctx.stores.transcript_ledger.transcript_segments(
+            [delta.segment_id for delta in deltas if delta.final]
+        )
+        records = [self._render(delta, final_segments) for delta in deltas]
+        batch = TranscriptSegmentBatch(runner_id=self.ctx.config.runner_id, records=records)
         _CP_BEFORE_SUBMIT.reached()
         try:
             ack = self.ctx.hub.push_transcripts(batch)
         except HubClientError:
             return False  # hub unreachable — the batch stays buffered, retried next tick; the fact lane is unaffected
         _CP_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay
-        for delta, _record in records:
+        for delta in deltas:
             if delta.seq in ack.capped:
                 # A cap rejection is not idempotency — surface it, but do not wedge the FIFO
                 # drain on a record the hub will never store in full: ack and move on (D6, D4).
@@ -147,17 +166,22 @@ class TranscriptDrain:
                     OutboundFacts(self.ctx).transcript_truncated(
                         chunk_id=delta.chunk_id, segment_id=delta.segment_id, reason=HUB_CAPPED, at=self.ctx.clock.now()
                     )
-        seqs = [delta.seq for delta, _record in records]
+        seqs = [delta.seq for delta in deltas]
         self.ctx.stores.transcript_ledger.ack_transcript_outbound_batch(seqs, acked_at=self.ctx.clock.now())
         return True
 
-    def _render(self, delta: BufferedTranscriptDelta) -> TranscriptSegmentRecord:
+    def _render(
+        self, delta: BufferedTranscriptDelta, final_segments: dict[str, TranscriptSegmentLedgerRow]
+    ) -> TranscriptSegmentRecord:
         """A non-final row's ``payload`` already IS the wire body, built by
         :class:`TranscriptPump`. A final marker's is deliberately minimal — every field it
-        needs is already frozen on the ledger row, read straight from there."""
+        needs is already frozen on the ledger row, read from ``final_segments`` — one
+        :meth:`~IReadTranscriptLedgerRepository.transcript_segments` call per batch (D6),
+        rather than one :meth:`~IReadTranscriptLedgerRepository.transcript_segment` per
+        final marker — so it reflects an earlier batch's just-applied hub-cap ack."""
         if not delta.final:
             return TranscriptSegmentRecord.model_validate({"seq": delta.seq, **json.loads(delta.payload)})
-        segment = self.ctx.stores.transcript_ledger.transcript_segment(delta.segment_id)
+        segment = final_segments.get(delta.segment_id)
         if segment is None:
             # A final marker's own segment row always exists (D1); a conditional rather than
             # an `assert`, which `python -O` strips into an opaque `AttributeError` below.

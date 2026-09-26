@@ -3,6 +3,8 @@ baseline."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
@@ -12,7 +14,22 @@ from blizzard.runner.harness.identity import SessionReference
 if TYPE_CHECKING:
     from blizzard.runner.domain.leases import LeaseRecord
 
-__all__ = ["IReadLeaseLivenessRepository", "IWriteLeaseLivenessRepository", "LeaseLivenessService"]
+__all__ = [
+    "IReadLeaseLivenessRepository",
+    "IWriteLeaseLivenessRepository",
+    "LeaseLivenessFacts",
+    "LeaseLivenessService",
+]
+
+
+@dataclass(frozen=True)
+class LeaseLivenessFacts:
+    """One lease's :meth:`~IReadLeaseLivenessRepository.latest_heartbeat` and
+    :meth:`~IReadLeaseLivenessRepository.latest_spawn`, read together —
+    :meth:`~IReadLeaseLivenessRepository.liveness_facts`'s own per-lease value."""
+
+    latest_heartbeat: datetime | None
+    latest_spawn: datetime | None
 
 
 class IReadLeaseLivenessRepository(Protocol):
@@ -31,6 +48,19 @@ class IReadLeaseLivenessRepository(Protocol):
 
         The fallback half of the staleness baseline (issue #150). A lease outlives its
         processes, so the newest ``lease_spawns`` row is when the running worker started."""
+        ...
+
+    def liveness_facts(self, lease_ids: Sequence[str]) -> dict[str, LeaseLivenessFacts]:
+        """:meth:`latest_heartbeat` and :meth:`latest_spawn`, for every id in ``lease_ids``,
+        in two grouped reads rather than one round trip per lease (`bzh:bulk-reconstitution`).
+        A lease with neither fact is absent from the result, exactly as the singular getters
+        would both answer ``None`` for it."""
+        ...
+
+    def lease_generations(self, lease_ids: Sequence[str]) -> dict[str, int]:
+        """:meth:`lease_generation` for every id in ``lease_ids``, in one grouped read.
+        An id with no ``lease_spawns`` row is absent — the caller reads that the same as
+        the singular's own ``0``."""
         ...
 
     def lease_generation(self, lease_id: str) -> int:

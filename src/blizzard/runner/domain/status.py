@@ -242,12 +242,15 @@ class RunnerStatusService:
         ]
 
     def escalations(self) -> list[EscalationView]:
+        held_by_chunk: dict[str, list[EnvBindingRecord]] = {}
+        for binding in self._stores.environments.held_bindings():
+            held_by_chunk.setdefault(binding.chunk_id, []).append(binding)
         views = []
         for escalation in self._stores.escalations.open_escalations():
             resume_command = ""
             session = escalation.session
             if session is not None:
-                bindings = self._stores.environments.bindings_for_chunk(escalation.chunk_id)
+                bindings = held_by_chunk.get(escalation.chunk_id, [])
                 if bindings:
                     # Composed from the escalation's own stamps (issue #144), not a fresh
                     # resolution: the operator lands in the configuration it ran with.
