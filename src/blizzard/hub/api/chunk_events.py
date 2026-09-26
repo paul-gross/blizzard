@@ -3,11 +3,80 @@ so every emit site enriches the frame the same way."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import ChunkChange, ChunkFacts
+from blizzard.hub.domain.fleet import Route
+from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.work import Chunk, ChunkChange, ChunkFacts
 from blizzard.hub.events.broker import ChunkChangeCause
+
+
+@dataclass(frozen=True)
+class ChunkFrameState:
+    """One chunk's fully-loaded post-write state — everything a ``chunk-changed`` frame's
+    enrichment reads. ``chunk``/``graph`` are ``None`` on the gone-chunk/missing-graph
+    degrade branch, in which case ``from_graph``/``route`` are never loaded either, the
+    same reads :meth:`ChunkChanged.publish` used to skip."""
+
+    facts: ChunkFacts
+    chunk: Chunk | None
+    graph: Graph | None
+    from_graph: Graph | None
+    route: Route | None
+
+    @classmethod
+    def load(cls, services: HubServices, chunk_id: str) -> ChunkFrameState:
+        """The singular reads a single-chunk write verb's ``publish`` issues."""
+        facts = ChunkFacts.or_default(services.chunks.facts.load_facts(chunk_id))
+        chunk = services.chunks.record.get(chunk_id)
+        graph = services.graphs.get(chunk.graph_id) if chunk is not None else None
+        if chunk is None or graph is None:
+            return cls(facts=facts, chunk=chunk, graph=graph, from_graph=None, route=None)
+
+        from_graph = None
+        transition = facts.newest_transition()
+        if transition is not None and transition.graph_id is not None and transition.graph_id != graph.graph_id:
+            from_graph = services.graphs.get(transition.graph_id)
+
+        route = services.chunks.route.route_of(chunk_id)
+        return cls(facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=route)
+
+    @classmethod
+    def load_many(cls, services: HubServices, chunk_ids: Sequence[str]) -> dict[str, ChunkFrameState]:
+        """`load`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per distinct
+        requested id, through the four plurals. Reads every distinct chunk's facts and
+        record once, then the union of pinned and cross-graph newest-transition graph ids
+        once, then every chunk's route once — a bounded number of statements regardless of
+        how many ids or facts the batch names."""
+        ids = list(dict.fromkeys(chunk_ids))
+        facts_by_id = services.chunks.facts.load_facts_for(ids)
+        chunks_by_id = services.chunks.record.get_many(ids)
+
+        graph_ids: set[str] = {chunk.graph_id for chunk in chunks_by_id.values()}
+        for chunk_id in ids:
+            facts = facts_by_id.get(chunk_id)
+            transition = facts.newest_transition() if facts is not None else None
+            if transition is not None and transition.graph_id is not None:
+                graph_ids.add(transition.graph_id)
+        graphs_by_id = services.graphs.get_many(list(graph_ids))
+        routes_by_id = services.chunks.route.routes_for(ids)
+
+        states: dict[str, ChunkFrameState] = {}
+        for chunk_id in ids:
+            facts = ChunkFacts.or_default(facts_by_id.get(chunk_id))
+            chunk = chunks_by_id.get(chunk_id)
+            graph = graphs_by_id.get(chunk.graph_id) if chunk is not None else None
+            from_graph = None
+            if chunk is not None and graph is not None:
+                transition = facts.newest_transition()
+                if transition is not None and transition.graph_id is not None and transition.graph_id != graph.graph_id:
+                    from_graph = graphs_by_id.get(transition.graph_id)
+            states[chunk_id] = cls(
+                facts=facts, chunk=chunk, graph=graph, from_graph=from_graph, route=routes_by_id.get(chunk_id)
+            )
+        return states
 
 
 @dataclass(frozen=True)
@@ -31,6 +100,20 @@ class ChunkChanged:
         return cls(services, chunk_id, None if facts is None else facts.status().value, facts)
 
     @classmethod
+    def before_many(cls, services: HubServices, chunk_ids: Sequence[str]) -> dict[str, ChunkChanged]:
+        """`before`'s batched sibling (`bzh:bulk-reconstitution`) — one snapshot per
+        distinct requested id, through `load_facts_for`. An id the plural drops gets
+        ``prev_status=None``/``facts=None``, exactly as `before` does for a missing
+        chunk."""
+        ids = list(dict.fromkeys(chunk_ids))
+        facts_by_id = services.chunks.facts.load_facts_for(ids)
+        result: dict[str, ChunkChanged] = {}
+        for chunk_id in ids:
+            facts = facts_by_id.get(chunk_id)
+            result[chunk_id] = cls(services, chunk_id, None if facts is None else facts.status().value, facts)
+        return result
+
+    @classmethod
     def of(cls, services: HubServices, chunk_id: str, *, prev_status: str | None) -> ChunkChanged:
         """A frame whose "before" the caller already holds — a mint, or facts already loaded."""
         return cls(services, chunk_id, prev_status)
@@ -47,32 +130,37 @@ class ChunkChanged:
         graph, and return those facts. ``key`` names the durable fact just written, or
         ``None``. ``by`` (delete-route-only) still degrades a gone chunk to a bare
         ``{chunk_id, status}`` frame rather than raising."""
-        facts = ChunkFacts.or_default(self.services.chunks.facts.load_facts(self.chunk_id))
+        state = ChunkFrameState.load(self.services, self.chunk_id)
+        return self.publish_from(state, cause=cause, status=status, by=by, key=key)
+
+    def publish_from(
+        self,
+        state: ChunkFrameState,
+        *,
+        cause: ChunkChangeCause | None,
+        status: str | None = None,
+        by: str | None = None,
+        key: str | None = None,
+    ) -> ChunkFacts:
+        """`publish`'s sibling for a caller already holding the post-write state — a batch
+        that loaded every touched chunk's state once through `ChunkFrameState.load_many`."""
+        facts = state.facts
         resolved_status = status if status is not None else facts.status().value
-        chunk = self.services.chunks.record.get(self.chunk_id)
-        graph = self.services.graphs.get(chunk.graph_id) if chunk is not None else None
-        if chunk is None or graph is None:
+        if state.chunk is None or state.graph is None:
             self.services.events.publish_chunk_changed(
                 self.chunk_id, resolved_status, prev_status=self.prev_status, cause=cause, by=by, key=key
             )
             return facts
 
-        from_graph = None
-        transition = facts.newest_transition()
-        if transition is not None and transition.graph_id is not None and transition.graph_id != graph.graph_id:
-            from_graph = self.services.graphs.get(transition.graph_id)
-
-        route = self.services.chunks.route.route_of(self.chunk_id)
-        runner_id = route.runner_id if route is not None else None
-
+        runner_id = state.route.runner_id if state.route is not None else None
         change = ChunkChange.of(
-            chunk,
-            graph,
+            state.chunk,
+            state.graph,
             facts,
             prev_status=self.prev_status,
             runner_id=runner_id,
             cause=cause,
-            from_graph=from_graph,
+            from_graph=state.from_graph,
         )
         self.services.events.publish_chunk_changed(
             self.chunk_id,
