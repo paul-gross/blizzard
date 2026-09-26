@@ -21,6 +21,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
 )
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.schema import garden_proposal_closures
 
 
@@ -74,13 +75,18 @@ class GardenProposalClosureStore:
         return self._of(row) if row is not None else None
 
     def get_many(self, proposal_ids: Sequence[str]) -> dict[str, GardenProposalClosure]:
+        """`get`'s batched sibling (`bzh:bulk-reconstitution`), one query per `id_batches`
+        batch over `proposal_ids`."""
         if not proposal_ids:
             return {}
+        result: dict[str, GardenProposalClosure] = {}
         with self._store.read("get_many") as conn:
-            rows = conn.execute(
-                select(garden_proposal_closures).where(garden_proposal_closures.c.proposal_id.in_(proposal_ids))
-            ).all()
-        return {row.proposal_id: self._of(row) for row in rows}
+            for batch in id_batches(proposal_ids):
+                rows = conn.execute(
+                    select(garden_proposal_closures).where(garden_proposal_closures.c.proposal_id.in_(batch))
+                ).all()
+                result.update({row.proposal_id: self._of(row) for row in rows})
+        return result
 
     def find_by_item(self, source: str, ref: str) -> GardenProposalClosure | None:
         """Filtered on `ix_garden_proposal_closures_source_ref` — `source`/`ref` are

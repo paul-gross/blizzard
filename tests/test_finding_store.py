@@ -19,9 +19,9 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.findings import FactEntry, Finding
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
-from blizzard.hub.store.internal import finding_store as finding_store_module
+from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import hub_store_connections
+from tests.support import count_queries, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -236,9 +236,9 @@ def test_facts_for_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypa
     """review:F6 — shrinks the batch size so seeding stays cheap, then seeds one more
     finding than two full batches to prove a chain landing in the second (or third)
     batch still comes back correctly via `list_across_routines`, the unbounded caller."""
-    monkeypatch.setattr(finding_store_module, "_FACTS_BATCH_SIZE", 3)
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
     store = _store(tmp_path)
-    finding_ids = [f"fin_{i}" for i in range(finding_store_module._FACTS_BATCH_SIZE + 5)]
+    finding_ids = [f"fin_{i}" for i in range(batching_module.BATCH_SIZE + 5)]
     for finding_id in finding_ids:
         _add(store, finding_id=finding_id)
         store.record_fact(finding_id, kind="observed", at=_LATER)
@@ -249,6 +249,44 @@ def test_facts_for_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypa
     for finding_id in finding_ids:
         assert found[finding_id].observed_count == 1
         assert found[finding_id].last_seen_at == _LATER
+
+
+def test_get_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`get_many`'s own row read batches through `id_batches` too, not just
+    `_facts_for_many` — a chain landing in the second (or third) batch of either query
+    must still come back correctly."""
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store = _store(tmp_path)
+    finding_ids = [f"fin_{i}" for i in range(batching_module.BATCH_SIZE + 5)]
+    for finding_id in finding_ids:
+        _add(store, finding_id=finding_id)
+        store.record_fact(finding_id, kind="observed", at=_LATER)
+
+    found = store.get_many(finding_ids)
+
+    assert set(found) == set(finding_ids)
+    for finding_id in finding_ids:
+        assert found[finding_id].observed_count == 1
+        assert found[finding_id].last_seen_at == _LATER
+
+
+def test_get_many_query_cost_scales_linearly_with_batch_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each batch's own row and facts reads cost the same regardless of trailing size —
+    the per-batch cost is constant, so the total grows with batch count, not id count."""
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store, engine = _store_and_engine(tmp_path)
+    finding_ids = [f"fin_{i}" for i in range(7)]
+    for finding_id in finding_ids:
+        _add(store, finding_id=finding_id)
+
+    one_batch_count = count_queries(engine, lambda: store.get_many(finding_ids[:3]))
+    two_batch_count = count_queries(engine, lambda: store.get_many(finding_ids[:6]))
+    three_batch_count = count_queries(engine, lambda: store.get_many(finding_ids))
+
+    per_batch_cost = two_batch_count - one_batch_count
+    assert per_batch_cost > 0
+    assert two_batch_count == one_batch_count + per_batch_cost
+    assert three_batch_count == one_batch_count + 2 * per_batch_cost  # the trailing size-1 batch costs the same
 
 
 def test_count_by_class_counts_across_the_named_routine(tmp_path: Path) -> None:

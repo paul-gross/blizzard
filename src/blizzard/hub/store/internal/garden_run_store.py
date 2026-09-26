@@ -117,13 +117,14 @@ class GardenRunStore:
                 .where(finding_sets.c.chunk_id == chunk_id)
                 .order_by(finding_sets.c.finding_set_id)
             ).all()
+            add_ids_by_set = self._add_finding_ids_by_set(conn, [row.finding_set_id for row in rows])
             return [
                 DeliveredSetRaw(
                     finding_set_id=row.finding_set_id,
                     revisions=json.loads(row.revisions),
                     measurement=row.measurement,
                     artifact_data=row.data,
-                    add_finding_ids=self._add_finding_ids(conn, row.finding_set_id),
+                    add_finding_ids=add_ids_by_set[row.finding_set_id],
                 )
                 for row in rows
             ]
@@ -181,20 +182,24 @@ class GardenRunStore:
         return counts
 
     @staticmethod
-    def _add_finding_ids(conn, finding_set_id: str) -> list[str]:  # type: ignore[no-untyped-def]
-        """The finding ids `finding_set_id`'s own `add` facts minted, in insertion
-        order — positionally parallel to its artifact's `AddFindingOp` entries
-        (`GardenDelivery.deliver` appends one fact per op in artifact order). A set
-        predating the `finding_facts.finding_set_id` linkage's addition matches none."""
-        return list(
-            conn.execute(
-                select(finding_facts.c.finding_id)
-                .where(finding_facts.c.finding_set_id == finding_set_id, finding_facts.c.kind == "add")
-                .order_by(finding_facts.c.id.asc())
-            )
-            .scalars()
-            .all()
-        )
+    def _add_finding_ids_by_set(conn, finding_set_ids: list[str]) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
+        """Every listed set's own `add` facts' finding ids, in insertion order —
+        positionally parallel to its artifact's `AddFindingOp` entries (`GardenDelivery.deliver`
+        appends one fact per op in artifact order) — one query for every id in
+        `finding_set_ids` (index-backed on `ix_finding_facts_finding_set_id`), the
+        `_fact_counts_by_set` shape, so `delivered_sets` never issues one query per set. A
+        set predating the `finding_facts.finding_set_id` linkage's addition matches none."""
+        grouped: dict[str, list[str]] = {finding_set_id: [] for finding_set_id in finding_set_ids}
+        if not finding_set_ids:
+            return grouped
+        rows = conn.execute(
+            select(finding_facts.c.finding_set_id, finding_facts.c.finding_id)
+            .where(finding_facts.c.finding_set_id.in_(finding_set_ids), finding_facts.c.kind == "add")
+            .order_by(finding_facts.c.finding_set_id, finding_facts.c.id.asc())
+        ).all()
+        for row in rows:
+            grouped[row.finding_set_id].append(row.finding_id)
+        return grouped
 
 
 def _conforms_garden_run_store(x: GardenRunStore) -> IReadGardenRunRepository:

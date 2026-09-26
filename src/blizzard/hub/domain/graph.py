@@ -725,12 +725,10 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         retired resolves to ``None``."""
         ...
 
-    def list_all(self) -> list[Graph]: ...
-
     def any_minted(self, name: str) -> bool:
         """Whether any graph of ``name`` has ever been minted, retired or not (blizzard#524
-        D6) — a cheap existence probe, in place of a full :meth:`list_all` reification to
-        check membership by name."""
+        D6) — a cheap existence probe, in place of a full listing, to check membership by
+        name."""
         ...
 
     def newest_definition_yaml(self, name: str) -> str | None:
@@ -779,9 +777,8 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         ...
 
     def list_summaries(self) -> list[GraphSummary]:
-        """Every minted graph's listing-shape fields, newest first — :meth:`list_all`'s
-        narrow sibling, reading only what a summary needs off the ``graphs`` table
-        itself, with no per-graph fan-out."""
+        """Every minted graph's listing-shape fields, newest first, reading only what a
+        summary needs off the ``graphs`` table itself, with no per-graph fan-out."""
         ...
 
     def graph_id_of_enabled_name(self, name: str) -> str | None:

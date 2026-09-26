@@ -1836,7 +1836,6 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadGraphRepository, "get"): lambda w: w.hub.services.graphs.get(w.graph.graph_id),
     (IReadGraphRepository, "get_enabled_by_name"): lambda w: w.hub.services.graphs.get_enabled_by_name(_HUB_GRAPH_NAME),
-    (IReadGraphRepository, "list_all"): lambda w: w.hub.services.graphs.list_all(),
     (IReadGraphRepository, "any_minted"): lambda w: w.hub.services.graphs.any_minted(_HUB_GRAPH_NAME),
     (IReadGraphRepository, "newest_definition_yaml"): lambda w: w.hub.services.graphs.newest_definition_yaml(
         _HUB_GRAPH_NAME

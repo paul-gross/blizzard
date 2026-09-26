@@ -1,7 +1,7 @@
 """``GraphStore``'s narrow projections — ``load_graph_summaries``, ``load_node_names``,
 ``list_summaries``, and ``graph_id_of_enabled_name`` (component tier).
 
-Each agrees with its fully-reified sibling (``get``/``get_enabled_by_name``/``list_all``)
+Each agrees with its fully-reified sibling (``get``/``get_enabled_by_name``/``get_many``)
 across two minted graphs, one retired; the two batch methods are also proven correct
 across a lowered ``BATCH_SIZE`` boundary."""
 
@@ -150,17 +150,17 @@ def test_load_node_names_matches_across_a_batch_boundary(tmp_path: Path, monkeyp
 # --- list_summaries ------------------------------------------------------------- #
 
 
-def test_list_summaries_agrees_with_list_all_newest_first(tmp_path: Path) -> None:
+def test_list_summaries_agrees_with_get_many_newest_first(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     _mint(store, "gr_1", "alpha", created_at=_T0)
     _mint(store, "gr_2", "beta", created_at=_T0.replace(hour=1))
 
     summaries = store.list_summaries()
-    graphs = store.list_all()
+    assert [s.graph_id for s in summaries] == ["gr_2", "gr_1"]
 
-    assert [s.graph_id for s in summaries] == [g.graph_id for g in graphs] == ["gr_2", "gr_1"]
-    for summary, graph in zip(summaries, graphs, strict=True):
-        assert summary.graph_id == graph.graph_id
+    graphs = store.get_many([s.graph_id for s in summaries])
+    for summary in summaries:
+        graph = graphs[summary.graph_id]
         assert summary.name == graph.name
         assert summary.entry_node_id == graph.entry_node_id
         assert summary.created_at == graph.created_at
@@ -227,3 +227,38 @@ def test_graph_id_of_enabled_name_is_none_when_every_mint_of_the_name_is_retired
 def test_graph_id_of_enabled_name_is_none_for_a_name_never_minted(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     assert store.graph_id_of_enabled_name("ghost") is None
+
+
+def test_get_enabled_by_name_query_count_does_not_grow_with_retired_newer_mint_count(tmp_path: Path) -> None:
+    """The retirement filter (D2) reads its own candidates in one batched query, not one
+    ``_is_retired`` call per candidate — a name with many retired mints newer than its
+    enabled one must not cost more queries than a name with few."""
+    (tmp_path / "few").mkdir()
+    (tmp_path / "many").mkdir()
+    few_store, few_engine = _store(tmp_path / "few")
+    many_store, many_engine = _store(tmp_path / "many")
+
+    few_old = _mint(few_store, "gr_old", "shared", created_at=_T0)
+    for i in range(2):
+        newer = _mint(few_store, f"gr_newer_{i}", "shared", created_at=_T0.replace(hour=1 + i))
+        few_store.record_lifecycle(newer.graph_id, retired=True, at=_T0, by="op")
+
+    many_old = _mint(many_store, "gr_old", "shared", created_at=_T0)
+    for i in range(20):
+        newer = _mint(many_store, f"gr_newer_{i}", "shared", created_at=_T0.replace(hour=1 + i))
+        many_store.record_lifecycle(newer.graph_id, retired=True, at=_T0, by="op")
+
+    few_count = count_queries(few_engine, lambda: few_store.get_enabled_by_name("shared"))
+    many_count = count_queries(many_engine, lambda: many_store.get_enabled_by_name("shared"))
+    assert few_count == many_count
+
+    few_id_count = count_queries(few_engine, lambda: few_store.graph_id_of_enabled_name("shared"))
+    many_id_count = count_queries(many_engine, lambda: many_store.graph_id_of_enabled_name("shared"))
+    assert few_id_count == many_id_count
+
+    few_enabled = few_store.get_enabled_by_name("shared")
+    many_enabled = many_store.get_enabled_by_name("shared")
+    assert few_enabled is not None and few_enabled.graph_id == few_old.graph_id
+    assert many_enabled is not None and many_enabled.graph_id == many_old.graph_id
+    assert few_store.graph_id_of_enabled_name("shared") == few_old.graph_id
+    assert many_store.graph_id_of_enabled_name("shared") == many_old.graph_id

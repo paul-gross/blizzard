@@ -75,7 +75,7 @@ def test_ingest_mints_a_chunk_pinned_to_the_default_graph(tmp_path: Path) -> Non
     assert detail["status"] == "not_ready"  # rests not-ready until promoted
     assert detail["work_refs"] == [{**_P1, "label": "default#1", "web_url": "http://forge.local/acme/widget/issues/1"}]
     # The default graph was minted on first ingest and the chunk pinned to it.
-    graphs = hub.services.graphs.list_all()
+    graphs = hub.services.graphs.list_summaries()
     assert [g.name for g in graphs] == ["default-delivery"]
     assert detail["graph_id"] == graphs[0].graph_id
 

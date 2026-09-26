@@ -8,6 +8,7 @@ own fact table; ``last_seen_at`` and ``token_hash`` are the refreshed-in-place c
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime
 
 from pydantic import ValidationError
@@ -25,6 +26,7 @@ from blizzard.hub.domain.registry import (
 from blizzard.hub.domain.work import ActivityRow
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.wire.facts import ExternalSubscriptionUsageWindowFact
 
 
@@ -54,13 +56,18 @@ class RunnerRegistryStore:
     def list_runners(self) -> list[RunnerRegistration]:
         with self._store.read("list_runners") as conn:
             rows = conn.execute(select(s.runner_registrations).order_by(s.runner_registrations.c.registered_at)).all()
+            runner_ids = [row.runner_id for row in rows]
+            paused = self._paused_many(conn, runner_ids)
+            local_pause = self._local_pause_detail_many(conn, runner_ids)
+            usage = self._external_usage_many(conn, runner_ids)
+            usage_misses = self._external_usage_misses_many(conn, runner_ids)
             return [
                 self._registration(
                     row,
-                    self._paused(conn, row.runner_id),
-                    self._local_pause_detail(conn, row.runner_id),
-                    self._external_usage(conn, row.runner_id),
-                    self._external_usage_misses(conn, row.runner_id),
+                    paused[row.runner_id],
+                    local_pause[row.runner_id],
+                    usage[row.runner_id],
+                    usage_misses[row.runner_id],
                 )
                 for row in rows
             ]
@@ -294,68 +301,129 @@ class RunnerRegistryStore:
     @staticmethod
     def _paused(conn, runner_id: str) -> bool:  # type: ignore[no-untyped-def]
         """Derive the fleet's brake from the newest pause/resume fact, default False."""
-        return RunnerRegistryStore._newest(conn, s.runner_pause_facts, runner_id)
+        return RunnerRegistryStore._paused_many(conn, [runner_id])[runner_id]
+
+    @staticmethod
+    def _paused_many(conn, runner_ids: Sequence[str]) -> dict[str, bool]:  # type: ignore[no-untyped-def]
+        """``_paused``'s grouped sibling and its one home — every listed runner's fleet
+        brake off its own newest pause/resume fact, one query for every id in
+        ``runner_ids`` rather than one query per runner (`list_runners`)."""
+        result = dict.fromkeys(runner_ids, False)
+        if not runner_ids:
+            return result
+        newest: dict[str, bool] = {}
+        for batch in id_batches(runner_ids):
+            rows = conn.execute(
+                select(s.runner_pause_facts.c.runner_id, s.runner_pause_facts.c.paused)
+                .where(s.runner_pause_facts.c.runner_id.in_(batch))
+                .order_by(s.runner_pause_facts.c.id)
+            ).all()
+            for row in rows:
+                newest[row.runner_id] = row.paused  # newest-fact-wins: ascending id order overwrites
+        result.update(newest)
+        return result
 
     @staticmethod
     def _local_pause_detail(conn, runner_id: str) -> tuple[bool, str | None, str | None]:  # type: ignore[no-untyped-def]
-        """The runner's own brake plus its cause, off the newest fact (issues #43, #61).
-
-        Defaults ``(False, None, None)``, and ``by``/``reason`` are nulled once the newest
-        fact is a *resume* — a stale cause must not outlive the brake it named."""
-        row = conn.execute(
-            select(
-                s.runner_local_pause_facts.c.paused,
-                s.runner_local_pause_facts.c.set_by,
-                s.runner_local_pause_facts.c.reason,
-            )
-            .where(s.runner_local_pause_facts.c.runner_id == runner_id)
-            .order_by(s.runner_local_pause_facts.c.id.desc())
-            .limit(1)
-        ).one_or_none()
-        if row is None or not row.paused:
-            return False, None, None
-        return True, row.set_by, row.reason
+        """The runner's own brake plus its cause, off the newest fact (issues #43, #61)."""
+        return RunnerRegistryStore._local_pause_detail_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _newest(conn, table, runner_id: str) -> bool:  # type: ignore[no-untyped-def]
-        row = conn.execute(
-            select(table.c.paused).where(table.c.runner_id == runner_id).order_by(table.c.id.desc()).limit(1)
-        ).one_or_none()
-        return bool(row.paused) if row is not None else False
+    def _local_pause_detail_many(  # type: ignore[no-untyped-def]
+        conn, runner_ids: Sequence[str]
+    ) -> dict[str, tuple[bool, str | None, str | None]]:
+        """``_local_pause_detail``'s grouped sibling and its one home — every listed
+        runner's own brake plus its cause, off its own newest fact, one query for every id
+        in ``runner_ids`` rather than one query per runner (`list_runners`).
+
+        Defaults ``(False, None, None)``, and ``by``/``reason`` are nulled once a runner's
+        newest fact is a *resume* — a stale cause must not outlive the brake it named."""
+        result: dict[str, tuple[bool, str | None, str | None]] = dict.fromkeys(runner_ids, (False, None, None))
+        if not runner_ids:
+            return result
+        newest: dict[str, tuple[bool, str | None, str | None]] = {}
+        for batch in id_batches(runner_ids):
+            rows = conn.execute(
+                select(
+                    s.runner_local_pause_facts.c.runner_id,
+                    s.runner_local_pause_facts.c.paused,
+                    s.runner_local_pause_facts.c.set_by,
+                    s.runner_local_pause_facts.c.reason,
+                )
+                .where(s.runner_local_pause_facts.c.runner_id.in_(batch))
+                .order_by(s.runner_local_pause_facts.c.id)
+            ).all()
+            for row in rows:
+                newest[row.runner_id] = (row.paused, row.set_by, row.reason)  # newest-fact-wins
+        for runner_id, (paused, set_by, reason) in newest.items():
+            result[runner_id] = (True, set_by, reason) if paused else (False, None, None)
+        return result
 
     @staticmethod
     def _external_usage(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:  # type: ignore[no-untyped-def]
         """Every reported subscription's newest sample for this runner, raw (issue #218),
-        one row per slug — ``(slug, name, sampled_at, windows_json)`` tuples. Empty for a
-        runner that has never reported one."""
-        rows = conn.execute(
-            select(
-                s.runner_external_usage.c.slug,
-                s.runner_external_usage.c.name,
-                s.runner_external_usage.c.sampled_at,
-                s.runner_external_usage.c.windows,
-            )
-            .where(s.runner_external_usage.c.runner_id == runner_id)
-            .order_by(s.runner_external_usage.c.slug)
-        ).all()
-        return [(row.slug, row.name, row.sampled_at, row.windows) for row in rows]
+        one row per slug. Empty for a runner that has never reported one."""
+        return RunnerRegistryStore._external_usage_many(conn, [runner_id])[runner_id]
+
+    @staticmethod
+    def _external_usage_many(  # type: ignore[no-untyped-def]
+        conn, runner_ids: Sequence[str]
+    ) -> dict[str, list[tuple[str, str, datetime, str]]]:
+        """``_external_usage``'s grouped sibling and its one home — every listed runner's
+        reported subscriptions, raw, one row per slug — ``(slug, name, sampled_at,
+        windows_json)`` tuples — one query for every id in ``runner_ids`` rather than one
+        query per runner (`list_runners`)."""
+        grouped: dict[str, list[tuple[str, str, datetime, str]]] = {runner_id: [] for runner_id in runner_ids}
+        if not runner_ids:
+            return grouped
+        for batch in id_batches(runner_ids):
+            rows = conn.execute(
+                select(
+                    s.runner_external_usage.c.runner_id,
+                    s.runner_external_usage.c.slug,
+                    s.runner_external_usage.c.name,
+                    s.runner_external_usage.c.sampled_at,
+                    s.runner_external_usage.c.windows,
+                )
+                .where(s.runner_external_usage.c.runner_id.in_(batch))
+                .order_by(s.runner_external_usage.c.runner_id, s.runner_external_usage.c.slug)
+            ).all()
+            for row in rows:
+                grouped[row.runner_id].append((row.slug, row.name, row.sampled_at, row.windows))
+        return grouped
 
     @staticmethod
     def _external_usage_misses(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:  # type: ignore[no-untyped-def]
         """Every reported subscription's newest miss for this runner, raw (blizzard#504
-        D7), one row per slug — ``(slug, name, missed_at, reason)`` tuples. Empty for a
-        runner that has never reported one."""
-        rows = conn.execute(
-            select(
-                s.runner_external_usage_misses.c.slug,
-                s.runner_external_usage_misses.c.name,
-                s.runner_external_usage_misses.c.missed_at,
-                s.runner_external_usage_misses.c.reason,
-            )
-            .where(s.runner_external_usage_misses.c.runner_id == runner_id)
-            .order_by(s.runner_external_usage_misses.c.slug)
-        ).all()
-        return [(row.slug, row.name, row.missed_at, row.reason) for row in rows]
+        D7), one row per slug. Empty for a runner that has never reported one."""
+        return RunnerRegistryStore._external_usage_misses_many(conn, [runner_id])[runner_id]
+
+    @staticmethod
+    def _external_usage_misses_many(  # type: ignore[no-untyped-def]
+        conn, runner_ids: Sequence[str]
+    ) -> dict[str, list[tuple[str, str, datetime, str]]]:
+        """``_external_usage_misses``'s grouped sibling and its one home — every listed
+        runner's reported subscription misses, raw, one row per slug — ``(slug, name,
+        missed_at, reason)`` tuples — one query for every id in ``runner_ids`` rather than
+        one query per runner (`list_runners`)."""
+        grouped: dict[str, list[tuple[str, str, datetime, str]]] = {runner_id: [] for runner_id in runner_ids}
+        if not runner_ids:
+            return grouped
+        for batch in id_batches(runner_ids):
+            rows = conn.execute(
+                select(
+                    s.runner_external_usage_misses.c.runner_id,
+                    s.runner_external_usage_misses.c.slug,
+                    s.runner_external_usage_misses.c.name,
+                    s.runner_external_usage_misses.c.missed_at,
+                    s.runner_external_usage_misses.c.reason,
+                )
+                .where(s.runner_external_usage_misses.c.runner_id.in_(batch))
+                .order_by(s.runner_external_usage_misses.c.runner_id, s.runner_external_usage_misses.c.slug)
+            ).all()
+            for row in rows:
+                grouped[row.runner_id].append((row.slug, row.name, row.missed_at, row.reason))
+        return grouped
 
     @staticmethod
     def _registration(
