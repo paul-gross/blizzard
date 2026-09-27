@@ -211,7 +211,7 @@ describe('FleetProposalPanel', () => {
       const el = fixture.nativeElement as HTMLElement;
 
       // `fin_3` is `gone`: `FindingView.live` would read `false` here, but the row is
-      // still open (D8) and Confirm gone is the verb it exists to receive. Gating off
+      // still open and Confirm gone is the verb it exists to receive. Gating off
       // `live` rather than `state` would withhold exactly this row's own verb.
       for (const verb of ['resolve', 'confirm-gone', 'wont-fix', 'not-a-finding']) {
         expect(

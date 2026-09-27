@@ -1,5 +1,5 @@
-"""``blizzard hub analytics events`` against the real router (blizzard#257 Phase 2,
-component tier): ``httpx.get``/``httpx.stream`` relayed to the app's own ``TestClient``,
+"""``blizzard hub analytics events`` against the real router (component
+tier): ``httpx.get``/``httpx.stream`` relayed to the app's own ``TestClient``,
 so the route, the filters, and the auth triad's own detail strings all genuinely run."""
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ def _relay(hub: HubHarness, token: str, monkeypatch: pytest.MonkeyPatch) -> None
 @contextlib.contextmanager
 def _local_timezone(tz: str) -> Iterator[None]:
     """The dev/CI box's own local timezone is unspecified — pin it so a naive
-    ``--since``/``--until`` (D6) converts predictably against the fixture's UTC stamps."""
+    ``--since``/``--until`` converts predictably against the fixture's UTC stamps."""
     original = os.environ.get("TZ")
     os.environ["TZ"] = tz
     time.tzset()

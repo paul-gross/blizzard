@@ -155,7 +155,7 @@ describe('ChunkIssueList', () => {
     expect(messages).toEqual(['seen it too', 'repro attached']);
   });
 
-  // --- The hub idiom (blizzard#362) ------------------------------------------
+  // --- The hub idiom ------------------------------------------
 
   it('a hub entry renders its markdown body, a user authorship line, stated priority, and no forge anchor', async () => {
     const { el } = await render([hubItem({ ref: '1', author: USER_AUTHOR, stated_priority: 'high' })]);

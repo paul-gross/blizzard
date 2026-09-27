@@ -1,5 +1,5 @@
 """Pinning tests for hub decisions that were previously defended by comment alone
-(issue #270, ``bzh:mutation-review-selection``).
+(``bzh:mutation-review-selection``).
 
 Each test exists because a long comment argued for a decision no assertion covered;
 the comment at each site now points back at the test that fails on revert.
@@ -222,7 +222,7 @@ def test_require_grants_the_implicit_operator_with_no_store_wired() -> None:
 
 def test_handle_exit_sets_the_shutdown_signal_synchronously() -> None:
     """The signal handler sets the event the instant SIGTERM is caught — before uvicorn's
-    graceful-drain wait an SSE response never finishes (issue #47)."""
+    graceful-drain wait an SSE response never finishes."""
     shutdown = asyncio.Event()
     server = _EarlyShutdownServer(uvicorn.Config(FastAPI(), log_config=None), shutdown_signal=shutdown)
 

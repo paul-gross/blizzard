@@ -26,7 +26,7 @@ import { ChunkDetailPage } from './chunk-detail-page';
  *
  * The "stacks its own sections" proof only applies to General, whose own sections carry
  * a `section-`-prefixed testid (`fleet-kit-panel`'s own convention); Artifacts, Node
- * history, and Transcripts (runner-node-grouped-transcripts Phase 4 — now the shared
+ * history, and Transcripts (now grouped by node, sharing the
  * `fleet-chunk-transcripts-container` nav-plus-viewer pane, not the prior lease-chip
  * `section-transcript` panel) are each one nav-plus-viewer pane rather than a stack of
  * independent panels (`fleet-chunk-artifacts-panel`, `app-chunk-node-history-tab`,
@@ -205,8 +205,8 @@ describe('runner chunk detail page shell sweep (web:shell-sweep, issue #318)', (
   });
 
   /**
-   * Regression coverage for a live-click-through defect (issue #318's verify
-   * node-step): `ChunkIssuePane`'s error status used `fleet-kit-async-state`'s
+   * Regression coverage for a live-click-through defect:
+   * `ChunkIssuePane`'s error status used `fleet-kit-async-state`'s
    * default `placement="center"` — a full sentence, not a short label, so it
    * overflowed and got clipped mid-word at phone widths, invisible to a
    * page-level `scrollWidth` check (the test above) since the status line was

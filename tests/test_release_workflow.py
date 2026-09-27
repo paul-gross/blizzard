@@ -72,7 +72,7 @@ def test_job_permissions_declare_both_contents_and_packages_write() -> None:
 
 
 def test_version_tag_check_runs_before_anything_is_built() -> None:
-    """The version/tag agreement check (issue #190) must fail fast, before the
+    """The version/tag agreement check must fail fast, before the
     wheel or image build spends any CI time on a release that can't publish."""
     steps = _release_job()["steps"]
     check_idx = _step_index(steps, lambda s: "check-version-tag.sh" in str(s.get("run", "")))
@@ -96,7 +96,7 @@ def test_release_notes_are_generated_not_auto_generated() -> None:
 def test_release_job_waits_for_each_full_suite_tier() -> None:
     """A tag release must not publish ahead of the full suite's three parallel
     jobs (service tier, FULL crash sweep, e2e) — `gate` alone isn't sufficient
-    for a release the way it is for the master dev channel (issue #200)."""
+    for a release the way it is for the master dev channel."""
     needs = _release_job()["needs"]
     for job in ("service-tier", "crash-sweep", "e2e"):
         assert job in needs

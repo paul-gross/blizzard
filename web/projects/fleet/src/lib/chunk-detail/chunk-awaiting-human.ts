@@ -22,7 +22,7 @@ export interface ResolveDecisionEvent {
   readonly struck: readonly string[];
 }
 
-/** How many recently answered questions the dock keeps a trail for (issue #165). */
+/** How many recently answered questions the dock keeps a trail for. */
 const ANSWERED_TRAIL_LIMIT = 3;
 
 /** The statuses a chunk never leaves. An answer still undelivered on one of these will
@@ -31,13 +31,13 @@ const ANSWERED_TRAIL_LIMIT = 3;
 const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'stopped']);
 
 /**
- * The chunk's awaiting-human gate (issue #79) — whatever the chunk waits on
+ * The chunk's awaiting-human gate — whatever the chunk waits on
  * a human for: an open **question** with an inline **Answer** action (MVP
  * criterion 7), an open gate **decision** as **choice buttons** (MVP
  * criterion 12), or an open **escalation**, rendered by {@link ChunkEscalation}
  * — this component keeps no escalation state of its own, just forwards `detail`.
  *
- * Below those, the **answered trail** (issue #165): a recently answered question stays
+ * Below those, the **answered trail**: a recently answered question stays
  * rendered with who answered it, what they said, and whether the runner has delivered
  * the answer into the resumed session — the return leg of the rendezvous, so the person
  * who answered sees it arrive instead of watching the row disappear.
@@ -57,14 +57,14 @@ export class ChunkAwaitingHuman {
   /** The chunk aggregate to render (open questions, gate decision, escalation). */
   readonly detail = input.required<ChunkDetail>();
 
-  /** Whether the current identity may answer an open question (`question:answer` —
-   * issue #210). Withholds the answer input/chips when `false`, though the question
+  /** Whether the current identity may answer an open question (`question:answer`).
+   * Withholds the answer input/chips when `false`, though the question
    * text itself still shows — a `guest` reads that a chunk is waiting, just cannot
    * act on it. `null`/pending resolves to `false` (hidden until confirmed). */
   readonly canAnswer = input(false);
 
-  /** Whether the current identity may resolve an open gate decision (`gate:resolve` —
-   * issue #210). Withholds the choice chips when `false`; `null`/pending resolves to
+  /** Whether the current identity may resolve an open gate decision (`gate:resolve`).
+   * Withholds the choice chips when `false`; `null`/pending resolves to
    * `false`. */
   readonly canResolve = input(false);
 
@@ -100,7 +100,7 @@ export class ChunkAwaitingHuman {
 
   /**
    * The chunk's recently answered questions, most recently **answered** first — the
-   * return trail (issue #165). Answering used to drop the row from the dock the instant
+   * return trail. Answering used to drop the row from the dock the instant
    * it landed, which left an operator answering from a phone with no evidence their
    * answer went anywhere; keeping it renders who answered, what they said, and whether
    * the runner has delivered it into the resumed session.

@@ -1,4 +1,4 @@
-"""``[auth]`` config parsing (issue #91) — ``mode``/``superuser`` validated,
+"""``[auth]`` config parsing — ``mode``/``superuser`` validated,
 ``[[auth.oauth.provider]]`` structurally parsed-and-carried (semantic validation is #92's).
 """
 

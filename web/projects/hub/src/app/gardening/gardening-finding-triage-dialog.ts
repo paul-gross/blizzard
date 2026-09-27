@@ -29,7 +29,7 @@ import { GardeningFindingTriageDialogView } from './gardening-finding-triage-dia
  * field in only where it applies — {@link onSubmit} passes it through unconditionally,
  * `undefined` for the five verbs that ignore it.
  *
- * A rejected batch (D5) surfaces through this container's own `submitError` and
+ * A rejected batch surfaces through this container's own `submitError` and
  * does **not** close the dialog — the container's caller keeps the same
  * `findingIds` selection in hand (`gardening-findings-page.ts`'s own
  * `triagingAction` signal is untouched by an error), so the same batch is one
@@ -53,7 +53,7 @@ export class GardeningFindingTriageDialog {
   readonly closed = output<void>();
 
   /** Emitted once the batch actually lands — distinct from {@link closed}, which
-   * also fires on a plain cancel; the host page's own selection-clear (F1) fires
+   * also fires on a plain cancel; the host page's own selection-clear fires
    * off this, never off `closed` alone. */
   readonly succeeded = output<void>();
 

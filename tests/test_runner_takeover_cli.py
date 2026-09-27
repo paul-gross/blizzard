@@ -1,4 +1,4 @@
-"""``blizzard runner takeover`` (issue #52).
+"""``blizzard runner takeover``.
 
 Driven against a live daemon on a real unix socket: a real server, a real store, and
 the CLI wired together. ``subprocess.call`` is monkeypatched so the interactive exec
@@ -59,7 +59,7 @@ def _seed_parked_lease(store: SqlAlchemyRunnerStore) -> None:
 
 
 def _seed_escalated_lease(store: SqlAlchemyRunnerStore) -> None:
-    """A closed reference lease — the needs-human shape issue #291's bug reproduced
+    """A closed reference lease — the needs-human shape a real bug reproduced
     against: every ``blizzard runner`` worker verb 404s once its lease is closed."""
     store.record_lease(
         NewLease(
@@ -89,7 +89,7 @@ def _seed_escalated_lease(store: SqlAlchemyRunnerStore) -> None:
 def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runner(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """End-to-end proof of issue #291, over the real live socket: the resumed session's
+    """End-to-end proof, over the real live socket: the resumed session's
     forwarded env authorizes a worker verb against the SAME closed reference lease the
     parked attempt held — no fresh lease, just the open-takeover fact widening the resolver."""
     root = _init_runner(tmp_path)
@@ -141,19 +141,19 @@ def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypat
         return 0
 
     monkeypatch.setattr(subprocess, "call", fake_call)
-    # A sentinel terminal var: the identity env must layer OVER the operator's env
-    # (issue #258), not replace it, so the exec'd child still sees this.
+    # A sentinel terminal var: the identity env must layer OVER the operator's env,
+    # not replace it, so the exec'd child still sees this.
     monkeypatch.setenv("OPERATOR_TERMINAL_SENTINEL", "still-here")
 
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
-    # The composed command reasserts the daemon's permission mode (issue #258) — so
+    # The composed command reasserts the daemon's permission mode — so
     # the taken-over session does not drop to per-tool approval prompts.
     assert calls == [("cd /ws/e1 && claude --resume sess-a --permission-mode bypassPermissions", True, "/ws/e1")]
     assert "taking over chunk ch_1 in /ws/e1" in result.output
-    # The lease's worker identity rides the exec env (issue #258), layered over the
+    # The lease's worker identity rides the exec env, layered over the
     # terminal env, so the session's `blizzard runner` verbs and heartbeat hook work.
     (child_env,) = child_envs
     assert child_env["OPERATOR_TERMINAL_SENTINEL"] == "still-here"

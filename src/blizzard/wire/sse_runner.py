@@ -1,6 +1,6 @@
-"""Per-kind SSE frame wire models for the runner's stream (blizzard#317), beside the
+"""Per-kind SSE frame wire models for the runner's stream, beside the
 hub's own vocabulary in :mod:`blizzard.wire.sse`; mirrored by the golden corpus's runner scope
-at ``contracts/sse/runner/``. D6: frames are thin id-and-cause notifications, and every model
+at ``contracts/sse/runner/``. Frames are thin id-and-cause notifications, and every model
 reuses :class:`~blizzard.wire.sse.SseFramePayload`'s present-when-meaningful serialization."""
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ class FactChangedPayload(SseFramePayload):
     """A hub-bound fact was enqueued or acked — mirrors the hub's own ``event-logged``
     shape: ``chunk_id``/``lease_id`` ride as a present ``null`` rather than omitted,
     since a runner-wide fact (e.g. a chunk-less ``event.recorded``) legitimately carries
-    neither. Never a heartbeat — those ride elsewhere, elapsed-time-derived (D7)."""
+    neither. Never a heartbeat — those ride elsewhere, elapsed-time-derived."""
 
     seq: int
     kind: str

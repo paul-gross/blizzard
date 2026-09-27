@@ -31,7 +31,7 @@ export class RunnerPanel {
   private readonly meQuery = injectMeQuery();
 
   /** Whether the current identity may operate the hub pause/resume brake
-   * (`runner:pause`, admin-tier — issue #93). Passed to the presentational view, which
+   * (`runner:pause`, admin-tier). Passed to the presentational view, which
    * withholds the toggle button when false so a `contributor` never sees a control that
    * would 403. `null`/pending resolves to `false` (hidden until confirmed). */
   protected readonly canPause = computed(() => hasPermission(this.meQuery.data(), 'runner:pause'));
@@ -79,7 +79,7 @@ export class RunnerPanel {
     });
   });
 
-  /** The panel's last pause/resume failure, or `null` (issue #42's "report, don't
+  /** The panel's last pause/resume failure, or `null` ("report, don't
    * swallow") — reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
 

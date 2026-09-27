@@ -1,4 +1,4 @@
-"""The trusted reverse-proxy forwarded-header resolver (unit tier, issue #130).
+"""The trusted reverse-proxy forwarded-header resolver (unit tier).
 
 Pure resolution logic — trust matching, the rightmost-untrusted-hop walk, scheme
 selection, and the empty-set passthrough that keeps a direct-exposure daemon

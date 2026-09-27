@@ -13,7 +13,7 @@ afterEach(() => stub?.restore());
 
 /** A full `DashboardView` body, `subscriptions.items` set to `subscriptions` and every
  * other section its empty default — `LocalSubscriptions` reads off the shared
- * `/api/dashboard` poll (issue #311), not a `/api/subscriptions` route of its own. */
+ * `/api/dashboard` poll, not a `/api/subscriptions` route of its own. */
 function dashboardBody(subscriptions: readonly runnerApi.SubscriptionView[]): runnerApi.DashboardView {
   return {
     runner: {

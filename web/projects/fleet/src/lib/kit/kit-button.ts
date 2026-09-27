@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 /**
- * The action button (issue #78) — the `.act` chrome duplicated (with drift)
+ * The action button — the `.act` chrome duplicated (with drift)
  * across the ready-queue and runner panels: a small bordered button in
  * three variants. Wraps a real native `<button>` so type/disabled/keyboard
  * semantics stay native; the click event passes through by bubbling — a

@@ -1,7 +1,7 @@
-"""SQLAlchemy adapter for the finding repository seam (package-private, blizzard#390).
+"""SQLAlchemy adapter for the finding repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the
-no-stored-column contract this reads over is `schema.py`'s own (D2-D4)."""
+no-stored-column contract this reads over is `schema.py`'s own."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.schema import finding_facts, finding_sets, findings
 
-#: `list_page`'s cursor: a plain `finding_id`, already total (blizzard#526 D4) unlike chunks' `minted_at`.
+#: `list_page`'s cursor: a plain `finding_id`, already total unlike chunks' `minted_at`.
 _CURSOR_ARITY = 1
 
 
@@ -119,7 +119,7 @@ class FindingStore:
         )
 
     def record_facts(self, entries: Sequence[FactEntry]) -> None:
-        """All-or-nothing (D7) — pinned by
+        """All-or-nothing — pinned by
         `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`."""
         for entry in entries:
             if entry.kind not in FACT_KINDS:
@@ -154,7 +154,7 @@ class FindingStore:
     def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
         """`get`'s batched sibling (`bzh:bulk-reconstitution`) — one row query and one
         `_facts_for_many` query per `id_batches` batch over `finding_ids`, so a bulk exit
-        verb's read side never issues one query pair per row (blizzard#394)."""
+        verb's read side never issues one query pair per row."""
         if not finding_ids:
             return {}
         result: dict[str, Finding] = {}
@@ -175,7 +175,7 @@ class FindingStore:
         return finding, facts
 
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
-        """The pass's own bucket read (D3) — filtered on `ix_findings_routine_scope`,
+        """The pass's own bucket read — filtered on `ix_findings_routine_scope`,
         ordered by `finding_id` so every backend returns the same rows."""
         with self._store.read("list_for") as conn:
             rows = conn.execute(
@@ -188,7 +188,7 @@ class FindingStore:
         return [f for f in result if include_gone or f.live]
 
     def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
-        """Every finding live on `routine_name`, across every scope (blizzard#393)
+        """Every finding live on `routine_name`, across every scope
         — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter."""
         with self._store.read("list_for_routine") as conn:
             rows = conn.execute(
@@ -209,7 +209,7 @@ class FindingStore:
         return [f for f in result if include_gone or f.live]
 
     def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
-        """Filtered on `ix_findings_scope_source` (blizzard#582 D3)."""
+        """Filtered on `ix_findings_scope_source`."""
         with self._store.read("list_by_source") as conn:
             rows = conn.execute(
                 select(findings)
@@ -231,8 +231,8 @@ class FindingStore:
         limit: int,
     ) -> FindingPage:
         """`list_for`/`list_for_routine`/`list_across_routines` unified into one bounded,
-        keyset-paginated read (blizzard#526 D1/D5). Liveness is derived in Python after
-        each SQL window (D3), so a short window tops up — narrowed by `finding_id` each
+        keyset-paginated read. Liveness is derived in Python after
+        each SQL window, so a short window tops up — narrowed by `finding_id` each
         retry — until `limit` matches accumulate or the table is exhausted, rather than
         returning a short page while more findings still stand."""
         if limit < 1:
@@ -289,9 +289,9 @@ class FindingStore:
 
     def _facts_for_many(self, conn, finding_ids: list[str]) -> dict[str, list[FindingFact]]:  # type: ignore[no-untyped-def]
         """One query per `id_batches` batch over `finding_ids` (index-backed on
-        `ix_finding_facts_finding_id_id`) — `list_across_routines` (blizzard#486) can hand
+        `ix_finding_facts_finding_id_id`) — `list_across_routines` can hand
         this an unbounded id list, and one unbatched `IN (...)` would eventually exceed
-        the driver's own per-statement bind-parameter ceiling (review:F6)."""
+        the driver's own per-statement bind-parameter ceiling."""
         grouped: dict[str, list[FindingFact]] = {finding_id: [] for finding_id in finding_ids}
         if not finding_ids:
             return grouped

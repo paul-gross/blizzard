@@ -152,14 +152,14 @@ class HubServices:
     stop: StopService
     complete: CompleteService
     edit: EditService
-    #: Declare/release a dependency edge between two chunks (issue #456) — under the same
+    #: Declare/release a dependency edge between two chunks — under the same
     #: shared claim lock ``claim``/``edit``/``restart`` already take.
     dependencies: DependencyService
-    #: The unacquired-chunk delete/withdraw service (issue #364) — the composite write
+    #: The unacquired-chunk delete/withdraw service — the composite write
     #: ``WorkItemEditService.withdraw`` also reaches through for an unacquired holder.
     delete: DeleteService
     facts: FactIngestService
-    #: The transcript lane's ingest policy (blizzard#247) — the write side; ``transcripts``
+    #: The transcript lane's ingest policy — the write side; ``transcripts``
     #: above is the same store's read Protocol.
     transcript_ingest: TranscriptIngestService
     graph_mint: GraphMintService
@@ -173,7 +173,7 @@ class HubServices:
     #: The fleet registry's read Protocol — the same store instance as ``fleet``'s writes.
     registry: IReadRunnerRegistry
     hub_node: HubNodeExecutor
-    #: The mid-run marker-write capability authority (issue #230) — one shared instance,
+    #: The mid-run marker-write capability authority — one shared instance,
     #: so every reader agrees on the one live token per (chunk, node, epoch).
     marker_authority: MarkerAuthority
     events: EventBroker
@@ -184,102 +184,100 @@ class HubServices:
     #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
     system_artifacts: PackagedSystemArtifacts
     work_sources: IWorkSourceRegistry
-    #: The close-intent drain sweep (blizzard#383) — built here because it needs the
+    #: The close-intent drain sweep — built here because it needs the
     #: write-capable chunk repository, which only the composition root holds.
     close_drain: CloseIntentDrainer
-    #: The delivery-materialization reconciler (blizzard#366) — built here for the same
+    #: The delivery-materialization reconciler — built here for the same
     #: reason: it needs the write-capable chunk and work-item repositories.
     work_item_materialization: WorkItemMaterializationReconciler
-    #: The session read repository (issue #91) — reads only (``bzh:controller-read-only``).
+    #: The session read repository — reads only (``bzh:controller-read-only``).
     sessions: IReadSessionRepository
-    #: The identity-link read repository (issue #92) — a plain read, no domain service.
+    #: The identity-link read repository — a plain read, no domain service.
     identities: IReadIdentityRepository
-    #: The user read repository (issue #94) — every write still goes through ``auth``.
+    #: The user read repository — every write still goes through ``auth``.
     users: IReadUserRepository
     #: The identity domain service — sessions, the first-login linking rule, ``state``.
     auth: AuthService
-    #: The configured OAuth provider registry (issue #92) — empty when none is configured.
+    #: The configured OAuth provider registry — empty when none is configured.
     oauth_providers: IOAuthProviderRegistry
-    #: Per-IP token-bucket throttle (issue #92) shared by the authorize/callback routes.
+    #: Per-IP token-bucket throttle shared by the authorize/callback routes.
     auth_throttle: IpThrottle
-    #: The non-chunk auth/security fact log (issue #92) — ``login_failed``/``sso_refused``.
+    #: The non-chunk auth/security fact log — ``login_failed``/``sso_refused``.
     auth_facts: AuthFactsService
-    #: The hub's IdP signing-key lifecycle (issue #95) — ``None`` when no keypair exists.
+    #: The hub's IdP signing-key lifecycle — ``None`` when no keypair exists.
     signing: SigningKeyService | None
-    #: The reverse-proxy trust set (issue #130) — empty by default, so forwarded headers
+    #: The reverse-proxy trust set — empty by default, so forwarded headers
     #: are ignored from every peer.
     trusted_proxies: TrustedProxies
-    #: The transcript-segment read Protocol (blizzard#247) — the operator-plane index and
+    #: The transcript-segment read Protocol — the operator-plane index and
     #: content routes' own seam (``bzh:controller-read-only``).
     transcripts: IReadTranscriptSegments
-    #: The transcript-event derivation reconciler (blizzard#254) — built here because it
+    #: The transcript-event derivation reconciler — built here because it
     #: needs the write-capable event store, which only the composition root holds.
     event_derivation: EventDerivationReconciler
-    #: The same reconciler's own service (blizzard#254 D7) — the re-derive route's own
+    #: The same reconciler's own service — the re-derive route's own
     #: scoped, bounded seam, exposed separately from a full sweep pass.
     event_derivation_service: EventDerivationService
-    #: The analytics event query Protocol (blizzard#255 D6) — the events/counts routes'
+    #: The analytics event query Protocol — the events/counts routes'
     #: own read-only seam (``bzh:controller-read-only``); no write repository backs it.
     analytics_events: IReadAnalyticsEventQueries
-    #: The operational-datasets query Protocol (blizzard#256 D1) — the durations/spend/
+    #: The operational-datasets query Protocol — the durations/spend/
     #: outcomes routes' own read-only seam; no write repository backs it either.
     operational_analytics: IReadOperationalAnalytics
-    #: The scope read Protocol (blizzard#389) — the same store instance as the two
+    #: The scope read Protocol — the same store instance as the two
     #: services below's writes.
     scopes: IReadScopeRepository
-    #: Mint-on-name and edit-description over a scope (blizzard#389 D4).
+    #: Mint-on-name and edit-description over a scope.
     scope_registry: ScopeRegistry
-    #: The scope retire/enable brake (blizzard#389 D3).
+    #: The scope retire/enable brake.
     scope_lifecycle: ScopeLifecycle
-    #: The routine read Protocol (blizzard#389) — the same store instance as
+    #: The routine read Protocol — the same store instance as
     #: ``routine_authoring``'s writes.
     routines: IReadRoutineRepository
-    #: The routine_scopes join's read Protocol (blizzard#488) — the declared many-to-many
+    #: The routine_scopes join's read Protocol — the declared many-to-many
     #: a routine's own ``default_scope_slug`` is a member of.
     routine_scopes: IReadRoutineScopeRepository
-    #: Link/unlink a routine's own `routine_scopes` set, refusing to unlink its default
-    #: (blizzard#488 D8).
+    #: Link/unlink a routine's own `routine_scopes` set, refusing to unlink its default.
     routine_scope_membership: RoutineScopeMembership
-    #: Create and edit a routine, minting its default scope on demand (blizzard#389 D4).
+    #: Create and edit a routine, minting its default scope on demand.
     routine_authoring: RoutineAuthoring
     #: The routine retire/enable brake.
     routine_lifecycle: RoutineLifecycle
-    #: Mint, ingest, and promote a hub work item from a routine, in one act (blizzard#392).
+    #: Mint, ingest, and promote a hub work item from a routine, in one act.
     routine_run: RunService
     #: The per-scope delta baseline a routine has swept, and how much has landed since
-    #: (D5) — the run dialog's pre-submit read.
+    #: — the run dialog's pre-submit read.
     routine_baselines: RoutineBaselineService
-    #: The finding read Protocol (blizzard#390).
+    #: The finding read Protocol.
     findings: IReadFindingRepository
     #: The human-driven exit verbs over findings — resolve/confirm-gone/wont-fix/
-    #: not-a-finding/supersede/reopen (blizzard#394).
+    #: not-a-finding/supersede/reopen.
     finding_exit: FindingExitService
-    #: The finding-set read Protocol (blizzard#390) — one set per delivered artifact list.
+    #: The finding-set read Protocol — one set per delivered artifact list.
     finding_sets: IReadFindingSetRepository
-    #: The garden-proposal read Protocol (blizzard#390).
+    #: The garden-proposal read Protocol.
     garden_proposals: IReadGardenProposalRepository
-    #: Create a garden proposal, rejecting an empty `findings` list (blizzard#390 D7).
+    #: Create a garden proposal, rejecting an empty `findings` list.
     garden_proposal_authoring: GardenProposalAuthoring
-    #: The garden-proposal-closure read Protocol (blizzard#395).
+    #: The garden-proposal-closure read Protocol.
     garden_proposal_closures: IReadGardenProposalClosureRepository
-    #: Pass or accept a garden proposal, minting a linked hub work item by default
-    #: (blizzard#395).
+    #: Pass or accept a garden proposal, minting a linked hub work item by default.
     garden_proposal_closure: GardenProposalClosureService
     #: A routine's open garden proposals — closed ones filtered out.
     open_garden_proposals: OpenGardenProposalReader
     #: A run's identity — routine, scope, and mode; read-only (``bzh:controller-read-only``).
     run_context: IReadRunContextRepository
-    #: The findings a chunk's own accepted, minted garden proposal answers (blizzard#397)
+    #: The findings a chunk's own accepted, minted garden proposal answers
     #: — the worker's per-chunk read, distinct from the routine-bucket read
     #: `findings`/`run_context` back.
     answered_findings: AnsweredFindingsReader
-    #: Materialize a validated delivery in one transaction (blizzard#393).
+    #: Materialize a validated delivery in one transaction.
     garden_delivery: GardenDelivery
-    #: Materialize a delivery lane's deferred review findings, one per chunk (blizzard#582).
+    #: Materialize a delivery lane's deferred review findings, one per chunk.
     review_findings: ReviewFindingsMaterialize
-    #: Resolves a cited commit against the configured forge (blizzard#393 D2).
+    #: Resolves a cited commit against the configured forge.
     commit_resolver: CommitResolver
-    #: A routine's finding inflow-against-outflow over a window (blizzard#394).
+    #: A routine's finding inflow-against-outflow over a window.
     garden_trend: GardenTrendService
     #: A routine's per-scope last-swept table and windowed measurement series.
     garden_sweeps: GardenSweepsService
@@ -320,10 +318,10 @@ def build_services(
     (#65), left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
     ``oauth_providers``. ``claim_lock``/``work_item_store``/``delete``/``finding_store``/
     ``finding_exit`` are required, not built here, so the built-in hub binding shares the
-    same five (issue #364, blizzard#394)."""
+    same five."""
     clock = clock or SystemClock()
-    # The hub-store seam (issue #413) — one collaborator shared by every
-    # ``hub/store/internal/`` adapter, replacing the bare engine (D2).
+    # The hub-store seam — one collaborator shared by every
+    # ``hub/store/internal/`` adapter, replacing the bare engine.
     store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
     # The chunk-seam adapters, in the one place their construction order is expressed.
     chunk_stores = build_chunk_stores(store_connections, clock)
@@ -378,10 +376,10 @@ def build_services(
         work_sources=work_sources,
     )
     # One fleet service, shared: the API's pause routes and the fact ingest both land
-    # registry facts, and two instances would be two of the same thing (issue #43).
+    # registry facts, and two instances would be two of the same thing.
     fleet = FleetService(registry=registry_store, clock=clock)
     enrollment = RunnerEnrollmentService(registry=registry_store, clock=clock)
-    # The identity spine (issue #91) — one error factory shared by the SQLAlchemy
+    # The identity spine — one error factory shared by the SQLAlchemy
     # adapters, so the same instances back both the Write Protocols and the reads.
     auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
     user_store = users or UserRepository(store_connections, auth_errors)
@@ -389,7 +387,7 @@ def build_services(
     session_store = SessionRepository(store_connections, auth_errors)
     auth_state_store: IWriteAuthStateRepository = AuthStateRepository(store_connections, auth_errors)
     superuser_bootstrap_store = SuperuserBootstrapRepository(store_connections)
-    # Built ahead of `auth` below (issue #94), which records role-change facts through
+    # Built ahead of `auth` below, which records role-change facts through
     # this service rather than a raw write repository.
     auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
     auth = AuthService(
@@ -401,10 +399,10 @@ def build_services(
         superuser_bootstrap=superuser_bootstrap_store,
         auth_facts=auth_facts_service,
     )
-    # The provider-login seam (issue #92) — one registry entry per configured
+    # The provider-login seam — one registry entry per configured
     # ``[[auth.oauth.provider]]``, empty when no providers are configured.
     oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
-    # The hub's IdP signing-key lifecycle (issue #95) — constructed only when a keys
+    # The hub's IdP signing-key lifecycle — constructed only when a keys
     # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)

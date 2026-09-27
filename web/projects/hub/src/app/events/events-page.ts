@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 import { EventsPanel } from 'fleet';
 
 /**
- * The `/events` route (blizzard#125 Phase 4) — the board's Events tab: the hub's
+ * The `/events` route — the board's Events tab: the hub's
  * persisted operational event feed (`GET /api/events`), filterable by
  * severity/runner/chunk, in one full-page panel. Composes {@link EventsPanel} the
  * way `graphs-page.ts`
@@ -12,7 +12,7 @@ import { EventsPanel } from 'fleet';
  * to the panel itself.
  *
  * Activating a row's chunk deep-links straight to it: `/board?chunk=<id>`, the
- * query param {@link BoardPage} reads its selection from (issue #162). The feed
+ * query param {@link BoardPage} reads its selection from. The feed
  * names a chunk id on every row, so the operator lands on the board with that
  * chunk already open in the dock rather than having to find it among the lanes.
  */

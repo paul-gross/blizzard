@@ -226,7 +226,7 @@
         "type": "object"
       },
       "AnalyticsChunkSpendResponse": {
-        "description": "A bounded page (blizzard#256 D8) \u2014 ``next_cursor`` is ``None`` exactly when this\nis the last page. Not a point-in-time snapshot: each page's sums are recomputed at\nfetch time, so an earlier page's chunk can be invalidated by a usage fact recorded\nwhile a later page still streams.",
+        "description": "A bounded page \u2014 ``next_cursor`` is ``None`` exactly when this\nis the last page. Not a point-in-time snapshot: each page's sums are recomputed at\nfetch time, so an earlier page's chunk can be invalidated by a usage fact recorded\nwhile a later page still streams.",
         "properties": {
           "next_cursor": {
             "anyOf": [
@@ -255,7 +255,7 @@
         "type": "object"
       },
       "AnalyticsChunkSpendView": {
-        "description": "One chunk's own usage/cost rollup (blizzard#256 D8) \u2014 the per-chunk grouping's\nunbounded, cursor-paged row. ``cost_partial`` is ``True`` iff some summed row carried neither a billed\nnor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some summed row carried one.",
+        "description": "One chunk's own usage/cost rollup \u2014 the per-chunk grouping's\nunbounded, cursor-paged row. ``cost_partial`` is ``True`` iff some summed row carried neither a billed\nnor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some summed row carried one.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -310,7 +310,7 @@
         "type": "object"
       },
       "AnalyticsCountView": {
-        "description": "One grouping key and how many events fell under it (blizzard#255). ``key`` names\nwhichever dimension this response is grouped by \u2014 a file path, a skill name, an\nagent type, or a node id.",
+        "description": "One grouping key and how many events fell under it. ``key`` names\nwhichever dimension this response is grouped by \u2014 a file path, a skill name, an\nagent type, or a node id.",
         "properties": {
           "count": {
             "title": "Count",
@@ -346,7 +346,7 @@
         "type": "object"
       },
       "AnalyticsDurationView": {
-        "description": "One grouping key's step-duration rollup (blizzard#256 D2/D3) \u2014 ``key`` is a node\nid or a graph id. Hub-observed wall-clock, not runner-measured (D3): a parked gate\nstretches it, a delayed store-and-forward mint-report *flush* compresses it toward\nzero instead.",
+        "description": "One grouping key's step-duration rollup \u2014 ``key`` is a node\nid or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate\nstretches it, a delayed store-and-forward mint-report *flush* compresses it toward\nzero instead.",
         "properties": {
           "avg_seconds": {
             "title": "Avg Seconds",
@@ -392,7 +392,7 @@
         "type": "object"
       },
       "AnalyticsEventView": {
-        "description": "One derived event, wire-shaped (blizzard#255) \u2014 ``payload`` is parsed from its\nstored JSON-text form into a plain object, so a consumer never double-decodes a JSON\nstring within JSON.",
+        "description": "One derived event, wire-shaped \u2014 ``payload`` is parsed from its\nstored JSON-text form into a plain object, so a consumer never double-decodes a JSON\nstring within JSON.",
         "properties": {
           "agent_type": {
             "anyOf": [
@@ -543,7 +543,7 @@
         "type": "object"
       },
       "AnalyticsEventsResponse": {
-        "description": "A bounded page (blizzard#255) \u2014 ``next_cursor`` is ``None`` exactly when this\npage is the last one; a caller drives a full bulk read by following it until absent.",
+        "description": "A bounded page \u2014 ``next_cursor`` is ``None`` exactly when this\npage is the last one; a caller drives a full bulk read by following it until absent.",
         "properties": {
           "events": {
             "items": {
@@ -572,7 +572,7 @@
         "type": "object"
       },
       "AnalyticsOutcomeView": {
-        "description": "One node's judged-choice distribution and attempt-failure count (blizzard#256 D4),\nnever blended \u2014 a judged failure consumes no retry budget, an ended (superseded by a\nstrictly newer lease) attempt does; a still-open final attempt counts as neither, nor\ndoes a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``.",
+        "description": "One node's judged-choice distribution and attempt-failure count,\nnever blended \u2014 a judged failure consumes no retry budget, an ended (superseded by a\nstrictly newer lease) attempt does; a still-open final attempt counts as neither, nor\ndoes a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``.",
         "properties": {
           "attempt_failures": {
             "title": "Attempt Failures",
@@ -902,7 +902,7 @@
         "type": "object"
       },
       "BacklogPageView": {
-        "description": "``GET /api/backlog``'s own bounded page (blizzard#526 D3/D4): ``next_cursor``\nis ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.",
+        "description": "``GET /api/backlog``'s own bounded page: ``next_cursor``\nis ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.",
         "properties": {
           "entries": {
             "default": [],
@@ -1028,7 +1028,7 @@
         "type": "object"
       },
       "BlockedView": {
-        "description": "A chunk's blocked marking (issue #457) \u2014 present iff a pre-claim dependent (``not_ready`` or\n``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.\nCarried beside ``status``, never a status of its own; names the immediate prerequisite only, with\nno transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at\nonce, ``prerequisite_chunk_id`` names the earliest-declared one. The marking is absent when\nnothing is unmet.",
+        "description": "A chunk's blocked marking \u2014 present iff a pre-claim dependent (``not_ready`` or\n``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.\nCarried beside ``status``, never a status of its own; names the immediate prerequisite only, with\nno transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at\nonce, ``prerequisite_chunk_id`` names the earliest-declared one. The marking is absent when\nnothing is unmet.",
         "properties": {
           "prerequisite_chunk_id": {
             "title": "Prerequisite Chunk Id",
@@ -1072,7 +1072,7 @@
         "type": "object"
       },
       "CheckResult": {
-        "description": "One deterministic check's **runner-executed** outcome (issue #114).\n\nCarries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire.",
+        "description": "One deterministic check's **runner-executed** outcome.\n\nCarries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire.",
         "properties": {
           "command": {
             "title": "Command",
@@ -1091,7 +1091,7 @@
         "type": "object"
       },
       "ChunkCompleteRequest": {
-        "description": "Manually complete a chunk, from any non-``done`` status \u2014 records who completed it\n(issue #294).",
+        "description": "Manually complete a chunk, from any non-``done`` status \u2014 records who completed it.",
         "properties": {
           "by": {
             "default": "operator",
@@ -1103,7 +1103,7 @@
         "type": "object"
       },
       "ChunkDecisionStatusView": {
-        "description": "A live gate decision's identity and resolution (blizzard#521) \u2014 no ``choices``,\nno ``docket``.",
+        "description": "A live gate decision's identity and resolution \u2014 no ``choices``,\nno ``docket``.",
         "properties": {
           "decision_id": {
             "title": "Decision Id",
@@ -1143,7 +1143,7 @@
         "type": "object"
       },
       "ChunkDeleteRequest": {
-        "description": "Delete a chunk \u2014 records who deleted it (issue #364).",
+        "description": "Delete a chunk \u2014 records who deleted it.",
         "properties": {
           "by": {
             "default": "operator",
@@ -1155,7 +1155,7 @@
         "type": "object"
       },
       "ChunkDeleteResponse": {
-        "description": "The result of one ``DELETE /chunks/{id}`` (issue #364) \u2014 the deleted chunk's own\nid, echoed back. Nothing richer: the chunk is gone from every read the instant this\nreturns, with no fresh status left to derive a summary from.",
+        "description": "The result of one ``DELETE /chunks/{id}`` \u2014 the deleted chunk's own\nid, echoed back. Nothing richer: the chunk is gone from every read the instant this\nreturns, with no fresh status left to derive a summary from.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -1169,7 +1169,7 @@
         "type": "object"
       },
       "ChunkDependencyDeclareRequest": {
-        "description": "Declare that CHUNK depends on ``prerequisite_chunk_id`` (issue #456). Records who\ndeclared it.",
+        "description": "Declare that CHUNK depends on ``prerequisite_chunk_id``. Records who\ndeclared it.",
         "properties": {
           "by": {
             "default": "operator",
@@ -1188,7 +1188,7 @@
         "type": "object"
       },
       "ChunkDependencyEdgeView": {
-        "description": "One declared dependency edge (issue #456) \u2014 the row a declare or release\nanswers with. ``released_at``/``released_by`` are null while the edge stands.",
+        "description": "One declared dependency edge \u2014 the row a declare or release\nanswers with. ``released_at``/``released_by`` are null while the edge stands.",
         "properties": {
           "declared_at": {
             "title": "Declared At",
@@ -1244,7 +1244,7 @@
         "type": "object"
       },
       "ChunkDependencyReleaseRequest": {
-        "description": "Release CHUNK's standing dependency on ``prerequisite_chunk_id`` (issue #456),\naddressed by the ordered pair rather than a minted edge id. Records who released it.",
+        "description": "Release CHUNK's standing dependency on ``prerequisite_chunk_id``,\naddressed by the ordered pair rather than a minted edge id. Records who released it.",
         "properties": {
           "by": {
             "default": "operator",
@@ -1263,7 +1263,7 @@
         "type": "object"
       },
       "ChunkDetail": {
-        "description": "The whole chunk aggregate (issue #314): transition history, inline artifact\nstore, and the open escalation.",
+        "description": "The whole chunk aggregate: transition history, inline artifact\nstore, and the open escalation.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -1630,7 +1630,7 @@
         "type": "object"
       },
       "ChunkNeighborView": {
-        "description": "One standing-edge neighbor, one hop away (issue #462). ``status`` is null only for\nthe residual race a neighbor's facts fail to resolve \u2014 the edge is still drawn,\nunsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive\nscope this shares.",
+        "description": "One standing-edge neighbor, one hop away. ``status`` is null only for\nthe residual race a neighbor's facts fail to resolve \u2014 the edge is still drawn,\nunsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive\nscope this shares.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -1659,7 +1659,7 @@
         "type": "object"
       },
       "ChunkNeighborhoodView": {
-        "description": "A chunk's standing dependency edges one hop each way (issue #462) \u2014 both\n``prerequisites`` and ``dependents`` are always present as lists, empty rather than\nnull.",
+        "description": "A chunk's standing dependency edges one hop each way \u2014 both\n``prerequisites`` and ``dependents`` are always present as lists, empty rather than\nnull.",
         "properties": {
           "dependents": {
             "items": {
@@ -1684,7 +1684,7 @@
         "type": "object"
       },
       "ChunkPatchRequest": {
-        "description": "The multi-field ``PATCH /chunks/{id}`` body (issue #124) \u2014 every field independently optional,\napplied all-or-nothing. ``graph_id``/``model`` mean \"leave unchanged\" whether omitted or explicitly\n``null``. ``intended_migration`` *is* nullable, so omitted (\"leave unchanged\") stays distinguishable\nfrom explicit ``null`` (\"clear it\") by the key's presence in the body, never by its value.",
+        "description": "The multi-field ``PATCH /chunks/{id}`` body \u2014 every field independently optional,\napplied all-or-nothing. ``graph_id``/``model`` mean \"leave unchanged\" whether omitted or explicitly\n``null``. ``intended_migration`` *is* nullable, so omitted (\"leave unchanged\") stays distinguishable\nfrom explicit ``null`` (\"clear it\") by the key's presence in the body, never by its value.",
         "properties": {
           "default_effort": {
             "anyOf": [
@@ -1751,7 +1751,7 @@
         "type": "object"
       },
       "ChunkPatchResponse": {
-        "description": "The result of one ``PATCH /chunks/{id}`` (issues #124, #144) \u2014 the chunk's\neditable build properties after the edit, carried together since a PATCH can apply more than\none at once.",
+        "description": "The result of one ``PATCH /chunks/{id}`` (#144) \u2014 the chunk's\neditable build properties after the edit, carried together since a PATCH can apply more than\none at once.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -1807,7 +1807,7 @@
         "type": "object"
       },
       "ChunkPauseRequest": {
-        "description": "Set or clear a chunk's operator pause brake \u2014 records who flipped it (issue #46).",
+        "description": "Set or clear a chunk's operator pause brake \u2014 records who flipped it.",
         "properties": {
           "by": {
             "default": "operator",
@@ -1869,7 +1869,7 @@
         "type": "string"
       },
       "ChunkStatusView": {
-        "description": "One chunk's status, pause, latest epoch, restart epochs, cost, and open decision\n(blizzard#521) \u2014 the slim batch projection ``GET /api/fleet/chunk-statuses`` returns.",
+        "description": "One chunk's status, pause, latest epoch, restart epochs, cost, and open decision \u2014\nthe slim batch projection ``GET /api/fleet/chunk-statuses`` returns.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -1940,7 +1940,7 @@
         "type": "object"
       },
       "ChunkStopRequest": {
-        "description": "Terminally abandon a chunk \u2014 records who stopped it (issue #118).",
+        "description": "Terminally abandon a chunk \u2014 records who stopped it.",
         "properties": {
           "by": {
             "default": "operator",
@@ -1952,7 +1952,7 @@
         "type": "object"
       },
       "ChunkSummary": {
-        "description": "One row of the fleet chunk list \u2014 the derived status and current node. ``current_node_name`` is\nthe node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.\n``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a terminal chunk reads\nunrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.",
+        "description": "One row of the fleet chunk list \u2014 the derived status and current node. ``current_node_name`` is\nthe node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.\n``runner_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads\nunrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.",
         "properties": {
           "blocked": {
             "anyOf": [
@@ -2128,7 +2128,7 @@
         "type": "object"
       },
       "ChunkUsageView": {
-        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was\nrecorded for this invocation \u2014 never fabricated. ``estimated_cost_usd`` is the runner's own reported\nestimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.",
+        "description": "One node-step's usage/cost telemetry \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was\nrecorded for this invocation \u2014 never fabricated. ``estimated_cost_usd`` is the runner's own reported\nestimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -2222,7 +2222,7 @@
         "type": "object"
       },
       "ChunksPageView": {
-        "description": "``GET /api/chunks``'s own bounded page (blizzard#526 D3/D4) \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one.",
+        "description": "``GET /api/chunks``'s own bounded page \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one.",
         "properties": {
           "chunks": {
             "default": [],
@@ -2248,7 +2248,7 @@
         "type": "object"
       },
       "CliTokenRequest": {
-        "description": "``POST /api/auth/cli/token``'s body (issue #96) \u2014 the CLI's PKCE code exchange.",
+        "description": "``POST /api/auth/cli/token``'s body \u2014 the CLI's PKCE code exchange.",
         "properties": {
           "code": {
             "title": "Code",
@@ -2272,7 +2272,7 @@
         "type": "object"
       },
       "CliTokenResponse": {
-        "description": "The minted hub session token (decision D6) \u2014 never a runner-style JWT.",
+        "description": "The minted hub session token \u2014 never a runner-style JWT.",
         "properties": {
           "token": {
             "title": "Token",
@@ -2480,7 +2480,7 @@
         "type": "object"
       },
       "DecisionSubmission": {
-        "description": "A runner-config gate: submit a decision in place of a transition, carrying the\ngated step's artifacts, proposed work items, and fencing epoch as one atomic write.\n``proposals`` is legal only from a node declaring ``proposes_work_items`` (D4, D6).",
+        "description": "A runner-config gate: submit a decision in place of a transition, carrying the\ngated step's artifacts, proposed work items, and fencing epoch as one atomic write.\n``proposals`` is legal only from a node declaring ``proposes_work_items``.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -2938,7 +2938,7 @@
         "type": "object"
       },
       "EventView": {
-        "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``runner_id`` is absent for a projected escalation (issue #155 \u2014 ``null``,\nnever ``\"\"``); ``detail`` is the event-specific JSON payload.",
+        "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``runner_id`` is absent for a projected escalation (``null``,\nnever ``\"\"``); ``detail`` is the event-specific JSON payload.",
         "properties": {
           "chunk_id": {
             "anyOf": [
@@ -3057,7 +3057,7 @@
         "type": "string"
       },
       "ExternalSubscriptionUsageWindowView": {
-        "description": "One rate-limit window's utilization, as the harness's own account reported it\n(issue #218) \u2014 ``window`` is the harness-native label, ``utilization_pct`` is 0-100,\n``resets_at`` the reset instant, ``window_seconds`` the window's length.",
+        "description": "One rate-limit window's utilization, as the harness's own account reported it\n\u2014 ``window`` is the harness-native label, ``utilization_pct`` is 0-100,\n``resets_at`` the reset instant, ``window_seconds`` the window's length.",
         "properties": {
           "resets_at": {
             "title": "Resets At",
@@ -3086,7 +3086,7 @@
         "type": "object"
       },
       "FindingDetailView": {
-        "description": "`GET /api/findings/{finding_id}`'s own response model (blizzard#487) \u2014 adds the\nfinding's whole fact chain, oldest-first, atop every `FindingView` field. The list\nread (`GET /api/findings`) returns plain `FindingView` and carries no chain.",
+        "description": "`GET /api/findings/{finding_id}`'s own response model \u2014 adds the\nfinding's whole fact chain, oldest-first, atop every `FindingView` field. The list\nread (`GET /api/findings`) returns plain `FindingView` and carries no chain.",
         "properties": {
           "class": {
             "title": "Class",
@@ -3238,7 +3238,7 @@
       },
       "FindingExitRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/findings/{verb}` \u2014 the shared shape for every human-driven exit and\n`reopen` except `supersede` (blizzard#394): every finding named exits (or\nreopens) together, one call, carrying the same required note (D7).",
+        "description": "`POST /api/findings/{verb}` \u2014 the shared shape for every human-driven exit and\n`reopen` except `supersede`: every finding named exits (or\nreopens) together, one call, carrying the same required note.",
         "properties": {
           "finding_ids": {
             "items": {
@@ -3261,7 +3261,7 @@
         "type": "object"
       },
       "FindingFactView": {
-        "description": "One entry in a finding's fact chain, oldest-first \u2014 `FindingFact` on the wire\n(blizzard#487).",
+        "description": "One entry in a finding's fact chain, oldest-first \u2014 `FindingFact` on the wire.",
         "properties": {
           "actor": {
             "anyOf": [
@@ -3325,7 +3325,7 @@
       },
       "FindingSupersedeRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/findings/supersede` \u2014 `FindingExitRequest` plus the absorbing finding\n(D4).",
+        "description": "`POST /api/findings/supersede` \u2014 `FindingExitRequest` plus the absorbing finding.",
         "properties": {
           "finding_ids": {
             "items": {
@@ -3353,7 +3353,7 @@
         "type": "object"
       },
       "FindingView": {
-        "description": "A finding. `state` folds the newest fact's kind to `\"live\"` for\n`add`/`observed`/`reopened` (blizzard#394); `note` is that fact's own note. `source`\nis `\"routine\"` or `\"review\"` (blizzard#582 D1): a review-sourced finding carries no\n`routine_name`, its own `severity`, and the `raised_by_chunk_id` that raised it.",
+        "description": "A finding. `state` folds the newest fact's kind to `\"live\"` for\n`add`/`observed`/`reopened`; `note` is that fact's own note. `source`\nis `\"routine\"` or `\"review\"`: a review-sourced finding carries no\n`routine_name`, its own `severity`, and the `raised_by_chunk_id` that raised it.",
         "properties": {
           "class": {
             "title": "Class",
@@ -3496,7 +3496,7 @@
         "type": "object"
       },
       "FindingsPageView": {
-        "description": "``GET /api/findings``'s own bounded page (blizzard#526 D3/D5) \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one.",
+        "description": "``GET /api/findings``'s own bounded page \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one.",
         "properties": {
           "findings": {
             "default": [],
@@ -3617,7 +3617,7 @@
         "type": "object"
       },
       "GardenDeliveryRequest": {
-        "description": "The garden-delivery route's body (issue #393) \u2014 the delta and proposal artifact\nnames to deliver, each independently optional.",
+        "description": "The garden-delivery route's body \u2014 the delta and proposal artifact\nnames to deliver, each independently optional.",
         "properties": {
           "delta": {
             "default": [],
@@ -3640,7 +3640,7 @@
         "type": "object"
       },
       "GardenDeliveryResponse": {
-        "description": "The result of one garden delivery \u2014 ``recorded`` durably means it, materialized\nnow or replayed (issue #393); ``invalid`` carries the rejection reason in\n``detail``.",
+        "description": "The result of one garden delivery \u2014 ``recorded`` durably means it, materialized\nnow or replayed; ``invalid`` carries the rejection reason in\n``detail``.",
         "properties": {
           "detail": {
             "default": "",
@@ -3664,7 +3664,7 @@
       },
       "GardenProposalAcceptRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/garden-proposals/{proposal_id}/accept` (blizzard#395). `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` replaces the proposal's own body as the prose the\nminted item's \"Related findings\" template wraps, when the proposal's own body should\nnot be used; ignored when `mint_work_item` is `False` (blizzard#397).",
+        "description": "`POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` replaces the proposal's own body as the prose the\nminted item's \"Related findings\" template wraps, when the proposal's own body should\nnot be used; ignored when `mint_work_item` is `False`.",
         "properties": {
           "body": {
             "anyOf": [
@@ -3798,7 +3798,7 @@
         "type": "string"
       },
       "GardenProposalClosureView": {
-        "description": "How a garden proposal closed (blizzard#395) \u2014 a pass or an accept, either way\nterminal.",
+        "description": "How a garden proposal closed \u2014 a pass or an accept, either way\nterminal.",
         "properties": {
           "closed_at": {
             "title": "Closed At",
@@ -3868,7 +3868,7 @@
         "type": "object"
       },
       "GardenProposalCountsRowView": {
-        "description": "One origin/routine/class triple's garden-proposal counts over the requested\nwindow (blizzard#631). `routine_name` is nullable for an operator-authored row\nnaming no routine.",
+        "description": "One origin/routine/class triple's garden-proposal counts over the requested\nwindow. `routine_name` is nullable for an operator-authored row\nnaming no routine.",
         "properties": {
           "accepted_with_item": {
             "title": "Accepted With Item",
@@ -3973,7 +3973,7 @@
       },
       "GardenProposalCreateRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/garden-proposals` (blizzard#631) \u2014 mints an operator-authored proposal.\n`routine` is optional; when given it must name an existing routine. `findings` may\nbe empty.",
+        "description": "`POST /api/garden-proposals` \u2014 mints an operator-authored proposal.\n`routine` is optional; when given it must name an existing routine. `findings` may\nbe empty.",
         "properties": {
           "body": {
             "title": "Body",
@@ -4016,7 +4016,7 @@
       },
       "GardenProposalEditRequest": {
         "additionalProperties": false,
-        "description": "`PATCH /api/garden-proposals/{proposal_id}` (blizzard#631) \u2014 all-or-nothing\nover the given fields; a field absent from the request is left unchanged. Carries no\n`routine`: a proposal's routine is fixed at create.",
+        "description": "`PATCH /api/garden-proposals/{proposal_id}` \u2014 all-or-nothing\nover the given fields; a field absent from the request is left unchanged. Carries no\n`routine`: a proposal's routine is fixed at create.",
         "properties": {
           "body": {
             "anyOf": [
@@ -4057,7 +4057,7 @@
       },
       "GardenProposalFindingsRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/garden-proposals/{proposal_id}/attach` and `.../detach` (blizzard#631)\n\u2014 the finding ids to link or unlink.",
+        "description": "`POST /api/garden-proposals/{proposal_id}/attach` and `.../detach`\n\u2014 the finding ids to link or unlink.",
         "properties": {
           "findings": {
             "items": {
@@ -4083,7 +4083,7 @@
         "type": "string"
       },
       "GardenProposalOrigin": {
-        "description": "Who authored a garden proposal (blizzard#631) \u2014 a mint-time fact, stored on\nthe row itself and never inferred from a null `routine_name`.",
+        "description": "Who authored a garden proposal \u2014 a mint-time fact, stored on\nthe row itself and never inferred from a null `routine_name`.",
         "enum": [
           "routine-run",
           "operator"
@@ -4093,7 +4093,7 @@
       },
       "GardenProposalPassRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/garden-proposals/{proposal_id}/pass` \u2014 passing wants a reason more\nthan accepting does (blizzard#395).",
+        "description": "`POST /api/garden-proposals/{proposal_id}/pass` \u2014 passing wants a reason more\nthan accepting does.",
         "properties": {
           "reason": {
             "title": "Reason",
@@ -4107,7 +4107,7 @@
         "type": "object"
       },
       "GardenProposalView": {
-        "description": "A garden proposal, its closure carried alongside it once one exists.\n`routine_name` is nullable \u2014 an operator-authored proposal (blizzard#631) may name\nno routine; `created_by` is set only for one.",
+        "description": "A garden proposal, its closure carried alongside it once one exists.\n`routine_name` is nullable \u2014 an operator-authored proposal may name\nno routine; `created_by` is set only for one.",
         "properties": {
           "body": {
             "title": "Body",
@@ -4186,7 +4186,7 @@
         "type": "object"
       },
       "GardenProposalsPageView": {
-        "description": "``GET /api/garden-proposals``'s own bounded page (blizzard#526 D3/D4) \u2014\n``next_cursor`` is ``None`` exactly when this page is the last one.",
+        "description": "``GET /api/garden-proposals``'s own bounded page \u2014\n``next_cursor`` is ``None`` exactly when this page is the last one.",
         "properties": {
           "next_cursor": {
             "anyOf": [
@@ -4356,7 +4356,7 @@
         "type": "object"
       },
       "GraphLifecycleRequest": {
-        "description": "Retire or re-enable a graph \u2014 records who flipped it (issue #101).",
+        "description": "Retire or re-enable a graph \u2014 records who flipped it.",
         "properties": {
           "by": {
             "default": "operator",
@@ -4519,7 +4519,7 @@
         "type": "object"
       },
       "GraphPolicyRequest": {
-        "description": "Set a graph's follow-latest policy \u2014 the tri-state (issue #164).\n\n``follow_latest`` is required and carries no default: ``true``/``false`` override the\nhub-level setting for this mint's chunks, explicit ``null`` reverts to inheriting it.",
+        "description": "Set a graph's follow-latest policy \u2014 the tri-state.\n\n``follow_latest`` is required and carries no default: ``true``/``false`` override the\nhub-level setting for this mint's chunks, explicit ``null`` reverts to inheriting it.",
         "properties": {
           "by": {
             "default": "operator",
@@ -4545,7 +4545,7 @@
         "type": "object"
       },
       "GraphSessionView": {
-        "description": "One graph-level named session declaration (issue #144).\n\n``model`` is a preference list resolved left-to-right at mint; the hub interprets none\nof it, ``effort``, ``compaction_window``, or ``harnesses`` (its own acceptable set).",
+        "description": "One graph-level named session declaration.\n\n``model`` is a preference list resolved left-to-right at mint; the hub interprets none\nof it, ``effort``, ``compaction_window``, or ``harnesses`` (its own acceptable set).",
         "properties": {
           "compaction_window": {
             "anyOf": [
@@ -4607,7 +4607,7 @@
         "type": "object"
       },
       "GraphSummaryView": {
-        "description": "One graph's summary row \u2014 a name-lineage entry as served by ``GET /graphs``.\n\n``effective`` marks the newest **non-retired** graph of this ``name`` (issue #101), while\n``retired`` is this graph's own state: a non-retired non-effective graph is superseded.",
+        "description": "One graph's summary row \u2014 a name-lineage entry as served by ``GET /graphs``.\n\n``effective`` marks the newest **non-retired** graph of this ``name``, while\n``retired`` is this graph's own state: a non-retired non-effective graph is superseded.",
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -4646,7 +4646,7 @@
         "type": "object"
       },
       "GraphSyncEntry": {
-        "description": "One packaged graph's reconciliation outcome (issue #146).\n\n``status`` is ``minted``, ``up-to-date``, or ``failed``; ``graph_id`` is present only on\n``minted``, and ``detail`` says why a graph minted or what went wrong.",
+        "description": "One packaged graph's reconciliation outcome.\n\n``status`` is ``minted``, ``up-to-date``, or ``failed``; ``graph_id`` is present only on\n``minted``, and ``detail`` says why a graph minted or what went wrong.",
         "properties": {
           "detail": {
             "anyOf": [
@@ -4687,7 +4687,7 @@
         "type": "object"
       },
       "GraphSyncResponse": {
-        "description": "``POST /graphs/sync``'s report \u2014 one entry per packaged graph (issue #146).\n\n``ok`` is false iff any entry failed, so a caller gates on the field rather than\nre-deriving it. Always ``200``: a per-graph failure is data, not a transport error.",
+        "description": "``POST /graphs/sync``'s report \u2014 one entry per packaged graph.\n\n``ok`` is false iff any entry failed, so a caller gates on the field rather than\nre-deriving it. Always ``200``: a per-graph failure is data, not a transport error.",
         "properties": {
           "entries": {
             "default": [],
@@ -4709,7 +4709,7 @@
         "type": "object"
       },
       "GraphView": {
-        "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.\n\n``enabled`` and ``retired`` are one lifecycle fact (issue #101), saying nothing about\nwhether this mint is newest. ``follow_latest`` is the **stored** tri-state (#164).",
+        "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.\n\n``enabled`` and ``retired`` are one lifecycle fact, saying nothing about\nwhether this mint is newest. ``follow_latest`` is the **stored** tri-state (#164).",
         "properties": {
           "artifacts": {
             "default": [],
@@ -4900,7 +4900,7 @@
         "type": "object"
       },
       "IntendedMigrationPatch": {
-        "description": "The intended-migration value a ``ChunkPatchRequest`` carries (issue #124). ``to_graph`` is a\ngraph id, or a name resolved server-side to the newest enabled graph of that name at request time \u2014\nthe resolved **id** is stored. ``node`` present selects ``forced``, absent selects ``auto``; there\nis no separate ``mode`` field, so \"node supplied under auto\" is unrepresentable.",
+        "description": "The intended-migration value a ``ChunkPatchRequest`` carries. ``to_graph`` is a\ngraph id, or a name resolved server-side to the newest enabled graph of that name at request time \u2014\nthe resolved **id** is stored. ``node`` present selects ``forced``, absent selects ``auto``; there\nis no separate ``mode`` field, so \"node supplied under auto\" is unrepresentable.",
         "properties": {
           "node": {
             "anyOf": [
@@ -4925,7 +4925,7 @@
         "type": "object"
       },
       "IntendedMigrationView": {
-        "description": "A chunk's standing migration intent (issue #124) \u2014 editable at any non-terminal status and\nconsulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved\nserver-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``\nmode's landing target, null for ``auto``, whose landing is derived at consult time.",
+        "description": "A chunk's standing migration intent \u2014 editable at any non-terminal status and\nconsulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved\nserver-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``\nmode's landing target, null for ``auto``, whose landing is derived at consult time.",
         "properties": {
           "graph_id": {
             "title": "Graph Id",
@@ -4993,7 +4993,7 @@
         "type": "object"
       },
       "LeaseTranscriptView": {
-        "description": "A lease's transcript, concatenated across every segment stored under its\n``(chunk_id, node_id, epoch)`` \u2014 every spawn generation, not one (D2). The fleet-plane\ncounterpart to the per-segment content read: a runner's read-back of its own shipped\nsegments (D3, issue #249). No ``final``: a segment's own closes only *that* segment.",
+        "description": "A lease's transcript, concatenated across every segment stored under its\n``(chunk_id, node_id, epoch)`` \u2014 every spawn generation, not one. The fleet-plane\ncounterpart to the per-segment content read: a runner's read-back of its own shipped\nsegments. No ``final``: a segment's own closes only *that* segment.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -5090,7 +5090,7 @@
         "type": "object"
       },
       "MigrationMode": {
-        "description": "How a chunk's intended migration fires at its next transition (issue #124).\n\n``AUTO`` fires only when the transition's own destination node name also exists on\nthe target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.",
+        "description": "How a chunk's intended migration fires at its next transition.\n\n``AUTO`` fires only when the transition's own destination node name also exists on\nthe target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.",
         "enum": [
           "auto",
           "forced"
@@ -5099,7 +5099,7 @@
         "type": "string"
       },
       "MigrationView": {
-        "description": "One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition. A transition-borne source ends\nthe attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the\nre-pinned model, null when the chunk kept its own. ``source`` attributes it.",
+        "description": "One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition. A transition-borne source ends\nthe attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the\nre-pinned model, null when the chunk kept its own. ``source`` attributes it.",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -5529,7 +5529,7 @@
         "type": "object"
       },
       "PauseView": {
-        "description": "An open pause on a chunk (issue #46) \u2014 who set it and when, present only while ``paused=True``\nis the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated\nstatuses in the derivation order, so this is the only carrier of a pause on a gated chunk.",
+        "description": "An open pause on a chunk \u2014 who set it and when, present only while ``paused=True``\nis the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated\nstatuses in the derivation order, so this is the only carrier of a pause on a gated chunk.",
         "properties": {
           "by": {
             "title": "By",
@@ -5591,7 +5591,7 @@
         "type": "object"
       },
       "ProducesEntry": {
-        "description": "One node's ``produces:`` expectation, kind-carrying (D1, issue #143).",
+        "description": "One node's ``produces:`` expectation, kind-carrying.",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/ArtifactKind",
@@ -5713,7 +5713,7 @@
         "type": "object"
       },
       "QuestionView": {
-        "description": "A question row with its derived answer *and delivery* state.\n\n``answered`` and the answer fields derive from the presence of the answer row;\n``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact (issue #165).",
+        "description": "A question row with its derived answer *and delivery* state.\n\n``answered`` and the answer fields derive from the presence of the answer row;\n``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact.",
         "properties": {
           "answer": {
             "anyOf": [
@@ -5847,7 +5847,7 @@
         "type": "object"
       },
       "QueuePageView": {
-        "description": "``GET /api/queue``'s own bounded page (blizzard#526 D3/D4): ``next_cursor`` is\n``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.",
+        "description": "``GET /api/queue``'s own bounded page: ``next_cursor`` is\n``None`` on the last page; ``position`` is each entry's whole-order index, not page-local.",
         "properties": {
           "entries": {
             "default": [],
@@ -5950,7 +5950,7 @@
         "type": "object"
       },
       "QueuePositionRequest": {
-        "description": "Single-chunk fractional reposition \u2014 ``POST /api/queue/position`` (issue #137).\n\n``after_chunk_id=null`` moves ``chunk_id`` to the top, otherwise immediately after\nthe named chunk. Both must be ready (``409``); a self-anchor is ``422``.",
+        "description": "Single-chunk fractional reposition \u2014 ``POST /api/queue/position``.\n\n``after_chunk_id=null`` moves ``chunk_id`` to the top, otherwise immediately after\nthe named chunk. Both must be ready (``409``); a self-anchor is ``422``.",
         "properties": {
           "after_chunk_id": {
             "anyOf": [
@@ -6207,7 +6207,7 @@
         "type": "object"
       },
       "ReviewFindingsDeliveryResponse": {
-        "description": "The result of one `record-findings` materialization (blizzard#582) \u2014 the\n`GardenDeliveryResponse` shape: ``recorded`` durably means it, materialized now or\nreplayed; ``invalid`` carries the rejection reason in ``detail``.",
+        "description": "The result of one `record-findings` materialization \u2014 the\n`GardenDeliveryResponse` shape: ``recorded`` durably means it, materialized now or\nreplayed; ``invalid`` carries the rejection reason in ``detail``.",
         "properties": {
           "detail": {
             "default": "",
@@ -6244,7 +6244,7 @@
         "type": "object"
       },
       "RotatePolicyView": {
-        "description": "One declared session's rotation bounds (issue #144).\n\nEvery threshold is independently optional; ``max_invocations`` counts **harness\ninvocations**, not node-steps, one of which burns several.",
+        "description": "One declared session's rotation bounds.\n\nEvery threshold is independently optional; ``max_invocations`` counts **harness\ninvocations**, not node-steps, one of which burns several.",
         "properties": {
           "max_context_tokens": {
             "anyOf": [
@@ -6403,7 +6403,7 @@
         "type": "object"
       },
       "RoutineBaselineRepoView": {
-        "description": "One repo's recorded baseline revision and how much has landed against it since\n(D1) \u2014 ``GET /api/routines/{routine_id}/baselines``.",
+        "description": "One repo's recorded baseline revision and how much has landed against it since\n\u2014 ``GET /api/routines/{routine_id}/baselines``.",
         "properties": {
           "landed_since": {
             "title": "Landed Since",
@@ -6427,7 +6427,7 @@
         "type": "object"
       },
       "RoutineBaselineView": {
-        "description": "One scope a routine has swept (D5) \u2014 see\n`IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.",
+        "description": "One scope a routine has swept \u2014 see\n`IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.",
         "properties": {
           "finding_set_id": {
             "title": "Finding Set Id",
@@ -6509,7 +6509,7 @@
         "type": "object"
       },
       "RoutineEditRequest": {
-        "description": "``name`` is required and must equal the routine's current one (D7) \u2014 the request\nrestates it so a caller cannot silently target the wrong routine's edit.",
+        "description": "``name`` is required and must equal the routine's current one \u2014 the request\nrestates it so a caller cannot silently target the wrong routine's edit.",
         "properties": {
           "default_effort": {
             "anyOf": [
@@ -6583,7 +6583,7 @@
       },
       "RoutineRunRequest": {
         "additionalProperties": false,
-        "description": "``POST /api/routines/{routine_id}/run`` (blizzard#392) \u2014 ``scope_slug`` omitted\nor ``None`` defaults to the routine's own; ``mode`` is ``\"full\"`` or ``\"delta\"``, a\nrequested ``\"delta\"`` with no recorded baseline downgrading to ``\"full\"`` on the\nresponse rather than refusing.",
+        "description": "``POST /api/routines/{routine_id}/run`` \u2014 ``scope_slug`` omitted\nor ``None`` defaults to the routine's own; ``mode`` is ``\"full\"`` or ``\"delta\"``, a\nrequested ``\"delta\"`` with no recorded baseline downgrading to ``\"full\"`` on the\nresponse rather than refusing.",
         "properties": {
           "mode": {
             "default": "full",
@@ -6904,7 +6904,7 @@
         "type": "object"
       },
       "RunnerCapability": {
-        "description": "One harness binding this runner can execute (blizzard#433) \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding. ``available`` (blizzard#438) defaults\n``True`` so a runner asserting none matches exactly as it did before this field\nexisted \u2014 never a reason to strand a pre-upgrade runner.",
+        "description": "One harness binding this runner can execute \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding. ``available`` defaults\n``True`` so a runner asserting none matches exactly as it did before this field\nexisted \u2014 never a reason to strand a pre-upgrade runner.",
         "properties": {
           "available": {
             "default": true,
@@ -7197,7 +7197,7 @@
         "type": "object"
       },
       "RunnerView": {
-        "description": "One fleet-registry row \u2014 derived liveness, both brakes, and advisory subscription usage.\n\nThe two brakes stay separate (issues #43, #45): ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". Subscription usage is advisory.",
+        "description": "One fleet-registry row \u2014 derived liveness, both brakes, and advisory subscription usage.\n\nThe two brakes stay separate (#45): ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". Subscription usage is advisory.",
         "properties": {
           "capabilities": {
             "default": [],
@@ -7290,7 +7290,7 @@
         "type": "object"
       },
       "ScopeCreateRequest": {
-        "description": "Mint a scope, or no-op onto the existing one of the same slug (D4).",
+        "description": "Mint a scope, or no-op onto the existing one of the same slug.",
         "properties": {
           "description": {
             "default": "",
@@ -7610,7 +7610,7 @@
         "type": "object"
       },
       "SubscriptionUsageView": {
-        "description": "One reported subscription's newest sampled usage, carrying its identity\n(issue #218). ``slug`` is the runner-unique join key, ``name`` the operator-facing\nlabel. ``sampled_at`` is ``None`` for a miss-only row (blizzard#504 D7) \u2014 ``condition``\ncarries the reason in that case, and ``windows`` is empty.",
+        "description": "One reported subscription's newest sampled usage, carrying its identity.\n``slug`` is the runner-unique join key, ``name`` the operator-facing\nlabel. ``sampled_at`` is ``None`` for a miss-only row \u2014 ``condition``\ncarries the reason in that case, and ``windows`` is empty.",
         "properties": {
           "condition": {
             "anyOf": [
@@ -7776,7 +7776,7 @@
         "type": "object"
       },
       "TranscriptSegmentAck": {
-        "description": "The hub's per-batch acknowledgement against the transcript lane's high-water mark.\n\n``capped`` is D6's cap-rejection class \u2014 acknowledged, content-dropped, and the\nhigh-water advances past it, a durable decision that must not re-adjudicate on replay.",
+        "description": "The hub's per-batch acknowledgement against the transcript lane's high-water mark.\n\n``capped`` is the cap-rejection class \u2014 acknowledged, content-dropped, and the\nhigh-water advances past it, a durable decision that must not re-adjudicate on replay.",
         "properties": {
           "already_applied": {
             "default": [],
@@ -7819,7 +7819,7 @@
         "type": "object"
       },
       "TranscriptSegmentBatch": {
-        "description": "A runner's push of one-or-more buffered transcript records, ordered by ``seq`` \u2014\nthe transcript lane's own store-and-forward batch, distinct from the fact lane's\n``RunnerFactBatch`` (D7).",
+        "description": "A runner's push of one-or-more buffered transcript records, ordered by ``seq`` \u2014\nthe transcript lane's own store-and-forward batch, distinct from the fact lane's\n``RunnerFactBatch``.",
         "properties": {
           "records": {
             "items": {
@@ -7841,7 +7841,7 @@
         "type": "object"
       },
       "TranscriptSegmentContentView": {
-        "description": "One segment's decompressed turns, concatenated across its stored records in\nturn-range order \u2014 the lazy per-segment content read (D12).",
+        "description": "One segment's decompressed turns, concatenated across its stored records in\nturn-range order \u2014 the lazy per-segment content read.",
         "properties": {
           "final": {
             "title": "Final",
@@ -7873,7 +7873,7 @@
         "type": "object"
       },
       "TranscriptSegmentIndexEntry": {
-        "description": "One segment's metadata row (D12) \u2014 byte counts and completion state, never turn\ncontent. ``truncated`` is true iff any record was cap-rejected (D5) OR the runner\nitself declared ``record_truncated`` on one, so a consumer can tell an incomplete\nsegment from a short one without fetching it.",
+        "description": "One segment's metadata row \u2014 byte counts and completion state, never turn\ncontent. ``truncated`` is true iff any record was cap-rejected OR the runner\nitself declared ``record_truncated`` on one, so a consumer can tell an incomplete\nsegment from a short one without fetching it.",
         "properties": {
           "byte_count": {
             "title": "Byte Count",
@@ -7960,7 +7960,7 @@
         "type": "object"
       },
       "TranscriptSegmentIndexView": {
-        "description": "The per-chunk segment discovery read (D12) \u2014 unreachable content, only what a\ncaller needs to then ask for one segment's turns.",
+        "description": "The per-chunk segment discovery read \u2014 unreachable content, only what a\ncaller needs to then ask for one segment's turns.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -7982,7 +7982,7 @@
         "type": "object"
       },
       "TranscriptSegmentRecord": {
-        "description": "One shipped turn-range slice of a segment (D1). ``final=True`` marks the one record\nthat closes the segment out. ``record_truncated`` is the runner's own declaration that\nTHIS record lost content it would otherwise carry \u2014 shrunk, an incomplete source read,\nor (only when neither closes the gap) ``turns`` emptied \u2014 distinct from ``rejected``.",
+        "description": "One shipped turn-range slice of a segment. ``final=True`` marks the one record\nthat closes the segment out. ``record_truncated`` is the runner's own declaration that\nTHIS record lost content it would otherwise carry \u2014 shrunk, an incomplete source read,\nor (only when neither closes the gap) ``turns`` emptied \u2014 distinct from ``rejected``.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -8110,7 +8110,7 @@
         "type": "object"
       },
       "TransitionView": {
-        "description": "One accepted transition in a chunk's history: the edge a node-step took \u2014 origin node, the\njudgement choice that routed it, destination \u2014 oldest first on the detail.\n``from_node_name``/``to_node_name`` are the nodes' human graph names, null when unresolvable.\n``graph_id``/``graph_name`` name the graph this step happened in (issue #90), both null on old rows.",
+        "description": "One accepted transition in a chunk's history: the edge a node-step took \u2014 origin node, the\njudgement choice that routed it, destination \u2014 oldest first on the detail.\n``from_node_name``/``to_node_name`` are the nodes' human graph names, null when unresolvable.\n``graph_id``/``graph_name`` name the graph this step happened in, both null on old rows.",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -8316,7 +8316,7 @@
         "type": "object"
       },
       "TurnSegmentView-Input": {
-        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),\nstable across a segment's batches \u2014 EXCEPT under ``sidechain.turns``, where it restarts at 0 within\nthat one sidechain, and on a lease transcript read, where it numbers only the turns that read\nreturned and slides with the recency window (blizzard#248 D1). ``kind`` is closed.",
+        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted,\nstable across a segment's batches \u2014 EXCEPT under ``sidechain.turns``, where it restarts at 0 within\nthat one sidechain, and on a lease transcript read, where it numbers only the turns that read\nreturned and slides with the recency window. ``kind`` is closed.",
         "properties": {
           "index": {
             "title": "Index",
@@ -8391,7 +8391,7 @@
         "type": "object"
       },
       "TurnSegmentView-Output": {
-        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),\nstable across a segment's batches \u2014 EXCEPT under ``sidechain.turns``, where it restarts at 0 within\nthat one sidechain, and on a lease transcript read, where it numbers only the turns that read\nreturned and slides with the recency window (blizzard#248 D1). ``kind`` is closed.",
+        "description": "One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted,\nstable across a segment's batches \u2014 EXCEPT under ``sidechain.turns``, where it restarts at 0 within\nthat one sidechain, and on a lease transcript read, where it numbers only the turns that read\nreturned and slides with the recency window. ``kind`` is closed.",
         "properties": {
           "index": {
             "title": "Index",
@@ -8467,7 +8467,7 @@
       },
       "UpdateWorkItemProposal": {
         "additionalProperties": false,
-        "description": "A proposed update to an existing work item \u2014 its ``{source, ref}`` pointer plus\nevidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent\nitem) is recorded, not refused (D5) \u2014 resolving the pointer is left to materialization.",
+        "description": "A proposed update to an existing work item \u2014 its ``{source, ref}`` pointer plus\nevidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent\nitem) is recorded, not refused \u2014 resolving the pointer is left to materialization.",
         "properties": {
           "evidence": {
             "title": "Evidence",
@@ -8610,7 +8610,7 @@
         "type": "object"
       },
       "WorkItemAuthorView": {
-        "description": "Who filed a hub-owned work item, legible for display (blizzard#362) \u2014 ``user_id``\nand ``login`` set only for ``kind == \"user\"``; ``runner_id``/``chunk_id``/``node_name``\n\u2014 the proposing runner, chunk, and node \u2014 set only for ``kind == \"fleet\"``.",
+        "description": "Who filed a hub-owned work item, legible for display \u2014 ``user_id``\nand ``login`` set only for ``kind == \"user\"``; ``runner_id``/``chunk_id``/``node_name``\n\u2014 the proposing runner, chunk, and node \u2014 set only for ``kind == \"fleet\"``.",
         "properties": {
           "chunk_id": {
             "anyOf": [
@@ -8679,7 +8679,7 @@
         "type": "object"
       },
       "WorkItemClosure": {
-        "description": "How a hub-owned work item closed (issue #357) \u2014 recorded on the row itself when\nit closes, never derived from anything else.",
+        "description": "How a hub-owned work item closed \u2014 recorded on the row itself when\nit closes, never derived from anything else.",
         "enum": [
           "delivered",
           "withdrawn"
@@ -8712,7 +8712,7 @@
         "type": "object"
       },
       "WorkItemCreateResponse": {
-        "description": "``POST /api/work-sources/{source}/items`` (blizzard#359) \u2014 carries every\n``WorkItemView`` field plus ``chunk_id``, the id of the ``not_ready`` chunk\ncreation mints in the same transaction.",
+        "description": "``POST /api/work-sources/{source}/items`` \u2014 carries every\n``WorkItemView`` field plus ``chunk_id``, the id of the ``not_ready`` chunk\ncreation mints in the same transaction.",
         "properties": {
           "author": {
             "$ref": "#/components/schemas/WorkItemAuthorView"
@@ -8818,7 +8818,7 @@
         "type": "object"
       },
       "WorkItemEntry": {
-        "description": "One pointer's pass-through work item, vendor-native \u2014 title, body, comments, and,\nonly when the source has them to give (blizzard#362), ``author``/``stated_priority``.\n``label``/``web_url`` are the legible pointer label and browser address, both null when no\nconfigured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``.",
+        "description": "One pointer's pass-through work item, vendor-native \u2014 title, body, comments, and,\nonly when the source has them to give, ``author``/``stated_priority``.\n``label``/``web_url`` are the legible pointer label and browser address, both null when no\nconfigured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``.",
         "properties": {
           "author": {
             "anyOf": [
@@ -8965,7 +8965,7 @@
         "type": "object"
       },
       "WorkItemPriority": {
-        "description": "The three stated-priority values a create or edit may set (blizzard#358).",
+        "description": "The three stated-priority values a create or edit may set.",
         "enum": [
           "low",
           "normal",
@@ -9214,7 +9214,7 @@
   "paths": {
     "/api/activity": {
       "get": {
-        "description": "The activity backfill (issue #213) \u2014 the three already-bounded per-source activity reads merged,\nsorted newest-first, and capped.\n\n``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to\nUTC so it never raises against the store's aware timestamps.",
+        "description": "The activity backfill \u2014 the three already-bounded per-source activity reads merged,\nsorted newest-first, and capped.\n\n``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to\nUTC so it never raises against the store's aware timestamps.",
         "operationId": "list_activity_api_activity_get",
         "parameters": [
           {
@@ -10173,7 +10173,7 @@
     },
     "/api/analytics/durations/graphs": {
       "get": {
-        "description": "The same rollup grouped by the graph the step happened in (D2) \u2014 the transition's\nown ``graph_id``, never the chunk's current pin.",
+        "description": "The same rollup grouped by the graph the step happened in \u2014 the transition's\nown ``graph_id``, never the chunk's current pin.",
         "operationId": "durations_by_graph_api_analytics_durations_graphs_get",
         "parameters": [
           {
@@ -10273,7 +10273,7 @@
     },
     "/api/analytics/durations/nodes": {
       "get": {
-        "description": "Completed-step duration rollups grouped by node (D2) \u2014 see\n``AnalyticsDurationView`` for the wall-clock semantics (D3).",
+        "description": "Completed-step duration rollups grouped by node \u2014 see\n``AnalyticsDurationView`` for the wall-clock semantics.",
         "operationId": "durations_by_node_api_analytics_durations_nodes_get",
         "parameters": [
           {
@@ -10889,7 +10889,7 @@
     },
     "/api/analytics/outcomes/nodes": {
       "get": {
-        "description": "Judged-choice distribution and attempt-failure counts grouped by node (D4/D5) \u2014\na judged failure edge and a retry-consuming attempt failure reported separately,\nnever blended into one rate. A delivery kick-back (``chunk_bounces``) counts as\nneither.",
+        "description": "Judged-choice distribution and attempt-failure counts grouped by node \u2014\na judged failure edge and a retry-consuming attempt failure reported separately,\nnever blended into one rate. A delivery kick-back (``chunk_bounces``) counts as\nneither.",
         "operationId": "outcomes_by_node_api_analytics_outcomes_nodes_get",
         "parameters": [
           {
@@ -11031,7 +11031,7 @@
     },
     "/api/analytics/spend/chunks": {
       "get": {
-        "description": "A bounded, keyset-paginated page of per-chunk spend rollups (D8) \u2014 unbounded in a\nwide window, unlike the per-node/per-graph groupings, so this takes a cursor rather\nthan a single envelope.",
+        "description": "A bounded, keyset-paginated page of per-chunk spend rollups \u2014 unbounded in a\nwide window, unlike the per-node/per-graph groupings, so this takes a cursor rather\nthan a single envelope.",
         "operationId": "spend_by_chunk_api_analytics_spend_chunks_get",
         "parameters": [
           {
@@ -11259,7 +11259,7 @@
     },
     "/api/analytics/spend/graphs": {
       "get": {
-        "description": "The same rollup grouped by each usage fact's chunk's *current* graph pin \u2014 a\nchunk that migrated attributes every usage fact it ever recorded to where it lives\ntoday (D6).",
+        "description": "The same rollup grouped by each usage fact's chunk's *current* graph pin \u2014 a\nchunk that migrated attributes every usage fact it ever recorded to where it lives\ntoday.",
         "operationId": "spend_by_graph_api_analytics_spend_graphs_get",
         "parameters": [
           {
@@ -11359,7 +11359,7 @@
     },
     "/api/analytics/spend/nodes": {
       "get": {
-        "description": "Usage/cost rollups grouped by node (D6) \u2014 the same lower-bound + PARTIAL contract\n``GET /api/spend`` publishes.",
+        "description": "Usage/cost rollups grouped by node \u2014 the same lower-bound + PARTIAL contract\n``GET /api/spend`` publishes.",
         "operationId": "spend_by_node_api_analytics_spend_nodes_get",
         "parameters": [
           {
@@ -11559,7 +11559,7 @@
     },
     "/api/auth/cli/token": {
       "post": {
-        "description": "Redeem a ``client=cli`` authorize code for a hub session token (issue #96).\n\nPublic plane \u2014 there is no session yet; this route is what mints one. One\nundifferentiated 400 covers every failure, telling a caller nothing about which.",
+        "description": "Redeem a ``client=cli`` authorize code for a hub session token.\n\nPublic plane \u2014 there is no session yet; this route is what mints one. One\nundifferentiated 400 covers every failure, telling a caller nothing about which.",
         "operationId": "cli_token_api_auth_cli_token_post",
         "requestBody": {
           "content": {
@@ -11663,7 +11663,7 @@
     },
     "/api/auth/rotate-signing-key": {
       "post": {
-        "description": "Mint a fresh current signing key, demoting the old current to previous (issue\n#95). Human-plane, gated on ``user:manage`` and closed to a runner bearer token.",
+        "description": "Mint a fresh current signing key, demoting the old current to previous.\nHuman-plane, gated on ``user:manage`` and closed to a runner bearer token.",
         "operationId": "rotate_signing_key_api_auth_rotate_signing_key_post",
         "responses": {
           "204": {
@@ -11806,7 +11806,7 @@
     },
     "/api/backlog": {
       "get": {
-        "description": "The hub-ordered ``not_ready`` list, read-only and keyset-paginated (blizzard#526\nD3/D4/D7) \u2014 an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``.",
+        "description": "The hub-ordered ``not_ready`` list, read-only and keyset-paginated\n\u2014 an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``.",
         "operationId": "get_backlog_api_backlog_get",
         "parameters": [
           {
@@ -11950,7 +11950,7 @@
     },
     "/api/chunks": {
       "get": {
-        "description": "The fleet chunk list \u2014 derived status per chunk, bounded and keyset-paginated.\n\nOnly the page's own rows render, but live-holder and blocked-marking derivation still\nsee the whole fleet (D6 below) \u2014 a pointer this page renders can be held live by a\nchunk outside it, same for a dependent's prerequisite.",
+        "description": "The fleet chunk list \u2014 derived status per chunk, bounded and keyset-paginated.\n\nOnly the page's own rows render, but live-holder and blocked-marking derivation still\nsee the whole fleet \u2014 a pointer this page renders can be held live by a\nchunk outside it, same for a dependent's prerequisite.",
         "operationId": "list_chunks_api_chunks_get",
         "parameters": [
           {
@@ -12010,7 +12010,7 @@
         ]
       },
       "post": {
-        "description": "Ingest by source-native token; 422 on a token no configured source\nclaims; 409 on a pointer held by a live chunk; 503 if every graph named after the\npackaged default has been retired (issue #101 \u2014 the operator's brake, not a code\nbug: re-enable one or mint a new one).",
+        "description": "Ingest by source-native token; 422 on a token no configured source\nclaims; 409 on a pointer held by a live chunk; 503 if every graph named after the\npackaged default has been retired (the operator's brake, not a code\nbug: re-enable one or mint a new one).",
         "operationId": "ingest_chunk_api_chunks_post",
         "requestBody": {
           "content": {
@@ -12052,7 +12052,7 @@
     },
     "/api/chunks/{chunk_id}": {
       "delete": {
-        "description": "Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds\nin the same write (issue #364). 404 for an unknown chunk or one a race deletes\nbetween resolving it and this write; 409 for one held, terminal, or a standing\nprerequisite for another chunk (issue #460), naming the dependents in that case.\nIrreversible: CHUNK is gone from every read the instant this returns.",
+        "description": "Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds\nin the same write. 404 for an unknown chunk or one a race deletes\nbetween resolving it and this write; 409 for one held, terminal, or a standing\nprerequisite for another chunk, naming the dependents in that case.\nIrreversible: CHUNK is gone from every read the instant this returns.",
         "operationId": "delete_chunk_api_chunks__chunk_id__delete",
         "parameters": [
           {
@@ -12144,7 +12144,7 @@
         ]
       },
       "patch": {
-        "description": "Apply the body's fields in one all-or-nothing edit (issue #124).\n\n404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a\nrefused edit.",
+        "description": "Apply the body's fields in one all-or-nothing edit.\n\n404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a\nrefused edit.",
         "operationId": "patch_chunk_api_chunks__chunk_id__patch",
         "parameters": [
           {
@@ -12197,7 +12197,7 @@
     },
     "/api/chunks/{chunk_id}/complete": {
       "post": {
-        "description": "Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).\nRecords the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route\nand held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:\ncompleting an already-``done`` chunk is a harmless no-op. 404 only when the chunk is\nunknown.",
+        "description": "Manually complete CHUNK, from any non-``done`` status, including ``stopped``.\nRecords the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route\nand held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:\ncompleting an already-``done`` chunk is a harmless no-op. 404 only when the chunk is\nunknown.",
         "operationId": "complete_chunk_api_chunks__chunk_id__complete_post",
         "parameters": [
           {
@@ -12250,7 +12250,7 @@
     },
     "/api/chunks/{chunk_id}/dependencies": {
       "post": {
-        "description": "Declare that CHUNK depends on ``prerequisite_chunk_id`` (issue #456).\n\nIdempotent: an already-standing pair is reported back before the prerequisite is even resolved, so one since gone\nephemeral cannot turn a refusal. 404 for an unknown dependent, or one a race deletes between resolving it and this\nwrite; 409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite.",
+        "description": "Declare that CHUNK depends on ``prerequisite_chunk_id``.\n\nIdempotent: an already-standing pair is reported back before the prerequisite is even resolved, so one since gone\nephemeral cannot turn a refusal. 404 for an unknown dependent, or one a race deletes between resolving it and this\nwrite; 409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite.",
         "operationId": "declare_dependency_api_chunks__chunk_id__dependencies_post",
         "parameters": [
           {
@@ -12303,7 +12303,7 @@
     },
     "/api/chunks/{chunk_id}/dependencies/release": {
       "post": {
-        "description": "Release CHUNK's standing dependency on ``prerequisite_chunk_id`` (issue\n#456) \u2014 recorded, never deleted. Admitted whenever the edge stands, whatever the\nprerequisite's own state. 404 for an unknown dependent; 409 when no edge stands.",
+        "description": "Release CHUNK's standing dependency on ``prerequisite_chunk_id``\n\u2014 recorded, never deleted. Admitted whenever the edge stands, whatever the\nprerequisite's own state. 404 for an unknown dependent; 409 when no edge stands.",
         "operationId": "release_dependency_api_chunks__chunk_id__dependencies_release_post",
         "parameters": [
           {
@@ -12470,7 +12470,7 @@
     },
     "/api/chunks/{chunk_id}/group": {
       "post": {
-        "description": "Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``\nparticipants alike (issue #141); 409 names the first chunk a runner holds, or one\nalready finished. The survivor also absorbs each folded chunk's standing dependency\nedges (issue #460); 409 refuses a fold that would close a cycle.",
+        "description": "Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``\nparticipants alike; 409 names the first chunk a runner holds, or one\nalready finished. The survivor also absorbs each folded chunk's standing dependency\nedges; 409 refuses a fold that would close a cycle.",
         "operationId": "group_chunks_api_chunks__chunk_id__group_post",
         "parameters": [
           {
@@ -12594,7 +12594,7 @@
     },
     "/api/chunks/{chunk_id}/pause": {
       "post": {
-        "description": "Set a chunk's operator pause brake \u2014 the claim is kept, unlike detach (issue #46).",
+        "description": "Set a chunk's operator pause brake \u2014 the claim is kept, unlike detach.",
         "operationId": "pause_chunk_api_chunks__chunk_id__pause_post",
         "parameters": [
           {
@@ -12830,7 +12830,7 @@
     },
     "/api/chunks/{chunk_id}/resume": {
       "post": {
-        "description": "Clear a chunk's operator pause brake \u2014 idempotent, never refused (issue #46).",
+        "description": "Clear a chunk's operator pause brake \u2014 idempotent, never refused.",
         "operationId": "resume_chunk_api_chunks__chunk_id__resume_post",
         "parameters": [
           {
@@ -12883,7 +12883,7 @@
     },
     "/api/chunks/{chunk_id}/review-findings-delivery": {
       "post": {
-        "description": "The `record-findings` node's own route (blizzard#582) \u2014 validates the chunk's\nnewest `review-finding-delta` artifact and, on success, materializes its `deferred`\nentries in one transaction. A malformed delta or an unresolvable node is an\n``invalid`` outcome at a 200, never an error response. Idempotent per chunk (D6).",
+        "description": "The `record-findings` node's own route \u2014 validates the chunk's\nnewest `review-finding-delta` artifact and, on success, materializes its `deferred`\nentries in one transaction. A malformed delta or an unresolvable node is an\n``invalid`` outcome at a 200, never an error response. Idempotent per chunk.",
         "operationId": "record_review_findings_delivery_api_chunks__chunk_id__review_findings_delivery_post",
         "parameters": [
           {
@@ -12944,7 +12944,7 @@
     },
     "/api/chunks/{chunk_id}/stop": {
       "post": {
-        "description": "Terminally abandon CHUNK \u2014 the operator's last-resort verb (issue #118).\n\nRecords the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never\nre-derives ``ready``, releases any live route, and supersedes any open escalation. 409\nwhen the chunk is already ``done`` or ``stopped`` \u2014 stopping is not retroactive.",
+        "description": "Terminally abandon CHUNK \u2014 the operator's last-resort verb.\n\nRecords the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never\nre-derives ``ready``, releases any live route, and supersedes any open escalation. 409\nwhen the chunk is already ``done`` or ``stopped`` \u2014 stopping is not retroactive.",
         "operationId": "stop_chunk_api_chunks__chunk_id__stop_post",
         "parameters": [
           {
@@ -12997,7 +12997,7 @@
     },
     "/api/chunks/{chunk_id}/transcripts": {
       "get": {
-        "description": "The chunk's segment index (D12) \u2014 metadata and byte counts only, never turns.",
+        "description": "The chunk's segment index \u2014 metadata and byte counts only, never turns.",
         "operationId": "list_transcript_segments_api_chunks__chunk_id__transcripts_get",
         "parameters": [
           {
@@ -13040,7 +13040,7 @@
     },
     "/api/chunks/{chunk_id}/transcripts/{segment_id}": {
       "get": {
-        "description": "One segment's decompressed turns, concatenated across its stored records in\nturn-range order \u2014 the lazy per-segment content read (D12).",
+        "description": "One segment's decompressed turns, concatenated across its stored records in\nturn-range order \u2014 the lazy per-segment content read.",
         "operationId": "get_transcript_segment_api_chunks__chunk_id__transcripts__segment_id__get",
         "parameters": [
           {
@@ -13157,7 +13157,7 @@
     },
     "/api/decisions/{decision_id}/resolutions": {
       "post": {
-        "description": "Resolve an open decision, first-write-wins CAS.\n\n``resolved_by`` is taken from the authenticated session identity, never the request\nbody's ``resolved_by`` field \u2014 a spoofed value there is silently ignored (issue #91).",
+        "description": "Resolve an open decision, first-write-wins CAS.\n\n``resolved_by`` is taken from the authenticated session identity, never the request\nbody's ``resolved_by`` field \u2014 a spoofed value there is silently ignored.",
         "operationId": "resolve_decision_api_decisions__decision_id__resolutions_post",
         "parameters": [
           {
@@ -13210,7 +13210,7 @@
     },
     "/api/events": {
       "get": {
-        "description": "The ``event_log`` unified with open escalations (issue #125), most-severe-newest first, bounded.\n\nThe ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;\nthe open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the\nprojection's aware ``recorded_at`` comparison below never raises against it.",
+        "description": "The ``event_log`` unified with open escalations, most-severe-newest first, bounded.\n\nThe ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;\nthe open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the\nprojection's aware ``recorded_at`` comparison below never raises against it.",
         "operationId": "list_events_api_events_get",
         "parameters": [
           {
@@ -13326,7 +13326,7 @@
     },
     "/api/findings": {
       "get": {
-        "description": "The findings bucket, widened to every routine and every scope (blizzard#486),\nbounded and keyset-paginated (blizzard#526 D1/D5) \u2014 live only, unless `include_gone`\n(D3), which also surfaces every exited finding, not just a merely `gone` one.\n`routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it holds\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\n`source` further narrows to `\"routine\"` or `\"review\"` (blizzard#582); absent reads\nboth. All share `list_page`'s own total `finding_id` order.",
+        "description": "The findings bucket, widened to every routine and every scope,\nbounded and keyset-paginated \u2014 live only, unless `include_gone`,\nwhich also surfaces every exited finding, not just a merely `gone` one.\n`routine` and `scope` are both optional, independently:\n\n- both named \u2014 one routine's findings under one scope\n- `routine` named, `scope` absent \u2014 one routine's findings across every scope it holds\n- `routine` absent, `scope` named \u2014 every routine's findings under one scope\n- both absent \u2014 every finding across every routine and every scope\n\n`source` further narrows to `\"routine\"` or `\"review\"`; absent reads\nboth. All share `list_page`'s own total `finding_id` order.",
         "operationId": "list_findings_api_findings_get",
         "parameters": [
           {
@@ -13722,7 +13722,7 @@
     },
     "/api/findings/{finding_id}": {
       "get": {
-        "description": "One finding's whole record, plus its whole fact chain oldest-first (blizzard#487);\n404 on an unknown id.",
+        "description": "One finding's whole record, plus its whole fact chain oldest-first;\n404 on an unknown id.",
         "operationId": "get_finding_api_findings__finding_id__get",
         "parameters": [
           {
@@ -13765,7 +13765,7 @@
     },
     "/api/fleet/chunk-statuses": {
       "get": {
-        "description": "The runner tick's slim batch status read (blizzard#521) \u2014 repeatable ``chunk_id``;\nan unknown or ephemeral id is omitted, never a 404.",
+        "description": "The runner tick's slim batch status read \u2014 repeatable ``chunk_id``;\nan unknown or ephemeral id is omitted, never a 404.",
         "operationId": "get_chunk_statuses_api_fleet_chunk_statuses_get",
         "parameters": [
           {
@@ -13858,7 +13858,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types": {
       "get": {
-        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/agent-types`` (blizzard#545).",
+        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/agent-types``.",
         "operationId": "get_chunk_analytics_counts_agent_types_api_fleet_chunks__chunk_id__analytics_counts_agent_types_get",
         "parameters": [
           {
@@ -13928,7 +13928,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/analytics/counts/files": {
       "get": {
-        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/files`` \u2014 the same\nrows, over the window it names, gated on the chunk carrying a run context rather than\non operator credentials (blizzard#545).",
+        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/files`` \u2014 the same\nrows, over the window it names, gated on the chunk carrying a run context rather than\non operator credentials.",
         "operationId": "get_chunk_analytics_counts_files_api_fleet_chunks__chunk_id__analytics_counts_files_get",
         "parameters": [
           {
@@ -13998,7 +13998,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/analytics/counts/nodes": {
       "get": {
-        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/nodes`` (blizzard#545).",
+        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/nodes``.",
         "operationId": "get_chunk_analytics_counts_nodes_api_fleet_chunks__chunk_id__analytics_counts_nodes_get",
         "parameters": [
           {
@@ -14068,7 +14068,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/analytics/counts/skills": {
       "get": {
-        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/skills`` (blizzard#545).",
+        "description": "A worker's own routine-run read of ``GET /api/analytics/counts/skills``.",
         "operationId": "get_chunk_analytics_counts_skills_api_fleet_chunks__chunk_id__analytics_counts_skills_get",
         "parameters": [
           {
@@ -14138,7 +14138,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/analytics/spend/graphs": {
       "get": {
-        "description": "A worker's own routine-run read of ``GET /api/analytics/spend/graphs`` (blizzard#545).",
+        "description": "A worker's own routine-run read of ``GET /api/analytics/spend/graphs``.",
         "operationId": "get_chunk_analytics_spend_graphs_api_fleet_chunks__chunk_id__analytics_spend_graphs_get",
         "parameters": [
           {
@@ -14208,7 +14208,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/analytics/spend/nodes": {
       "get": {
-        "description": "A worker's own routine-run read of ``GET /api/analytics/spend/nodes`` (blizzard#545).",
+        "description": "A worker's own routine-run read of ``GET /api/analytics/spend/nodes``.",
         "operationId": "get_chunk_analytics_spend_nodes_api_fleet_chunks__chunk_id__analytics_spend_nodes_get",
         "parameters": [
           {
@@ -14583,7 +14583,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/garden/findings": {
       "get": {
-        "description": "A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583\nD2), widened to every review-sourced finding on the same scope (blizzard#582 D3) \u2014 the\nchunk's own run context derives the routine and the scope; no caller-supplied flag can\nname another. 404 both for an unknown chunk and for one carrying no run context (not a\nroutine run): a chunk with nothing to read is refused rather than an empty bucket.",
+        "description": "A worker's own routine's live-plus-`delivered` finding bucket, widened to every\nreview-sourced finding on the same scope \u2014 the\nchunk's own run context derives the routine and the scope; no caller-supplied flag can\nname another. 404 both for an unknown chunk and for one carrying no run context (not a\nroutine run): a chunk with nothing to read is refused rather than an empty bucket.",
         "operationId": "get_garden_findings_api_fleet_chunks__chunk_id__garden_findings_get",
         "parameters": [
           {
@@ -14786,7 +14786,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/pause": {
       "post": {
-        "description": "Pause the chunk with a runner's own bearer token (issue #185) \u2014 the same transition as the\noperator route, ``by`` defaulting to ``operator``.",
+        "description": "Pause the chunk with a runner's own bearer token \u2014 the same transition as the\noperator route, ``by`` defaulting to ``operator``.",
         "operationId": "pause_chunk_api_fleet_chunks__chunk_id__pause_post",
         "parameters": [
           {
@@ -14873,7 +14873,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/resume": {
       "post": {
-        "description": "Resume the chunk with a runner's own bearer token (issue #185). Takes no body, so the\nresume is always recorded as ``operator``.",
+        "description": "Resume the chunk with a runner's own bearer token. Takes no body, so the\nresume is always recorded as ``operator``.",
         "operationId": "resume_chunk_api_fleet_chunks__chunk_id__resume_post",
         "parameters": [
           {
@@ -14959,7 +14959,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/transcript-segments": {
       "get": {
-        "description": "A runner's read-back of its own shipped segments (D2/D3, issue #249) \u2014 every\naccepted record across every spawn generation under a lease's ``(chunk_id, node_id,\nepoch)``, confined against the ``runner_id`` already on those rows regardless of\n``runner_auth_mode`` \u2014 this route's own always-raising ownership check, not the\nrouter's mode-gated one.",
+        "description": "A runner's read-back of its own shipped segments \u2014 every\naccepted record across every spawn generation under a lease's ``(chunk_id, node_id,\nepoch)``, confined against the ``runner_id`` already on those rows regardless of\n``runner_auth_mode`` \u2014 this route's own always-raising ownership check, not the\nrouter's mode-gated one.",
         "operationId": "get_lease_transcript_segments_api_fleet_chunks__chunk_id__transcript_segments_get",
         "parameters": [
           {
@@ -15148,7 +15148,7 @@
     },
     "/api/fleet/queue/peek": {
       "get": {
-        "description": "The runner's FILL read \u2014 the whole ready-queue order: a filling runner needs every\nready chunk in one read. Kept as-is for a previous-minor caller (D7, blizzard#433);\n``POST /queue/peek`` below is the matched counterpart.",
+        "description": "The runner's FILL read \u2014 the whole ready-queue order: a filling runner needs every\nready chunk in one read. Kept as-is for a previous-minor caller;\n``POST /queue/peek`` below is the matched counterpart.",
         "operationId": "peek_queue_api_fleet_queue_peek_get",
         "responses": {
           "200": {
@@ -15210,7 +15210,7 @@
     },
     "/api/fleet/routes": {
       "post": {
-        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nalready terminal ({done, stopped}, issue #118), standing on an unmet prerequisite\n(blizzard#458), or incompatible with the runner's stored capabilities (blizzard#433\nD9), else the first node envelope.",
+        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nalready terminal ({done, stopped}), standing on an unmet prerequisite,\nor incompatible with the runner's stored capabilities, else the first node envelope.",
         "operationId": "claim_route_api_fleet_routes_post",
         "requestBody": {
           "content": {
@@ -15252,7 +15252,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level (issue #86a); the ``subscriptions`` roster\nrides the same authenticated write. The hub never rejects a registration over its\nroster \u2014 it doubles as the heartbeat every tick.",
+        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level; the ``subscriptions`` roster\nrides the same authenticated write. The hub never rejects a registration over its\nroster \u2014 it doubles as the heartbeat every tick.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {
@@ -15373,7 +15373,7 @@
     },
     "/api/fleet/scopes": {
       "get": {
-        "description": "Every scope, newest first, each marked retired or not (blizzard#582 D2) \u2014 the\ndeployment's scope vocabulary, read by `blizzard runner scope list` so a review's\ndeferred findings can name an existing slug without a hub-interpreted default.",
+        "description": "Every scope, newest first, each marked retired or not \u2014 the\ndeployment's scope vocabulary, read by `blizzard runner scope list` so a review's\ndeferred findings can name an existing slug without a hub-interpreted default.",
         "operationId": "get_scopes_api_fleet_scopes_get",
         "responses": {
           "200": {
@@ -15399,7 +15399,7 @@
     },
     "/api/fleet/summary": {
       "get": {
-        "description": "The fleet-pulse counts (issue #76), read with a runner's own bearer token. Fleet-router-only:\nthis read has no anonymous counterpart.",
+        "description": "The fleet-pulse counts, read with a runner's own bearer token. Fleet-router-only:\nthis read has no anonymous counterpart.",
         "operationId": "fleet_summary_api_fleet_summary_get",
         "responses": {
           "200": {
@@ -15490,7 +15490,7 @@
     },
     "/api/fleet/transcripts": {
       "post": {
-        "description": "Land the runner's batched transcript records \u2014 the transcript lane's own\nstore-and-forward push (D7), distinct from the fact lane at ``POST /api/fleet/events``.",
+        "description": "Land the runner's batched transcript records \u2014 the transcript lane's own\nstore-and-forward push, distinct from the fact lane at ``POST /api/fleet/events``.",
         "operationId": "ingest_transcript_segments_api_fleet_transcripts_post",
         "requestBody": {
           "content": {
@@ -15532,7 +15532,7 @@
     },
     "/api/garden-proposals": {
       "get": {
-        "description": "Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526\nD3/D4). `origin` narrows to `routine-run` or `operator` proposals (blizzard#631).",
+        "description": "Every garden proposal, newest first, bounded and keyset-paginated.\n`origin` narrows to `routine-run` or `operator` proposals.",
         "operationId": "list_garden_proposals_api_garden_proposals_get",
         "parameters": [
           {
@@ -15608,7 +15608,7 @@
         ]
       },
       "post": {
-        "description": "Mint an operator-authored proposal (blizzard#631), naming `routine` when the\ncaller names one, else none. 422 for a blank title/class/body, an unknown routine,\nor an unknown, non-live, or duplicate finding id \u2014 the whole call is refused, nothing\nis linked.",
+        "description": "Mint an operator-authored proposal, naming `routine` when the\ncaller names one, else none. 422 for a blank title/class/body, an unknown routine,\nor an unknown, non-live, or duplicate finding id \u2014 the whole call is refused, nothing\nis linked.",
         "operationId": "create_garden_proposal_api_garden_proposals_post",
         "requestBody": {
           "content": {
@@ -15691,7 +15691,7 @@
         ]
       },
       "patch": {
-        "description": "Replace the given fields of PROPOSAL_ID in place, all-or-nothing (blizzard#631)\n\u2014 works on either origin while open. 404 unknown proposal, 409 already closed,\n422 a blank title/class/body or an edit naming no field.",
+        "description": "Replace the given fields of PROPOSAL_ID in place, all-or-nothing\n\u2014 works on either origin while open. 404 unknown proposal, 409 already closed,\n422 a blank title/class/body or an edit naming no field.",
         "operationId": "edit_garden_proposal_api_garden_proposals__proposal_id__patch",
         "parameters": [
           {
@@ -15797,7 +15797,7 @@
     },
     "/api/garden-proposals/{proposal_id}/attach": {
       "post": {
-        "description": "Link the given finding ids to PROPOSAL_ID (blizzard#631) \u2014 works on either origin\nwhile open. 404 unknown proposal, 409 already closed, 422 an unknown, non-live, or\nduplicate finding id, or one already linked to this proposal \u2014 the whole call is\nrefused, nothing is linked.",
+        "description": "Link the given finding ids to PROPOSAL_ID \u2014 works on either origin\nwhile open. 404 unknown proposal, 409 already closed, 422 an unknown, non-live, or\nduplicate finding id, or one already linked to this proposal \u2014 the whole call is\nrefused, nothing is linked.",
         "operationId": "attach_garden_proposal_findings_api_garden_proposals__proposal_id__attach_post",
         "parameters": [
           {
@@ -15850,7 +15850,7 @@
     },
     "/api/garden-proposals/{proposal_id}/detach": {
       "post": {
-        "description": "Unlink the given finding ids from PROPOSAL_ID (blizzard#631) \u2014 works on either\norigin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or\none not linked to this proposal.",
+        "description": "Unlink the given finding ids from PROPOSAL_ID \u2014 works on either\norigin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or\none not linked to this proposal.",
         "operationId": "detach_garden_proposal_findings_api_garden_proposals__proposal_id__detach_post",
         "parameters": [
           {
@@ -15956,7 +15956,7 @@
     },
     "/api/graphs": {
       "get": {
-        "description": "Every minted graph, newest first, newest non-retired per name marked ``effective``.\n\nReads the listing-shape projection (issue #421) \u2014 nothing here touches nodes,\nedges, sessions or artifacts.",
+        "description": "Every minted graph, newest first, newest non-retired per name marked ``effective``.\n\nReads the listing-shape projection \u2014 nothing here touches nodes,\nedges, sessions or artifacts.",
         "operationId": "list_graphs_api_graphs_get",
         "responses": {
           "200": {
@@ -16022,7 +16022,7 @@
     },
     "/api/graphs/sync": {
       "post": {
-        "description": "Reconcile the packaged graph set against the store, minting only what changed.\n\nIdempotent, so it is safe to run unconditionally (issue #146). Registered above\n``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a\ngraph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict.",
+        "description": "Reconcile the packaged graph set against the store, minting only what changed.\n\nIdempotent, so it is safe to run unconditionally. Registered above\n``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a\ngraph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict.",
         "operationId": "sync_graphs_api_graphs_sync_post",
         "responses": {
           "200": {
@@ -16087,7 +16087,7 @@
     },
     "/api/graphs/{graph_id}/enable": {
       "post": {
-        "description": "Re-enable a retired graph \u2014 restores normal newest-per-name derivation\n(issue #101). Idempotent on an already-enabled graph; 404 on an unknown id.",
+        "description": "Re-enable a retired graph \u2014 restores normal newest-per-name derivation.\nIdempotent on an already-enabled graph; 404 on an unknown id.",
         "operationId": "enable_graph_api_graphs__graph_id__enable_post",
         "parameters": [
           {
@@ -16140,7 +16140,7 @@
     },
     "/api/graphs/{graph_id}/follow-latest": {
       "post": {
-        "description": "Set this graph's follow-latest policy \u2014 ``true``/``false``/``null`` (issue #164).\n\nAppends a policy fact rather than mutating the immutable ``graphs`` row; explicit\n``null`` reverts to inheriting the hub default and is itself an appended fact. Scoped\nto this one mint, not to the graph name. Idempotent, and 404 on an unknown id.",
+        "description": "Set this graph's follow-latest policy \u2014 ``true``/``false``/``null``.\n\nAppends a policy fact rather than mutating the immutable ``graphs`` row; explicit\n``null`` reverts to inheriting the hub default and is itself an appended fact. Scoped\nto this one mint, not to the graph name. Idempotent, and 404 on an unknown id.",
         "operationId": "set_graph_follow_latest_api_graphs__graph_id__follow_latest_post",
         "parameters": [
           {
@@ -16193,7 +16193,7 @@
     },
     "/api/graphs/{graph_id}/retire": {
       "post": {
-        "description": "Retire a graph \u2014 excludes it from name resolution; the claim on any chunk\nalready pinned to it runs on untouched (issue #101). 404 on an unknown id.",
+        "description": "Retire a graph \u2014 excludes it from name resolution; the claim on any chunk\nalready pinned to it runs on untouched. 404 on an unknown id.",
         "operationId": "retire_graph_api_graphs__graph_id__retire_post",
         "parameters": [
           {
@@ -16363,7 +16363,7 @@
     },
     "/api/questions/{question_id}/answers": {
       "post": {
-        "description": "Answer a question first-write-wins; 409 carries the winning answer.\n\n``answered_by`` is taken from the authenticated session identity, never the request\nbody's ``answered_by`` field \u2014 a spoofed value there is silently ignored (issue #91).",
+        "description": "Answer a question first-write-wins; 409 carries the winning answer.\n\n``answered_by`` is taken from the authenticated session identity, never the request\nbody's ``answered_by`` field \u2014 a spoofed value there is silently ignored.",
         "operationId": "answer_question_api_questions__question_id__answers_post",
         "parameters": [
           {
@@ -16416,7 +16416,7 @@
     },
     "/api/queue": {
       "get": {
-        "description": "The hub-ordered ready queue, read-only and keyset-paginated (blizzard#526 D3/D4/D7)\n\u2014 honours reorder/replace + grouping.",
+        "description": "The hub-ordered ready queue, read-only and keyset-paginated\n\u2014 honours reorder/replace + grouping.",
         "operationId": "get_queue_api_queue_get",
         "parameters": [
           {
@@ -16518,7 +16518,7 @@
     },
     "/api/queue/position": {
       "post": {
-        "description": "Single-chunk fractional reorder (issue #137).\n\nResolves both ids against the current ready set: ``409`` names either one if it is\nnot ready, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves the chunk to\nthe top of the queue.",
+        "description": "Single-chunk fractional reorder.\n\nResolves both ids against the current ready set: ``409`` names either one if it is\nnot ready, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves the chunk to\nthe top of the queue.",
         "operationId": "reposition_queue_api_queue_position_post",
         "requestBody": {
           "content": {
@@ -16669,7 +16669,7 @@
     },
     "/api/routines/proposal-counts": {
       "get": {
-        "description": "Garden-proposal counts (blizzard#547) per origin, routine, and class over\n`[since, until)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum (blizzard#631). `routine` narrows to one routine's rows of\nboth origins when given; 404 on an unknown one. `origin` narrows to one origin. 422\non a malformed instant or `until <= since`.",
+        "description": "Garden-proposal counts per origin, routine, and class over\n`[since, until)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum. `routine` narrows to one routine's rows of\nboth origins when given; 404 on an unknown one. `origin` narrows to one origin. 422\non a malformed instant or `until <= since`.",
         "operationId": "routine_proposal_counts_api_routines_proposal_counts_get",
         "parameters": [
           {
@@ -16753,7 +16753,7 @@
     },
     "/api/routines/trend": {
       "get": {
-        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups (D2), and the D5 age cut against `introduced_boundary`. 404 on an\nunknown routine name; 422 on a malformed instant, a non-positive `period_days`, a\nnon-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`.",
+        "description": "`routine`'s finding inflow-against-outflow over `[since, until)`: per\n`period_days`-wide period, findings created and per-kind exit counts, the outflow/\nwithdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an\nunknown routine name; 422 on a malformed instant, a non-positive `period_days`, a\nnon-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`.",
         "operationId": "routine_trend_api_routines_trend_get",
         "parameters": [
           {
@@ -16927,7 +16927,7 @@
     },
     "/api/routines/{routine_id}/baselines": {
       "get": {
-        "description": "Every scope `routine_id` has swept (D5) \u2014 see\n`IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.\n404 on an unknown routine id.",
+        "description": "Every scope `routine_id` has swept \u2014 see\n`IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.\n404 on an unknown routine id.",
         "operationId": "routine_baselines_api_routines__routine_id__baselines_get",
         "parameters": [
           {
@@ -17080,7 +17080,7 @@
     },
     "/api/routines/{routine_id}/run": {
       "post": {
-        "description": "Mint, ingest, and promote a hub work item from the routine, in one act\n(blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown\n``mode``, or an effective scope no scope row holds or outside the routine's own\nrelated set (blizzard#399 D1, D4 \u2014 never minted); 503 on a retired routine\n(checked first, before the mode or scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
+        "description": "Mint, ingest, and promote a hub work item from the routine, in one act.\n404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown\n``mode``, or an effective scope no scope row holds or outside the routine's own\nrelated set (never minted); 503 on a retired routine\n(checked first, before the mode or scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
         "operationId": "run_routine_api_routines__routine_id__run_post",
         "parameters": [
           {
@@ -17133,7 +17133,7 @@
     },
     "/api/routines/{routine_id}/scopes": {
       "get": {
-        "description": "Every scope slug linked to `routine_id`, sorted (blizzard#488) \u2014 its own default\nscope is always among them (D8). 404 on an unknown routine id.",
+        "description": "Every scope slug linked to `routine_id`, sorted \u2014 its own default\nscope is always among them. 404 on an unknown routine id.",
         "operationId": "list_routine_scopes_api_routines__routine_id__scopes_get",
         "parameters": [
           {
@@ -17180,7 +17180,7 @@
     },
     "/api/routines/{routine_id}/scopes/{scope_slug}": {
       "delete": {
-        "description": "Unlink `scope_slug` from `routine_id`'s own set (blizzard#488); idempotent. 404\non an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed\nscope slug, or on naming the routine's own default scope (D8) \u2014 always a member of\nits own set.",
+        "description": "Unlink `scope_slug` from `routine_id`'s own set; idempotent. 404\non an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed\nscope slug, or on naming the routine's own default scope \u2014 always a member of\nits own set.",
         "operationId": "unlink_routine_scope_api_routines__routine_id__scopes__scope_slug__delete",
         "parameters": [
           {
@@ -17223,7 +17223,7 @@
         ]
       },
       "put": {
-        "description": "Link `scope_slug` into `routine_id`'s own set (blizzard#488); idempotent. 404 on\nan unknown routine id or a well-formed but unknown scope slug; 422 on a malformed\nscope slug.",
+        "description": "Link `scope_slug` into `routine_id`'s own set; idempotent. 404 on\nan unknown routine id or a well-formed but unknown scope slug; 422 on a malformed\nscope slug.",
         "operationId": "link_routine_scope_api_routines__routine_id__scopes__scope_slug__put",
         "parameters": [
           {
@@ -17268,7 +17268,7 @@
     },
     "/api/routines/{routine_id}/sweeps": {
       "get": {
-        "description": "``routine_id``'s per-scope last-swept table (D2, D3, D4) \u2014 the routine's declared\nset, retired scopes filtered out unless already swept while linked \u2014 and its\nmeasurement series (D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a\nmalformed instant or a non-positive span.",
+        "description": "``routine_id``'s per-scope last-swept table \u2014 the routine's declared\nset, retired scopes filtered out unless already swept while linked \u2014 and its\nmeasurement series over ``[since, until)``. 404 on an unknown id; 422 on a\nmalformed instant or a non-positive span.",
         "operationId": "routine_sweeps_api_routines__routine_id__sweeps_get",
         "parameters": [
           {
@@ -17680,7 +17680,7 @@
         ]
       },
       "post": {
-        "description": "Mint a scope, or no-op onto the existing one of the same slug (D4); 422 on a\nmalformed slug, naming the rejected value.",
+        "description": "Mint a scope, or no-op onto the existing one of the same slug; 422 on a\nmalformed slug, naming the rejected value.",
         "operationId": "create_scope_api_scopes_post",
         "requestBody": {
           "content": {
@@ -17816,7 +17816,7 @@
     },
     "/api/scopes/{slug}/enable": {
       "post": {
-        "description": "Re-enable a retired scope (D3); idempotent, 404 on an unknown slug.",
+        "description": "Re-enable a retired scope; idempotent, 404 on an unknown slug.",
         "operationId": "enable_scope_api_scopes__slug__enable_post",
         "parameters": [
           {
@@ -17869,7 +17869,7 @@
     },
     "/api/scopes/{slug}/retire": {
       "post": {
-        "description": "Retire a scope \u2014 a reversible brake (D3); 404 on an unknown slug.",
+        "description": "Retire a scope \u2014 a reversible brake; 404 on an unknown slug.",
         "operationId": "retire_scope_api_scopes__slug__retire_post",
         "parameters": [
           {
@@ -18054,7 +18054,7 @@
     },
     "/api/users/{user_id}/role": {
       "post": {
-        "description": "Assign ``user_id`` a new role. Three refusals, each a 403: changing your own role;\nany change touching ``superuser``, which is bootstrap-only; and granting or revoking\n``admin`` as anyone but a ``superuser``. A no-op change is accepted and records\nnothing. A real one records a ``user_role_changed`` fact and takes effect on the\nsubject's next request, with no re-login (issue #91).",
+        "description": "Assign ``user_id`` a new role. Three refusals, each a 403: changing your own role;\nany change touching ``superuser``, which is bootstrap-only; and granting or revoking\n``admin`` as anyone but a ``superuser``. A no-op change is accepted and records\nnothing. A real one records a ``user_role_changed`` fact and takes effect on the\nsubject's next request, with no re-login.",
         "operationId": "assign_role_api_users__user_id__role_post",
         "parameters": [
           {
@@ -18129,7 +18129,7 @@
     },
     "/api/work-sources/{source}/items": {
       "get": {
-        "description": "Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 per D4.",
+        "description": "Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 from the source's editor gate.",
         "operationId": "list_work_items_api_work_sources__source__items_get",
         "parameters": [
           {
@@ -18182,7 +18182,7 @@
         ]
       },
       "post": {
-        "description": "Allocate a fresh item at SOURCE, open, authored by the caller, and mint its\nresting ``not_ready`` chunk in the same transaction (blizzard#359). 404/409 per D4,\n422 for a blank title or body, 409 if an out-of-band ingest already holds the\nallocated ref's pointer, 503 if every graph named after the packaged default has\nbeen retired (the operator's brake, mirroring ``POST /chunks``).",
+        "description": "Allocate a fresh item at SOURCE, open, authored by the caller, and mint its\nresting ``not_ready`` chunk in the same transaction. 404/409 from the source's editor gate,\n422 for a blank title or body, 409 if an out-of-band ingest already holds the\nallocated ref's pointer, 503 if every graph named after the packaged default has\nbeen retired (the operator's brake, mirroring ``POST /chunks``).",
         "operationId": "create_work_item_api_work_sources__source__items_post",
         "parameters": [
           {
@@ -18235,7 +18235,7 @@
     },
     "/api/work-sources/{source}/items/{ref}": {
       "delete": {
-        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref\n(D9), or a chunk a race deletes between resolving it and this write; 409 for a known\nsource with no editor (D4), an item already closed, or one an *acquired* live chunk\nholds (D5, D10) \u2014 an unacquired holder deletes instead unless it is now a standing\nprerequisite for another chunk (issue #460), also 409.",
+        "description": "Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref,\nor a chunk a race deletes between resolving it and this write; 409 for a known\nsource with no editor, an item already closed, or one an *acquired* live chunk\nholds \u2014 an unacquired holder deletes instead unless it is now a standing\nprerequisite for another chunk, also 409.",
         "operationId": "withdraw_work_item_api_work_sources__source__items__ref__delete",
         "parameters": [
           {
@@ -18285,7 +18285,7 @@
         ]
       },
       "get": {
-        "description": "One item at SOURCE by REF, open or closed. 404 for an unknown source, an\nunallocated ref (D9), or a known source with no editor answered as 409 (D4).",
+        "description": "One item at SOURCE by REF, open or closed. 404 for an unknown source, an\nunallocated ref, or a known source with no editor answered as 409.",
         "operationId": "get_work_item_api_work_sources__source__items__ref__get",
         "parameters": [
           {
@@ -18335,7 +18335,7 @@
         ]
       },
       "patch": {
-        "description": "Replace the given fields in place, all-or-nothing. 404 for an unknown source or\nan unallocated ref (D9); 409 for a known source with no editor (D4) or an item that\nalready carries a closure (D5); 422 for a blank title or body.",
+        "description": "Replace the given fields in place, all-or-nothing. 404 for an unknown source or\nan unallocated ref; 409 for a known source with no editor or an item that\nalready carries a closure; 422 for a blank title or body.",
         "operationId": "patch_work_item_api_work_sources__source__items__ref__patch",
         "parameters": [
           {

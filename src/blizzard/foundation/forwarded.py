@@ -1,4 +1,4 @@
-"""Trusted reverse-proxy forwarded-header resolution (issue #130).
+"""Trusted reverse-proxy forwarded-header resolution.
 
 ``X-Forwarded-Proto`` / ``X-Forwarded-For`` are honored **only** when the direct peer is a configured
 trusted proxy, so an untrusted client cannot forge either; an empty registry (the default) resolves both

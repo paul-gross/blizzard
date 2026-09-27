@@ -4,7 +4,7 @@ import { type UserView, listUsersApiUsersGet } from '../api/hub';
 import { hubUsersKey } from '../query-keys';
 
 /**
- * `GET /api/users` — the admin page's own user listing (issue #94), gated on
+ * `GET /api/users` — the admin page's own user listing, gated on
  * `user:manage` hub-side (a `403` under this permission renders as this query's own
  * error state; the page itself is nav-gated before it ever mounts, `app-nav.ts`).
  * Not in the SSE event vocabulary — a role change is rare and the assignment

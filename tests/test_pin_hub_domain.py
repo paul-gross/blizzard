@@ -48,7 +48,7 @@ def _node() -> Node:
 
 
 def test_envelope_requires_graph_explicitly() -> None:
-    """``graph`` carries no default (issue #144): a caller that forgets it gets a
+    """``graph`` carries no default: a caller that forgets it gets a
     ``TypeError``, never a silent fall-back to the pre-#144 "no declaration, no chunk
     default" envelope."""
     with pytest.raises(TypeError):
@@ -61,7 +61,7 @@ def test_envelope_requires_graph_explicitly() -> None:
 
 
 def test_follow_latest_requires_hub_default_explicitly() -> None:
-    """``hub_default`` carries no default of its own (issue #164): a caller that forgets
+    """``hub_default`` carries no default of its own: a caller that forgets
     the hub setting gets a ``TypeError``, never a silent ``True`` (migrating a fleet that
     never opted in) or a silent ``False`` (never migrating anything)."""
     with pytest.raises(TypeError):

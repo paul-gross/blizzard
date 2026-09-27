@@ -26,7 +26,7 @@ export class ChunkCardView {
   /** Whether this card is the current selection. */
   readonly selected = input(false);
 
-  /** The severable work-item enrichment (issue #28, decision 1) — resolved by the
+  /** The severable work-item enrichment (decision 1) — resolved by the
    * container's own query; empty before it resolves or when it fails. */
   readonly linkedItems = input<readonly runnerApi.WorkItemEntry[]>([]);
 

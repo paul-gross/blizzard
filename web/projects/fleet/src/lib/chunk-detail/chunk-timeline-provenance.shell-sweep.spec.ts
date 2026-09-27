@@ -8,7 +8,7 @@ import { ChunkTimeline } from './chunk-timeline';
 import { ChunkTimelineSelection } from './chunk-timeline-selection';
 
 /**
- * The node-history timeline's harness-provenance badges (blizzard#441), the tooled half
+ * The node-history timeline's harness-provenance badges, the tooled half
  * of `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method — a real,
  * headless-Chromium proof that two steps' own recorded harnesses render two genuinely
  * distinct badges beside their usage figures at the board's narrow, mobile-reachable

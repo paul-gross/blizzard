@@ -24,7 +24,7 @@ const LIVE_VM: FindingPanelVm = {
   raisedByChunkId: null,
 };
 
-/** A review-sourced finding (blizzard#582 D1) — no routine, its own severity and
+/** A review-sourced finding — no routine, its own severity and
  * raising chunk in place of the routine-only facts above. */
 const REVIEW_VM: FindingPanelVm = {
   ...LIVE_VM,

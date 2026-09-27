@@ -1,7 +1,7 @@
-"""Analytics dialect registry (blizzard#439) — the recognition registry keyed
+"""Analytics dialect registry — the recognition registry keyed
 by a segment's own exact ``normalizer_version``. A kind absent from a dialect
 derives zero events of that kind; a version absent from :data:`DIALECTS`
-derives zero events at all (D1, D9 — ``bzh:domain-core``). Version keys stay
+derives zero events at all (``bzh:domain-core``). Version keys stay
 string literals, never imported from ``blizzard.runner``: a normalizer's own
 version constant is that module's business, not this registry's dependency."""
 
@@ -21,14 +21,14 @@ class DialectEntry:
     argument_key: str
 
 
-#: Claude Code's own normalizer stamp (blizzard#327), now data rather than a name-only mapping.
+#: Claude Code's own normalizer stamp, now data rather than a name-only mapping.
 _CLAUDE_CODE_JSONL_2: dict[str, DialectEntry] = {
     KIND_FILE_READ: DialectEntry(tool_name="Read", argument_key="file_path"),
     KIND_SKILL_INVOCATION: DialectEntry(tool_name="Skill", argument_key="skill"),
     KIND_AGENT_SPAWN: DialectEntry(tool_name="Agent", argument_key="subagent_type"),
 }
 
-#: OpenCode's spawn entry only (D5) — fixture-proven; read/skill have no proven tool name yet.
+#: OpenCode's spawn entry only — fixture-proven; read/skill have no proven tool name yet.
 _OPENCODE_EXPORT_1: dict[str, DialectEntry] = {
     KIND_AGENT_SPAWN: DialectEntry(tool_name="task", argument_key="agent"),
 }

@@ -17,7 +17,7 @@ _PROV = Provenance(chunk_id="ch_x", node_id="nd_build_1", epoch=7)
 
 
 def test_git_commit_round_trips_exactly_with_forge() -> None:
-    """The worker-declared ``forge`` (issue #143, Phase 4) round-trips through the
+    """The worker-declared ``forge`` round-trips through the
     flat storage row exactly like ``repo`` — a ``git_commit``-only sibling column,
     not folded into ``data``."""
     art = GitCommitArtifact(

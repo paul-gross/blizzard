@@ -14,7 +14,7 @@ import type { MachineChunkRow } from './local-panel';
 import { LocalSubscriptions } from './local-subscriptions';
 
 /**
- * The runner's machine-local panel's layout half (issue #80) — shaped like
+ * The runner's machine-local panel's layout half — shaped like
  * the discovery mock's machine panel: a three-column grid over the runner's
  * local API, hub-free save for the rails that proxy through it — the
  * fleet-summary strip (`local-info`).
@@ -25,12 +25,11 @@ import { LocalSubscriptions } from './local-subscriptions';
  * - **Center (1fr)** — work: the chunks on this machine (one row per chunk,
  *   work-item-enriched, derived status in the hub board's colors) over the machine
  *   detail dock for the selected chunk's execution facts — the transcript and
- *   per-attempt selection moved to the runner-local chunk detail route
- *   (issue #318).
+ *   per-attempt selection moved to the runner-local chunk detail route.
  * - **Right (330px)** — the machine's account of itself: the hub link
  *   (endpoint, reachability, last flush, buffer), the open local asks, and
- *   each declared subscription's own newest sampling attempt (blizzard#504).
- *   The local fact log moved to its own `/events` route (issue #313) — full
+ *   each declared subscription's own newest sampling attempt.
+ *   The local fact log moved to its own `/events` route — full
  *   width there rather than a rail-sized panel.
  *
  * Presentational only: it renders exactly the leases/chunks/selection it is
@@ -39,7 +38,7 @@ import { LocalSubscriptions } from './local-subscriptions';
  * resolves through the shared design tokens (`fleet` library,
  * design/tokens.css), never hard-coded hex.
  *
- * Owns no titlebar (issue #325): the shared `BoardHeader` chrome, the pause
+ * Owns no titlebar: the shared `BoardHeader` chrome, the pause
  * control/identity/profile-menu trailing cluster, and their narrow-tier
  * collapse all moved up to the app root's own `AppHeader`
  * (`../../runner/src/app/nav/app-header.ts`), the same shelf the hub board's
@@ -76,17 +75,16 @@ export class LocalPanelLayout {
   readonly chunksTriadState = input.required<KitAsyncStateValue>();
 
   /** The chunks pane's empty-state text — the container distinguishes
-   * "nothing on this machine" from "the filter hid everything" (issue #134
-   * review fix), so this layout renders whichever text it is handed rather
+   * "nothing on this machine" from "the filter hid everything", so this layout renders whichever text it is handed rather
    * than a literal in the template. */
   readonly chunksEmptyText = input.required<string>();
 
   /** One row per chunk on this machine, pre-folded by the container **and**
-   * already filtered per {@link showAllChunks} (issue #134) — the container
+   * already filtered per {@link showAllChunks} — the container
    * owns the fold, this renders exactly the rows it is handed. */
   readonly machineChunks = input.required<readonly MachineChunkRow[]>();
 
-  /** The chunks list's "show all" checkbox state (issue #134) — unchecked
+  /** The chunks list's "show all" checkbox state — unchecked
    * (the default) hides a chunk whose newest lease is closed; the container
    * derives {@link machineChunks} from this, so this is display-only here. */
   readonly showAllChunks = input.required<boolean>();
@@ -99,7 +97,7 @@ export class LocalPanelLayout {
 
   /** The selected chunk's attempts (oldest → newest) — the detail dock reads
    * only the newest for its summary/status; per-attempt selection and the
-   * transcript live on the chunk detail route instead (issue #318). */
+   * transcript live on the chunk detail route instead. */
   readonly selectedChunkLeases = input.required<readonly runnerApi.LeaseView[]>();
 
   readonly selectedStatus = input.required<MachineChunkStatus | null>();
@@ -115,10 +113,10 @@ export class LocalPanelLayout {
   readonly selectChunk = output<string>();
 
   /** Emitted with the checkbox's new checked state when the operator toggles
-   * "show all" (issue #134). */
+   * "show all". */
   readonly toggleShowAllChunks = output<boolean>();
 
-  /** Emitted when the operator dismisses the detail dock (issue #185) via its
+  /** Emitted when the operator dismisses the detail dock via its
    * own close button — the container clears the selection. */
   readonly dismiss = output<void>();
 }

@@ -16,7 +16,7 @@ export interface AssignRoleVars {
 }
 
 /**
- * `POST /api/users/{id}/role` — assign a hub-local user a new role (issue #94),
+ * `POST /api/users/{id}/role` — assign a hub-local user a new role,
  * through the generated client (bzh:generated-client). On success it invalidates the
  * user listing so the table re-reads the change; the subject's *own* next request
  * already resolves the new role server-side (no client-side propagation needed).

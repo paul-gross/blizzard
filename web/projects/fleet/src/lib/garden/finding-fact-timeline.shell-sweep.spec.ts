@@ -6,7 +6,7 @@ import { page } from 'vitest/browser';
 import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
 
 /**
- * The finding fact timeline (blizzard#487, phase 1 of 2, the tooled half of
+ * The finding fact timeline (phase 1 of 2, the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method) — a real,
  * headless-Chromium proof that a long, genuinely unbroken note wraps
  * (`overflow-wrap: anywhere`) inside its row rather than forcing the row wider than
@@ -22,7 +22,7 @@ import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
  * overflowing once real panel chrome constrains its width) where it would actually
  * happen, rather than in an isolation the timeline is never rendered in on its own.
  *
- * The fixture note (review:F3) is a genuinely unbroken 96-character run with no
+ * The fixture note is a genuinely unbroken 96-character run with no
  * spaces — the previous fixture was ordinary space-separated prose, which wraps at
  * word boundaries with or without `overflow-wrap: anywhere`, so it proved nothing
  * about the rule it claimed to. Proven able to fail: temporarily commenting out

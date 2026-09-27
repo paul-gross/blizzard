@@ -1,5 +1,5 @@
 """The analytics query adapter's statements: every one it executes compiles under both
-dialects and stays on the portable expression surface (blizzard#255, Phase 2 — unit
+dialects and stays on the portable expression surface (unit
 tier)."""
 
 from __future__ import annotations

@@ -27,13 +27,13 @@ class IReadChunkEventsRepository(Protocol):
         desc, ``id`` desc tiebreak within a band), filtered by whichever of
         ``severity``/``runner_id``/``chunk_id``/``since`` is given and bounded by
         ``limit`` — the cap keeps the most severe rows, not merely the newest.
-        ``GET /api/events``'s own-table half (issue #125); the caller unifies it with
+        ``GET /api/events``'s own-table half; the caller unifies it with
         ``list_open_escalations`` via :class:`~blizzard.hub.domain.work.EventFeed`."""
         ...
 
     def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
         """Every ``chunk-changed``-shaped activity row across every mapped cause's fact
-        table, at or after ``since`` (issue #213, AC4). ``edited`` is deliberately
+        table, at or after ``since`` (AC4). ``edited`` is deliberately
         unrepresented: a chunk edit writes no fact row — a documented exclusion, not a
         gap. Each source table is read with its own bounded ``ORDER BY … LIMIT``, so this
         returns rows unsorted across sources."""
@@ -66,7 +66,7 @@ class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
         detail: dict | None,
         at: datetime,
     ) -> int:
-        """Append one ``event_log`` row (issue #125) — never mutated once written.
+        """Append one ``event_log`` row — never mutated once written.
 
         ``chunk_id``/``runner_id`` are ``None`` for a runner-scoped/hub-authored event,
         respectively; ``detail`` is opaque, serialized to JSON text by the store. Returns

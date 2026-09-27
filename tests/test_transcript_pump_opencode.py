@@ -1,4 +1,4 @@
-"""``TranscriptPump`` driven against the real ``OpenCodeTranscriptSource`` (review F3, blocking)
+"""``TranscriptPump`` driven against the real ``OpenCodeTranscriptSource`` (blocking)
 — component tier. The unit-tier tests in ``test_runner_harness_opencode_transcript.py`` prove
 the source itself ships a ``LateToolOutput`` patch, not a duplicate turn, on a pending tool
 call's completion; this file proves the SAME scenario end to end through the pump, mirroring
@@ -75,7 +75,7 @@ def _shipped_turns(ctx) -> list[dict]:  # type: ignore[no-untyped-def]
 
 
 def test_a_pending_tool_call_completing_on_a_later_window_never_ships_twice() -> None:
-    """review F3 end to end: a real ``OpenCodeTranscriptSource`` reading a pending tool call,
+    """End to end: a real ``OpenCodeTranscriptSource`` reading a pending tool call,
     then its completion on a later tick, ships exactly ONE full tool turn (the pending one)
     plus one output-patch turn — never the completed call a second time."""
     exporter = FakeExporter(
@@ -151,7 +151,7 @@ def test_a_pending_tool_call_completing_on_a_later_window_never_ships_twice() ->
 
 
 def test_an_unresolved_child_sidechain_is_visible_and_picked_up_on_a_later_window() -> None:
-    """review F4 end to end: a child session export that fails once, then succeeds, surfaces
+    """End to end: a child session export that fails once, then succeeds, surfaces
     as an unlinked sidechain (never lost) and is picked up through the pump's own
     cross-window agent-id route once it resolves — never a duplicate on a further tick."""
     root = _export(

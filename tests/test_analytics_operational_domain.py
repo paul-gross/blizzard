@@ -1,5 +1,5 @@
-"""The operational analytics domain folds (blizzard#256 — unit tier):
-:func:`resolve_attempt_failures`'s D5 base cases, :func:`fold_step_durations`'s
+"""The operational analytics domain folds (unit tier):
+:func:`resolve_attempt_failures`'s base cases, :func:`fold_step_durations`'s
 chained-interval attribution, and :func:`steps_in_window`'s post-fold time filter,
 pinned as pure functions over hand-built facts with no store standing up."""
 
@@ -36,7 +36,7 @@ def _at(seconds: int) -> datetime:
 
 
 def test_an_in_flight_epoch_is_excluded_with_no_end_of_attempt_evidence() -> None:
-    """F1: a lone unresolved epoch that is still the chunk's newest lease is running,
+    """A lone unresolved epoch that is still the chunk's newest lease is running,
     not failed — no positive evidence it has ended."""
     failures = resolve_attempt_failures(
         lease_epochs=[LeaseEpoch(chunk_id="ch_1", epoch=1, minted_at=_at(0))],
@@ -52,8 +52,8 @@ def test_an_in_flight_epoch_is_excluded_with_no_end_of_attempt_evidence() -> Non
 
 
 def test_a_superseded_epoch_with_no_movement_counts_via_the_entry_node() -> None:
-    """D5's base case with zero prior movement — a strictly newer lease is the positive
-    end-of-attempt evidence epoch 1 needs (F1)."""
+    """The base case with zero prior movement — a strictly newer lease is the positive
+    end-of-attempt evidence epoch 1 needs."""
     failures = resolve_attempt_failures(
         lease_epochs=[
             LeaseEpoch(chunk_id="ch_1", epoch=1, minted_at=_at(0)),
@@ -102,7 +102,7 @@ def test_a_superseded_epoch_resolves_via_the_prior_transitions_to_node() -> None
 
 
 def test_a_same_instant_tie_between_a_transition_and_a_migration_goes_to_the_migration() -> None:
-    """F4: mirrors ``ChunkFacts._latest_movement_is_migration`` — a migration recorded at
+    """Mirrors ``ChunkFacts._latest_movement_is_migration`` — a migration recorded at
     the same instant and epoch as a transition is the later movement. Epoch 2 is the
     failure under test; epoch 3 is the positive evidence it is over."""
     failures = resolve_attempt_failures(
@@ -173,7 +173,7 @@ def test_a_no_movement_failure_resolves_via_the_epoch_s_own_graph_not_the_curren
 
 
 def test_a_graph_id_missing_from_the_preload_raises_a_named_error_not_a_keyerror() -> None:
-    """F14: the adapter preloads exactly the graph ids the fold's own indexing needs —
+    """The adapter preloads exactly the graph ids the fold's own indexing needs —
     a miss (e.g. a `chunk_migrations` row whose graph id no longer has a `graphs` row,
     unenforced by any FK) must surface as a diagnosable error, not a bare KeyError."""
     with pytest.raises(MissingGraphFact):
@@ -190,7 +190,7 @@ def test_a_graph_id_missing_from_the_preload_raises_a_named_error_not_a_keyerror
 
 
 def test_a_terminal_transition_is_never_read_as_a_prior_movements_node() -> None:
-    """F9: ``transitions.to_node_id`` can be ``RESERVED_TERMINAL`` ("done"), not a node
+    """``transitions.to_node_id`` can be ``RESERVED_TERMINAL`` ("done"), not a node
     id — a later unresolved epoch resolving through it must fall through to the
     no-movement case instead."""
     failures = resolve_attempt_failures(
@@ -221,7 +221,7 @@ def test_a_terminal_transition_is_never_read_as_a_prior_movements_node() -> None
 
 
 def test_a_same_instant_migration_tie_breaks_deterministically_on_migration_id() -> None:
-    """F7: the no-movement fallback's tie-break must be a total order — two later
+    """The no-movement fallback's tie-break must be a total order — two later
     migrations at the identical ``(epoch, recorded_at)`` break on their own
     (schema-unique) ``migration_id``."""
     later_a = MigrationMovement(
@@ -261,7 +261,7 @@ def test_a_same_instant_migration_tie_breaks_deterministically_on_migration_id()
 
 
 def test_a_bounced_epoch_is_excluded_outright() -> None:
-    """F1 (round 4): the bounced epoch must be superseded by a strictly newer lease, or
+    """The bounced epoch (round 4) must be superseded by a strictly newer lease, or
     the unrelated in-flight guard excludes it first and masks the ``bounced_set`` check."""
     failures = resolve_attempt_failures(
         lease_epochs=[
@@ -280,7 +280,7 @@ def test_a_bounced_epoch_is_excluded_outright() -> None:
 
 
 def test_fold_step_durations_chains_two_transitions_sharing_one_epoch() -> None:
-    """F3: the first transition in an epoch measures from the lease mint; the second
+    """The first transition in an epoch measures from the lease mint; the second
     measures from the first, not from the mint again."""
     rows = fold_step_durations(
         transitions=[
@@ -310,7 +310,7 @@ def test_fold_step_durations_chains_two_transitions_sharing_one_epoch() -> None:
 
 
 def test_fold_step_durations_orders_by_recorded_at_not_row_arrival() -> None:
-    """F4: the fold sorts explicitly rather than trusting the order rows arrived in."""
+    """The fold sorts explicitly rather than trusting the order rows arrived in."""
     rows = fold_step_durations(
         transitions=[
             TransitionMovement(
@@ -381,7 +381,7 @@ def test_steps_in_window_keeps_only_rows_whose_own_transition_is_inside_it() -> 
 
 
 def test_steps_in_window_re_checks_graph_id_too() -> None:
-    """F9 (review round 4): the store's fetch narrows by ``(chunk_id, epoch)`` group,
+    """The store's fetch (review round 4) narrows by ``(chunk_id, epoch)`` group,
     not by graph — this re-check is what actually enforces a ``graph_id`` filter
     against a hand-built input that violates the one-group-one-graph invariant."""
     rows = [
@@ -425,7 +425,7 @@ def test_fold_step_durations_then_steps_in_window_does_not_break_a_chained_epoch
 
 
 def test_group_judged_choices_groups_by_node_then_choice() -> None:
-    """F3: the judged-distribution grouping is a domain fold, not adapter-only logic."""
+    """The judged-distribution grouping is a domain fold, not adapter-only logic."""
     rows = [
         JudgedChoiceRow(from_node_id="nd_build", choice_name="pass", occurrences=3),
         JudgedChoiceRow(from_node_id="nd_build", choice_name="fail", occurrences=1),
@@ -439,7 +439,7 @@ def test_group_judged_choices_groups_by_node_then_choice() -> None:
 
 
 def test_summarize_outcomes_merges_both_halves_and_never_drops_a_node_with_only_one() -> None:
-    """F3: D4's own merge rule (a node with neither a judged choice nor an attempt
+    """The merge rule (a node with neither a judged choice nor an attempt
     failure never appears) as a domain fold, node id ascending."""
     judged = {"nd_b": {"pass": 1}}
     failures = {"nd_a": 2}

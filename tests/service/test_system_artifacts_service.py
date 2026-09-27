@@ -1,4 +1,4 @@
-"""System-scope artifact reads — service tier (blizzard#391).
+"""System-scope artifact reads — service tier.
 
 A real runner-local API against a real ``blizzard-mock-hub`` subprocess, driven through the
 ``blizzard runner artifact`` CLI. Proves the end-to-end read, ``bzh:system-scope-reads-live``'s

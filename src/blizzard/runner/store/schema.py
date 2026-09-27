@@ -37,7 +37,7 @@ leases = Table(
     Column("process_start_time", String, nullable=True),  # stable across pid reuse; REAP keys on it
     Column("session_id", String, nullable=True),  # harness-assigned, recorded once identified (phase two)
     Column("harness_id", String, nullable=True),  # owner of session_id; together they identify a concrete session
-    Column("pgid", Integer, nullable=True),  # the current generation's owned process group (D3)
+    Column("pgid", Integer, nullable=True),  # the current generation's owned process group
     Column("created_at", UtcDateTime, nullable=False),
 )
 
@@ -66,12 +66,12 @@ outbound_buffer = Table(
     Column("payload", Text, nullable=False),  # the JSON body posted to the matching hub route
     Column("created_at", UtcDateTime, nullable=False),
     Column("acked_at", UtcDateTime, nullable=True),  # NULL = pending; set when the hub acks the seq
-    # Retention/pending-floor contract (issue #520): see
+    # Retention/pending-floor contract: see
     # `IWriteOutboundRepository.prune_outbound`'s own docstring.
     sqlite_autoincrement=True,
 )
 
-# `pending_outbound`/`pending_submission_lease_ids` (issue #520) both filter on
+# `pending_outbound`/`pending_submission_lease_ids` both filter on
 # `acked_at IS NULL` — a live buffer is mostly acked rows behind a small pending tail, so
 # this turns both into a search of that tail instead of a scan of the whole table.
 Index("ix_outbound_buffer_acked_at_seq", outbound_buffer.c.acked_at, outbound_buffer.c.seq)
@@ -79,7 +79,7 @@ Index("ix_outbound_buffer_acked_at_seq", outbound_buffer.c.acked_at, outbound_bu
 # --- Heartbeats (progress detection, machine-local — never leaves the box) ----
 # Append-only: a lease's last heartbeat is ``max(beat_at)`` (``bzh:facts-not-status``).
 
-# Retention contract (issue #520): see IWriteLeaseLivenessRepository.prune_heartbeats.
+# Retention contract: see IWriteLeaseLivenessRepository.prune_heartbeats.
 
 heartbeats = Table(
     "heartbeats",
@@ -89,7 +89,7 @@ heartbeats = Table(
     Column("beat_at", UtcDateTime, nullable=False),  # injected-clock stamp of the tool call
 )
 
-# Serves `max(beat_at) WHERE lease_id = ?` (issue #520): trailing `beat_at` lets sqlite
+# Serves `max(beat_at) WHERE lease_id = ?`: trailing `beat_at` lets sqlite
 # answer that MAX from the index alone, never touching a heartbeat row.
 Index("ix_heartbeats_lease_id_beat_at", heartbeats.c.lease_id, heartbeats.c.beat_at)
 
@@ -106,7 +106,7 @@ lease_context = Table(
     Column("node_name", String, nullable=False),
     Column("retries_max", Integer, nullable=False),  # the node's retry budget, from the envelope
     # The model/effort the session ACTUALLY ran under, never a freshly resolved
-    # preference (issue #144). NULL means *unknown*, never a value.
+    # preference. NULL means *unknown*, never a value.
     Column("session_name", String, nullable=True),
     Column("resolved_model", String, nullable=True),
     Column("resolved_effort", String, nullable=True),
@@ -114,7 +114,7 @@ lease_context = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- Lease spawns (the spawn generation of each attempt — issue #13) ----------
+# --- Lease spawns (the spawn generation of each attempt) ----------
 # A lease outlives its sessions, so its newest `spawned_at` is the current generation.
 
 lease_spawns = Table(
@@ -127,12 +127,12 @@ lease_spawns = Table(
     # generation records the executable/version that actually started it.
     Column("harness_id", String, nullable=True),
     Column("harness_version", String, nullable=True),
-    # Phase one (D1/D2): launch-time process facts, durable before identity is known;
+    # Phase one: launch-time process facts, durable before identity is known;
     # `None` for a generation recorded the single-shot way (`record_spawn`).
     Column("pid", Integer, nullable=True),
     Column("process_start_time", String, nullable=True),
     Column("pgid", Integer, nullable=True),
-    # Phase two (D1/D2): set together once identity is confirmed (`bzh:facts-not-status`'s
+    # Phase two: set together once identity is confirmed (`bzh:facts-not-status`'s
     # closing-fact shape). A generation with `pid` set and both `NULL` is durably provisional.
     Column("session_id", String, nullable=True),
     Column("identified_at", UtcDateTime, nullable=True),
@@ -166,7 +166,7 @@ binding_releases = Table(
     Column("released_at", UtcDateTime, nullable=False),
 )
 
-# `HELD_BINDING` (issue #520) correlates on exactly this triple, once per `env_bindings`
+# `HELD_BINDING` correlates on exactly this triple, once per `env_bindings`
 # row asked about — without it, each read builds sqlite's own ad hoc covering index.
 Index(
     "ix_binding_releases_chunk_id_environment_id_released_at",
@@ -178,7 +178,7 @@ Index(
 # --- Asks (the worker's local open-ask fact) ---------------------------------
 # Recorded before the worker exits, so it is durable by the time the process ends.
 
-# Deliberately unindexed (issue #520), with `park_facts`, `park_resumes`, `check_results`,
+# Deliberately unindexed, with `park_facts`, `park_resumes`, `check_results`,
 # `checks_ran`, `in_flight_elicitations` below — each near-empty, so a scan beats an index's upkeep.
 
 asks = Table(
@@ -198,7 +198,7 @@ asks = Table(
 # --- Park / resume (the chunk's dormancy on a question) ----------------------
 # Parked while a park_fact references a lease with no later park_resume.
 
-# Deliberately unindexed — see `asks`'s own comment above for why (issue #520).
+# Deliberately unindexed — see `asks`'s own comment above for why.
 
 park_facts = Table(
     "park_facts",
@@ -219,7 +219,7 @@ park_resumes = Table(
     Column("resumed_at", UtcDateTime, nullable=False),
 )
 
-# --- Pause park / resume (dormancy on an operator pause — issue #46) ---------
+# --- Pause park / resume (dormancy on an operator pause) ---------
 # A separate table pair: one NULL ``question_id`` would poison a NOT IN subquery.
 
 pause_parks = Table(
@@ -229,7 +229,7 @@ pause_parks = Table(
     Column("lease_id", String, nullable=False),
     Column("chunk_id", String, nullable=False),
     Column("parked_at", UtcDateTime, nullable=False),
-    # The in-flight elicitation the park's interrupt signalled (blizzard#627), or NULL.
+    # The in-flight elicitation the park's interrupt signalled, or NULL.
     Column("interrupted_elicitation_id", Integer, nullable=True),
 )
 
@@ -282,7 +282,7 @@ hub_control = Table(
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
-# --- Local pause facts (the runner's own brake — issue #43) -------------------
+# --- Local pause facts (the runner's own brake) -------------------
 # Appends rather than upserts; effective paused is the OR with ``hub_control``.
 
 local_pause_facts = Table(
@@ -293,10 +293,10 @@ local_pause_facts = Table(
     Column("paused", Boolean, nullable=False),  # locally paused derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
-    Column("reason", String, nullable=True),  # None on an unreasoned pause/clear (blizzard#594)
+    Column("reason", String, nullable=True),  # None on an unreasoned pause/clear
 )
 
-# --- Workspace prompt override (runtime-settable spawn preamble — issue #17) --
+# --- Workspace prompt override (runtime-settable spawn preamble) --
 # A present row, empty ``prompt`` included, wins over config; no row falls back to it.
 
 workspace_prompt = Table(
@@ -307,7 +307,7 @@ workspace_prompt = Table(
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
-# --- Daemon liveness (when the runner was last known alive — issue #13) -------
+# --- Daemon liveness (when the runner was last known alive) -------
 # The crash-time reference recovery measures staleness against, not `now - heartbeat`.
 
 daemon_liveness = Table(
@@ -317,7 +317,7 @@ daemon_liveness = Table(
     Column("alive_at", UtcDateTime, nullable=False),  # injected-clock stamp of the newest tick
 )
 
-# --- Takeovers (the operator's session over a parked chunk — issue #52) -------
+# --- Takeovers (the operator's session over a parked chunk) -------
 # Recorded **before** any kill, so no later tick can race the human for the chunk.
 
 takeovers = Table(
@@ -341,7 +341,7 @@ takeover_ends = Table(
     Column("ended_at", UtcDateTime, nullable=False),
 )
 
-# --- Requeues (the explicit hand-back after a human hold — issue #53) --------
+# --- Requeues (the explicit hand-back after a human hold) --------
 # Pending while no later lease was minted, so the next fresh spawn consumes it.
 
 requeues = Table(
@@ -364,7 +364,7 @@ escalation_closures = Table(
     Column("closed_at", UtcDateTime, nullable=False),
 )
 
-# --- Usage facts (cost/token telemetry per invocation — issue #58) -----------
+# --- Usage facts (cost/token telemetry per invocation) -----------
 # Keyed ``(lease_id, generation, kind)``, so a replay writes nothing twice.
 
 usage_facts = Table(
@@ -378,7 +378,7 @@ usage_facts = Table(
     Column("generation", Integer, nullable=False),  # this lease's spawn ordinal (1 = the initial spawn)
     Column("kind", String, nullable=False),  # spawn | resume | judge
     Column("model", String, nullable=False),
-    # The invocation's own recorded harness identity (blizzard#441) — nullable and
+    # The invocation's own recorded harness identity — nullable and
     # un-backfilled; NULL declares unknown, never a value.
     Column("harness_id", String, nullable=True),
     Column("harness_version", String, nullable=True),
@@ -404,7 +404,7 @@ route_tokens = Table(
     Column("acquired_at", UtcDateTime, nullable=False),
 )
 
-# --- Lease capability tokens (issue #113) -------------------------------------
+# --- Lease capability tokens -------------------------------------
 # Only the sha256 hash is stored; the plaintext rides the spawn env, never persisted.
 
 lease_tokens = Table(
@@ -415,7 +415,7 @@ lease_tokens = Table(
     Column("minted_at", UtcDateTime, nullable=False),
 )
 
-# --- Attachments (a worker's explicit artifact submission — issue #113) ------
+# --- Attachments (a worker's explicit artifact submission) ------
 # Append-only, latest-wins-per-``(lease_id, name)``, so a re-submit is a correction.
 
 attachments = Table(
@@ -431,11 +431,11 @@ attachments = Table(
     Column("attached_at", UtcDateTime, nullable=False),
 )
 
-# `attachments_for_lease` (issue #520) groups by `name` within one lease's rows for
+# `attachments_for_lease` groups by `name` within one lease's rows for
 # `max(id)`; trailing `name`, `id` lets that per-group max come straight off the index.
 Index("ix_attachments_lease_id_name_id", attachments.c.lease_id, attachments.c.name, attachments.c.id)
 
-# --- Nudge-fired facts (issue #113) -------------------------------------------
+# --- Nudge-fired facts -------------------------------------------
 # Written BEFORE the resume it guards, so "at most one nudge" survives a crash.
 
 nudge_facts = Table(
@@ -447,10 +447,10 @@ nudge_facts = Table(
     Column("nudged_at", UtcDateTime, nullable=False),
 )
 
-# --- Check results + the checks-ran guard (issue #114) -----------------------
+# --- Check results + the checks-ran guard -----------------------
 # ``checks_ran`` is written last: a marker implies its result rows exist.
 
-# Both tables deliberately unindexed — see `asks`'s own comment above for why (issue #520).
+# Both tables deliberately unindexed — see `asks`'s own comment above for why.
 
 check_results = Table(
     "check_results",
@@ -475,12 +475,12 @@ checks_ran = Table(
     Column("ran_at", UtcDateTime, nullable=False),
 )
 
-# --- In-flight judgement elicitations (blizzard#443) --------------------------
-# One row per (lease_id, epoch) launch: durable BEFORE the process starts (D1), so an
+# --- In-flight judgement elicitations --------------------------
+# One row per (lease_id, epoch) launch: durable BEFORE the process starts, so an
 # orphaned Popen is never possible — only an un-armable record-with-no-process gap REAP's
 # generic staleness treatment absorbs. `pid`/`process_start_time` land once Popen returns.
 
-# Deliberately unindexed — see `asks`'s own comment above for why (issue #520).
+# Deliberately unindexed — see `asks`'s own comment above for why.
 
 in_flight_elicitations = Table(
     "in_flight_elicitations",
@@ -490,18 +490,18 @@ in_flight_elicitations = Table(
     Column("epoch", Integer, nullable=False),
     Column("pid", Integer, nullable=True),
     Column("process_start_time", String, nullable=True),
-    Column("pgid", Integer, nullable=True),  # this launch's owned process group (D3)
+    Column("pgid", Integer, nullable=True),  # this launch's owned process group
     Column("output_path", String, nullable=False),
     Column("first_launched_at", UtcDateTime, nullable=False),
     Column("relaunch_count", Integer, nullable=False),
-    # `pause_parks.interrupted_elicitation_id` (blizzard#627) names a row of this table by
+    # `pause_parks.interrupted_elicitation_id` names a row of this table by
     # `id`; a bare sqlite `INTEGER PRIMARY KEY` reuses a deleted row's rowid, so this pin
     # matches `outbound_buffer`/`transcript_outbound_buffer`'s own fix
     # (blizzard-context:/standards/persistence.md) rather than leave that link ambiguous.
     sqlite_autoincrement=True,
 )
 
-# --- Transcript invocation boundaries (blizzard#437 D6/D11) -------------------
+# --- Transcript invocation boundaries -------------------------
 # One row per fleet-driven invocation, durable BEFORE it launches. Runner-local only.
 
 invocation_boundaries = Table(
@@ -524,7 +524,7 @@ invocation_boundaries = Table(
 )
 Index("ix_invocation_boundaries_lease_id", invocation_boundaries.c.lease_id)
 
-# --- SSO federation jti replay cache (issue #95, decision D4) ----------------
+# --- SSO federation jti replay cache ----------------
 # The `jti` primary key alone is the single-use guarantee, enforced by the store.
 
 jwt_jti_seen = Table(
@@ -535,7 +535,7 @@ jwt_jti_seen = Table(
     Column("expires_at", UtcDateTime, nullable=False),
 )
 
-# --- Git-commit declarations (issue #143) -------------------------------------
+# --- Git-commit declarations -------------------------------------
 # Latest-wins-per-``(lease_id, repo)``: a chunk may span multiple repos.
 
 git_commit_declarations = Table(
@@ -553,7 +553,7 @@ git_commit_declarations = Table(
     Column("declared_at", UtcDateTime, nullable=False),
 )
 
-# --- Session preamble facts (the standing prose last sent — issue #149) ------
+# --- Session preamble facts (the standing prose last sent) ------
 # Digests, not the prose (``canon:one-owner``); keyed on the SESSION, not the lease.
 
 session_preamble_facts = Table(
@@ -567,12 +567,12 @@ session_preamble_facts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- External subscription usage samples (issue #218) ------------------------
+# --- External subscription usage samples ------------------------
 # One row per sampling *attempt*: a NULL payload still counts toward the cadence.
-# `slug` joins a row to its declared subscription (blizzard#436); non-nullable — a row that
+# `slug` joins a row to its declared subscription; non-nullable — a row that
 # predates per-provider subscriptions carries the legacy Anthropic slug.
 
-# Retention contract (issue #520): see IWriteUsageRepository.prune_external_usage_samples.
+# Retention contract: see IWriteUsageRepository.prune_external_usage_samples.
 
 external_usage_samples = Table(
     "external_usage_samples",
@@ -589,7 +589,7 @@ external_usage_samples = Table(
     Column("renewal", String, nullable=True),
 )
 
-# `prune_external_usage_samples`'s per-slug newest-attempt lookup (issue #520) reads
+# `prune_external_usage_samples`'s per-slug newest-attempt lookup reads
 # `max(sampled_at) WHERE slug = ?`, mirroring `ix_heartbeats_lease_id_beat_at`.
 Index("ix_external_usage_samples_slug_sampled_at", external_usage_samples.c.slug, external_usage_samples.c.sampled_at)
 
@@ -611,7 +611,7 @@ context_samples = Table(
     Column("sampled_at", UtcDateTime, nullable=False),
 )
 
-# --- Transcript segments (the segment ledger — issue #246, D2) ---------------
+# --- Transcript segments (the segment ledger) ---------------
 # Mutable, like `leases`, not append-only; keyed `(chunk_id, node_id, epoch, generation)`.
 
 transcript_segments = Table(
@@ -627,14 +627,14 @@ transcript_segments = Table(
     Column("harness_id", String, nullable=False),
     Column("cursor", String, nullable=True),  # opaque TranscriptPosition.token; NULL = unread from the start
     Column("shipped_bytes", Integer, nullable=False),
-    # Also this segment's next `turn_range_start` (blizzard#247's wire key) — turn indices
+    # Also this segment's next `turn_range_start` (wire key) — turn indices
     # are segment-relative and gapless, so the running count doubles as the next offset.
     Column("shipped_turns", Integer, nullable=False),
     # A static per-harness constant, not something reading is needed to learn — stamped with
     # the source seam's "never ran" sentinel at spawn, so a closure always has one to declare.
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
-    # Frozen at segment open from `lease_context`'s own resolved pair (D3) — nullable
+    # Frozen at segment open from `lease_context`'s own resolved pair — nullable
     # throughout, unset for a segment opened before this pair existed. NULL means unknown.
     Column("model", String, nullable=True),
     Column("effort", String, nullable=True),
@@ -644,10 +644,10 @@ transcript_segments = Table(
     # The severity `truncated_reason` was last set with — so the store can compare
     # without itself knowing what any reason string means.
     Column("truncated_reason_severity", Integer, nullable=True),
-    Column("shipping_stopped_reason", String, nullable=True),  # NULL = still shipping (D4)
+    Column("shipping_stopped_reason", String, nullable=True),  # NULL = still shipping
     # JSON array of subagent `agent_id`s already warned about on the fact lane.
     Column("sidechain_warned_agents", Text, nullable=True),  # NULL = none warned yet
-    # JSON object, agent_id -> spawning `tool_use_id` (blizzard#338) — the cross-window
+    # JSON object, agent_id -> spawning `tool_use_id` — the cross-window
     # link handle; a sidecar read after its result scrolled away has no other parent.
     Column("agent_tool_use_ids", Text, nullable=True),  # NULL = none learned yet
     # JSON array of truncation `reason`s warned about — the warn-once latch,
@@ -658,7 +658,7 @@ transcript_segments = Table(
     Column("stamped_at", UtcDateTime, nullable=False),
 )
 
-# Every per-chunk read filters `chunk_id` and orders by `stamped_at, segment_id` (issue #520);
+# Every per-chunk read filters `chunk_id` and orders by `stamped_at, segment_id`;
 # this composite index serves both, sort-free.
 Index(
     "ix_transcript_segments_chunk_id_stamped_at_segment_id",
@@ -667,7 +667,7 @@ Index(
     transcript_segments.c.segment_id,
 )
 
-# --- Transcript outbound buffer (the lane's own store-and-forward — D3) ------
+# --- Transcript outbound buffer (the lane's own store-and-forward) ------
 # A second FIFO drain, its own sequence, structurally independent of `outbound_buffer`'s.
 
 transcript_outbound_buffer = Table(
@@ -704,7 +704,7 @@ graph_artifacts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- Selftest results (blizzard#438) — latest-wins-per-harness_id (bzh:facts-not-status) ---
+# --- Selftest results — latest-wins-per-harness_id (bzh:facts-not-status) ---
 
 selftest_results = Table(
     "selftest_results",
@@ -716,7 +716,7 @@ selftest_results = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- Provider-overload backoff facts (blizzard#595) --------------------------
+# --- Provider-overload backoff facts --------------------------
 # Append-only, one row per exit classified overloaded; `overload_resets` closes a streak on
 # a later clean exit — mirrors `pause_parks`/`pause_park_resumes`'s own open/close pair.
 # Deliberately unindexed — one environment's own local runner store stays small for that

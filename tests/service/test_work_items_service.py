@@ -1,5 +1,5 @@
-"""The runner's work-items proxy against a real mock hub, over a real HTTP hop
-(blizzard#362) — the wire-change-extends-mock companion landing owes this: this route
+"""The runner's work-items proxy against a real mock hub, over a real HTTP hop —
+the wire-change-extends-mock companion landing owes this: this route
 forwards through the generic ``HubProxy``, not ``IHubClient``, so
 ``tests/service/test_parity_guard.py``'s mechanical diff never enumerates it."""
 
@@ -56,7 +56,7 @@ def test_work_items_proxy_carries_the_widened_fields_unchanged_over_a_real_hop(t
 
 
 def test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart(tmp_path: Path) -> None:
-    """``HubProxy.forward``'s retry (blizzard#467) over a real bounce: the mock hub is
+    """``HubProxy.forward``'s retry over a real bounce: the mock hub is
     killed, the runner's proxied read is already in flight against the closed port, and
     the hub comes back up on the same port before the runner's retry budget runs out —
     the read still answers ``200``, never surfacing the restart window's `502` to the

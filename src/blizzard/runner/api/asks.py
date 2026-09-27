@@ -1,5 +1,5 @@
 """The runner-local ask endpoints — ``POST /api/leases/{lease_id}/asks`` (record) and
-``GET /api/asks?open=true`` (list, issue #51).
+``GET /api/asks?open=true`` (list).
 
 The POST records the ask fact **before** the asking worker exits, which is what lets a later read
 tell "parked on a question" from "died without a verdict"; the ``question_id`` is minted here so
@@ -40,7 +40,7 @@ class AskResponse(BaseModel):
 def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> AskResponse:
     """Record a worker's ask against its lease, minting the question id.
 
-    Token-authorized like every other worker verb (issue #291): activeness alone would admit
+    Token-authorized like every other worker verb: activeness alone would admit
     an open takeover's closed reference lease too, so the presented token is the only
     credential that actually gates this route."""
     lease = authorized_lease(lease_id, request)
@@ -65,10 +65,10 @@ def _ask_view(ask: AskRecord) -> AskView:
 
 @router.get("/asks", response_model=AskListResponse, dependencies=[Depends(require_human_api)])
 def list_asks(request: Request, open_only: bool = Query(True, alias="open")) -> AskListResponse:
-    """Every ask still awaiting an answer — ``GET /api/asks?open=true`` (issue #51).
+    """Every ask still awaiting an answer — ``GET /api/asks?open=true``.
 
     The one **human-web-lane** route on this otherwise worker-hook router, so it carries
-    ``require_human_api`` (issue #95). An ask reads open while its ``question_id`` carries
+    ``require_human_api``. An ask reads open while its ``question_id`` carries
     no answer fact. No closed-ask history is kept, so ``open=false`` is refused."""
     if not open_only:
         raise HTTPException(

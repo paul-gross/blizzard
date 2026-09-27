@@ -1,4 +1,4 @@
-"""``require_marker_authority`` gating the mid-run marker callback (issue #230, phase 2).
+"""``require_marker_authority`` gating the mid-run marker callback.
 
 A real hub built with ``auth_mode="oauth"``, hit with a real HTTP client. Every refusal
 is proven both by status code AND by reading the marker artifact back — a route that
@@ -131,8 +131,8 @@ def test_an_operators_own_chunk_control_session_still_works_with_no_marker_token
     assert _MARKER_NAME in _recorded_marker_names(hub, chunk_id)
 
 
-# The producer and consumer each assert their own copy of the header literal (issue
-# #230); a rename on either side must fail here, driven in-process through the real route.
+# The producer and consumer each assert their own copy of the header literal;
+# a rename on either side must fail here, driven in-process through the real route.
 
 
 def _hub_request(hub: HubHarness):
@@ -182,8 +182,8 @@ def test_the_land_scripts_own_recorder_fails_loudly_when_the_hub_refuses(tmp_pat
     assert _recorded_marker_names(hub, chunk_id) == set()
 
 
-# The executor and ``HubServices`` must share one ``MarkerAuthority`` instance (issue
-# #230); the test below is the only place a token travels the whole shipped path.
+# The executor and ``HubServices`` must share one ``MarkerAuthority`` instance;
+# the test below is the only place a token travels the whole shipped path.
 
 _HUB_NODE_GRAPH_YAML = """
 name: default-delivery

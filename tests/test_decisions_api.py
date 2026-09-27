@@ -1,5 +1,5 @@
 """``POST /api/decisions/{id}/resolutions`` and the deprecated singular
-``.../resolution`` alias (issue #104), component tier.
+``.../resolution`` alias, component tier.
 
 Pins the pluralized route's CAS behavior (200 winner / 409 loser) and proves the
 singular alias resolves byte-identically while carrying the ``Deprecation``/``Link``
@@ -113,7 +113,7 @@ def test_resolutions_resolves_first_write_wins(tmp_path: Path) -> None:
     )
     assert first.status_code == 200, first.text
     assert first.json()["choice"] == "approve"
-    # `resolved_by` in the body is a spoof attempt — issue #91 overwrites it with the
+    # `resolved_by` in the body is a spoof attempt — the route overwrites it with the
     # resolved session identity, `"operator"` under the default `auth.mode = "none"`.
     assert first.json()["resolved_by"] == "operator"
 

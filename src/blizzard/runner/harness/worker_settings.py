@@ -15,7 +15,7 @@ HEARTBEAT_HOOK_COMMAND = "blizzard runner heartbeat"
 #: The command a worker's SessionEnd hook runs — the "declared done" signal.
 SESSION_END_HOOK_COMMAND = "blizzard runner session-end"
 
-#: Tools that defer work to a future turn a headless worker never gets (issue #422);
+#: Tools that defer work to a future turn a headless worker never gets;
 #: ``TaskOutput``/``TaskStop``/backgrounded ``Bash`` stay reachable on purpose.
 DENIED_TOOLS = (
     "ScheduleWakeup",

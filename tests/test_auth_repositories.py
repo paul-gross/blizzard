@@ -1,5 +1,5 @@
 """The identity-spine SQLAlchemy adapters — real store, injected errors (component
-tier, issue #91). Each adapter is exercised over the hub-store seam (issue #413) atop
+tier). Each adapter is exercised over the hub-store seam atop
 a migrated sqlite engine, with the injected ``RepoErrorFactory`` proven to wrap a
 raced/unexpected ``IntegrityError`` into the domain ``RepoError``."""
 
@@ -64,7 +64,7 @@ def test_user_create_and_get_round_trip(store, errors: RepoErrorFactory) -> None
 
 def test_user_role_round_trips_for_every_role_member(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
     """A stored row's ``role`` string reads back as the same :class:`Role` member for
-    every declared role — no role is silently demoted on read (issue #210's AC; there
+    every declared role — no role is silently demoted on read (there
     is no migration to prove this against, so the round trip itself is the proof)."""
     repo = UserRepository(store, errors)
     for i, role in enumerate(Role):
@@ -221,7 +221,7 @@ def test_session_create_rejects_a_duplicate_id_hash(store, errors: RepoErrorFact
         sessions.create(Session(id_hash="hash1", user_id="usr_1", created_at=_T0, expires_at=_T0, last_seen_at=_T0))
 
 
-# --- AuthStateRepository (issue #92) -------------------------------------------
+# --- AuthStateRepository -------------------------------------------
 
 
 def test_auth_state_create_get_consume_round_trip(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
@@ -263,7 +263,7 @@ def test_auth_state_consume_is_idempotently_none_the_second_time(store, errors: 
 
 
 def test_auth_state_consume_is_single_use_under_concurrent_callers(store, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
-    """Two racing ``consume`` calls on the same state must not both win (issue #92)."""
+    """Two racing ``consume`` calls on the same state must not both win."""
     repo = AuthStateRepository(store, errors)
     repo.create(
         AuthStateEntry(
@@ -313,7 +313,7 @@ def test_auth_state_create_rejects_a_duplicate_state(store, errors: RepoErrorFac
         repo.create(entry)
 
 
-# --- AuthFactsRepository (issue #92) -------------------------------------------
+# --- AuthFactsRepository -------------------------------------------
 
 
 def test_auth_facts_create_and_list_recent_newest_first(store) -> None:  # type: ignore[no-untyped-def]
@@ -333,7 +333,7 @@ def test_auth_facts_list_recent_respects_limit(store) -> None:  # type: ignore[n
     assert len(repo.list_recent(limit=2)) == 2
 
 
-# --- SuperuserBootstrapRepository (issue #94) -----------------------------------
+# --- SuperuserBootstrapRepository -----------------------------------
 
 
 def test_superuser_bootstrap_get_is_none_before_any_write(store) -> None:  # type: ignore[no-untyped-def]

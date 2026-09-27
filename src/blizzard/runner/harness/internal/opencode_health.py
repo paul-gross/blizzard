@@ -1,4 +1,4 @@
-"""The OpenCode health-probe binding (blizzard#438).
+"""The OpenCode health-probe binding.
 
 Standalone, like :class:`~blizzard.runner.harness.internal.opencode_probe.
 OpenCodeCompatibilityProbe`: the health-probe seam is a narrow, separately-injected
@@ -35,8 +35,8 @@ _HARNESS_ID = "opencode"
 
 
 def _degradations_from_manifest(version: str, *, corpus_root: Path) -> tuple[DeclaredDegradation, ...]:
-    """This ``version``'s own declared degradations, read from its committed corpus manifest
-    (blizzard#438) — never a hardcoded Python literal describing only one version. A
+    """This ``version``'s own declared degradations, read from its committed corpus manifest —
+    never a hardcoded Python literal describing only one version. A
     missing or malformed manifest reads as "no declared degradations", the same fail-soft
     posture :func:`~blizzard.runner.harness.internal.offline_compatibility.classify_offline`
     already takes for a manifest it cannot read."""
@@ -86,7 +86,7 @@ class OpenCodeHealthProbe:
         # own real credential-discovery path.
         self._auth_path = Path(auth_path) if auth_path is not None else _default_opencode_auth_path()
         self._corpus_root = corpus_root
-        # The admitted range owes at least one committed corpus manifest inside it (D1) —
+        # The admitted range owes at least one committed corpus manifest inside it —
         # checked here, not at import, so a misconfigured corpus only degrades this binding.
         try:
             assert_admitted_range_has_corpus(_HARNESS_ID, ADMITTED_OPENCODE_RANGE, corpus_root=corpus_root)
@@ -123,7 +123,7 @@ class OpenCodeHealthProbe:
 
     def declared_degradations(self) -> tuple[DeclaredDegradation, ...]:
         """The union of every committed corpus inside the admitted range's own declared
-        degradations (blizzard#438), read from each such version's manifest — never a
+        degradations, read from each such version's manifest — never a
         hardcoded tuple describing only one of them, and never one version's list picked
         arbitrarily, since this seam reports independent of any one observed version."""
         seen: dict[CompatibilityProbe, DeclaredDegradation] = {}

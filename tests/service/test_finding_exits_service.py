@@ -1,6 +1,5 @@
 """Hub service tier — a finding's human-driven exits, the delta guard they raise, the
-routine trend, and its last-swept table, against a real hub daemon (blizzard#394 Phases
-2-4). Both edges are real: raw HTTP, and the shipped ``blizzard hub`` binary as a
+routine trend, and its last-swept table, against a real hub daemon. Both edges are real: raw HTTP, and the shipped ``blizzard hub`` binary as a
 subprocess. Findings are minted the way a routine mints them — a run, the mock runner
 submitting its ``delta`` over the wire, then the hub's own garden-delivery route — never
 ad-hoc SQL. Run with ``BLIZZARD_SERVICE=1``."""
@@ -107,7 +106,7 @@ def deliver(
     runner, submit the run's artifacts over the wire, then post the hub's own
     garden-delivery route. Returns that route's response — ``recorded`` or ``invalid``.
     ``routine_id`` defaults to ``g``'s own routine; a caller naming a second routine it
-    minted itself sweeps that one instead (blizzard#631)."""
+    minted itself sweeps that one instead."""
     run = g.hub.post(
         f"/api/routines/{routine_id or g.routine_id}/run",
         json={"scope_slug": scope, "mode": "full", "note": "sweep"},
@@ -182,7 +181,7 @@ def cli(g: Garden, *args: str, expect: int = 0) -> subprocess.CompletedProcess[s
     return proc
 
 
-# --- Phase 2 — the exit verbs at both edges --------------------------------- #
+# --- the exit verbs at both edges --------------------------------- #
 
 
 def test_every_exit_verb_and_reopen_land_over_real_http(tmp_path: Path) -> None:
@@ -221,7 +220,7 @@ def test_every_exit_verb_and_reopen_land_over_real_http(tmp_path: Path) -> None:
 
 def test_every_exit_verb_and_reopen_land_through_the_real_cli(tmp_path: Path) -> None:
     """The shipped ``blizzard hub finding`` verbs reach the same routes over the network
-    and render the post-write state — the second edge Phase 2's criterion names."""
+    and render the post-write state, proving the CLI edge alongside the raw-HTTP one."""
     with garden_stack(tmp_path) as g:
         a, b, c, d, e, f = seed(g, 6)
 
@@ -249,7 +248,7 @@ def test_every_exit_verb_and_reopen_land_through_the_real_cli(tmp_path: Path) ->
 
 
 def test_a_blank_note_is_refused_at_both_edges_and_a_bulk_exit_is_one_call(tmp_path: Path) -> None:
-    """D7's note requirement holds on the wire and in the CLI, and one call exits many."""
+    """The blank-note refusal holds on the wire and in the CLI, and one call exits many."""
     with garden_stack(tmp_path) as g:
         a, b, c = seed(g, 3)
 
@@ -276,11 +275,11 @@ def test_a_blank_note_is_refused_at_both_edges_and_a_bulk_exit_is_one_call(tmp_p
         assert live(g) == []
 
 
-# --- Phase 1 D3 — an exit is terminal to a later run's delta ops ------------- #
+# --- an exit is terminal to a later run's delta ops ------------- #
 
 
 def test_an_exited_finding_is_no_longer_a_delta_target_but_a_gone_flagged_one_still_is(tmp_path: Path) -> None:
-    """D3: a human exit takes the finding out of a run's reach, while the ``gone`` flag a
+    """A human exit takes the finding out of a run's reach, while the ``gone`` flag a
     run itself raises does not — the flagged finding is still a live delta target."""
     with garden_stack(tmp_path) as g:
         exited, flagged = seed(g, 2)
@@ -304,7 +303,7 @@ def test_an_exited_finding_is_no_longer_a_delta_target_but_a_gone_flagged_one_st
         assert read_back(g, flagged)["state"] == "live"
 
 
-# --- Phase 4 — the trend, at both edges -------------------------------------- #
+# --- the trend, at both edges -------------------------------------- #
 
 
 def _trend(g: Garden, *, since: datetime, until: datetime, boundary: datetime, period_days: int = 7) -> dict[str, Any]:
@@ -323,7 +322,7 @@ def _trend(g: Garden, *, since: datetime, until: datetime, boundary: datetime, p
 
 
 def test_the_trend_is_served_over_http_and_through_the_real_cli(tmp_path: Path) -> None:
-    """Per-period created/exit counts, the outflow-vs-withdrawn roll-ups, and the D5
+    """Per-period created/exit counts, the outflow-vs-withdrawn roll-ups, and the
     introduced-age cut — the same numbers on both edges."""
     with garden_stack(tmp_path) as g:
         # The window's periods are cut from an instant taken BEFORE anything is recorded,
@@ -331,7 +330,7 @@ def test_the_trend_is_served_over_http_and_through_the_real_cli(tmp_path: Path) 
         t0, t0_local = datetime.now(UTC), datetime.now()
 
         # Two findings carry an `introduced` commit the mock forge resolves (attributed);
-        # one carries none (unattributed) — the three D5 buckets in one window.
+        # one carries none (unattributed) — the three buckets in one window.
         recorded = deliver(
             g,
             [
@@ -509,7 +508,7 @@ def test_sweeps_404s_on_an_unknown_routine_id(tmp_path: Path) -> None:
 
 
 def test_retiring_a_linked_scope_leaves_the_routine_scope_membership_intact(tmp_path: Path) -> None:
-    """D3: retire is a brake over new runs, not an unlink — a retired scope stays in
+    """Retire is a brake over new runs, not an unlink — a retired scope stays in
     both directions of the routine_scopes membership it was already part of."""
     with garden_stack(tmp_path) as g:
         slug = "garden-svc-retired-linked"
@@ -531,7 +530,7 @@ def test_retiring_a_linked_scope_leaves_the_routine_scope_membership_intact(tmp_
 
 
 def test_retiring_a_scope_does_not_hide_its_already_delivered_findings(tmp_path: Path) -> None:
-    """D3: retire brakes new runs into a scope, not the findings list read — a finding
+    """Retire brakes new runs into a scope, not the findings list read — a finding
     delivered before retirement still lists under it, unchanged."""
     with garden_stack(tmp_path) as g:
         recorded = deliver(g, [add_op("src/app.py:1")])
@@ -549,12 +548,12 @@ def test_retiring_a_scope_does_not_hide_its_already_delivered_findings(tmp_path:
         assert after_findings[0]["state"] == before[0]["state"]
 
 
-# --- Phase 3 — an accepted proposal's delivered item closes its findings ---- #
+# --- an accepted proposal's delivered item closes its findings ---- #
 
 
 def test_delivering_an_accepted_proposals_minted_item_closes_its_findings_to_delivered(tmp_path: Path) -> None:
-    """The Phase 3 hook, driven live: a proposal delivered, accepted, and closed by the
-    daemon's own close-intent drain comes back `delivered`, not `resolved` (blizzard#583)
+    """This hook, driven live: a proposal delivered, accepted, and closed by the
+    daemon's own close-intent drain comes back `delivered`, not `resolved`
     — the owning routine's next run is what settles it for good."""
     with garden_stack(tmp_path) as g:
         first, second = seed(g, 2)
@@ -606,12 +605,11 @@ def test_delivering_an_accepted_proposals_minted_item_closes_its_findings_to_del
 
 
 def test_an_operator_proposal_over_two_routines_and_scopes_delivers_its_findings(tmp_path: Path) -> None:
-    """The Phase 3 end-to-end proof (blizzard#631): an operator proposal naming no
+    """An operator proposal naming no
     routine, over findings minted by two different routines in two different scopes,
     created through the shipped ``blizzard hub`` binary. Accept and delivery close its
     findings to ``delivered`` exactly as a routine-authored proposal's own do — this
-    chunk's own mint-through-delivery setup, `deliver`'s own second-routine seam
-    (blizzard#631)."""
+    chunk's own mint-through-delivery setup, `deliver`'s own second-routine seam."""
     with garden_stack(tmp_path) as g:
         (first,) = seed(g, 1)
 

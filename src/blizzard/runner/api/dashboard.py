@@ -1,4 +1,4 @@
-"""The runner-local composed dashboard read — ``GET /api/dashboard`` (issue #311).
+"""The runner-local composed dashboard read — ``GET /api/dashboard``.
 
 Folds the panel's nine status polls (``/runner``, ``/environments``, ``/asks?open=true``,
 ``/escalations``, ``/takeovers``, ``/facts``, ``/harness-health``, ``/subscriptions``,
@@ -67,7 +67,7 @@ def _maybe_fleet_summary(request: Request) -> FleetSummaryView | None:
     try:
         # A hub outage here is tolerated degradation, not an operational failure — the six
         # local sections still stand, so this route's own unreachable-hub line logs below
-        # the module default (issue #374).
+        # the module default.
         return _fleet_summary(proxy, timeout=_DASHBOARD_HUB_TIMEOUT, severity="warning")
     except HTTPException:
         # Hub unreachable, or answered with a non-200 — the local sections still stand.

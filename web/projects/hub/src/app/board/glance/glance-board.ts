@@ -66,7 +66,7 @@ export class GlanceBoard {
   private readonly health = injectHubHealthQuery();
   private readonly live = inject(FleetLiveUpdates);
 
-  /** The fleet-wide spend-since read (issue #60) — the same local-midnight
+  /** The fleet-wide spend-since read — the same local-midnight
    * window the titlebar's own cell reads (`startOfLocalDayIso`), so the two
    * never disagree and share one query-cache entry. */
   protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso());

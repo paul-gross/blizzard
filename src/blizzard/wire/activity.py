@@ -1,4 +1,4 @@
-"""The activity feed — ``GET /api/activity`` (issue #213).
+"""The activity feed — ``GET /api/activity``.
 
 A bounded, merged read over the same fact-derived vocabulary a live ``chunk-changed`` /
 ``event-logged`` / ``runner-changed`` frame carries — shaped by

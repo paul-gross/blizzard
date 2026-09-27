@@ -1,4 +1,4 @@
-"""Per-kind SSE frame wire models (issue #235) — the one description each frame kind's
+"""Per-kind SSE frame wire models — the one description each frame kind's
 payload has, mirrored by the golden corpus at ``contracts/sse/``.
 
 Every model is ``extra="forbid"``. Presence-vs-null is load-bearing and not uniform, so each
@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.event_log import EventLogSeverity
 
-#: What fact family drove a ``chunk-changed`` frame (issue #212) — each emit site names
+#: What fact family drove a ``chunk-changed`` frame — each emit site names
 #: its own cause statically.
 ChunkChangeCause = Literal[
     "minted",
@@ -39,7 +39,7 @@ ChunkChangeCause = Literal[
     "deleted",
 ]
 
-#: What a ``runner-changed`` frame reports (issue #151) — see
+#: What a ``runner-changed`` frame reports — see
 #: :func:`blizzard.hub.events.broker.EventBroker.publish_runner_changed`.
 RunnerChangeKind = Literal[
     "registered", "heartbeat", "paused", "resumed", "locally-paused", "locally-resumed", "external-usage"
@@ -74,7 +74,7 @@ class ChunkChangedPayload(SseFramePayload):
     runner_id: str | None = None
     cause: ChunkChangeCause | None = None
     graph_id: str | None = None
-    #: Who deleted the chunk (issue #364) — rides the ``deleted`` cause, mirroring
+    #: Who deleted the chunk — rides the ``deleted`` cause, mirroring
     #: :attr:`RunnerChangedPayload.by`; omitted on every other cause.
     by: str | None = None
     key: str | None = None

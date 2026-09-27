@@ -1,4 +1,4 @@
-"""``blizzard hub login``'s client mechanics (issue #96) — PKCE minting, the ephemeral
+"""``blizzard hub login``'s client mechanics — PKCE minting, the ephemeral
 loopback listener, and the paste-code fallback. No call here reaches a provider: every
 one targets the hub itself."""
 

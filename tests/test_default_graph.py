@@ -1,6 +1,6 @@
 """The packaged default graph (unit tier).
 
-The hub ships a default graph every chunk pins at ingest (issue #229). Proves it
+The hub ships a default graph every chunk pins at ingest. Proves it
 loads, inlines its prompt file references, and passes mint-time validation clean, and
 that its single ``triage`` node routes every chunk out via a cross-graph migration or
 straight to ``done``."""

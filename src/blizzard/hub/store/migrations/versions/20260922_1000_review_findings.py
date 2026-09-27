@@ -1,4 +1,4 @@
-"""Adds review-sourced findings (blizzard#582 D1): `findings` gains `source`,
+"""Adds review-sourced findings: `findings` gains `source`,
 `severity`, and `raised_by_chunk_id`; `routine_name` becomes nullable.
 
 Revision ID: 20260922_1000_review_findings

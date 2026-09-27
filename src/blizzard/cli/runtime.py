@@ -1,6 +1,6 @@
 """Daemon-neutral ``init``/``migrate``/``host`` glue shared by the hub and runner CLIs.
 
-Parameterized, not generalized (D5): each shared body takes the daemon's own
+Parameterized, not generalized: each shared body takes the daemon's own
 callables/exception types as arguments, so a daemon-specific difference is bound by
 the caller, never taught to this module."""
 
@@ -16,8 +16,8 @@ import uvicorn
 
 from blizzard.foundation.events.server import EarlyShutdownServer as _EarlyShutdownServer
 
-# Bounds uvicorn's own connection-drain wait — defense-in-depth, not the fix for issue #47
-# (see ``EarlyShutdownServer``, the shared foundation wrapper, imported above).
+# Bounds uvicorn's own connection-drain wait — defense-in-depth; the actual fix is
+# ``EarlyShutdownServer``, the shared foundation wrapper, imported above.
 GRACEFUL_SHUTDOWN_SECONDS = 5
 
 
@@ -59,6 +59,6 @@ def run_migrate(
 
 
 def build_early_shutdown_server(app: Any, *, host: str, port: int, shutdown_signal: Any) -> _EarlyShutdownServer:
-    """Wire APP under uvicorn behind the shared early-shutdown wrapper (D1/D3)."""
+    """Wire APP under uvicorn behind the shared early-shutdown wrapper."""
     uvicorn_config = uvicorn.Config(app, host=host, port=port, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS)
     return _EarlyShutdownServer(uvicorn_config, shutdown_signal=shutdown_signal)

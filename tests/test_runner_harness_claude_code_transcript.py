@@ -1,5 +1,5 @@
 """``harness/internal/claude_code_transcript.py`` — the transcript filesystem adapter
-(blizzard#245). Unit tier, hermetic under ``tmp_path`` as ``projects_root``.
+. Unit tier, hermetic under ``tmp_path`` as ``projects_root``.
 
 Covers forward incremental reads from a minted position, the shared batch-budget cap,
 and sidecar discovery/read I/O — the agent-id join itself is filesystem-free coverage
@@ -341,7 +341,7 @@ def test_read_forward_a_record_wider_than_the_budget_makes_forward_progress(
 
 @pytest.mark.unit
 def test_read_forward_a_narrow_non_ceiling_budget_never_force_consumes(tmp_path: Path) -> None:
-    """F2 regression: a sidecar's `budget=remaining_budget` can be arbitrarily small,
+    """Regression: a sidecar's `budget=remaining_budget` can be arbitrarily small,
     so a narrow window finding no newline proves nothing about the record's real
     width and must NOT force-consume — zero progress, retried on a fuller budget."""
     path = tmp_path / "sidecar.jsonl"
@@ -445,7 +445,7 @@ def test_a_sidecar_resolved_after_its_spawning_batch_lands_unlinked_not_agent_id
 def test_a_tool_use_tool_result_pair_straddling_a_batch_boundary_still_discovers_the_sidecar(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """F1 regression: a `tool_use`/`tool_result` pair split across a forward-read
+    """Regression: a `tool_use`/`tool_result` pair split across a forward-read
     boundary must not permanently lose the sidecar it names — a `tool_result` landing
     alone must still surface the sidecar unlinked, not dropped."""
     project_dir = "-home-user-workspace"
@@ -767,7 +767,7 @@ def test_a_fully_caught_up_sidecar_does_not_force_an_incomplete_batch_when_the_b
 def test_a_sidecar_record_wider_than_the_leftover_budget_survives_to_a_later_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """F2, observed at `turns_since`: a sidecar reads with whatever budget survives
+    """, observed at `turns_since`: a sidecar reads with whatever budget survives
     the main file's read, which can be smaller than one record. That narrow window
     must make zero progress and the record must arrive intact later, not be dropped."""
     project_dir = "-home-user-workspace"
@@ -868,8 +868,8 @@ def test_read_raw_lines_miss_is_empty(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_read_raw_lines_default_range_is_start_of_file_to_tail(tmp_path: Path) -> None:
-    """``start=None, end=None`` preserves the pre-range whole-session read exactly (blizzard#437
-    Phase 1) — the shape the envelope-less usage fallback has always called."""
+    """``start=None, end=None`` preserves the pre-range whole-session read exactly
+    — the shape the envelope-less usage fallback has always called."""
     _write_main(tmp_path, [fx.user_env("hello"), fx.user_env("world")])
     source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
 
@@ -908,7 +908,7 @@ def test_read_raw_lines_empty_range_is_empty(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_read_raw_lines_start_past_eof_is_unreadable_not_a_whole_file_reread(tmp_path: Path) -> None:
     """A durable ``start`` past the file's size is unreadable, not "start over" — unlike
-    `turns_since`'s own tolerant clamp, this read has no budget bounding a reread from 0 (F9)."""
+    `turns_since`'s own tolerant clamp, this read has no budget bounding a reread from 0."""
     _write_main(tmp_path, [fx.user_env("hello")])
     source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
     stale_start = TranscriptPosition(token=json.dumps({"main": 10_000, "sidecars": {}}))
@@ -1085,7 +1085,7 @@ def test_size_bytes_unreadable_logs_warning_not_error(tmp_path: Path) -> None:
     assert [entry["log_level"] for entry in logs] == ["warning"]
 
 
-# --- cross-window correlation (blizzard#338) ----------------------------------------
+# --- cross-window correlation ----------------------------------------
 
 
 def _append(path: Path, lines: list[str]) -> None:

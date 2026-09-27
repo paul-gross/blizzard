@@ -56,8 +56,8 @@ def test_broker_typed_event_vocabulary() -> None:
 
 
 def test_runner_changed_carries_by_and_reason_only_where_they_apply() -> None:
-    """The frame's optional fields are present-when-meaningful, not always-null (issue
-    #151) — a heartbeat has no actor and no note, so it says nothing about either."""
+    """The frame's optional fields are present-when-meaningful, not always-null
+    — a heartbeat has no actor and no note, so it says nothing about either."""
     broker = EventBroker()
     broker.publish_runner_changed("runner-a", kind="heartbeat")
     broker.publish_runner_changed("runner-a", kind="paused", by="alice")
@@ -71,8 +71,8 @@ def test_runner_changed_carries_by_and_reason_only_where_they_apply() -> None:
 
 
 def test_chunk_changed_carries_optionals_only_where_supplied() -> None:
-    """The frame's new fields are present-when-meaningful, the same shape issue #151 set
-    for ``runner-changed`` (issue #212) — a call supplying none of the optionals emits a
+    """The frame's new fields are present-when-meaningful, the same shape set
+    for ``runner-changed`` — a call supplying none of the optionals emits a
     bare ``{chunk_id, status}`` frame, never placeholder ``null``s."""
     broker = EventBroker()
     broker.publish_chunk_changed(
@@ -221,7 +221,7 @@ def test_event_recorded_with_a_declared_kind_and_its_declared_severity_is_applie
 def test_a_legacy_severity_outside_the_vocabulary_is_served_narrowed_to_its_kinds_declared_one(
     tmp_path: Path,
 ) -> None:
-    """No migration (issue #106): a pre-fix hub once wrote ``severity="error"`` for
+    """No migration: a pre-fix hub once wrote ``severity="error"`` for
     ``hub-node-unroutable-outcome``; the store adapter narrows a persisted row like it at
     the read boundary instead, to the severity its kind now declares."""
     hub = build_hub(tmp_path)
@@ -244,8 +244,8 @@ def test_a_legacy_severity_outside_the_vocabulary_is_served_narrowed_to_its_kind
 
 
 def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> None:
-    """All five ``publish_runner_changed`` sites, driven through their own routes (issue
-    #151, #218); each must name its own ``kind``."""
+    """All five ``publish_runner_changed`` sites, driven through their own routes;
+    each must name its own ``kind``."""
     hub = build_hub(tmp_path)
 
     # 1. Registration — the runner's pull-loop liveness beat, by far the loudest site.
@@ -256,7 +256,7 @@ def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> Non
     assert hub.client.post("/api/runners/r1/pause", json={"by": "alice"}).status_code == 200
     assert hub.client.post("/api/runners/r1/resume", json={"by": "alice"}).status_code == 200
     # 4. Runner-local pause/resume facts — the runner braked itself, and says why.
-    # 5. A sampled external-subscription-usage snapshot (issue #218) — runner-scoped.
+    # 5. A sampled external-subscription-usage snapshot — runner-scoped.
     resp = hub.client.post(
         "/api/fleet/events",
         json={
@@ -287,7 +287,7 @@ def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> Non
 
     frames = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == "runner-changed"]
     assert frames == [
-        # `registered`/`heartbeat` carry no `key` (issue #213) — no fact table backs them.
+        # `registered`/`heartbeat` carry no `key` — no fact table backs them.
         {"runner_id": "r1", "kind": "registered"},
         {"runner_id": "r1", "kind": "heartbeat"},
         # The pause family each names its own fact's identity.

@@ -1,5 +1,5 @@
 """Unit-tier coverage of `scripts/prose_spans.py` and `scripts/restated_invariants.py`
-(issue paul-gross/blizzard#273), plus validation of the committed registry
+(issue paul-gross), plus validation of the committed registry
 (`scripts/restated-invariants.json`) — case numbers are this file's own, in
 authoring order. The registry's own triage narrative lives on the GitHub issue at
 delivery, not in this repo.
@@ -472,7 +472,7 @@ def test_unresolvable_root_exits_nonzero_via_cli(tmp_path: Path) -> None:
 
 
 # A single-file root — `blizzard/README.md`, the one bound surface that is not a
-# tree (blizzard#274). `rglob` on a file yields nothing, so a root that resolved
+# tree. `rglob` on a file yields nothing, so a root that resolved
 # but swept zero files would report permanently clean.
 
 

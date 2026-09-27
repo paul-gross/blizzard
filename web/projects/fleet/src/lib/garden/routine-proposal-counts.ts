@@ -3,12 +3,12 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
 
-/** One origin/class pair's garden-proposal counts over the panel's window
- * (blizzard#547), already scoped to the one selected routine by the query's own
+/** One origin/class pair's garden-proposal counts over the panel's window,
+ * already scoped to the one selected routine by the query's own
  * `routine` filter, so no `routineName` rides the row (`RoutinePanelVm.lastSwept`'s
  * own reason for not repeating what every row already shares). `origin` splits a
- * routine's own rows from an operator-authored proposal naming the same routine
- * (blizzard#631), since one class can appear under both. `proposalClass` renames the
+ * routine's own rows from an operator-authored proposal naming the same routine,
+ * since one class can appear under both. `proposalClass` renames the
  * wire's `class`, `FindingListRowVm`'s own `findingClass` rename, so a template never
  * confuses it with the DOM `class` attribute. */
 export interface ProposalCountsRowVm {
@@ -22,7 +22,7 @@ export interface ProposalCountsRowVm {
 }
 
 /**
- * The gardening routine detail's garden-proposal counts table (blizzard#547) — how
+ * The gardening routine detail's garden-proposal counts table — how
  * many proposals a routine raised, per class, and how each was closed over the
  * panel's own window. Presentational only, no query injection
  * (`bzh:frontend-container-presentational`): it renders exactly the rows it is

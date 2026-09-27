@@ -1,4 +1,4 @@
-"""Derived lease state — ``LeaseActivity.state`` and ``LocalLeaseService`` (issue #28).
+"""Derived lease state — ``LeaseActivity.state`` and ``LocalLeaseService``.
 
 Two tiers: the pure precedence tests (no store, no I/O) sit at unit; ``LocalLeaseService
 .list_active()`` — wired against a real tmp sqlite store with the fake process probe
@@ -142,7 +142,7 @@ def test_state_closed_wins_over_parked() -> None:
 
 @pytest.mark.unit
 def test_state_backing_off_when_flagged() -> None:
-    """blizzard#595: a lease with an open, un-elapsed provider-overload backoff derives
+    """A lease with an open, un-elapsed provider-overload backoff derives
     ``backing-off``, distinct from ``exited`` even though its worker's process is gone."""
     lease = _lease_record()
     assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=False, backing_off=True).state == (
@@ -179,7 +179,7 @@ def test_state_closed_wins_over_backing_off() -> None:
     )
 
 
-# Liveness.stale — the staleness-boundary pin (Phase 1 escalation #2)
+# Liveness.stale — the staleness-boundary pin
 
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
@@ -230,7 +230,7 @@ def test_stale_just_past_threshold_is_stale(tmp_path) -> None:  # type: ignore[n
 
 @pytest.mark.unit
 def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Issue #150's live incident, at the predicate: an ask-park resumed at T+2h, far
+    """'s live incident, at the predicate: an ask-park resumed at T+2h, far
     past the threshold, records a fresh ``lease_spawns`` row — the worker gets the
     whole window back, not stale at birth and reaped seconds into its first turn."""
     store = _store(tmp_path)
@@ -355,14 +355,14 @@ def test_list_active_joins_binding_and_heartbeat(tmp_path) -> None:  # type: ign
     assert activity.state == "running"
     assert activity.environment_id == "e1"
     assert activity.workdir == "/ws/e1"
-    # The store column is UtcDateTime-typed (issue #28, ``bzh:utc-instants``): a read
+    # The store column is UtcDateTime-typed (``bzh:utc-instants``): a read
     # comes back UTC-aware, no coercion needed at this call site.
     assert activity.last_heartbeat_at == beat_at
 
 
 @pytest.mark.component
 def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Reuses REAP's baseline (issue #150): a lease resumed after a long park does not
+    """Reuses REAP's baseline: a lease resumed after a long park does not
     render ``stale``. Its ``last_heartbeat_at`` stays honest — the old beat, not the
     spawn — reporting what the worker last did, not when staleness is measured from."""
     store = _store(tmp_path)
@@ -422,7 +422,7 @@ def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path) -> None
 
 @pytest.mark.component
 def test_list_active_renders_a_backing_off_lease(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """blizzard#595: an open, un-elapsed overload fact renders ``backing-off`` — not
+    """An open, un-elapsed overload fact renders ``backing-off`` — not
     ``exited``, even though the process the fact records has already exited (no probe entry)."""
     store = _store(tmp_path)
     _seed_lease(store)
@@ -452,7 +452,7 @@ def test_list_active_renders_a_backing_off_lease(tmp_path) -> None:  # type: ign
     assert activities[0].state == "backing-off"
 
 
-# LocalLeaseService.list_recent() — active + recent-closed (issue #29)
+# LocalLeaseService.list_recent() — active + recent-closed
 
 
 @pytest.mark.component
@@ -532,7 +532,7 @@ def test_list_recent_active_lease_not_crowded_out_by_newer_closed_leases(tmp_pat
 @pytest.mark.component
 def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """A closed lease's bindings are always released by the time closure is recorded
-    (issue #29) — the read model must be honest about that, so ``environment_id``/
+     — the read model must be honest about that, so ``environment_id``/
     ``workdir`` come back ``None`` even though a binding once existed."""
     store = _store(tmp_path)
     _seed_lease(store, chunk="ch_1", lease="lease_1")

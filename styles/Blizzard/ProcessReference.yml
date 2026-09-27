@@ -1,0 +1,15 @@
+extends: existence
+message: "'%s' is a process reference — state what is proven now, not how it was delivered."
+level: error
+scope: text
+nonword: true
+tokens:
+  - '\b(?:blizzard|blizzard-mock|blizzard-context|blizzard-infra|winter[A-Za-z0-9-]*)#\d+\b'
+  - '\b[Ii]ssues?\s+#\d+\b'
+  - '\bPRs?\s+#\d+\b'
+  - '\breview:[A-Z]\d+\b'
+  - '\b[DF]\d+\b'
+  - '\bPhases?\s+\d+\b'
+  - '\bchange\s+[A-Z]\b'
+  - '\b[A-Z]\([ivxlcdm]+\)\b'
+  - '\bhub:\d+\b'

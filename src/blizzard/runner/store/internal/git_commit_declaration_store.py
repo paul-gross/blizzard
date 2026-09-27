@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the git-commit declaration repository seam (package-private,
-blizzard#410)."""
+"""SQLAlchemy adapter for the git-commit declaration repository seam (package-private)."""
 
 from __future__ import annotations
 
@@ -65,7 +64,7 @@ class GitCommitDeclarationStore:
         declared_at: datetime,
     ) -> None:
         # A single committed transaction — durable the instant this returns, so it survives
-        # a `kill -9` right after (issue #143).
+        # a `kill -9` right after.
         with self._store.begin() as conn:
             conn.execute(
                 git_commit_declarations.insert().values(

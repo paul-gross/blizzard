@@ -1,4 +1,4 @@
-"""The runner's SSO federation bounce, and the gates the human web lane depends on (issue #95).
+"""The runner's SSO federation bounce, and the gates the human web lane depends on.
 
 ``login`` stashes a random ``state`` and ``return_to`` in two short-lived cookies and redirects to the
 hub's authorize endpoint; ``callback`` validates the round-tripped ``state``, verifies the token,
@@ -117,7 +117,7 @@ class HumanLane:
     def demand_api(self) -> RunnerSession:
         """The human-web-lane API gate: a ``401``, not the served surface's ``302``, since a fetch
         cannot transparently follow a cross-document redirect. A **TCP** caller against a gated hub
-        legitimately gets it — until CLI session auth lands (issue #96), the socket door is that lane's path."""
+        legitimately gets it — until CLI session auth lands, the socket door is that lane's path."""
         session = self.session
         if session is None:
             raise HTTPException(status_code=401, detail="runner session required")
@@ -263,7 +263,7 @@ async def callback(request: Request) -> Response:
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(response: Response) -> Response:
-    """Clear the runner's own session cookie (issue #129). Public, like the bounce it complements:
+    """Clear the runner's own session cookie. Public, like the bounce it complements:
     logging out cannot itself require a live session, and clearing an absent cookie is a harmless no-op.
     The session is a **stateless** signed cookie, so there is nothing server-side to revoke — deleting
     it *is* the logout. If the hub session is still live, the next visit silently re-authenticates
@@ -274,7 +274,7 @@ def logout(response: Response) -> Response:
 
 
 class RunnerAuthSessionView(BaseModel):
-    """An own-identity read (``GET /api/auth/session``, issue #129): whether the human surface is gated
+    """An own-identity read (``GET /api/auth/session``): whether the human surface is gated
     at all, and if so the signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub, whose
     surface is authless; ``username`` is ``None`` when gated but no valid session is presented."""
 
@@ -284,7 +284,7 @@ class RunnerAuthSessionView(BaseModel):
 
 @router.get("/session", response_model=RunnerAuthSessionView)
 def read_session(request: Request) -> RunnerAuthSessionView:
-    """The own-identity read (issue #129). Public and self-resolving: it reports the identity a request
+    """The own-identity read. Public and self-resolving: it reports the identity a request
     *would* resolve to rather than gating on one, so it never ``401``s. Under a ``none``-mode hub the
     surface is authless; under oauth it carries the signed-in username, or ``None`` when none rode
     along."""

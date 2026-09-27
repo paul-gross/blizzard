@@ -1,8 +1,8 @@
-"""``blizzard hub analytics summary`` (blizzard#257 Phase 3) — a pure client of the ten
+"""``blizzard hub analytics summary`` — a pure client of the ten
 read rollup routes driven with ``httpx`` stubbed (unit tier): each response shape's
-rendering, ``--json``, the per-dataset filter-applicability guards (D2), and
+rendering, ``--json``, the per-dataset filter-applicability guards, and
 ``--ndjson``'s spend-chunks-only guard plus its incompatible-flag guards (mirroring
-Phase 2's ``events``)."""
+``events``)."""
 
 from __future__ import annotations
 
@@ -218,7 +218,7 @@ def test_json_prints_the_raw_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
     assert json.loads(result.output) == body
 
 
-# --- D2: the per-dataset filter-applicability table -----------------------------------
+# --- the per-dataset filter-applicability table -----------------------------------
 
 
 def test_a_filter_the_dataset_does_not_expose_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:

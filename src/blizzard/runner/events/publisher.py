@@ -1,4 +1,4 @@
-"""The runner event-publishing seam (D2/D4, blizzard#317) — the inner-layer Protocol every
+"""The runner event-publishing seam — the inner-layer Protocol every
 publishing mutation seam holds in place of the concrete
 :class:`~blizzard.runner.events.broker.EventBroker` (``bzh:dependency-inversion``), which
 stays a composition-root-only import."""

@@ -1,8 +1,8 @@
-"""``blizzard hub analytics summary`` against the real router (blizzard#257 Phase 3,
-component tier): every dataset choice is reachable at the route the choice→route table
-(D1) names, each dataset's applicable filters round-trip to a filtered result (mirroring
-Phase 2's ``events``), ``--ndjson`` streams the real per-chunk spend rollup, and the
-applicability table (D2) matches each route's own declared query params."""
+"""``blizzard hub analytics summary`` against the real router (component
+tier): every dataset choice is reachable at the route the choice→route table
+names, each dataset's applicable filters round-trip to a filtered result (mirroring
+``events``), ``--ndjson`` streams the real per-chunk spend rollup, and the
+applicability table matches each route's own declared query params."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def _invoke(*args: str) -> Result:
     return CliRunner().invoke(hub_group, ["analytics", "summary", *args], env={"BZ_HUB_URL": _HUB_URL})
 
 
-# --- D2: the applicability table matches each route's own declared query params -------
+# --- the applicability table matches each route's own declared query params -------
 
 
 def test_the_applicability_table_matches_the_openapi_declared_params() -> None:

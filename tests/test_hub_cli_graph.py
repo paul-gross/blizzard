@@ -1,6 +1,6 @@
 """``blizzard hub graph list|show|retire|enable|mint|sync`` (unit tier) — pure clients of
 the graph lifecycle, mint, and reconciliation endpoints, driven here with ``httpx``
-stubbed (issue #101, issue #104, issue #123, issue #146). ``mint`` inlines referenced
+stubbed. ``mint`` inlines referenced
 prompt files and accepts stdin (``-``); ``sync`` is the deploy verb, reconciling the
 **hub's** packaged set.
 """
@@ -405,7 +405,7 @@ def test_graph_mint_reads_the_definition_from_stdin(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.unit
 def test_graph_sync_prints_every_outcome_and_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The deploy verb (issue #146): one line per packaged graph, minted or not."""
+    """The deploy verb: one line per packaged graph, minted or not."""
     calls: list[str] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:

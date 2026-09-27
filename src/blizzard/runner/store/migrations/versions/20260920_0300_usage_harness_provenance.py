@@ -1,7 +1,6 @@
 """Harness id/version onto usage_facts.
 
-Two guarded, nullable columns — un-backfilled, so NULL declares unknown, never a value
-(blizzard#441).
+Two guarded, nullable columns — un-backfilled, so NULL declares unknown, never a value.
 Revision ID: 20260920_0300_usage_harness_provenance
 Revises: 20260920_0200_usage_cost_is_share
 """

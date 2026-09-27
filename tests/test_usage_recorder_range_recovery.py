@@ -1,5 +1,5 @@
 """The envelope-less usage fallback reads only its own generation's boundary-to-tail range
-(blizzard#437 Phase 4) — never the whole session, which would re-sum an earlier generation's
+— never the whole session, which would re-sum an earlier generation's
 already-recorded tokens."""
 
 from __future__ import annotations
@@ -268,7 +268,7 @@ def test_a_worker_boundary_with_an_unreadable_start_records_no_sample_and_reads_
 ) -> None:
     """``start_unreadable=True`` must never be treated as "read from zero" — a transient tail
     read failure on a RESUME/JUDGE/NUDGE boundary is never a stand-in for the fresh-session
-    sentinel (blizzard#437 F2/F10)."""
+    sentinel."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
     store.record_spawn(
@@ -370,7 +370,7 @@ def test_a_judge_boundary_with_an_unreadable_start_skips_the_worker_sample_entir
 ) -> None:
     """A judge boundary exists but its own start could not be read: falling back to "tail
     right now" would risk the judge's own later turns bleeding into the worker's own sum —
-    skip the sample instead (blizzard#437 F10)."""
+    skip the sample instead."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store)
     store.record_spawn(
@@ -421,7 +421,7 @@ def test_a_judge_boundary_with_an_unreadable_start_skips_the_worker_sample_entir
 def test_advance_boundary_moves_the_judge_transcript_range_past_a_stale_signal(  # type: ignore[no-untyped-def]
     tmp_path,
 ) -> None:
-    """blizzard#594: a judge-usage-limit park's resume reuses the SAME ``(lease, generation,
+    """A judge-usage-limit park's resume reuses the SAME ``(lease, generation,
     "judge")`` boundary for its fresh elicitation — ``record_boundary_open``'s check-then-
     insert never mints a second row for one generation's judge phase. Without advancing that
     standing boundary in place, the fresh elicitation's own classification would re-read the

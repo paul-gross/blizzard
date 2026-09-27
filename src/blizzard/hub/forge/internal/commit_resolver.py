@@ -1,4 +1,4 @@
-"""The GitHub-backed commit resolver (blizzard#393, D2) — the real forge check
+"""The GitHub-backed commit resolver — the real forge check
 behind `garden_delivery.CommitResolver`: resolves whether a cited commit exists on a
 repo when the hub has a forge configured and the repo is addressable, degrading to
 ``None`` (well-formedness only) otherwise. Confined to ``internal/``
@@ -59,9 +59,9 @@ class GitHubCommitResolver:
 
     @staticmethod
     def _authored_at(resp: httpx.Response) -> datetime | None:
-        """The commit's own authored instant (blizzard#394 D5) from the same body the
+        """The commit's own authored instant from the same body the
         200 response already carries — no second forge round trip. Malformed or missing
-        JSON degrades to `None` (D5: unattributed, never guessed)."""
+        JSON degrades to `None` (unattributed, never guessed)."""
         try:
             raw = resp.json()["commit"]["author"]["date"]
         except (ValueError, KeyError, TypeError):

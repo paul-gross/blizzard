@@ -41,7 +41,7 @@ const TONE_DIM: Record<Tone, string> = {
 };
 
 /**
- * The tone badge (issue #78) — a projected label colored by {@link Tone},
+ * The tone badge — a projected label colored by {@link Tone},
  * in one of three variants: plain uppercase text (`variant: 'text'`, matching
  * the derived chunk-status ladder), a bordered pill (`variant: 'pill'`), or
  * the mock's muted, fully-rounded `'soft'` pill (mock screen C) — same bright

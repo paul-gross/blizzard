@@ -13,29 +13,29 @@ export const hubQueueKey = ['hub', 'queue'] as const;
 export const hubBacklogKey = ['hub', 'backlog'] as const;
 export const hubRunnersKey = ['hub', 'runners'] as const;
 export const hubQuestionsKey = ['hub', 'questions'] as const;
-/** The operational event feed's key prefix (`GET /api/events`, Phase 4) — a query
+/** The operational event feed's key prefix (`GET /api/events`) — a query
  * appends its filter set, so a filter change is its own cache entry and this prefix
  * closes every one of them on an SSE invalidation (TanStack's default prefix match). */
 export const hubEventsKey = ['hub', 'events'] as const;
-/** The Activity feed panel's backfill read (`GET /api/activity`, issue #213 Phase 4) — a
+/** The Activity feed panel's backfill read (`GET /api/activity`) — a
  * one-shot read on mount, not re-invalidated by an SSE event: the live tee keeps the
  * feed current after mount, so nothing needs to re-GET this. */
 export const hubActivityKey = ['hub', 'activity'] as const;
-/** The fleet spend-since read's key prefix (issue #60) — the actual query key appends
+/** The fleet spend-since read's key prefix — the actual query key appends
  * the `since` instant, so an SSE invalidation naming just this prefix closes every
  * cached window at once (TanStack's default prefix match on `invalidateQueries`). */
 export const hubFleetSpendKey = ['hub', 'fleet-spend'] as const;
 export const hubGraphsKey = ['hub', 'graphs'] as const;
-/** The resolved-identity read (issue #93) — `GET /api/me`. Never invalidated by an
+/** The resolved-identity read — `GET /api/me`. Never invalidated by an
  * SSE event (no event names an identity change yet, #94); the login/logout flows
  * invalidate it explicitly instead. */
 export const hubMeKey = ['hub', 'me'] as const;
-/** The configured login-provider list (issue #93) — `GET /api/auth/providers`. */
+/** The configured login-provider list — `GET /api/auth/providers`. */
 export const hubAuthProvidersKey = ['hub', 'auth', 'providers'] as const;
-/** The admin page's user listing (issue #94) — `GET /api/users`. Invalidated by the
+/** The admin page's user listing — `GET /api/users`. Invalidated by the
  * role-assignment mutation directly (no SSE event names a role change yet). */
 export const hubUsersKey = ['hub', 'users'] as const;
-/** The gardening tab's docket read (blizzard#397) — `GET /api/garden-proposals`. Not
+/** The gardening tab's docket read — `GET /api/garden-proposals`. Not
  * yet in the SSE event vocabulary, so nothing invalidates this key on a live event. */
 export const hubGardenProposalsKey = ['hub', 'garden-proposals'] as const;
 /** The gardening tab's routine list — `GET /api/routines`. Routines change rarely and
@@ -79,7 +79,7 @@ export function hubFindingKey(findingId: string | null): readonly unknown[] {
 export const hubFindingsBucketPrefixKey = ['hub', 'findings-bucket'] as const;
 
 /** The findings triage bucket read, keyed by the selected routine and scope. Both are
- * independently optional on the server (blizzard#486) — `null` means "every value on
+ * independently optional on the server — `null` means "every value on
  * that dimension" rather than "not chosen yet" — so the `(null, null)` pair is itself
  * a distinct, meaningful cache entry (the widened "every routine, every scope" read),
  * not a disabled-query rest state the way `hubGraphKey`'s nullable id is. */
@@ -120,7 +120,7 @@ export function hubRoutineTrendKey(
 }
 
 /** One routine's last-swept table and measurement series — `GET
- * /api/routines/{routine_id}/sweeps`, keyed by id since the route itself is (D6).
+ * /api/routines/{routine_id}/sweeps`, keyed by id since the route itself is.
  * `routineId` is nullable, `hubChunkKey`'s own null-tolerant shape, for the
  * disabled-query rest state. */
 export function hubRoutineSweepsKey(routineId: string | null, since: string, until: string): readonly unknown[] {
@@ -128,7 +128,7 @@ export function hubRoutineSweepsKey(routineId: string | null, since: string, unt
 }
 
 /** One routine's garden-proposal counts read's key prefix — `GET
- * /api/routines/proposal-counts` (blizzard#547), appended with the selected routine
+ * /api/routines/proposal-counts`, appended with the selected routine
  * and window so a different one is its own cache entry, {@link hubRoutineTrendKey}'s
  * own window-in-key shape. A pass/accept garden-proposal mutation doesn't know which
  * routine or window is currently cached, so it invalidates this bare prefix instead
@@ -197,14 +197,14 @@ export function hubGraphKey(graphId: string | null): readonly unknown[] {
   return ['hub', 'graph', graphId];
 }
 
-/** Which daemon a transcript-segment query reads from (runner-node-grouped-transcripts,
- * D5) — namespaced so a plane's own live-invalidation event, where one exists, only ever
+/** Which daemon a transcript-segment query reads from (runner-node-grouped-transcripts)
+ * — namespaced so a plane's own live-invalidation event, where one exists, only ever
  * refetches that plane's own cache entries, even though both planes answer the identical
- * wire shape (D2). Only the hub plane has such an event today; see
+ * wire shape. Only the hub plane has such an event today; see
  * {@link chunkTranscriptsKey} for the runner plane's own gap. */
 export type TranscriptPlane = 'hub' | 'runner';
 
-/** One chunk's transcript-segment index (blizzard#248), keyed by plane and id —
+/** One chunk's transcript-segment index, keyed by plane and id —
  * deliberately under the plane's own chunk-key prefix (`[plane, 'chunk', chunkId]`), so
  * the hub's `chunk-changed` SSE event refetches it: new segments genuinely appear here as
  * the chunk's steps progress. The runner plane carries no equivalent event yet — no
@@ -216,11 +216,11 @@ export function chunkTranscriptsKey(plane: TranscriptPlane, chunkId: string | nu
   return [plane, 'chunk', chunkId, 'transcripts'];
 }
 
-/** One segment's decompressed turns (blizzard#248), keyed by plane, chunk, and segment
+/** One segment's decompressed turns, keyed by plane, chunk, and segment
  * id, plus whether the segment is `final` — the placement, not just the id pair, is what
- * decides whether a `chunk-changed` SSE event refetches it (`review:F2`, tightening
- * `review:F6`). A `final` segment's content is immutable and the (chunkId, segmentId)
- * pair already uniquely identifies it, so it gets its own top-level prefix, *not* nested
+ * decides whether a `chunk-changed` SSE event refetches it. A `final` segment's content
+ * is immutable and the (chunkId, segmentId) pair already uniquely identifies it, so it
+ * gets its own top-level prefix, *not* nested
  * under the plane's chunk-key prefix — nesting it there would mean every SSE event on the
  * chunk refetches an already-rendered segment's content, a decompress+parse+per-turn-
  * validate for no reason, defeating this query's own `refetchInterval: false`

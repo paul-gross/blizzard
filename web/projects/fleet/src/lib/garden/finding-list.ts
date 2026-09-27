@@ -27,7 +27,7 @@ export interface FindingListRowVm {
   readonly summary: string;
   readonly state: string;
   readonly lastSeenAt: string | null;
-  /** The finding's own routine/scope (blizzard#486), rendered only when the
+  /** The finding's own routine/scope, rendered only when the
    * container hands a non-null value. The widened findings bucket can mix rows
    * from every routine and every scope, so a row needs to say which it came from
    * once the active filter no longer names one for it; a bucket already filtered
@@ -35,7 +35,7 @@ export interface FindingListRowVm {
    * repeat what every row already shares. */
   readonly routineName: string | null;
   readonly scopeSlug: string | null;
-  /** `FindingView.source` (blizzard#582 D1) — `"routine"` or `"review"`. A
+  /** `FindingView.source` — `"routine"` or `"review"`. A
    * review-sourced finding carries no {@link routineName} (always `null` for one),
    * so the row shows {@link severity} and {@link raisedByChunkId} in its place
    * rather than leaving that slot silently empty. A `"routine"` row renders exactly
@@ -62,7 +62,7 @@ export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a
 /**
  * The gardening findings tab's findings triage list — presentational only, no
  * query injection, `run-list.ts`'s own shape: renders the rows it is handed,
- * exactly as filtered by the container (D3: class/state filtering happens
+ * exactly as filtered by the container (class/state filtering happens
  * client-side, this component stays dumb over whatever `rows()` it's given).
  *
  * Built on `fleet-kit-select-row`: a row click emits {@link findingPick}, opening
@@ -75,7 +75,7 @@ export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a
  * classification), carried on the projected `.fl-body` div rather than the kit row's
  * own encapsulated button — `run-list.ts`'s own `.rl-body`/`.rl-body--escalated`
  * shape and its doc comment on why: still open with no flag renders untinted; a
- * `gone`-flagged row (D8) renders tinted (`.fl-body--gone`) but stays a normal,
+ * `gone`-flagged row renders tinted (`.fl-body--gone`) but stays a normal,
  * fully rendered row — `gone` is *not* exited; an exited row (one of
  * `finding-state.ts`'s `FINDING_EXIT_STATES`) renders dimmed (`.fl-body--exited`)
  * but never leaves the DOM.

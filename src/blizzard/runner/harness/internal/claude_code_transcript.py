@@ -1,4 +1,4 @@
-"""The Claude Code ``IHarnessTranscriptSource`` adapter (blizzard#245).
+"""The Claude Code ``IHarnessTranscriptSource`` adapter.
 
 The only module here that touches ``pathlib``/``glob`` I/O (``bzh:dependency-inversion``),
 and the one owner of the file-location rules: :meth:`ClaudeCodeTranscriptSource.mangle_cwd`,
@@ -335,7 +335,7 @@ class ClaudeCodeTranscriptSource:
             begin = Position.of(start).main
             if begin > size:
                 # A truncated/rotated transcript's start is unreadable, not "start over" —
-                # unlike `turns_since`'s own clamp, this read has no budget bounding a reread from 0 (F9).
+                # unlike `turns_since`'s own clamp, this read has no budget bounding a reread from 0.
                 return []
             stop = Position.of(end).main if end is not None else size
             stop = min(max(stop, begin), size)
@@ -351,7 +351,7 @@ class ClaudeCodeTranscriptSource:
         if path is None:
             return None
         try:
-            # Newline-aligned like every `turns_since` `next_position` (F11) — reusing
+            # Newline-aligned like every `turns_since` `next_position` — reusing
             # `FileRead.cold`'s own tail-seek holds back a trailing partial line.
             main = FileRead.cold(path).next_offset
         except OSError as exc:

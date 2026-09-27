@@ -2,17 +2,15 @@ import { type Signal, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 
-/** The chunk detail page's tabs (issue #160, widened blizzard#248 Phase 2, then again for
- * Node history). */
+/** The chunk detail page's tabs. */
 export type ChunkDetailTab = 'general' | 'node-history' | 'artifacts' | 'transcripts';
 
 /**
- * The chunk detail page's selection, as the URL holds it (issue #160, widened
- * blizzard#248 D7/D9) — `tab` names the active tab; `artifact` the artifact
+ * The chunk detail page's selection, as the URL holds it — `tab` names the active tab; `artifact` the artifact
  * selected within the Artifacts tab; `segment`/`sidechain` the Transcripts
  * tab's own open segment and, within it, a standalone-opened sidechain
- * conversation — nested under a tool call or unlinked, either carries one
- * (`review:F4`). The URL is the single source of truth: the page derives its
+ * conversation — nested under a tool call or unlinked, either carries one.
+ * The URL is the single source of truth: the page derives its
  * state from these params and every selection writes them back, never the
  * reverse, so a link is copyable, a reload keeps its place, back/forward walk
  * the selection, and the board dock's artifact link is a plain `routerLink`
@@ -47,8 +45,8 @@ export interface ChunkDetailSelection {
 
   /** The raw `sidechain` param — an encoded `SidechainPath` (`fleet`'s
    * `transcript-sidechain-path.ts`) naming the sidechain, nested under a tool
-   * call or unlinked, opened standalone within the open segment
-   * (blizzard#248 D7, `review:F4`), or `null`. */
+   * call or unlinked, opened standalone within the open segment,
+   * or `null`. */
   readonly transcriptSidechain: Signal<string | null>;
 
   /** Merge a selection into the URL — a client-side navigation (no reload)
@@ -61,8 +59,7 @@ export interface ChunkDetailSelection {
   selectTranscriptSegment(segmentId: string | null): void;
 
   /** Open (or close, with `null`) a sidechain standalone within the
-   * currently open segment, addressed by its encoded `SidechainPath`
-   * (`review:F4`). */
+   * currently open segment, addressed by its encoded `SidechainPath`. */
   selectTranscriptSidechain(path: string | null): void;
 
   /** Select a node-step (or close one with `null`) in the Node history tab. */

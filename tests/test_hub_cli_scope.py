@@ -1,5 +1,5 @@
 """``blizzard hub scope create|list|edit|retire|enable`` (unit tier) — pure clients of
-the scope routes, driven here with ``httpx`` stubbed (blizzard#389), the
+the scope routes, driven here with ``httpx`` stubbed, the
 ``tests/test_hub_cli_graph.py`` shape."""
 
 from __future__ import annotations

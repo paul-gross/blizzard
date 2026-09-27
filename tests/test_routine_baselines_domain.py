@@ -1,4 +1,4 @@
-"""``RoutineBaselineService`` (unit tier, blizzard#399 D5): the per-scope delta
+"""``RoutineBaselineService`` (unit tier): the per-scope delta
 baseline a routine has swept, composed over doubled seams."""
 
 from __future__ import annotations

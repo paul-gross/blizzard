@@ -8,7 +8,7 @@ import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient
 import { routes } from '../app.routes';
 
 /**
- * The `/gardening` subtree in the real route table (`app.routes.ts`, blizzard#397) —
+ * The `/gardening` subtree in the real route table (`app.routes.ts`) —
  * proves the five top-level children resolve, the bare parent path redirects to
  * `scopes` (the leftmost tab), and each of the five bare/param pairs (`scopes`,
  * `routines`, `runs`, `findings`, `proposals`) actually mounts its page and selects

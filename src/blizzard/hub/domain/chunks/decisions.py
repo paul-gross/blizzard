@@ -15,7 +15,7 @@ from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 
 @dataclass(frozen=True)
 class LiveDecisionStatus:
-    """A live gate decision's identity and resolution (blizzard#521) — no choices, no
+    """A live gate decision's identity and resolution — no choices, no
     docket."""
 
     decision_id: str
@@ -52,7 +52,7 @@ class IReadChunkDecisionsRepository(Protocol):
         ...
 
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
-        """Each given chunk's newest not-yet-transitioned decision, lean (blizzard#521) —
+        """Each given chunk's newest not-yet-transitioned decision, lean —
         the by-id-set bulk counterpart to :meth:`decision_for_chunk`, set-based
         throughout. A chunk with no live decision is absent from the dict."""
         ...

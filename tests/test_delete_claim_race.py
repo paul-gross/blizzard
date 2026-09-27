@@ -1,4 +1,4 @@
-"""The delete/claim race is atomic (issue #364, component tier).
+"""The delete/claim race is atomic (component tier).
 
 Mirrors ``tests/test_edit_claim_race.py``'s own interleaving pattern: ``DeleteService``
 and ``ClaimService`` share one claim lock, so a claim landing on a chunk mid-delete
@@ -25,7 +25,7 @@ def test_a_claim_blocks_while_a_delete_holds_the_shared_lock_mid_write(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Pause the delete mid-write and prove a concurrent claim blocks on the same lock;
-    once released, the claim's own fresh re-read (issue #120) finds the chunk gone and
+    once released, the claim's own fresh re-read finds the chunk gone and
     refuses (409), never a route recorded against an ephemeral chunk."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])  # promote=True by default -> ready
@@ -72,6 +72,6 @@ def test_a_claim_blocks_while_a_delete_holds_the_shared_lock_mid_write(
 
     assert delete_result["status"] == 202, delete_result
     # The delete's write landed first, under the lock — the claim's own fresh re-read
-    # (`ClaimService._claim_locked`, issue #120) then finds the chunk gone and refuses.
+    # (`ClaimService._claim_locked`) then finds the chunk gone and refuses.
     assert claim_response["status"] == 409, claim_response
     assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 404

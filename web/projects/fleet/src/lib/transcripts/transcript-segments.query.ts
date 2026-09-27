@@ -8,7 +8,7 @@ import * as runnerApi from '../api/runner';
 import { chunkTranscriptSegmentKey, chunkTranscriptsKey, type TranscriptPlane } from '../query-keys';
 
 /** Each plane's own generated module, keyed by {@link TranscriptPlane} (`bzh:generated-
- * client`) — the two specs mirror each other's path shape (D3), but calling through the
+ * client`) — the two specs mirror each other's path shape, but calling through the
  * wrong plane's generated function would make any future divergence between them silent
  * instead of a compile error, so the plane picks which generated module answers, never
  * just which transport `client` the call runs against. Exported (not part of `fleet`'s
@@ -20,7 +20,7 @@ export const TRANSCRIPT_SEGMENTS_API = { hub: hubApi, runner: runnerApi } as con
 
 /** An error a transcript queryFn throws, carrying the HTTP status the fetch actually
  * returned — the generated `error` value doesn't — so a container can render an
- * honest 403 (blizzard#248 D9) instead of a generic error. */
+ * honest 403 instead of a generic error. */
 export class TranscriptFetchError extends Error {
   constructor(readonly status: number) {
     super(`transcript fetch failed with status ${status}`);
@@ -35,19 +35,19 @@ export function shouldRetryTranscriptFetch(failureCount: number, error: Error): 
 }
 
 /**
- * `GET /api/chunks/{chunk_id}/transcripts` read (blizzard#248 D12, runner-node-grouped-
- * transcripts D5) — the chunk's segment index: metadata and byte counts only, never turn
+ * `GET /api/chunks/{chunk_id}/transcripts` read — the chunk's segment index: metadata
+ * and byte counts only, never turn
  * content. Plane-generic: `client` is the seam a caller crosses to reach either the hub's
- * or a runner's own copy of this identically-shaped route (D2/D3), and `plane` only
+ * or a runner's own copy of this identically-shaped route, and `plane` only
  * namespaces the TanStack cache key ({@link chunkTranscriptsKey}) — neither this function
- * nor a mounting container branches on which plane it is (D5). This query's own
- * `enabled: id !== null` is belt-and-suspenders, not the actual gate (`review:F5`): a
- * chunk page passes `chunkId` unconditionally, so laziness (D8's "the index on open")
+ * nor a mounting container branches on which plane it is. This query's own
+ * `enabled: id !== null` is belt-and-suspenders, not the actual gate: a
+ * chunk page passes `chunkId` unconditionally, so laziness
  * comes entirely from where the container that injects this query is mounted — only
  * inside the chunk page's Transcripts-tab branch, never for every chunk selection.
  * Permission is gated on `transcript:read` at the backend rather than here — a deep link
  * held by a viewer-role identity still issues this request once the tab is open, so the
- * 403 renders as the container's own honest state (D9) instead of the tab silently never
+ * 403 renders as the container's own honest state instead of the tab silently never
  * appearing (which it also doesn't, since the chunk page hides the tab option itself for
  * that identity).
  *
@@ -98,12 +98,12 @@ export function injectHubChunkTranscriptsQuery(chunkId: () => string | null) {
 }
 
 /**
- * `GET /api/chunks/{chunk_id}/transcripts/{segment_id}` read (blizzard#248 D12, runner-
- * node-grouped-transcripts D5) — one segment's turns, fetched lazily: `enabled` only once
+ * `GET /api/chunks/{chunk_id}/transcripts/{segment_id}` read — one segment's turns,
+ * fetched lazily: `enabled` only once
  * a segment is actually opened, so listing the index never itself issues a content
  * request. Plane-generic, same as {@link injectChunkTranscriptsQuery}. `final` decides
  * whether this query's key stays live to a `chunk-changed` SSE event or is treated as
- * immutable (`review:F2`, `chunkTranscriptSegmentKey`) — and is **tri-state**: `null`
+ * immutable (`chunkTranscriptSegmentKey`) — and is **tri-state**: `null`
  * means the index has not named this segment's finality yet, and holds the query disabled
  * rather than fetching against a guessed placement.
  *

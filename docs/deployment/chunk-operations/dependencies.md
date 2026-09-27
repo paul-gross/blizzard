@@ -44,8 +44,8 @@ it is confined to are `blizzard-context:/domain/work/statuses.md`'s to say. Sati
 when its prerequisite reads `done`, read fresh at the point something consults it rather than cached on the edge itself,
 so declaring onto an already-`done` prerequisite is an ordinary accepted edge that names no marking. A prerequisite
 absent from the fleet's statuses still blocks, the conservative read — but deletion now refuses a standing edge onto a
-live prerequisite (issue #460), so this conservative read only guards the accepted residual race between a status read
-and a concurrent write, not an ordinary reachable path.
+live prerequisite, so this conservative read only guards the accepted residual race between a status read and a
+concurrent write, not an ordinary reachable path.
 
 A chunk currently named as another's prerequisite cannot itself be deleted while that edge stands: deletion is refused
 409, naming the dependents. Deleting the *dependent* chunk instead is unaffected — it succeeds, and releases that
@@ -68,24 +68,24 @@ A standing, unsatisfied dependency denies a claim on its dependent outright: `PO
 the marking's own body shape — `chunk_id` and `prerequisite_chunk_id`, distinct from the conflict, terminal, and
 incompatibility `409`s a claim can otherwise answer with — re-derived fresh under the claim lock rather than trusted
 from an earlier read, so a peek-then-claim race can never slip a blocked chunk through. A runner whose registered
-capabilities can no longer run every statically reachable node from the chunk's current position is denied the same
-way, with its own `409` naming `chunk_id` and `incompatible_runner_id` in place of the marking's
-`prerequisite_chunk_id` — re-derived fresh under the same lock, for the same reason: a capability change landing
-between a runner's peek and its claim is denied rather than raced. A registration carrying no capabilities at all is
-never checked against this denial, so a runner that has never asserted any never meets it.
+capabilities can no longer run every statically reachable node from the chunk's current position is denied the same way,
+with its own `409` naming `chunk_id` and `incompatible_runner_id` in place of the marking's `prerequisite_chunk_id` —
+re-derived fresh under the same lock, for the same reason: a capability change landing between a runner's peek and its
+claim is denied rather than raced. A registration carrying no capabilities at all is never checked against this denial,
+so a runner that has never asserted any never meets it.
 
 A runner's own FILL step does not have to run into that denial to make progress. The legacy `GET /api/fleet/queue/peek`
 carries the marking on every entry it returns, and a runner filling from that unfiltered order reaches past a marked
 head for the first unmarked entry in the peeked list by default, rather than spending a claim attempt it already knows
-will be refused. A runner peeking matched to its own capability snapshot (`POST /api/fleet/queue/peek`) gets at most
-one entry back instead, with that same hold-or-pass-over choice already applied hub-side to the blocked marking and to
+will be refused. A runner peeking matched to its own capability snapshot (`POST /api/fleet/queue/peek`) gets at most one
+entry back instead, with that same hold-or-pass-over choice already applied hub-side to the blocked marking and to
 capability eligibility together — there is no local list left to scan, so the runner's own reach-ahead plays no part on
 that path.
 
 `[queue] strict = true` in a runner's config is the hold half of that choice on either verb: set, a runner filling from
 the legacy order lets a marked head yield no entry and idles the tick rather than trying a later one, and a runner
-peeking matched gets the same outcome because the hub itself stops at the first unusable entry rather than scanning
-past it. Left at its default, both verbs pass over instead. Either way the claim-time denial above still stands as the
+peeking matched gets the same outcome because the hub itself stops at the first unusable entry rather than scanning past
+it. Left at its default, both verbs pass over instead. Either way the claim-time denial above still stands as the
 structural guarantee: reach-ahead — local or hub-side — is an efficiency over the peek, never a replacement for it.
 
 ## On the board

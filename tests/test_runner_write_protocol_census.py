@@ -1,8 +1,8 @@
-"""The write-protocol census exhaustiveness gate (D5, blizzard#317 Phase 3).
+"""The write-protocol census exhaustiveness gate.
 
 Introspects :class:`~blizzard.runner.stores.IWriteRunnerStore` at runtime for its
 write-only members — declared on its own class body or inherited from a concept Protocol
-such as :class:`~blizzard.runner.domain.leases.IWriteLeaseRecordRepository` (blizzard#410), but
+such as :class:`~blizzard.runner.domain.leases.IWriteLeaseRecordRepository`, but
 never a member also reachable through :class:`~blizzard.runner.stores.IReadRunnerStore`
 — and asserts ``tests/runner_event_census.py`` names exactly that set — exhaustiveness by
 test, not review."""

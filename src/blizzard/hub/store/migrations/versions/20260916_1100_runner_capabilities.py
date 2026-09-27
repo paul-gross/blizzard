@@ -1,4 +1,4 @@
-"""Runner capability snapshot — one nullable, un-backfilled column (blizzard#433).
+"""Runner capability snapshot — one nullable, un-backfilled column.
 
 Revision ID: 20260916_1100_hub_runner_capabilities
 Revises: 20260916_1000_hub_authored_harnesses

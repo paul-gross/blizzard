@@ -31,8 +31,8 @@ from blizzard.hub.cli.status import status as _status_command
 @click.pass_context
 def hub(ctx: click.Context) -> None:
     """Talk to — or become — the blizzard hub."""
-    # The composition root (issue #104): built once, inherited as `ctx.obj` by every
-    # subcommand's own context — a `SessionService` (hub:98) wrapping the one `SessionFile`,
+    # The composition root: built once, inherited as `ctx.obj` by every
+    # subcommand's own context — a `SessionService` wrapping the one `SessionFile`,
     # so a read-only verb still narrows it to `IReadSessionStore` while login/logout pull
     # the full service off the same object (pinned by
     # tests/test_layering.py::test_session_file_is_named_only_at_its_composition_root).

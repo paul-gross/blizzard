@@ -1,5 +1,5 @@
 """runner-side nudge-once fact — ``nudge_facts``, at most one row per ``(lease_id,
-epoch)``, written before the resume it guards (runner store tree, issue #113)
+epoch)``, written before the resume it guards (runner store tree)
 
 Revision ID: 20260719_1100_runner_nudge_facts
 Revises: 20260719_1000_runner_attachments

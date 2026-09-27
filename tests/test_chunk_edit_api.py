@@ -1,4 +1,4 @@
-"""The ``PATCH /chunks/{id}`` edit route over the HTTP surface (issues #27, #120, #124, #144).
+"""The ``PATCH /chunks/{id}`` edit route over the HTTP surface.
 
 A not-ready or ready-and-unclaimed chunk's graph, default model/effort, and migration
 intent are editable through one all-or-nothing ``PATCH``, refused (409) once claimed.
@@ -61,7 +61,7 @@ def _mint_alt_graph(hub) -> str:  # type: ignore[no-untyped-def]
 
 
 def test_a_freshly_ingested_chunk_carries_the_default_graph_and_no_model_preference(tmp_path: Path) -> None:
-    """Ingest mints neither default (issue #144) — a fresh chunk expresses no model or
+    """Ingest mints neither default — a fresh chunk expresses no model or
     effort preference."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER], promote=False)
@@ -79,7 +79,7 @@ def test_a_freshly_ingested_chunk_carries_the_default_graph_and_no_model_prefere
 
 
 # --------------------------------------------------------------------------- #
-# Write — PATCH /chunks/{id} (issues #124, #144): applied all-or-nothing in one request.
+# Write — PATCH /chunks/{id}: applied all-or-nothing in one request.
 
 
 def _claim(hub, chunk_id: str, *, runner_id: str = "r1") -> None:  # type: ignore[no-untyped-def]
@@ -288,7 +288,7 @@ def test_patch_accepts_an_unrecognized_model_or_effort_vocabulary(tmp_path: Path
 
 
 def test_patch_refuses_a_field_not_editable_at_the_current_status_and_writes_nothing(tmp_path: Path) -> None:
-    """A mixed body refused on one field applies neither (issue #124's all-or-nothing
+    """A mixed body refused on one field applies neither (all-or-nothing
     redesign) — `graph_id` stays sealed once claimed even though a plain PATCH-only
     `intended_migration` body would be admitted at the same status."""
     hub = build_hub(tmp_path)
@@ -312,7 +312,7 @@ def test_patch_refuses_a_field_not_editable_at_the_current_status_and_writes_not
 def test_patch_retired_graph_id_target_is_not_bypassed_by_a_different_valid_migration_target(tmp_path: Path) -> None:
     """A retired `graph_id` target 409s even when `intended_migration.to_graph` names a
     different, non-retired graph — the two targets validate independently, so nothing
-    applies (issue #124)."""
+    applies."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])  # promote=True by default -> ready
     retired_graph_id = _mint_alt_graph(hub)
@@ -366,7 +366,7 @@ def test_patch_publishes_chunk_changed(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Write — PATCH intended_migration (issue #124).
+# Write — PATCH intended_migration.
 
 
 def test_get_chunk_intended_migration_is_null_by_default(tmp_path: Path) -> None:

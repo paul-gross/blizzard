@@ -12,7 +12,7 @@ import {
 } from 'fleet';
 
 /**
- * The machine detail dock's header (issue #185) — the full chunk id, its work
+ * The machine detail dock's header — the full chunk id, its work
  * items as links, the derived state, a working Pause/Resume on the same
  * `bzh:claim-vocabulary` copy and tooltip the hub board's own header uses
  * (`fleet/chunk-detail/chunk-detail-header.ts`), and a close button. The two
@@ -21,7 +21,7 @@ import {
  * does not, Detach being a hub-side concern out of scope here.
  *
  * The chunk id itself links to the runner-local
- * chunk detail route (issue #318) — the operator's way into the shared
+ * chunk detail route — the operator's way into the shared
  * `fleet` sections and the transcript, both of which moved out of this dock.
  * The link carries the chunk in the route's own path and no query params at
  * all: `?chunk=` is the board's selection (the shared `injectChunkUrlSelection`) and means
@@ -42,7 +42,7 @@ import {
   styleUrl: './machine-detail-header.css',
 })
 export class MachineDetailHeader {
-  /** The selected chunk's full id — never the compact shortname (issue #185). */
+  /** The selected chunk's full id — never the compact shortname. */
   readonly chunkId = input.required<string>();
 
   /** This runner's own id, for {@link pauseCopy}/{@link resumeCopy}'s `<runner>`

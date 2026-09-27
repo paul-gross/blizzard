@@ -4,7 +4,7 @@ import type { MeResponse } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
 
 /**
- * The `pending` lobby (issue #93; renamed from the `guest` lobby by issue #210) — an
+ * The `pending` lobby (renamed from the `guest` lobby) — an
  * authenticated user resolved with an **empty** permission set (a freshly-linked
  * account, `role = "pending"`, before an admin grants a role — #94's role
  * assignment) sees this instead of the board: "signed in, awaiting access", not a

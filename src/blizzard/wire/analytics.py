@@ -1,8 +1,8 @@
 """Analytics wire bodies — the forced re-derive verb's request and response over
-``POST /api/analytics/re-derive`` (blizzard#254 D7), the read-only events and counts
-surfaces over ``GET /api/analytics/events`` and ``GET /api/analytics/counts/*``
-(blizzard#255), and the operational datasets over ``GET /api/analytics/durations/*``,
-``.../spend/*``, and ``.../outcomes/*`` (blizzard#256)."""
+``POST /api/analytics/re-derive``, the read-only events and counts
+surfaces over ``GET /api/analytics/events`` and ``GET /api/analytics/counts/*``,
+and the operational datasets over ``GET /api/analytics/durations/*``,
+``.../spend/*``, and ``.../outcomes/*``."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 
 class AnalyticsEventView(BaseModel):
-    """One derived event, wire-shaped (blizzard#255) — ``payload`` is parsed from its
+    """One derived event, wire-shaped — ``payload`` is parsed from its
     stored JSON-text form into a plain object, so a consumer never double-decodes a JSON
     string within JSON."""
 
@@ -34,7 +34,7 @@ class AnalyticsEventView(BaseModel):
 
 
 class AnalyticsEventsResponse(BaseModel):
-    """A bounded page (blizzard#255) — ``next_cursor`` is ``None`` exactly when this
+    """A bounded page — ``next_cursor`` is ``None`` exactly when this
     page is the last one; a caller drives a full bulk read by following it until absent."""
 
     events: list[AnalyticsEventView]
@@ -42,7 +42,7 @@ class AnalyticsEventsResponse(BaseModel):
 
 
 class AnalyticsCountView(BaseModel):
-    """One grouping key and how many events fell under it (blizzard#255). ``key`` names
+    """One grouping key and how many events fell under it. ``key`` names
     whichever dimension this response is grouped by — a file path, a skill name, an
     agent type, or a node id."""
 
@@ -58,8 +58,8 @@ class AnalyticsCountsResponse(BaseModel):
 
 
 class AnalyticsDurationView(BaseModel):
-    """One grouping key's step-duration rollup (blizzard#256 D2/D3) — ``key`` is a node
-    id or a graph id. Hub-observed wall-clock, not runner-measured (D3): a parked gate
+    """One grouping key's step-duration rollup — ``key`` is a node
+    id or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate
     stretches it, a delayed store-and-forward mint-report *flush* compresses it toward
     zero instead."""
 
@@ -100,7 +100,7 @@ class AnalyticsSpendResponse(BaseModel):
 
 
 class AnalyticsChunkSpendView(BaseModel):
-    """One chunk's own usage/cost rollup (blizzard#256 D8) — the per-chunk grouping's
+    """One chunk's own usage/cost rollup — the per-chunk grouping's
     unbounded, cursor-paged row. ``cost_partial`` is ``True`` iff some summed row carried neither a billed
     nor an estimated amount, and ``estimated_cost_usd`` is ``None`` unless some summed row carried one."""
 
@@ -115,7 +115,7 @@ class AnalyticsChunkSpendView(BaseModel):
 
 
 class AnalyticsChunkSpendResponse(BaseModel):
-    """A bounded page (blizzard#256 D8) — ``next_cursor`` is ``None`` exactly when this
+    """A bounded page — ``next_cursor`` is ``None`` exactly when this
     is the last page. Not a point-in-time snapshot: each page's sums are recomputed at
     fetch time, so an earlier page's chunk can be invalidated by a usage fact recorded
     while a later page still streams."""
@@ -125,7 +125,7 @@ class AnalyticsChunkSpendResponse(BaseModel):
 
 
 class AnalyticsOutcomeView(BaseModel):
-    """One node's judged-choice distribution and attempt-failure count (blizzard#256 D4),
+    """One node's judged-choice distribution and attempt-failure count,
     never blended — a judged failure consumes no retry budget, an ended (superseded by a
     strictly newer lease) attempt does; a still-open final attempt counts as neither, nor
     does a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``."""

@@ -72,7 +72,7 @@ const LONG_ASK = {
 };
 
 /** A full `DashboardView` body, `asks` set to `asks` and every other section a
- * plausible/empty default (issue #311) — `LocalPanelMobile` and its children
+ * plausible/empty default — `LocalPanelMobile` and its children
  * (`local-info`, `local-asks`) all read one shared `/api/dashboard` poll now, so
  * this shell's default fallback can no longer leave them pending/malformed on
  * an unmatched per-endpoint path. */

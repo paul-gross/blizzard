@@ -1,6 +1,6 @@
-"""The per-segment replacement unit and the standing convergence sweep (blizzard#254).
+"""The per-segment replacement unit and the standing convergence sweep.
 
-There is no finalize hook to derive from (D1/D2): the sweep is the only first-derivation
+There is no finalize hook to derive from: the sweep is the only first-derivation
 path, and re-running it is the re-derive path — one engine, one convergence property
 (``bzh:domain-core``, ``bzh:steppable-loop``)."""
 
@@ -34,7 +34,7 @@ _log = get_logger("blizzard.hub.transcript_events")
 
 @dataclass(frozen=True)
 class GraphPins:
-    """Per chunk, its transitions and mint pin (D4), pre-resolved once for a whole
+    """Per chunk, its transitions and mint pin, pre-resolved once for a whole
     pass. Owns the "newest matching transition, else mint pin" rule
     :meth:`EventDerivationService.derive_segment` applies per node-step."""
 
@@ -42,7 +42,7 @@ class GraphPins:
     mint_pin_by_chunk: dict[str, str] = field(default_factory=dict)
 
     def graph_id_for(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
-        """The node-step's graph (D4): the newest transition among this chunk's
+        """The node-step's graph: the newest transition among this chunk's
         pre-resolved ones matching ``node_id``/``epoch``, else the chunk's mint pin, else
         ``None`` when neither resolves (an unresolvable chunk)."""
         matches = [
@@ -58,9 +58,9 @@ class GraphPins:
 
 
 class EventDerivationService:
-    """The per-segment replacement unit (D6) and the candidate-set predicate (D1).
+    """The per-segment replacement unit and the candidate-set predicate.
 
-    ``facts``/``record`` resolve a node-step's ``graph_id`` (D4): the latest matching
+    ``facts``/``record`` resolve a node-step's ``graph_id``: the latest matching
     ``transitions`` row where one exists, else the chunk's own mint pin."""
 
     def __init__(
@@ -82,19 +82,19 @@ class EventDerivationService:
 
     def candidacy(self, *, chunk_id: str | None = None) -> CandidacyRead:
         """:meth:`IReadTranscriptEvents.candidacy`, fixed to this service's own
-        ``extractor_version``. ``chunk_id`` narrows the read to one chunk when given
-        (D7); omitted, the whole visible set is evaluated."""
+        ``extractor_version``. ``chunk_id`` narrows the read to one chunk when given;
+        omitted, the whole visible set is evaluated."""
         return self._events.candidacy(self._extractor_version, chunk_id=chunk_id)
 
     def candidate_segment_ids(self, *, chunk_id: str | None = None) -> list[str]:
-        """Every visible segment (D1) lacking a current-version marker, or whose marker
-        disagrees with the segment's stored content today (D2), read via
+        """Every visible segment lacking a current-version marker, or whose marker
+        disagrees with the segment's stored content today, read via
         :meth:`candidacy`."""
         return self.candidacy(chunk_id=chunk_id).candidate_segment_ids
 
     def graph_pins_for(self, segment_ids: Sequence[str]) -> GraphPins:
         """Every one of ``segment_ids``' resolved chunks' graph pins, in two bulk reads
-        for the whole batch (D4): one ``segment_contexts`` call resolves the chunk ids,
+        for the whole batch: one ``segment_contexts`` call resolves the chunk ids,
         then one ``load_facts_for`` plus one ``graph_id_of_many`` call resolves the
         distinct chunk set's transitions and mint pins. Empty input issues neither read."""
         if not segment_ids:
@@ -111,7 +111,7 @@ class EventDerivationService:
     def derive_segment(self, segment_id: str, pins: GraphPins) -> bool:
         """One transaction: recognize every event this segment's turns hold today, stamp
         the node-step context, and replace this ``(segment_id, extractor_version)`` pair's
-        rows and marker (D6). Returns ``False``, deriving nothing, for a segment gone by
+        rows and marker. Returns ``False``, deriving nothing, for a segment gone by
         now or one whose chunk has no resolvable graph pin. ``pins`` is the caller's own
         already-resolved :class:`GraphPins`, built once per pass by :meth:`graph_pins_for`."""
         current = self._events.segment_derivation_input(segment_id)
@@ -154,7 +154,7 @@ class EventDerivationService:
         return True
 
 
-#: The change probe's forced floor (blizzard#524 D5) — bounds how stale a missed signature can leave reality.
+#: The change probe's forced floor — bounds how stale a missed signature can leave reality.
 _FORCED_FULL_PASS_FLOOR = timedelta(minutes=10)
 
 

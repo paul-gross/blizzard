@@ -1,5 +1,5 @@
-"""``auth_facts`` — the append-only non-chunk auth/security event log (issue #92,
-``bzh:facts-not-status``).
+"""``auth_facts`` — the append-only non-chunk auth/security event log
+(``bzh:facts-not-status``).
 
 The rest of the fact model is chunk-scoped; login, session, and role events are not, so they get their
 own durable table rather than being shoehorned onto a chunk. ``SSO_REFUSED`` in particular records a
@@ -21,10 +21,10 @@ LOGIN_FAILED = "login_failed"
 #: presented to — refused outright rather than treated as a plain expired/missing state.
 SSO_REFUSED = "sso_refused"
 #: A user's role changed — the acting user (``"system"`` for the superuser bootstrap's
-#: own promote/demote), the subject, and the from/to roles land in ``detail`` (issue #94).
+#: own promote/demote), the subject, and the from/to roles land in ``detail``.
 USER_ROLE_CHANGED = "user_role_changed"
 #: A configured ``auth.superuser`` email matches no verified user yet — reported at
-#: every boot while unclaimed, never a silent dead end (issue #94).
+#: every boot while unclaimed, never a silent dead end.
 SUPERUSER_BOOTSTRAP_UNCLAIMED = "superuser_bootstrap_unclaimed"
 
 _log = get_logger("blizzard.hub.auth")

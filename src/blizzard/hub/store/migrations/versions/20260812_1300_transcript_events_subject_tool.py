@@ -1,4 +1,4 @@
-"""transcript_events.subject / transcript_events.tool (blizzard#255 D1) — payload's
+"""transcript_events.subject / transcript_events.tool — payload's
 filterable projection. Existing rows stay at their old extractor version until the sweep.
 
 Revision ID: 20260812_1300_hub_transcript_events_subject_tool

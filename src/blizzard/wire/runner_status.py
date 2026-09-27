@@ -1,6 +1,6 @@
-"""The runner's machine-local status view — wire bodies (issue #51): identity, pause states, capacities
-and hub connectivity; the configured environment pool (issue #106); open questions; parked escalations
-with their literal resume command; and open operator takeovers (issue #52). Datetimes are ISO-8601
+"""The runner's machine-local status view — wire bodies: identity, pause states, capacities
+and hub connectivity; the configured environment pool; open questions; parked escalations
+with their literal resume command; and open operator takeovers. Datetimes are ISO-8601
 strings with an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ class PauseStateView(BaseModel):
 
     ``local_reason`` is the local brake's own reason — a usage limit, the spend ceiling, or
     ``None`` on a plain operator pause — the runner-local mirror of the reason the hub already
-    shows for a runner's local pause (blizzard#594)."""
+    shows for a runner's local pause."""
 
     local: bool
     hub: bool
@@ -54,8 +54,8 @@ class RunnerStatusView(BaseModel):
 
 
 class EnvironmentView(BaseModel):
-    """One environment in the runner's configured pool — ``GET /api/environments``
-    (issue #106). ``chunk_id``/``held_since`` are present only while the environment
+    """One environment in the runner's configured pool — ``GET /api/environments``.
+    ``chunk_id``/``held_since`` are present only while the environment
     is currently bound; an unused pool environment carries both as ``None``."""
 
     environment_id: str
@@ -97,13 +97,13 @@ class EscalationView(BaseModel):
     epoch: int
     closed_at: str
     resume_command: str
-    # The parked session's own configuration (issue #144) — the pool it belongs to and the model and
+    # The parked session's own configuration — the pool it belongs to and the model and
     # effort it ran under. All `None` for a bare-vocabulary session, or one predating the stamps.
     session_name: str | None = None
     model: str | None = None
     effort: str | None = None
     harness_id: str | None = None
-    #: The escalated generation's own recorded harness build version (blizzard#441),
+    #: The escalated generation's own recorded harness build version,
     #: beside ``harness_id``. ``None`` when the generation recorded none.
     harness_version: str | None = None
 
@@ -116,7 +116,7 @@ class EscalationListResponse(BaseModel):
 
 class OpenTakeoverView(BaseModel):
     """One open operator takeover — ``GET /api/takeovers``, the stranded-takeover
-    recovery surface (issue #52): the chunk it holds, the ``takeover_id`` an
+    recovery surface: the chunk it holds, the ``takeover_id`` an
     interrupted terminal never PATCHed closed, and how long it has been held."""
 
     chunk_id: str
@@ -152,7 +152,7 @@ class FactListResponse(BaseModel):
 
 
 class HarnessHealthView(BaseModel):
-    """One configured harness binding's own computed health (blizzard#438) —
+    """One configured harness binding's own computed health —
     ``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of
     ``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,
     ``unmapped_tier``, or ``selftest_failure`` when unavailable; ``declared_degradation`` when
@@ -164,7 +164,7 @@ class HarnessHealthView(BaseModel):
     available: bool
     cause: str | None = None
     degradations: list[str] = []
-    #: This binding's own declared admitted-version range as its literal display string (D3); ``None`` when none.
+    #: This binding's own declared admitted-version range as its literal display string; ``None`` when none.
     admitted_range: str | None = None
 
 
@@ -175,7 +175,7 @@ class HarnessHealthListResponse(BaseModel):
 
 
 class SubscriptionView(BaseModel):
-    """One declared subscription's runner-local diagnostics (blizzard#504), served by
+    """One declared subscription's runner-local diagnostics, served by
     ``GET /api/subscriptions``. Every field past ``provider`` is ``None`` until a first
     attempt; ``miss_reason`` is the closed-set reason when ``ok`` is ``False``; ``renewal`` is
     that attempt's own renewal outcome — ``renewed``, ``failed:<reason>``, or ``None``."""

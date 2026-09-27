@@ -1,4 +1,4 @@
-"""The hub's IdP signing-key lifecycle (issue #95, decision D1) — ``SigningKeyService``.
+"""The hub's IdP signing-key lifecycle — ``SigningKeyService``.
 
 Constructed only under ``auth.mode = "oauth"``. Private key material lives under
 ``config.data_dir / "auth" / "signing-keys"`` — never in the store or config — with
@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
-#: RS256 key size (decision D1) — the conventional minimum for an RSA signing key.
+#: RS256 key size — the conventional minimum for an RSA signing key.
 _KEY_SIZE_BITS = 2048
 _META_FILENAME = "meta.json"
 _DIR_MODE = 0o700
@@ -53,7 +53,7 @@ class SigningKeyService:
         return jwt.encode(payload, private_pem, algorithm="RS256", headers={"kid": self._meta.current_kid})
 
     def public_jwks(self) -> dict[str, object]:
-        """Current + previous public keys, each ``kid``-tagged (issue #95)."""
+        """Current + previous public keys, each ``kid``-tagged."""
         kids = [self._meta.current_kid]
         if self._meta.previous_kid is not None:
             kids.append(self._meta.previous_kid)

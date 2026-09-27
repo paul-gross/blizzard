@@ -1,7 +1,7 @@
 """``GardenSweepsService`` (component tier) — a routine's last-swept table and
 measurement series, wired with real ``GardenSweepsStore``, ``ScopeStore``, and
 ``RoutineScopeStore`` collaborators over sqlite-on-disk, doubles only at the clock.
-Proves the D1/D3 declared-set-coverage rule end to end: real scopes, real routine_scopes
+Proves the declared-set-coverage rule end to end: real scopes, real routine_scopes
 links, real lifecycle facts, real ``finding_sets``/``artifacts`` rows."""
 
 from __future__ import annotations
@@ -166,7 +166,7 @@ def test_the_newest_set_by_produced_at_is_reported(tmp_path: Path) -> None:
 
 
 def test_last_swept_covers_the_declared_set_scoped_by_link_and_retirement(tmp_path: Path) -> None:
-    """D1/D3: a linked, non-retired scope never swept reads `never`; an unlinked scope
+    """A linked, non-retired scope never swept reads `never`; an unlinked scope
     is omitted regardless of retirement or of its own sweep history; a linked, retired
     scope keeps its row if this routine swept it, but is omitted if it never was."""
     _, engine = migrate_to(tmp_path, "head")

@@ -60,8 +60,7 @@ def _work_sources(forge_port: int) -> tuple[WorkSourceConfig, ...]:
     """Two ``[[work_source]]`` bindings — one per fixture repo — since the
     journey files issues across both. This is the case that proves the
     repo-matching resolver: a first-entry shim would fetch half these issues from the
-    wrong repo the moment two sources are configured (the Phase 1 finale's ``alpha#7``
-    lying-label bug)."""
+    wrong repo the moment two sources are configured."""
     api_base = f"http://127.0.0.1:{forge_port}"
     return (
         WorkSourceConfig(
@@ -202,7 +201,7 @@ _ANSWER_SCRIPT = (
     '     "commit", "-m", "feat: resolve the ask and land"],\n'
     "    check=True,\n"
     ")\n"
-    # Push the branch and declare it (issue #143, Phase 4) via the real
+    # Push the branch and declare it via the real
     # `blizzard runner artifact commit` verb.
     "_branch = subprocess.run(\n"
     '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
@@ -443,7 +442,7 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             assert escalation and escalation["takeover_command"], "no pasteable takeover command on the escalation"
             takeover = escalation["takeover_command"]
 
-            # The wrapped, supported entry point (issue #251); `--dir` names
+            # The wrapped, supported entry point; `--dir` names
             # `RunnerConfig.load`'s resolved root, not the raw expression above.
             resolved_runner_dir = runner_dir.resolve()
             wrapped_takeover = escalation["wrapped_takeover_command"]

@@ -1,4 +1,4 @@
-"""The injected error-wrapping seam for the identity repositories (issue #91).
+"""The injected error-wrapping seam for the identity repositories.
 
 Follows the exemplar's ``RepoErrorFactory`` shape: a library exception is translated
 into the domain :class:`RepoError` at the one site it is caught, logged once at ERROR

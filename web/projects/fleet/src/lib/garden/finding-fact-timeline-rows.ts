@@ -1,7 +1,7 @@
 import type { FindingFactView } from '../api/hub';
 import { formatAbsolute, formatWhen } from '../when';
 
-/** One entry in a finding's fact chain (blizzard#487), re-read for display — the
+/** One entry in a finding's fact chain, re-read for display — the
  * chain itself carries no id per entry, so {@link deriveFactTimelineRows} keys each
  * row off its own position in the (already oldest-first, never reordered within one
  * render) array rather than inventing one. {@link whenTitle} is the full-datetime
@@ -36,7 +36,7 @@ export const FACT_KIND_LABELS: Record<string, string> = {
 };
 
 /**
- * A finding's whole fact chain (blizzard#487), re-read as timeline rows — a pure map
+ * A finding's whole fact chain, re-read as timeline rows — a pure map
  * over `facts` in the array's own order (already oldest-first off the wire; never
  * re-sorted here). The single owner of this derivation (`canon:one-owner`,
  * `chunk-timeline-rows.ts`'s own precedent).

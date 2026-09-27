@@ -7,7 +7,7 @@ import { ArtifactView } from './artifact-view';
 
 /**
  * One artifact, full (`/board/chunk/:chunkId/artifact/:artifactKey`) — out of
- * scope for the chunk detail page's Artifacts tab (issue #160), which shows
+ * scope for the chunk detail page's Artifacts tab, which shows
  * the same artifacts without leaving the page; this route stays live so an
  * already-shared URL keeps resolving. The route **container**
  * (`bzh:frontend-container-presentational`): it resolves the route params and the

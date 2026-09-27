@@ -1,4 +1,4 @@
-"""Preempting an attempt an operator's restart fenced out (issue #370).
+"""Preempting an attempt an operator's restart fenced out.
 
 ``Pull._reconcile_leases`` reads each active lease against the hub's fence; a restart raised
 it, so the attempt is preempted — killed and closed with route, tenure and environments kept

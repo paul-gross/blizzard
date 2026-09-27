@@ -1,5 +1,5 @@
-"""``CliContext``'s transport seam directly (blizzard#257 Phase 1): the streaming method
-(D4) and the unnamed-403 branch (D5), ahead of any verb consuming either."""
+"""``CliContext``'s transport seam directly: the streaming method
+and the unnamed-403 branch, ahead of any verb consuming either."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def _stream_returning(resp: _FakeStreamResponse):
     return fake_stream
 
 
-# --- D4: CliContext.stream ---------------------------------------------------------
+# --- CliContext.stream ---------------------------------------------------------
 
 
 def test_stream_yields_the_body_line_by_line(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -97,7 +97,7 @@ def test_stream_surfaces_a_bare_401_with_the_login_hint(monkeypatch: pytest.Monk
     assert "blizzard hub login" in exc_info.value.message
 
 
-# --- D5: CliContext.check's unnamed-403 branch --------------------------------------
+# --- CliContext.check's unnamed-403 branch --------------------------------------
 
 
 def test_check_surfaces_an_unnamed_403s_detail() -> None:

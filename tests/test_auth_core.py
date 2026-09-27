@@ -1,6 +1,4 @@
-"""``blizzard/auth_core/`` — the dependency-free shared authz vocabulary (unit tier,
-issue #91, decision D3).
-"""
+"""``blizzard/auth_core/`` — the dependency-free shared authz vocabulary (unit tier)."""
 
 from __future__ import annotations
 
@@ -94,7 +92,7 @@ def test_runner_pause_and_graph_edit_are_admin_and_above() -> None:
 
 
 def test_analytics_admin_is_admin_and_above() -> None:
-    """``analytics:admin`` gates the forced re-derive route (blizzard#254 D7) — a
+    """``analytics:admin`` gates the forced re-derive route — a
     mutation, so above the read-only ``transcript:read``, not ``contributor``+."""
     for role in (Role.ADMIN, Role.SUPERUSER):
         assert ANALYTICS_ADMIN in expand(role)
@@ -103,7 +101,7 @@ def test_analytics_admin_is_admin_and_above() -> None:
 
 
 def test_transcript_read_is_contributor_and_above() -> None:
-    """``transcript:read`` is held by ``contributor``+ (blizzard#247, D11) — not by
+    """``transcript:read`` is held by ``contributor``+ — not by
     ``guest``, which holds every other read: a transcript carries everything a worker
     saw, not just the fleet's state."""
     for role in (Role.CONTRIBUTOR, Role.ADMIN, Role.SUPERUSER):

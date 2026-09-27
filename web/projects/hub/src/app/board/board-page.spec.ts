@@ -14,8 +14,8 @@ import { BoardPage } from './board-page';
 
 /**
  * The desktop board, driven through a **real** router (`RouterTestingHarness`)
- * rather than a stubbed `ActivatedRoute`: the URL owns the chunk selection
- * (issue #162), so a navigation's full round trip — write the param, re-read it,
+ * rather than a stubbed `ActivatedRoute`: the URL owns the chunk selection,
+ * so a navigation's full round trip — write the param, re-read it,
  * push a history entry — is part of what is under test. The router is configured
  * exactly as `app.config.ts` configures it (`onSameUrlNavigation: 'reload'`), so
  * the spec exercises the app's own navigation semantics.
@@ -199,7 +199,7 @@ describe('BoardPage', () => {
     const { el } = await open();
 
     // The centre and the one rail are the columns of the main grid — the left
-    // rail is gone with the queue panel it held (issue #137).
+    // rail is gone with the queue panel it held.
     const columns = el.querySelectorAll('.main > .col');
     expect(columns.length).toBe(2);
     expect(el.querySelector('fleet-board-shell')?.closest('.col')).toBe(columns[0]);
@@ -300,7 +300,7 @@ describe('BoardPage', () => {
    * promoted card, so a pending mutation's effect must scope to the card whose own
    * mutation is in flight — a sibling card's Promote button must stay clickable.
    *
-   * The clicked card no longer just disables its own Promote button in place: Phase 2's
+   * The clicked card no longer just disables its own Promote button in place: the
    * READY-lane override (`bzh:frontend-pending-override`, below) moves the whole card into
    * READY while its promote is pending, and a card in READY never carries a Promote button
    * at all — a not_ready and a ready card can never both be true of the same card at once, since
@@ -363,7 +363,7 @@ describe('BoardPage', () => {
   });
 
   /*
-   * Phase 2's board-half pending overrides (`bzh:frontend-pending-override`): a control whose
+   * The board-half pending overrides (`bzh:frontend-pending-override`): a control whose
    * resulting change is predictable renders it immediately, computed off the in-flight
    * mutation's own variables — never a cache write — so a rejection reverts to the last real
    * server state for free the instant `isPending()` flips false.

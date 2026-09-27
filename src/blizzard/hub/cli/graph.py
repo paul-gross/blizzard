@@ -1,4 +1,4 @@
-"""``blizzard hub graph`` — issues #101/#104/#123: operator verbs over minted graphs."""
+"""``blizzard hub graph`` — operator verbs over minted graphs."""
 
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ def graph_mint(cli: CliContext, path: str) -> None:
 def graph_sync(cli: CliContext) -> None:
     """Reconcile the hub's packaged graphs into its store, minting only what changed.
 
-    The deploy verb (issue #146) — graphs live in the store, not on disk, so run it at
+    The deploy verb — graphs live in the store, not on disk, so run it at
     the end of every deploy; it is idempotent. The **hub's own** packaged set is what is
     reconciled, not this CLI's. Exits non-zero only if a packaged graph failed to load."""
     resp = cli.post("/api/graphs/sync", "POST /graphs/sync", json_body={})
@@ -151,7 +151,7 @@ def graph_enable(cli: CliContext, graph_id: str, by: str) -> None:
 @click.argument("value", type=click.Choice(["true", "false", "inherit"]))
 @click.option("--by", "by", default="operator", help="Who is setting the policy (recorded on the fact).")
 def graph_follow_latest(cli: CliContext, graph_id: str, value: str, by: str) -> None:
-    """Set GRAPH_ID's follow-latest policy: true, false, or inherit (issue #164).
+    """Set GRAPH_ID's follow-latest policy: true, false, or inherit.
 
     With the policy on, a chunk pinned to this mint re-pins to the newest enabled mint
     of the same *name* at its next transition. ``inherit`` (the stored ``null``, and

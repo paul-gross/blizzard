@@ -1,4 +1,4 @@
-"""The worker settings document's ``permissions.deny`` list (blizzard#422).
+"""The worker settings document's ``permissions.deny`` list.
 
 The turn-deferring tools a headless worker must not reach — a settings-document literal
 whose effect only a live harness shows (``blizzard:manual-worker-deny-list``).

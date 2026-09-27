@@ -1,8 +1,8 @@
-"""The selftest job resource's in-memory service — the adapter-drift canary (issue #54).
+"""The selftest job resource's in-memory service — the adapter-drift canary.
 
 Mints and runs a selftest against a chosen coding harness off the request thread, in a
 throwaway scratch repo the ``IScratchGit`` seam owns. Run *state* stays process-local, gone
-on restart; a run's *terminal outcome* also lands as a durable per-harness fact (blizzard#438)
+on restart; a run's *terminal outcome* also lands as a durable per-harness fact
 when a result repository is wired."""
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.model import SelfTestCheck, SelfTestRun, SelfTestStatus
 from blizzard.runner.selftest.scratch_git import IScratchGit
 
-# The whole-run wall-clock budget (issue #54): a hung check must fail the canary loudly
+# The whole-run wall-clock budget: a hung check must fail the canary loudly
 # rather than wedge it silently.
 _DEFAULT_RUN_BUDGET_SECONDS = 300.0
 
@@ -79,7 +79,7 @@ class SelfTestService:
 
     def _execute(self, selftest_id: str, adapter: IHarnessSelfTestSeam) -> None:
         # Joined against the budget in its own thread: an overrun cannot be killed, so it
-        # is abandoned as a daemon thread and the run resolves anyway (issue #54).
+        # is abandoned as a daemon thread and the run resolves anyway.
         outcome: list[tuple[list[SelfTestCheck], str | None]] = []
 
         def _run() -> None:

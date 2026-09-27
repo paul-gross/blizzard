@@ -1,14 +1,14 @@
 /**
- * The runner's SSE event vocabulary and payload interfaces (blizzard#317 Phase 2), beside
+ * The runner's SSE event vocabulary and payload interfaces, beside
  * the hub's own in {@link "./fleet-live"}. Mirrors ``blizzard.runner.events.broker``'s
  * event-type constants and ``blizzard.wire.sse_runner``'s payload models — the golden
  * corpus's runner scope at `contracts/sse/runner/` is the single description both sides
  * hold to.
  *
- * D6: frames are thin id-and-cause notifications; `local-panel` re-reads through the
+ * Frames are thin id-and-cause notifications; `local-panel` re-reads through the
  * runner's existing endpoints rather than the frame itself carrying a full view. This
  * module carries only the wire vocabulary — the event union type and payload
- * interfaces — so `local-panel` can consume them (Phase 4). It builds no live-updates
+ * interfaces — so `local-panel` can consume them. It builds no live-updates
  * service or invalidation registry of its own; `SseService` is imported unchanged.
  */
 

@@ -1,5 +1,5 @@
 """graph checks gating — ``graph_nodes.checks_cwd``/``checks_timeout``,
-``graph_choices.requires_checks`` (issue #114, hub store tree). Nullable, no backfill.
+``graph_choices.requires_checks`` (hub store tree). Nullable, no backfill.
 
 Revision ID: 20260725_1200_hub_graph_checks_gating
 Revises: 20260722_1200_hub_artifact_forge

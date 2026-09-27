@@ -1,8 +1,8 @@
 """``AuthService`` — mint/resolve/slide sessions, the first-login email-merge linking
-rule, and collision-free username minting (issues #91, #92).
+rule, and collision-free username minting.
 
 Holds the **write** repositories (``bzh:controller-read-only``) and takes already-loaded
-objects (``bzh:domain-takes-objects``). Also holds :meth:`assign_role` (issue #94) and
+objects (``bzh:domain-takes-objects``). Also holds :meth:`assign_role` and
 the superuser-bootstrap primitives; every role change is recorded via ``auth_facts``."""
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ _log = get_logger("blizzard.hub.auth")
 
 
 class RoleAssignmentRefused(Exception):
-    """A role-change request violated a hub-side rule (issue #94) — self-change,
+    """A role-change request violated a hub-side rule — self-change,
     ``superuser`` grant/revoke by a non-``superuser`` actor, or ``superuser`` itself,
     which is bootstrap-only and not assignable through the API."""
 
@@ -61,14 +61,14 @@ STATE_BYTES = 24
 #: redirect, short enough that an abandoned authorize attempt cannot be replayed later.
 STATE_TTL = timedelta(minutes=10)
 
-#: The ``auth_state.kind`` the provider-login dance writes (decision D5).
+#: The ``auth_state.kind`` the provider-login dance writes.
 PROVIDER_LOGIN_STATE_KIND = "provider_login"
 
-#: The registered public client id the CLI authenticates as (issue #96) — a built-in
+#: The registered public client id the CLI authenticates as — a built-in
 #: convention, not a per-user/per-runner registration.
 CLI_CLIENT_ID = "cli"
 
-#: The ``auth_state.kind`` a ``client=cli`` authorize mints (issue #96) — for this kind
+#: The ``auth_state.kind`` a ``client=cli`` authorize mints — for this kind
 #: the ``state`` column holds the minted authorization *code*, not an anti-CSRF value.
 CLI_LOGIN_STATE_KIND = "cli_login"
 
@@ -168,7 +168,7 @@ class AuthService:
         return plaintext, session
 
     def link_or_mint(self, identity: ProviderIdentity, *, provider_name: str) -> User:
-        """The first-login email-merge linking rule (issue #92): resolve ``identity`` to the
+        """The first-login email-merge linking rule: resolve ``identity`` to the
         :class:`User` it belongs to, minting one if none exists.
 
         An existing ``(provider_name, subject)`` link wins, its ``handle`` refreshed in place;
@@ -222,7 +222,7 @@ class AuthService:
         _log.info("session revoked", user_id=session.user_id)
 
     def start_state(self, *, kind: str, provider_name: str, return_to: str, ttl: timedelta = STATE_TTL) -> str:
-        """Mint and persist a single-use ``state`` (decision D5); returns the plaintext
+        """Mint and persist a single-use ``state``; returns the plaintext
         value to round-trip through the redirect."""
         state = secrets.token_urlsafe(STATE_BYTES)
         now = self._clock.now()
@@ -249,13 +249,13 @@ class AuthService:
             return None
         return entry
 
-    # --- CLI login (issue #96) -----------------------------------------------
+    # --- CLI login -----------------------------------------------
 
     def mint_cli_code(self, user: User, *, code_challenge: str, redirect_uri: str) -> str:
         """Mint a single-use authorization code for the CLI's PKCE exchange, for an
-        already-resolved ``user`` (issue #96).
+        already-resolved ``user``.
 
-        Reuses the ``auth_state`` table (decision D5) — ``code_challenge`` and ``user_id``
+        Reuses the ``auth_state`` table — ``code_challenge`` and ``user_id``
         are the two fields no other ``kind`` populates. The returned code is opaque."""
         code = secrets.token_urlsafe(CLI_CODE_BYTES)
         now = self._clock.now()
@@ -275,7 +275,7 @@ class AuthService:
 
     def exchange_cli_code(self, code: str, *, code_verifier: str, redirect_uri: str) -> str | None:
         """Redeem a code minted by :meth:`mint_cli_code` for a fresh hub session token
-        (decision D6 — a session, never a runner-style JWT), or ``None`` on any failure:
+        (a session, never a runner-style JWT), or ``None`` on any failure:
         unknown/consumed/expired code, mismatched ``redirect_uri``, or a bad PKCE verifier.
         Every failure collapses to the same ``None``, so a caller cannot fingerprint which
         check failed (pinned by ``tests/test_cli_login_api.py``)."""
@@ -307,10 +307,10 @@ class AuthService:
             candidate = f"{base}-{suffix}"
         return candidate
 
-    # --- role assignment (issue #94) -----------------------------------------
+    # --- role assignment -----------------------------------------
 
     def assign_role(self, *, actor: ResolvedIdentity, subject: User, to_role: Role) -> User:
-        """Enforce the hub-side role-change rules (issue #94), then apply the change.
+        """Enforce the hub-side role-change rules, then apply the change.
 
         Raises :class:`RoleAssignmentRefused` when the actor is the subject, when either
         role is ``superuser`` (bootstrap-only), or when a non-``superuser`` actor grants or
@@ -343,7 +343,7 @@ class AuthService:
             created_at=user.created_at,
         )
 
-    # --- superuser bootstrap (issue #94) -------------------------------------
+    # --- superuser bootstrap -------------------------------------
 
     def get_superuser_bootstrap(self) -> SuperuserBootstrap | None:
         """The singleton bootstrap row's read passthrough, so a caller never reaches past

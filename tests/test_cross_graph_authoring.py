@@ -1,4 +1,4 @@
-"""Cross-graph target authoring (issue #90, Phase 2) — syntax, parse, reify, validate, mint warning.
+"""Cross-graph target authoring — syntax, parse, reify, validate, mint warning.
 
 Unit tier: ``to: graph:<name>`` parses, validates, and reifies onto the edge; a malformed
 ``graph:`` form errors. Component tier: minting a target naming an absent graph succeeds

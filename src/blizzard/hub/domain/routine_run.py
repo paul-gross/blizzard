@@ -1,12 +1,12 @@
-"""Routine run — mint, ingest, and promote a hub work item from a routine in one act
-(blizzard#392): ``blizzard hub routine run <name>``.
+"""Routine run — mint, ingest, and promote a hub work item from a routine in one act:
+``blizzard hub routine run <name>``.
 
 Takes an already-resolved routine and an already-resolved, already-related scope
-(``bzh:domain-takes-objects`` — blizzard#399 D1): both must already exist and the scope
+(``bzh:domain-takes-objects``): both must already exist and the scope
 must already relate to the routine. Settles the mode against the pair's recorded
 baseline, composes the charge, and drives the one-act write atomically. A scope outside
 the routine's own related set, a retired scope, or an unresolvable graph refuses rather
-than defaults (D5)."""
+than defaults."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ class RoutineRetiredError(ValueError):
 
 
 class ScopeRetiredError(ValueError):
-    """A run's effective scope — named or the routine's own default — is retired (D5):
+    """A run's effective scope — named or the routine's own default — is retired:
     a real, named resource in a blocked state, refused rather than run against."""
 
     def __init__(self, slug: str) -> None:
@@ -53,8 +53,8 @@ class ScopeRetiredError(ValueError):
 
 
 class ScopeNotRelatedError(ValueError):
-    """A run's effective scope is not a member of the routine's own related set
-    (blizzard#399 D1-D3): refused rather than run against, and never minted. The
+    """A run's effective scope is not a member of the routine's own related set:
+    refused rather than run against, and never minted. The
     routine's own default is always a member, so this can only fire on an explicit
     override."""
 
@@ -75,7 +75,7 @@ def compose_charge(
     baseline: FindingSet | None,
     note: str | None,
 ) -> str:
-    """The run's charge as prose (D1) — names the routine and the graph its runs
+    """The run's charge as prose — names the routine and the graph its runs
     execute, the scope with its own description, the mode with its resolved baseline,
     and ``note`` as a "This run" section. A pure function over already-resolved values —
     no store — so a unit test drives it directly."""
@@ -109,7 +109,7 @@ class RunResult:
 
 
 class RunService:
-    """Mint, ingest, and promote a hub work item from a routine, in one act (blizzard#392)."""
+    """Mint, ingest, and promote a hub work item from a routine, in one act."""
 
     def __init__(
         self,

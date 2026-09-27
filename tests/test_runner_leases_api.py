@@ -1,4 +1,4 @@
-"""The runner-local active-lease list — ``GET /api/leases`` (issue #28).
+"""The runner-local active-lease list — ``GET /api/leases``.
 
 Exercised over a real store via TestClient, hub-free. The route's shape, its binding
 join, its empty and unwired forms, and the derivation→wire mapping (``parked`` via real
@@ -88,7 +88,7 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
     assert len(items) == 1
     item = items[0]
     # Timestamps carry an explicit UTC offset: the store column is UtcDateTime-typed
-    # (issue #28, `bzh:utc-instants`), and `_view` serializes with `iso_utc`.
+    # (`bzh:utc-instants`), and `_view` serializes with `iso_utc`.
     assert item == {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
@@ -160,7 +160,7 @@ def test_spawning_state_reaches_the_wire_via_a_null_pid(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_closed_lease_appears_after_active_with_state_and_reason(tmp_path: Path) -> None:
-    """The widened route (issue #29): recently-closed leases join active ones,
+    """The widened route: recently-closed leases join active ones,
     ordered after them, carrying ``state: "closed"`` and the closure reason on the wire."""
     app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store, lease_id="lease_1", chunk_id="ch_1")

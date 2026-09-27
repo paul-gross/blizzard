@@ -1,6 +1,6 @@
-"""The worker git-commit declaration channel (issue #143): a worker durably declares a
+"""The worker git-commit declaration channel: a worker durably declares a
 ``git_commit``-kind artifact for a repo it touched, authorized by the lease token minted at its own
-spawn (issue #113). :meth:`GitCommitDeclarationService.declare` is the one place the write happens
+spawn. :meth:`GitCommitDeclarationService.declare` is the one place the write happens
 (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class IReadGitCommitDeclarationRepository(Protocol):
 
     def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
         """The lease's explicit git-commit declarations, newest per ``(environment_id,
-        repo)`` (issue #143), keyed the same way.
+        repo)``, keyed the same way.
 
         Append-only, latest-wins. Keying on the environment as well as the repo keeps
         several environments from collapsing one env's branch onto another's."""
@@ -69,7 +69,7 @@ class IWriteGitCommitDeclarationRepository(IReadGitCommitDeclarationRepository, 
         declared_at: datetime,
     ) -> None:
         """Append a worker's explicit git-commit declaration for ``repo`` in
-        ``environment_id`` (issue #143), a single committed transaction so it survives a
+        ``environment_id``, a single committed transaction so it survives a
         ``kill -9`` before the collection reads it. Append-only: a later call for the
         same key is a correction, read back as the replacement, never merged."""
         ...

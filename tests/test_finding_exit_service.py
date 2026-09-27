@@ -1,4 +1,4 @@
-"""``FindingExitService`` (unit tier, blizzard#394 Phase 1): a blank or missing note is
+"""``FindingExitService`` (unit tier): a blank or missing note is
 refused before the repository is ever touched, every verb records the right fact kind,
 `resolve` and `supersede` alone carry their extra field, and a multi-finding call is one
 `record_facts` batch — the `tests/test_garden_proposal_closure_domain.py` shape."""

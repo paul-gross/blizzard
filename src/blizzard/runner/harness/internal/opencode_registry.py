@@ -1,4 +1,4 @@
-"""Production construction for the OpenCode coding harness (D9).
+"""Production construction for the OpenCode coding harness.
 
 The one factory allowed to construct :class:`OpenCodeAdapter` — every composition root takes
 the registry `harness_registry.build_production_harness_registry` builds instead, and
@@ -22,7 +22,7 @@ def build_opencode_binding(
     config: RunnerConfig, *, process: IProcessProbe, launcher: IProcessLauncher
 ) -> HarnessBinding:
     """Build the OpenCode adapter once for one composition graph, over the one runner-owned
-    ``process``/``launcher`` pair the Claude Code binding also receives (D4). Wires one
+    ``process``/``launcher`` pair the Claude Code binding also receives. Wires one
     :class:`OpenCodeTranscriptSource` into both the adapter and the binding, exactly as
     Claude Code's own binding wires its transcript source, plus a price catalog resolved
     from the same worker env — never a constant path."""

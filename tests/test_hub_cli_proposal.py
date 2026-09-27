@@ -1,5 +1,5 @@
 """``blizzard hub garden-proposal list|show`` (unit tier) — pure clients of the
-garden-proposal routes, driven here with ``httpx`` stubbed (blizzard#390), the
+garden-proposal routes, driven here with ``httpx`` stubbed, the
 ``tests/test_hub_cli_scope.py`` shape."""
 
 from __future__ import annotations

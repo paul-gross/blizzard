@@ -1,4 +1,4 @@
-"""Delivery validation (blizzard#393) — the hub-executed delivery node's shape
+"""Delivery validation — the hub-executed delivery node's shape
 check, before anything is written; the check itself is specified by
 blizzard-product:/delivered/garden/machinery.md §Delivery. Pure functions over already-loaded
 objects (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is
@@ -33,8 +33,8 @@ class GardenDeliveryRejected(Exception):
     error, never a stack of causes a person has to untangle."""
 
 
-# Every finding known to this routine, live or gone, minus an exited one (blizzard#394
-# D3): keyed by finding id, valued by that finding's own recorded scope slug.
+# Every finding known to this routine, live or gone, minus an exited one:
+# keyed by finding id, valued by that finding's own recorded scope slug.
 LiveFindings = Mapping[str, str]
 
 
@@ -64,7 +64,7 @@ class ValidatedDelivery:
     #: `(repo, sha)`'s resolved authored instant — `None` when unresolved, absent when
     #: never attempted; materialization must not re-resolve to fill the gap (no backfill).
     introduced_at: dict[tuple[str, str], datetime | None] = field(default_factory=dict)
-    #: Every currently-`delivered` finding, valued by its closer's actor, or `None` (blizzard#583 D3).
+    #: Every currently-`delivered` finding, valued by its closer's actor, or `None`.
     delivered_findings: dict[str, str | None] = field(default_factory=dict)
 
 
@@ -106,7 +106,7 @@ def is_finding_id_shaped(value: str) -> bool:
 def single_repo_of(delta: FindingDelta) -> str | None:
     """The one repository `delta.revisions` names, or `None` if it names zero or several
     — `introduced` carries no repository of its own, so this is the sole case its commit
-    resolves against (blizzard#394 D5). Shared with `garden_delivery_materialize` so the
+    resolves against. Shared with `garden_delivery_materialize` so the
     rule is asked once, not reimplemented and left to silently diverge."""
     return next(iter(delta.revisions)) if len(delta.revisions) == 1 else None
 
@@ -122,7 +122,7 @@ def check_delta(
     """Validate one already-parsed delta against `run` and `live_findings`, raising
     :class:`GardenDeliveryRejected` on the first failure: `delta.scope`, every commit sha,
     every transformation's id, one op per id, and a `gone` op's non-empty note. `exited_ids`
-    only distinguishes an exited id from an unknown one in the message (D3). Returns every
+    only distinguishes an exited id from an unknown one in the message. Returns every
     `(repo, sha)` resolved for an `add`'s `introduced` commit, for `introduced_at`."""
     if delta.scope != run.scope_slug:
         raise GardenDeliveryRejected(
@@ -230,7 +230,7 @@ def validate_delivery(
     """The delivery node's whole check: `delta_artifacts`/`proposal_artifacts` are
     artifact-name → raw-JSON-text maps a route handler holds before parsing.
     `known_findings` is every finding on `run.routine_name` plus review-sourced ones on
-    `run.scope_slug` (D3), live or gone. Raises :class:`GardenDeliveryRejected` on the
+    `run.scope_slug`, live or gone. Raises :class:`GardenDeliveryRejected` on the
     first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
     live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in known_findings if f.state not in EXIT_KINDS}
     exited_ids = frozenset(f.finding_id for f in known_findings if f.state in EXIT_KINDS)

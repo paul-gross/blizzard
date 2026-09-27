@@ -14,11 +14,11 @@
   background: var(--overlay-25);
 }
 /* Informational, not a warning — the turns are real, just sourced from the
-   hub's archive instead of the live local file (blizzard#249 D1). */
+   hub's archive instead of the live local file. */
 .banner.archived {
   color: var(--cyan);
 }
-/* The hub-unreachable state (blizzard#249 D1) — local-info.ts's visible-degrade
+/* The hub-unreachable state — local-info.ts's visible-degrade
    banner precedent (.fleet-strip.stale::after): a filled red-background wash, not
    KitAsyncState's error variant, which is plain red text with no background —
    too subtle for a state this deliberately prominent (closer in spirit to "we

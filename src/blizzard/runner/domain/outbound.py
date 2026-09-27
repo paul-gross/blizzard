@@ -1,4 +1,4 @@
-"""The hub-bound store-and-forward outbound buffer repository seam (blizzard#410)."""
+"""The hub-bound store-and-forward outbound buffer repository seam."""
 
 from __future__ import annotations
 
@@ -83,12 +83,12 @@ class IWriteOutboundRepository(IReadOutboundRepository, Protocol):
         ...
 
     def ack_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
-        """Mark every seq in ``seqs`` delivered, in one transaction (issue #522), so a
+        """Mark every seq in ``seqs`` delivered, in one transaction, so a
         crash mid-batch never acks part of one delivered run."""
         ...
 
     def prune_outbound(self, *, now: datetime) -> int:
-        """Delete acked rows older than the store's own retention window (issue #520), but
+        """Delete acked rows older than the store's own retention window, but
         only below the lowest still-pending seq — an acked row interleaved above a pending
         one always survives, so the retained buffer stays gapless from the pending floor
         upward. Returns the number of rows pruned."""

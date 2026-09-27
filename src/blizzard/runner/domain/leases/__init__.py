@@ -81,7 +81,7 @@ class NewLease:
     runner_id: str
     retries_max: int
     created_at: datetime
-    # What session this attempt runs and under what configuration (issue #144), stamped on
+    # What session this attempt runs and under what configuration, stamped on
     # the mint's own `lease_context` insert. `None` means *unknown*, never a value.
     session_name: str | None = None
     resolved_model: str | None = None
@@ -91,7 +91,7 @@ class NewLease:
 
 @dataclass(frozen=True)
 class PoolHead:
-    """A named session pool's current head (issue #144). ``resolved_model``/
+    """A named session pool's current head. ``resolved_model``/
     ``resolved_effort`` are the head's own **stamps**, not a fresh resolution; ``None``
     on either means *unknown*, never a value."""
 
@@ -121,7 +121,7 @@ class LeaseRecord:
     runner_id: str
     retries_max: int
     created_at: datetime
-    # This attempt's session stamps, read back (issue #144). `None` on any of the three
+    # This attempt's session stamps, read back. `None` on any of the three
     # means *unknown*, never a value.
     session_name: str | None = None
     resolved_model: str | None = None
@@ -131,7 +131,7 @@ class LeaseRecord:
     process_start_time: str | None = None
     session_id: str | None = None
     harness_id: str | None = None
-    # The owned process group (D3), recorded alongside `pid`, never inferred from it.
+    # The owned process group, recorded alongside `pid`, never inferred from it.
     pgid: int | None = None
 
     @property
@@ -146,7 +146,7 @@ class LeaseRecord:
 
 @dataclass(frozen=True)
 class ClosedLeaseRecord:
-    """A lease joined with its closure fact — the panel's recent-history read (issue #29).
+    """A lease joined with its closure fact — the panel's recent-history read.
     ``reason`` is the closure vocabulary: ``transitioned`` | ``reaped`` | ``failed`` |
     ``escalated`` | ``parked`` | ``released`` | ``owner-unresolvable-mint`` | ``no-acceptable-harness-mint``
     (both zero-budget, minted only to escalate a resume owner or mint selection that failed)."""
@@ -161,11 +161,10 @@ class ClosedLeaseRecord:
 HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
 
 #: A **list-length affordance**, not a retention policy: it bounds how many closed rows
-#: are returned, never how long a closure fact lives (issue #29).
+#: are returned, never how long a closure fact lives.
 RECENT_LEASE_LIMIT = 20
 
-#: The panel's derived state (issue #28; ``closed`` added issue #29; ``backing-off``
-#: added blizzard#595) — one of seven, computed at read time and never stored
+#: The panel's derived state — one of seven, computed at read time and never stored
 #: (``bzh:facts-not-status``).
 LeaseState = Literal["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
 
@@ -185,7 +184,7 @@ class Liveness:
     """A lease's staleness baseline: the newest of its heartbeat, its spawn, and its mint.
 
     ``max`` over all three rather than a chain, so a worker respawned into an old lease
-    reads fresh for **every** spawn generation, not just the first (issue #150)."""
+    reads fresh for **every** spawn generation, not just the first."""
 
     last_activity: datetime
 
@@ -215,7 +214,7 @@ class Liveness:
 # ``as_utc`` is re-exported: callers depend on the name at this path.
 
 
-# --- Derived lease state — the panel's read model (issue #28) ----------------
+# --- Derived lease state — the panel's read model ----------------
 
 
 @dataclass(frozen=True)
@@ -244,7 +243,7 @@ class LeaseActivity:
         The precedence is the point: ``closed`` outranks ``alive`` because a closed
         lease's pid may have been reused, ``parked`` outranks ``stale`` because parking
         stops the reap clock, and ``backing-off`` ranks below ``parked`` but above
-        ``spawning`` (blizzard#595) — a backing-off lease's exited worker/judge already
+        ``spawning`` — a backing-off lease's exited worker/judge already
         left ``pid``/``session_id`` set, so it would otherwise misread as ``exited``."""
         if self.closed:
             return "closed"
@@ -271,11 +270,11 @@ class IProcessProbe(Protocol):
 
 
 class LocalLeaseService:
-    """Derive every active lease's state at read time — the panel's list (issue #28).
+    """Derive every active lease's state at read time — the panel's list.
 
     A status the store never stores. Spans leases, asks (parked) and environments
     (bindings), so it holds the :class:`~blizzard.runner.stores.RunnerReadStores` bundle
-    (D4) — verified read-only over it, so it takes the narrowed bundle (blizzard#412)."""
+    — verified read-only over it, so it takes the narrowed bundle."""
 
     def __init__(
         self,
@@ -333,7 +332,7 @@ class LocalLeaseService:
         return activities
 
     def list_recent(self) -> list[LeaseActivity]:
-        """Active leases, then the most recently closed — the panel's list (issue #29).
+        """Active leases, then the most recently closed — the panel's list.
 
         Every active lease first — unbounded, so a long-running agent is never crowded
         out — then up to ``recent_limit`` closed leases, newest first."""
@@ -343,7 +342,7 @@ class LocalLeaseService:
         """The recent-closed half of :meth:`list_recent` — no probe, no heartbeat read.
 
         ``closed`` wins the precedence unconditionally, so a pid read here would be
-        wasted and actively misleading. Bindings are already released (issue #29)."""
+        wasted and actively misleading. Bindings are already released."""
         return [
             LeaseActivity(
                 lease=record.lease,

@@ -71,7 +71,7 @@ def test_events_stream_excluded_from_openapi() -> None:
 
 async def test_stream_exits_promptly_on_shutdown_signal_not_disconnect() -> None:
     """A shutting-down stream returns as soon as ``shutdown`` fires — not on client
-    disconnect or the next 15s keepalive wake (issue #47). Bounding the wait at 1s fails
+    disconnect or the next 15s keepalive wake. Bounding the wait at 1s fails
     if the shutdown signal isn't wired into the live-wait race."""
     broker = EventBroker()
     shutdown = asyncio.Event()

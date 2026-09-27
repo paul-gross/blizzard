@@ -1,4 +1,4 @@
-"""``probe_authentication()``'s health-probe seam, service tier (blizzard#438) — bound to
+"""``probe_authentication()``'s health-probe seam, service tier — bound to
 the mock fleet's real CLI binaries (``bzh:external-cli-fake-is-service-tier``). Neither
 real CLI exposes a provider-authentication subcommand without spending a live turn, so
 each probe combines a subprocess invocation with a credential-file read — these tests
@@ -62,7 +62,7 @@ def test_claude_code_probe_authentication_shells_out_to_the_real_binary_and_read
 
 def test_claude_code_probe_and_cache_read_available_against_the_real_mock_binary(tmp_path: Path) -> None:
     """``ClaudeCodeHealthProbe`` + ``HarnessHealthCache`` over the real ``mock-claude-code``
-    binary (blizzard#606, D5): its ``--version`` answers the real observed shape, which the
+    binary: its ``--version`` answers the real observed shape, which the
     real normalizer and admitted range both accept with no corpus behind either."""
     bin_dir = require_mock_fleet()
     mock_claude_code = bin_dir / "mock-claude-code"

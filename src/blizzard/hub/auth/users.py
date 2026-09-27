@@ -1,4 +1,4 @@
-"""The user repository seam — read/write Protocols (issue #91, ``bzh:repository-split``).
+"""The user repository seam — read/write Protocols (``bzh:repository-split``).
 
 The concrete SQLAlchemy adapter lives at ``internal/user_repository.py``
 (``bzh:dependency-inversion``); this module holds only the Protocol pair, depended on
@@ -27,7 +27,7 @@ class IReadUserRepository(Protocol):
         ...
 
     def list_all(self) -> list[User]:
-        """Every user, for the admin page's own listing (issue #94) — the one caller
+        """Every user, for the admin page's own listing — the one caller
         that ever needs the whole table rather than a single lookup."""
         ...
 
@@ -38,7 +38,7 @@ class IWriteUserRepository(IReadUserRepository, Protocol):
     def create(self, user: User) -> None: ...
 
     def update_role(self, user_id: str, role: Role) -> None:
-        """Set ``user_id``'s stored role in place (issue #94's role-assignment API and
+        """Set ``user_id``'s stored role in place (the role-assignment API and
         superuser-bootstrap lifecycle) — the write ``AuthService`` delegates to after
         its own rule checks have already passed."""
         ...

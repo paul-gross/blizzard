@@ -19,14 +19,14 @@ class IReadChunkRouteRepository(Protocol):
 
     def load_all_routes(self) -> dict[str, Route]:
         """Every chunk's live route, keyed by chunk id — the bulk counterpart to
-        :meth:`route_of` (issue #421), bounded the way ``load_all_facts`` is. A chunk
+        :meth:`route_of`, bounded the way ``load_all_facts`` is. A chunk
         with no live route is absent from the dict, as :meth:`route_of` returns ``None``."""
         ...
 
     def routes_for(self, chunk_ids: Iterable[str]) -> dict[str, Route]:
         """The given chunks' live routes, keyed by chunk id — the by-id-set bulk read
         between :meth:`route_of`'s one-chunk read and :meth:`load_all_routes`'s
-        whole-fleet one (blizzard#521). A chunk with no live route is absent from the
+        whole-fleet one. A chunk with no live route is absent from the
         dict, as :meth:`route_of` returns ``None``."""
         ...
 
@@ -48,7 +48,7 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
 
     def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
         """Append the ``route.released`` fact. Returns the freshly-written
-        ``route_released.id`` (issue #213's activity-feed key)."""
+        ``route_released.id`` (the activity-feed's key)."""
         ...
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:

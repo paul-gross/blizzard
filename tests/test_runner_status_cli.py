@@ -1,4 +1,4 @@
-"""``blizzard runner status`` — the machine-local view (issue #51).
+"""``blizzard runner status`` — the machine-local view.
 
 Driven against a live daemon on a real unix socket: a real server, a real store, and
 the CLI wired together, doubled only at the hub seam — the verb is a pure client of
@@ -137,7 +137,7 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
             epoch=1,
             runner_id="runner-local",
             retries_max=2,
-            # The session stamps (issue #144) — so `status` renders which lineage parked
+            # The session stamps — so `status` renders which lineage parked
             # and the resume command an operator can paste lands in its configuration.
             session_name="code",
             resolved_model="opus",
@@ -162,7 +162,7 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
     )
 
     # A third chunk under an open operator takeover — status renders regardless of
-    # how the takeover (issue #52) got left open.
+    # how the takeover got left open.
     store.record_binding(chunk_id="ch_3", environment_id="e3", workdir="/ws/e3", bound_at=_NOW)
     store.record_takeover(
         takeover_id="tko_1",
@@ -190,7 +190,7 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
     assert "escalations (1):" in out
     assert "ch_2" in out
     # The literal takeover command, carrying the parked session's own configuration
-    # (issue #144) rather than whatever a fresh resolution would produce now.
+    # rather than whatever a fresh resolution would produce now.
     assert "resume: cd /ws/e2 && claude --resume sess-b --model opus --effort high" in out
     assert "session=code (opus, high)" in out  # which lineage parked, not just its id
     assert "open takeovers (1):" in out
@@ -267,7 +267,7 @@ def test_status_renders_a_renewal_outcome_alongside_a_successful_sample(
 def test_status_omits_an_unheld_pool_slot_from_held_environments(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``GET /api/environments`` carries the whole configured pool (issue #106); an
+    """``GET /api/environments`` carries the whole configured pool; an
     unheld slot must not leak into the CLI's held-environments section."""
     root = _init_runner(tmp_path)
     config_path = root / "blizzard-runner.toml"

@@ -1,4 +1,4 @@
-"""The garden delivery node's own script (blizzard#393) — posts a routine run's
+"""The garden delivery node's own script — posts a routine run's
 ``--delta``/``--proposals`` artifact names to the hub's garden-delivery route and reports
 the outcome. Pure stdlib (``bzh:deterministic-shell``), built on `land_common`'s own
 :class:`~blizzard.hub.graphs.scripts.land_common.ScriptEnv`/
@@ -25,7 +25,7 @@ _FAILURE_MARKER_NAME = "garden-delivery-failure"
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
-    """``--delta``/``--proposals`` each repeat (D3): ``garden_deliver --delta a --delta b
+    """``--delta``/``--proposals`` each repeat: ``garden_deliver --delta a --delta b
     --proposals docket``."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--delta", action="append", default=[])

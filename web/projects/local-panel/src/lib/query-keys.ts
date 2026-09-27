@@ -7,8 +7,8 @@
 export const runnerLeasesKey = ['runner', 'leases'] as const;
 
 /**
- * `GET /api/dashboard` — the panel's seven status reads composed into one response
- * (issue #311): `runner` (identity, capacities, hub connectivity, last tick),
+ * `GET /api/dashboard` — the panel's seven status reads composed into one response:
+ * `runner` (identity, capacities, hub connectivity, last tick),
  * `environments`, `asks`, `escalations`, `takeovers`, `facts`, and `fleet_summary`.
  * One key for every rail this panel polls, so TanStack dedupes the N components
  * that inject it into the single shared `GET /api/dashboard` request — the same
@@ -18,13 +18,13 @@ export const runnerLeasesKey = ['runner', 'leases'] as const;
 export const runnerDashboardKey = ['runner', 'dashboard'] as const;
 
 /** `GET /api/auth/session` — whether the surface is gated, and the signed-in
- * hub username, behind the panel's username/logout control (issue #129). */
+ * hub username, behind the panel's username/logout control. */
 export const runnerSessionKey = ['runner', 'session'] as const;
 
 /**
  * One chunk's pass-through work items (issue title + labels), keyed by chunk id.
  * Deliberately its own key — never invalidated or refetched by the leases poll
- * (issue #28's severable title enrichment) — so a distinct `chunk_id` here can
+ * (the severable title enrichment) — so a distinct `chunk_id` here can
  * never collide with `hub`-namespaced `chunk-work-items` reads in `fleet`.
  */
 export function runnerChunkWorkItemsKey(chunkId: string): readonly unknown[] {
@@ -32,8 +32,8 @@ export function runnerChunkWorkItemsKey(chunkId: string): readonly unknown[] {
 }
 
 /**
- * One chunk's work items for the chunk detail route's Issues section (issue
- * #318) — full-fidelity, not the severable row-decoration read above: this
+ * One chunk's work items for the chunk detail route's Issues section
+ * — full-fidelity, not the severable row-decoration read above: this
  * page renders a real loading/error/empty triad for it, so it needs a real
  * fetch (retried, not silently swallowed after one attempt) rather than the
  * list rows' single-shot decoration. Its own key so it shares neither cache
@@ -44,7 +44,7 @@ export function runnerChunkWorkItemsDetailKey(chunkId: string): readonly unknown
 }
 
 /**
- * One lease's transcript read (issue #29), keyed by lease id — switching the
+ * One lease's transcript read, keyed by lease id — switching the
  * selected row is a distinct cache entry, never invalidated by the leases poll.
  */
 export function runnerTranscriptKey(leaseId: string): readonly unknown[] {
@@ -52,7 +52,7 @@ export function runnerTranscriptKey(leaseId: string): readonly unknown[] {
 }
 
 /**
- * One chunk's full detail aggregate (issue #185) — the chunk-detail dock's
+ * One chunk's full detail aggregate — the chunk-detail dock's
  * header, pass-through-forwarded to the hub (`ChunkDetail.pause` is the only
  * way this panel learns a chunk is paused). Its own key, keyed by chunk id,
  * distinct from the severable {@link runnerChunkWorkItemsKey} title read and

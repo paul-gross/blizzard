@@ -1,6 +1,6 @@
-"""Finding domain model — a durable observation a routine's run recorded (blizzard#390).
+"""Finding domain model — a durable observation a routine's run recorded.
 
-The no-stored-column contract is `src/blizzard/hub/store/schema.py`'s own (D2, D4).
+The no-stored-column contract is `src/blizzard/hub/store/schema.py`'s own.
 Liveness is a derived fold over facts, reversible only by a person's own verb once
 exited (blizzard-context:/domain/findings-and-proposals.md §Liveness is derived, and
 reversible); `class_`/`locus` are opaque to the hub, same doc."""
@@ -29,18 +29,18 @@ FACT_KINDS = frozenset(
     }
 )
 
-#: The human-driven verbs that exit a finding for good; `reopened` is excluded since it undoes one (blizzard#394 D2).
+#: The human-driven verbs that exit a finding for good; `reopened` is excluded since it undoes one.
 EXIT_KINDS = frozenset({"resolved", "gone-confirmed", "wont-fix", "not-a-finding", "superseded"})
 
 #: The ground itself changed — work landed, or a person confirmed non-reproduction.
 OUTFLOW_KINDS = frozenset({"resolved", "gone-confirmed"})
 
-#: A judgment call about the finding, not the code (blizzard#394 D2).
+#: A judgment call about the finding, not the code.
 WITHDRAWN_KINDS = EXIT_KINDS - OUTFLOW_KINDS
 
 
 class UnknownFactKindError(ValueError):
-    """A `finding_facts` row named a `kind` outside `FACT_KINDS` (D2) — refused at the
+    """A `finding_facts` row named a `kind` outside `FACT_KINDS` — refused at the
     write path so `derive_liveness`'s newest-fact-wins fold, which assumes every kind is
     one of the nine, never has to reason about a stray value."""
 
@@ -49,7 +49,7 @@ class UnknownFactKindError(ValueError):
 
 
 class FindingNoteRequiredError(ValueError):
-    """An exit or `reopened` fact carried a blank or missing note (blizzard#394) — every
+    """An exit or `reopened` fact carried a blank or missing note — every
     human-driven verb wants one, the way `gone`'s own note already does."""
 
     def __init__(self, kind: str) -> None:
@@ -59,54 +59,54 @@ class FindingNoteRequiredError(ValueError):
 @dataclass(frozen=True)
 class Finding:
     finding_id: str
-    #: A routine's own name, not its surrogate id (D5); `None` for `source="review"` (D1).
+    #: A routine's own name, not its surrogate id; `None` for `source="review"`.
     routine_name: str | None
     scope_slug: str
     class_: str
     locus: str
     summary: str
     introduced: str | None
-    #: The `introduced` commit's authored instant; null wherever unresolved, never backfilled (blizzard#394 D5).
+    #: The `introduced` commit's authored instant; null wherever unresolved, never backfilled.
     introduced_at: datetime | None
     #: When the garden first saw this finding (the `add` fact's instant), not when the commit landed (`introduced_at`).
     first_observed_at: datetime | None
-    #: schema.py's `findings` table carries no such column (D2-D4).
+    #: schema.py's `findings` table carries no such column.
     live: bool
-    #: "live", "gone", "delivered", or one of `EXIT_KINDS` — the newest fact's own kind (blizzard#583).
+    #: "live", "gone", "delivered", or one of `EXIT_KINDS` — the newest fact's own kind.
     state: str
-    #: The newest fact's own note; `None` for a kind that carries none (blizzard#394).
+    #: The newest fact's own note; `None` for a kind that carries none.
     note: str | None
     last_seen_at: datetime | None
     observed_count: int
-    #: "routine" or "review" (blizzard#582 D1) — a finding's home, not its liveness.
+    #: "routine" or "review" — a finding's home, not its liveness.
     source: str = "routine"
-    #: blocking/should-fix; `None` for a routine-sourced finding (blizzard#582 D1).
+    #: blocking/should-fix; `None` for a routine-sourced finding.
     severity: str | None = None
     #: The chunk whose review raised this finding; `None` for a routine-sourced finding.
     raised_by_chunk_id: str | None = None
-    #: The newest fact's own actor — a `delivered` finding's own closer, read for D3 (blizzard#583).
+    #: The newest fact's own actor — a `delivered` finding's own closer.
     actor: str | None = None
 
 
 @dataclass(frozen=True)
 class FindingFact:
-    """One `add`/`observed`/`gone`/`delivered`/exit/`reopened` transformation (D2,
-    blizzard#394, blizzard#583) — append-only, oldest first."""
+    """One `add`/`observed`/`gone`/`delivered`/exit/`reopened` transformation
+    — append-only, oldest first."""
 
     kind: str
     recorded_at: datetime
     note: str | None = None
-    #: Who recorded a human-driven fact; `None` for a run-driven `add`/`observed`/`gone` (blizzard#394).
+    #: Who recorded a human-driven fact; `None` for a run-driven `add`/`observed`/`gone`.
     actor: str | None = None
-    #: The proposal a `delivered` fact answered, when the drain recorded it (blizzard#394, blizzard#583 D3).
+    #: The proposal a `delivered` fact answered, when the drain recorded it.
     proposal_id: str | None = None
-    #: The absorbing finding, set only on a `superseded` fact (blizzard#394).
+    #: The absorbing finding, set only on a `superseded` fact.
     superseded_by: str | None = None
 
 
 @dataclass(frozen=True)
 class FindingLiveness:
-    """The newest-fact-wins read over a finding's facts (D2-D4, blizzard#394) — never
+    """The newest-fact-wins read over a finding's facts — never
     persisted."""
 
     state: str
@@ -119,8 +119,8 @@ class FindingLiveness:
 
 
 def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
-    """The newest-fact-wins read over a finding's facts (D1-D3, blizzard#394): any later
-    fact reverses `gone` or `delivered` (blizzard#583), but only `reopened` reverses an
+    """The newest-fact-wins read over a finding's facts: any later
+    fact reverses `gone` or `delivered`, but only `reopened` reverses an
     `EXIT_KINDS` verb. `first_observed_at`/`last_seen_at` are the min/max of the same
     `add`/`observed` span and use `recorded_at`, not insertion order, so out-of-order
     ingestion still derives correctly."""
@@ -156,7 +156,7 @@ def derive_liveness(facts: Sequence[FindingFact]) -> FindingLiveness:
 @dataclass(frozen=True)
 class FindingPage:
     """A bounded, keyset-paginated page of :meth:`IReadFindingRepository.list_page`
-    (blizzard#526 D5) — ``next_cursor`` is ``None`` exactly when this page is the last one."""
+    — ``next_cursor`` is ``None`` exactly when this page is the last one."""
 
     findings: list[Finding]
     next_cursor: str | None
@@ -171,8 +171,8 @@ class IReadFindingRepository(Protocol):
     def get(self, finding_id: str) -> Finding | None: ...
 
     def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
-        """`get`'s batched sibling, keyed by `finding_id` — a bulk exit verb's read side
-        (blizzard#394), so it costs one query pair, not one pair per row."""
+        """`get`'s batched sibling, keyed by `finding_id` — a bulk exit verb's read side,
+        so it costs one query pair, not one pair per row."""
         ...
 
     def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
@@ -184,25 +184,25 @@ class IReadFindingRepository(Protocol):
     def list_for(self, routine_name: str, scope_slug: str, *, include_gone: bool = False) -> list[Finding]:
         """A routine's findings under one scope
         (blizzard-product:/delivered/garden/machinery.md §Managing findings and proposals) —
-        live only, unless `include_gone` (D3), which also surfaces every exited finding,
+        live only, unless `include_gone`, which also surfaces every exited finding,
         not just a merely `gone` one."""
         ...
 
     def list_for_routine(self, routine_name: str, *, include_gone: bool = False) -> list[Finding]:
-        """Every finding live on `routine_name`, across every scope it holds (blizzard#393)
+        """Every finding live on `routine_name`, across every scope it holds
         — `list_for`'s scope-narrowed sibling, minus the `scope_slug` filter.
-        Live only, unless `include_gone` (D3), which also surfaces every exited finding."""
+        Live only, unless `include_gone`, which also surfaces every exited finding."""
         ...
 
     def list_across_routines(self, scope_slug: str | None = None, *, include_gone: bool = False) -> list[Finding]:
-        """Every finding across every routine (blizzard#486); `scope_slug=None` reads every
+        """Every finding across every routine; `scope_slug=None` reads every
         scope. Table-scans by construction — `ix_findings_routine_scope` and
         `ix_findings_routine_class` both lead with `routine_name`, which this never filters
-        on, so neither is usable; blizzard#486 leaves the scale question open."""
+        on, so neither is usable; the scale question here stays open."""
         ...
 
     def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
-        """Every finding under `scope_slug` carrying `source` (blizzard#582 D3) — filtered
+        """Every finding under `scope_slug` carrying `source` — filtered
         on `ix_findings_scope_source`, indexed unlike `list_across_routines`. The garden
         bucket's own union reads a routine's own findings through `list_for` and a
         scope's `source="review"` findings through this, side by side."""
@@ -225,15 +225,15 @@ class IReadFindingRepository(Protocol):
         limit: int,
     ) -> FindingPage:
         """Bounded, keyset-paginated read unifying `list_for`/`list_for_routine`/
-        `list_across_routines` (blizzard#526 D1/D5); `source` narrows to `"routine"` or
-        `"review"` (blizzard#582), `None` reads both. Liveness is derived in Python after
-        the SQL read (D3), so implementation tops up windows until `limit` matches or
+        `list_across_routines`; `source` narrows to `"routine"` or
+        `"review"`, `None` reads both. Liveness is derived in Python after
+        the SQL read, so implementation tops up windows until `limit` matches or
         exhaustion; `cursor` is a prior :attr:`FindingPage.next_cursor`."""
         ...
 
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
         """Whether any fact already carries `proposal_id` — delivery-triggered closure's
-        own once-only gate (blizzard#394, blizzard#583), kind-agnostic so a proposal
+        own once-only gate, kind-agnostic so a proposal
         delivered before `delivered` existed (its fact stamped `resolved`) still gates,
         independent of any one finding's current state so a later reopen is never
         silently redone."""
@@ -255,7 +255,7 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
         introduced: str | None,
         at: datetime,
     ) -> Finding:
-        """Insert the finding row and its own `add` fact (D2), in one transaction."""
+        """Insert the finding row and its own `add` fact, in one transaction."""
         ...
 
     def record_fact(
@@ -269,18 +269,18 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
         proposal_id: str | None = None,
         superseded_by: str | None = None,
     ) -> None:
-        """Append one fact (D2) — never touches the `findings` row."""
+        """Append one fact — never touches the `findings` row."""
         ...
 
     def record_facts(self, entries: Sequence[FactEntry]) -> None:
-        """All-or-nothing (D7) — pinned by
+        """All-or-nothing — pinned by
         `tests/test_finding_store.py::test_record_facts_is_all_or_nothing`."""
         ...
 
 
 @dataclass(frozen=True)
 class FactEntry:
-    """One `record_facts` row (blizzard#394) — the bulk-write shape `FindingExitService`
+    """One `record_facts` row — the bulk-write shape `FindingExitService`
     builds one of per finding, per verb."""
 
     finding_id: str
@@ -294,7 +294,7 @@ class FactEntry:
 
 class IFindingExitResolver(Protocol):
     """`FindingExitService.deliver`'s own narrowed shape — delivery-triggered closure,
-    not an exit itself (blizzard#394, blizzard#583), so that collaborator depends on a
+    not an exit itself, so that collaborator depends on a
     Protocol like every other one it takes."""
 
     def deliver(
@@ -303,7 +303,7 @@ class IFindingExitResolver(Protocol):
 
 
 class FindingExitService:
-    """The human-driven exit verbs (blizzard#394), `reopen`, and `deliver` (blizzard#583)
+    """The human-driven exit verbs, `reopen`, and `deliver`
     — delivery-triggered and provisional, not an exit, until the owning routine's next
     run settles it. Every method takes already-loaded :class:`Finding` objects
     (`bzh:domain-takes-objects`) and refuses a blank or missing note before writing."""
@@ -316,7 +316,7 @@ class FindingExitService:
         self._apply(findings, kind="resolved", note=note, actor=actor, proposal_id=proposal_id)
 
     def deliver(self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None) -> None:
-        """Delivery-triggered closure (blizzard#583) — `resolved`'s provisional sibling:
+        """Delivery-triggered closure — `resolved`'s provisional sibling:
         the owning routine's next run re-checks a `delivered` finding, settling it to
         `resolved` if it still holds or reviving it to `live` if it does not, rather than
         a delivery alone declaring the ground changed."""
@@ -368,14 +368,14 @@ class FindingExitService:
 
 @dataclass(frozen=True)
 class FindingSet:
-    """The set a delivered finding list mints, one per artifact (D6) — scope, the
+    """The set a delivered finding list mints, one per artifact — scope, the
     per-repository revisions, and the routine's measurement live here, never per finding."""
 
     finding_set_id: str
     artifact_id: str
     chunk_id: str
     scope_slug: str
-    routine_name: str  # D5 — a routine's own name, not its surrogate id (blizzard#392)
+    routine_name: str  # a routine's own name, not its surrogate id
     revisions: dict[str, str]
     measurement: str | None
 
@@ -386,11 +386,11 @@ class IReadFindingSetRepository(Protocol):
     def get(self, finding_set_id: str) -> FindingSet | None: ...
 
     def list_for_chunk(self, chunk_id: str) -> list[FindingSet]:
-        """A run's own delivered sets (D6) — filtered on `ix_finding_sets_chunk_id`."""
+        """A run's own delivered sets — filtered on `ix_finding_sets_chunk_id`."""
         ...
 
     def newest_for_routine_scope(self, routine_name: str, scope_slug: str) -> FindingSet | None:
-        """A routine run's own delta baseline (blizzard#392) — the newest set for the
+        """A routine run's own delta baseline — the newest set for the
         (routine name, scope slug) pair, or `None` when the pair has recorded none.
         `finding_sets` carries no timestamp, so newest is `finding_set_id` descending:
         `fins_<ULID>` is monotonic in mint instant."""
@@ -417,5 +417,5 @@ class IWriteFindingSetRepository(IReadFindingSetRepository, Protocol):
         revisions: dict[str, str],
         measurement: str | None,
     ) -> FindingSet:
-        """Insert the set row — one per artifact (D6, its own `uq`-backed unique FK)."""
+        """Insert the set row — one per artifact (its own `uq`-backed unique FK)."""
         ...

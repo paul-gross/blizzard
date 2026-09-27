@@ -19,7 +19,7 @@ _RUNNER_DIR = _SRC_DIR / "runner"
 # wall clock directly, since it is what every ``IClock.now()`` call ultimately reaches.
 _CLOCK_IMPLEMENTATION_FILE = _FOUNDATION_DIR / "clock.py"
 
-# AST-based (D1, plan blizzard-context#clean-architecture): a literal-token grep would
+# AST-based (plan blizzard-context#clean-architecture): a literal-token grep would
 # misfire on `foundation/clock.py`'s and `hub/auth/signing.py`'s docstring mentions of
 # `datetime.now()`, and on `time.monotonic()` — a legitimate non-wall-clock read one token
 # away from `time.time()`.

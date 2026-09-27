@@ -1,4 +1,4 @@
-"""``blizzard runner takeover`` — wire bodies (issue #52).
+"""``blizzard runner takeover`` — wire bodies.
 
 Behind ``POST /chunks/{id}/takeovers`` (open) and ``PATCH
 /chunks/{id}/takeovers/{tid}`` (end).
@@ -17,7 +17,7 @@ class TakeoverRequest(BaseModel):
 
 class TakeoverOpenResponse(BaseModel):
     """``POST /chunks/{id}/takeovers`` — ``command`` is exec'd verbatim in ``workdir``.
-    ``env`` (issue #258) is the bounded takeover env — the lease's ``BLIZZARD_*`` identity
+    ``env`` is the bounded takeover env — the lease's ``BLIZZARD_*`` identity
     (including the re-minted lease token) plus ``PATH``/``HOME``, never the daemon's full
     child env. It rides only this body; the ``command`` string stays printable-safe."""
 

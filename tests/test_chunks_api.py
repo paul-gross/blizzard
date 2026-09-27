@@ -1,4 +1,4 @@
-"""The ``/chunks/{id}/pause`` and ``/resume`` routes over the HTTP surface (issue #46).
+"""The ``/chunks/{id}/pause`` and ``/resume`` routes over the HTTP surface.
 
 Tests only the wire: 200/404/409, the fact written, the ``pause`` view, and the two
 events published (``queue-changed`` alongside ``chunk-changed``). The refusal itself is
@@ -109,7 +109,7 @@ def _ingest_and_deliver(hub, *, yaml: str) -> str:  # type: ignore[no-untyped-de
 
 def _stop(tmp_path: Path, chunk_id: str, *, at: datetime) -> None:
     """Write a ``chunk_stopped`` row directly rather than through ``POST
-    /chunks/{id}/stop`` (issue #118) — a lighter-weight precondition for a test that
+    /chunks/{id}/stop`` — a lighter-weight precondition for a test that
     only needs a stopped chunk to exist, not to exercise the stop route itself (that
     route's own behavior is proven in ``test_chunk_stop.py``)."""
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
@@ -268,7 +268,7 @@ def test_resume_returns_200_and_the_chunk_derives_ready_again(tmp_path: Path) ->
     resp = hub.client.post(f"/api/chunks/{chunk_id}/resume", json={"by": "bob"})
 
     assert resp.status_code == 202, resp.text
-    # The response is the transitioned chunk's summary (issue #104), not a bare
+    # The response is the transitioned chunk's summary, not a bare
     # `{"chunk_id": ...}`.
     assert resp.json()["chunk_id"] == chunk_id
     assert resp.json()["status"] == "ready"

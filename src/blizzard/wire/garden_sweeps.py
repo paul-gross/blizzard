@@ -1,7 +1,7 @@
 """A routine's per-scope last-swept table and its windowed measurement series — the
 `GET /api/routines/{routine_id}/sweeps` read view.
 
-Last-swept is unwindowed (D2); the measurement series is cut to `[since, until)`, the
+Last-swept is unwindowed; the measurement series is cut to `[since, until)`, the
 same window `TrendView` reports over."""
 
 from __future__ import annotations

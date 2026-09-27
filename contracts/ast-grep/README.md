@@ -25,10 +25,9 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/claim.py`), reasoned at the site with
     `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
 
-- **`bzh:subscriptions-no-write`** (`rules/subscriptions-no-write.yml`) — blizzard never opens a subscription
-  credential file for writing (D1 of blizzard#504's plan): the vendor CLI owns its own lock, atomic write, and
-  refresh-token rotation, and a second writer risks corrupting the file mid-refresh or invalidating the login it just
-  renewed.
+- **`bzh:subscriptions-no-write`** (`rules/subscriptions-no-write.yml`) — blizzard never opens a subscription credential
+  file for writing: the vendor CLI owns its own lock, atomic write, and refresh-token rotation, and a second writer
+  risks corrupting the file mid-refresh or invalidating the login it just renewed.
   - Scoped to `src/blizzard/runner/subscriptions/**` — every sampler and renewer binding's own home.
   - Matches `.write_text(`, `.write_bytes(`, a bare or keyword-carrying `open($PATH, $MODE, ...)` whose mode string
     contains `w`, `a`, or `x`, and the same shape via `$PATH.open($MODE)`. A read (`open(path)`, `open(path, "r")`,

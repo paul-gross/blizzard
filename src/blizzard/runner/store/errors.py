@@ -1,4 +1,4 @@
-"""The runner-store error-wrapping seam (blizzard#410, D5).
+"""The runner-store error-wrapping seam.
 
 Mirrors ``blizzard.hub.store.errors``: a driver exception is translated into the domain
 :class:`RunnerStoreError` at the one site it is caught, logged once at ERROR
@@ -18,7 +18,7 @@ class RunnerStoreError(RuntimeError):
 class RunnerStoreErrorFactory:
     """The injected error-wrapping seam every ``runner/store/internal/`` adapter takes
     in place of a module-level logger — the substitutability the hub-store seam's
-    ``HubStoreErrorFactory`` also gives its own adapters (blizzard#413)."""
+    ``HubStoreErrorFactory`` also gives its own adapters."""
 
     def __init__(self, log: structlog.stdlib.BoundLogger) -> None:
         self._log = log

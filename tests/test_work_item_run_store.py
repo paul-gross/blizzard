@@ -1,5 +1,5 @@
 """``WorkItemStore.create_with_chunk_and_promote`` — a routine run's own one-act mint
-(blizzard#392, component tier). Mirrors ``test_work_item_store.py``'s shape, plus the
+(component tier). Mirrors ``test_work_item_store.py``'s shape, plus the
 promote-then-tail-stamp pair landing in the same transaction."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""The multi-daemon SSO bounce, driven by a real browser — the `test_runner_federation_e2e` scenario (issue #95).
+"""The multi-daemon SSO bounce, driven by a real browser — the `test_runner_federation_e2e` scenario.
 
 A real Chromium bounces through a real hub + stub IdP into runner A, then the captured
 token is replayed against runner B (rejected, audience-bound) and against runner A again
@@ -76,7 +76,7 @@ def _oauth_hub(hub_dir: Path, idp_port: int, port: int) -> Iterator[httpx.Client
         issuer=f"http://127.0.0.1:{idp_port}",
     )
     config = HubConfig.load(hub_dir)
-    # `superuser` (issue #94's bootstrap) matches the stub IdP profile below, so the
+    # `superuser` (bootstrap) matches the stub IdP profile below, so the
     # first login claims `user:manage` with no separate role-assignment surface.
     config = dataclasses.replace(
         config, auth=AuthConfig(mode="oauth", oauth_providers=(provider,), superuser=_PROFILE_EMAIL)
@@ -101,7 +101,7 @@ def _oauth_hub(hub_dir: Path, idp_port: int, port: int) -> Iterator[httpx.Client
 
 def _spawn_runner(runner_dir: Path, *, port: int) -> subprocess.Popen[str]:
     """Launch `blizzard-runner host` against an already-`init`ed/registered directory —
-    the restart half of issue #312's scenario, which relaunches on the same port with no
+    the restart half of this scenario, which relaunches on the same port with no
     re-`init` and no re-registration, exactly as a redeploy would."""
     log = runner_dir / "daemon.log"
     proc = subprocess.Popen(
@@ -134,7 +134,7 @@ def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, runner_id: 
         runner_id=runner_id,
         public_urls=(public_url,),
         # A path that is never created — the sampler's missing-credentials soft failure
-        # trips before any request is built (issue #218).
+        # trips before any request is built.
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
     )
     config.config_path.write_text(config.to_toml())
@@ -276,7 +276,7 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
 
 
 def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
-    """The runner's session-recovery seam (issue #312): restarting the runner (its
+    """The runner's session-recovery seam: restarting the runner (its
     session secret is minted per start) invalidates an open tab's session with no
     reload and no touch to the hub's own session; the SPA must re-federate on its own."""
     from playwright.sync_api import expect, sync_playwright
@@ -318,7 +318,7 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
                 new_proc = _spawn_runner(runner_dir, port=runner_port)
 
                 # 3. No goto/reload here: wait for the seam's own bounce request, triggered by
-                # the SSE reconnect (D9); timeout clears SseService's own backoff ladder — see e2e-scenarios.md.
+                # the SSE reconnect; timeout clears SseService's own backoff ladder — see e2e-scenarios.md.
                 page.wait_for_event(
                     "request", predicate=lambda r: "/api/auth/login?return_to=" in r.url, timeout=40_000
                 )

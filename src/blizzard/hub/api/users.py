@@ -1,5 +1,5 @@
 """``GET /api/users`` / ``POST /api/users/{user_id}/role`` — the user listing and
-role-assignment API (issue #94), gated on ``user:manage``, human-plane throughout.
+role-assignment API, gated on ``user:manage``, human-plane throughout.
 
 Role-change rules live in ``AuthService.assign_role`` (``bzh:controller-read-only``);
 this module resolves identities, maps ``RoleAssignmentRefused`` to ``403``, and renders.
@@ -55,7 +55,7 @@ def assign_role(
     any change touching ``superuser``, which is bootstrap-only; and granting or revoking
     ``admin`` as anyone but a ``superuser``. A no-op change is accepted and records
     nothing. A real one records a ``user_role_changed`` fact and takes effect on the
-    subject's next request, with no re-login (issue #91)."""
+    subject's next request, with no re-login."""
     try:
         to_role = Role(body.role)
     except ValueError as exc:

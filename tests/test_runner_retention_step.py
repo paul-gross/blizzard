@@ -1,9 +1,9 @@
-"""``Retention`` — the tick's append-only-lane pruner (issue #520).
+"""``Retention`` — the tick's append-only-lane pruner.
 
 Each of outbound/heartbeat/external-usage-sample retention is its own store-level
 derivation, already proven against a real store in ``tests/test_runner_store.py``. This
 file pins only the step's own contract over that: it calls every lane every tick, and one
-lane's prune raising never costs the others theirs. The worker-stdout lane (issue #58) is
+lane's prune raising never costs the others theirs. The worker-stdout lane is
 filesystem- rather than store-backed, so its own age-based sweep is proven directly here
 too, rather than in ``tests/test_runner_store.py``.
 """

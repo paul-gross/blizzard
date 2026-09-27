@@ -1,4 +1,4 @@
-"""chunk_dependencies — the declared dependent-on-prerequisite edge (issue #456). One
+"""chunk_dependencies — the declared dependent-on-prerequisite edge. One
 new table.
 
 Revision ID: 20260902_0900_chunk_dependencies

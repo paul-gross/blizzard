@@ -1,5 +1,5 @@
 """``blizzard hub analytics re-derive`` — a pure client of ``POST /api/analytics/re-derive``
-driven with ``httpx.post`` stubbed (blizzard#254 D7, unit tier)."""
+driven with ``httpx.post`` stubbed (unit tier)."""
 
 from __future__ import annotations
 

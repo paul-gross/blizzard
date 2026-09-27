@@ -1,5 +1,5 @@
-"""``GardenProposalDeliveryResolution`` (unit tier, blizzard#394 Phase 3) and
-``AnsweredFindingsReader`` (blizzard#397 Phase 1): the write-side delivery resolution
+"""``GardenProposalDeliveryResolution`` (unit tier) and
+``AnsweredFindingsReader``: the write-side delivery resolution
 resolves a proposal's still-live findings only when its own closure is an accepted,
 minting one naming the delivered pointer — a pass, a decline, an absent closure, an
 absent proposal, or an already-exited finding all resolve nothing. The read-side
@@ -311,7 +311,7 @@ def test_resolves_exactly_the_proposals_live_findings_attributed_to_it() -> None
 
 
 def test_a_proposal_already_delivered_once_is_never_delivered_again_even_after_a_reopen() -> None:
-    """blizzard#394 review F1/F13: a person's `reopened` fact folds a delivered finding
+    """A person's `reopened` fact folds a delivered finding
     back to `live` (`derive_liveness`) — a stray repeat call must not read that as "still
     unresolved" and silently redo what the person undid. Gating on
     `has_delivery_for_proposal` rather than each finding's own state closes that hole."""

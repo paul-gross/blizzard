@@ -1,4 +1,4 @@
-"""runner-reported local pause facts (hub store tree) — the runner's own brake (issue #43), a separate
+"""runner-reported local pause facts (hub store tree) — the runner's own brake, a separate
 table from ``runner_pause_facts``, the fleet's own brake, because they are separate concepts.
 
 Revision ID: 20260716_1511_hub_runner_local_pause

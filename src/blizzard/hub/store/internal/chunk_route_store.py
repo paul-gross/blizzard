@@ -38,8 +38,8 @@ class ChunkRouteStore:
             return route_of_conn(conn, chunk_id)
 
     def load_all_routes(self) -> dict[str, Route]:
-        """See :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.load_all_routes`
-        (issue #421) — one bounded query per route table, grouped by chunk id in Python the
+        """See :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.load_all_routes` —
+        one bounded query per route table, grouped by chunk id in Python the
         way the facts seam's ``load_all_facts`` is, deferring liveness to the same
         :class:`~blizzard.hub.domain.work.RouteHistory.newest` tie-break :func:`route_of_conn`
         uses. Row construction and grouping are shared with :meth:`routes_for` via
@@ -48,8 +48,8 @@ class ChunkRouteStore:
             return self._routes(conn, None)
 
     def routes_for(self, chunk_ids: Iterable[str]) -> dict[str, Route]:
-        """See :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.routes_for`
-        (blizzard#521) — :meth:`load_all_routes`'s own shape, scoped to ``ids`` via
+        """See :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.routes_for` —
+        :meth:`load_all_routes`'s own shape, scoped to ``ids`` via
         :meth:`_routes`'s ``chunk_id.in_(ids)`` filters rather than a fleet-wide read."""
         ids = list(chunk_ids)
         if not ids:
@@ -141,7 +141,7 @@ class ChunkRouteStore:
         The token fact is a second row on the same shared per-chunk seq counter
         (:func:`~blizzard.hub.store.internal.chunk_rows.next_route_seq`), allocated by its
         own call to the allocator, never a fixed +1. Returns the freshly-minted
-        ``route_created.route_id`` (issue #213)."""
+        ``route_created.route_id``."""
         route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
         with self._store.write("record_route") as conn:
             conn.execute(

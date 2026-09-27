@@ -40,7 +40,7 @@ type VersionLabel = 'effective' | 'superseded' | 'retired';
  * `spawning`'s cyan (`Tone`'s only cyan), `superseded` reuses `idle`'s dim — a
  * reasonable double meaning, since a superseded version really is this lineage's
  * spent, inert entry — and `retired` reuses `stale`'s red, reading as the alarm a
- * deliberately disabled version (issue #101) should. */
+ * deliberately disabled version should. */
 const LIFECYCLE_TONE: Readonly<Record<VersionLabel, Tone>> = {
   effective: 'spawning',
   superseded: 'idle',
@@ -51,11 +51,11 @@ const LIFECYCLE_TONE: Readonly<Record<VersionLabel, Tone>> = {
  * The graph explorer's **list** — every minted graph, grouped by name (the
  * primary object; a name is a lineage of immutable versions). Each group shows its
  * version count and the effective version's summary; expanding a group selects that
- * effective version (issue #152 — the detail opens on the first click) and reveals the
+ * effective version (the detail opens on the first click) and reveals the
  * full lineage newest-first, each row carrying its `graph_id`, `created_at`, and an
  * **effective** / **superseded** / **retired** badge — the `graphs` row itself is
  * never mutated (still insert-only), the marker is the `effective`/`retired` facts
- * `GET /api/graphs` derives (issue #101's reversible lifecycle brake, layered on top
+ * `GET /api/graphs` derives (reversible lifecycle brake, layered on top
  * of the pre-#101 `effective` derivation). Any version, effective, superseded, or
  * retired, is selectable and opens identically (`selectGraph`); retiring/re-enabling
  * itself is driven from the detail view (`graph-detail.ts`), not this list.
@@ -71,7 +71,7 @@ const LIFECYCLE_TONE: Readonly<Record<VersionLabel, Tone>> = {
  * lineage rows since they sit a level below the group headline.
  *
  * Retired versions are **filtered out by default** ({@link showRetired}) — a
- * retired version is one deliberately taken out of name resolution (issue #101), so
+ * retired version is one deliberately taken out of name resolution, so
  * carrying it in the default list makes every lineage read longer than the set an
  * operator can actually pin work to. The filter is a chip above the list rather than
  * a hidden preference, and it names how many versions it is holding back, so the
@@ -154,7 +154,7 @@ export class GraphExplorerList {
     }));
   });
 
-  /** A header click expands the group **and** opens its effective version (issue #152)
+  /** A header click expands the group **and** opens its effective version
    * — the header already displays that id, so requiring a second click on the version
    * row to see anything was pure friction. Collapsing only closes the group: the
    * selection is left exactly as it was, so the header click can only ever add a
@@ -194,7 +194,7 @@ export class GraphExplorerList {
     this.showRetired.update((shown) => !shown);
   }
 
-  /** The compact display id (issue #206) — the single owner of that rendering is
+  /** The compact display id — the single owner of that rendering is
    * {@link compactRef}, kept behind this wrapper so the template calls a bound method
    * rather than an imported free function. */
   protected shortId(graphId: string): string {
@@ -202,8 +202,8 @@ export class GraphExplorerList {
   }
 
   /** `effective` takes precedence (a graph can be both, briefly nonsensical, only if
-   * the wire ever disagreed with itself); otherwise `retired` names issue #101's own
-   * lifecycle state distinctly from "merely superseded by a newer version". */
+   * the wire ever disagreed with itself); otherwise `retired` names a lifecycle
+   * state distinct from "merely superseded by a newer version". */
   protected versionLabel(version: GraphSummaryView): VersionLabel {
     if (version.effective) return 'effective';
     if (version.retired) return 'retired';

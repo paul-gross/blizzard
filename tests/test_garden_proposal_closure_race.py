@@ -1,5 +1,5 @@
 """A closing write (pass/accept) racing an edit/attach/detach on the same garden
-proposal (blizzard#631, component tier). Both sides gate on
+proposal (component tier). Both sides gate on
 ``garden_proposal_closures`` — a table neither one's own row-write otherwise touches —
 so a bare check-then-act would race a concurrent commit landing in the gap. Proves the
 portable no-op-``UPDATE`` lock ``next_route_seq`` uses for the same shape of hazard

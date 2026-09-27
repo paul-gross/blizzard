@@ -1,4 +1,4 @@
-"""The close-intent drain sweep (blizzard#383): retires every pending ``close_intents`` row,
+"""The close-intent drain sweep: retires every pending ``close_intents`` row,
 unconditionally like the event-derivation and delivery-materialization sweeps. Dependency-free
 (``bzh:domain-core``): every collaborator is an injected Protocol, so :meth:`sweep` is one
 complete, directly-callable step (``bzh:steppable-loop``); ground is
@@ -20,7 +20,7 @@ from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _log = get_logger("blizzard.hub.work_closure")
 
-# The close-intent outbox's second window (blizzard#383) — the forge close returned but the
+# The close-intent outbox's second window — the forge close returned but the
 # atomic record-and-retire write hasn't landed yet; recovered by a re-attempt next pass.
 _CP_CLOSE_AFTER_CLOSE_BEFORE_RECORD = crashpoint(
     "close.after-close.before-record",
@@ -30,7 +30,7 @@ _CP_CLOSE_AFTER_CLOSE_BEFORE_RECORD = crashpoint(
 _EVENT_CLOSED: EventLogKind = "work-item-closed"
 _EVENT_CLOSE_FAILED: EventLogKind = "work-item-close-failed"
 
-#: The close-drain sweep's own backoff base (blizzard#524 D7) — pinned equal to
+#: The close-drain sweep's own backoff base — pinned equal to
 #: ``CLOSE_DRAIN_INTERVAL_SECONDS`` in ``blizzard.hub.app`` by a dedicated test.
 CLOSE_DRAIN_BACKOFF_BASE_SECONDS = 60
 #: The backoff's cap — never wait longer than this between due-checks of the same intent.
@@ -38,7 +38,7 @@ CLOSE_DRAIN_BACKOFF_CAP_SECONDS = 3600
 
 
 def close_intent_is_due(now: datetime, *, attempt_count: int | None, last_attempt_at: datetime | None) -> bool:
-    """blizzard#524 D7: due with no prior attempt at all; otherwise due once
+    """Due with no prior attempt at all; otherwise due once
     ``min(base x 2^(n-1), cap)`` seconds have passed since the last one — a pure domain
     rule (``bzh:domain-core``), applied by the store's read over an already-aggregated row."""
     if not attempt_count or last_attempt_at is None:
@@ -73,8 +73,8 @@ class CloseIntentDrainer:
             closer = self._work_sources.closer(intent.ref.source)
             if closer is None:
                 skipped += 1
-                # D4: no closer bound for this source today — stays pending, ticking the
-                # backoff clock (blizzard#524 D7) so it isn't reconsidered every sweep.
+                # No closer bound for this source today — stays pending, ticking the
+                # backoff clock so it isn't reconsidered every sweep.
                 self._delivery.record_close_attempt_skipped(intent.intent_id, at=self._clock.now())
                 continue
             at = self._clock.now()

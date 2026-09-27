@@ -82,7 +82,7 @@ describe('ChunkDetailHeader overflow menu', () => {
     expect(el.querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
   });
 
-  // --- Detach (issue #42) ---------------------------------------------
+  // --- Detach ---------------------------------------------
 
   it('shows no Detach item for a chunk with no live route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
@@ -190,7 +190,7 @@ describe('ChunkDetailHeader overflow menu', () => {
     expect(message).not.toContain('ready queue');
   });
 
-  // --- Complete (issue #294) -------------------------------------------
+  // --- Complete -------------------------------------------
 
   it('shows a Complete item, enabled, for a running chunk with chunk:control', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
@@ -298,7 +298,7 @@ describe('ChunkDetailHeader overflow menu', () => {
     expect(message).toContain('Cannot be undone');
   });
 
-  // --- Delete (D8, issue #364) -------------------------------------------
+  // --- Delete -------------------------------------------
 
   it('enables Delete for an unacquired chunk (not_ready, ready) with chunk:control', async () => {
     for (const status of ['not_ready', 'ready'] as const) {
@@ -407,7 +407,7 @@ describe('ChunkDetailHeader overflow menu', () => {
     expect(message).toContain('Cannot be undone');
   });
 
-  // --- Delete's dependents gate (D6) ------------------------------------
+  // --- Delete's dependents gate ------------------------------------
 
   it('disables Delete and names the dependents when another chunk still depends on it', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);

@@ -1,4 +1,4 @@
-"""``GET /api/me`` — the resolved identity and its expanded permission set (issue #91).
+"""``GET /api/me`` — the resolved identity and its expanded permission set.
 
 Public plane (no ``require(<permission>)``): a ``pending`` identity must reach this
 route to discover it has no permissions. It is the one route that distinguishes

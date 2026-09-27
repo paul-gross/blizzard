@@ -1,7 +1,7 @@
-"""``jwt_jti_seen`` adapter over ``RunnerStoreConnections`` (package-private, issue #95).
+"""``jwt_jti_seen`` adapter over ``RunnerStoreConnections`` (package-private).
 
 The caller sees only :class:`~blizzard.runner.auth.jti_cache.IJtiCache`. ``IntegrityError``
-is the one ``sqlalchemy`` name held locally — that collision *is* the replay check (D6).
+is the one ``sqlalchemy`` name held locally — that collision *is* the replay check.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ class JtiCacheRepository:
         self._clock = clock
 
     def check_and_record(self, jti: str, *, aud: str, expires_at: datetime) -> bool:
-        # A single-txn insert under the `jti` primary key IS the check-and-record (D4);
+        # A single-txn insert under the `jti` primary key IS the check-and-record;
         # the prune ahead of it drops only expired rows (tests/test_runner_jti_cache.py).
         try:
             with self._store.begin() as conn:

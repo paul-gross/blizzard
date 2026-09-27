@@ -215,7 +215,7 @@ def test_an_escalated_run_with_no_delivery_still_appears(tmp_path: Path) -> None
 
 
 def test_every_run_kind_appears_together_in_one_window(tmp_path: Path) -> None:
-    """D6: a delivered run, an empty-delivery run, and an escalated run all surface —
+    """A delivered run, an empty-delivery run, and an escalated run all surface —
     `work_item_runs` is the enumeration source, never `finding_sets` alone."""
     hub = build_hub(tmp_path)
     routine = _routine(hub)
@@ -379,7 +379,7 @@ def test_an_observed_op_naming_no_finding_row_still_renders_by_id(tmp_path: Path
 
 
 def test_an_add_predating_the_finding_set_link_renders_with_no_matched_id(tmp_path: Path) -> None:
-    """A set delivered before `finding_facts.finding_set_id` existed (Phase 1) still
+    """A set delivered before `finding_facts.finding_set_id` existed still
     renders its add from the artifact, but links to no finding id."""
     hub = build_hub(tmp_path)
     routine = _routine(hub)
@@ -420,8 +420,8 @@ def test_run_delta_keeps_several_delivered_sets_separately_grouped(tmp_path: Pat
 
 
 def test_run_delta_query_count_does_not_grow_with_delivered_set_count(tmp_path: Path) -> None:
-    """`delivered_sets`'s own `add`-finding-id read now happens in one grouped query
-    (D3) — a run with many delivered sets must not cost more queries than one with few."""
+    """`delivered_sets`'s own `add`-finding-id read now happens in one grouped query —
+    a run with many delivered sets must not cost more queries than one with few."""
     hub = build_hub(tmp_path)
     routine = _routine(hub)
 

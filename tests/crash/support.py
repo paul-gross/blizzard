@@ -104,7 +104,7 @@ def winter_source() -> Path | None:
 def build_script(landed_file: str) -> str:
     """A scripted build node that makes a real commit adding ``landed_file``, then pushes
     its branch and declares it through the real `blizzard runner artifact commit` verb
-    (issue #143, Phase 4)."""
+    """
     return (
         "import subprocess, pathlib\n"
         f"repo = {REPO_NAME!r}\n"
@@ -134,7 +134,7 @@ def build_script(landed_file: str) -> str:
 
 
 def usage_limited_build_script(landed_file: str) -> str:
-    """:func:`build_script`'s twin for the usage-limit crash scenario (blizzard#594): commits,
+    """:func:`build_script`'s twin for the usage-limit crash scenario: commits,
     pushes, and declares the same as always — so ``produces: commit`` is already met and the
     resumed session (after the pause lifts) can proceed straight to judging rather than
     nudging forever — then calls ``usage_limited()`` last in place of ending the turn plainly.
@@ -187,8 +187,8 @@ def usage_limited_judgement_script(marker: Path) -> str:
 
 def usage_limited_judge_graph_yaml(landed_file: str, marker: Path) -> str:
     """:func:`graph_yaml`'s ``build -> deliver`` shape, but the **judge elicitation** — not
-    the worker generation — is the one that exits usage-limited (blizzard#594's other crash
-    point): ``build`` commits and exits normally, same as the generic sweep's own node, but its
+    the worker generation — is the one that exits usage-limited: ``build`` commits and exits
+    normally, same as the generic sweep's own node, but its
     ``judgement.prompt`` is :func:`usage_limited_judgement_script` in place of the ordinary
     ``verdict()`` call. Named ``default-delivery`` like :func:`graph_yaml` so ingest resolves it."""
     import yaml
@@ -230,8 +230,8 @@ def usage_limited_judge_graph_yaml(landed_file: str, marker: Path) -> str:
 def usage_limited_graph_yaml(landed_file: str) -> str:
     """A single-node ``build`` graph whose entry node's own generation calls
     ``usage_limited()`` and never reaches its judgement — the classifier in
-    ``Advance._advance_exited_worker`` intercepts the exit before any judge is launched
-    (blizzard#594). Named ``default-delivery`` like :func:`graph_yaml` so ingest resolves it."""
+    ``Advance._advance_exited_worker`` intercepts the exit before any judge is launched.
+    Named ``default-delivery`` like :func:`graph_yaml` so ingest resolves it."""
     import yaml
 
     graph = {
@@ -276,7 +276,7 @@ def opencode_build_script(landed_file: str) -> str:
     that protocol (see ``tests/service/support.py::OPENCODE_BUILD_SCRIPT``, which this
     mirrors adapted to the crash tier's own ``landed_file``/``REPO_NAME``/git-push idiom).
     The commit is idempotent (only if dirty), :func:`pre_declare_build_script`'s own
-    pattern: the two-phase spawn's own crash points (D1/D2) confirm the launched process
+    pattern: the two-phase spawn's own crash points confirm the launched process
     durable — and so free-running, no longer bounded by the launch trampoline — BEFORE the
     authoritative session record lands, so an orphaned worker from an armed kill in that
     window can race a fresh re-attempt to the SAME commit; a plain ``git commit`` there
@@ -320,7 +320,7 @@ def sigint_trap_hang_script(body: str) -> str:
     """``body`` (typically :func:`build_script`) then ``hang()``, both guarded by a SIGINT
     trap installed before ``body`` runs — a caller's readiness poll can observe ``body``'s
     last ``subprocess.run`` durable before that call itself returns, so trapping only
-    around the hang would race a signal landing mid ``body`` (issue #12)."""
+    around the hang would race a signal landing mid ``body``."""
     indented = "".join(f"    {line}\n" if line else "\n" for line in (body + "hang()\n").splitlines())
     return (
         "import signal\n"
@@ -348,7 +348,7 @@ def sigint_trap_hang_script(body: str) -> str:
 
 
 def pre_declare_build_script(landed_file: str, pushed_marker: Path, go_marker: Path) -> str:
-    """:func:`build_script`'s commit + push, then an in-test fence (``bzh:crash-sweep`` D2):
+    """:func:`build_script`'s commit + push, then an in-test fence (``bzh:crash-sweep``):
     write ``pushed_marker`` once pushed, then block on ``go_marker`` before declaring — pinning
     the pre-declaration window deterministically. The commit is idempotent (only if dirty): a
     retried attempt reuses the same workdir, which already carries the first attempt's commit,
@@ -392,8 +392,8 @@ def pre_declare_build_script(landed_file: str, pushed_marker: Path, go_marker: P
 
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
-#: The ``git_commit`` ``produces:`` every genuinely-committing build node declares (D1,
-#: ``bzh:crash-sweep``) — arms ``LAND_STEP``'s empty-delivery refusal via ``Graph.declares_git_commit``.
+#: The ``git_commit`` ``produces:`` every genuinely-committing build node declares
+#: (``bzh:crash-sweep``) — arms ``LAND_STEP``'s empty-delivery refusal via ``Graph.declares_git_commit``.
 _GIT_COMMIT_PRODUCES = [{"name": "commit", "kind": "git_commit"}]
 
 # The migrate scenario's source-graph judgement (#90): the build node hands the chunk to
@@ -402,7 +402,7 @@ _MIGRATE_JUDGEMENT_SCRIPT = "verdict('migrate', 'hand the chunk to the triage-de
 
 
 # Merges each submitted branch to base by pinned SHA against the mock forge; idempotent by
-# construction, and refuses an empty delivery like production's ``LandRun.pending()`` (D1).
+# construction, and refuses an empty delivery like production's ``LandRun.pending()``.
 LAND_STEP = """python3 - <<'PYEOF'
 import json, os, sys, urllib.error, urllib.request
 
@@ -491,19 +491,19 @@ def graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-#: The graph-level named session (issue #144) an OpenCode-lineage ``build`` node resumes
-#: (D5, ``bzh:crash-sweep`` phase 4) — constrained to ``harnesses: [opencode]`` so the
+#: The graph-level named session an OpenCode-lineage ``build`` node resumes
+#: (``bzh:crash-sweep`` phase 4) — constrained to ``harnesses: [opencode]`` so the
 #: fresh mint that opens it is a real OpenCode dispatch, not a default Claude Code one.
 OPENCODE_SESSION_NAME = "crash-sweep-opencode"
 
 
 def opencode_graph_yaml(landed_file: str) -> str:
     """:func:`graph_yaml`'s ``build -> deliver`` shape, but ``build`` resumes
-    :data:`OPENCODE_SESSION_NAME`, a graph-level session (issue #144) declared
+    :data:`OPENCODE_SESSION_NAME`, a graph-level session declared
     ``harnesses: [opencode]`` — see ``tests/service/support.py::mock_hub_opencode_chunk_spec``
     for that field's own shape. These are the SAME harness-neutral ``spawn.*``/``advance.*``
     registry windows :func:`graph_yaml` already exercises under Claude Code, reached here
-    under an OpenCode lineage instead of a declared ``opencode.*`` mirror family (D5)."""
+    under an OpenCode lineage instead of a declared ``opencode.*`` mirror family."""
     import yaml
 
     graph = {
@@ -544,7 +544,7 @@ def opencode_graph_yaml(landed_file: str) -> str:
 
 def checks_graph_yaml(landed_file: str) -> str:
     """:func:`graph_yaml`'s ``build -> deliver`` shape, plus a real ``checks:`` on ``build``
-    (issue #114) — what opens the `checks.*` crash windows the dedicated scenario arms.
+    — what opens the `checks.*` crash windows the dedicated scenario arms.
 
     The check is ``true``: a green check that names no toolchain and runs in any env. Named
     ``default-delivery`` like :func:`graph_yaml` so ingest resolves to it."""
@@ -585,14 +585,14 @@ def checks_graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-#: The nudge scenario's unattached `produces:` name (issue #113) — declared by `build`,
+#: The nudge scenario's unattached `produces:` name — declared by `build`,
 #: never attached, keeping the `nudge.*` windows open every pass.
 NUDGE_PRODUCES_NAME = "finding"
 
 
 def nudge_graph_yaml(landed_file: str) -> str:
-    """:func:`graph_yaml`'s shape, plus one unattached ``produces:`` name on ``build``
-    (issue #113): declared but never attached, so every pass opens the `nudge.*` windows
+    """:func:`graph_yaml`'s shape, plus one unattached ``produces:`` name on ``build``:
+    declared but never attached, so every pass opens the `nudge.*` windows
     the dedicated scenario arms. Named ``default-delivery`` so ingest resolves to it."""
     import yaml
 
@@ -664,7 +664,7 @@ def migrate_target_yaml(landed_file: str) -> str:
 
 def migrate_hub_source_yaml() -> str:
     """A source graph (`default-delivery`, so ingest pins it) whose `build` migrates to the
-    hub-landing target `triage-hub` (issue #111) rather than the runner-landing
+    hub-landing target `triage-hub` rather than the runner-landing
     `triage-delivery` :func:`migrate_source_yaml` uses. Same no-op build prompt: the source
     node commits nothing, so the target's landing hub node has no branches to merge — the
     scenario asserts on convergence, not a landed file (see the test)."""
@@ -672,10 +672,10 @@ def migrate_hub_source_yaml() -> str:
 
 
 def migrate_hub_target_yaml() -> str:
-    """The hub-landing migration target (`triage-hub`, issue #111): its **entry** node
+    """The hub-landing migration target (`triage-hub`): its **entry** node
     `build` name-matches the source's migrating `build`, so the migration lands there, and
     is **hub-executed** via :data:`LAND_STEP`. This graph declares no `git_commit` `produces:`,
-    so D1's empty-delivery refusal never arms here — with nothing submitted, the step stays a
+    so the land step's empty-delivery refusal never arms here — with nothing submitted, the step stays a
     clean no-op that prints its success line and routes to `done`."""
     import yaml
 
@@ -700,7 +700,7 @@ def migrate_hub_target_yaml() -> str:
 
 def intended_migrate_source_yaml() -> str:
     """A plain single-graph source (`default-delivery`, so ingest pins it) for the
-    **intended**-migration crash scenario (issue #124) — no `graph:<name>` cross-graph edge
+    **intended**-migration crash scenario — no `graph:<name>` cross-graph edge
     anywhere, unlike :func:`migrate_source_yaml`; the migration is driven out of band by a
     PATCHed `intended_migration`. `deliver` is a dummy hub node, never actually reached:
     the scenario arms a `forced` intent naming the migration target's own `build` node."""
@@ -813,7 +813,7 @@ def start_hub(
 
     ``new_session`` makes the hub a process-group leader so a caller can ``os.killpg`` the
     whole tree, including any spawned ``run:`` subprocess — required for a faithful
-    kill -9 mid-script (issue #67)."""
+    kill -9 mid-script."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     if not (hub_dir / "blizzard-hub.toml").exists():
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
@@ -852,13 +852,13 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         # The mock façade's own fence-relative default (``ClaudeTranscriptWriter``'s
         # ``transcripts_root``) — without this the real adapter's transcript reads (usage-limit
         # classification, the transcript-summed usage fallback) fall back to the real
-        # ``~/.claude/projects`` and silently find nothing (blizzard#594).
+        # ``~/.claude/projects`` and silently find nothing.
         transcripts_root=str(workspace / ".blizzard-mock-harness" / "transcripts"),
         harness_binary=str(bin_dir / "mock-claude-code"),
         # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
         # omitted here — ``None`` omits it.
         harness_permission_mode=None,
-        # Both health probes read a fixture-written credential file (blizzard#438) — neither
+        # Both health probes read a fixture-written credential file — neither
         # mock binary is a real, logged-in provider CLI.
         claude_code_credentials_path=claude_credentials,
         # Independent of `harness_binary` (still Claude Code's) — without this, no crash-tier
@@ -866,11 +866,11 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         opencode_binary=str(bin_dir / "mock-opencode"),
         opencode_auth_path=opencode_auth,
         # Unset on purpose: the external-usage sampler's first soft-failure check (a
-        # missing credentials file) trips before any request is built (issue #218).
+        # missing credentials file) trips before any request is built.
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
         base_branch="main",
         # `start_runner` sets `ENV_HARNESS_FENCE` in the daemon subprocess's own env; it
-        # reaches a worker only because it is declared here (issue #88).
+        # reaches a worker only because it is declared here.
         worker_env_passthrough=(ENV_HARNESS_FENCE,),
     )
     config.config_path.write_text(config.to_toml())

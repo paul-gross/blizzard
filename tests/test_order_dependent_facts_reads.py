@@ -1,5 +1,5 @@
 """Structural guard: an order-dependent facts field carries an explicit `order_by` on its
-store-side select (``bzh:sql-portable``, issue #48).
+store-side select (``bzh:sql-portable``).
 
 Without an explicit ``order_by``, postgres may return rows in any order, while sqlite's
 incidental rowid order preserves insertion order — a consumer indexing a facts field

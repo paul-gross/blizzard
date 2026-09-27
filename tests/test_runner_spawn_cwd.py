@@ -1,4 +1,4 @@
-"""``SpawnCwd`` — the spawn-cwd rule's one owner (issue #29).
+"""``SpawnCwd`` — the spawn-cwd rule's one owner.
 
 Pure, no I/O — both branches, including the case the transcript service actually
 hits: a closed lease's binding is released, so the fallback is legitimately

@@ -44,8 +44,8 @@
             <div class="r2">
               <span class="wid">{{ row.workspace_id }}</span>
             </div>
-            <!-- Every harness this runner reported it can execute (blizzard#441) — one
-                 distinct badge per binding, rendered whether the list is populated or
+            <!-- Every harness this runner reported it can execute — one distinct
+                 badge per binding, rendered whether the list is populated or
                  reported empty. -->
             <fleet-capability-badge-group
               data-testid="runner-capabilities-group"
@@ -56,8 +56,8 @@
                  sits at, and how it is doing there — folded in by the container from
                  the board's own chunk list, so the registry and the board can never
                  disagree about who is working what. The status badge colors off the
-                 same STATUS_TONE ladder the board card uses (issue #156), so a
-                 claim and its card always read the same tone. -->
+                 same STATUS_TONE ladder the board card uses, so a claim and its
+                 card always read the same tone. -->
             @if (row.claims.length > 0) {
               <ul class="claims" data-testid="runner-claims">
                 @for (claim of row.claims; track claim.chunkId) {
@@ -75,7 +75,7 @@
                 }
               </ul>
             }
-            <!-- The env-slot occupancy bar (issue #69): used = environments this
+            <!-- The env-slot occupancy bar: used = environments this
                  runner's live routes hold; total = its reported env_capacity. Omitted
                  (not a zero-slot bar) for a runner registered by a client that predates
                  the field, whose capacity is null. -->
@@ -88,8 +88,7 @@
               />
             }
             <!-- The rate-limit pacing bars: one group per reported subscription sample, keyed
-                 by slug (blizzard#478), so two subscriptions sharing a window label
-                 never collide. -->
+                 by slug, so two subscriptions sharing a window label never collide. -->
             @if (row.subscriptionPaces.length > 0) {
               <fleet-subscription-pace-group
                 data-testid="runner-subscription-groups"
@@ -114,8 +113,8 @@
                 }
               </span>
               <!-- The button is the hub's brake only: the board cannot clear a brake the
-                   runner set on itself, so it never offers to. Gated on runner:pause
-                   (issue #93): that permission is admin-tier, so a contributor sees the
+                   runner set on itself, so it never offers to. Gated on runner:pause,
+                   an admin-tier permission, so a contributor sees the
                    registry and its live paused state but not the brake it cannot operate —
                    a control that would only 403. -->
               @if (canPause()) {

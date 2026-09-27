@@ -2,7 +2,7 @@
 
 Order derives from appended position facts; grouping folds work refs into the survivor
 and discards the rest as ephemeral. Neither touches an acquired chunk, but their scopes
-differ (issue #141): grouping needs only an unheld chunk, while reordering ranks the
+differ: grouping needs only an unheld chunk, while reordering ranks the
 ``ready`` queue and ``not_ready`` list independently (``bzh:ranking-is-per-list``)."""
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from blizzard.hub.domain.work import Chunk, ChunkFacts
 
 _log = get_logger("blizzard.hub.queue")
 
-# Grouping stays actor-less on the wire; every fold edge is stamped with this fixed actor (D5, issue #460).
+# Grouping stays actor-less on the wire; every fold edge is stamped with this fixed actor.
 FOLD_ACTOR = "fold"
 
 
@@ -45,7 +45,7 @@ class QueueList(Enum):
 
 
 class QueueMatchPolicy(Enum):
-    """The matched fleet peek's hold-or-pass-over policy (D8) — applied to the
+    """The matched fleet peek's hold-or-pass-over policy — applied to the
     capability-eligibility and blocked-dependency dimensions together, never one alone.
     :meth:`of` never raises: an unrecognized wire value reads as :attr:`PASS_OVER`
     (``docs/versioning.md``'s round-trip-the-unrecognized rule)."""
@@ -61,7 +61,7 @@ class QueueMatchPolicy(Enum):
 @dataclass(frozen=True)
 class MatchedEntry:
     """The one ready chunk :func:`select_matched_entry` returns, at its own position in
-    the unmutated ready order (D8) — the order itself is never reshaped, only scanned
+    the unmutated ready order — the order itself is never reshaped, only scanned
     past."""
 
     chunk: Chunk
@@ -115,7 +115,7 @@ def select_matched_entry(
 
 
 class ChunkNotGroupable(ValueError):
-    """A group op named a chunk that is not free to be folded away (issue #141) — outside
+    """A group op named a chunk that is not free to be folded away — outside
     :data:`~blizzard.foundation.chunk_status.PRE_CLAIM_STATUSES`, the pre-claim window."""
 
     def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
@@ -130,7 +130,7 @@ class ChunkNotGroupable(ValueError):
 
 class FoldWouldCloseCycle(Exception):
     """Folding ``merge_ids`` into ``survivor_id`` would close a cycle in the resulting
-    standing dependency graph (issue #460) — refused before any write, a set-level
+    standing dependency graph — refused before any write, a set-level
     question over the whole fold rather than per edge."""
 
     def __init__(self, survivor_id: str, folded_chunk_ids: list[str]) -> None:
@@ -143,8 +143,7 @@ class FoldWouldCloseCycle(Exception):
 
 
 def _decode_queue_cursor(cursor: str) -> tuple[float, str]:
-    """``QueueService.page``'s whole cursor format: an effective-position/chunk_id pair
-    (blizzard#526 D4)."""
+    """``QueueService.page``'s whole cursor format: an effective-position/chunk_id pair."""
     parts = decode_cursor(cursor)
     if (
         len(parts) != 2
@@ -158,7 +157,7 @@ def _decode_queue_cursor(cursor: str) -> tuple[float, str]:
 
 @dataclass(frozen=True)
 class QueueEntry:
-    """One paged queue/backlog row (blizzard#526 D4) — the chunk plus its absolute
+    """One paged queue/backlog row — the chunk plus its absolute
     0-based whole-list position, so drained pages read ``0…n-1`` like an unpaginated peek."""
 
     chunk: Chunk
@@ -167,7 +166,7 @@ class QueueEntry:
 
 @dataclass(frozen=True)
 class QueuePage:
-    """A bounded, keyset-paginated page of :meth:`QueueService.page` (blizzard#526 D4) —
+    """A bounded, keyset-paginated page of :meth:`QueueService.page` —
     ``next_cursor`` is ``None`` exactly when this page is the last one."""
 
     entries: list[QueueEntry]
@@ -185,7 +184,7 @@ class QueueService:
 
     def ordered(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """``list_``'s chunks in order — ascending by effective position, ``chunk_id``
-        breaking a same-instant tie (blizzard#526 D4). ``statuses`` is the caller's own
+        breaking a same-instant tie. ``statuses`` is the caller's own
         already-derived fleet statuses (``load_all_statuses()``), never re-derived here."""
         positions = self._queue.queue_positions()
         promoted_ats = self._queue.promoted_ats()
@@ -200,7 +199,7 @@ class QueueService:
         cursor: str | None = None,
         limit: int,
     ) -> QueuePage:
-        """``list_``'s chunks bounded and keyset-paginated (blizzard#526 D4/D7); the
+        """``list_``'s chunks bounded and keyset-paginated; the
         keyset applies over :meth:`ordered`'s already-materialized order, not a second
         SQL read. ``position`` is each entry's absolute index in the whole list, so a
         since-repositioned cursor chunk still resumes by key. ``cursor`` is a prior
@@ -248,7 +247,7 @@ class QueueService:
     ) -> None:
         """Single-chunk fractional reorder within ``list_``: stamp ``chunk`` a new
         explicit position immediately after ``after`` (top when ``after is None``),
-        without restamping every other chunk (issue #137). Bisection exhausting the
+        without restamping every other chunk. Bisection exhausting the
         representable doubles renormalizes via :meth:`replace_order`; ``statuses`` is
         the caller's own already-derived fleet statuses, reused as-is throughout."""
         write = self._write_fn(list_)
@@ -306,7 +305,7 @@ class QueueService:
     @staticmethod
     def _effective_position(chunk: Chunk, positions: dict[str, float], promoted_ats: dict[str, datetime]) -> float:
         """A chunk's sort key: its newest explicit position, else its promotion instant,
-        else its mint instant (issue #137). The fallback is a unix timestamp, so a chunk
+        else its mint instant. The fallback is a unix timestamp, so a chunk
         minted long ago but promoted late still sorts at the tail rather than mid-queue.
         """
         explicit = positions.get(chunk.chunk_id)
@@ -318,21 +317,20 @@ class QueueService:
 
 @dataclass(frozen=True)
 class GroupResult:
-    """A completed group: the survivor and the status it is left at (issue #141).
+    """A completed group: the survivor and the status it is left at.
 
     The status rides along because grouping does not imply ``ready``: folding backlog
     chunks yields a backlog survivor."""
 
     survivor: Chunk
     status: ChunkStatus
-    # The last ``chunk_grouped.id`` this call wrote; ``None`` when ``merge_ids`` resolved to zero targets (issue #213).
+    # The last ``chunk_grouped.id`` this call wrote; ``None`` when ``merge_ids`` resolved to zero targets.
     grouped_id: int | None = None
 
 
 class GroupService:
     """Merge unacquired chunks — ``not_ready`` or ``ready`` — into one surviving chunk,
-    carrying each folded chunk's standing dependency edges onto the survivor (D1-D4,
-    issue #460)."""
+    carrying each folded chunk's standing dependency edges onto the survivor."""
 
     def __init__(
         self,
@@ -350,12 +348,12 @@ class GroupService:
         self._facts = facts
         self._clock = clock
         # The same lock ClaimService/EditService/RestartService/DependencyService/DeleteService already share — closes
-        # the residual GroupService previously left open against a racing declare (D2).
+        # the residual GroupService previously left open against a racing declare.
         self._claim_lock = claim_lock
 
     def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
         """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers
-        and each folded chunk's standing dependency edges (D1-D3). Refused before any
+        and each folded chunk's standing dependency edges. Refused before any
         write when the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
         with self._claim_lock:
             return self._group_locked(survivor_id, merge_ids)
@@ -385,7 +383,7 @@ class GroupService:
                 )
                 for target in targets
             ]
-            # One call, one transaction across every target (D4, issue #460) — a target's
+            # One call, one transaction across every target — a target's
             # own row can never commit ahead of a sibling's edge release/mint.
             grouped_ids = self._dependencies.record_fold(fold_targets, grouped_into=survivor_id, by=FOLD_ACTOR, at=now)
             grouped_id = grouped_ids[targets[-1].chunk_id]

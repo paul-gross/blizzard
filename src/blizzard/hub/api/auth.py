@@ -95,8 +95,8 @@ class RunnerAuth:
         return None
 
     def refuse_runner(self) -> None:
-        """Refuse a runner's token on an operator router — valid only on the fleet router
-        (issue #87). An unresolvable token is not flagged: that is what an anonymous
+        """Refuse a runner's token on an operator router — valid only on the fleet router.
+        An unresolvable token is not flagged: that is what an anonymous
         operator call looks like."""
         principal = self.principal
         if principal is None:

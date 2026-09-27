@@ -10,7 +10,7 @@ function markFor(type: string): 'github' | 'sso' {
 }
 
 /**
- * The login page's provider buttons (issue #93) — presentational: one button per
+ * The login page's provider buttons — presentational: one button per
  * `providers()` entry, each a real `<a>` to its hub authorize route (a full-page
  * navigation into the OAuth dance, not a router link) so the browser actually leaves
  * the SPA for the provider redirect. A single configured provider still renders as a

@@ -1,4 +1,4 @@
-"""``blizzard runner chunk history`` (unit tier, issue #237), mirroring
+"""``blizzard runner chunk history`` (unit tier), mirroring
 ``tests/test_runner_artifact_cli.py``'s shape: ``httpx`` stubbed, no live socket. The
 route itself (store round-trip, hub forward, 403/404/503) is the component tier's
 ``tests/test_runner_chunk_history_api.py``.

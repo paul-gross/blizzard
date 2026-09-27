@@ -4,7 +4,7 @@ import { KitPaceBar } from '../kit/kit-pace-bar';
 import type { SubscriptionPace } from './runner-rows';
 
 /**
- * The runner registry's per-subscription pace render (blizzard#478) — one group per
+ * The runner registry's per-subscription pace render — one group per
  * declared subscription, headed by its operator-facing name and keyed by slug, so two
  * subscriptions reporting identically labelled windows (both a `"5h"`) never merge into
  * one bar list. A sample with no folded {@link SubscriptionPace.paceBars} renders no

@@ -1,4 +1,4 @@
-"""Routine routes — create, list, read, and edit (blizzard#389, component tier).
+"""Routine routes — create, list, read, and edit (component tier).
 
 Proves the HTTP surface end to end: a create/edit naming a graph with no enabled mint
 422s naming it, a duplicate name is refused on create, a name change is refused on
@@ -261,7 +261,7 @@ def test_list_returns_every_routine(tmp_path: Path) -> None:
     assert names == {"a", "b"}
 
 
-# --- The routine_scopes join sub-resource (blizzard#488) -----------------------------
+# --- The routine_scopes join sub-resource -----------------------------
 
 
 def _mint_scope(hub, slug: str) -> None:  # type: ignore[no-untyped-def]

@@ -1,4 +1,4 @@
-"""The restated-invariant sweep (issue #273): one home per fact, everything else a
+"""The restated-invariant sweep: one home per fact, everything else a
 pointer — `blizzard-context:/standards/one-prose-home.md`.
 
 discover ROOTS...                                   run the four candidate detectors.

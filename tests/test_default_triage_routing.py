@@ -1,4 +1,4 @@
-"""The packaged triage router drives real migrations (issues #229, #231).
+"""The packaged triage router drives real migrations.
 
 Proves the packaged wiring: reconciling the shipped set mints every graph the default
 graph's choices name, a default-pinned chunk claims at ``triage``, and each authored

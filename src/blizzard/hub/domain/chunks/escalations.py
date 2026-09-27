@@ -13,7 +13,7 @@ class IReadChunkEscalationsRepository(Protocol):
     """Read-only chunk-escalations access."""
 
     def list_open_escalations(self) -> list[EscalationOpen]:
-        """Every currently-open escalation, **fleet-wide** (issue #125).
+        """Every currently-open escalation, **fleet-wide**.
 
         Each decided by :meth:`ChunkFacts.open_escalation` — the rule's one implementation
         (#293). Low-volume, so the candidate scan is full."""
@@ -36,7 +36,7 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         """Record an ``escalation.recorded`` fact — the chunk derives ``needs_human``
         until something supersedes it. The takeover command rides along so the
         parked session is resumable (`blizzard-context:/domain/humans/escalation.md`). ``decision_id``,
-        when set, closes a gate decision no transition or migration will (issue #110)."""
+        when set, closes a gate decision no transition or migration will."""
         ...
 
     def record_bounce(self, chunk_id: str, *, epoch: int, cause: str, envelope: str, at: datetime) -> bool:

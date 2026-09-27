@@ -7,7 +7,7 @@ import type { DiagramSelection } from './graph-diagram-selection';
 
 /**
  * The diagram's 50/50 split — `GraphDiagram` left, `GraphDiagramDetail` right —
- * and the sole owner of "what is selected" (blizzard#159). `GraphDiagram` stays
+ * and the sole owner of "what is selected". `GraphDiagram` stays
  * fully controlled (it renders `selection`, emits `selectionChange`); this
  * component is the one place those two meet, so the diagram and the pane can
  * never disagree about the current selection. Layout runs once, inside

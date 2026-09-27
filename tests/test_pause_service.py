@@ -1,4 +1,4 @@
-"""PauseService (unit tier) — the operator's per-chunk brake, facts only (issue #46).
+"""PauseService (unit tier) — the operator's per-chunk brake, facts only.
 
 A fake stands in for the lifecycle store — only ``record_pause`` is meaningfully
 implemented; every other seam raises loudly if called. ``facts`` is the caller's own
@@ -135,7 +135,7 @@ def test_pause_allows_running_ready_and_human_gated_statuses(facts_factory: obje
     ids=["done", "stopped", "delivering"],
 )
 def test_resume_is_never_refused_not_even_for_the_statuses_pause_refuses(facts_factory: object) -> None:
-    """Resume is unconditional — the refusal set governs `pause` only (issue #46 §4):
+    """Resume is unconditional — the refusal set governs `pause` only:
     pause must not engage on finished/in-flight work, but disengaging a brake is
     always safe."""
     clock = FixedClock(instant=_T0)

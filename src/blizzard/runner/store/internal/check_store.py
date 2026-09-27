@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the check-result/nudge repository seam (package-private,
-blizzard#410)."""
+"""SQLAlchemy adapter for the check-result/nudge repository seam (package-private)."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """Pinning tests for hub-delivery decisions that were previously defended only by prose
-(issue #270 phase 2, ``bzh:mutation-review-selection``).
+(phase 2, ``bzh:mutation-review-selection``).
 
 Each test here converts one comment-defended decision into an assertion that fails if the
 decision is reverted. Grouped by the module whose decision they pin.
@@ -30,7 +30,7 @@ from tests.support import FakeHubCommandRunner, FakeHubWorkdir, HubHarness, buil
 def test_a_restarted_processs_fresh_authority_refuses_a_prior_instances_token() -> None:
     """An orphaned land script — its owning hub process killed mid-land — presents a token
     minted by a process that no longer exists. The restarted process's authority is empty,
-    so that write is refused rather than granted (issue #230)."""
+    so that write is refused rather than granted."""
     killed = MarkerAuthority()
     orphaned_token = killed.issue("ch_1", node_id="nd_1", epoch=1)
 
@@ -98,7 +98,7 @@ def test_a_terminal_failure_findings_write_failure_exits_non_zero_instead_of_rou
 ) -> None:
     """The terminal-CI-failure findings write is deliberately unguarded: an unwritten
     set of findings is the only signal a resolve worker has nothing to read, so it exits
-    non-zero rather than printing the `failure` edge over it (issue #243)."""
+    non-zero rather than printing the `failure` edge over it."""
     monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
     monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
     monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([{"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT}]))

@@ -27,7 +27,7 @@ import { shortSha } from './short-sha';
  * group shows: `observed` carries no payload beyond its id — "it was true
  * when recorded and is true now" — so its entry is the id alone; `gone` ordinarily does
  * not close the finding, it flags it for a person (except against a `delivered`
- * finding, which it settles outright — blizzard#583 D3, invisible to this raw-ops
+ * finding, which it settles outright — invisible to this raw-ops
  * render either way), which is why it renders beside `added` rather than looking like a
  * resolution.
  *

@@ -1,8 +1,8 @@
-"""D5's registration guard: every tool name a dialect registers for a kind must
+"""This registration guard: every tool name a dialect registers for a kind must
 actually occur in that dialect's own pinned compatibility corpus — the one test
 in the analytics-extraction lane that reads
 ``src/blizzard/runner/harness/contracts/opencode/<version>/`` directly, where the corpus
-files are the subject, not an in-file builder (blizzard#439)."""
+files are the subject, not an in-file builder."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 
-#: Every dialect with a pinned compatibility corpus — Claude Code has none (D5).
+#: Every dialect with a pinned compatibility corpus — Claude Code has none.
 _CORPUS_DIRS: dict[str, Path] = {
     "opencode-export/1": _PACKAGE_ROOT / "contracts" / "opencode" / "1.18.25",
 }
@@ -59,7 +59,7 @@ def test_every_corpus_backed_dialect_is_registered() -> None:
 
 def test_every_runner_normalizer_version_is_registered() -> None:
     """The hub's `DIALECTS` keys are string literals, deliberately not imported from
-    `blizzard.runner` (D1) — this test is the one place that still ties them to the
+    `blizzard.runner` — this test is the one place that still ties them to the
     runner's own normalizer stamps, so the two can drift apart only silently past here."""
     assert {_CLAUDE_CODE_VERSION, _OPENCODE_VERSION} <= set(DIALECTS)
 

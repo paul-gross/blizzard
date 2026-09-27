@@ -3,18 +3,18 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { KitOption, KitPanel, type ScopeView } from 'fleet';
 
 /** The run dialog's own scope-field state — the chosen scope's slug, `''` for nothing
- * selected yet (blizzard#399 phase 1: the field offers only the routine's own related
+ * selected yet (phase 1: the field offers only the routine's own related
  * set, so there is no longer a slug the operator can mint here). */
 export type ScopeSelection = string;
 
 export const EMPTY_SCOPE_SELECTION: ScopeSelection = '';
 
 /**
- * The gardening run dialog's scope field (blizzard#399 D6) — split out of
+ * The gardening run dialog's scope field — split out of
  * {@link GardeningRunDialogView} ahead of the 400-line ceiling rather than after it.
  * Lists the routine's own related, non-retired scopes, previously-swept first.
  *
- * Presentational only: renders `scopes()` (the container's own ordering, D5) and
+ * Presentational only: renders `scopes()` (the container's own ordering) and
  * `selection()`, and re-emits every change through `selectionChange` — the container
  * decides what a selection means.
  */
@@ -27,7 +27,7 @@ export const EMPTY_SCOPE_SELECTION: ScopeSelection = '';
 })
 export class GardeningRunScopeField {
   /** The routine's own related, non-retired scopes, previously-swept-by-this-routine
-   * first (D5, D6) — the container's own ordering; this field renders it verbatim. */
+   * first — the container's own ordering; this field renders it verbatim. */
   readonly scopes = input.required<readonly ScopeView[]>();
 
   /** The scope slugs this routine has previously swept — renders a "previously swept"

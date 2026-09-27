@@ -1,4 +1,4 @@
-"""Chunk stop — the operator's terminal abandonment of a chunk (issue #118).
+"""Chunk stop — the operator's terminal abandonment of a chunk.
 
 Appends the ``chunk_stopped`` fact, which ``derive_chunk_status`` honors above every other
 state (``bzh:facts-not-status``), and conditionally releases a live route — both in one

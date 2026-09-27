@@ -15,7 +15,7 @@ export interface StatCell {
   readonly capacity?: number;
 }
 
-/** One spend cell — today's or yesterday's (issue #183) — folded into one shape
+/** One spend cell — today's or yesterday's — folded into one shape
  * so the template renders both from a single `@for` rather than a duplicated
  * `@if` block per window. `spend` is `null` while its own read is unresolved;
  * the template withholds the cell entirely rather than show a misleading `$0.00`. */
@@ -32,7 +32,7 @@ interface SpendCellView {
  * connection state. Shared by the hub board (its own chunk-derived lane counts,
  * via {@link chunks}) and the runner's local panel (its own capacity cells, via
  * {@link stats}) — one header, one 48px chrome, rather than each app rendering its
- * own bespoke bar (issue #131). It spans the whole window above whatever it sits
+ * own bespoke bar. It spans the whole window above whatever it sits
  * over, so it lives here rather than inside a routed page: a header nested in a
  * content column would only span that column, leaving the rails to start above it.
  *
@@ -44,7 +44,7 @@ interface SpendCellView {
  * component knowing about either. All color comes from the design-token layer,
  * never hard-coded hex.
  *
- * Collapses in tiers as it narrows (issue #163), driven by `@container`
+ * Collapses in tiers as it narrows, driven by `@container`
  * queries on the header's own inline size rather than the viewport's: the two
  * shells mount it over different layouts, so each must react to the width it
  * actually has. Below ~1150px the stat strip drops; below ~700px the spend cell
@@ -88,18 +88,18 @@ export class BoardHeader {
    * once {@link stats} is given. */
   readonly chunks = input<readonly ChunkSummary[]>([]);
 
-  /** The fleet-wide spend-since read (issue #60), or `null` before the first read
+  /** The fleet-wide spend-since read, or `null` before the first read
    * resolves — the cell withholds itself rather than show a misleading `$0.00`. */
   readonly spendToday = input<FleetSpendView | null>(null);
 
-  /** The fleet-wide spend-yesterday read (issue #183) — `[yesterday-midnight,
+  /** The fleet-wide spend-yesterday read — `[yesterday-midnight,
    * today-midnight)`, or `null` before the first read resolves (withheld the same
    * way as {@link spendToday}) and for every consumer that never passes one, e.g.
    * the runner's local panel (`local-panel-layout.ts`), which has no such read. */
   readonly spendYesterday = input<FleetSpendView | null>(null);
 
-  /** Explicit stat cells, e.g. the runner's envs/agents capacity cells (issue
-   * #131) — when given, these render in place of {@link chunkStats} below, so a
+  /** Explicit stat cells, e.g. the runner's envs/agents capacity cells —
+   * when given, these render in place of {@link chunkStats} below, so a
    * caller with no chunk list supplies its own stats without this component
    * knowing anything about its domain. `null` (the hub's usage) falls through to
    * the chunk-derived lane cells. */
@@ -115,7 +115,7 @@ export class BoardHeader {
    * be a silent contradiction, whereas a new status added to the wire is a compile
    * error in `chunk-lanes`, the one place that decides where it belongs. The Ready
    * cell used to count the lane-less `ready` status the left rail owned; the READY
-   * lane (issue #137) makes it a plain lane tally like every other cell.
+   * lane makes it a plain lane tally like every other cell.
    */
   protected readonly chunkStats = computed<readonly StatCell[]>(() => {
     const chunks = this.chunks();
@@ -138,7 +138,7 @@ export class BoardHeader {
    * else {@link chunkStats}. */
   protected readonly cells = computed<readonly StatCell[]>(() => this.stats() ?? this.chunkStats());
 
-  /** Today's and yesterday's spend cells (issue #183), folded into one list the
+  /** Today's and yesterday's spend cells, folded into one list the
    * template renders with a single `@for` — see {@link SpendCellView}. */
   protected readonly spendCells = computed<readonly SpendCellView[]>(() => [
     { key: 'today', label: 'TODAY', testid: 'spend-today', valueTestid: 'spend-today-value', spend: this.spendToday() },

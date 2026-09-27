@@ -1,4 +1,4 @@
-"""work_item_materializations — one outcome fact per proposal (D5). One new table.
+"""work_item_materializations — one outcome fact per proposal. One new table.
 
 Revision ID: 20260825_1200_work_item_materializations
 Revises: 20260825_1150_work_item_proposals_runner_id

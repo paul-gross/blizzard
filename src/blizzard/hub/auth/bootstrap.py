@@ -1,4 +1,4 @@
-"""``auth.superuser`` bootstrap — ensure/demote/report at hub boot (issue #94).
+"""``auth.superuser`` bootstrap — ensure/demote/report at hub boot.
 
 Idempotent across restarts. Pointing ``auth.superuser`` at a *different* email demotes
 whichever user the previous target had claimed (the singleton ``superuser_bootstrap``

@@ -29,7 +29,7 @@ CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
 # The runner-owned worker hook file `init` scaffolds, delivering the heartbeat hook.
 WORKER_SETTINGS_FILENAME = "worker-settings.json"
-# The runner-owned OpenCode permission/plugin document `init` scaffolds (D7).
+# The runner-owned OpenCode permission/plugin document `init` scaffolds.
 OPENCODE_WORKER_CONFIG_FILENAME = "opencode-worker-config.json"
 # The local API's unix socket, under the state dir beside the store; filesystem
 # permissions are its access control.
@@ -49,13 +49,13 @@ ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
 ENV_HARNESS_PERMISSION_MODE = "BZ_HARNESS_PERMISSION_MODE"
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
-ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline (issue #17)
+ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline
 ENV_WORKSPACE_PROMPT_PACKAGE = "BZ_WORKSPACE_PROMPT_PACKAGE"  # a packaged workspace-prompt sample, by name (#344)
-ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline (issue #103)
-# Where the harness writes session transcripts (issue #29); empty resolves to a default at
+ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline
+# Where the harness writes session transcripts; empty resolves to a default at
 # the composition root, never here.
 ENV_TRANSCRIPTS_ROOT = "BZ_TRANSCRIPTS_ROOT"
-# The browser-reachable base URLs this runner answers on (issues #95, #287), comma-separated.
+# The browser-reachable base URLs this runner answers on, comma-separated.
 ENV_PUBLIC_URL = "BZ_RUNNER_PUBLIC_URL"
 
 # The federation callback route, owned here so the registered URI set and the URL the bounce
@@ -67,7 +67,7 @@ DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
 DEFAULT_RUNNER_ID = "runner-local"
 DEFAULT_WORKSPACE_ID = "workspace-local"
 DEFAULT_HARNESS_BINARY = "claude"
-# OpenCode's own binary path (D6) — independent of `harness_binary`'s Claude Code meaning.
+# OpenCode's own binary path — independent of `harness_binary`'s Claude Code meaning.
 DEFAULT_OPENCODE_BINARY = "opencode"
 # A headless worker has no one to approve tool use, so it needs a non-interactive mode;
 # a config may set this empty to omit the flag.
@@ -82,17 +82,17 @@ DEFAULT_MAX_ENVIRONMENTS = 10
 # The runner-ceiling rolling window's default length (issue #61b) — a ceiling with no
 # declared window still needs one to sum over.
 DEFAULT_RUNNER_CEILING_WINDOW_HOURS = 24.0
-# How often the tick re-samples the harness's rate-limit windows (issue #218) — a
+# How often the tick re-samples the harness's rate-limit windows — a
 # diagnostic, best-effort read, not a spend control.
 DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS = 300
-# Structural-only: `[[subscription]]` required keys (blizzard#436) — `provider` is
+# Structural-only: `[[subscription]]` required keys — `provider` is
 # unvalidated, since an undeclared sampler binding is simply unsampled, not a load failure.
 _REQUIRED_SUBSCRIPTION_KEYS = ("slug", "name", "provider")
 # Well under the minutes a context takes to move; each read is a bounded tail read.
 DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS = 60
 DEFAULT_AUTH_HUB_ROLE = "mirror"
 # How long a worker's captured stdout/stderr survive after release before the periodic
-# sweep prunes them (issue #58) — long enough to investigate a stalled or rate-limited
+# sweep prunes them — long enough to investigate a stalled or rate-limited
 # invocation days after the fact.
 DEFAULT_WORKER_STDOUT_RETENTION_DAYS = 14
 
@@ -131,7 +131,7 @@ def _workspace_repos(raw: object) -> tuple[WorkspaceRepo, ...]:
 
 def _expanded_path_prepend(raw: tuple[str, ...]) -> tuple[str, ...]:
     """Expand ``~`` in each ``[worker] path_prepend`` entry and store it absolute; a
-    still-relative entry after expansion raises, naming the offending key (D3)."""
+    still-relative entry after expansion raises, naming the offending key."""
     expanded: list[str] = []
     for entry in raw:
         path = Path(entry).expanduser()
@@ -143,7 +143,7 @@ def _expanded_path_prepend(raw: tuple[str, ...]) -> tuple[str, ...]:
 
 def _cap_line(key: str, value: int | None, default: int) -> str:
     """One ``[transcripts]`` ceiling: live once overridden, commented at its default so the
-    scaffolded file always shows an operator what the ceiling IS (blizzard#338)."""
+    scaffolded file always shows an operator what the ceiling IS."""
     return f"{key} = {value}\n" if value is not None else f"# {key} = {default}\n"
 
 
@@ -179,7 +179,7 @@ class Table:
 
     def boolean(self, key: str, default: bool) -> bool:
         """A real TOML boolean, or ``default`` when ``key`` is absent. Raises on anything
-        else (blizzard#246): ``bool()`` on a non-empty string is truthy regardless of its
+        else: ``bool()`` on a non-empty string is truthy regardless of its
         text, so a typo'd ``ship = "false"`` must never silently turn a switch on."""
         value = self.body.get(key)
         if value is None:
@@ -260,7 +260,7 @@ class Context:
 
 @dataclass(frozen=True)
 class ExternalUsage:
-    """The ``[external_subscription_usage]`` table (issue #218)."""
+    """The ``[external_subscription_usage]`` table."""
 
     table: Table
 
@@ -279,7 +279,7 @@ class ExternalUsage:
 
 @dataclass(frozen=True)
 class SubscriptionDeclaration:
-    """One declared provider subscription (blizzard#436) — the runner-unique, immutable
+    """One declared provider subscription — the runner-unique, immutable
     join key everything downstream keys on is ``slug``; ``name`` is operator-facing only.
 
     Declarations win over the legacy ``[external_subscription_usage]`` table
@@ -290,7 +290,7 @@ class SubscriptionDeclaration:
     slug: str
     name: str
     provider: str
-    #: Reuses the legacy field's shape (issue #218) — ``None`` means the sampler
+    #: Reuses the legacy field's shape — ``None`` means the sampler
     #: binding's own default.
     credentials_path: str | None = None
     sample_interval_seconds: int = DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
@@ -352,7 +352,7 @@ class SubscriptionDeclaration:
 
 @dataclass(frozen=True)
 class Queue:
-    """The ``[queue]`` table (blizzard#459) — this runner's selection policy over the peeked
+    """The ``[queue]`` table — this runner's selection policy over the peeked
     ready queue, applied at :class:`~blizzard.runner.loop.claim.ReadyQueue`'s peek seam."""
 
     table: Table
@@ -371,7 +371,7 @@ class Queue:
 
 @dataclass(frozen=True)
 class WorkerStdout:
-    """The ``[worker_stdout]`` table (issue #58) — the periodic sweep's own retention window
+    """The ``[worker_stdout]`` table — the periodic sweep's own retention window
     over ``worker-stdout/``, independent of lease release."""
 
     table: Table
@@ -387,7 +387,7 @@ class WorkerStdout:
 
 @dataclass(frozen=True)
 class Transcripts:
-    """The ``[transcripts]`` table (issue #246) — the dedicated outbound lane's own switch,
+    """The ``[transcripts]`` table — the dedicated outbound lane's own switch,
     distinct from the top-level ``transcripts_root`` (the harness source's read location)."""
 
     table: Table
@@ -398,7 +398,7 @@ class Transcripts:
 
     @property
     def ship(self) -> bool:
-        """Off by default (D5) — a rollout decision, not a discard-sink one: the hub's
+        """Off by default — a rollout decision, not a discard-sink one: the hub's
         durable, compressed-at-rest, operator-gated segment store (``#247``) is ready to
         receive shipped segments, so a `True` value here is retained, not wasted
         bandwidth."""
@@ -406,15 +406,14 @@ class Transcripts:
 
     @property
     def record_max_bytes(self) -> int | None:
-        """Override for the pump's own per-record cap; ``None`` keeps its default
-        (blizzard#338). Must stay at or below the hub's `record_max_bytes` — the ordering
+        """Override for the pump's own per-record cap; ``None`` keeps its default.
+        Must stay at or below the hub's `record_max_bytes` — the ordering
         and its consequence are at :mod:`blizzard.runner.transcripts.caps`."""
         return self._cap("record_max_bytes")
 
     @property
     def chunk_max_bytes(self) -> int | None:
-        """Override for the pump's own per-chunk budget; ``None`` keeps its default
-        (blizzard#338)."""
+        """Override for the pump's own per-chunk budget; ``None`` keeps its default."""
         return self._cap("chunk_max_bytes")
 
     def _cap(self, key: str) -> int | None:
@@ -431,7 +430,7 @@ class Transcripts:
 
 @dataclass(frozen=True)
 class Auth:
-    """The ``[auth]`` table (issue #95) — runner-local role resolution, keyed by hub username."""
+    """The ``[auth]`` table — runner-local role resolution, keyed by hub username."""
 
     table: Table
 
@@ -476,34 +475,34 @@ class RunnerConfig:
     harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod
     harness_permission_mode: str | None = None  # `claude -p --permission-mode` (headless); None omits it
     worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)
-    #: Override for the Claude Code health probe's own credential file (blizzard#438); `None` is its own default.
+    #: Override for the Claude Code health probe's own credential file; `None` is its own default.
     claude_code_credentials_path: str | None = None
     max_agents: int = DEFAULT_MAX_AGENTS
     base_branch: str = DEFAULT_BASE_BRANCH
     #: Node NAMES this runner imposes a human gate on; reloaded every tick.
     gates: tuple[str, ...] = ()
-    #: The workspace prompt prepended to a worker spawn (issue #17) — two source knobs,
+    #: The workspace prompt prepended to a worker spawn — two source knobs,
     #: one effective value (:meth:`resolved_workspace_prompt`); the file wins when set.
     workspace_prompt: str = ""
     workspace_prompt_file: str = ""
-    #: A packaged workspace-prompt sample, by name (issue #344); exclusive with the two above.
+    #: A packaged workspace-prompt sample, by name; exclusive with the two above.
     workspace_prompt_package: str = ""
-    #: The override of the baked-in blizzard preamble (issue #103), prepended ahead of
+    #: The override of the baked-in blizzard preamble, prepended ahead of
     #: :attr:`workspace_prompt`; empty resolves to the baked default.
     runner_prompt: str = ""
     runner_prompt_file: str = ""
-    #: Where the harness writes session transcripts (issue #29); read from the toml, never
+    #: Where the harness writes session transcripts; read from the toml, never
     #: re-read from the environment live, so a changed env var needs a re-``init``.
     transcripts_root: str = ""
-    #: Per-record cap and per-chunk budget overrides (``[transcripts]``, blizzard#338);
+    #: Per-record cap and per-chunk budget overrides (``[transcripts]``);
     #: ``None`` keeps `transcript_pump`'s own defaults, which own the values.
     transcript_record_max_bytes: int | None = None
     transcript_chunk_max_bytes: int | None = None
-    #: The transcript outbound lane's own switch (``[transcripts] ship``, issue #246);
-    #: off by default (D5) — the pump enqueues no delta while this is ``False``.
+    #: The transcript outbound lane's own switch (``[transcripts] ship``);
+    #: off by default — the pump enqueues no delta while this is ``False``.
     transcripts_ship: bool = False
-    #: This runner's selection policy over the peeked ready queue (``[queue] strict``,
-    #: blizzard#459); off by default reaches past a marked head for the first unmarked
+    #: This runner's selection policy over the peeked ready queue (``[queue] strict``);
+    #: off by default reaches past a marked head for the first unmarked
     #: entry, ``True`` holds at a marked head and yields no entry instead.
     queue_strict: bool = False
     #: The per-chunk spend cap (issue #61a); ``None`` means no cap. A chunk reaching it
@@ -515,13 +514,13 @@ class RunnerConfig:
     #: The runner ceiling's rolling window length in hours (issue #61b) — unused while
     #: :attr:`runner_ceiling_usd` is ``None``.
     runner_ceiling_window_hours: float = DEFAULT_RUNNER_CEILING_WINDOW_HOURS
-    #: The external-usage sample cadence in seconds (issue #218) — a diagnostic cadence,
+    #: The external-usage sample cadence in seconds — a diagnostic cadence,
     #: not a spend control, so absent means the default rather than never.
     external_usage_sample_interval_seconds: int = DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
-    #: An override for the credential file the external-usage sampler reads (issue #218);
+    #: An override for the credential file the external-usage sampler reads;
     #: ``None`` means the adapter's own default.
     external_usage_credentials_path: str | None = None
-    #: Every authored ``[[subscription]]`` entry (blizzard#436), verbatim — empty when none
+    #: Every authored ``[[subscription]]`` entry, verbatim — empty when none
     #: is declared. :meth:`resolved_subscriptions` is the runtime list every caller other
     #: than the config layer itself should read: this field alone says nothing about the
     #: legacy ``[external_subscription_usage]`` table's own implicit subscription.
@@ -530,44 +529,44 @@ class RunnerConfig:
     context_warn_tokens: int | None = None
     #: How often a running lease's context is re-read — unused while the lane is off.
     context_sample_interval_seconds: int = DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS
-    #: The declared extension to the worker spawn-environment allowlist (issue #88) — a
+    #: The declared extension to the worker spawn-environment allowlist — a
     #: worker's env is that allowlist, never a full ``os.environ`` copy.
     worker_env_passthrough: tuple[str, ...] = ()
     #: Absolute directories (``~`` expanded at load) led onto every worker's ``PATH`` ahead of the daemon's own.
     worker_path_prepend: tuple[str, ...] = ()
     #: Every browser-reachable origin this runner answers on, authored as `public_url` — one URL or
-    #: a list; first is canonical, empty registers no federation identity (issues #95, #287).
+    #: a list; first is canonical, empty registers no federation identity.
     public_urls: tuple[str, ...] = ()
-    #: The hub username naming this runner's own sovereign (issue #95) — config-only,
+    #: The hub username naming this runner's own sovereign — config-only,
     #: never assignable through a JWT claim.
     auth_superuser: str | None = None
-    #: The fallback role for a hub identity with no `[auth.users]` override (issue #95) —
+    #: The fallback role for a hub identity with no `[auth.users]` override —
     #: `"mirror"` reproduces the hub's claim, a fixed role floors every unmatched identity.
     auth_hub_role_default: str = DEFAULT_AUTH_HUB_ROLE
-    #: Per-username role overrides (issue #95), keyed on the JWT's `username` claim only,
+    #: Per-username role overrides, keyed on the JWT's `username` claim only,
     #: never `email`, which is mutable and may be null.
     auth_users: tuple[tuple[str, str], ...] = ()
-    #: Model tier-alias mappings (issue #144) onto the names *this* runner's harness
+    #: Model tier-alias mappings onto the names *this* runner's harness
     #: understands; an alias mapped by neither this nor the adapter is skipped, never fatal.
     model_aliases: tuple[tuple[str, str], ...] = ()
-    #: Effort alias mappings (issue #144) onto the `low|medium|high|max` ordinal; the
+    #: Effort alias mappings onto the `low|medium|high|max` ordinal; the
     #: well-known four need no entry.
     effort_aliases: tuple[tuple[str, str], ...] = ()
-    #: OpenCode's own binary path (D6), independent of `harness_binary` (still Claude Code's).
+    #: OpenCode's own binary path, independent of `harness_binary` (still Claude Code's).
     opencode_binary: str = DEFAULT_OPENCODE_BINARY
-    #: OpenCode's tier -> `provider/model` mapping (D6); an unmapped tier skips this binding.
+    #: OpenCode's tier -> `provider/model` mapping; an unmapped tier skips this binding.
     opencode_model_aliases: tuple[tuple[str, str], ...] = ()
-    #: OpenCode's effort -> `--variant` mapping (D6); unmapped drops to `None` and logs once.
+    #: OpenCode's effort -> `--variant` mapping; unmapped drops to `None` and logs once.
     opencode_effort_aliases: tuple[tuple[str, str], ...] = ()
-    #: The runner-owned OpenCode permission/plugin document's path (D7); `None` predates the binding.
+    #: The runner-owned OpenCode permission/plugin document's path; `None` predates the binding.
     opencode_worker_config_path: str | None = None
-    #: Override for the OpenCode health probe's own auth file (blizzard#438); `None` is its own default.
+    #: Override for the OpenCode health probe's own auth file; `None` is its own default.
     opencode_auth_path: str | None = None
-    #: The reverse-proxy trust set (issue #130) — addresses or CIDRs whose
+    #: The reverse-proxy trust set — addresses or CIDRs whose
     #: `X-Forwarded-Proto` is honored; empty ignores the header from every peer.
     trusted_proxies: tuple[str, ...] = ()
     #: How long (days) a worker's captured stdout/stderr survive after being written, before
-    #: the periodic sweep prunes them (``[worker_stdout] retention_days``, issue #58) —
+    #: the periodic sweep prunes them (``[worker_stdout] retention_days``) —
     #: independent of lease release, which leaves them in place.
     worker_stdout_retention_days: int = DEFAULT_WORKER_STDOUT_RETENTION_DAYS
 
@@ -587,7 +586,7 @@ class RunnerConfig:
 
     @property
     def public_origins(self) -> PublicOrigins:
-        """Every origin this runner answers on (issue #287), in declaration order."""
+        """Every origin this runner answers on, in declaration order."""
         return PublicOrigins.of(*self.public_urls)
 
     @property
@@ -599,8 +598,8 @@ class RunnerConfig:
 
     @property
     def redirect_uris(self) -> tuple[str, ...]:
-        """The redirect URIs this runner presents to the hub's IdP authorize endpoint (issue #95) — one
-        per declared origin (issue #287), derived from :attr:`public_origins`, never independently
+        """The redirect URIs this runner presents to the hub's IdP authorize endpoint — one
+        per declared origin, derived from :attr:`public_origins`, never independently
         configured. The hub exact-matches a presented URI against this registered set, so an origin
         missing from it cannot complete a bounce."""
         return self.public_origins.callback_uris(CALLBACK_PATH)
@@ -646,7 +645,7 @@ class RunnerConfig:
         return f"sqlite:///{(root / DATA_DIRNAME / 'runner.db').resolve()}"
 
     def resolved_workspace_prompt(self) -> str:
-        """The effective static workspace prompt (issue #17), resolved from its three knobs.
+        """The effective static workspace prompt, resolved from its three knobs.
 
         ``workspace_prompt_package`` names a packaged sample and is exclusive with the other two,
         which keep their file-wins-over-inline precedence; a configured-but-missing sample or file
@@ -684,7 +683,7 @@ class RunnerConfig:
             raise ConfigError(f"workspace_prompt_package is exclusive with {', '.join(conflicts)} — set one of them")
 
     def resolved_runner_prompt(self) -> str:
-        """The effective override for the blizzard preamble (issue #103), from its two knobs.
+        """The effective override for the blizzard preamble, from its two knobs.
 
         Mirrors :meth:`resolved_workspace_prompt`: the file knob wins when set, and a
         configured-but-missing file raises. Both empty returns ``""``, which the preamble
@@ -699,7 +698,7 @@ class RunnerConfig:
         return self.runner_prompt
 
     def resolved_subscriptions(self) -> tuple[SubscriptionDeclaration, ...]:
-        """Every declared provider subscription, resolved (blizzard#436) — the runtime list
+        """Every declared provider subscription, resolved — the runtime list
         every caller but this config layer itself should read.
 
         Mirrors :meth:`resolved_workspace_prompt`'s two-knobs-one-value shape: declarations
@@ -755,11 +754,11 @@ class RunnerConfig:
             worker_settings_path=str(root / WORKER_SETTINGS_FILENAME),
             opencode_worker_config_path=str(root / OPENCODE_WORKER_CONFIG_FILENAME),
             # Empty on a fresh scaffold; seeded from the environment so `init` can inject
-            # a default without hand-editing (issue #17).
+            # a default without hand-editing.
             workspace_prompt=os.environ.get(ENV_WORKSPACE_PROMPT, ""),
-            # Seeded the same way, so `init` can adopt a packaged sample by name (issue #344).
+            # Seeded the same way, so `init` can adopt a packaged sample by name.
             workspace_prompt_package=os.environ.get(ENV_WORKSPACE_PROMPT_PACKAGE, ""),
-            # Empty on a fresh scaffold means the baked-in preamble is used (issue #103).
+            # Empty on a fresh scaffold means the baked-in preamble is used.
             runner_prompt=os.environ.get(ENV_RUNNER_PROMPT, ""),
             transcripts_root=os.environ.get(ENV_TRANSCRIPTS_ROOT, ""),
             public_urls=PublicOrigins.entries(public_urls.split(","), ConfigError),
@@ -1002,7 +1001,7 @@ class RunnerConfig:
         worker_stdout = WorkerStdout.of(raw.get("worker_stdout"))
         # Authored `[[subscription]]` entries, verbatim — never synthesized here;
         # `resolved_subscriptions()` is where declarations-win-over-the-legacy-table
-        # (blizzard#436) actually happens, from this config's own resolved fields.
+        # actually happens, from this config's own resolved fields.
         subscriptions = SubscriptionDeclaration.declared(raw.get("subscription", []))
         opencode = Table.of(raw.get("opencode"))
         provider = raw.get("workspace_provider", "winter")
@@ -1073,7 +1072,7 @@ class RunnerConfig:
             opencode_model_aliases=Table.of(opencode.body.get("models")).pairs("aliases"),
             opencode_effort_aliases=Table.of(opencode.body.get("effort")).pairs("aliases"),
             # A pre-`[opencode]` config carries no `worker_config_path`; default to the
-            # same path a fresh `Runtime.init` scaffolds rather than `None` (D7).
+            # same path a fresh `Runtime.init` scaffolds rather than `None`.
             opencode_worker_config_path=(
                 opencode.word("worker_config_path") or str(root / OPENCODE_WORKER_CONFIG_FILENAME)
             ),

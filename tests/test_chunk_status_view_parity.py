@@ -1,5 +1,5 @@
 """``ChunkStatusView`` pins its fields equal to the same chunk's ``ChunkDetail`` fields —
-component tier (blizzard#521). Drives a chunk through running, paused, restarted, an
+component tier. Drives a chunk through running, paused, restarted, an
 open gate decision, a resolved-but-not-transitioned decision, and recorded usage/cost,
 asserting the slim batch read and the full aggregate agree on every shared field."""
 
@@ -154,7 +154,7 @@ def test_decision_resolved_not_transitioned_chunk_field_parity(tmp_path: Path) -
 
 def test_decision_closed_by_restart_chunk_field_parity(tmp_path: Path) -> None:
     """The decision-closure check has four arms (transitions, migrations, escalations,
-    restarts — issue #370); every other decision test here closes one via a transition.
+    restarts); every other decision test here closes one via a transition.
     This one closes it via a restart instead, so the shared closure rule
     (`ChunkDecisionsStore._decision_closure_ids`) is proven on a second arm, not just the
     one every sibling test happens to exercise."""

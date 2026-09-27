@@ -12,7 +12,7 @@
 </div>
 <!-- The drag-and-drop drop list is only *armed* when the identity actually holds
      queue:reorder — a read-only board must not offer a drag it would then
-     refuse, not merely hide a button (issue #210). A guest on a reorderable lane
+     refuse, not merely hide a button. A guest on a reorderable lane
      falls to the plain, undraggable branch below, same as every non-reorderable lane. -->
 @if (reorderControls() && canReorder()) {
   <div class="b-col-body" cdkDropList (cdkDropListDropped)="dropped($event)">

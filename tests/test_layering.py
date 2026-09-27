@@ -144,7 +144,7 @@ def _bare_engine_accesses(root: Path, *, exempt: frozenset[Path] = frozenset()) 
 
 
 def test_hub_acquires_no_connection_outside_the_store_seam() -> None:
-    """D5 (blizzard#413), widened hub-wide (D2): every adapter under ``hub/`` takes
+    """Every adapter under ``hub/`` takes
     ``HubStoreConnections`` in place of ``Engine`` — none may acquire a connection
     directly. Retires the narrower ``hub/store/internal/``-only assertion this replaces."""
     violations = _bare_engine_accesses(_HUB_DIR, exempt=frozenset({_HUB_STORE_ERRORS_FILE}))
@@ -180,7 +180,7 @@ _RUNNER_STORE_CONNECTIONS_FILE = _RUNNER_STORE_DIR / "internal" / "base.py"
 
 
 def test_runner_acquires_no_connection_outside_the_store_seam() -> None:
-    """D5 (plan: structural gates over runner wiring): every ``runner/`` module takes
+    """(plan: structural gates over runner wiring): every ``runner/`` module takes
     ``RunnerStoreConnections`` in place of a bare ``Engine`` — none may acquire a
     connection directly outside the connections seam itself."""
     violations = _bare_engine_accesses(_RUNNER_DIR, exempt=frozenset({_RUNNER_STORE_CONNECTIONS_FILE}))
@@ -210,14 +210,14 @@ def _protocol_declarations(root: Path) -> list[str]:
 
 
 def test_no_protocol_is_declared_under_runner_store() -> None:
-    """AC1 (blizzard#410): every seam Protocol lives beside the concept that uses it —
+    """AC1: every seam Protocol lives beside the concept that uses it —
     ``runner/store/`` holds only adapters, schema, and errors, never a Protocol."""
     violations = _protocol_declarations(_RUNNER_STORE_DIR)
     assert not violations, f"F — runner/store/ must declare no Protocol: {violations}"
 
 
 def test_no_runner_domain_module_imports_from_runner_store() -> None:
-    """AC1 (blizzard#410): a domain module owns its own seam Protocol — it never reaches
+    """AC1: a domain module owns its own seam Protocol — it never reaches
     into ``runner/store/`` for one, which would invert the dependency arrow."""
     violations = _violations(_RUNNER_DOMAIN_DIR, ("blizzard.runner.store",))
     assert not violations, f"G — runner/domain/ must not import from runner/store/: {violations}"
@@ -231,19 +231,19 @@ _RUNNER_COMPOSITION_FILE = _RUNNER_DIR / "composition.py"
 _RUNNER_APP_FILE = _RUNNER_DIR / "app.py"
 _RUNNER_LOOP_BUILD_FILE = _RUNNER_DIR / "loop" / "build.py"
 
-# AC3 (blizzard#410, Phases 4-5): every file outside the store's own package that still
+# AC3: every file outside the store's own package that still
 # names ``sqlalchemy`` — each an accepted, individually-justified exception, not the
 # store surface this criterion polices. ``None`` allows every name from that import;
 # a tuple narrows to only those names.
 _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     # Engine only, for DI typing — shared with hub/composition.py, permanently out of
     # scope (plan's "Out of scope": "Engine in a composition root"). ``app.py`` and
-    # ``loop/build.py`` are composition roots too (each opens its own engine, D4/D5), so
+    # ``loop/build.py`` are composition roots too (each opens its own engine), so
     # the same exception covers the handles they hand their own callers to dispose.
     _RUNNER_COMPOSITION_FILE: ("Engine",),
     _RUNNER_APP_FILE: ("Engine",),
     _RUNNER_LOOP_BUILD_FILE: ("Engine",),
-    # IntegrityError only, for the replay-check catch (D6): the collision itself IS the
+    # IntegrityError only, for the replay-check catch: the collision itself IS the
     # business-logic check, so this one name stays local instead of the table-bound form.
     _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": ("IntegrityError",),
 }
@@ -267,7 +267,7 @@ def _sqlalchemy_import_names(path: Path) -> set[str]:
 
 
 def test_sqlalchemy_is_imported_only_from_the_store_seam() -> None:
-    """AC3 (blizzard#410, Phases 4-5): ``sqlalchemy`` is a name the store's own adapters,
+    """AC3: ``sqlalchemy`` is a name the store's own adapters,
     schema, errors and migrations may hold — every other module takes the Protocol seam,
     never the driver underneath it, bar the individually-justified exceptions above."""
     violations: list[str] = []
@@ -301,7 +301,7 @@ def _runner_store_adapter_names() -> set[str]:
 
 
 def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter() -> None:
-    """AC4 (blizzard#410, D4): every concrete ``store/internal/`` adapter is named by
+    """AC4: every concrete ``store/internal/`` adapter is named by
     ``runner/composition.py`` and nowhere else under ``src/`` — every other collaborator
     takes a Protocol seam or the ``RunnerStores`` bundle it builds."""
     adapters = _runner_store_adapter_names()
@@ -351,7 +351,7 @@ def _runner_composition_imports(root: Path, *, exempt: frozenset[Path]) -> list[
 
 
 def test_only_the_composition_roots_import_the_runner_composition_module() -> None:
-    """D5/hub:99: `blizzard.runner.composition` is a wiring module, not a Protocol or a
+    """`blizzard.runner.composition` is a wiring module, not a Protocol or a
     bundle seam — importing it in any form outside the seven composition roots means
     constructing runner stores outside their one approved wiring site
     (``bzh:dependency-injection``). Fail-closed: no name exemptions, unlike the old
@@ -362,7 +362,7 @@ def test_only_the_composition_roots_import_the_runner_composition_module() -> No
     )
 
 
-# Each gated concrete adapter class may be imported only by its one approved factory module (D9).
+# Each gated concrete adapter class may be imported only by its one approved factory module.
 _GATED_COMPOSITIONS: dict[str, Path] = {
     "ClaudeCodeAdapter": _RUNNER_DIR / "harness" / "internal" / "harness_registry.py",
     "OpenCodeAdapter": _RUNNER_DIR / "harness" / "internal" / "opencode_registry.py",
@@ -428,7 +428,7 @@ def _session_file_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
 
 
 def test_session_file_is_named_only_at_its_composition_root() -> None:
-    """D7: ``SessionFile`` is named only at ``hub/cli/__init__.py`` — every other module
+    """``SessionFile`` is named only at ``hub/cli/__init__.py`` — every other module
     takes the read/write Protocol seam, however the class is reached, never the concrete
     name itself. ``sessions/internal/session_file.py`` (its declaring module) is exempt."""
     violations = _session_file_accesses(_SRC_DIR, exempt=_COMPOSITION_ROOTS | frozenset({_HUB_CLI_SESSION_STORE_FILE}))
@@ -451,7 +451,7 @@ def _write_session_store_accesses(root: Path, *, exempt: frozenset[Path]) -> lis
 
 
 def test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root() -> None:
-    """D4/hub:98: only `hub/cli/sessions/` (the Protocol's own package) may name
+    """Only `hub/cli/sessions/` (the Protocol's own package) may name
     `IWriteSessionStore` — every other hub CLI module, including `auth.py`'s
     login/logout, takes the `SessionService` application service instead, never the raw
     write seam (``bzh:controller-read-only``)."""
@@ -466,7 +466,7 @@ _RUNNER_API_DIR = _RUNNER_DIR / "api"
 
 
 def test_runner_api_names_no_write_capable_store_or_bundle() -> None:
-    """AC (blizzard#412, D1): a runner route resolves only ``RunnerReadStores`` and its
+    """AC: a runner route resolves only ``RunnerReadStores`` and its
     per-concept mutation services — never ``RunnerStores`` nor an ``IWrite*`` seam, which
     would let a route mutate directly instead of delegating to a domain service."""
     violations: list[str] = []
@@ -514,7 +514,7 @@ def _wire_cross_model_constructions() -> list[str]:
 
 
 def test_no_wire_model_projects_into_another() -> None:
-    """O (plan: hold wire/ to its stated contract, D3): a wire model is a pydantic shape,
+    """O (plan: hold wire/ to its stated contract): a wire model is a pydantic shape,
     never a projection — no method under ``wire/`` may instantiate another wire model,
     only its own class (a classmethod's bare ``cls(...)``, or a ``default_factory``
     supplying a sibling default outside any method body, are model config, not this)."""

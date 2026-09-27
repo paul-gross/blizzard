@@ -11,11 +11,11 @@ export interface KitTabOption {
 }
 
 /**
- * The tab strip (issue #160) — a row of tabs selecting between sibling views
+ * The tab strip — a row of tabs selecting between sibling views
  * of the same page (e.g. a chunk detail page's General/Artifacts split).
  * Shaped like {@link KitChips} (options + selected value in, `(choose)` out),
  * rendered with the same {@link KitTabStrip}/{@link KitTab} chrome the main
- * nav's routed tabs wear (blizzard#203) — one tab treatment, not two.
+ * nav's routed tabs wear — one tab treatment, not two.
  *
  * `role="tablist"` / `role="tab"` / `aria-selected` so the strip is
  * navigable by assistive tech; this component does not itself own the

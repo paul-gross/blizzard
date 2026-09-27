@@ -1,4 +1,4 @@
-"""``blizzard runner scope list`` (unit tier, blizzard#582 D2), mirroring
+"""``blizzard runner scope list`` (unit tier), mirroring
 ``tests/test_runner_garden_findings_cli.py``'s shape: ``httpx`` stubbed, no live socket.
 The route itself is the component tier's ``tests/test_runner_scope_api.py``."""
 

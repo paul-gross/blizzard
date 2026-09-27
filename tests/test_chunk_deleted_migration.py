@@ -1,4 +1,4 @@
-"""The ``chunk_deleted`` table create — pure additive, no backfill (issue #364).
+"""The ``chunk_deleted`` table create — pure additive, no backfill.
 
 Unlike ``chunk_promoted``'s own migration, a chunk minted before this one carries no
 ``chunk_deleted`` row either way, so it stays fully live and claimable after the

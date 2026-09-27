@@ -3,7 +3,7 @@ import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet';
 import { injectRunnerDashboardQuery } from 'local-panel';
 
 /**
- * The runner's mobile bottom tab bar (issue #313) — rendered at the app root,
+ * The runner's mobile bottom tab bar — rendered at the app root,
  * below `<router-outlet>` (`../app.ts`), so it persists across `/board` and
  * `/events` rather than being a per-page fixture, mirroring the hub's own
  * `app/nav/mobile-tab-bar.ts`.

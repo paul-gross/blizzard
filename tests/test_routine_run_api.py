@@ -1,4 +1,4 @@
-"""``POST /api/routines/{routine_id}/run`` (blizzard#392, component tier) — mints,
+"""``POST /api/routines/{routine_id}/run`` (component tier) — mints,
 ingests, and promotes a hub work item from a routine over the real HTTP surface, the
 ``tests/test_hub_work_source_api.py`` shape."""
 

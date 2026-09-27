@@ -1,4 +1,4 @@
-"""Pinning tests for runner decisions that were defended only by comment prose (issue #270).
+"""Pinning tests for runner decisions that were defended only by comment prose.
 
 Each test is the executable form of a decision whose only defence was a paragraph of
 argument, replacing that prose."""

@@ -70,7 +70,7 @@ describe('BoardShell', () => {
 
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
     // Six board columns: the backlog, the ready queue, and the four post-dispatch
-    // lanes. READY is a lane like any other (issue #137) — the ready queue is on the
+    // lanes. READY is a lane like any other — the ready queue is on the
     // board, not in a rail beside it.
     expect(el.querySelectorAll('[data-col]')).toHaveLength(6);
     expect(el.querySelector('[data-col="notready"]')).toBeTruthy();
@@ -174,7 +174,7 @@ describe('BoardShell', () => {
     const el = (await render(chunks)).nativeElement as HTMLElement;
 
     // No empty state once the fleet has chunks, and every chunk is a card —
-    // the ready one included, in the READY lane (issue #137).
+    // the ready one included, in the READY lane.
     expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
     expect(el.querySelectorAll('[data-testid="chunk-card"]')).toHaveLength(3);
 
@@ -372,7 +372,7 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-testid="card-cost"]')).toBeNull();
   });
 
-  /** The READY lane (issue #137), ordered by the hub's dispatch order. */
+  /** The READY lane, ordered by the hub's dispatch order. */
   describe('the READY lane', () => {
     const A = READY('aaaaaaaaaaaaaaaaaaaa');
     const B = READY('bbbbbbbbbbbbbbbbbbbb');
@@ -561,7 +561,7 @@ describe('BoardShell', () => {
   });
 
   /*
-   * The DONE lane's newest-first order (issue #173) — a second lane-scoped ordering,
+   * The DONE lane's newest-first order — a second lane-scoped ordering,
    * the same shape as READY's own above but keyed on the completion instant instead
    * of the hub's dispatch order.
    */

@@ -1,4 +1,4 @@
-"""The adapter-drift canary (issue #54): ``blizzard runner selftest``.
+"""The adapter-drift canary: ``blizzard runner selftest``.
 
 Per-coding-harness mechanics are external CLI surface that drifts with every harness release.
 A run exercises them against a throwaway scratch git repo — no chunk, lease, environment

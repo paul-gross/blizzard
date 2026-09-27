@@ -1,4 +1,4 @@
-"""Work-source item routes (blizzard#358) — the operator-plane editor surface over a
+"""Work-source item routes — the operator-plane editor surface over a
 work source's browsable items, distinct from the pass-through ``WorkItemEntry``
 (``wire/chunk.py``). Every request model is ``extra="forbid"`` (mirrors ``wire/sse.py``);
 the patch model follows ``ChunkPatchRequest``'s omitted-versus-explicit-null convention
@@ -29,7 +29,7 @@ class WorkSourcesListView(BaseModel):
 
 
 class WorkItemAuthorView(BaseModel):
-    """Who filed a hub-owned work item, legible for display (blizzard#362) — ``user_id``
+    """Who filed a hub-owned work item, legible for display — ``user_id``
     and ``login`` set only for ``kind == "user"``; ``runner_id``/``chunk_id``/``node_name``
     — the proposing runner, chunk, and node — set only for ``kind == "fleet"``."""
 
@@ -66,7 +66,7 @@ class WorkItemsListView(BaseModel):
 
 
 class WorkItemCreateResponse(WorkItemView):
-    """``POST /api/work-sources/{source}/items`` (blizzard#359) — carries every
+    """``POST /api/work-sources/{source}/items`` — carries every
     ``WorkItemView`` field plus ``chunk_id``, the id of the ``not_ready`` chunk
     creation mints in the same transaction."""
 

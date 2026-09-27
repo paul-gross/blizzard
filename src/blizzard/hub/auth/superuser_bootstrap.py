@@ -1,5 +1,4 @@
-"""The superuser-bootstrap repository seam — read/write Protocols (issue #94,
-``bzh:repository-split``).
+"""The superuser-bootstrap repository seam — read/write Protocols (``bzh:repository-split``).
 
 Backs the ``superuser_bootstrap`` singleton row: a domain-only seam, never reached
 from the edge."""

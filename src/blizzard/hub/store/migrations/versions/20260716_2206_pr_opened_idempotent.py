@@ -1,4 +1,4 @@
-"""``pr.opened`` idempotent per (chunk, repo) — a DB-level close of a write race (issue #10)
+"""``pr.opened`` idempotent per (chunk, repo) — a DB-level close of a write race
 
 Adds a unique constraint on (chunk_id, repo), keeping the earliest row of each duplicate pair first.
 Revision ID: 20260716_2206_hub_pr_opened_idempotent

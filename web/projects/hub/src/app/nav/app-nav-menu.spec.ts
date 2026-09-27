@@ -37,7 +37,7 @@ describe('AppNavMenu', () => {
 
     expect(inOverlay('[data-testid="app-nav-menu-panel"] [data-testid="nav-logout"]')).not.toBeNull();
     expect(inOverlay('[data-testid="app-nav-menu-panel"] [data-testid="nav-appearance"]')).not.toBeNull();
-    // The switcher is a real submenu now (issue #161), not an inline chip row —
+    // The switcher is a real submenu now, not an inline chip row —
     // so it stays closed until its own item is entered.
     expect(inOverlay('[data-testid="nav-appearance-panel"]')).toBeNull();
   });

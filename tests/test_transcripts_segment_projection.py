@@ -1,5 +1,5 @@
 """``transcripts/internal/segment_projection.py`` — a hub segment's wire turns onto the
-runner's transcript read model (blizzard#249).
+runner's transcript read model.
 
 Constructs :class:`TurnSegmentView` fixtures directly, so the job here is the mapping — what
 survives it and what it degrades on — not the transport."""
@@ -66,7 +66,7 @@ def _tool(
 @pytest.mark.unit
 @pytest.mark.parametrize("kind", ["env", "asst", "tool", "thinking", "sidechain"])
 def test_every_turn_kind_survives_the_projection(kind: TurnKind) -> None:
-    """blizzard#248 D1/D2 widened the domain ``Turn`` to the segment wire's own shape, so
+    """The domain ``Turn`` widened to the segment wire's own shape, so
     nothing is narrowed away here — a kind dropped would silently shorten an archived read."""
     assert to_turn(_turn(0, kind, text="body"), 0).kind == kind
 
@@ -175,8 +175,7 @@ def test_an_uncapped_tool_turn_stays_untruncated() -> None:
 @pytest.mark.unit
 def test_a_late_output_patch_keeps_its_flag_through_the_projection() -> None:
     """The archived read is the only route carrying a late link — a cold local read links its
-    own results. Dropping the flag leaves the panel unable to fold the patch, the defect
-    blizzard#338 fixed."""
+    own results. Dropping the flag leaves the panel unable to fold the patch."""
     patch = _tool(name="", output="3 blockers", output_patch=True)
 
     result = to_turn(_turn(0, "tool", tool=patch), 0)

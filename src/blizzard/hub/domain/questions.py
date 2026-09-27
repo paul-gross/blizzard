@@ -45,7 +45,7 @@ class QuestionService:
     def _asked_at(self, value: str) -> datetime:
         """Read an ISO-8601 instant, falling back to now on a malformed stamp.
 
-        Coerces a naive result to UTC (``bzh:utc-instants``, issue #28); pinned by
+        Coerces a naive result to UTC (``bzh:utc-instants``); pinned by
         ``tests/test_ask_answer.py``."""
         try:
             return as_utc(datetime.fromisoformat(value))

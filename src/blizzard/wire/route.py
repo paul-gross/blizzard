@@ -42,7 +42,7 @@ class RouteClaimConflict(BaseModel):
 
 class RouteClaimTerminalDenial(BaseModel):
     """The 409 body: the chunk is already terminal ({done, stopped}) — refused outright,
-    not a race loss (issue #118). Distinct from a claim conflict: no other runner holds
+    not a race loss. Distinct from a claim conflict: no other runner holds
     this chunk, it simply can never be claimed again."""
 
     chunk_id: str
@@ -52,7 +52,7 @@ class RouteClaimTerminalDenial(BaseModel):
 
 class RouteClaimDependencyDenial(BaseModel):
     """The 409 body: the chunk stands on a prerequisite that has not reached ``done``
-    (blizzard#458) — refused outright, not a race loss. Distinct from both other 409
+    — refused outright, not a race loss. Distinct from both other 409
     shapes: no other runner holds this chunk and it is not terminal, it simply named a
     prerequisite still standing."""
 
@@ -63,8 +63,8 @@ class RouteClaimDependencyDenial(BaseModel):
 
 class RouteClaimIncompatibleDenial(BaseModel):
     """The 409 body: the claiming runner's stored capabilities can no longer run every
-    statically reachable runner-owned lineage from the chunk's current node (blizzard#433
-    D9) — refused outright, not a race loss. Distinct from the other three 409 shapes by
+    statically reachable runner-owned lineage from the chunk's current node
+    — refused outright, not a race loss. Distinct from the other three 409 shapes by
     its own ``incompatible_runner_id`` field."""
 
     chunk_id: str
@@ -73,7 +73,7 @@ class RouteClaimIncompatibleDenial(BaseModel):
 
 
 class RouteClaimPausedDenial(BaseModel):
-    """The 403 body: the claiming runner is paused at the hub registry (issue #44).
+    """The 403 body: the claiming runner is paused at the hub registry.
 
     Distinct from a claim conflict — this claim never entered the race."""
 

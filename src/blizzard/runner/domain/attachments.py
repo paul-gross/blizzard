@@ -1,4 +1,4 @@
-"""The worker attach channel — ``blizzard runner attach --name <n>`` (issue #113).
+"""The worker attach channel — ``blizzard runner attach --name <n>``.
 
 A worker durably submits an explicit artifact for a ``produces:`` name, authorized by
 the lease token minted at its own spawn. :meth:`AttachmentService.attach` is the one
@@ -22,14 +22,14 @@ class IReadAttachmentRepository(Protocol):
     """Read-only attachment queries (held by read-path edges)."""
 
     def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
-        """The lease's explicit artifact submissions, newest content per ``name``
-        (issue #113). Append-only, latest-wins-per-``(lease_id, name)``: a re-attach of
+        """The lease's explicit artifact submissions, newest content per ``name``.
+        Append-only, latest-wins-per-``(lease_id, name)``: a re-attach of
         the same name reads back as the replacement, never a duplicate."""
         ...
 
     def attachment_names_for_lease(self, lease_id: str) -> set[str]:
         """Just the names attached for ``lease_id`` — the produces-coverage check's own lean
-        read (Phase 3 hoist): it only ever needs to know WHICH names are attached, never their
+        read: it only ever needs to know WHICH names are attached, never their
         content, so this skips fetching and materializing ``attachments_for_lease``'s values."""
         ...
 
@@ -48,14 +48,14 @@ class IWriteAttachmentRepository(IReadAttachmentRepository, Protocol):
         content: str,
         attached_at: datetime,
     ) -> None:
-        """Append a worker's explicit artifact submission for ``name`` (issue #113), a
+        """Append a worker's explicit artifact submission for ``name``, a
         single committed transaction so it survives a ``kill -9`` before the completion
         submission reads it. Append-only: a later call for the same ``(lease_id, name)``
         is a correction, read back as the replacement, never merged."""
         ...
 
 
-# The armed crash window (issue #113, ``bzh:crash-point-registry``): the attach row is
+# The armed crash window (``bzh:crash-point-registry``): the attach row is
 # durable but the ``200`` has not returned. Recovery owes nothing but durability.
 _CP_ATTACH_AFTER_RECORD = crashpoint(
     "attach.after-record.before-response",
@@ -70,7 +70,7 @@ class AttachmentRejected(Exception):
 
 class AttachmentService:
     """Composition-root-wired: the attachment store, the token store (for authorization),
-    and the clock (issue #113)."""
+    and the clock."""
 
     def __init__(self, store: IWriteAttachmentRepository, clock: IClock, *, tokens: IReadTokenRepository) -> None:
         self._store = store

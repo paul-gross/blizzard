@@ -1,4 +1,4 @@
-"""The ``/chunks/{id}/complete`` route over the HTTP surface (issue #294).
+"""The ``/chunks/{id}/complete`` route over the HTTP surface.
 
 Proves the controller wires an operator completion correctly end to end: 202/404, the
 fact written, the route + hub-exec slot released, the events published, that completion

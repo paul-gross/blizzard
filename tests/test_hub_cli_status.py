@@ -1,4 +1,4 @@
-"""``blizzard hub status`` — the per-chunk cost column and fleet total (issue #60).
+"""``blizzard hub status`` — the per-chunk cost column and fleet total.
 
 Stubs ``httpx.get`` with canned responses keyed by URL, proving the CLI's own
 rendering — the per-chunk cost column, the fleet total, and the ``~``-estimated/
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.component
 class _FakeResponse:
     def __init__(self, payload: object) -> None:
         self._payload = payload
-        # issue #96's `_check` reads `.status_code` unconditionally — every response
+        # the `_check` reads `.status_code` unconditionally — every response
         # this file installs is a plain 200.
         self.status_code = 200
 
@@ -140,7 +140,7 @@ def test_status_renders_no_estimate_where_none_was_reported(monkeypatch: pytest.
 
 
 def test_status_names_a_ceiling_pause_reason_inline(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A runner-ceiling escalation (issue #61) is distinguishable from a manual pause on
+    """A runner-ceiling escalation is distinguishable from a manual pause on
     ``blizzard hub status`` — the composed ceiling+spend reason rides inline rather than
     the bare ``[paused: local]`` a manual pause renders."""
     cost = _cost(0.0, partial=False)
@@ -170,7 +170,7 @@ def test_status_renders_a_manual_pause_bare_with_no_reason(monkeypatch: pytest.M
 
 def test_status_names_a_hub_pause_with_no_local_brake(monkeypatch: pytest.MonkeyPatch) -> None:
     """A fleet-side pause names itself ``hub``, distinct from a local one — collapsing both to
-    a bare ``paused`` would hide which verb clears it (issue #43)."""
+    a bare ``paused`` would hide which verb clears it."""
     cost = _cost(0.0, partial=False)
     runners = [_runner(hub_paused=True)]
     _install(monkeypatch, _responses(cost, cost, runners))
@@ -183,7 +183,7 @@ def test_status_names_a_hub_pause_with_no_local_brake(monkeypatch: pytest.Monkey
 
 def test_status_names_both_brakes_with_the_local_reason_inline(monkeypatch: pytest.MonkeyPatch) -> None:
     """Both brakes on at once still name which is which, and the local one's reason still
-    rides alongside it (issue #43's naming, extended by issue #61's reason)."""
+    rides alongside it."""
     cost = _cost(0.0, partial=False)
     reason = "spend ceiling $5.00 reached over the trailing 24h (spend $7.00)"
     runners = [
@@ -230,7 +230,7 @@ def test_status_drains_every_page_of_chunks(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_status_marks_a_blocked_chunk_naming_the_prerequisite(monkeypatch: pytest.MonkeyPatch) -> None:
     """`hub status` shares `ChunkRow` with `hub chunk list`, so the blocked marking
-    (issue #476) is proven once here to cover both."""
+    is proven once here to cover both."""
     cost = _cost(0.0, partial=False)
     responses = _responses(cost, cost)
     envelope = cast("dict", responses[f"{DEFAULT_HUB_URL}/api/chunks"])

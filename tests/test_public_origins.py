@@ -1,4 +1,4 @@
-"""The declared browser-reachable origin set (issue #287): validation, derivation, selection."""
+"""The declared browser-reachable origin set: validation, derivation, selection."""
 
 from __future__ import annotations
 

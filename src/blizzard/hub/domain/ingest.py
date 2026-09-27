@@ -1,7 +1,7 @@
 """Chunk ingest — wrap ``{source, ref}`` pointers into a chunk pinned to a graph, storing the pointer
 and never the contents.
 
-The empty-preference default policy is :func:`~blizzard.hub.domain.work.mint_chunk`'s own (issue #144).
+The empty-preference default policy is :func:`~blizzard.hub.domain.work.mint_chunk`'s own.
 **Batch = one chunk.** A pointer already held by a non-terminal chunk rejects the whole ingest ``409``;
 re-ingest is legal once its holder is done."""
 

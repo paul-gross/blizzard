@@ -18,7 +18,7 @@ Key = tuple[str, str]
 
 @dataclass
 class DeclaredCommits:
-    """This lease's declared git commits (issue #143), confirmed **read-only** against the
+    """This lease's declared git commits, confirmed **read-only** against the
     origin each declaring environment's manifest names.
 
     Never mutates git and never infers a branch off residue. A declaration that does not

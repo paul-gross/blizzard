@@ -1,4 +1,4 @@
-"""The transcript-segments migration (blizzard#247, Phase 1 — component tier): applies
+"""The transcript-segments migration (component tier): applies
 from an empty store to head, and survives a downgrade/upgrade roundtrip."""
 
 from __future__ import annotations

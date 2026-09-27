@@ -13,8 +13,8 @@ describe('fleet public API — the previously-missing chunk exports (issue #82)'
   });
 
   it('reaches the chunk graph edit mutation from the fleet barrel', () => {
-    // The model edit mutation stood beside it until issue #144 retired `Chunk.model`
-    // and left the replacing defaults with no web editing surface.
+    // The model edit mutation stood beside it until `Chunk.model` was retired,
+    // leaving the replacing defaults with no web editing surface.
     expect(typeof injectSetChunkGraphMutation).toBe('function');
   });
 });

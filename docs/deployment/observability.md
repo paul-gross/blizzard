@@ -16,24 +16,22 @@ missing edge then requeuing, not retrying. The work-item closure events are also
 
 `owner-unresolvable` (critical): a runner reached an existing session whose recorded harness owner it cannot resolve
 right now. This runner binds only `claude_code` ([worker-spawn.md](./worker-spawn.md) owns that binding). **Unknown**
-means the session was recorded under a harness id this runner build doesn't bind at all — the remedy is to run a
-runner version that binds that id, on the runner holding the chunk, never to substitute another harness. **Unavailable**
-means a bound harness is missing the specific capability being asked of it; the production registry always binds
-`claude_code` with every capability, so this can't happen today. The chunk escalates in place with no takeover command,
-since no other runner can dispatch to that exact session either — but once the recorded harness is resolvable again
-(that runner build), the operator can take the session over by hand
-([chunk-operations/takeover.md](./chunk-operations/takeover.md)) alongside that remedy; either way, clearing the
-escalation still takes one of the supersessions below.
+means the session was recorded under a harness id this runner build doesn't bind at all — the remedy is to run a runner
+version that binds that id, on the runner holding the chunk, never to substitute another harness. **Unavailable** means
+a bound harness is missing the specific capability being asked of it; the production registry always binds `claude_code`
+with every capability, so this can't happen today. The chunk escalates in place with no takeover command, since no other
+runner can dispatch to that exact session either — but once the recorded harness is resolvable again (that runner
+build), the operator can take the session over by hand ([chunk-operations/takeover.md](./chunk-operations/takeover.md))
+alongside that remedy; either way, clearing the escalation still takes one of the supersessions below.
 
 `no-acceptable-harness` (critical): distinct from `owner-unresolvable` above in reaching only a fresh mint, with no
-existing session to name — every member of the node's acceptable harness set ([worker-spawn.md](./worker-spawn.md)
-owns that set and its resolution) is unknown, unavailable, **unhealthy**, or resolves none of the session's model
-preference. **Unhealthy** (blizzard#438) is distinct from unavailable: a bound harness with every capability wired can
-still fail its own computed health — a missing binary, an incompatible or unknown observed version, failed
-authentication, an unmapped configured tier, or a recorded selftest failure, all visible with their cause in this
-runner's own `GET /api/harness-health` diagnostics, never in this escalation. The chunk escalates in place rather than
-minting under the runner's default harness; with no session ever spawned, the escalation carries no takeover command
-either.
+existing session to name — every member of the node's acceptable harness set ([worker-spawn.md](./worker-spawn.md) owns
+that set and its resolution) is unknown, unavailable, **unhealthy**, or resolves none of the session's model preference.
+**Unhealthy** is distinct from unavailable: a bound harness with every capability wired can still fail its own computed
+health — a missing binary, an incompatible or unknown observed version, failed authentication, an unmapped configured
+tier, or a recorded selftest failure, all visible with their cause in this runner's own `GET /api/harness-health`
+diagnostics, never in this escalation. The chunk escalates in place rather than minting under the runner's default
+harness; with no session ever spawned, the escalation carries no takeover command either.
 
 Escalations appear in the same feed as a needs-human event kind — one row, one surface; a row leaves when its escalation
 is superseded by any of a requeue, an operator `chunk restart`, the next attempt's lease, or the chunk ending `stopped`
@@ -42,17 +40,17 @@ or `done`.
 ## Worker stdout and stderr
 
 Every worker invocation's raw stdout and stderr are captured to the runner's own runtime directory, under
-`worker-stdout/<lease_id>.<generation>.{stdout,stderr}` — one pair of files per spawn or resume attempt. `stdout` carries
-the harness result envelope (cost, usage, `subtype`, `is_error`, the final result text); `stderr` is what the process
-wrote before a crash, and is what a `worker-lost` event's stderr tail is drawn from. An operator with a lease id and
-generation number (both visible on the chunk's own attempt history) can open the file directly — the layout needs no
+`worker-stdout/<lease_id>.<generation>.{stdout,stderr}` — one pair of files per spawn or resume attempt. `stdout`
+carries the harness result envelope (cost, usage, `subtype`, `is_error`, the final result text); `stderr` is what the
+process wrote before a crash, and is what a `worker-lost` event's stderr tail is drawn from. An operator with a lease id
+and generation number (both visible on the chunk's own attempt history) can open the file directly — the layout needs no
 lookup elsewhere.
 
-These files outlive the lease: releasing an environment does not delete them (issue #58), so an invocation's envelope
-stays readable well after the chunk that spawned it has moved on — the one place to see exactly what a harness returned
-after something has gone wrong (a usage-limit hit, an interrupted worker, a premature exit). They are not durable
-forever, though — a periodic sweep prunes both streams once they age past `[worker_stdout] retention_days` in
-`blizzard-runner.toml` (default 14 days); a file inside the window is left alone regardless of its lease's own state.
+These files outlive the lease: releasing an environment does not delete them, so an invocation's envelope stays readable
+well after the chunk that spawned it has moved on — the one place to see exactly what a harness returned after something
+has gone wrong (a usage-limit hit, an interrupted worker, a premature exit). They are not durable forever, though — a
+periodic sweep prunes both streams once they age past `[worker_stdout] retention_days` in `blizzard-runner.toml`
+(default 14 days); a file inside the window is left alone regardless of its lease's own state.
 
 ## Reading the feed
 
@@ -63,9 +61,9 @@ row linking to its chunk.
 
 `GET /api/activity` is a second read the board's Activity feed rail backfills from on page load, merging three durable
 sources — chunk status changes, the event log, and runner pause/resume — newest-first, bounded by `since` (default 24
-hours back) and `limit` (default 200, refused past 1000), gated like `GET /api/events`. Activity orders by pure
-recency, the event log being the triage view; after backfill the rail continues live over the same stream, deduped by
-each frame's fact-identity key rather than by timestamp.
+hours back) and `limit` (default 200, refused past 1000), gated like `GET /api/events`. Activity orders by pure recency,
+the event log being the triage view; after backfill the rail continues live over the same stream, deduped by each
+frame's fact-identity key rather than by timestamp.
 
 ## List pagination
 

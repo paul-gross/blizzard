@@ -54,7 +54,7 @@ FIXTURE_ENV = "e2e"
 RUNNER_ENV = "e1"
 
 # The mock harness's fence var, forwarded to workers through the spawn-environment
-# allowlist's operator-extension knob (issue #88); see MOCK_HARNESS_ENV_PASSTHROUGH.
+# allowlist's operator-extension knob; see MOCK_HARNESS_ENV_PASSTHROUGH.
 MOCK_HARNESS_FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
 # The vars every scripted mock-fleet scenario's worker child needs — mock-only names, so
 # they ride the allowlist's operator-extension knob rather than the base allowlist.
@@ -65,7 +65,7 @@ MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT)
 WORK_SOURCE_TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN_TOYAPI"
 
 # Appended to a build prompt after a real commit: pushes the branch and declares it via
-# `blizzard runner artifact commit` (issue #143); declaring twice per lease is harmless.
+# `blizzard runner artifact commit`; declaring twice per lease is harmless.
 _PUSH_AND_DECLARE_SCRIPT = (
     "_branch = subprocess.run(\n"
     '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
@@ -235,7 +235,7 @@ def _await_http(
 ) -> None:
     """Block until ``path`` answers 200, or fail naming why.
 
-    ``log`` is the daemon's own log file (issue #145); the early-exit diagnostic reads it
+    ``log`` is the daemon's own log file; the early-exit diagnostic reads it
     rather than a drained pipe, and always names the exit code too.
     """
     deadline = time.monotonic() + timeout
@@ -287,7 +287,7 @@ def _hub(
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     # Declare the one work source every scenario ingests against; `annotate` opts it into
-    # the forge-status label sweep (issue #179).
+    # the forge-status label sweep.
     write_work_sources(
         hub_dir,
         [
@@ -428,7 +428,7 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
 def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int) -> RunnerConfig:
     """A migrated runner runtime pointed at the fixture workspace and the mock harness.
     ``host``/``port`` bind to a free port rather than the base config's default, which
-    can collide with this machine's live dogfood runner (issue #143, Phase 4). Both mock
+    can collide with this machine's live dogfood runner. Both mock
     harness binaries are always wired: ``harness_binary`` keeps meaning Claude Code
     (harness selection is per-node, never this function), ``opencode_binary`` lets a scenario opt in by naming ``opencode``."""
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
@@ -445,13 +445,13 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         # The mock façade rejects an unknown ``--permission-mode`` flag, so it must be
         # omitted (``None``).
         harness_permission_mode=None,
-        # Both health probes read a fixture-written credential file (blizzard#438) — neither
+        # Both health probes read a fixture-written credential file — neither
         # mock binary is a real, logged-in provider CLI.
         claude_code_credentials_path=claude_credentials,
         opencode_binary=str(bin_dir / "mock-opencode"),
         opencode_auth_path=opencode_auth,
         # A path that is never created, so the external-usage sampler's missing-credentials
-        # soft failure trips before any request is built (issue #218).
+        # soft failure trips before any request is built.
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
         base_branch="main",
         worker_env_passthrough=MOCK_HARNESS_ENV_PASSTHROUGH,
@@ -540,8 +540,8 @@ def _work_item_graph_yaml() -> str:
 def _runner_api(config: RunnerConfig, *, events: EventBroker | None = None) -> Iterator[None]:
     """Serve the runner's local API in a thread — the daemon the worker's verbs POST/GET to.
 
-    Touches no store, so it runs alongside the tick without contention. ``events`` (D2,
-    blizzard#317) threads a broker in, for a scenario proving the stream route too."""
+    Touches no store, so it runs alongside the tick without contention. ``events``
+    threads a broker in, for a scenario proving the stream route too."""
     app = build_hosted_app(config, events=events).app
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
     thread = threading.Thread(target=server.run, name="runner-local-api", daemon=True)

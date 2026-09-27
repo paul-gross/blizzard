@@ -1,4 +1,4 @@
-"""The runner loop honors a hub-side chunk pause (issue #46) — loop component tier.
+"""The runner loop honors a hub-side chunk pause — loop component tier.
 
 A pause must keep the claim — interrupt the worker, park the lease, hold environments — and
 resume the same session when it clears; a pause is not a detach. Every test drives the
@@ -78,7 +78,7 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
 
 
 class _ExitingProbe(FakeProbe):
-    """A worker that exits on its SIGINT, the way a real harness does (blizzard#627) — the
+    """A worker that exits on its SIGINT, the way a real harness does — the
     pause's interrupt is what ends it, never a kill."""
 
     def interrupt_group(self, pgid: int) -> None:
@@ -222,7 +222,7 @@ def test_a_chunk_detached_and_then_paused_is_still_abandoned(tmp_path):  # type:
 
 def test_pull_interrupts_the_worker_and_parks_the_lease_keeping_everything_else(tmp_path):  # type: ignore[no-untyped-def]
     """A pause discovered on a live tick interrupts the worker and parks on that same tick —
-    the inverse of an abandon, and never a SIGKILL (blizzard#627). Each omission (release,
+    the inverse of an abandon, and never a SIGKILL. Each omission (release,
     closure, epoch bump, requeue) is asserted separately (plan §3.1)."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -584,7 +584,7 @@ def test_pausing_an_unheld_ready_chunk_simply_keeps_it_out_of_the_queue(tmp_path
 
 
 # --------------------------------------------------------------------------- #
-# The interrupt-then-kill park (blizzard#627): envelope recorded, survivor killed only past the budget, no waits.
+# The interrupt-then-kill park: envelope recorded, survivor killed only past the budget, no waits.
 
 
 def _usage_payloads(store):  # type: ignore[no-untyped-def]

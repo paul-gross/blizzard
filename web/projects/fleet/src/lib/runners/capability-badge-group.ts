@@ -6,7 +6,7 @@ import { KitBadge } from '../kit/kit-badge';
 import type { Tone } from '../kit/tone';
 
 /**
- * The runner registry's per-capability render (blizzard#441) — one distinct, labelled
+ * The runner registry's per-capability render — one distinct, labelled
  * badge per reported harness binding, so a multi-harness runner never collapses its
  * bindings into one undifferentiated row. A runner reporting none renders its own
  * settled empty branch rather than nothing at all — {@link RunnerPanelView}'s async

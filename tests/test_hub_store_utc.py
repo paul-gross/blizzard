@@ -1,4 +1,4 @@
-"""The hub store round-trips its own written instants (issue #28, ``bzh:utc-instants``).
+"""The hub store round-trips its own written instants (``bzh:utc-instants``).
 
 ``record_lease(created_at=_NOW)`` (well, its fleet-registry sibling here) must read
 back ``== _NOW`` and UTC-aware — impossible before the schema's ``DateTime`` columns
@@ -80,7 +80,7 @@ def test_registration_without_capabilities_leaves_it_empty(tmp_path: Path) -> No
 
 def test_reregistration_replaces_the_capability_snapshot_whole(tmp_path: Path) -> None:
     # A dropped binding/tier leaves no trace, and omitting the field on re-registration
-    # clears whatever was there before (blizzard#433) — a synchronous overwrite, not a merge.
+    # clears whatever was there before — a synchronous overwrite, not a merge.
     store = _store(tmp_path)
     store.upsert_registration(
         "r1",

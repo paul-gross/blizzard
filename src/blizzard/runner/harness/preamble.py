@@ -1,4 +1,4 @@
-"""The runner's spawn-preamble composition (issues #17, #103, #149).
+"""The runner's spawn-preamble composition.
 
 Three ordered layers: the baked-in blizzard preamble, the operator-owned workspace
 prompt, and a machine-local facts table. A resumed spawn re-sends a standing layer only
@@ -29,42 +29,42 @@ class Prompts:
 
 PROMPTS = Prompts(Path(__file__).resolve().parent / "prompts")
 
-#: Layer 1's text (issue #103) — the fallback when a configured ``runner_prompt`` is unset.
+#: Layer 1's text — the fallback when a configured ``runner_prompt`` is unset.
 DEFAULT_BLIZZARD_PREAMBLE = PROMPTS.text("blizzard_preamble.md")
 
-#: Layers 1 and 2 both unchanged (issue #149). Carries layer 1's pointer to the facts
+#: Layers 1 and 2 both unchanged. Carries layer 1's pointer to the facts
 #: table, which layer 1's own prose would otherwise be the only thing to introduce.
 RESUME_STANDING_UNCHANGED = PROMPTS.text("resume_standing_unchanged.md")
 
-#: The raw ``{node}``/``{prior_node}`` template behind :func:`resume_cross_node` (blizzard#340).
+#: The raw ``{node}``/``{prior_node}`` template behind :func:`resume_cross_node`.
 _RESUME_CROSS_NODE = PROMPTS.text("resume_cross_node.md")
 
 
 def resume_cross_node(*, node: str, prior_node: str) -> str:
     """The emit-ready role-change line for a resume whose node differs from the previous
-    turn's (blizzard#340)."""
+    turn's."""
     return _RESUME_CROSS_NODE.format(node=node, prior_node=prior_node)
 
 
 #: Layer 1 unchanged while layer 2 is sent in full — carrying the same facts-table
-#: pointer, since the collapse rule is per layer (issue #149).
+#: pointer, since the collapse rule is per layer.
 RESUME_BLIZZARD_UNCHANGED = PROMPTS.text("resume_blizzard_unchanged.md")
 
-#: The mirror case (issue #149). No facts-table pointer: layer 1 is right there in full.
+#: The mirror case. No facts-table pointer: layer 1 is right there in full.
 RESUME_WORKSPACE_UNCHANGED = PROMPTS.text("resume_workspace_unchanged.md")
 
 #: A change whose new text is nothing, so it needs prose of its own: silence would read
-#: as "unchanged" to a worker still holding the withdrawn policy (issue #149).
+#: as "unchanged" to a worker still holding the withdrawn policy.
 RESUME_WORKSPACE_WITHDRAWN = PROMPTS.text("resume_workspace_withdrawn.md")
 
 #: Without it, replacement prose arrives in the same position looking exactly like the
-#: block the worker was handed several spawns ago (issue #149).
+#: block the worker was handed several spawns ago.
 RESUME_UPDATED_NOTICE = PROMPTS.text("resume_updated_notice.md")
 
 
 @dataclass(frozen=True)
 class Preamble:
-    """The spawn prefix prepended to the node envelope prompt (issues #17, #103, #149), plus
+    """The spawn prefix prepended to the node envelope prompt, plus
     the fingerprint of the standing prose *this* render resolved — so a caller records what it
     sent rather than re-deriving it."""
 
@@ -94,7 +94,7 @@ class Preamble:
         ``None`` for a spawn resuming nothing: it selects between the full three-layer render and
         one where an unchanged layer collapses and a changed one is announced. ``node`` names this
         turn's node-step — required, so no call site can silently suppress the role-change line —
-        and a ``prior_node`` known to differ from it composes that line in (blizzard#340)."""
+        and a ``prior_node`` known to differ from it composes that line in."""
         rows = [
             ("runner id", runner_id),
             ("chunk id", chunk_id),
@@ -110,7 +110,7 @@ class Preamble:
         blizzard = runner_prompt.strip() or DEFAULT_BLIZZARD_PREAMBLE
         workspace = workspace_prompt.strip()
         # The digest source, stated once: the resolved, post-`strip()` layer inputs above —
-        # never the raw prompt, never the emitted text (issue #149).
+        # never the raw prompt, never the emitted text.
         return cls(
             blizzard=blizzard,
             workspace=workspace,
@@ -131,8 +131,8 @@ class Preamble:
 
     @property
     def standing(self) -> list[str]:
-        """Layers 1 and 2 as this spawn sends them — in full, collapsed, or announced (issue #149)."""
-        # The role-change line leads every render whose nodes are known to differ (blizzard#340);
+        """Layers 1 and 2 as this spawn sends them — in full, collapsed, or announced."""
+        # The role-change line leads every render whose nodes are known to differ;
         # a differing recorded prior node already implies a resume, fingerprint or not.
         cross: list[str] = []
         if self.prior_node is not None and self.node != self.prior_node:

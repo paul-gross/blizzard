@@ -22,7 +22,7 @@ class IReadChunkMovementRepository(Protocol):
 
     def accepted_migration(self, chunk_id: str, *, from_node_id: str, epoch: int) -> bool:
         """True iff a cross-graph migration is already recorded for ``(chunk_id,
-        from_node_id, epoch)`` (issue #90) — the replay probe for a re-applied cross-graph
+        from_node_id, epoch)`` — the replay probe for a re-applied cross-graph
         completion. A migration writes no transition, so :meth:`accepted_transition_target`
         never sees it; this is its counterpart."""
         ...
@@ -72,7 +72,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         clear_intent: bool = False,
         migration_id: str | None = None,
     ) -> str | None:
-        """Record a cross-graph migration atomically and idempotently (issue #90). One
+        """Record a cross-graph migration atomically and idempotently. One
         transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin, the route
         release (unless ``release_route`` is ``False``), the submitting step's ``artifacts``
         and ``proposals``, and — when ``clear_intent`` — the intent clear. Returns the
@@ -102,5 +102,5 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
     def record_requeue(self, chunk_id: str, *, at: datetime) -> int:
         """Record a ``requeue.recorded`` fact — supersedes an open escalation.
 
-        Returns the freshly-written ``requeues.id`` (issue #213's activity-feed key)."""
+        Returns the freshly-written ``requeues.id`` (the activity-feed's key)."""
         ...

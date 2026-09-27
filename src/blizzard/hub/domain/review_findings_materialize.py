@@ -1,4 +1,4 @@
-"""Review-finding delivery materialization (blizzard#582) — turning a
+"""Review-finding delivery materialization — turning a
 :class:`ValidatedReviewFindings` into the rows a passing delivery mints, written in one
 transaction. Sibling to `review_findings.py` rather than folded into it so that module
 stays pure validation with no I/O; this one mints ids through the injected clock
@@ -32,7 +32,7 @@ class ReviewFindingsOutcome(Enum):
 class NewReviewFinding:
     """A fully-formed ``findings`` row — id already minted (`bzh:domain-takes-objects`).
     Carries no `routine_name`/`introduced`/`introduced_at`: a review-sourced finding has
-    no routine lineage and no commit-blame resolution (blizzard#582 D1)."""
+    no routine lineage and no commit-blame resolution."""
 
     finding_id: str
     scope_slug: str
@@ -58,7 +58,7 @@ class ReviewFindingsPlan:
     """Everything :class:`IWriteReviewFindingsRepository` needs to do its writes — every
     id, timestamp, and scope description already composed (`bzh:injected-clock`). The
     store still mints any unseen scope named here, in the same transaction as the
-    findings and facts (D6), but writes this plan's own description rather than its own."""
+    findings and facts, but writes this plan's own description rather than its own."""
 
     chunk_id: str
     node_id: str
@@ -85,7 +85,7 @@ class ReviewFindingsPlan:
 
 class IWriteReviewFindingsRepository(Protocol):
     """Materialize one :class:`ReviewFindingsPlan`, atomically and idempotently, keyed
-    on ``chunk_id`` alone (blizzard#582 D6) — not ``(chunk_id, node_id, epoch)``, since a
+    on ``chunk_id`` alone — not ``(chunk_id, node_id, epoch)``, since a
     chunk may reach `record-findings` more than once only through a rare post-landing
     repair round, whose deferred findings this idempotence key deliberately drops."""
 

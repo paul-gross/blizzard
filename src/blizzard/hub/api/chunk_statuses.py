@@ -1,4 +1,4 @@
-"""The runner tick's slim batch status read (blizzard#521) — one bulk-by-id-set call to
+"""The runner tick's slim batch status read — one bulk-by-id-set call to
 each of the facts/route/decisions seams."""
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def chunk_statuses(chunk_ids: list[str], services: HubServices) -> list[ChunkSta
                 route_runner_id=route.runner_id if route is not None else None,
                 pause=pause_view(facts.open_pause()),
                 latest_epoch=facts.latest_epoch(),
-                # Oldest first (issue #370) — mirrors `ChunkHistoryView.restarts`'s own
+                # Oldest first — mirrors `ChunkHistoryView.restarts`'s own
                 # `(recorded_at, epoch)` order, the documented contract on the wire field.
                 restart_epochs=[r.epoch for r in sorted(facts.restarts, key=lambda r: (r.recorded_at, r.epoch))],
                 cost=usage_total_view(facts.usage_total()),

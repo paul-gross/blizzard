@@ -87,7 +87,7 @@ class Validator:
             self.errors.append(f"entry `{self.doc.entry}` does not name an existing node")
 
     def _check_sessions(self) -> None:
-        """A session name and a node name share one reference namespace (issue #144), so a
+        """A session name and a node name share one reference namespace, so a
         collision would make a node's own lineage silently unreachable."""
         for name, decl in self.doc.sessions.items():
             if name in self.node_names:
@@ -102,7 +102,7 @@ class Validator:
             if not entry:
                 self.errors.append(f"session `{name}`: `model` entries must be non-empty strings")
         # Non-empty only: the `effort`/`compaction_window` vocabulary is the adapter's to
-        # recognize (``bzh:one-owner``), same as `effort` (blizzard#343).
+        # recognize (``bzh:one-owner``), same as `effort`.
         if decl.effort is not None and not decl.effort.strip():
             self.errors.append(f"session `{name}`: `effort` must be a non-empty string")
         if decl.compaction_window is not None and not decl.compaction_window.strip():
@@ -229,7 +229,7 @@ class NodeCheck:
 
     def _check_checks_gating(self) -> None:
         """``checks_cwd``, ``checks_timeout``, and ``requires_checks`` are all meaningless
-        without a ``checks:`` list to run (issue #114)."""
+        without a ``checks:`` list to run."""
         node = self.node
         if not node.checks:
             if node.checks_cwd is not None:
@@ -260,7 +260,7 @@ class NodeCheck:
 
     def _check_choice_targets(self) -> None:
         """Every choice needs a description and a ``to`` that resolves: a same-graph node
-        name, the reserved terminal, or a well-formed ``graph:<name>`` target (issue #90)."""
+        name, the reserved terminal, or a well-formed ``graph:<name>`` target."""
         node = self.node
         if node.judgement is None:
             return
@@ -284,7 +284,7 @@ class NodeCheck:
 
     def _check_session_ref(self) -> None:
         """``resume:<name>`` resolves declared-session-first, node-second; ``fresh:<name>``
-        resolves against sessions only (D1, issues #115, #144)."""
+        resolves against sessions only."""
         node = self.node
         if node.session_malformed:
             self.errors.append(f"node `{node.name}`: malformed session value — expected {SESSION_LEGAL_FORMS}")
@@ -312,7 +312,7 @@ class NodeCheck:
             )
 
     def _check_proposes_work_items(self) -> None:
-        """D4 — a hub-executed node has no worker to author a proposal, and a human-judged
+        """A hub-executed node has no worker to author a proposal, and a human-judged
         node's completion is the resolving transition, which carries no payload channel at
         all — so the policy is legal only on a worker-judged runner node."""
         node = self.node
@@ -328,7 +328,7 @@ class NodeCheck:
 class Reachability:
     """What the entry reaches over the adjacency every node's authored choices imply.
 
-    No node name is privileged (#67); a cross-graph target (issue #90) is an exit *out*
+    No node name is privileged (#67); a cross-graph target is an exit *out*
     of this graph, so like the terminal it contributes no intra-graph adjacency."""
 
     entry: str

@@ -1,5 +1,5 @@
-"""The transcript lane's pump (component tier, issue #246) — cursor advance, the per-record
-and 64 MB per-chunk caps (D4), the ``ship`` off-switch (D5), and blizzard#247's turn-range
+"""The transcript lane's pump (component tier) — cursor advance, the per-record
+and 64 MB per-chunk caps, the ``ship`` off-switch, and turn-range
 wire shape."""
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def _tool_call(output: str, *, input_: dict[str, object] | None = None, input_un
 
 def _tool_turn(index: int, *, output: str) -> NormalizedTurn:
     """A turn whose oversized content lives in ``tool.output``, not its own ``text`` — the
-    ordinary shape of a Claude Code transcript (review F2)."""
+    ordinary shape of a Claude Code transcript."""
     return NormalizedTurn(
         index=index,
         kind="tool",
@@ -153,7 +153,7 @@ def _tool_turn(index: int, *, output: str) -> NormalizedTurn:
 
 def _input_tool_turn(index: int, *, content: str) -> NormalizedTurn:
     """A ``Write``-shaped turn whose oversized content lives in ``tool.input["content"]``,
-    never a turn's own ``text`` or a tool's ``output`` (F1)."""
+    never a turn's own ``text`` or a tool's ``output``."""
     return NormalizedTurn(
         index=index,
         kind="tool",
@@ -182,7 +182,7 @@ def _unparsed_input_tool_turn(index: int, *, raw: str) -> NormalizedTurn:
 
 
 def _sidechain_turn(index: int, *, sidechain_text: str) -> NormalizedTurn:
-    """A turn whose oversized content lives in a nested sidechain turn's ``text`` (review F2)."""
+    """A turn whose oversized content lives in a nested sidechain turn's ``text``."""
     return NormalizedTurn(
         index=index,
         kind="tool",
@@ -229,13 +229,13 @@ def _incomplete_batch(
 ) -> TranscriptBatch:
     """``_batch``'s ``complete=False`` counterpart — the per-batch read budget ran out
     before this whole window was covered, so ``next_position`` is where a caller resumes
-    RIGHT NOW, not next tick (F2, review round 7)."""
+    RIGHT NOW, not next tick."""
     return replace(_batch(turns, next_token=next_token, unlinked_sidechains=unlinked_sidechains), complete=False)
 
 
 def _assert_gapless_contiguous(pending: Sequence[BufferedTranscriptDelta], *, total_turns: int) -> list[dict[str, Any]]:
     """Every non-final buffered record's turn range, sorted, covers exactly
-    ``[0, total_turns)`` with no gap and no overlap (F1, review round 7) — the invariant
+    ``[0, total_turns)`` with no gap and no overlap — the invariant
     splitting an over-cap batch into several records must never break."""
     bodies: list[dict[str, Any]] = sorted((json.loads(d.payload) for d in pending), key=lambda b: b["turn_range_start"])
     expected_start = 0
@@ -320,7 +320,7 @@ def test_pump_is_a_noop_when_ship_is_false() -> None:
 
 
 def test_pump_skips_a_segment_already_stopped_from_shipping() -> None:
-    """review F10: `_pump_one`'s first guard — an already-latched segment never reads the
+    """`_pump_one`'s first guard — an already-latched segment never reads the
     source at all. No prior test ever seeded `shipping_stopped_reason` first."""
     ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
@@ -333,7 +333,7 @@ def test_pump_skips_a_segment_already_stopped_from_shipping() -> None:
 
 
 def test_pump_retries_from_the_same_cursor_when_the_source_is_unavailable() -> None:
-    """review F10: `turns_since` can report `available=False` (e.g. the harness session
+    """`turns_since` can report `available=False` (e.g. the harness session
     file is mid-rotation) — the pump must leave the cursor untouched and ship nothing,
     retrying from the same position next tick. No prior test scripted this outcome."""
     unavailable = TranscriptBatch(
@@ -371,7 +371,7 @@ def test_pump_ships_a_record_and_advances_the_cursor() -> None:
     assert pending[0].final is False
     assert pending[0].segment_id == segment_id
     body = json.loads(pending[0].payload)
-    assert (body["turn_range_start"], body["turn_range_end"]) == (0, 1)  # blizzard#247's turn-range key
+    assert (body["turn_range_start"], body["turn_range_end"]) == (0, 1)  # the turn-range key
     assert body["normalizer_version"] == "fake/1"
     assert (body["model"], body["effort"]) == ("claude-sonnet-5", "high")
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
@@ -421,8 +421,8 @@ def test_pump_advances_the_cursor_on_a_turnless_batch() -> None:
 
 
 def test_pump_truncates_a_single_record_that_alone_exceeds_the_cap() -> None:
-    """D4: a single turn over the cap is truncated in place, not dropped. review F1:
-    the TRANSIENT reason — ``truncated_reason``, never ``shipping_stopped_reason``."""
+    """A single turn over the cap is truncated in place, not dropped. The TRANSIENT
+    reason — ``truncated_reason``, never ``shipping_stopped_reason``."""
     huge = "x" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, huge)], next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
@@ -437,7 +437,7 @@ def test_pump_truncates_a_single_record_that_alone_exceeds_the_cap() -> None:
     assert segment.cursor == "pos-1"  # the cursor advances past the whole batch regardless
     assert segment.truncated_reason == "record_cap_exceeded"
     assert segment.shipping_stopped_reason is None  # never latches the pump's guard
-    # Truncation is never silent (D4): a warning rides the FACT lane. review F12: assert
+    # Truncation is never silent: a warning rides the FACT lane. Assert
     # the actual payload, not just the generic envelope kind every fact-lane event shares.
     fact_events = ctx.stores.outbound.pending_outbound()
     assert len(fact_events) == 1
@@ -449,7 +449,7 @@ def test_pump_truncates_a_single_record_that_alone_exceeds_the_cap() -> None:
 
 
 def test_pump_keeps_shipping_after_a_record_cap_truncation() -> None:
-    """review F1's exact regression: before the fix, a single oversized turn latched the
+    """Before the fix, a single oversized turn latched the
     SAME field the chunk-budget stop reads, permanently ending the segment. It must not —
     the very next tick, with a fresh small turn available, still ships."""
     huge = "x" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
@@ -511,7 +511,7 @@ def test_pump_warns_once_per_reason_even_as_the_segments_displayed_reason_altern
 
 
 def test_pump_shrinks_tool_output_not_just_top_level_text() -> None:
-    """review F2: an oversized ``tool.output`` — the ordinary case for a Claude Code
+    """An oversized ``tool.output`` — the ordinary case for a Claude Code
     transcript, not an oversized ``text`` — must shrink too, or the record still ships
     over cap and the hub rejects it."""
     huge_output = "y" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
@@ -525,9 +525,9 @@ def test_pump_shrinks_tool_output_not_just_top_level_text() -> None:
     assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
     body = json.loads(pending[0].payload)
     assert body["turns"] != []  # shrunk, not emptied — genuine content still shipped
-    # review F6: mildly over cap shrinks by a sliver, not to near-nothing.
+    # Mildly over cap shrinks by a sliver, not to near-nothing.
     assert len(body["turns"][0]["tool"]["output"]) > len(huge_output) * 0.8
-    # review F7: shrinking alone (not just the still-over-cap empty-slice case) is a real
+    # Shrinking alone (not just the still-over-cap empty-slice case) is a real
     # loss too — the wire flag must say so, not just the local variable that drove it.
     assert body["record_truncated"] is True
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
@@ -537,7 +537,7 @@ def test_pump_shrinks_tool_output_not_just_top_level_text() -> None:
 
 
 def test_pump_shrinks_a_nested_sidechain_turns_text() -> None:
-    """review F2: an oversized turn nested under a sidechain conversation is exactly as
+    """An oversized turn nested under a sidechain conversation is exactly as
     shrinkable as a top-level one — the shrink must recurse into ``sidechain.turns``."""
     huge = "z" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
     ctx, _source = _ctx(
@@ -551,7 +551,7 @@ def test_pump_shrinks_a_nested_sidechain_turns_text() -> None:
     assert len(pending) == 1
     assert len(pending[0].payload.encode("utf-8")) <= TRANSCRIPT_RECORD_MAX_BYTES
     body = json.loads(pending[0].payload)
-    # review F6: mildly over cap shrinks by a sliver, not to near-nothing.
+    # Mildly over cap shrinks by a sliver, not to near-nothing.
     assert len(body["turns"][0]["sidechain"]["turns"][0]["text"]) > len(huge) * 0.8
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
@@ -604,7 +604,7 @@ def test_sidechain_and_tool_wire_never_omit_a_defaulted_wire_field() -> None:
 
 
 def test_pump_splits_many_small_turns_instead_of_emptying_the_whole_batch() -> None:
-    """review round 7 F1: before the fix, a WHOLE batch whose structural overhead alone
+    """Before the fix, a WHOLE batch whose structural overhead alone
     exceeded the cap got emptied in one explicit-empty record. Splitting into several
     under-cap records instead needs no shrinking and drops nothing."""
     # Each turn's own JSON overhead (index/kind/timestamp/tool=None/…) is small but not
@@ -632,7 +632,7 @@ def test_pump_splits_many_small_turns_instead_of_emptying_the_whole_batch() -> N
 
 def test_pump_splits_a_batch_with_many_large_shrinkable_fields_instead_of_shrinking_them() -> None:
     """A batch whose oversized content spans many turns — a real catch-up window's shape —
-    now splits into several under-cap records with every byte intact (review round 7 F1),
+    now splits into several under-cap records with every byte intact,
     rather than shrinking one combined record's content down to fit."""
     many_turns = [_tool_turn(i, output="x" * _cap_share(0.03)) for i in range(60)]  # ~1.8 caps' worth
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(many_turns, next_token="pos-1")})
@@ -655,7 +655,7 @@ def test_pump_splits_a_batch_with_many_large_shrinkable_fields_instead_of_shrink
 
 
 def test_pump_splits_a_severely_oversized_batch_instead_of_shrinking_every_field() -> None:
-    """review round 7 F1: a window many times over cap — a real catch-up read's ordinary
+    """A window many times over cap — a real catch-up read's ordinary
     shape — splits into several fully-intact records. Mirrors the finding's own 50-turn
     measurement, which used to require lossy shrinking; splitting needs none."""
     window_turns = [_tool_turn(i, output="x" * _cap_share(0.06)) for i in range(50)]  # ~3 caps' worth
@@ -732,7 +732,7 @@ def test_pump_shrinks_non_ascii_content_by_a_real_fraction_not_to_near_zero() ->
 
 
 def test_pump_shrinks_an_oversized_unparsed_tool_input_instead_of_emptying_the_record() -> None:
-    """`input_unparsed` is the second half of F1's fix and fails independently of the parsed
+    """`input_unparsed` shrinks the same way `input` does, and fails independently of the parsed
     `input` walk: an unparseable oversized blob is just as unshrinkable-looking, and the
     whole claimed range is lost the same way if the candidate is never offered."""
     huge_raw = "u" * (TRANSCRIPT_RECORD_MAX_BYTES + 1000)
@@ -759,8 +759,8 @@ def test_pump_shrinks_an_oversized_unparsed_tool_input_instead_of_emptying_the_r
 
 def test_pump_splits_many_medium_tool_inputs_instead_of_emptying_the_record() -> None:
     """Many ordinary `Edit`-shaped calls, each individually under cap, summing well over it
-    — the batch splits into several under-cap records, each fully intact (review round 7
-    F1), not a single shrunk-or-emptied one."""
+    — the batch splits into several under-cap records, each fully intact,
+    not a single shrunk-or-emptied one."""
     edits = [_input_tool_turn(i, content="e" * _cap_share(0.03)) for i in range(60)]  # ~1.8 caps' worth
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch(edits, next_token="pos-1")})
     segment_id = _spawn_one_segment(ctx)
@@ -783,8 +783,8 @@ def test_pump_splits_many_medium_tool_inputs_instead_of_emptying_the_record() ->
 
 def _assert_skipped_not_raised(logs: Sequence[Mapping[str, object]]) -> None:
     """Pins the cursor-advance guard's FORM, not just its existence: a bare `assert` (the
-    pre-F3 code, and what `python -O` strips) is indistinguishable by outcome alone —
-    `_pump_one_safe`'s own per-segment catch (F2) swallows the `AssertionError`, leaving
+    old code, and what `python -O` strips) is indistinguishable by outcome alone —
+    `_pump_one_safe`'s own per-segment catch swallows the `AssertionError`, leaving
     the same empty buffer and unadvanced cursor. Only the log tells them apart: the skip
     line fired, the isolation's failure line did not."""
     assert [e for e in logs if "cursor did not advance" in str(e["event"])] != []
@@ -933,7 +933,7 @@ def test_pump_stops_shipping_past_the_chunk_budget_and_a_later_closure_still_fin
     segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
     assert segment is not None
     assert segment.shipping_stopped_reason == "chunk_budget_exceeded"
-    assert segment.truncated_reason is None  # the two reasons are independent fields (F1)
+    assert segment.truncated_reason is None  # the two reasons are independent fields
     assert source.turns_since_calls == []  # never even read — the budget check comes first
 
     ctx.stores.lease_record.record_closure(
@@ -976,7 +976,7 @@ def test_a_raise_before_the_warning_leaves_the_dropped_sidechain_unlatched() -> 
 
 
 def test_pump_still_warns_a_dropped_sidechain_on_the_tick_that_tips_the_chunk_budget() -> None:
-    """review F13: unlike the pre-read budget check above, THIS tick's own record (a
+    """Unlike the pre-read budget check above, THIS tick's own record (a
     real, just-read batch) is what tips the budget over — its dropped sidechain must
     still warn, not vanish silently along with the stop."""
     ctx, _source = _ctx(
@@ -1010,7 +1010,7 @@ def test_pump_still_warns_a_dropped_sidechain_on_the_tick_that_tips_the_chunk_bu
 
 
 def test_pump_never_double_ships_after_a_same_session_resume() -> None:
-    """review F3's pump-level regression: a same-session resume must not leave two open
+    """A same-session resume must not leave two open
     segments reading it — the pump only ever finds ONE, picking up where it left off."""
     ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
     _spawn_one_segment(ctx)
@@ -1067,7 +1067,7 @@ def test_lease_close_pumps_the_open_segment_before_finalizing_it() -> None:
 
 
 def test_pump_lease_yields_to_its_own_deadline() -> None:
-    """review F4: ``pump_lease`` must honor an already-elapsed deadline exactly like
+    """``pump_lease`` must honor an already-elapsed deadline exactly like
     ``run()`` does — the bound ``Attempt.close`` computes before calling it, so a slow
     transcript-source read can never delay the closure it precedes past a few seconds."""
     ctx, _source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
@@ -1094,7 +1094,7 @@ class _AdvancingClock(FixedClock):
 
 
 def test_lease_close_bounds_the_pump_it_runs_before_closing() -> None:
-    """review F4's other half: ``pump_lease`` honoring a deadline is worth nothing unless
+    """``pump_lease`` honoring a deadline is worth nothing unless
     ``Attempt.close`` actually computes and passes one. Passing ``None`` there survives
     every other case, so the bound is pinned at the closure boundary itself."""
     ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
@@ -1111,8 +1111,8 @@ def test_lease_close_bounds_the_pump_it_runs_before_closing() -> None:
 
 
 class _RaisingTranscriptSource:
-    """An :class:`IHarnessTranscriptSource` whose ``turns_since`` always raises — review
-    F4's exception-isolation case, which no fixture can script through
+    """An :class:`IHarnessTranscriptSource` whose ``turns_since`` always raises — the
+    exception-isolation case, which no fixture can script through
     :class:`FakeTranscriptSource` alone."""
 
     def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  # type: ignore[no-untyped-def]
@@ -1139,7 +1139,7 @@ class _RaisingTranscriptSource:
 
 
 def test_lease_close_survives_a_raising_transcript_source() -> None:
-    """review F4: ``Attempt.close`` funnels every closure path through its own
+    """``Attempt.close`` funnels every closure path through its own
     pre-closure pump call. A read that raises must not propagate past it — the
     closure, and whatever it accompanies, must still land."""
     store = make_store("sqlite://")
@@ -1209,7 +1209,7 @@ def test_run_yields_to_its_own_deadline_across_many_open_segments() -> None:
 
 
 class _PartiallyRaisingTranscriptSource:
-    """review round 6 F2: raises for one session, serves a real batch for another — the
+    """Raises for one session, serves a real batch for another — the
     per-segment isolation case no single-session fixture can script."""
 
     def __init__(self, *, raising_session: str, batch: TranscriptBatch) -> None:
@@ -1357,7 +1357,7 @@ def test_pump_warns_on_an_unlinked_sidechain_dropped_with_no_turns() -> None:
 
 
 def test_pump_warns_only_once_per_segment_per_agent_across_ticks() -> None:
-    """review F2: an unlinked subagent stays unlinked every tick until it attaches or the
+    """An unlinked subagent stays unlinked every tick until it attaches or the
     segment closes — the fact-lane warning must latch per (segment, agent_id), not fire on
     every tick it recurs."""
     ctx, source = _ctx(
@@ -1390,11 +1390,11 @@ def test_pump_warns_only_once_per_segment_per_agent_across_ticks() -> None:
     assert [w["detail"]["agent_ids"] for w in warnings] == [["sub_1"], ["sub_2"]]
 
 
-# --- review round 7 F1: split an over-cap batch into several records, not one --------
+# --- Split an over-cap batch into several records, not one --------
 
 
 def test_pump_splits_a_batch_within_the_hub_cap_but_over_the_runner_cap() -> None:
-    """review round 7 F1: a batch within the hub's own record cap but over the runner's
+    """A batch within the hub's own record cap but over the runner's
     smaller one splits into multiple records, each within cap, none emptied — the cursor
     advances exactly once, and the split records' ranges are contiguous, gapless."""
     # The midpoint of the two caps — in the band by construction, however either moves.
@@ -1424,7 +1424,7 @@ def test_pump_splits_a_batch_within_the_hub_cap_but_over_the_runner_cap() -> Non
 def _unshrinkable_tool_turn(index: int) -> NormalizedTurn:
     """A `MultiEdit`-shaped turn with no shrinkable content at all (every string value is
     empty) whose sheer structural bulk alone still exceeds the cap, even shrunk to
-    nothing — the single pathological turn F1(b) needs, isolated from any sibling."""
+    nothing — the single pathological turn the isolation test needs, isolated from any sibling."""
     edits = [{"old_string": "", "new_string": ""} for _ in range(_empty_edits_over_cap(1.5))]
     return NormalizedTurn(
         index=index,
@@ -1439,7 +1439,7 @@ def _unshrinkable_tool_turn(index: int) -> NormalizedTurn:
 
 
 def test_pump_isolates_a_single_pathological_turn_from_its_siblings() -> None:
-    """review round 7 F1: a single turn over cap even after shrinking still falls back to
+    """A single turn over cap even after shrinking still falls back to
     an explicit empty-turns record, scoped to just its own range. Sibling turns in the
     same batch ship normally, in their own record(s), never swept up in its loss."""
     turns = [_turn(0, "before"), _unshrinkable_tool_turn(1), _turn(2, "after")]
@@ -1467,7 +1467,7 @@ def test_pump_isolates_a_single_pathological_turn_from_its_siblings() -> None:
 
 
 def test_pump_stops_shipping_a_split_batch_that_would_exceed_the_chunk_budget_when_summed() -> None:
-    """review round 7 F1: because every record a split batch produces advances the SAME
+    """Because every record a split batch produces advances the SAME
     cursor write, they must ship all-or-nothing against the 64 MB per-chunk budget —
     summed across every record the batch would produce, not just checked against one."""
     turns = [_tool_turn(i, output="x" * 300_000) for i in range(5)]  # splits into >1 record
@@ -1498,12 +1498,12 @@ def test_pump_stops_shipping_a_split_batch_that_would_exceed_the_chunk_budget_wh
     assert segment.shipped_turns == 0  # none of the split batch's turns were claimed
 
 
-# --- review round 7 F2: `pump_lease` drains a segment fully, not just one window -----
+# --- `pump_lease` drains a segment fully, not just one window -----
 
 
 class _SequencedTranscriptSource:
     """Serves a scripted sequence of batches for one session, one per call — the
-    within-one-invocation multi-read case ``pump_lease``'s drain loop (F2) needs, which
+    within-one-invocation multi-read case ``pump_lease``'s drain loop needs, which
     ``FakeTranscriptSource`` can't script (it needs external reassignment between calls,
     impossible from inside a single ``pump_lease`` call)."""
 
@@ -1553,7 +1553,7 @@ class _SequencedTranscriptSource:
 
 
 def test_pump_lease_drains_a_segment_across_several_incomplete_reads() -> None:
-    """review round 7 F2: `TranscriptBatch.complete=False` means more remains RIGHT NOW —
+    """`TranscriptBatch.complete=False` means more remains RIGHT NOW —
     `pump_lease` must loop reading the same segment until it catches up, not stop after
     one window like `run()` does."""
     batches = [
@@ -1595,7 +1595,7 @@ def test_pump_lease_drains_a_segment_across_several_incomplete_reads() -> None:
 class _ClockAdvancingAfterNCallsSource:
     """Wraps a ``_SequencedTranscriptSource``, advancing ``clock`` by ``jump`` right after
     its ``after``-th call returns — pins exactly which read ``pump_lease``'s drain loop is
-    mid-flight on when its deadline first reads as expired (F2), without coupling the test
+    mid-flight on when its deadline first reads as expired, without coupling the test
     to how many internal ``.now()`` calls one ``_pump_one`` happens to make."""
 
     inner: _SequencedTranscriptSource
@@ -1632,7 +1632,7 @@ class _ClockAdvancingAfterNCallsSource:
 
 
 def test_pump_lease_marks_incomplete_when_its_deadline_expires_mid_drain() -> None:
-    """review round 7 F2: a deadline expiring mid-drain stops the loop where it is — the
+    """A deadline expiring mid-drain stops the loop where it is — the
     segment is marked truncated (the new incomplete-closure reason) and the fact-lane
     warning fires, rather than the remaining unread content vanishing once it finalizes."""
     batches = [
@@ -1680,7 +1680,7 @@ class _AdvanceClockAfterSessionSource:
     """Serves one complete batch per session; advances ``clock`` past ``deadline`` right
     after serving ``advance_after``'s own read — pins ``pump_lease``'s OUTER per-segment
     loop (not the per-segment drain loop) to see its deadline as expired before ever
-    attempting the next segment (F2)."""
+    attempting the next segment."""
 
     batches: dict[str, TranscriptBatch]
     clock: FixedClock
@@ -1732,7 +1732,7 @@ class _AdvanceClockAfterSessionSource:
 
 
 def test_pump_lease_marks_a_second_segment_truncated_when_never_even_attempted() -> None:
-    """review round 7 F2: the outer per-segment loop's own deadline-break used to drop a
+    """The outer per-segment loop's own deadline-break used to drop a
     never-attempted segment silently. A lease with two open segments (a resume under a
     different session id) whose deadline expires right after the first now marks the second."""
     clock = FixedClock(instant=_NOW)
@@ -1792,11 +1792,11 @@ def test_pump_lease_marks_a_second_segment_truncated_when_never_even_attempted()
     assert kinds.count("transcript-truncated") == 1
 
 
-# --- review round 7 F3: the cursor-guard's early return must still warn a latched sidechain
+# --- The cursor-guard's early return must still warn a latched sidechain
 
 
 def test_pump_warns_a_dropped_sidechain_even_when_the_cursor_guard_skips_the_segment() -> None:
-    """review round 7 F3: `mark_sidechain_dropped_warned` latches (segment, agent_id) as
+    """`mark_sidechain_dropped_warned` latches (segment, agent_id) as
     warned the instant it's called, so the cursor-guard's early return must still fire
     that warning — or it's lost forever (no later tick re-latches the same pair)."""
     stuck = TranscriptBatch(
@@ -1825,12 +1825,12 @@ def test_pump_warns_a_dropped_sidechain_even_when_the_cursor_guard_skips_the_seg
     assert "transcript-sidechain-dropped" in kinds  # the already-latched warning still fires
 
 
-# --- review round 7 F4: shrink recurses into a tool input's nested containers --------
+# --- Shrink recurses into a tool input's nested containers --------
 
 
 def _multi_edit_tool_turn(index: int, *, old: str, new: str) -> NormalizedTurn:
     """A `MultiEdit`-shaped turn: `tool.input["edits"]` is a LIST of dicts, each carrying
-    its own `old_string`/`new_string` — not a flat top-level string (F4)."""
+    its own `old_string`/`new_string` — not a flat top-level string."""
     return NormalizedTurn(
         index=index,
         kind="tool",
@@ -1844,7 +1844,7 @@ def _multi_edit_tool_turn(index: int, *, old: str, new: str) -> NormalizedTurn:
 
 
 def test_pump_shrinks_a_multi_edit_shaped_tool_input_instead_of_emptying_the_record() -> None:
-    """review round 7 F4: `MultiEdit.edits` nests its oversized strings below `tool.input`'s
+    """`MultiEdit.edits` nests its oversized strings below `tool.input`'s
     top-level keys — a flat walk counts their bytes toward the overshoot but never offers
     them as shrinkable. Mutation-verify by reverting to the flat top-level-only walk."""
     huge = "e" * (TRANSCRIPT_RECORD_MAX_BYTES // 2)
@@ -1885,11 +1885,11 @@ def test_pump_shrinking_a_multi_edit_input_never_mutates_the_sources_own_turn() 
     assert source_edit["new_string"] == huge
 
 
-# --- review round 7 F8: backpressure against an already-unbounded outbound buffer ----
+# --- Backpressure against an already-unbounded outbound buffer ----
 
 
 def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -> None:
-    """review round 7 F8: a prolonged hub outage leaves buffered content resident
+    """A prolonged hub outage leaves buffered content resident
     indefinitely — the pump must not pile more onto it. Transient backpressure, not a
     latch: it self-clears once the outstanding total drops back under the cap."""
     ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
@@ -1926,7 +1926,7 @@ def test_pump_gates_on_outstanding_buffered_bytes_before_reading_a_new_batch() -
 
 
 def test_run_reads_outstanding_buffered_bytes_once_and_still_enforces_the_cap_locally() -> None:
-    """Phase 3 hoist: `run()` reads the buffer's outstanding total once for the whole call,
+    """`run()` reads the buffer's outstanding total once for the whole call,
     then tracks it locally — a segment this same run ships adds to the local total, so a
     LATER segment in the same run correctly sees the cap crossed without a second store read."""
     ctx, source = _ctx(
@@ -1937,7 +1937,7 @@ def test_run_reads_outstanding_buffered_bytes_once_and_still_enforces_the_cap_lo
         },
     )
     segment_a_id = _spawn_one_segment(ctx)
-    # A same-lease resume under a different session id (as in the F2 test above) leaves a
+    # A same-lease resume under a different session id leaves a
     # second open segment on the same lease, so one `run()` call pumps both.
     ctx.stores.liveness.record_spawn(
         "lease_1",
@@ -1977,7 +1977,7 @@ def test_run_reads_outstanding_buffered_bytes_once_and_still_enforces_the_cap_lo
 
 
 def test_pump_lease_marks_incomplete_when_backpressure_gates_the_close_time_read() -> None:
-    """verify round 8 (F2 follow-up): F8's backpressure gate returning early looked
+    """The backpressure gate returning early looked
     identical to a caught-up segment to ``pump_lease``'s drain loop — the segment finalized
     with its content never even attempted, no truncated_reason, no fact-lane warning."""
     ctx, source = _ctx(ship=True, batches={"sess-a": _batch([_turn(0, "hi")], next_token="pos-1")})
@@ -2091,7 +2091,7 @@ def test_pump_lease_marks_incomplete_when_the_cursor_is_stuck_at_closure() -> No
     assert "transcript-truncated" in kinds
 
 
-# --- configured byte ceilings (blizzard#338) ----------------------------------------
+# --- configured byte ceilings ----------------------------------------
 
 
 def test_a_configured_chunk_budget_stops_shipping_where_the_default_would_not() -> None:
@@ -2179,7 +2179,7 @@ def test_unconfigured_caps_leave_the_module_defaults_in_force() -> None:
     assert pump._chunk_max_bytes == CHUNK_TRANSCRIPT_MAX_BYTES
 
 
-# --- cross-window correlation (blizzard#338) ----------------------------------------
+# --- cross-window correlation ----------------------------------------
 
 
 def _shipped_turns(ctx) -> list[dict]:  # type: ignore[no-untyped-def]

@@ -1,10 +1,10 @@
-"""``classify_offline``'s corpus lookup (blizzard#438) — reads the committed fixture corpus
+"""``classify_offline``'s corpus lookup — reads the committed fixture corpus
 rather than running a live probe. Mirrors `test_runner_harness_opencode_compatibility.py`'s
 own `_PACKAGE_ROOT`/corpus-path construction.
 
 ``classify_offline`` classifies a version by resolving it to a *reference corpus* — the
 newest committed corpus at or below it, inside the admitted range — never by requiring a
-corpus for the exact observed version. It carries no membership concept of its own (D2): the
+corpus for the exact observed version. It carries no membership concept of its own: the
 admitted range is used only to select the reference corpus, never to assert the observed
 version is itself admitted — a caller (`capability_snapshot.py`) checks that membership
 itself, before consulting this classification. The two-facts-not-one distinction that
@@ -35,7 +35,7 @@ from tests.repo_files import repo_root
 pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
-# Keyed off the admitted range's own committed corpus (blizzard#438), not a hardcoded
+# Keyed off the admitted range's own committed corpus, not a hardcoded
 # literal — there is exactly one committed corpus today, but this stays correct once a
 # second one lands.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
@@ -149,7 +149,7 @@ def test_assert_admitted_range_has_corpus_passes_when_a_committed_corpus_is_insi
 def test_a_raw_prefixed_observed_version_normalizes_before_classification() -> None:
     """A raw, prefixed ``--version`` output must route through the shared normalizer before
     the corpus lookup, the same normalized form the live probe already stores
-    (blizzard#438)."""
+    ."""
     raw = "opencode version 1.18.25\n"
     normalized = normalize_opencode_version(raw)
     assert normalized == PINNED_OPENCODE_VERSION
@@ -164,9 +164,9 @@ def test_assert_admitted_range_has_corpus_raises_naming_the_range(tmp_path: Path
 
 
 def test_a_semver_prerelease_named_corpus_directory_is_never_admitted(tmp_path: Path) -> None:
-    """A directory named ``1.19.0-1`` reads as a semver pre-release (blizzard#604) — the
+    """A directory named ``1.19.0-1`` reads as a semver pre-release — the
     same guard :func:`~blizzard.runner.harness.internal.harness_shared.version_admitted`
-    applies to an observed version, now shared by corpus admission too (D2)."""
+    applies to an observed version, now shared by corpus admission too."""
     for version in ("1.19.0-1", "1.19.0"):
         manifest_dir = tmp_path / "widget" / version
         manifest_dir.mkdir(parents=True)

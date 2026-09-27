@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 # SAFETY: `ANTHROPIC_MODEL` and family must stay absent — here and in `[worker]
-# env_passthrough` — they override the model a resumed session restores (issue #144).
+# env_passthrough` — they override the model a resumed session restores.
 BASE_ALLOWLIST_VARS: tuple[str, ...] = ("PATH", "HOME", "USER", "LANG", "TERM", "TMPDIR")
 # ``LC_*`` locale vars are a family, not a fixed set of names, so they are matched by
 # prefix rather than enumerated in ``BASE_ALLOWLIST_VARS``.

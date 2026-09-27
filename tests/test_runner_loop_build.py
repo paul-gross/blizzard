@@ -1,8 +1,8 @@
-"""Composition-root threading (``bzh:dependency-injection``) — issue #88.
+"""Composition-root threading (``bzh:dependency-injection``) —.
 
 Each case pins one ``RunnerConfig`` key reaching the collaborator built from it: an
 unthreaded key is read from the operator's toml and dropped, which no other tier sees.
-Both roots that build a ``ClaudeCodeAdapter`` are covered (issue #276).
+Both roots that build a ``ClaudeCodeAdapter`` are covered.
 """
 
 from __future__ import annotations
@@ -126,7 +126,7 @@ def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: P
 def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tmp_path: Path) -> None:
     """An unthreaded override leaves every daemon this root builds reading the
     sampler's own default credentials path and reaching the real Anthropic endpoint
-    (issue #218). The sampler is a separate seam from the harness adapter (blizzard#436) —
+    . The sampler is a separate seam from the harness adapter —
     selected from the config's resolved (declared-or-synthesized) subscription list, not
     threaded through ``ClaudeCodeAdapter`` anymore, and keyed by slug (phase 2) since a
     runner may declare several. The legacy table's own ``external_usage_sample_interval_seconds``
@@ -154,7 +154,7 @@ def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tm
 @pytest.mark.unit
 def test_the_loops_declared_subscriptions_share_one_root_owned_http_client(tmp_path: Path) -> None:
     """The laziness invariant ("a sampler that never samples opens no pool") lives at the
-    composition root (blizzard#436, hub:95): every declared subscription's sampler draws
+    composition root: every declared subscription's sampler draws
     from the *same* shared client, not one each."""
     config = RunnerConfig(
         root=tmp_path,
@@ -179,7 +179,7 @@ def test_the_loops_declared_subscriptions_share_one_root_owned_http_client(tmp_p
 @pytest.mark.unit
 def test_the_loops_usage_http_client_is_not_built_merely_by_composing_the_context(tmp_path: Path) -> None:
     """No declared subscription ever samples in this test — composing the context alone
-    must open no real connection pool (blizzard#436, hub:95); only calling the provider
+    must open no real connection pool; only calling the provider
     builds one."""
     config = RunnerConfig(
         root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
@@ -194,7 +194,7 @@ def test_the_loops_usage_http_client_is_not_built_merely_by_composing_the_contex
 @pytest.mark.unit
 def test_the_loops_usage_http_client_owner_closes_a_client_it_actually_built(tmp_path: Path) -> None:
     """Whoever owns the ``LoopContext`` closes the shared client exactly once, and closing
-    it actually closes the real ``httpx.Client`` a sampler built (blizzard#436, hub:95)."""
+    it actually closes the real ``httpx.Client`` a sampler built."""
     config = RunnerConfig(
         root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
     )
@@ -234,7 +234,7 @@ def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_pa
 @pytest.mark.unit
 def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_path: Path) -> None:
     """The hosted app builds its own adapter, and the takeover command it composes
-    asserts the permission mode (issue #258) — a second threading of the same two keys,
+    asserts the permission mode — a second threading of the same two keys,
     which the loop's own root does not cover."""
     settings = str(tmp_path / "worker-settings.json")
     (tmp_path / CONFIG_FILENAME).write_text(
@@ -253,7 +253,7 @@ def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_pat
 
 @pytest.mark.unit
 def test_loop_wiring_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -> None:
-    """The wrapped takeover command (issue #251) needs ``LoopConfig.runner_dir`` to
+    """The wrapped takeover command needs ``LoopConfig.runner_dir`` to
     mirror ``RunnerConfig``'s resolved ``root``. Routed through ``RunnerConfig.load()``
     with an un-resolved ``..``-bearing path, since a bare ``tmp_path`` already resolves."""
     real_root = tmp_path / "runner"
@@ -270,7 +270,7 @@ def test_loop_wiring_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -
 
 @pytest.mark.unit
 def test_loop_wiring_of_defaults_to_no_broker(tmp_path: Path) -> None:
-    """D2, blizzard#317: a loop-only caller (``blizzard runner tick``) threads no
+    """A loop-only caller (``blizzard runner tick``) threads no
     broker, so its ``LoopContext`` publishes nothing — the disposition for the
     store-free/export app and every other path with no stream to feed."""
     config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
@@ -282,8 +282,8 @@ def test_loop_wiring_of_defaults_to_no_broker(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_loop_wiring_of_threads_the_broker_into_the_loop_context(tmp_path: Path) -> None:
-    """D2, blizzard#317: the ``host`` verb's one broker reaches ``LoopContext`` — the
-    seam Phase 3's publish call sites read off."""
+    """The ``host`` verb's one broker reaches ``LoopContext`` — the
+    seam's publish call sites read off."""
     config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
     broker = EventBroker()
 
@@ -294,7 +294,7 @@ def test_loop_wiring_of_threads_the_broker_into_the_loop_context(tmp_path: Path)
 
 @pytest.mark.unit
 def test_periodic_driver_threads_the_broker_into_its_own_loop_wiring(tmp_path: Path) -> None:
-    """D2, blizzard#317: the same broker the ``host`` verb passes to ``build_hosted_app``
+    """The same broker the ``host`` verb passes to ``build_hosted_app``
     also reaches ``PeriodicDriver``'s own ``LoopWiring`` — the second of the two
     composition paths a single instance must reach."""
     config = RunnerConfig(
@@ -320,7 +320,7 @@ def test_periodic_driver_defaults_to_no_broker(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_periodic_driver_threads_its_harness_health_cache_into_its_own_loop_wiring(tmp_path: Path) -> None:
-    """blizzard#438, F3: the same ``HarnessHealthCache`` instance ``host`` also hands the
+    """The same ``HarnessHealthCache`` instance ``host`` also hands the
     served app (``HostedApp.harness_health``) must reach the loop's own context too — one
     shared source of truth, not two independently-refreshing caches that can disagree."""
     config = RunnerConfig(
@@ -347,7 +347,7 @@ def test_context_reuses_an_injected_health_cache_rather_than_building_its_own(tm
 
 @pytest.mark.unit
 def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path) -> None:
-    """D2, blizzard#317: the ``host`` verb's broker reaches ``app.state.events`` — the
+    """The ``host`` verb's broker reaches ``app.state.events`` — the
     seam the stream route (``runner/api/events.py``) reads off the served app."""
     (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
     broker = EventBroker()
@@ -359,7 +359,7 @@ def test_hosted_app_threads_the_broker_into_create_apps_seam_list(tmp_path: Path
 
 @pytest.mark.unit
 def test_hosted_app_exposes_the_same_harness_health_cache_it_wires_into_create_app(tmp_path: Path) -> None:
-    """blizzard#438, F3: ``HostedApp.harness_health`` is the exact instance ``app.state``
+    """``HostedApp.harness_health`` is the exact instance ``app.state``
     carries — the one ``host`` then hands to ``PeriodicDriver`` too, so a dashboard read
     and the loop's own registered availability read one shared cache, not two."""
     (tmp_path / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(tmp_path)}"\n')
@@ -382,7 +382,7 @@ def test_hosted_app_defaults_to_no_broker(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_create_app_for_export_stays_broker_less(tmp_path: Path) -> None:
-    """The OpenAPI-export/store-free app is one of the paths D2 names as having no
+    """The OpenAPI-export/store-free app is one of the paths names as having no
     stream to feed — unlike the hub, ``create_app`` never conjures a broker on its own."""
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
 
@@ -423,7 +423,7 @@ def test_resume_marking_on_shutdown_marks_via_its_injected_clock(tmp_path: Path)
 @pytest.mark.unit
 def test_resume_marking_on_shutdown_drains_the_marked_leases_recorded_group(tmp_path: Path) -> None:
     """`on_shutdown` doesn't just mark — it SIGINTs the marked lease's own recorded group
-    right after, through the same injected clock and an injected sleep (issue #12)."""
+    right after, through the same injected clock and an injected sleep."""
     store = _seeded_running_lease_store(tmp_path)
     store.record_spawn(
         "lease_1",

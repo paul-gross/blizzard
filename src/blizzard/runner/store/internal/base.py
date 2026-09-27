@@ -1,5 +1,5 @@
-"""Package-private infrastructure shared by every ``runner/store/internal/`` adapter
-(blizzard#410, D1): the connection helper each concept adapter takes in place of a bare
+"""Package-private infrastructure shared by every ``runner/store/internal/`` adapter:
+the connection helper each concept adapter takes in place of a bare
 ``Engine``, and the fact-closure predicates more than one concept's rows share — a
 predicate used by exactly one concept is defined at that concept's own adapter instead."""
 
@@ -122,7 +122,7 @@ OPEN_PAUSE_PARK = Unsuperseded(
 )
 
 #: The pause-park half of ask/park's ``parked_lease_ids`` union — shared so the ask
-#: adapter never reaches into a sibling adapter for it (blizzard#410).
+#: adapter never reaches into a sibling adapter for it.
 PAUSE_PARKED_LEASE_IDS = select(pause_parks.c.lease_id).where(OPEN_PAUSE_PARK.clause).distinct()
 
 # Correlated against ``open_escalations``'s own outer ``leases``/``lease_closures`` join.
@@ -145,7 +145,7 @@ UNRESOLVED_ESCALATION = Unsuperseded(
 
 def lease_select():  # type: ignore[no-untyped-def]
     """The lease+context join every lease read selects from — shared with the transcripts
-    ledger's backfill read, which also joins a lease (blizzard#410)."""
+    ledger's backfill read, which also joins a lease."""
     return select(
         leases.c.lease_id,
         leases.c.chunk_id,
@@ -161,7 +161,7 @@ def lease_select():  # type: ignore[no-untyped-def]
         lease_context.c.node_id,
         lease_context.c.node_name,
         lease_context.c.retries_max,
-        # The session stamps (issue #144) — selected on the shared join rather than a
+        # The session stamps — selected on the shared join rather than a
         # second query, so every lease read carries them.
         lease_context.c.session_name,
         lease_context.c.resolved_model,
@@ -194,7 +194,7 @@ def row_to_lease(r) -> LeaseRecord:  # type: ignore[no-untyped-def]
 
 
 def enqueue_transcript_final(conn: Connection, segment: Any, *, at: datetime) -> None:
-    """Enqueue a marker noting ``segment`` is finalized (issue #246) — a minimal row; the
+    """Enqueue a marker noting ``segment`` is finalized — a minimal row; the
     wire-shaped ``TranscriptSegmentRecord`` itself is rendered at the drain boundary from
     the ledger row (``bzh:dependency-inversion``). Ships unconditionally. Shared by the
     leases adapter (a spawn/closure boundary implicitly finalizes) and the transcripts

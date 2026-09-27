@@ -12,7 +12,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import ChunkRow, Cost, QuestionRow, RunnerRow
 
-# The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend`` (issue #60).
+# The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend``.
 _FLEET_SPEND_SINCE = "1970-01-01T00:00:00+00:00"
 
 

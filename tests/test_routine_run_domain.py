@@ -1,4 +1,4 @@
-"""``RunService``/``compose_charge`` (unit tier, blizzard#392): mint, ingest, and
+"""``RunService``/``compose_charge`` (unit tier): mint, ingest, and
 promote a hub work item from a routine over fake repositories — only the members each
 method actually touches are live (``bzh:domain-core``, the ``test_routine_domain.py``
 isolation shape)."""
@@ -100,7 +100,7 @@ class _FakeScopes:
 
 @dataclass
 class _FakeRoutineScopes:
-    """A routine's own related set (blizzard#399 D2) — defaults to just the fixture
+    """A routine's own related set — defaults to just the fixture
     routine's own default scope, the one member every routine always carries."""
 
     related: list[str] = field(default_factory=lambda: ["blizzard"])
@@ -290,8 +290,8 @@ def test_run_refuses_an_override_outside_the_routines_related_set() -> None:
 
 
 def test_run_refuses_a_related_check_before_the_retire_check() -> None:
-    """An unrelated, also-retired scope is refused for being unrelated (D3's own
-    order) — the retire brake never runs against a scope the routine has no set
+    """An unrelated, also-retired scope is refused for being unrelated
+    — the retire brake never runs against a scope the routine has no set
     membership for at all."""
     unrelated = Scope(slug="unrelated", description="", created_at=_T0)
     scopes = _FakeScopes(scopes={"blizzard": _DEFAULT_SCOPE, "unrelated": unrelated}, retired={"unrelated"})

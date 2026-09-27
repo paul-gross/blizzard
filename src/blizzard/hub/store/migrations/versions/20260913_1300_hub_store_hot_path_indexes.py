@@ -1,4 +1,4 @@
-"""Hub store hot-path indexes (blizzard#517, blizzard#519): index every unindexed
+"""Hub store hot-path indexes: index every unindexed
 predicate/order-by the synchronous read surface actually filters or sorts on, and
 replace the three single-column ``chunk_id`` indexes the new ``(chunk_id, epoch)``
 composites supersede.
@@ -19,9 +19,9 @@ down_revision: str | None = "20260913_1200_close_intent_attempts"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# (index name, table, columns) — blizzard#519's hot-path predicates, plus
-# blizzard#517's `usage_facts.recorded_at`, plus one `(ts, pk)` index per table needing
-# a newest-first bounded read since a timestamp (D6) — portable across sqlite and
+# (index name, table, columns) — hot-path predicates, plus
+# `usage_facts.recorded_at`, plus one `(ts, pk)` index per table needing
+# a newest-first bounded read since a timestamp — portable across sqlite and
 # postgres alike (`bzh:sql-portable`).
 _CREATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("ix_artifacts_chunk_id_node_id_epoch", "artifacts", ("chunk_id", "node_id", "epoch")),

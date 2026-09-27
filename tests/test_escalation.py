@@ -115,7 +115,7 @@ def test_requeue_lease_mint_closes_escalation_by_supersession(tmp_path: Path) ->
 
 def test_escalation_with_wrapped_takeover_round_trips(tmp_path: Path) -> None:
     """A runner new enough to compose the wrapped takeover command has it round-trip
-    onto chunk detail alongside the raw one (issue #251)."""
+    onto chunk detail alongside the raw one."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
 
@@ -139,8 +139,7 @@ def test_escalation_with_wrapped_takeover_round_trips(tmp_path: Path) -> None:
 
 def test_escalation_without_wrapped_takeover_reads_back_empty(tmp_path: Path) -> None:
     """A runner too old to know about ``wrapped_takeover_command`` omits it entirely —
-    the field reads back empty while the raw ``takeover_command`` stays intact
-    (issue #251)."""
+    the field reads back empty while the raw ``takeover_command`` stays intact."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
 

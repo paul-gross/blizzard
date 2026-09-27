@@ -1,6 +1,6 @@
 # review/finding-format
 
-The shape a delivery lane's review round publishes for its unfixed findings (blizzard#582). This is blizzard's own
+The shape a delivery lane's review round publishes for its unfixed findings. This is blizzard's own
 format, not a graph's — a lane graph's `artifacts:` map must never carry its own copy of it. The `record-findings` node
 validates a submission against exactly this shape, so read it live rather than trusting a graph's baked-in memory of
 it.
@@ -25,8 +25,7 @@ for five required fields beyond `ref`/`disposition` in total:
 
 - `severity` — `"blocking"` or `"should-fix"`. A `deferred` entry can never carry `"blocking"`: a passing review
   cannot hold a blocking finding by definition, so one on the wire is rejected outright, not silently downgraded.
-- `scope` — the scope this finding is filed under. Named freely; an unfamiliar slug is minted rather than rejected
-  (blizzard#582 D2), and a retired one is still accepted — recording a finding is not running against the scope.
+- `scope` — the scope this finding is filed under. Named freely; an unfamiliar slug is minted rather than rejected, and a retired one is still accepted — recording a finding is not running against the scope.
 - `class` — the lane's own review-axis name, the deployment's own vocabulary exactly as `garden/finding-format`'s
   `class` is — blizzard indexes it and never interprets it.
 - `locus` — where it lives, the same meaning and the same freedom to name a whole body of ground instead of one point.

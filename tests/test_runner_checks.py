@@ -1,4 +1,4 @@
-"""ADVANCE runs a node's ``checks:`` at worker exit and records durable facts (issue #114).
+"""ADVANCE runs a node's ``checks:`` at worker exit and records durable facts.
 
 A real ADVANCE tick against a real tmp store proves checks run at worker exit, before
 judgement, in the declared cwd, and each result is a durable fact surviving a runner
@@ -120,7 +120,7 @@ def test_advance_runs_checks_records_facts_and_injects_them_into_the_submission(
 
 @pytest.mark.component
 def test_advance_records_a_red_check_and_still_buffers_the_completion(tmp_path: Path) -> None:
-    """A red check is recorded (passed=False) and — with no gating yet (Phase 2) — the
+    """A red check is recorded (passed=False) and — with no gating yet — the
     worker's chosen edge still buffers. The tail is captured on the durable fact."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(_NOW)
@@ -313,7 +313,7 @@ def test_checks_ran_marker_is_idempotent(tmp_path: Path) -> None:
     assert store.checks_ran("lease_b", 1) is True
 
 
-# --- Phase 3: injection of check results into the judgement prompt -------------
+# --- injection of check results into the judgement prompt -------------
 
 
 @pytest.mark.unit
@@ -377,7 +377,7 @@ def test_advance_injects_the_check_results_into_the_judgement_prompt(tmp_path: P
     assert judge_prompt.index("Assess the build.") < judge_prompt.index("[FAIL]") < judge_prompt.index("<Choice>")
 
 
-# --- Phase 4: the checks gate (runner-local) -----------------------------------
+# --- the checks gate (runner-local) -----------------------------------
 
 
 @pytest.mark.unit

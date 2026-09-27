@@ -237,7 +237,7 @@ class RunnerRegistryStore:
     ) -> None:
         # No FK, no known-runner requirement: the fact can legitimately arrive ahead of
         # the registration, and must not stall this runner's high-water mark waiting.
-        # Upserts on (runner_id, slug) — one row per declared subscription (blizzard#436),
+        # Upserts on (runner_id, slug) — one row per declared subscription,
         # so a sibling slug's row is untouched by this one's write.
         with self._store.write("record_external_usage") as conn:
             existing = conn.execute(
@@ -336,7 +336,7 @@ class RunnerRegistryStore:
 
     @staticmethod
     def _local_pause_detail(conn, runner_id: str) -> tuple[bool, str | None, str | None]:  # type: ignore[no-untyped-def]
-        """The runner's own brake plus its cause, off the newest fact (issues #43, #61)."""
+        """The runner's own brake plus its cause, off the newest fact (#61)."""
         return RunnerRegistryStore._local_pause_detail_many(conn, [runner_id])[runner_id]
 
     @staticmethod
@@ -372,7 +372,7 @@ class RunnerRegistryStore:
 
     @staticmethod
     def _external_usage(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:  # type: ignore[no-untyped-def]
-        """Every reported subscription's newest sample for this runner, raw (issue #218),
+        """Every reported subscription's newest sample for this runner, raw,
         one row per slug. Empty for a runner that has never reported one."""
         return RunnerRegistryStore._external_usage_many(conn, [runner_id])[runner_id]
 
@@ -405,8 +405,8 @@ class RunnerRegistryStore:
 
     @staticmethod
     def _external_usage_misses(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:  # type: ignore[no-untyped-def]
-        """Every reported subscription's newest miss for this runner, raw (blizzard#504
-        D7), one row per slug. Empty for a runner that has never reported one."""
+        """Every reported subscription's newest miss for this runner, raw,
+        one row per slug. Empty for a runner that has never reported one."""
         return RunnerRegistryStore._external_usage_misses_many(conn, [runner_id])[runner_id]
 
     @staticmethod

@@ -1,5 +1,5 @@
-"""Runner service tier — the finding proxy legs against a real mock hub (blizzard#397
-Phase 2). The mock hub's own ``GET /api/fleet/chunks/{id}/findings`` and
+"""Runner service tier — the finding proxy legs against a real mock hub.
+The mock hub's own ``GET /api/fleet/chunks/{id}/findings`` and
 ``.../findings/{finding_id}`` are what a real runner's ``GET /api/leases/{id}/findings``
 and ``.../findings/{finding_id}`` proxy to, over a real process boundary — a real
 ``blizzard-runner host`` subprocess, with no ``BZ_HUB_URL`` anywhere near the worker call

@@ -1,5 +1,5 @@
 """``HttpArchivedTranscriptRepository`` — driven against a fake hub via ``httpx.MockTransport``
-(blizzard#249, D4). The seam's whole contract: every outcome, including a transport failure,
+. The seam's whole contract: every outcome, including a transport failure,
 reaches the caller as a value on :class:`ArchivedTranscript`, never a raised exception. Also
 pins that the request carries the runner's own auth header — AC3's transport-layer half."""
 
@@ -58,7 +58,7 @@ def test_found_turns_are_projected_and_the_request_is_authenticated() -> None:
 
 @pytest.mark.unit
 def test_thinking_turns_and_sidechains_survive_the_read_intact() -> None:
-    """blizzard#248 D1/D2 widened the runner's own read model to the segment wire's shape,
+    """Widened the runner's own read model to the segment wire's shape,
     so an archived read narrows nothing — a thinking turn and a whole nested sidechain both
     reach the panel exactly as the hub stored them."""
 

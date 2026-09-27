@@ -1,4 +1,4 @@
-"""A migrated chunk reclaimed by a fresh runner mints above the hub epoch floor (issue #112).
+"""A migrated chunk reclaimed by a fresh runner mints above the hub epoch floor.
 
 A fresh runner's local epoch floor is 0, while the chunk's hub-side history carries
 epochs > 0 from the source graph; the mint floor seeds from ``max(local,

@@ -19,13 +19,13 @@ class IReadChunkDeliveryRepository(Protocol):
 
     def count_landed_since(self, repo: str, since: datetime) -> int:
         """How many `delivery_repo_landed` rows `repo` has recorded strictly after
-        `since` — a routine-baseline's own "landed since" count (D1); "landed" is this
+        `since` — a routine-baseline's own "landed since" count; "landed" is this
         table's own fact, never a commit count the hub has no seam to produce."""
         ...
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
-        """Every ``(chunk_id, ref)`` pair carrying a pending, **due** ``close_intents`` row
-        (blizzard#383, backoff blizzard#524 D7); a chunk in the ephemeral set is excluded
+        """Every ``(chunk_id, ref)`` pair carrying a pending, **due** ``close_intents`` row;
+        a chunk in the ephemeral set is excluded
         even if its intent enqueued before it was grouped or deleted. An intent with no
         prior attempt is always due; one with prior attempts backs off exponentially,
         capped at an hour, from its own ``close_intent_attempts`` history."""
@@ -72,13 +72,13 @@ class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
         detail; ``None`` for ``closed``. A ``closed``/``gone`` outcome also retires the
         matching pending ``close_intents`` row, in the same transaction — never a
         ``failed`` one's. A ``failed`` outcome instead appends a ``close_intent_attempts``
-        row for its matching intent, in the same transaction (blizzard#524 D7) — the
+        row for its matching intent, in the same transaction — the
         backoff clock's own tick; a pointer with no matching pending intent (never
         enqueued) records none. Returns True iff it wrote a fresh outcome row."""
         ...
 
     def record_close_attempt_skipped(self, intent_id: int, *, at: datetime) -> None:
-        """Append one ``close_intent_attempts`` row for ``intent_id`` (blizzard#524 D7) —
+        """Append one ``close_intent_attempts`` row for ``intent_id`` —
         the backoff clock's own tick for an intent no bound closer answered this pass.
         A single insert, its own transaction: unlike a failed close, there is no outcome
         fact or retirement to fold it alongside."""
@@ -93,7 +93,7 @@ class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
         reason: str | None,
         at: datetime,
     ) -> bool:
-        """Append one proposal's terminal judgment (D5), idempotent per ``proposal_id`` —
+        """Append one proposal's terminal judgment, idempotent per ``proposal_id`` —
         the standalone recorder for an ``unresolved`` outcome, which mints or mutates no
         work item. ``pointer`` is the targeted item for an unresolvable ``update``, and
         ``None`` for an unresolvable ``create``. Returns True iff it wrote a fresh row."""

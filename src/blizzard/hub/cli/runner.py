@@ -1,4 +1,4 @@
-"""``blizzard hub runner`` — issues #104/#86a: operator verbs over one runner."""
+"""``blizzard hub runner`` — operator verbs over one runner."""
 
 from __future__ import annotations
 

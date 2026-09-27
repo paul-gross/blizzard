@@ -1,5 +1,7 @@
 [tools]
 uv = "0.11.21"
+vale = "3.22.0"
+node = "22"
 
 [tasks.install]
 description = "Install dependencies"
@@ -67,8 +69,12 @@ run = "uv run pyright"
 description = "Export the hub and runner OpenAPI specs to ./openapi (frontend codegen + CI drift baseline)"
 run = "uv run blizzard-export-openapi --out-dir openapi"
 
+[tasks."process-ref-lint"]
+description = "Process-reference prose lint"
+run = "vale --output=line ."
+
 [tasks.gate]
-description = "Run the local equivalent of the PR-to-master merge gate (ruff, pyright, pytest, spec/client drift, eslint, vitest)"
+description = "Run the local equivalent of the PR-to-master merge gate (ruff, pyright, process-ref-lint, pytest, spec/client drift, eslint, vitest)"
 run = "./scripts/ci-gate.sh"
 
 [tasks.build]

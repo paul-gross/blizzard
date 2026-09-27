@@ -84,7 +84,7 @@ _MARKER_PREFIX = "merged/"
 class HubRunResult:
     """The outcome of one :meth:`HubNodeExecutor.run` call that actually ran.
 
-    ``transition_id`` (issue #213) is set only when ``wrote_transition`` is true; a
+    ``transition_id`` is set only when ``wrote_transition`` is true; a
     pending poll, a bounce, or an escalation records no transition row."""
 
     outcome_choice: str
@@ -105,10 +105,10 @@ ENV_BASE_BRANCH = "BZ_HUB_BASE_BRANCH"
 ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"  # JSON list of {repo, branch, commit}
 ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"  # JSON list of already-recorded artifact names for this node
 ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"  # POST {name, content} records a marker mid-run
-ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"  # the capability token authorizing that POST (issue #230)
-# POST {delta, proposals} (artifact names) delivers a routine's run (blizzard#393)
+ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"  # the capability token authorizing that POST
+# POST {delta, proposals} (artifact names) delivers a routine's run
 ENV_GARDEN_DELIVERY_URL = "BZ_HUB_GARDEN_DELIVERY_URL"
-# POST with no body delivers the chunk's own newest review-finding-delta artifact (blizzard#582)
+# POST with no body delivers the chunk's own newest review-finding-delta artifact
 ENV_REVIEW_FINDINGS_URL = "BZ_HUB_REVIEW_FINDINGS_URL"
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
@@ -350,7 +350,7 @@ class HubNodeExecutor:
         )
         # A fresh `merged/<repo>` marker is the one production choke point for "a repo
         # landed" — gated on `wrote` so crash-recovery replay never double-counts
-        # (blizzard#399 D1, `count_landed_since`).
+        # (`count_landed_since`).
         if wrote and name.startswith(_MARKER_PREFIX):
             self._delivery.record_delivery_repo_landed(
                 chunk_id, repo=name.removeprefix(_MARKER_PREFIX), commit_hash=content, at=self._clock.now()
@@ -388,7 +388,7 @@ class HubNodeExecutor:
         workdir = self._workdir.ensure(chunk.chunk_id)
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
         # Minted before the env is built and revoked once this call is done with it, so
-        # it is live only for this (chunk, node, epoch) visit (issue #230).
+        # it is live only for this (chunk, node, epoch) visit.
         marker_token = self._marker_authority.issue(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
         try:
             try:

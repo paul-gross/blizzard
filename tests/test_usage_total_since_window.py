@@ -1,10 +1,9 @@
-"""``IReadChunkUsageRepository.usage_total_since``'s optional upper bound (issue #183,
-blizzard#517, unit tier).
+"""``IReadChunkUsageRepository.usage_total_since``'s optional upper bound (unit tier).
 
 ``since`` is inclusive, ``until`` — when given — is exclusive, so two adjacent windows
 sharing a boundary instant neither double-count nor drop that fact. Omitting ``until``
-returns the open-ended tail. Ported from ``usage_since``'s own window tests (blizzard#517
-D3): the seeded token values (1, 2, 4) sum to a distinct total per row set, so the same
+returns the open-ended tail. Ported from ``usage_since``'s own window tests:
+the seeded token values (1, 2, 4) sum to a distinct total per row set, so the same
 four cases still identify exactly which rows a window included."""
 
 from __future__ import annotations

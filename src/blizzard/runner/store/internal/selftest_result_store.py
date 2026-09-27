@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the selftest-result repository seam (blizzard#438)."""
+"""SQLAlchemy adapter for the selftest-result repository seam."""
 
 from __future__ import annotations
 

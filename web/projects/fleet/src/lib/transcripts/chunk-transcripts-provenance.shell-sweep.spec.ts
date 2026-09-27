@@ -6,7 +6,7 @@ import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 
 /**
- * The transcript segment list's harness-provenance badges (blizzard#441), the tooled
+ * The transcript segment list's harness-provenance badges, the tooled
  * half of `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method — a
  * real, headless-Chromium proof that two segments recording distinct harnesses render
  * two genuinely distinct badges at the board's narrow, mobile-reachable width, rather

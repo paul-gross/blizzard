@@ -88,7 +88,7 @@ def test_hold_returns_a_usable_head_normally(tmp_path: Path) -> None:
 
 
 def test_an_unavailable_default_capability_is_treated_as_incompatible(tmp_path: Path) -> None:
-    """A capability health has withdrawn (blizzard#438, ``available=False``) satisfies no
+    """A capability health has withdrawn (``available=False``) satisfies no
     lineage on the peek path either — mirroring the claim path's own denial."""
     hub = build_hub(tmp_path)
     token = _token(hub)
@@ -162,7 +162,7 @@ def test_the_blocked_dimension_takes_the_same_policy_as_the_capability_one(tmp_p
 def test_refuses_401_without_a_resolvable_principal_under_warn(tmp_path: Path) -> None:
     """``warn`` (the default) is what leaves the legacy verb answering an unenrolled
     runner's peek — the matched verb's own demand for a principal is not softened by it
-    (D7): an unenrolled caller (no token, or an unresolvable one) gets 401 regardless."""
+    an unenrolled caller (no token, or an unresolvable one) gets 401 regardless."""
     hub = build_hub(tmp_path)
     resp = hub.client.post("/api/fleet/queue/peek", json={})
     assert resp.status_code == 401, resp.text

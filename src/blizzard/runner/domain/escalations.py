@@ -1,4 +1,4 @@
-"""The needs-human escalation repository seam (blizzard#410)."""
+"""The needs-human escalation repository seam."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ __all__ = ["EscalationRecord", "IReadEscalationRepository", "IWriteEscalationRep
 
 @dataclass(frozen=True)
 class EscalationRecord:
-    """A closed-``escalated`` lease not yet superseded — the status view's read (issue #51).
+    """A closed-``escalated`` lease not yet superseded — the status view's read.
 
     Open until a later lease is minted for the chunk, or the hub resolves it terminally and
     PULL records an ``escalation_closures`` mark (#292) — two supersessions, no flag."""
@@ -28,7 +28,7 @@ class EscalationRecord:
     resolved_model: str | None = None
     resolved_effort: str | None = None
     harness_id: str | None = None
-    #: The escalated generation's own recorded harness build version (blizzard#441),
+    #: The escalated generation's own recorded harness build version,
     #: read off ``lease_spawns`` beside ``harness_id``. ``None`` when the generation
     #: recorded none.
     harness_version: str | None = None
@@ -48,13 +48,13 @@ class IReadEscalationRepository(Protocol):
     """Read-only escalation queries (held by read-path edges)."""
 
     def open_escalations(self) -> list[EscalationRecord]:
-        """Every escalated chunk still unsuperseded (issue #51).
+        """Every escalated chunk still unsuperseded.
 
         See :class:`EscalationRecord` for what "open" means here."""
         ...
 
     def open_escalation_for_chunk(self, chunk_id: str) -> EscalationRecord | None:
-        """The chunk's open escalation, or ``None`` (issue #53).
+        """The chunk's open escalation, or ``None``.
 
         The single-chunk narrowing of :meth:`open_escalations`. Unaffected by a takeover
         in between — a takeover writes neither a closure nor a lease mint."""

@@ -1,5 +1,5 @@
 """``SigningKeyService`` — keypair lifecycle, sign/verify round-trip, JWKS shape,
-rotation, and on-disk permissions (issue #95)."""
+rotation, and on-disk permissions."""
 
 from __future__ import annotations
 

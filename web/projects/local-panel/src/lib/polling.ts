@@ -1,16 +1,16 @@
 /**
  * Backstop `refetchInterval` for the panel's queries whose data is now kept current
- * by the runner's own SSE stream (blizzard#317 Phase 4) — mirrors `fleet`'s
- * `LIVE_COVERED_POLL_BACKSTOP_MS` (issue #316) in intent, but not in value: this
+ * by the runner's own SSE stream — mirrors `fleet`'s
+ * `LIVE_COVERED_POLL_BACKSTOP_MS` in intent, but not in value: this
  * panel is a single machine-local operator surface, not a shared board — so the
  * floor here is deliberately coarser than 45s. 1 minute: `leases.query.ts` feeds
  * `local-heartbeat-freshness`'s own decay curve, which anchors its resolution at this
- * interval (blizzard#334 D4) — a slower backstop would widen the window that curve
+ * interval — a slower backstop would widen the window that curve
  * renders 100% instead of a real drain, without changing what it is actually able to
- * resolve (the elapsed-time-derived state a heartbeat *is* rides no event at all, D7,
+ * resolve (the elapsed-time-derived state a heartbeat *is* rides no event at all,
  * so this interval is the only thing that ever refreshes it), and `status.query.ts`
  * feeds the dashboard's `runner` section
- * (the daemon's own tick beat, also D7-silent, and the hub-pause mirror, which no kind
+ * (the daemon's own tick beat, also silent, and the hub-pause mirror, which no kind
  * in the vocabulary represents either). Still a real backstop, not a return to
  * per-surface polling: 1 request/minute across two reads is negligible idle volume
  * even left running for a full shift, and every transition either read renders that
@@ -26,6 +26,6 @@
  * lease-changed cause announces a worker's pid dying — that transition surfaces only
  * once this backstop (or an unrelated lease-changed frame for the same lease) triggers
  * the next read, up to one interval later, until REAP's own closure catches up and
- * publishes lease-changed(reaped) for real (blizzard#317 review round 4, F3).
+ * publishes lease-changed(reaped) for real.
  */
 export const RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS = 60_000;

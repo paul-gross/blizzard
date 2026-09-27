@@ -6,7 +6,7 @@ import { logoutMutationKey } from '../mutation-keys';
 import { hubMeKey } from '../query-keys';
 
 /**
- * `POST /api/auth/logout` (issue #93) — revokes the session at the hub and clears the
+ * `POST /api/auth/logout` — revokes the session at the hub and clears the
  * cookie server-side, then drops the cached identity so the next `/api/me` read (the
  * app root's own gating query) resolves unauthenticated and the app renders the login
  * page. Under `auth.mode = "none"` this route still 204s (it always clears the

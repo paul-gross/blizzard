@@ -1,4 +1,4 @@
-"""Runner restart-resume — the graceful-restart re-attach (issue #12, unit tier).
+"""Runner restart-resume — the graceful-restart re-attach (unit tier).
 
 A graceful shutdown marks every in-flight lease for restart-resume, and the startup
 RESUME step re-attaches each marked session in place — or abandons a chunk the hub
@@ -131,7 +131,7 @@ def test_marking_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[n
 
 @pytest.mark.unit
 def test_marking_skips_a_lease_with_an_in_flight_elicitation(tmp_path):  # type: ignore[no-untyped-def]
-    """D6 (blizzard#443 review, F1/F2/F5): a lease whose worker already exited into a
+    """A lease whose worker already exited into a
     detached verdict elicitation is neither parked nor pending, but resuming it would wake a
     SECOND process on the same session — the elicitation's own collect pass is what must
     claim it next, not a restart-resume re-attach."""
@@ -185,7 +185,7 @@ def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path):  # ty
     lease = store.active_lease("lease_1")
     assert lease is not None
     assert (lease.lease_id, lease.epoch, lease.session_id, lease.pid) == ("lease_1", 1, "sess-a", 4321)
-    # The resumed process's own group is durable too (D3) — every launch, resume included,
+    # The resumed process's own group is durable too — every launch, resume included,
     # gets a fresh session/group leader, so the resumed pid IS its own pgid.
     assert lease.pgid == 4321
     # No retry consumed — no new lease minted, no closure recorded.
@@ -196,7 +196,7 @@ def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path):  # ty
 
 @pytest.mark.unit
 def test_restart_resume_records_the_launchers_own_start_time_without_reprobing(tmp_path):  # type: ignore[no-untyped-def]
-    """F4/F14: `_wake` carries the resumed launch's own recorded `process_start_time`
+    """`_wake` carries the resumed launch's own recorded `process_start_time`
     straight through into `record_spawn` — never re-probing `/proc` a second time, which
     would race a pid-reuse window opening between the launch and this call."""
     store = _store(tmp_path)
@@ -220,7 +220,7 @@ def test_restart_resume_records_the_launchers_own_start_time_without_reprobing(t
 
 @pytest.mark.unit
 def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
-    """F4's mirror of F1/F3 for a resume launch: a plain exception writing the durable
+    """For a resume launch: a plain exception writing the durable
     `record_spawn` row must not leave the trampoline parked forever with nothing durable
     for REAP/ADVANCE to re-adopt — `_wake` kills the group itself, never disarming."""
     store = _store(tmp_path)
@@ -274,12 +274,12 @@ def test_restart_resume_skips_the_kill_when_the_recorded_pid_was_reused(tmp_path
 
 @pytest.mark.unit
 def test_restart_resume_group_kills_the_survivor_when_a_pgid_is_recorded(tmp_path):  # type: ignore[no-untyped-def]
-    """A survivor with a durable recorded pgid (D3) is killed by GROUP, never by bare
+    """A survivor with a durable recorded pgid is killed by GROUP, never by bare
     pid — the same preference `Attempt._kill_process` applies, reached here through the
     same shared, liveness-checked helper."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_spawn(  # this generation's own group is durable (D3)
+    store.record_spawn(  # this generation's own group is durable
         "lease_1",
         pid=100,
         process_start_time="start-100",
@@ -334,7 +334,7 @@ def test_resume_records_its_own_pgid_rather_than_clobbering_a_prior_one_with_nul
 
 @pytest.mark.unit
 def test_resume_records_the_launchers_real_pgid_rather_than_inferring_it_from_the_pid(tmp_path):  # type: ignore[no-untyped-def]
-    """D3, the same "recorded, not inferred" contract a fresh spawn already keeps: a resumed
+    """The same "recorded, not inferred" contract a fresh spawn already keeps: a resumed
     process's real group can differ from its own pid. A call site that still wrote
     ``pgid=pid`` would record 4321 here instead of the launcher's actual 9999."""
     store = _store(tmp_path)
@@ -466,8 +466,7 @@ def test_resume_abandons_detached_chunk(tmp_path):  # type: ignore[no-untyped-de
 @pytest.mark.unit
 def test_resume_abandons_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
     """A 404 (``ChunkNotFoundError``) is terminal, not deferred like the generic
-    ``HubClientError`` below — ``_resume_marked_lease`` abandons on it directly
-    (blizzard#9)."""
+    ``HubClientError`` below — ``_resume_marked_lease`` abandons on it directly."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)

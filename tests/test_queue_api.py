@@ -100,7 +100,7 @@ def test_get_queue_returns_the_ordered_ready_view(tmp_path: Path) -> None:
 
 
 def test_a_chunk_minted_long_ago_but_promoted_last_still_sorts_last(tmp_path: Path) -> None:
-    # Issue #137: an un-moved chunk's fallback sort key is its promotion instant, not
+    # An un-moved chunk's fallback sort key is its promotion instant, not
     # its mint instant, so a late-promoted chunk sits at the tail, not mid-queue.
     hub = build_hub(tmp_path)
     old_pointer = {"source": "default", "ref": "old"}
@@ -184,7 +184,7 @@ def test_put_queue_duplicate_ids_is_422(tmp_path: Path) -> None:
     assert resp.status_code == 422
 
 
-# --- POST /api/queue/position — single-chunk fractional reorder (issue #137) -----
+# --- POST /api/queue/position — single-chunk fractional reorder -----
 
 
 def _position_row_count(hub: HubHarness) -> int:
@@ -314,7 +314,7 @@ def test_post_backlog_position_self_anchor_is_422(tmp_path: Path) -> None:
     assert resp.status_code == 422
 
 
-# --- GET /api/queue, GET /api/backlog — keyset pagination (blizzard#526) ------------
+# --- GET /api/queue, GET /api/backlog — keyset pagination ------------
 
 
 def test_get_queue_pages_with_mint_time_ties_match_the_full_order(tmp_path: Path) -> None:
@@ -473,7 +473,7 @@ def test_a_fleet_view_only_principal_is_refused_the_backlog_read(tmp_path: Path)
     assert hub.client.get("/api/queue", headers={"Cookie": f"bz_session={token}"}).status_code == 200
 
 
-# --- Promotion still lands a backlog-ranked chunk at the ready tail (issue #137) —
+# --- Promotion still lands a backlog-ranked chunk at the ready tail —
 # now that queue_positions() carries both lists' facts -------------------------------
 
 

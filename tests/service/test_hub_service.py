@@ -174,7 +174,7 @@ def test_sse_stream_serves_the_eventsource_contract(tmp_path: Path) -> None:
 
 
 def test_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: Path) -> None:
-    """SIGTERM sets ``app.state.shutdown`` synchronously (D1/D3, issue #47), ahead of
+    """SIGTERM sets ``app.state.shutdown`` synchronously, ahead of
     uvicorn's own graceful drain (bounded at 5s) — the process exits well inside that
     bound even with an SSE client still connected, rather than riding out the drain."""
     hub_dir = tmp_path / "hub"
@@ -259,8 +259,8 @@ def _migration_graphs_yaml() -> tuple[str, str]:
 
 
 def test_a_fresh_migration_publishes_queue_changed_to_a_live_subscriber(tmp_path: Path) -> None:
-    """A fresh cross-graph migration reaches a **live** SSE subscriber with ``queue-changed``
-    (issue #107), and its replay does not — only a real subscriber on a real socket proves
+    """A fresh cross-graph migration reaches a **live** SSE subscriber with ``queue-changed``,
+    and its replay does not — only a real subscriber on a real socket proves
     the fan-out leg, unlike the component tier's replay-tail check."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     source_yaml, target_yaml = _migration_graphs_yaml()
@@ -293,8 +293,8 @@ def test_a_fresh_migration_publishes_queue_changed_to_a_live_subscriber(tmp_path
 
 
 def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> None:
-    """The ``pause`` wire field off a live ``GET /chunks/{id}`` response (issue #46),
-    present only on the detail shape, never the summary card (issue #42) —
+    """The ``pause`` wire field off a live ``GET /chunks/{id}`` response,
+    present only on the detail shape, never the summary card —
     ``bzh:sweep-release-only-tiers``."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
@@ -378,7 +378,7 @@ def test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string
 
 
 def test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_wire(tmp_path: Path) -> None:
-    """blizzard#504 D7 end to end: the mock runner drives a miss over the real wire, and
+    """End to end: the mock runner drives a miss over the real wire, and
     the real hub renders it as a miss-only, ``credential_lapsed`` row — no prior sample."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     missed_at = datetime.now(UTC).replace(microsecond=0).isoformat()
@@ -539,7 +539,7 @@ def test_route_token_omitted_is_rejected_under_enforce_over_the_wire(tmp_path: P
             assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
 
 
-# --- Produces-artifact authorization over the wire (issue #113 phase 5) ---
+# --- Produces-artifact authorization over the wire (phase 5) ---
 # The real hub's `produces_mode` backstop, driven by mock-runner `/_drive/complete`.
 
 
@@ -664,7 +664,7 @@ def test_explicit_attachment_is_accepted_under_enforce_over_the_wire(tmp_path: P
 
 def test_git_commit_covered_produces_name_is_accepted_under_enforce_over_the_wire(tmp_path: Path) -> None:
     """Under ``enforce`` a ``produces:`` name covered by a pushed git commit (``attached=
-    False``) still passes the backstop and advances (regression guard, issue #113)."""
+    False``) still passes the backstop and advances."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
         _forge(bin_dir, origins, forge_port) as forge,
@@ -689,7 +689,7 @@ def test_git_commit_covered_produces_name_is_accepted_under_enforce_over_the_wir
 
 def _git_commit_kind_graph_yaml() -> str:
     """A ``default-delivery`` graph whose ``build`` node declares a **kind** expectation —
-    ``produces: [{name: commit, kind: git_commit}]`` (issue #143, D1/D2) — rather than the
+    ``produces: [{name: commit, kind: git_commit}]`` — rather than the
     name-only asset form ``_produces_graph_yaml`` above authors. The declared name
     (``commit``) is never what a real git-commit artifact is named (per-repo, e.g.
     ``toy-api``); coverage for this spec is by **kind**, not name."""
@@ -740,7 +740,7 @@ def test_git_commit_kind_expectation_is_accepted_by_kind_not_name_under_enforce_
 ) -> None:
     """A ``{kind: git_commit}`` expectation is met by **any** git-commit artifact present,
     regardless of its name — the artifact here is named ``toy-api`` (its repo), never the
-    declared produces name ``commit`` — proving coverage is a kind match (issue #143, D2)."""
+    declared produces name ``commit`` — proving coverage is a kind match."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
         _forge(bin_dir, origins, forge_port) as forge,
@@ -767,8 +767,8 @@ def test_git_commit_kind_expectation_with_zero_commits_is_rejected_under_enforce
     tmp_path: Path,
 ) -> None:
     """A ``{kind: git_commit}`` expectation with **zero** git-commit artifacts in the
-    submission is fenced out under ``enforce`` — the hub's presence-by-kind backstop
-    (issue #143, D2). No asset artifact of any name can satisfy a kind expectation."""
+    submission is fenced out under ``enforce`` — the hub's presence-by-kind backstop.
+    No asset artifact of any name can satisfy a kind expectation."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
         _forge(bin_dir, origins, forge_port) as forge,
@@ -788,7 +788,7 @@ def test_git_commit_kind_expectation_with_zero_commits_is_rejected_under_enforce
             assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
 
 
-# --- Checks-gate authorization (issue #114) ---
+# --- Checks-gate authorization ---
 # The hub's `requires_checks` backstop; no mode flag — gating applies iff declared.
 
 

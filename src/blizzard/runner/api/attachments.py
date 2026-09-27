@@ -1,5 +1,5 @@
 """``blizzard runner artifact create`` — ``POST /api/leases/{lease_id}/attachments``
-(issue #113), plus its read-back counterpart ``GET`` (issue #169).
+plus its read-back counterpart ``GET``.
 
 The lease token is presented as ``X-Blizzard-Lease-Token`` or ``Authorization: Bearer``,
 the dedicated header checked first. ``404`` unknown/closed lease, ``403`` bad token."""
@@ -43,7 +43,7 @@ def record_attachment(lease_id: str, request_body: AttachmentRequest, request: R
 @router.get("/leases/{lease_id}/attachments", response_model=list[StagedAttachment])
 def list_staged_attachments(lease_id: str, request: Request) -> list[StagedAttachment]:
     """The lease's currently staged submissions — newest content per ``name``, not yet
-    published into any envelope (issue #169)."""
+    published into any envelope."""
     lease = authorized_lease(lease_id, request)
     attachments = RunnerWiring.of(request).read_stores().attachments
     staged = attachments.attachments_for_lease(lease.lease_id)

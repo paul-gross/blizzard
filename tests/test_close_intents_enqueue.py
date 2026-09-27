@@ -1,4 +1,4 @@
-"""The close-intent outbox's enqueue side (D1, blizzard#383): every chunk-seam adapter
+"""The close-intent outbox's enqueue side: every chunk-seam adapter
 transaction that lands or completes a chunk folds an intent per still-open work ref into
 that same transaction — real adapters, real migrations."""
 

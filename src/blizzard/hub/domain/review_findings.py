@@ -1,4 +1,4 @@
-"""Review-finding delivery validation (blizzard#582) — the `record-findings` node's own
+"""Review-finding delivery validation — the `record-findings` node's own
 shape check, before anything is written. Pure functions over already-parsed objects
 (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is
 `review_findings_materialize.py`'s, mirroring the garden delivery split

@@ -451,7 +451,7 @@ def test_harness_selection_skips_unresolvable_and_untiered_members_in_order():  
 
 @pytest.mark.unit
 def test_harness_selection_skips_a_member_health_has_withdrawn():  # type: ignore[no-untyped-def]
-    """A member health has marked unavailable (blizzard#438) is skipped with its own
+    """A member health has marked unavailable is skipped with its own
     reason, distinct from ``"unavailable"``'s no-binding-at-all meaning — and the check
     reads the cache's last-computed result only, never triggering a probe mid-selection."""
     h_unhealthy = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
@@ -619,7 +619,7 @@ def test_fresh_mint_with_no_acceptable_set_mints_under_the_runner_default(tmp_pa
 @pytest.mark.unit
 def test_fresh_mint_with_no_acceptable_set_tracks_registry_order_not_a_hardcoded_id(tmp_path):  # type: ignore[no-untyped-def]
     """The no-``session_harnesses`` fallback must agree with ``capability_snapshot``'s own
-    default (blizzard#433): a registry with a non-Claude-Code binding first spawns under
+    default: a registry with a non-Claude-Code binding first spawns under
     that binding, never a hardcoded ``claude_code``."""
     store = _store(tmp_path)
     first = FakeHarness(
@@ -845,7 +845,7 @@ def test_a_version_probe_that_comes_back_empty_still_spawns_and_records_no_versi
 
 @pytest.mark.unit
 def test_a_provisional_record_write_that_raises_kills_the_still_unconfirmed_launch(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
-    """F1: an ordinary exception (never an OS crash) does not disarm the deferred launch on
+    """An ordinary exception (never an OS crash) does not disarm the deferred launch on
     its own — `Spawner.spawn` must kill the group itself rather than leave it parked forever
     with no durable record for REAP to ever find."""
     store = _store(tmp_path)
@@ -1014,7 +1014,7 @@ def test_fill_stashes_the_claims_route_token(tmp_path):  # type: ignore[no-untyp
 
 @pytest.mark.unit
 def test_fill_mints_a_lease_capability_token_and_carries_its_plaintext_to_spawn(tmp_path):  # type: ignore[no-untyped-def]
-    """A per-lease capability token (issue #113, Phase 1) is minted alongside the
+    """A per-lease capability token is minted alongside the
     lease: its sha256 hash lands durably, and its plaintext rides only the spawn
     preamble — never the store — for ``BLIZZARD_LEASE_TOKEN`` to carry into the env."""
     store = _store(tmp_path)
@@ -1101,7 +1101,7 @@ def test_fill_conflict_releases_and_does_not_bind(tmp_path):  # type: ignore[no-
 
 @pytest.mark.unit
 def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  # type: ignore[no-untyped-def]
-    """A 403 (issue #44) is distinct from a 409 conflict: the claim was refused outright,
+    """A 403 is distinct from a 409 conflict: the claim was refused outright,
     so FILL releases the binding and stops trying further slots this tick rather than
     keep racing claims that will be refused the same way."""
     from blizzard.runner.loop.hub import RouteClaimOutcome
@@ -1126,7 +1126,7 @@ def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  # type: ignor
 
 @pytest.mark.unit
 def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path):  # type: ignore[no-untyped-def]
-    """The must-fix-1 claim guard (issue #118): the chunk was stopped between this
+    """The must-fix-1 claim guard: the chunk was stopped between this
     runner's peek and its claim POST — not a fleet-wide brake, so FILL releases the
     binding and keeps trying its remaining slots, same as a race-loss conflict."""
     from blizzard.runner.loop.hub import RouteClaimOutcome
@@ -1151,7 +1151,7 @@ def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path):  # type: ign
 
 @pytest.mark.unit
 def test_fill_dependency_denial_releases_and_keeps_filling(tmp_path):  # type: ignore[no-untyped-def]
-    """A distinct refusal (blizzard#458): the chunk stands on a prerequisite that has
+    """A distinct refusal: the chunk stands on a prerequisite that has
     not reached ``done`` — not a race loss, so FILL releases the binding and keeps
     trying its remaining slots, same as a terminal denial or a race-loss conflict."""
     from blizzard.runner.loop.hub import RouteClaimOutcome
@@ -1205,7 +1205,7 @@ def test_fill_incompatible_denial_releases_and_keeps_filling(tmp_path):  # type:
 
 @pytest.mark.unit
 def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(tmp_path):  # type: ignore[no-untyped-def]
-    """review F3: a dependency block discovered only at claim time — not reflected in the
+    """review a dependency block discovered only at claim time — not reflected in the
     peeked snapshot's own ``blocked`` field, unlike ``test_fill_strict_holds_at_a_marked_head``'s
     statically-known one — must still hold strict mode at that head. With two open slots and
     a second, unmarked entry behind it, the whole run must stop at the first claim rather
@@ -1242,7 +1242,7 @@ def test_fill_strict_holds_at_a_dependency_denial_discovered_only_at_claim_time(
 
 @pytest.mark.unit
 def test_fill_reaches_past_a_marked_head_by_default(tmp_path):  # type: ignore[no-untyped-def]
-    """Reach-ahead (blizzard#459), the default: a marked head is skipped for the first
+    """Reach-ahead, the default: a marked head is skipped for the first
     unmarked entry, at whatever depth in the peeked list."""
     from blizzard.wire.chunk import BlockedView
 
@@ -1267,7 +1267,7 @@ def test_fill_reaches_past_a_marked_head_by_default(tmp_path):  # type: ignore[n
 
 @pytest.mark.unit
 def test_fill_strict_holds_at_a_marked_head_and_idles(tmp_path):  # type: ignore[no-untyped-def]
-    """Strict (``[queue] strict``, blizzard#459) yields no entry at a marked head rather
+    """Strict (``[queue] strict``) yields no entry at a marked head rather
     than falling through to a later unmarked one — an idle tick, not a claim attempt."""
     from blizzard.wire.chunk import BlockedView
 
@@ -1298,7 +1298,7 @@ def test_fill_strict_holds_at_a_marked_head_and_idles(tmp_path):  # type: ignore
 @pytest.mark.unit
 @pytest.mark.parametrize("strict", [False, True])
 def test_fill_finds_no_entry_when_every_peeked_chunk_is_marked(tmp_path, strict):  # type: ignore[no-untyped-def]
-    """The whole-list scan's exhaustion boundary (blizzard#459): every entry marked yields
+    """The whole-list scan's exhaustion boundary: every entry marked yields
     nothing under both the default reach-ahead and strict — pinned explicitly rather than
     left to converge with the strict case by accident."""
     from blizzard.wire.chunk import BlockedView
@@ -1384,7 +1384,7 @@ def test_fill_respects_max_agents(tmp_path):  # type: ignore[no-untyped-def]
 
 @pytest.mark.unit
 def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path):  # type: ignore[no-untyped-def]
-    """blizzard#202: FILL's crash reconciler must not fall through silently on a held
+    """FILL's crash reconciler must not fall through silently on a held
     binding whose chunk the hub reports with no live route in a status that is neither
     ``ready`` nor ``running`` — an unmatched shape leaks the binding indefinitely."""
     store = _store(tmp_path)
@@ -1415,8 +1415,8 @@ def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path
 
 @pytest.mark.unit
 def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills_on_the_legacy_path(tmp_path):  # type: ignore[no-untyped-def]
-    """Phase 3 hoist (blizzard#459), preserved for the legacy (non-capability-asserting)
-    path only (blizzard#433 D10): one ``Fill.run()`` peeks the hub ONCE, filling every open
+    """Hoist, preserved for the legacy (non-capability-asserting)
+    path only: one ``Fill.run()`` peeks the hub ONCE, filling every open
     slot off that one cached snapshot — the reverse of the matched path's own discipline."""
     from blizzard.runner.loop.hub import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimConflict
@@ -1451,8 +1451,8 @@ def test_fill_peeks_the_hub_once_regardless_of_how_many_slots_it_fills_on_the_le
 
 @pytest.mark.unit
 def test_fill_peeks_once_per_claim_attempt_on_the_matched_path(tmp_path):  # type: ignore[no-untyped-def]
-    """blizzard#433 D10: a capability-asserting runner peeks fresh before every
-    ``claim_one()`` attempt, since D8's single-entry response leaves no cache behind —
+    """A capability-asserting runner peeks fresh before every
+    ``claim_one()`` attempt, since the single-entry response leaves no cache behind —
     each successive peek here advances past the chunk the previous attempt claimed."""
     store = _store(tmp_path)
     hub = FakeHub()
@@ -1562,7 +1562,7 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
     Advance(ctx).run()  # collects it -> exit-is-done
 
     # The declared commit was verified read-only and the completion is BUFFERED — not
-    # yet submitted. Verified TWICE (blizzard#443): once in the launch pass, ahead of the
+    # yet submitted. Verified TWICE: once in the launch pass, ahead of the
     # produces-reconcile check, and again in the collect pass, ahead of the completion it
     # buffers — the two passes may be separated by a restart, so nothing durable carries
     # the launch pass's in-memory verdict forward; re-reading is the same idempotent
@@ -1621,7 +1621,7 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
     Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     # verify WAS called on the declaration, but the False verdict dropped it, so the
-    # buffered completion names no git-commit artifact. Verified twice (blizzard#443 — see
+    # buffered completion names no git-commit artifact. Verified twice ( — see
     # the re-verification note on `test_advance_buffers_completion_...`): once in the
     # launch pass, once in the collect pass.
     assert wt.verified_calls == [
@@ -1639,7 +1639,7 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
 @pytest.mark.unit
 def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):  # type: ignore[no-untyped-def]
     """ADVANCE drives ``verify(forge, branch, commit)`` only against the worker's own
-    DECLARED branch, never the worktree's ambient HEAD (issue #143). Pinned structurally
+    DECLARED branch, never the worktree's ambient HEAD. Pinned structurally
     too: no fake here carries a ``push``/``_current_branch`` method to infer from."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -1667,7 +1667,7 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):
 
     # Only the read-only verify ran, over the worker's own declared branch — no branch
     # was ever inferred off any local HEAD, detached or otherwise. Verified twice
-    # (blizzard#443 — see the re-verification note on `test_advance_buffers_completion_...`).
+    # (— see the re-verification note on `test_advance_buffers_completion_...`).
     assert wt.verified_calls == [
         ("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef"),
         ("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef"),
@@ -1733,7 +1733,7 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
     assert len(review_mints) == 1
 
 
-# NODE-ENTRY RESUME (issue #115): session modes across a build -> review -> build cycle
+# NODE-ENTRY RESUME: session modes across a build -> review -> build cycle
 # — component tier, real store, doubles only at the hub/harness/provider/probe seams.
 
 
@@ -1751,7 +1751,7 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
     )
     review_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, session=SessionMode.FRESH)
 
-    # Phase 1 (FILL): first arrival at `build` — no session exists yet, so the targeted
+    # (FILL): first arrival at `build` — no session exists yet, so the targeted
     # `resume:build` lookup comes back empty and the spawn falls back to fresh.
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", build_env)
@@ -1766,7 +1766,7 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
     build_lease_1 = store.active_lease_for_chunk("ch_1")
     assert build_lease_1 is not None and build_lease_1.session_id == "sess-build-1"
 
-    # --- Phase 2 (ADVANCE + PULL): build passes; apply-response NEXT hands the chunk
+    # --- (ADVANCE + PULL): build passes; apply-response NEXT hands the chunk
     # to `review` (fresh) — always a new sid (assertion c).
     hub.envelopes["ch_1"] = build_env  # `_advance_exited_worker`'s own idempotent re-read
     hub.apply_responses = [
@@ -1795,7 +1795,7 @@ def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session
         review_lease is not None and review_lease.node_name == "review" and review_lease.session_id == "sess-review-1"
     )
 
-    # Phase 3 (ADVANCE + PULL): review fails; apply-response routes back into build's
+    # (ADVANCE + PULL): review fails; apply-response routes back into build's
     # targeted `resume:build` — must resume BUILD's own session, not the reviewer's.
     hub.envelopes["ch_1"] = review_env  # `_advance_exited_worker`'s own idempotent re-read
     harness3 = FakeHarness(
@@ -1908,7 +1908,7 @@ def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  
     assert lease is not None and lease.epoch == 2 and lease.session_id == "sess-b"
 
 
-# RESUME-TIME PREAMBLE ELISION (issue #149): component tier, proving the WIRING (store
+# RESUME-TIME PREAMBLE ELISION: component tier, proving the WIRING (store
 # read -> renderer -> adapter prefix) the renderer's own unit tier cannot.
 
 
@@ -2167,7 +2167,7 @@ def test_an_announced_change_is_announced_once_and_then_elided(tmp_path):  # typ
 
 @pytest.mark.component
 def test_a_cross_node_resume_names_the_node_transition_from_recorded_state(tmp_path):  # type: ignore[no-untyped-def]
-    """Scenario 7 (blizzard#340) — the wiring the renderer's unit tier cannot pin: the previous
+    """Scenario 7 — the wiring the renderer's unit tier cannot pin: the previous
     turn's node reaches `Preamble.of` from the recorded lease rows, so `verify` resuming the
     session `build` minted opens with the role-change line naming both nodes."""
     store = _store(tmp_path)
@@ -2235,8 +2235,8 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
         worktree_git=FakeWorktreeGit(),
     )
 
-    # `review-findings` is never attached, so the first exit resumes rather than judges
-    # (issue #422); the second, past the one-resume cap, falls through to judgement —
+    # `review-findings` is never attached, so the first exit resumes rather than judges;
+    # the second, past the one-resume cap, falls through to judgement —
     # launching the detached elicitation; the third collects it.
     Advance(ctx).run()
     Advance(ctx).run()
@@ -2255,7 +2255,7 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
 def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path):  # type: ignore[no-untyped-def]
     """A node whose `produces:` is `[review-findings]` drives **no** git-commit
     declaration or verify at all — ``verify`` is never invoked and no ``GIT_COMMIT``
-    artifact is produced, while findings still ride the asset path (issue #143)."""
+    artifact is produced, while findings still ride the asset path."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -2292,7 +2292,7 @@ def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path): 
     )
 
     # `review-findings` is never attached, so the first exit is resumed rather than
-    # judged (issue #422); the second, past the one-resume cap, falls through to judgement —
+    # judged; the second, past the one-resume cap, falls through to judgement —
     # launching the detached elicitation; the third collects it.
     Advance(ctx).run()
     Advance(ctx).run()
@@ -2307,7 +2307,7 @@ def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path): 
 
 @pytest.mark.unit
 def test_collect_asset_artifacts_prefers_an_attachment_over_the_assessment():  # type: ignore[no-untyped-def]
-    """A `produces` name with a durable attachment wins over the assessment (issue #113)."""
+    """A `produces` name with a durable attachment wins over the assessment."""
     envelope = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"])
 
     submitted = ProducesReconciler(envelope).collect_assets(
@@ -2683,7 +2683,7 @@ def test_reap_orphan_requeues(tmp_path):  # type: ignore[no-untyped-def]
 def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably_provisional_lease(
     tmp_path,
 ):  # type: ignore[no-untyped-def]
-    """`Spawner.spawn`'s `WorkerIdentityError` branch (D1/D2) — a real identity-handshake
+    """`Spawner.spawn`'s `WorkerIdentityError` branch — a real identity-handshake
     failure kills the group and marks the provisional generation failed, while the lease
     itself stays open (REAP's own sweep closes it as a retry)."""
     store = _store(tmp_path)
@@ -2697,7 +2697,7 @@ def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably
         )
 
     failing = harness.failing_identity_handles[0]
-    assert failing.confirm_durable_calls == 1  # F1: disarmed once the provisional record landed
+    assert failing.confirm_durable_calls == 1  # disarmed once the provisional record landed
     assert probe.killed_groups == [_HANDLE.pgid]  # the still-running group was killed outright
 
     lease = store.active_lease_for_chunk("ch_1")
@@ -2715,7 +2715,7 @@ def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably
 
 @pytest.mark.unit
 def test_reap_closes_a_provisional_generation_left_by_an_identity_failure(tmp_path):  # type: ignore[no-untyped-def]
-    """REAP's own provisional-generation branch (D1/D2): a lease with a durable pid but no
+    """REAP's own provisional-generation branch: a lease with a durable pid but no
     identified session is neither `pid is None` (a plain orphan) nor a live, beating worker —
     it is closed via `Attempt.fail`, consuming a retry, exactly as an orphan is."""
     store = _store(tmp_path)
@@ -2830,7 +2830,7 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
     store = _store(tmp_path)
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()  # retries_max = 2
-    # A runtime dir with whitespace (issue #251) — proves the composed wrapped command
+    # A runtime dir with whitespace — proves the composed wrapped command
     # stays shell-safe (shlex.quote) rather than merely happening to work on a plain path.
     runner_dir = "/tmp/runner dir/r1"
     config = LoopConfig(
@@ -2859,7 +2859,7 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
     # It resumes from the session's own spawn cwd, where a directory-scoped harness finds it.
     takeover_command = payload["takeover_command"]
     assert takeover_command.startswith(f"cd {expected_cwd} &&") and "--resume" in takeover_command
-    # The wrapped, supported entry point (issue #251) — composed under the same guard,
+    # The wrapped, supported entry point — composed under the same guard,
     # alongside the raw fallback above.
     wrapped = payload["wrapped_takeover_command"]
     assert wrapped == f"blizzard runner takeover ch_1 --dir {shlex.quote(runner_dir)}"
@@ -2872,7 +2872,7 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
 def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path):  # type: ignore[no-untyped-def]
     """A lease escalated before it ever recorded a session (`session_id` still `None`)
     composes no takeover command at all — with nothing to resume there is no raw command
-    to build, so nothing for the wrapped verb (issue #251) to wrap either."""
+    to build, so nothing for the wrapped verb to wrap either."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -2962,7 +2962,7 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
 
 @pytest.mark.unit
 def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path):  # type: ignore[no-untyped-def]
-    """The doubted state built the way the funnel reaches it (blizzard#280): a binding recorded
+    """The doubted state built the way the funnel reaches it: a binding recorded
     and then *released*, as `abandon` releases it. It escalates anyway — the chunk still needs a
     human — and warns which of `humans/escalation.md`'s origins produced a command-less escalation."""
     store = _store(tmp_path)
@@ -3362,7 +3362,7 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
     probe.alive.clear()
 
     # Tick 2: PULL flushes lease.minted; ADVANCE finds the exited worker and launches
-    # the detached elicitation (blizzard#443) — not yet judged.
+    # the detached elicitation — not yet judged.
     tick(ctx)
     assert [f.kind for f in hub.pushed] == [LEASE_MINTED]
     assert hub.completions == []
@@ -3397,7 +3397,7 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
 
 @pytest.mark.unit
 def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path):  # type: ignore[no-untyped-def]
-    """The preamble carries the workspace root (spawn cwd) and the static config prompt (issue #17)."""
+    """The preamble carries the workspace root (spawn cwd) and the static config prompt."""
     store = _store(tmp_path)
     hub = FakeHub()
     env = _build_envelope()
@@ -3423,7 +3423,7 @@ def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path
     _, preamble = harness.spawns[0]
     assert preamble.workspace_root == "/ws"
     # Layer 1 (the baked blizzard preamble, since runner_prompt is unset) leads,
-    # followed by the static workspace prompt (issue #103).
+    # followed by the static workspace prompt.
     assert preamble.prompt_prefix.startswith(f"{DEFAULT_BLIZZARD_PREAMBLE}\n\nSTATIC-PROMPT\n\n")
     assert "| environment name | `e1` |" in preamble.prompt_prefix
 
@@ -3463,7 +3463,7 @@ def _engine_for(tmp_path):  # type: ignore[no-untyped-def]
 
 
 class _CountingPreambleStore(SqlAlchemyRunnerStore):
-    """The real store with one read counted (issue #149) — a subclass, not a hand-written
+    """The real store with one read counted — a subclass, not a hand-written
     double, so every other method the loop touches keeps its genuine behaviour."""
 
     def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
@@ -3477,7 +3477,7 @@ class _CountingPreambleStore(SqlAlchemyRunnerStore):
 
 @pytest.mark.unit
 def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: ignore[no-untyped-def]
-    """The lookup is resume-**gated**, not merely resume-shaped (issue #149): hoisting
+    """The lookup is resume-**gated**, not merely resume-shaped: hoisting
     the read above the `resume_from` check passes every other test here (a fresh session
     has no prior row *yet*) but silently elides prose once a session id is reused."""
     store = _CountingPreambleStore(_engine_for(tmp_path), runner_store_errors())
@@ -3568,7 +3568,7 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
     Pull(ctx).run()
 
     # Both envs' declarations were checked, in each of the launch and collect passes
-    # (blizzard#443 — see the re-verification note on `test_advance_buffers_completion_...`).
+    # (— see the re-verification note on `test_advance_buffers_completion_...`).
     assert len(wt.verified_calls) == 4
     _chunk_id, submission = hub.completions[0]
     branches = sorted(a.branch_name or "" for a in submission.artifacts if a.kind is ArtifactKind.GIT_COMMIT)
@@ -3606,7 +3606,7 @@ def test_pull_registers_every_declared_redirect_uri(tmp_path):  # type: ignore[n
 @pytest.mark.unit
 def test_pull_sends_a_deterministic_single_binding_capability_snapshot(tmp_path):  # type: ignore[no-untyped-def]
     # A registry holding one available binding (today's only shape) always names it the
-    # default (blizzard#433) — no separate runner config key decides this.
+    # default — no separate runner config key decides this.
     store = _store(tmp_path)
     hub = FakeHub()
     harness = FakeHarness(handle=_HANDLE, verdict="pass")

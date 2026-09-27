@@ -4,7 +4,7 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 (``bzh:facts-not-status``): every write appends a row that happened and status is
 derived. Timestamps arrive already stamped (``bzh:injected-clock``).
 
-D6: ``record_transition``, ``record_restart``, and ``record_migration`` are each one
+``record_transition``, ``record_restart``, and ``record_migration`` are each one
 transaction on one connection, unchanged by the seam carve — the shared row helpers below
 are plain function calls inside that same ``with self._store.write(...)`` block, never a
 second connection."""
@@ -161,7 +161,7 @@ class ChunkMovementStore:
             )
             values: dict[str, str | None] = {"graph_id": to_graph_id}
             if model is not None:
-                # Written INLINE (issue #144): a second transactional write would split the
+                # Written INLINE: a second transactional write would split the
                 # durable fact from the pin it implies (`hub:migration-pin-consistent`).
                 values["default_model"] = DEFAULT_MODEL.encode([model])
             if clear_intent:

@@ -1,4 +1,4 @@
-"""generic hub command nodes (issue #65): ``graph_nodes.run``, the JSON command list null on every other
+"""generic hub command nodes: ``graph_nodes.run``, the JSON command list null on every other
 node, and ``hub_exec_slot``, the fleet-wide serialization lease as a FACT (``bzh:facts-not-status``).
 
 Revision ID: 20260717_2359_hub_command_nodes

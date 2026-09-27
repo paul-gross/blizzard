@@ -5,12 +5,12 @@ import type { LaidOutNode } from './graph-layout';
 
 /** The node box's corner radius — square on the left (the color stripe's edge),
  * rounded on the right, so the selection/hover outline traced over the same path
- * hugs the shape actually drawn instead of a uniformly rounded rect (blizzard#207). */
+ * hugs the shape actually drawn instead of a uniformly rounded rect. */
 const CORNER_RADIUS = 9;
 
 /**
- * One node's SVG shape — split out of `graph-diagram.ts` (issue #157's 400-line
- * `web:lint` cap) once the selection feature (blizzard#159) pushed the
+ * One node's SVG shape — split out of `graph-diagram.ts` (400-line
+ * `web:lint` cap) once the selection feature pushed the
  * parent over it. An attribute-selector component (`g[fleetGraphDiagramNode]`)
  * so it renders as a plain `<g>` inside the parent's `<svg>`, no wrapping element.
  * Purely presentational: `selected`/`incident` are booleans the parent derives from

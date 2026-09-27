@@ -131,7 +131,7 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
 
 
 def test_detail_carries_the_pinned_graphs_name_and_created_at(tmp_path: Path) -> None:
-    """``ChunkDetail`` carries the pinned graph's name and mint instant (issue #102);
+    """``ChunkDetail`` carries the pinned graph's name and mint instant;
     asserts it matches what `GET /api/graphs` independently reports."""
     hub = build_hub(tmp_path)
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML}).json()

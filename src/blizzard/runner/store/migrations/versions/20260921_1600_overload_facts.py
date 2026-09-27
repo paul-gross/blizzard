@@ -1,4 +1,4 @@
-"""Add the provider-overload backoff fact tables (blizzard#595).
+"""Add the provider-overload backoff fact tables.
 
 Revision ID: 20260921_1600_overload_facts
 Revises: 20260921_1000_local_pause_reason

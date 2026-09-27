@@ -1,4 +1,4 @@
-"""The finding delta payload on the wire (unit tier, blizzard#390).
+"""The finding delta payload on the wire (unit tier).
 
 ``FindingDelta.findings`` is a discriminated union on ``op`` (the
 ``tests/test_work_item_proposals_wire.py`` shape): malformed input is refused at the

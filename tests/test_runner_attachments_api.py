@@ -1,5 +1,5 @@
-"""``POST /api/leases/{id}/attachments`` (issue #113, Phase 2) and its read-back
-counterpart ``GET /api/leases/{id}/attachments`` (issue #169).
+"""``POST /api/leases/{id}/attachments`` and its read-back
+counterpart ``GET /api/leases/{id}/attachments``.
 
 Exercised over a real store via TestClient: the route's shape, its 403/404/503 forms,
 and the round-trip it delegates to :class:`~blizzard.runner.domain.attachments.AttachmentService`.
@@ -174,7 +174,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) -> None:
-    """The worker-authorization resolver's other half (issue #291): once an open
+    """The worker-authorization resolver's other half: once an open
     takeover names the (now closed) reference lease, its re-minted token reaches
     this route the same as an ordinary active lease would."""
     app, store = _app_with_attachments(tmp_path)
@@ -203,7 +203,7 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) ->
 
 
 # --------------------------------------------------------------------------- #
-# GET /api/leases/{id}/attachments — a worker's read-back of its own staged submissions (issue #169)
+# GET /api/leases/{id}/attachments — a worker's read-back of its own staged submissions
 
 
 @pytest.mark.component

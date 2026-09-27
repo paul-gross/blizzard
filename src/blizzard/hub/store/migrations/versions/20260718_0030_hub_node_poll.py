@@ -1,4 +1,4 @@
-"""pending-poll outcome: hub_node_poll + per-node poll cadence (issue #66, hub store tree)
+"""pending-poll outcome: hub_node_poll + per-node poll cadence (hub store tree)
 
 Adds append-only ``hub_node_poll`` and two per-node cadence overrides; null on either takes the default.
 Revision ID: 20260718_0030_hub_node_poll

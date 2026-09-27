@@ -121,7 +121,7 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
                 expect(group).to_have_count(1)
 
                 # Groups render collapsed; expanding one already selects its effective
-                # version (issue #152); either navigates to /graphs/:graphId.
+                # version; either navigates to /graphs/:graphId.
                 group.get_by_test_id("graph-explorer-group-toggle").click()
                 expect(page).to_have_url(f"http://127.0.0.1:{hub_port}/graphs/{graph_id}")
                 # `data-graph-id` is on the `<li>` wrapper and the testid on the row button
@@ -180,7 +180,7 @@ _OFFSET_POINT_ON_PATH_JS = """
 
 
 def test_graphs_diagram_selection_in_the_browser(tmp_path: Path, chromium_available: bool) -> None:
-    """Node/edge/self-loop selection and the detail pane, in a real browser (blizzard#159);
+    """Node/edge/self-loop selection and the detail pane, in a real browser;
     clicks a point on the rendered curve since jsdom cannot hit-test geometry."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
@@ -376,7 +376,7 @@ def _name_bound_graph_yaml() -> str:
 
 
 def test_diagram_geometry_matches_the_rendered_text(tmp_path: Path, chromium_available: bool) -> None:
-    """Every box the measurer sized fits the text the browser drew (issue #157);
+    """Every box the measurer sized fits the text the browser drew;
     reconstructed from rendered SVG advance widths rather than a canvas of its own,
     which would only prove Chromium's own measurers agree with each other."""
     if not chromium_available:

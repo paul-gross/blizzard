@@ -1,4 +1,4 @@
-"""Browser login dance + mid-stream session-expiry redirect (issue #93; ladder from #210).
+"""Browser login dance + mid-stream session-expiry redirect.
 
 Real Chromium over the served board under oauth: login lands `pending`; `guest` reads
 read-only; `contributor` gets the write control; a session expiring mid-SSE redirects to
@@ -93,7 +93,7 @@ def _set_role(hub_dir: Path, username: str, role: str) -> None:
 
 def _seed_not_ready_chunk(hub_dir: Path, *, chunk_id: str, graph_id: str) -> None:
     """One bare fixture chunk — no route, no facts — so the read-only board claim
-    (Phase 5's Promote control) has a concrete card to assert against. Derives
+    that a guest's Promote control stays hidden has a concrete card to assert against. Derives
     ``not_ready`` by construction: a chunk with no promote fact rests there."""
     con = sqlite3.connect(_db_path(hub_dir))
     try:

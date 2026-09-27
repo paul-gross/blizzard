@@ -1,4 +1,4 @@
-"""The kind-agnostic SSE event broker (D1) — the live re-broadcast seam both daemons bind.
+"""The kind-agnostic SSE event broker — the live re-broadcast seam both daemons bind.
 Every published event carries a **monotonic id** and reaches every open connection live,
 with a bounded tail (``history``) a reconnect replays from its ``Last-Event-ID``.
 Publishers run on worker threads, subscribers on the event loop, so :meth:`publish`

@@ -1,5 +1,5 @@
 """The ``github`` conformer — plain OAuth2 code flow, ``GET /user`` + ``GET /user/emails`` for the
-verified primary email (issue #92, package-private).
+verified primary email (package-private).
 
 All ``httpx`` usage is confined here (``bzh:dependency-inversion``). ``web_base``/``api_base`` default
 to real GitHub's split hosts but are overridable to point at a stub IdP."""

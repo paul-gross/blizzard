@@ -1,5 +1,5 @@
-"""``GET /api/activity`` — the board's Event log backfill on page load (issue #213,
-Phase 3, component tier).
+"""``GET /api/activity`` — the board's Event log backfill on page load
+(component tier).
 
 Proves the route's own contract off a real, migrated hub app: the default 24h/200
 window, ``since``/``limit`` handling, newest-first ordering, and the same auth gating
@@ -187,7 +187,7 @@ def test_deleted_chunks_events_are_excluded_but_runner_scoped_events_survive(tmp
 def test_a_legacy_severity_outside_the_vocabulary_is_served_narrowed_to_its_kinds_declared_one(
     tmp_path: Path,
 ) -> None:
-    """No migration (issue #106): a pre-fix hub once wrote ``severity="error"`` for
+    """No migration: a pre-fix hub once wrote ``severity="error"`` for
     ``hub-node-unroutable-outcome``; the store adapter narrows a persisted row like it at
     the read boundary instead, to the severity its kind now declares."""
     hub = build_hub(tmp_path)

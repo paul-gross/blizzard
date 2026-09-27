@@ -1,6 +1,6 @@
-"""``RoutineBaselineService`` over real stores (blizzard#399 D1, D5, component tier):
+"""``RoutineBaselineService`` over real stores (component tier):
 a delivered garden finding set and a chunk landing after it, joined purely on the repo
-names each side independently holds — the one join D1 rests on."""
+names each side independently holds — the one join rests on."""
 
 from __future__ import annotations
 

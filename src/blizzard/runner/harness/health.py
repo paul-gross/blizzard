@@ -1,4 +1,4 @@
-"""The harness-health evaluation policy (blizzard#438).
+"""The harness-health evaluation policy.
 
 A pure, dependency-free closure over already-collected evidence — no I/O, no subprocess, no
 clock read happens here. The evaluator answers one question, "is this configured harness
@@ -53,7 +53,7 @@ class HarnessHealthEvidence:
     binary_present: bool
     #: Whether this binding declares a supported-version range at all; absent is not itself a failure.
     version_declared: bool
-    #: Meaningful only when declared (D2): membership per the caller; ``None`` means nothing was observed.
+    #: Meaningful only when declared: membership per the caller; ``None`` means nothing was observed.
     version_admitted: bool | None
     #: Meaningful only when declared and admitted: ``None`` means the corpus fixture couldn't classify it.
     version_classification: CompatibilityClassification | None
@@ -83,9 +83,9 @@ class HarnessHealthResult:
 def evaluate_harness_health(evidence: HarnessHealthEvidence) -> HarnessHealthResult:
     """Apply the closed priority policy to one binding's already-collected evidence: first
     match wins, in :class:`HarnessHealthCause`'s own declared order. Within the version
-    check (D2), membership is checked before classification, so a non-admitted version is
+    check, membership is checked before classification, so a non-admitted version is
     always ``incompatible_version``; ``unknown_version`` is reserved for none observed, or
-    an admitted version only a corpus-backed binding can't classify (blizzard#606)."""
+    an admitted version only a corpus-backed binding can't classify."""
 
     if not evidence.binary_present:
         return _unavailable(evidence, HarnessHealthCause.MISSING_BINARY)

@@ -22,7 +22,7 @@
    always-visible, non-scrolling region (the footer's actions) that model has no slot
    for; forcing it into `KitPanel`'s single body slot either scrolls the footer away
    with tall content or leans on a sticky-positioning approximation of a section
-   `KitPanel` was never built to have three of. (blizzard#399 F15)
+   `KitPanel` was never built to have three of.
  */
 .panel {
   display: flex;

@@ -1,4 +1,4 @@
-"""The marker-write route's own authorization dependency (issue #230).
+"""The marker-write route's own authorization dependency.
 
 A second way past that route's gate, layered in front of the human
 ``require(CHUNK_CONTROL)`` rather than replacing it: a live marker token for the exact

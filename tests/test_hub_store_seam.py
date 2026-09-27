@@ -1,8 +1,8 @@
-"""The hub-store error-wrapping seam (blizzard#413) — a driver fault through every one
+"""The hub-store error-wrapping seam — a driver fault through every one
 of the ``hub/store/internal/`` adapters, and every ``hub/auth/internal/`` adapter now
 converged onto it (plan: inject-hub-auth-and-cli-seams), raises the wrapped
-``HubStoreError``, logged once at the collaborator's single wrap site (D1, D4). One
-parametrized case drives every adapter below (D6, ``bzh:case-pins-its-own-name``)
+``HubStoreError``, logged once at the collaborator's single wrap site. One
+parametrized case drives every adapter below (``bzh:case-pins-its-own-name``)
 rather than one copy each."""
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ _ADAPTER_CASES = [
     _AdapterCase(
         "ChunkWorkRefsStore",
         lambda store: ChunkWorkRefsStore(store, FixedClock(_NOW), facts=ChunkFactsStore(store, FixedClock(_NOW))),
-        # `find_live_holder` delegates to `live_holders([pointer])` (issue #421), so the
+        # `find_live_holder` delegates to `live_holders([pointer])`, so the
         # driver fault it raises wraps `live_holders`' own operation name.
         lambda a: a.find_live_holder(WorkRef(source="s", ref="1")),
         "live_holders",

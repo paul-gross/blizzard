@@ -48,7 +48,7 @@ class Runtime:
         """Scaffold config + data dir + a migrated store. Idempotent.
 
         Re-running leaves an existing config untouched and migrates the store to head. A
-        config whose db_url points outside the root is refused, not reconciled (issue #234).
+        config whose db_url points outside the root is refused, not reconciled.
         """
         root = self.root.resolve()
         try:

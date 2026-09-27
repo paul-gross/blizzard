@@ -1,4 +1,4 @@
-"""Dashboard route service tier — the real runner against a real mock hub (blizzard#311).
+"""Dashboard route service tier — the real runner against a real mock hub.
 
 The component tier (`tests/test_dashboard_route.py`) proves this route in-process, against
 a monkeypatched `httpx.request`. This proves it over a genuinely running daemon: a real

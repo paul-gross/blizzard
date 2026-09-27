@@ -121,7 +121,7 @@ def test_load_node_names_matches_node_by_id_across_two_graphs(tmp_path: Path) ->
 
 def test_load_node_names_keys_a_shared_node_id_per_graph_so_the_wrong_graph_misses(tmp_path: Path) -> None:
     """A node id looked up against a graph that doesn't hold it must not fall back to
-    another graph's node of the same id (issue #421)."""
+    another graph's node of the same id."""
     store, _ = _store(tmp_path)
     alpha = _mint(store, "gr_1", "alpha", node_names=["build"], created_at=_T0)
     beta = _mint(store, "gr_2", "beta", node_names=["deploy"], created_at=_T0)
@@ -230,7 +230,7 @@ def test_graph_id_of_enabled_name_is_none_for_a_name_never_minted(tmp_path: Path
 
 
 def test_get_enabled_by_name_query_count_does_not_grow_with_retired_newer_mint_count(tmp_path: Path) -> None:
-    """The retirement filter (D2) reads its own candidates in one batched query, not one
+    """The retirement filter reads its own candidates in one batched query, not one
     ``_is_retired`` call per candidate — a name with many retired mints newer than its
     enabled one must not cost more queries than a name with few."""
     (tmp_path / "few").mkdir()

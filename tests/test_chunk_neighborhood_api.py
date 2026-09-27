@@ -1,8 +1,8 @@
-"""``GET /api/chunks/{chunk_id}``'s ``neighborhood`` field (issue #462) — a chunk's
+"""``GET /api/chunks/{chunk_id}``'s ``neighborhood`` field — a chunk's
 standing dependency edges one hop each way, proven end to end over HTTP.
 
 Unlike ``blocked``, the field is always present: a chunk with no edges still reads back
-two empty lists (D5)."""
+two empty lists."""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def test_released_edges_are_absent_from_both_lists(tmp_path: Path) -> None:
 
 
 def test_a_neighbor_whose_facts_do_not_resolve_is_present_and_unsatisfied(tmp_path: Path) -> None:
-    """D4: the residual race a delete's 409 refusal otherwise guards against — a standing
+    """The residual race a delete's 409 refusal otherwise guards against — a standing
     edge naming a prerequisite id the fleet holds no facts for. Declared directly through
     the store, below the API's own existence check, to reach the case at all."""
     hub = build_hub(tmp_path)
@@ -137,7 +137,7 @@ class _CountingFactsStore(ChunkFactsStore):
 
 
 def test_a_chunk_with_no_standing_edges_costs_no_additional_facts_reads(tmp_path: Path) -> None:
-    """D5: a bare chunk's neighborhood costs exactly the one facts read the route already
+    """A bare chunk's neighborhood costs exactly the one facts read the route already
     makes for its own status — no edges means no further per-neighbor reads."""
     hub = build_hub(tmp_path)
     bare_id = ingest(hub, [{"source": "default", "ref": "bare"}])

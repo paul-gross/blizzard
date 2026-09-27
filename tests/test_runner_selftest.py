@@ -1,4 +1,4 @@
-"""``blizzard runner selftest`` — the adapter-drift canary (issue #54).
+"""``blizzard runner selftest`` — the adapter-drift canary.
 
 The job resource is exercised over a real app against a fake harness binary mimicking
 ``mock-claude-code``'s CLI surface. The CLI verb runs against a real daemon over its

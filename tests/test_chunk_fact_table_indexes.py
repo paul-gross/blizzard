@@ -1,9 +1,9 @@
-"""Fact-table ``chunk_id`` indexes (blizzard#421), blizzard#519's hot-path indexes, and blizzard#517's spend range
+"""Fact-table ``chunk_id`` indexes, hot-path indexes, and spend range
 (component tier) — migrated-to-head sqlite-on-disk.
 
 Pins *which named index* each plan uses (narrower than ``test_store_read_index_gate.py``'s scan-avoidance gate):
 ``ChunkFactsStore.load_facts``/``_route_of_conn`` must plan an index search against ``ix_<table>_chunk_id``, over the
-``20260829_1930_fact_tables_chunk_id_index`` table set plus blizzard#519's hot-path reads."""
+``20260829_1930_fact_tables_chunk_id_index`` table set plus hot-path reads."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=UTC)
 
 # Mirrors the revision's own table list, minus `delivery_pr_opened` (covered by its own
-# unique constraint) and the three blizzard#519 D5 composite-superseded tables
+# unique constraint) and the three composite-superseded tables
 # (`transitions`, `lease_facts`, `chunk_bounces`) — those get their own exact-name
 # assertion below, since a substring match here would also match their new
 # `ix_<table>_chunk_id_epoch` composite.
@@ -80,7 +80,7 @@ _INDEXED_TABLES = (
     "delivery_landed",
 )
 
-# blizzard#519 D5: the three `(chunk_id, epoch)` composites that supersede a
+# The three `(chunk_id, epoch)` composites that supersede a
 # single-column `ix_<table>_chunk_id` index of the same table.
 _CHUNK_ID_EPOCH_COMPOSITE_TABLES = ("transitions", "lease_facts", "chunk_bounces")
 
@@ -96,7 +96,7 @@ def _engine(tmp_path: Path) -> Engine:
 
 
 def _plan_uses_index(plan: Sequence[Row[Any]], index_name: str) -> bool:
-    """Exact-name match (blizzard#519 D5): a substring check on ``ix_foo_chunk_id``
+    """Exact-name match: a substring check on ``ix_foo_chunk_id``
     also matches ``ix_foo_chunk_id_epoch``, so a dropped single-column index's name
     could still "pass" by riding its composite successor's plan text. `\\b` fails to
     end the match inside `_epoch` (`_` is a word character), so this only matches the
@@ -122,7 +122,7 @@ def test_fact_table_chunk_id_read_plans_as_an_index_search(tmp_path: Path, table
 
 @pytest.mark.parametrize("table", _CHUNK_ID_EPOCH_COMPOSITE_TABLES)
 def test_chunk_id_epoch_composite_tables_plan_through_the_exact_composite(tmp_path: Path, table: str) -> None:
-    """blizzard#519 D5: `ix_{table}_chunk_id` is dropped in favor of
+    """`ix_{table}_chunk_id` is dropped in favor of
     `ix_{table}_chunk_id_epoch`, a strict superset that still serves a plain `chunk_id`
     equality filter as its leading column."""
     engine = _engine(tmp_path)
@@ -145,7 +145,7 @@ def test_delivery_pr_opened_read_plans_as_an_index_search_on_its_own_unique_cons
 
 
 def test_load_facts_answered_question_read_plans_as_an_index_search(tmp_path: Path) -> None:
-    """`load_facts`'s `answered` read (blizzard#421) joins on `questions.chunk_id`, so it
+    """`load_facts`'s `answered` read joins on `questions.chunk_id`, so it
     plans against `ix_questions_chunk_id` rather than an unfiltered join."""
     engine = _engine(tmp_path)
     with engine.connect() as conn:
@@ -159,7 +159,7 @@ def test_load_facts_answered_question_read_plans_as_an_index_search(tmp_path: Pa
     assert any("ix_questions_chunk_id" in str(row) for row in plan), plan
 
 
-# --- blizzard#519: the hot-path reads named in its acceptance criteria --------------
+# --- the hot-path reads named in its acceptance criteria --------------
 
 # (label, sql, index name the read must plan through)
 _HOT_PATH_INDEX_SEARCHES = (
@@ -195,7 +195,7 @@ def test_hot_path_read_plans_as_an_index_search(tmp_path: Path, label: str, sql:
 
 def test_spend_by_node_plans_through_the_node_index_when_unfiltered(tmp_path: Path) -> None:
     """`ix_usage_facts_node_id` serves `spend_by_node`'s `GROUP BY` with no scan and no
-    temp B-tree when the caller passes no date range (blizzard#519 F11)."""
+    temp B-tree when the caller passes no date range."""
     engine = _engine(tmp_path)
     compiled = str(
         _spend_by_node_stmt(OperationalCriteria()).compile(
@@ -211,7 +211,7 @@ def test_spend_by_node_plans_through_the_node_index_when_unfiltered(tmp_path: Pa
 def test_spend_by_node_prefers_the_range_index_and_sorts_for_group_by_when_windowed(tmp_path: Path) -> None:
     """A windowed `spend_by_node` call plans through `ix_usage_facts_recorded_at` for the
     range instead — `ix_usage_facts_node_id` goes unused and the `GROUP BY` falls back to
-    a temp B-tree (blizzard#519 F11). Accepted, not fixed: the range is the more
+    a temp B-tree. Accepted, not fixed: the range is the more
     selective predicate on a windowed call, and no case elsewhere pins this trade-off."""
     engine = _engine(tmp_path)
     criteria = OperationalCriteria(since=_NOW, until=_NOW)
@@ -226,7 +226,7 @@ def test_spend_by_node_prefers_the_range_index_and_sorts_for_group_by_when_windo
 
 def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_path: Path) -> None:
     """`_visible_segment_ids_stmt`'s `NOT IN (SELECT supersedes ...)` subquery
-    (blizzard#519) — the outer `final = TRUE` filter plans through
+    — the outer `final = TRUE` filter plans through
     `ix_transcript_segments_final_chunk_id`, and the subquery's own `supersedes IS NOT
     NULL` scan plans through `ix_transcript_segments_supersedes`. Compiles the real
     statement rather than a hand-written mirror, so the two can't silently diverge."""
@@ -240,12 +240,12 @@ def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_pa
     assert _plan_uses_index(plan, "ix_transcript_segments_supersedes"), plan
 
 
-# --- blizzard#519 D6: activity_facts_since's per-source `_bounded` read -------------
+# --- activity_facts_since's per-source `_bounded` read -------------
 
 # (label, stmt fn, ts_col, pk_col, index name) — the real per-source base-statement
 # builder `ChunkEventsStore.activity_facts_since` calls, so the compiled statement
 # includes the same joins and `chunk_deleted` anti-join production issues, not a
-# hand-written mirror that could diverge (blizzard#519 F6).
+# hand-written mirror that could diverge.
 _ACTIVITY_FEED_SOURCES = (
     ("chunks", _chunk_minted_stmt, s.chunks.c.minted_at, s.chunks.c.chunk_id, "ix_chunks_minted_at_chunk_id"),
     (

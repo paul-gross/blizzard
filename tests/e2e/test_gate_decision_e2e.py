@@ -111,7 +111,7 @@ def _tick_until(
     """Drive synchronous ticks until the chunk reaches one of ``targets``; return its status.
 
     Wrapped in :func:`_runner_api` so the build node's scripted push+declare has a live
-    local API to POST to (issue #143).
+    local API to POST to.
     """
     prior = dict(os.environ)
     os.environ.update(fenced)  # the runner spawns the fenced mock harness in-process
@@ -186,7 +186,7 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(tmp_path: Path) -> Non
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
 
-        # Phase 1: build commits and its verdict transitions into the gate — the hub opens
+        # The build commits and its verdict transitions into the gate — the hub opens
         # a decision carrying the build artifact and the chunk derives waiting_on_human.
         status = _tick_until(config, hub, chunk_id, fenced, {"waiting_on_human", "done", "needs_human"}, 90.0)
         assert status == "waiting_on_human", f"chunk did not park at the gate (last status {status!r})"
@@ -211,7 +211,7 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(tmp_path: Path) -> Non
         decided = _blizzard("hub", "decision", "resolve", decision_id, "approve", "--by", "alice", "--hub-url", hub_url)
         assert decided.returncode == 0, f"hub decision resolve failed:\n{decided.stderr}"
 
-        # Phase 2: the holding runner records the resolving transition; deliver lands the chunk.
+        # The holding runner records the resolving transition; deliver lands the chunk.
         status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 90.0)
         assert status == "done", f"chunk did not land after the gate was decided (last status {status!r})"
 

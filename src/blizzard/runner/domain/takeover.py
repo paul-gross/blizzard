@@ -1,4 +1,4 @@
-"""The operator takeover — ``blizzard runner takeover <chunk-id>`` (issue #52).
+"""The operator takeover — ``blizzard runner takeover <chunk-id>``.
 
 A chunk is **takeable** while this runner holds it and carries no running attempt; anything else
 raises a refusal the edge maps to ``409``. The **fact-before-command** ordering holds regardless
@@ -27,11 +27,11 @@ from blizzard.runner.loop.process import IProcessProbe, kill_owned_process
 from blizzard.wire.facts import LEASE_MINTED
 
 if TYPE_CHECKING:
-    # Deferred: ``runner/stores.py`` composes this module's own Protocol (blizzard#410).
+    # Deferred: ``runner/stores.py`` composes this module's own Protocol.
     from blizzard.runner.environments.repository import EnvBindingRecord
     from blizzard.runner.stores import RunnerStores
 
-# What a takeover forwards from the identity env (issue #258). Nothing else leaves the
+# What a takeover forwards from the identity env. Nothing else leaves the
 # daemon: the operator's terminal supplies the rest, and no secret crosses the local API.
 _IDENTITY_PREFIX = "BLIZZARD_"
 _FORWARDED_EXECUTION_VARS = ("PATH", "HOME")
@@ -53,7 +53,7 @@ __all__ = [
 
 @dataclass(frozen=True)
 class TakeoverRecord:
-    """An open operator takeover — the human-in-session fact (issue #52).
+    """An open operator takeover — the human-in-session fact.
 
     ``lease_id`` always names the reference lease — active or already closed, never
     ``None``. ``fence_epoch`` is set only when a live worker was force-killed."""
@@ -105,7 +105,7 @@ class IReadTakeoverRepository(Protocol):
     """Read-only takeover queries (held by read-path edges)."""
 
     def lease_for_open_takeover(self, lease_id: str) -> LeaseRecord | None:
-        """The lease by id iff an open takeover names it (issue #291), regardless of the
+        """The lease by id iff an open takeover names it, regardless of the
         lease's own closure — the worker-authorization resolver's second half, alongside
         :meth:`~blizzard.runner.domain.leases.IReadLeaseRecordRepository.active_lease`. The
         open-takeover fact is what authorizes a resumed session's worker verbs against the
@@ -114,18 +114,18 @@ class IReadTakeoverRepository(Protocol):
 
     def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:
         """The chunk's open takeover, or ``None`` — a ``takeovers`` row with no
-        ``takeover_ends`` row for the same ``takeover_id`` (issue #52).
+        ``takeover_ends`` row for the same ``takeover_id``.
 
         At most one open takeover exists per chunk at a time."""
         ...
 
     def open_takeover_chunk_ids(self) -> set[str]:
-        """Every chunk id currently under an open takeover (issue #52): each names a chunk
+        """Every chunk id currently under an open takeover: each names a chunk
         whose session the human holds, untouchable until the takeover closes."""
         ...
 
     def open_takeovers(self) -> list[TakeoverRecord]:
-        """Every open takeover, across every chunk (issue #51).
+        """Every open takeover, across every chunk.
 
         :meth:`open_takeover_for_chunk` widened to the fleet, mirroring
         :mod:`~blizzard.runner.domain.escalations`'s own ``open_escalations`` shape — the
@@ -148,7 +148,7 @@ class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
         session: SessionReference,
     ) -> None:
         """Open a takeover — recorded before any kill and before the interactive command
-        is returned (issue #52), so no later tick can race the human for the chunk."""
+        is returned, so no later tick can race the human for the chunk."""
         ...
 
     def record_takeover_end(self, *, takeover_id: str, ended_at: datetime) -> None:
@@ -202,11 +202,11 @@ class OpenedTakeover:
     takeover_id: str
     command: str
     workdir: str
-    # The declared pool this session belongs to (issue #144); ``None`` when it belongs to
+    # The declared pool this session belongs to; ``None`` when it belongs to
     # no pool, or predates the stamps.
     session_name: str | None = None
     harness_id: str | None = None
-    # The bounded takeover env (issue #258), layered over the operator's terminal on exec.
+    # The bounded takeover env, layered over the operator's terminal on exec.
     # Carries the re-minted lease token — env only, never the printable ``command``.
     env: dict[str, str] = field(default_factory=dict)
 
@@ -215,7 +215,7 @@ class TakeoverService:
     """Composition-root-wired: the clock, harness registry, and process probe.
 
     Spans five concepts (takeover, asks, outbound, tokens, elicitations), so it holds the
-    :class:`~blizzard.runner.stores.RunnerStores` bundle (D4) — the chunk-keyed reads
+    :class:`~blizzard.runner.stores.RunnerStores` bundle — the chunk-keyed reads
     (environments, leases) are resolved at the edge instead (``bzh:domain-takes-objects``)."""
 
     def __init__(
@@ -235,7 +235,7 @@ class TakeoverService:
         self._harnesses = harnesses
         self._process = process
         self._local_api_url = local_api_url
-        # The SSE publish seam (D2), typed against the Protocol (``bzh:dependency-inversion``);
+        # The SSE publish seam, typed against the Protocol (``bzh:dependency-inversion``);
         # ``None`` on a broker-less app, a no-op there.
         self._events = events
 
@@ -300,13 +300,13 @@ class TakeoverService:
             if self._events is not None:
                 self._events.publish_fact_changed(seq=seq, kind=LEASE_MINTED, chunk_id=chunk_id, lease_id=None)
             # The reap machinery's own best-effort kill: the shared, liveness-checked,
-            # pgid-preferring kill (D3) every owned-process teardown reaches through.
+            # pgid-preferring kill every owned-process teardown reaches through.
             kill_owned_process(
                 self._process, pid=active.pid, process_start_time=active.process_start_time, pgid=active.pgid
             )
             # A taken-over chunk's lease is skipped by every loop step from here on (Advance,
             # Reap alike), so an in-flight elicitation would otherwise leak forever uncollected
-            # and unkilled (blizzard#443, D7) — killed here, the one path that closes it out.
+            # and unkilled — killed here, the one path that closes it out.
             elicitation = self._stores.elicitations.in_flight_elicitation(active.lease_id, active.epoch)
             if elicitation is not None:
                 kill_owned_process(
@@ -317,7 +317,7 @@ class TakeoverService:
                 )
                 self._stores.elicitations.clear_elicitation(active.lease_id, active.epoch)
 
-        # Read the reference lease's stamps (issue #144) rather than re-resolving, so the
+        # Read the reference lease's stamps rather than re-resolving, so the
         # operator continues under exactly the configuration the session ran with.
         command = harness.resume_command(
             SpawnCwd.of_session(self._workspace_root, workdir),
@@ -326,7 +326,7 @@ class TakeoverService:
             effort=reference.resolved_effort,
             attended=True,
         )
-        # A resume inherits no spawn env, so identity must be handed over (issue #258).
+        # A resume inherits no spawn env, so identity must be handed over.
         # The token plaintext is never persisted, so it is re-minted, invalidating the prior.
         lease_token, token_hash = LeaseToken.mint()
         self._stores.tokens.record_lease_token(reference.lease_id, token_hash, now)
@@ -356,7 +356,7 @@ class TakeoverService:
         )
 
     def close(self, scope: TakeoverCloseScope, takeover_id: str) -> None:
-        """End ``takeover_id``, idempotently (issue #291): ending one already ended — by this
+        """End ``takeover_id``, idempotently: ending one already ended — by this
         same call racing ``Pull``'s own closer, or a retried end-PATCH — is the desired state,
         so it succeeds rather than raising. Only a genuinely *different* takeover holding the
         chunk is the real conflict this still refuses. ``scope`` is already resolved by the

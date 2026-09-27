@@ -1,4 +1,4 @@
-"""PromoteService (unit tier) — promote-and-tail-stamp, facts only (issue #137).
+"""PromoteService (unit tier) — promote-and-tail-stamp, facts only.
 
 A fake stands in for the store — only the methods :meth:`PromoteService.promote` calls
 are meaningfully implemented; every other seam raises loudly if called
@@ -96,7 +96,7 @@ def test_promote_stamps_one_past_the_max_effective_position_of_ready_chunks() ->
 
 
 def test_promote_uses_the_effective_position_fallback_for_ready_chunks_with_no_explicit_position() -> None:
-    # A ready chunk with no explicit position falls back to its promoted_at (issue #137) —
+    # A ready chunk with no explicit position falls back to its promoted_at —
     # the new chunk's tail stamp must beat that fallback too, not just explicit positions.
     clock = FixedClock(instant=_T0)
     ready = [_chunk("chk_a", minted_at=datetime(2020, 1, 1, tzinfo=UTC))]

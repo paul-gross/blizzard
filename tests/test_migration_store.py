@@ -1,8 +1,8 @@
-"""Cross-graph migration — the store write + derivations (issue #90, Phase 3).
+"""Cross-graph migration — the store write + derivations.
 
 A :class:`MigrationFact` makes ``current_node_id`` the landing node and status ``ready``;
 ``record_migration`` re-pins the graph, releases the route, and persists artifacts in one
-idempotent write. Issue #124 adds ``IntendedMigration`` and the ``clear_intent`` flag.
+idempotent write. adds ``IntendedMigration`` and the ``clear_intent`` flag.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ nodes:
 """
 
 # A target graph whose landing node (name-matches the source's ``build``) is
-# hub-executed — issue #111: a migration landing here must derive ``delivering``.
+# hub-executed — a migration landing here must derive ``delivering``.
 _HUB_TARGET_YAML = """
 name: triage
 entry: build
@@ -114,7 +114,7 @@ def _migrated_facts(
 def test_after_a_migration_the_current_node_is_the_landing_node_and_status_is_ready() -> None:
     facts = _migrated_facts(landed="nd_landed")
     assert facts.current_node_id() == "nd_landed"
-    # A runner-executed landing node re-queues the chunk claimable (issue #111 regression).
+    # A runner-executed landing node re-queues the chunk claimable (regression).
     assert facts.status() is ChunkStatus.READY
     # The fact carries the re-pinned model.
     migration = facts.newest_migration()
@@ -123,7 +123,7 @@ def test_after_a_migration_the_current_node_is_the_landing_node_and_status_is_re
 
 @unit
 def test_a_migration_landing_on_a_hub_node_derives_delivering() -> None:
-    # Issue #111: a migration re-pinning the chunk onto a hub-executed node is retained
+    # A migration re-pinning the chunk onto a hub-executed node is retained
     # by the hub, exactly as a transition into one is — never wrongly derived READY.
     facts = _migrated_facts(landed="nd_landed", landed_executor=Executor.HUB)
     assert facts.status() is ChunkStatus.DELIVERING
@@ -237,7 +237,7 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     assert chunk.graph_id == target_graph_id  # re-pinned
-    # Issue #144 retargeted the re-pin: the authored choice `model:` is still a single
+    # Retargeted the re-pin: the authored choice `model:` is still a single
     # string, and it lands in the prioritized `default_model` list as its one entry.
     assert chunk.default_model == ["claude-sonnet-5"]
     assert hub.services.chunks.route.route_of(chunk_id) is None  # route released
@@ -288,7 +288,7 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
 
 @component
 def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(tmp_path: Path) -> None:
-    """Issue #111: a cross-graph migration whose landing node is hub-executed is
+    """A cross-graph migration whose landing node is hub-executed is
     retained by the hub — the chunk must derive ``delivering``, not runner-claimable
     ``ready``, and so must be absent from :meth:`ChunkRecordStore.list_ready`."""
     hub = build_hub(tmp_path)
@@ -338,7 +338,7 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
 
 
 # --------------------------------------------------------------------------- #
-# intended_migration (issue #124, Phase 1) — storage + domain types only
+# intended_migration — storage + domain types only
 
 
 @component
@@ -371,7 +371,7 @@ def test_set_intended_migration_sets_overwrites_and_clears(tmp_path: Path) -> No
 @component
 def test_record_migration_with_clear_intent_clears_the_intent_atomically(tmp_path: Path) -> None:
     """``clear_intent=True`` folds the intent's clear into the same write as the fact,
-    the re-pin, the artifacts, and the route release — a runner landing (issue #124)."""
+    the re-pin, the artifacts, and the route release — a runner landing."""
     hub = build_hub(tmp_path)
     chunk_id, node_id, target_graph_id = _claimed(hub)
     chunks = cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
@@ -451,7 +451,7 @@ def test_record_migration_without_clear_intent_leaves_a_set_intent_untouched(tmp
 @component
 def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(tmp_path: Path) -> None:
     """The intent's clear lands atomically on the ``release_route=False`` hub-landing
-    branch too (issue #111 + #124 together): the route stays retained, the intent still
+    branch too: the route stays retained, the intent still
     clears in the same transaction as the fact."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _SRC_YAML}).status_code == 201
@@ -496,7 +496,7 @@ def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(t
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     assert chunk.intended_migration is None  # cleared even though the route is retained
-    assert hub.services.chunks.route.route_of(chunk_id) is not None  # retained (hub landing, issue #111)
+    assert hub.services.chunks.route.route_of(chunk_id) is not None  # retained (hub landing)
     facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     migration = facts.newest_migration()

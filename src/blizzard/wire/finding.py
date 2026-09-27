@@ -1,4 +1,4 @@
-"""Finding wire shapes (blizzard#390) — the candidate, the delta ops, and the read view.
+"""Finding wire shapes — the candidate, the delta ops, and the read view.
 
 Both this and ``blizzard.wire.garden_proposal`` are the platform's own shapes
 (blizzard-product:/delivered/garden/machinery.md §Where the formats live): a garden graph
@@ -52,8 +52,8 @@ class ObservedFindingOp(BaseModel):
 
 class GoneFindingOp(BaseModel):
     """The run looked and could not find the finding named by `id`. Ordinarily this does
-    not close the finding (D3) — it flags it for a person — except against a `delivered`
-    finding, which it settles to `resolved` outright (blizzard#583 D3): a delivery
+    not close the finding — it flags it for a person — except against a `delivered`
+    finding, which it settles to `resolved` outright: a delivery
     already carries a person's own claim that the ground moved."""
 
     op: Literal["gone"] = "gone"
@@ -76,7 +76,7 @@ class FindingDelta(BaseModel):
 
 
 class DeferredReviewFindingEntry(BaseModel):
-    """A `deferred` entry (blizzard#582 D7) — a still-open should-fix finding a passing
+    """A `deferred` entry — a still-open should-fix finding a passing
     review leaves unanswered, the only disposition that mints. Carries the
     `garden/finding-format` `AddFindingOp` fields plus `severity`, all required:
     pydantic refuses a delta missing one, rather than a hand-rolled check downstream."""
@@ -93,7 +93,7 @@ class DeferredReviewFindingEntry(BaseModel):
 
 
 class FixedReviewFindingEntry(BaseModel):
-    """A `fixed` entry (blizzard#582 D7) — the review already settled it; materialization
+    """A `fixed` entry — the review already settled it; materialization
     mints nothing further and reads no field beyond `ref`."""
 
     model_config = ConfigDict(extra="forbid")
@@ -103,7 +103,7 @@ class FixedReviewFindingEntry(BaseModel):
 
 
 class RefutedReviewFindingEntry(BaseModel):
-    """A `refuted` entry (blizzard#582 D7) — the review already settled it; materialization
+    """A `refuted` entry — the review already settled it; materialization
     mints nothing further and reads no field beyond `ref`."""
 
     model_config = ConfigDict(extra="forbid")
@@ -119,7 +119,7 @@ ReviewFindingEntry = Annotated[
 
 
 class ReviewFindingDelta(BaseModel):
-    """A delivery lane review round's own delta (blizzard#582 D7) — the wire shape
+    """A delivery lane review round's own delta — the wire shape
     `review/finding-format` documents in full; this restates only the field meanings a
     caller needs. `entries` is required, not defaulted: a payload naming no `entries`
     key at all is refused rather than read as an empty, `recorded` delta."""
@@ -131,8 +131,8 @@ class ReviewFindingDelta(BaseModel):
 
 class FindingView(BaseModel):
     """A finding. `state` folds the newest fact's kind to `"live"` for
-    `add`/`observed`/`reopened` (blizzard#394); `note` is that fact's own note. `source`
-    is `"routine"` or `"review"` (blizzard#582 D1): a review-sourced finding carries no
+    `add`/`observed`/`reopened`; `note` is that fact's own note. `source`
+    is `"routine"` or `"review"`: a review-sourced finding carries no
     `routine_name`, its own `severity`, and the `raised_by_chunk_id` that raised it."""
 
     model_config = ConfigDict(populate_by_name=True)
@@ -157,7 +157,7 @@ class FindingView(BaseModel):
 
 
 class FindingsPageView(BaseModel):
-    """``GET /api/findings``'s own bounded page (blizzard#526 D3/D5) — ``next_cursor`` is
+    """``GET /api/findings``'s own bounded page — ``next_cursor`` is
     ``None`` exactly when this page is the last one."""
 
     findings: list[FindingView] = []
@@ -165,8 +165,7 @@ class FindingsPageView(BaseModel):
 
 
 class FindingFactView(BaseModel):
-    """One entry in a finding's fact chain, oldest-first — `FindingFact` on the wire
-    (blizzard#487)."""
+    """One entry in a finding's fact chain, oldest-first — `FindingFact` on the wire."""
 
     kind: str
     recorded_at: str
@@ -177,7 +176,7 @@ class FindingFactView(BaseModel):
 
 
 class FindingDetailView(FindingView):
-    """`GET /api/findings/{finding_id}`'s own response model (blizzard#487) — adds the
+    """`GET /api/findings/{finding_id}`'s own response model — adds the
     finding's whole fact chain, oldest-first, atop every `FindingView` field. The list
     read (`GET /api/findings`) returns plain `FindingView` and carries no chain."""
 
@@ -186,8 +185,8 @@ class FindingDetailView(FindingView):
 
 class FindingExitRequest(BaseModel):
     """`POST /api/findings/{verb}` — the shared shape for every human-driven exit and
-    `reopen` except `supersede` (blizzard#394): every finding named exits (or
-    reopens) together, one call, carrying the same required note (D7)."""
+    `reopen` except `supersede`: every finding named exits (or
+    reopens) together, one call, carrying the same required note."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -196,7 +195,6 @@ class FindingExitRequest(BaseModel):
 
 
 class FindingSupersedeRequest(FindingExitRequest):
-    """`POST /api/findings/supersede` — `FindingExitRequest` plus the absorbing finding
-    (D4)."""
+    """`POST /api/findings/supersede` — `FindingExitRequest` plus the absorbing finding."""
 
     superseded_by: str

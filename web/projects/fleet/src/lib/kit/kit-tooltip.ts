@@ -49,7 +49,7 @@ class KitTooltipPanel {
 }
 
 /**
- * A tooltip trigger (issue #405) — applied directly on the element it describes
+ * A tooltip trigger — applied directly on the element it describes
  * (`[fleetTooltip]`, not a wrapping component), it opens a small token-styled panel
  * in a CDK overlay on hover or keyboard focus and closes it on the inverse
  * (mouseleave/blur) or `Escape`. The described text is a plain string input rather

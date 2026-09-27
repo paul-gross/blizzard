@@ -12,10 +12,10 @@ from blizzard.hub.cli.sessions.service import SessionService
 
 @click.command("rotate-signing-key", cls=AuthCommand)
 def rotate_signing_key(cli: CliContext) -> None:
-    """Rotate the hub's IdP signing keypair (issue #95) — a fresh key signs immediately; the
+    """Rotate the hub's IdP signing keypair — a fresh key signs immediately; the
     old key still verifies already-issued tokens, and no restart is needed. A no-op error under
     ``auth.mode = "none"`` (no keypair exists). Human-plane, gated on ``user:manage`` — under
-    ``auth.mode = "oauth"`` this requires a hub session (``blizzard hub login``, issue #96)."""
+    ``auth.mode = "oauth"`` this requires a hub session (``blizzard hub login``)."""
     cli.post(
         "/api/auth/rotate-signing-key",
         "POST /auth/rotate-signing-key",
@@ -36,7 +36,7 @@ def rotate_signing_key(cli: CliContext) -> None:
     "--no-browser", "no_browser", is_flag=True, default=False, help="Print the login URL instead of opening it."
 )
 def login(cli: CliContext, session_service: SessionService, paste: bool, no_browser: bool) -> None:
-    """Log into the hub (issue #96) — opens the browser to authorize and stores the
+    """Log into the hub — opens the browser to authorize and stores the
     resulting session token locally. ``--paste`` uses the paste-code fallback for a
     shell with no reachable loopback listener; ``--no-browser`` still runs the loopback
     flow, printing the URL."""
@@ -55,7 +55,7 @@ def login(cli: CliContext, session_service: SessionService, paste: bool, no_brow
 
 @click.command(cls=SessionServiceCommand)
 def logout(cli: CliContext, session_service: SessionService) -> None:
-    """Log out of the hub (issue #96) — deletes the locally stored session token and
+    """Log out of the hub — deletes the locally stored session token and
     revokes it at the hub, so it stops resolving even if it leaked. A no-op (locally)
     if never logged in; the revoke call is best-effort (a hub already unreachable, or
     an already-expired session, does not block the local cleanup)."""

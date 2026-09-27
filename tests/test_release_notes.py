@@ -1,5 +1,5 @@
-"""``scripts/release-notes.sh`` — the Conventional-Commit-type grouping (issue
-#190), pinned over a synthetic commit list so this needs no real git history.
+"""``scripts/release-notes.sh`` — the Conventional-Commit-type grouping,
+pinned over a synthetic commit list so this needs no real git history.
 The script's ``--range`` mode (real ``git log``) is exercised only by the
 release workflow itself; ``--from-stdin`` is what this test drives.
 """

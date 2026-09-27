@@ -1,4 +1,4 @@
-"""The harness-usage domain value (epic #57, issue #58).
+"""The harness-usage domain value (epic #57).
 
 Cost always comes from the harness's own reported figure — blizzard never maintains a
 pricing table. Token counts are always present, but ``cost_usd`` can be legitimately
@@ -37,8 +37,8 @@ class UsageSample:
     estimated_cost_usd: float | None = None
     #: What ``cost_usd`` covers; ``None`` says the figure is this invocation's alone.
     cost_scope_tokens: int | None = None
-    #: The invocation's own recorded harness identity (blizzard#441, D5) — stamped by the
-    #: caller from the lease's own session/spawn-generation records (D4), never resolved
+    #: The invocation's own recorded harness identity — stamped by the
+    #: caller from the lease's own session/spawn-generation records, never resolved
     #: by the parser itself. ``None`` on a sample no caller has stamped yet.
     harness_id: str | None = None
     #: The generation's own recorded harness build version, alongside ``harness_id``.
@@ -54,14 +54,14 @@ class UsageSample:
 @dataclass(frozen=True)
 class UsageLimit:
     """One invocation classified as exited over the account's own subscription usage
-    limit (blizzard#594) — a fact the adapter translates from its harness's own output,
+    limit — a fact the adapter translates from its harness's own output,
     never a decision (``bzh:deterministic-shell``): the loop is what engages the pause
     brake from it.
 
     ``resets_at`` is ``None`` when the classifier could not parse a reset time from the
     harness's own report — never a guess, never a raise. ``detail`` is the harness's own
     free-text report, carried through and logged at engagement for diagnosis — the brake's
-    own reason string (D3) stays the fixed ``usage limit: <harness> (resets <time>)`` shape
+    own reason string stays the fixed ``usage limit: <harness> (resets <time>)`` shape
     and never repeats it."""
 
     resets_at: datetime | None

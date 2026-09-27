@@ -33,7 +33,7 @@ from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 @dataclass(frozen=True)
 class DecisionSubmitResult:
     """:meth:`DecisionService.submit`'s own return — the wire :class:`ApplyResponse` plus
-    the identity of the durable fact this call just wrote (issue #213). ``decision_id``
+    the identity of the durable fact this call just wrote. ``decision_id``
     is set only on a fresh ``decisions`` row, never on a failure or an idempotent
     replay."""
 
@@ -107,7 +107,7 @@ class DecisionService:
                 response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
             )
 
-        # Proposed-work-item policy refusal (D6) — the same unconditional check
+        # Proposed-work-item policy refusal — the same unconditional check
         # ``ApplyService.apply`` runs, since a runner-config gate is the fourth dispatch fork.
         policy_rejection = ProposalPolicy(node, submission.proposals).rejection()
         if policy_rejection is not None:

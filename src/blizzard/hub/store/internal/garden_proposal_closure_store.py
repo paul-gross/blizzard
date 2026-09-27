@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the garden-proposal closure repository seam (blizzard#395).
+"""SQLAlchemy adapter for the garden-proposal closure repository seam.
 All ``sqlalchemy`` usage confined here (``bzh:dependency-inversion``). The
 accept-with-mint write lives in ``WorkItemStore.accept_create`` instead, reaching
 :func:`insert_garden_proposal_closure_row` as ``chunk_rows.insert_materialization_row``

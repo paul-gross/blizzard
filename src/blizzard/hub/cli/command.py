@@ -1,4 +1,4 @@
-"""The click command base classes every hub verb declares through (issue #104)."""
+"""The click command base classes every hub verb declares through."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from blizzard.hub.cli.sessions import IReadSessionStore
 
 
 class HubCommand(click.Command):
-    """An operator verb (issue #104): it declares the connection options; the callback takes their ``CliContext``."""
+    """An operator verb: it declares the connection options; the callback takes their ``CliContext``."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -40,7 +40,7 @@ class HubCommand(click.Command):
         raise NotImplementedError
 
     def invoke(self, ctx: click.Context) -> Any:
-        # `ctx.obj` is the session-store seam the `hub` group's own callback built (issue #104).
+        # `ctx.obj` is the session-store seam the `hub` group's own callback built.
         ctx.params["cli"] = self.context(ctx.params, ctx.obj)
         return super().invoke(ctx)
 
@@ -66,8 +66,8 @@ class AuthCommand(HubCommand):
 
 
 class SessionServiceCommand(AuthCommand):
-    """An ``AuthCommand`` that hands the session application service to the controller
-    (hub:98) — pinned by
+    """An ``AuthCommand`` that hands the session application service to the controller —
+    pinned by
     ``tests/test_cli_surface_contract.py::test_login_and_logout_keep_session_service_off_the_recorded_surface``."""
 
     def invoke(self, ctx: click.Context) -> Any:

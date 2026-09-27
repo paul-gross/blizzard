@@ -5,7 +5,7 @@ import { client as hubClient } from '../api/hub/client.gen';
 import { redirectToLogin } from './auth-redirect';
 
 /**
- * The 401 interceptor (issue #93): registers a response interceptor on the generated
+ * The 401 interceptor: registers a response interceptor on the generated
  * hub client's own transport — the app has no `HttpClient`/`HttpInterceptorFn` seam to
  * hang off (`bzh:generated-client`'s fetch-based client is the one transport every
  * request rides), so this is that seam's counterpart. Any hub response answering

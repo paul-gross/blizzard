@@ -144,7 +144,7 @@ def _drive_until(config: RunnerConfig, hub: httpx.Client, chunk_id: str, env: di
     """Tick until `predicate(detail)` is truthy; return that detail. Raises on timeout.
 
     Wrapped in :func:`_runner_api` so the build node's scripted push+declare has a live
-    local API to POST to (issue #143).
+    local API to POST to.
     """
     prior = dict(os.environ)
     os.environ.update(env)
@@ -170,8 +170,8 @@ def _fenced_env() -> dict[str, str]:
 
 
 def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
-    """A blocked PR pends over several polls, then lands once the lever clears; issue
-    #232's D2/F1 wait path also pins exactly one unchanging `delivery-findings`
+    """A blocked PR pends over several polls, then lands once the lever clears; the
+    blocked-wait path also pins exactly one unchanging `delivery-findings`
     artifact across the repeated polls."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
     main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
@@ -184,7 +184,7 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = _fenced_env()
 
-        # Phase 1 — pending: the PR is open but blocked, so nothing merges.
+        # Pending: the PR is open but blocked, so nothing merges.
         pending = _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
         assert pending["status"] == "delivering", pending["status"]
         assert pending["landed"] is False
@@ -192,7 +192,7 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         assert pulls and not any(p.get("merged") for p in pulls), f"a blocked PR merged while pending: {pulls}"
         assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved while pending"
 
-        # D2/F1 — the substantive wait writes `delivery-findings` on its first poll...
+        # The substantive wait writes `delivery-findings` on its first poll...
         findings_rows = [a for a in pending["artifacts"] if a.get("name") == "delivery-findings"]
         assert len(findings_rows) == 1, f"expected exactly one delivery-findings artifact: {findings_rows}"
         first_content = findings_rows[0].get("content") or ""
@@ -221,7 +221,7 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
             assert len(rows) == 1, f"a repeat poll duplicated the delivery-findings artifact: {rows}"
             assert (rows[0].get("content") or "") == first_content, "a repeat poll changed the findings content"
 
-        # Phase 2 — CI goes green: clear the lever; the next poll reads clean and merges.
+        # CI goes green: clear the lever; the next poll reads clean and merges.
         assert forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
         done = _drive_until(config, hub, chunk_id, fenced, lambda b: b["status"] in {"done", "needs_human"}, timeout=90)
         assert done["status"] == "done", f"did not land after CI went green (status {done['status']!r})"
@@ -239,7 +239,7 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
 
 
 def test_pr_ci_routes_failure_on_a_terminally_failed_check(tmp_path: Path) -> None:
-    """Issue #232: a terminally-failed check routes `failure` well inside the 60s budget,
+    """A terminally-failed check routes `failure` well inside the 60s budget,
     ruling out a `poll_timeout`-driven trigger. Two passes assert the findings content:
     plain CI failure, then a red base check ("not this change")."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)

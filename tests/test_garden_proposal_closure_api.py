@@ -1,4 +1,4 @@
-"""Garden-proposal closure routes — pass and accept (blizzard#395, component tier).
+"""Garden-proposal closure routes — pass and accept (component tier).
 
 Seeded straight through ``GardenProposalStore``/``FindingStore``, the
 ``tests/test_garden_proposal_api.py`` shape. The ``tests/test_hub_work_source_api.py``

@@ -1,5 +1,5 @@
 """``ChunkDependenciesStore`` — the declared dependency edge's round-trip and release
-(issue #456, component tier). Migrated-to-head sqlite-on-disk, the
+(component tier). Migrated-to-head sqlite-on-disk, the
 ``test_chunk_delivery_store.py`` shape."""
 
 from __future__ import annotations
@@ -94,8 +94,8 @@ def test_declare_after_release_mints_a_fresh_row(tmp_path: Path) -> None:
 
 
 def test_list_standing_edges_orders_by_declared_at_ascending(tmp_path: Path) -> None:
-    """Review round 1 F2: ``derive_blocked_markings``'s "earliest-declared wins" rule
-    (D4) delegates entirely to this ordering, so it must be pinned here — declared with
+    """``derive_blocked_markings``'s "earliest-declared wins" rule
+    delegates entirely to this ordering, so it must be pinned here — declared with
     genuinely different ``declared_at`` instants, and out of chronological call order, so
     a store that returned insertion order rather than sorting would fail this."""
     dependencies, engine = _dependencies(tmp_path)
@@ -111,7 +111,7 @@ def test_list_standing_edges_orders_by_declared_at_ascending(tmp_path: Path) -> 
 
 
 def test_standing_edges_for_names_a_chunk_in_either_role(tmp_path: Path) -> None:
-    """``standing_edges_for`` (D2, issue #462) — the one-hop-each-way bounded read: every
+    """``standing_edges_for`` — the one-hop-each-way bounded read: every
     standing edge naming the chunk as dependent or as prerequisite, in one list."""
     dependencies, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
@@ -144,8 +144,8 @@ def test_standing_edges_for_excludes_a_released_edge(tmp_path: Path) -> None:
 
 
 def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Path) -> None:
-    """``ChunkDependenciesStore.record_fold`` — the fold's own composite write (issue
-    #460): a chunk's own ``chunk_grouped`` row, one release, and one mint, all in one
+    """``ChunkDependenciesStore.record_fold`` — the fold's own composite write:
+    a chunk's own ``chunk_grouped`` row, one release, and one mint, all in one
     transaction. The minted pair never revives the released row's ``dependency_id``."""
     dependencies, engine = _dependencies(tmp_path)
     with engine.begin() as conn:
@@ -174,7 +174,7 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
 
 def test_record_fold_writes_every_target_in_one_transaction(tmp_path: Path) -> None:
     """A fault partway through a later target's write rolls back an earlier target's row
-    too (F4, issue #460) — proven against the real engine, since a cross-target rollback
+    too — proven against the real engine, since a cross-target rollback
     is not observable through a seam double."""
     dependencies, engine = _dependencies(tmp_path)
     with engine.begin() as conn:

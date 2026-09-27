@@ -1,5 +1,5 @@
 """The ``oidc``/``github`` provider conformers — driven against a fake transport via
-``httpx.MockTransport`` (unit tier, issue #92).
+``httpx.MockTransport`` (unit tier).
 
 The whole authorize-url/exchange dance runs against canned responses, including a
 real RSA signature verification of the ``oidc`` conformer's ``id_token`` — no network,
@@ -156,7 +156,7 @@ def test_oidc_exchange_raises_on_a_signature_that_does_not_verify() -> None:
 def test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg() -> None:
     """A JWKS entry with no ``alg`` member (legal per RFC 7517) must not let a token's
     ``HS256`` header pick the algorithm and HMAC-key off the published RSA public key
-    (alg-confusion attack, issue #92)."""
+    (alg-confusion attack)."""
     _, jwk = _rsa_keypair()
     del jwk["alg"]
     public_pem = RSAAlgorithm.from_jwk(jwk).public_bytes(  # type: ignore[union-attr]

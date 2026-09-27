@@ -9,7 +9,7 @@ import {
 import { hubRunDeltaKey, hubRunsKey } from '../query-keys';
 
 /**
- * Hub `GET /api/runs` read (blizzard#401 Phase 3, `hub run list`) — every routine run
+ * Hub `GET /api/runs` read (`hub run list`) — every routine run
  * minted in `[since, until)`, newest first. `since` is a reactive accessor,
  * `injectHubRoutineTrendQuery`'s own shape, so a caller can recompute the window
  * without re-wiring the query; the window's lower edge rides the key (`hubRunsKey`),
@@ -36,7 +36,7 @@ export function injectHubRunsQuery(since: () => string) {
 }
 
 /**
- * Hub `GET /api/runs/{chunk_id}` read (blizzard#401 Phase 3, `hub run show`) — one
+ * Hub `GET /api/runs/{chunk_id}` read (`hub run show`) — one
  * run's full detail: its identity, derived outcome, and, per finding-set it
  * delivered, the added/observed/gone entries its own artifact published. Disabled
  * while `chunkId()` is `null` — `injectHubGraphQuery`'s own rest state for a route

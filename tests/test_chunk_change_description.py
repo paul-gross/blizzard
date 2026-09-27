@@ -1,5 +1,5 @@
 """``ChunkChange.of`` (unit tier) — the pure derivation behind a ``chunk-changed``
-frame's prev/current node names and graph id (issue #212). Built straight from
+frame's prev/current node names and graph id. Built straight from
 :class:`ChunkFacts` + :class:`Graph` literals — no store, no hub harness.
 """
 

@@ -1,7 +1,7 @@
 """The ask/answer rendezvous at the hub (component tier) — MVP criterion 7.
 
 Pins the hub half of the protocol: asking parks the chunk on waiting_on_human,
-answering is first-write-wins CAS, the return leg (issue #165) derives
+answering is first-write-wins CAS, the return leg derives
 delivered/delivered_at, and GET /questions lists only the open ones.
 """
 
@@ -106,7 +106,7 @@ def test_forwarded_question_parks_chunk_and_surfaces(tmp_path: Path) -> None:
 
 
 def test_ask_and_answer_carry_distinct_causes(tmp_path: Path) -> None:
-    """The two routes share one call site (``questions.py``'s ``_publish``, issue #212) —
+    """The two routes share one call site (``questions.py``'s ``_publish``) —
     asserted separately so a hardcoded or defaulted cause on either route shows up here."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
@@ -126,7 +126,7 @@ def test_ask_and_answer_carry_distinct_causes(tmp_path: Path) -> None:
 
 
 def test_ask_question_normalizes_a_naive_asked_at(tmp_path: Path) -> None:
-    """Insurance on the typed route too (issue #28, ``bzh:utc-instants``): ``_parse``
+    """Insurance on the typed route too (``bzh:utc-instants``): ``_parse``
     coerces a naive ``asked_at`` to UTC rather than storing it (and later re-emitting
     it) naive."""
     hub = build_hub(tmp_path)
@@ -182,7 +182,7 @@ def test_question_asked_via_events_batch_lands(tmp_path: Path) -> None:
 
 
 def test_question_asked_via_events_batch_normalizes_a_naive_asked_at(tmp_path: Path) -> None:
-    """Legacy-buffered-payload insurance (issue #28, ``bzh:utc-instants``): a naive
+    """Legacy-buffered-payload insurance (``bzh:utc-instants``): a naive
     ``asked_at`` is normalized to UTC."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
@@ -220,7 +220,7 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
 
-    # `answered_by` in the body is a spoof attempt — issue #91 overwrites it with the
+    # `answered_by` in the body is a spoof attempt — the route overwrites it with the
     # resolved session identity, `"operator"` under the default `auth.mode = "none"`.
     first = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest", "answered_by": "alice"})
     assert first.status_code == 201, first.text
@@ -240,7 +240,7 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     assert body["answered_by"] == "operator"
     assert body["answer"] == "rest"
 
-    # The question row stays on the detail carrying its trail (issue #165); answered
+    # The question row stays on the detail carrying its trail; answered
     # but not yet delivered.
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"
@@ -279,7 +279,7 @@ def test_answer_delivered_fact_is_accepted(tmp_path: Path) -> None:
 
 
 def test_answer_delivered_surfaces_the_return_trip_on_the_question_view(tmp_path: Path) -> None:
-    """The delivered fact is *readable*, not merely stored (issue #165)."""
+    """The delivered fact is *readable*, not merely stored."""
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
@@ -337,7 +337,7 @@ def test_landing_a_delivered_fact_publishes_chunk_changed_for_the_trail(tmp_path
     data = frames[0][1]
     assert data["chunk_id"] == chunk_id
     # It genuinely carries no news by itself: the status is unchanged across the delivery
-    # — cause names the fact that drove the frame regardless (issue #212).
+    # — cause names the fact that drove the frame regardless.
     assert data["status"] == status_before
     assert data["prev_status"] == status_before
     assert data["cause"] == "question-answered"

@@ -22,7 +22,7 @@ function trackPageErrors() {
 }
 
 // 390 (a typical phone) and 320 (the narrowest common phone) — this view replaces
-// the whole panel, reachable at every width the shell itself is (blizzard#312).
+// the whole panel, reachable at every width the shell itself is.
 const WIDTHS = [390, 320];
 
 describe('session-recovery view shell sweep (web:shell-sweep, blizzard#312)', () => {

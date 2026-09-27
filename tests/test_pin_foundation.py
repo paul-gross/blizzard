@@ -52,7 +52,7 @@ def test_version_tracks_the_installed_distribution_metadata(monkeypatch: pytest.
 def test_an_open_pause_park_over_a_closed_lease_is_not_a_violation(tmp_path: Path) -> None:
     """Pause a chunk, then detach it: ``_reconcile_leases`` closes the lease and records no
     pause-park resume, so the park stays open over a closed lease. That is a legal history,
-    so "a pause-parked lease has no closure" is deliberately not an invariant (issue #46)."""
+    so "a pause-parked lease has no closure" is deliberately not an invariant."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(
@@ -99,7 +99,7 @@ def test_two_live_hub_exec_slots_are_a_violation(tmp_path: Path) -> None:
 def test_the_version_table_admits_this_projects_revision_ids(tmp_path: Path) -> None:
     """A migrated store's ``alembic_version.version_num`` is wide enough for this project's
     ``YYYYMMDD_HHMM_slug`` revision ids — alembic's own 32-char default truncates them on
-    postgres (issue #191), which sqlite's typeless storage would hide."""
+    postgres, which sqlite's typeless storage would hide."""
     engine = _runner_engine(tmp_path)
     column = next(c for c in inspect(engine).get_columns("alembic_version") if c["name"] == "version_num")
     with engine.connect() as conn:

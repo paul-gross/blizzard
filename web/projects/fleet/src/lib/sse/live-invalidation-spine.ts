@@ -25,7 +25,7 @@ export interface LiveInvalidationSpineOptions<TPayload extends object, TType ext
 
 /**
  * The registry-driven coalescing/reconnect machinery both daemons' live-update
- * services drive (`review:F5`; D10, `bzh:frontend-disjoint-diffs` — the machinery
+ * services drive (`bzh:frontend-disjoint-diffs` — the machinery
  * lifted here is kind-agnostic, unlike each daemon's own registry, which stays put).
  * One SSE subscription, dispatched through the caller's registry into a coalesced
  * `invalidateQueries` pass, plus reconnect-then-re-GET gap recovery: identical to what
@@ -38,7 +38,7 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
   private authRef: EffectRef | null = null;
   /** Guards {@link DestroyRef.onDestroy} registration to exactly once per instance —
    * {@link open} runs on every {@link start}/{@link restart}, but the teardown it
-   * registers must not stack (D2): a second registration would run the same close
+   * registers must not stack: a second registration would run the same close
    * twice on the eventual real destroy, once each against whatever handle/effects
    * happen to be current then. */
   private destroyRegistered = false;
@@ -72,7 +72,7 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
 
   /**
    * Tear down the current stream and open a fresh one — for a caller that declined
-   * session recovery and wants another shot at the stream (blizzard#333 D2/D3), never
+   * session recovery and wants another shot at the stream, never
    * for `SseService`'s own reconnect, which already retries under the hood. Leaves
    * exactly one subscription, effect pair, and destroy teardown live afterward, same
    * as a single {@link start} would — {@link open} registers the teardown once, ever,
@@ -113,7 +113,7 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
       ),
     );
 
-    // D9: a stream 401 is terminal — `SseService` schedules no reconnect past one —
+    // A stream 401 is terminal — `SseService` schedules no reconnect past one —
     // so this is the only place that ever observes it. Only a caller that names
     // `onAuthFailed` wants this watched at all (the hub instead exposes `authFailed`
     // for its app root to route on).

@@ -3,8 +3,8 @@ import type { GraphView } from '../api/hub';
 /**
  * What one choice's `to:` names — resolved from the wire's plain-string
  * `to_node_name` into the three things it can mean, and the structural kind that
- * follows from which one it is. Split out of `graph-layout.ts` (issue #157's
- * `web:lint` 400-line cap, the same reason `graph-diagram-node-shape.ts` and
+ * follows from which one it is. Split out of `graph-layout.ts` (`web:lint`
+ * 400-line cap, the same reason `graph-diagram-node-shape.ts` and
  * `graph-diagram-start.ts` were split out of the diagram component) into its own
  * cohesive unit — this mirrors the backend's own split, where `ChoiceTarget` is a
  * dataclass separate from the graph module it lives beside

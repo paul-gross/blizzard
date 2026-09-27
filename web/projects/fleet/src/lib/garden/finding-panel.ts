@@ -44,11 +44,11 @@ export interface FindingPanelVm {
   readonly lastSeenAt: string | null;
   readonly summary: string;
   readonly note: string | null;
-  /** The finding's whole append-only fact chain, oldest-first (blizzard#487) — fed
+  /** The finding's whole append-only fact chain, oldest-first — fed
    * straight to {@link FleetFindingFactTimeline}, which owns its own rendering. */
   readonly facts: readonly FindingFactView[];
   readonly workItem: ProposalWorkItemVm | null;
-  /** `FindingView.source` (blizzard#582 D1) — `"routine"` or `"review"`. Drives
+  /** `FindingView.source` — `"routine"` or `"review"`. Drives
    * whether {@link severity}/{@link raisedByChunkId} render at all: a `"routine"`
    * finding renders exactly as it did before this field existed — additive, not a
    * redesign (`finding-list.ts`'s own `FindingListRowVm.source` shape). */
@@ -110,7 +110,7 @@ export class FleetFindingPanel {
    * this chrome) — a method, not a stored computed, since it depends on both the
    * selected finding and the five `<ng-template>`s the view declares for the rows
    * whose value is markup rather than text, `routine-panel.ts`'s own `recordRows`
-   * shape. `severity`/`raised by` (blizzard#582) append only for a `source ===
+   * shape. `severity`/`raised by` append only for a `source ===
    * 'review'` panel — a `'routine'` one renders exactly the five rows this grid
    * always carried, additive rather than a redesign. */
   protected factRows(

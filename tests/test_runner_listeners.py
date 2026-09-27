@@ -30,7 +30,7 @@ def _close(sockets: list[socket.socket], config: RunnerConfig) -> None:
 
 @pytest.mark.unit
 def test_binds_both_a_socket_and_a_tcp_port(tmp_path: Path) -> None:
-    """One app, two doors: the CLI's socket and the browser's TCP port (issue #43)."""
+    """One app, two doors: the CLI's socket and the browser's TCP port."""
     config = _config(tmp_path)
     sockets = Listeners.of(config).bound()
     try:

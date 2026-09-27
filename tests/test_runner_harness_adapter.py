@@ -2,7 +2,7 @@
 
 ``parse_verdict`` is exercised over the harness-native JSON envelope and its failure
 modes; the component test drives spawn/resume against a real fake-harness binary. Also
-covers usage parsing, the per-lease stdout redirect, and node-entry resume (issue #115).
+covers usage parsing, the per-lease stdout redirect, and node-entry resume.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Lo
 @pytest.fixture(autouse=True)
 def _claude_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """A unit test's fake spawn must not depend on whether ``claude`` is really installed
-    on this machine's ``PATH`` — `_ensure_executable`'s `shutil.which` lookup (F1) runs
+    on this machine's ``PATH`` — `_ensure_executable`'s `shutil.which` lookup runs
     before the faked ``subprocess.Popen`` ever sees the call. Tests proving the
     absent-from-``PATH`` behavior override this within their own body."""
     monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
@@ -90,7 +90,7 @@ def test_resume_command_is_the_literal_takeover() -> None:
 
 @pytest.mark.unit
 def test_attended_resume_command_reasserts_the_permission_mode() -> None:
-    # The flag is per-invocation, not session-sticky (issue #258): the takeover door's
+    # The flag is per-invocation, not session-sticky: the takeover door's
     # exec'd command reasserts it so a bypassPermissions worker is not demoted mid-task.
     adapter = _adapter(binary="claude", permission_mode="bypassPermissions")
 
@@ -167,7 +167,7 @@ def test_observe_version_absent_from_path_skips_the_subprocess_and_does_not_warn
 ) -> None:
     """A host that never installed this binding's binary (a runner configured with only
     one of several known harnesses) is an expected shape, not a failure — no subprocess
-    attempt, and nothing louder than ``debug`` (blizzard#433)."""
+    attempt, and nothing louder than ``debug``."""
     monkeypatch.setattr(shutil, "which", lambda binary: None)
 
     def _unexpected(*args, **kwargs):  # type: ignore[no-untyped-def]
@@ -181,7 +181,7 @@ def test_observe_version_absent_from_path_skips_the_subprocess_and_does_not_warn
 
 
 # --------------------------------------------------------------------------- #
-# Node-entry resume (issue #115): the CLI flag branch, with ``subprocess.Popen`` faked.
+# Node-entry resume: the CLI flag branch, with ``subprocess.Popen`` faked.
 
 
 class _FakeSpawnedProcess:
@@ -289,8 +289,8 @@ def test_judge_stamps_process_start_time_from_the_injected_probe(
 def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """F4: a resume gets the same D1/D4 ownership a fresh spawn or judge gets — the
-    launcher's own recorded start time (D3), and a real disarm signal, not
+    """A resume gets the same ownership a fresh spawn or judge gets — the
+    launcher's own recorded start time, and a real disarm signal, not
     `ResumeHandle`'s bare no-op default."""
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing({}))
     probe = FakeProbe(alive={(_FakeSpawnedProcess.pid, "fake-resume-start-time")})
@@ -306,7 +306,7 @@ def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durabl
 
 
 # --------------------------------------------------------------------------- #
-# Spawn-environment allowlist (issue #88): no call path copies `os.environ` wholesale
+# Spawn-environment allowlist: no call path copies `os.environ` wholesale
 
 _SENTINEL_UNLISTED_VAR = "MY_UNLISTED_SENTINEL_VAR"
 
@@ -360,7 +360,7 @@ def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     adapter = _adapter(binary=str(dump_script))
 
     handle = adapter.judge(str(workdir), "sess-1", "assess", str(workdir / "judge-output.json"))
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -388,7 +388,7 @@ def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) 
     handle = adapter.judge(
         str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
     )
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -415,7 +415,7 @@ def test_judge_child_env_carries_the_elicitation_marker_when_given_a_preamble(tm
     handle = adapter.judge(
         str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
     )
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -436,7 +436,7 @@ def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_se
     adapter = _adapter(binary=str(dump_script))
 
     resumed = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
-    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -462,7 +462,7 @@ def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(tm
     )
 
     resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
-    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -487,7 +487,7 @@ def test_resume_with_message_child_env_excludes_the_elicitation_marker(tmp_path:
     )
 
     resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
-    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
@@ -554,7 +554,7 @@ def test_spawn_env_still_carries_the_base_allowlist_and_deliberate_blizzard_vars
 
 @pytest.mark.unit
 def test_spawn_env_carries_the_lease_capability_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    # issue #113, Phase 1 — the preamble's plaintext lease token rides the spawn env
+    # — the preamble's plaintext lease token rides the spawn env
     # as an explicit per-spawn identity var, alongside BLIZZARD_LEASE_ID.
     adapter = _adapter(binary="claude")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
@@ -651,7 +651,7 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path) -> None:
     assert handle.session_id == "sess-123"  # Claude honors the pre-assigned id
     assert handle.pid > 0
     assert handle.process_start_time  # stamped from /proc for pid-reuse-proof liveness
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)  # let the fire-and-forget child finish
     assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")  # ran in the acquired workdir
     assert "--permission-mode" not in (workdir / "argv.txt").read_text()  # omitted when unset
@@ -712,7 +712,7 @@ def test_a_hung_version_probe_reads_none_and_the_spawn_right_after_still_runs(
     assert adapter.observe_version() is None  # bounded — never waits out the hang
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert handle.pid > 0
@@ -735,7 +735,7 @@ def test_spawn_pins_a_configured_model(tmp_path: Path) -> None:
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert "--model claude-sonnet-5" in (workdir / "argv.txt").read_text()
@@ -757,7 +757,7 @@ def test_spawn_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
@@ -772,7 +772,7 @@ def test_judge_resume_output_parses_to_choice(tmp_path: Path) -> None:
     output_path = str(workdir / "judge-output.json")
 
     handle = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.", output_path)
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     output = Path(output_path).read_text()
@@ -791,7 +791,7 @@ def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
     handle = adapter.judge(
         str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.", str(workdir / "judge-output.json")
     )
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
@@ -808,7 +808,7 @@ def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path) -
     adapter = _adapter(binary=binary, settings_path=str(settings))
 
     resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
-    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     assert f"--settings {settings}" in (workdir / "argv.txt").read_text()
@@ -827,7 +827,7 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path:
     resumed = adapter.resume_with_message(
         str(workdir), "sess-123", "continue", model="sonnet", effort="high", compaction_window="150k"
     )
-    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
     resumed_prefix, _, resumed_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
@@ -840,7 +840,7 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(tmp_path:
         effort="high",
         compaction_window="150k",
     )
-    judge_handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    judge_handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(judge_handle.pid, 0)
     judge_prefix, _, judge_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
@@ -890,7 +890,7 @@ def test_worker_judge_and_resumes_keep_a_model_different_from_the_ambient_defaul
 
 @pytest.mark.component
 def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path) -> None:
-    # The worker's cwd is the winter workspace root, not the env subdir (issue #17), and the
+    # The worker's cwd is the winter workspace root, not the env subdir, and the
     # runner-composed preamble is prepended to the node envelope prompt.
     binary = _fake_binary(tmp_path)
     workspace_root = tmp_path / "workspace"
@@ -908,7 +908,7 @@ def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path) -> Non
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     # Ran at the workspace root — the marker file the fake writes lands there, not the env dir.
@@ -933,7 +933,7 @@ def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     # No prefix and no workspace root: cwd is the env workdir, prompt is the envelope prompt alone.
@@ -1003,7 +1003,7 @@ _SIGINT_ENVELOPE = json.dumps(
 
 @pytest.mark.unit
 def test_parse_usage_extracts_a_real_cost_from_a_sigint_error_during_execution_envelope() -> None:
-    """The drain's own SIGINT (issue #12) leaves this exact envelope shape — `parse_usage`
+    """The drain's own SIGINT leaves this exact envelope shape — `parse_usage`
     gates on neither `is_error` nor `subtype`, so the real `total_cost_usd` still lands."""
     sample = _adapter().parse_usage(_SIGINT_ENVELOPE, "spawn")
     assert sample is not None
@@ -1291,7 +1291,7 @@ def test_spawn_redirects_stdout_to_the_injected_stdout_path(tmp_path: Path) -> N
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert stdout_path.exists()
@@ -1316,7 +1316,7 @@ def test_spawn_without_a_stdout_path_still_discards_output(tmp_path: Path) -> No
     )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
-    handle.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)
 
     assert list(workdir.glob("*.stdout")) == []
@@ -1333,7 +1333,7 @@ def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Pat
     resumed = adapter.resume_with_message(
         str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
     )
-    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     assert stdout_path.exists()
@@ -1355,7 +1355,7 @@ def test_resume_with_message_passes_output_format_json_so_cost_is_real(tmp_path:
     resumed = adapter.resume_with_message(
         str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
     )
-    resumed.confirm_durable()  # F1: stands in for the caller's own confirm_durable()
+    resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(resumed.pid, 0)
 
     sample = adapter.parse_usage(stdout_path.read_text(), "resume")
@@ -1383,7 +1383,7 @@ def test_resume_without_output_format_json_yields_no_envelope(tmp_path: Path) ->
 
 
 # --------------------------------------------------------------------------- #
-# Model / effort resolution (issue #144): left-to-right, first entry that resolves wins.
+# Model / effort resolution: left-to-right, first entry that resolves wins.
 
 
 @pytest.mark.unit
@@ -1445,7 +1445,7 @@ def test_an_all_unresolvable_list_falls_back_to_the_adapter_default_with_a_note(
 
 @pytest.mark.unit
 def test_an_empty_preference_list_is_the_adapter_default() -> None:
-    # A chunk that expresses no preference (issue #144).
+    # A chunk that expresses no preference.
     assert _adapter(binary="claude", model="claude-opus-5").resolve_model([]) == "claude-opus-5"
 
 
@@ -1470,7 +1470,7 @@ def test_resolve_model_strict_is_none_when_nothing_resolves() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `resolvable_tier_ids` (blizzard#433): the capability snapshot's own tier enumeration.
+# `resolvable_tier_ids`: the capability snapshot's own tier enumeration.
 
 
 @pytest.mark.unit
@@ -1529,7 +1529,7 @@ def test_an_unrecognized_effort_logs_once_and_is_ignored() -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("value", ["auto", "500k", "200000", "200"])
 def test_resolve_compaction_window_passes_a_recognized_spelling_through(value: str) -> None:
-    # `auto` or a token count (blizzard#343) — the adapter checks the shape, not the CLI's
+    # `auto` or a token count — the adapter checks the shape, not the CLI's
     # own 100k-1M range, which it never re-validates.
     assert _adapter(binary="claude").resolve_compaction_window(value) == value
 
@@ -1606,7 +1606,7 @@ def test_spawn_at_mint_carries_the_compaction_window(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.unit
 def test_spawn_on_a_resume_reasserts_the_compaction_window(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Reasserted like effort, never sticky-by-omission (blizzard#343).
+    # Reasserted like effort, never sticky-by-omission.
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     adapter, envelope, preamble = _spawn_fixture()
@@ -1692,7 +1692,7 @@ def test_resume_with_message_reasserts_the_session_model_and_effort(monkeypatch:
     assert cmd[cmd.index("--effort") + 1] == "high"
 
 
-# Usage attribution (issue #144): the caller supplies the model resolved for an
+# Usage attribution: the caller supplies the model resolved for an
 # invocation the harness itself reports none for.
 
 
@@ -1813,7 +1813,7 @@ def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pyt
     assert not [name for name in env if name.startswith("ANTHROPIC_")]
 
 
-# resume_command (D4, issue #144) composes a command for an attended takeover.
+# resume_command composes a command for an attended takeover.
 
 
 @pytest.mark.unit
@@ -1910,7 +1910,7 @@ def test_parse_usage_reports_no_cost_scope_when_the_envelope_breaks_out_no_model
     assert sample.cost_scope_tokens is None
 
 
-# --- classify_usage_limit (blizzard#594) ------------------------------------
+# --- classify_usage_limit ------------------------------------
 
 
 @pytest.mark.unit
@@ -1973,7 +1973,7 @@ def test_classify_usage_limit_tolerates_malformed_lines() -> None:
     assert limit is not None
 
 
-# --- classify_provider_overload (blizzard#595) ------------------------------
+# --- classify_provider_overload ------------------------------
 
 
 @pytest.mark.unit

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 /**
- * The env-slot flexbar (issue #69) — a row of `total` equal-width cells with the
+ * The env-slot flexbar — a row of `total` equal-width cells with the
  * first `used` filled, plus a `used/total slots` label, rendering a runner's
  * environment-pool occupancy in the fleet registry (the mockup's `.gauge`/`.cell.on`
  * treatment). Presentational, input-only: the container computes `used` (summed from

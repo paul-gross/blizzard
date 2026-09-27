@@ -1,6 +1,6 @@
-"""The close-intent outbox's drain (blizzard#383). ``ChunkDeliveryStore.pending_close_intents()``/
+"""The close-intent outbox's drain. ``ChunkDeliveryStore.pending_close_intents()``/
 ``record_work_item_closure()`` are exercised against a real, migrated store. The enqueue side
-(landing/completion, D1) is covered by ``tests/test_close_intents_enqueue.py``; this file
+(landing/completion) is covered by ``tests/test_close_intents_enqueue.py``; this file
 covers the drain that retires what the enqueue queued."""
 
 from __future__ import annotations
@@ -56,8 +56,8 @@ def _event_logged_frames(hub: HubHarness, *, since: int = 0) -> list[dict]:
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     """Simulate a generic hub command node's mid-run ``merged/<repo>`` marker —
     the current landing truth :func:`~blizzard.hub.domain.work.has_landed_repos` reads
-    (issue #67), independent of any real graph/node machinery. Enqueues a pending close
-    intent (D1) as a side effect of the same write."""
+    independent of any real graph/node machinery. Enqueues a pending close
+    intent as a side effect of the same write."""
     cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id="nd_deliver",
@@ -70,7 +70,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
 
 
 # ChunkDeliveryStore.record_work_item_closure() — retires its matching intent in the same
-# transaction (blizzard#383, F8/F9) whenever the outcome is closed/gone.
+# transaction whenever the outcome is closed/gone.
 
 
 @pytest.mark.component
@@ -93,7 +93,7 @@ def test_record_work_item_closure_retires_the_matching_pending_intent(tmp_path: 
 
 @pytest.mark.component
 def test_record_work_item_closure_replay_still_retires_an_interrupted_intent(tmp_path: Path) -> None:
-    """The crash-recovery case (F9): the outcome was already recorded on a prior pass — the
+    """The crash-recovery case: the outcome was already recorded on a prior pass — the
     crash landed before retirement — and a replay finishes the retirement even though it
     writes no fresh outcome row."""
     hub = build_hub(tmp_path)
@@ -139,7 +139,7 @@ def test_record_work_item_closure_failed_outcome_leaves_the_intent_pending(tmp_p
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.FAILED, reason="boom", at=hub.clock.now()
     )
 
-    # Not retired, but its just-ticked backoff clock (blizzard#524 D7) means it is not
+    # Not retired, but its just-ticked backoff clock means it is not
     # due again this same instant.
     assert pointer not in {i.ref for i in hub.services.chunks.delivery.pending_close_intents()}
 
@@ -147,7 +147,7 @@ def test_record_work_item_closure_failed_outcome_leaves_the_intent_pending(tmp_p
     assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
 
 
-# The backoff clock itself (blizzard#524 D7) ------------------------------------
+# The backoff clock itself ------------------------------------
 
 
 @pytest.mark.component
@@ -170,7 +170,7 @@ def test_the_backoff_boundary_is_exact_at_sixty_seconds(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_the_backoff_grows_exponentially_then_caps_at_one_hour(tmp_path: Path) -> None:
-    """base x 2^(n-1): 60s, 120s, 240s, ... capped at 3600s (blizzard#524 D7)."""
+    """base x 2^(n-1): 60s, 120s, 240s, ... capped at 3600s."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
@@ -205,8 +205,8 @@ def test_a_skipped_attempt_ticks_the_same_backoff_clock_as_a_failed_one(tmp_path
 
 
 def test_the_backoff_base_matches_the_sweep_interval() -> None:
-    """The backoff's base second is meant to mirror the close-drain sweep's own tick
-    (blizzard#524 D7); a drift between the two constants would silently change the
+    """The backoff's base second is meant to mirror the close-drain sweep's own tick;
+    a drift between the two constants would silently change the
     backoff's real cadence relative to the sweep that drives it."""
     from blizzard.hub.app import CLOSE_DRAIN_INTERVAL_SECONDS
 
@@ -215,7 +215,7 @@ def test_the_backoff_base_matches_the_sweep_interval() -> None:
 
 @pytest.mark.component
 def test_pending_close_intents_issues_a_flat_query_count_regardless_of_backlog_size(tmp_path: Path) -> None:
-    """blizzard#524 D7: the due-check reads every intent's backoff history through one
+    """The due-check reads every intent's backoff history through one
     outer-joined, aggregated statement — never one query per intent."""
     hub = build_hub(tmp_path)
     delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
@@ -387,9 +387,9 @@ def test_sweep_leaves_a_failed_intent_pending_and_retries_it() -> None:
 
 
 def test_sweep_skips_an_intent_whose_source_has_no_closer_bound() -> None:
-    """D4: an intent from a source not seated as a closer stays pending, untouched —
+    """An intent from a source not seated as a closer stays pending, untouched —
     the sweep neither closes it nor retires it, and issues no forge call. It still ticks
-    the intent's own backoff clock (blizzard#524 D7), so a persistently source-less intent
+    the intent's own backoff clock, so a persistently source-less intent
     is not reconsidered on every sweep forever."""
     unopted_ref = WorkRef(source="unopted", ref="1")
     chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=unopted_ref, intent_id=7)])
@@ -461,7 +461,7 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
     )
 
     drainer.sweep()
-    hub.clock.advance(timedelta(hours=1))  # past the backoff cap (blizzard#524 D7) — due again
+    hub.clock.advance(timedelta(hours=1))  # past the backoff cap — due again
     assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
 
     closer.fail_refs.clear()  # simulate the transient failure clearing before the next sweep
@@ -492,7 +492,7 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
     pointer = WorkRef(source="default", ref="1")
 
     drainer.sweep()
-    # Not retired, but its just-ticked backoff clock (blizzard#524 D7) means it is not
+    # Not retired, but its just-ticked backoff clock means it is not
     # due again this same instant.
     assert pointer not in {i.ref for i in hub.services.chunks.delivery.pending_close_intents()}
 
@@ -501,7 +501,7 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
     assert frames[0]["kind"] == "work-item-close-failed"
     assert frames[0]["key"].startswith("event_log:")
 
-    hub.clock.advance(timedelta(hours=1))  # past the backoff cap (blizzard#524 D7) — due again
+    hub.clock.advance(timedelta(hours=1))  # past the backoff cap — due again
     assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
     drainer.sweep()  # the same failure again — an identical outcome, already recorded
 
@@ -510,7 +510,7 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
 
 @pytest.mark.component
 def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_path: Path) -> None:
-    """D4: a source removed from config after a landing — the only way this arises —
+    """A source removed from config after a landing — the only way this arises —
     leaves a stuck pending row rather than dead-lettering it."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
@@ -526,20 +526,20 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_p
     drainer.sweep()
 
     pointer = WorkRef(source="default", ref="1")
-    # Just skipped — its backoff clock (blizzard#524 D7) is not due again this instant.
+    # Just skipped — its backoff clock is not due again this instant.
     assert pointer not in {i.ref for i in hub.services.chunks.delivery.pending_close_intents()}
 
     hub.clock.advance(timedelta(hours=1))  # past the backoff cap — due again, still not dead-lettered
     assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
 
 
-# CloseIntentDrainer.sweep() against the built-in `hub` source (issue #360) — always
+# CloseIntentDrainer.sweep() against the built-in `hub` source — always
 # seated as a closer, so `build_hub`'s own registry already carries it with no setup.
 
 
 @pytest.mark.component
 def test_sweep_closes_a_landed_hub_born_chunks_item(tmp_path: Path) -> None:
-    """Creation itself mints the item's chunk (blizzard#359) — no separate ingest call
+    """Creation itself mints the item's chunk — no separate ingest call
     needed to give the sweep a chunk to land and close against."""
     hub = build_hub(tmp_path)
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()

@@ -1,4 +1,4 @@
-"""The ``20260926_1000_operator_garden_proposals`` revision (blizzard#631 D1) against a
+"""The ``20260926_1000_operator_garden_proposals`` revision against a
 store that already holds a routine-run garden proposal — backfilled to
 ``origin = 'routine-run'``, `routine_name` becomes nullable, the check constraints refuse
 an inconsistent row, and downgrade restores the old shape without orphaning the row (the

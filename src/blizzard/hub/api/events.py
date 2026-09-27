@@ -3,7 +3,7 @@
 A subscriber registers with :class:`~blizzard.hub.events.broker.EventBroker`, replays the
 buffered tail newer than its ``Last-Event-ID``, then streams live until it disconnects — ids
 are monotonic, so an event caught in both is emitted once. :class:`Cursor`/:class:`Stream` are
-the runner-shared machinery (D1); only the reserved open-of-stream comment names this daemon."""
+the runner-shared machinery; only the reserved open-of-stream comment names this daemon."""
 
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ def list_events(
     since: Annotated[datetime | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> EventsResponse:
-    """The ``event_log`` unified with open escalations (issue #125), most-severe-newest first, bounded.
+    """The ``event_log`` unified with open escalations, most-severe-newest first, bounded.
 
     The ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;
     the open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the
@@ -146,7 +146,7 @@ def list_activity(
     since: Annotated[datetime | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> ActivityResponse:
-    """The activity backfill (issue #213) — the three already-bounded per-source activity reads merged,
+    """The activity backfill — the three already-bounded per-source activity reads merged,
     sorted newest-first, and capped.
 
     ``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to

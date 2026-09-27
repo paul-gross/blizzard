@@ -1,5 +1,4 @@
-"""EditService (unit tier) — a chunk's graph/model/intended-migration edit, facts only
-(issue #27, #120, #124).
+"""EditService (unit tier) — a chunk's graph/model/intended-migration edit, facts only.
 
 A fake stands in for the store — every unimplemented seam raises loudly if called
 (``bzh:domain-core``). The lock's cross-service race atomicity is proven at the
@@ -237,7 +236,7 @@ def test_set_defaults_omitting_default_harnesses_leaves_it_at_its_current_value(
 
 
 def test_set_graph_writes_on_a_ready_unclaimed_chunk() -> None:
-    """Issue #120 — a promoted-but-unclaimed chunk is still editable."""
+    """A promoted-but-unclaimed chunk is still editable."""
     repo = _FakeChunkRepo(facts=_ready_facts())
     service = _service(repo)
 
@@ -247,7 +246,7 @@ def test_set_graph_writes_on_a_ready_unclaimed_chunk() -> None:
 
 
 def test_set_defaults_writes_on_a_ready_unclaimed_chunk() -> None:
-    """Issue #120 — a promoted-but-unclaimed chunk is still editable."""
+    """A promoted-but-unclaimed chunk is still editable."""
     repo = _FakeChunkRepo(facts=_ready_facts())
     service = _service(repo)
 
@@ -302,7 +301,7 @@ def test_refusal_carries_the_offending_field_and_status_on_the_exception() -> No
 
 
 def test_set_graph_holds_the_injected_lock_across_its_check_and_write() -> None:
-    """Issue #120 — ``EditService`` must take the lock it was constructed with around
+    """``EditService`` must take the lock it was constructed with around
     its whole check-then-act, not a private one, so the composition root can serialize
     it against ``ClaimService``'s own CAS."""
     repo = _FakeChunkRepo(facts=_ready_facts())
@@ -507,7 +506,7 @@ def test_edit_intended_migration_auto_does_not_check_node_names() -> None:
 def test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target() -> None:
     """A retired ``graph_id`` target must not slip past its :class:`TargetGraphRetired`
     check just because the request's ``intended_migration`` names a different,
-    non-retired graph (issue #124)."""
+    non-retired graph."""
     repo = _FakeChunkRepo(facts=_ready_facts())
     migration_graph = make_graph("gr_3", "other", entry_node_id="nd_1", created_at=_T0)
     service = _service(repo, graphs=_FakeGraphRepo(retired=frozenset({"gr_2"})))

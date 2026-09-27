@@ -9,7 +9,7 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 import { ChunkDetailPage } from './chunk-detail-page';
 
 /**
- * The runner-local chunk detail page (`/board/chunk/:chunkId`, issue #318,
+ * The runner-local chunk detail page (`/board/chunk/:chunkId`,
  * tabbed follow-up) — driven through a real router (`RouterTestingHarness`)
  * rather than a stubbed `ActivatedRoute`: the page reads its own route param
  * (`:chunkId`) and two independent query params (`?tab=`, `?attempt=`) and
@@ -338,7 +338,7 @@ describe('ChunkDetailPage', () => {
   });
 
   it('renders the open escalation through the shared awaiting-human section', async () => {
-    // The proxied aggregate carries `escalation` (issue #314), so a needs_human chunk
+    // The proxied aggregate carries `escalation`, so a needs_human chunk
     // reads the same on this route as on the hub board. Asserting the takeover command
     // itself, not just that the section mounts: an aggregate that dropped the field
     // would mount an always-empty sub-panel and satisfy a mount-only assertion.

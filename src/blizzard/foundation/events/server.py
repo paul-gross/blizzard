@@ -1,4 +1,4 @@
-"""The early-shutdown uvicorn server wrapper (D1, issue #47) — sets a shutdown signal
+"""The early-shutdown uvicorn server wrapper — sets a shutdown signal
 the instant SIGTERM/SIGINT is caught, ahead of uvicorn's own graceful drain, which an
 SSE response never finishes on its own."""
 

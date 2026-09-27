@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the escalation repository seam (package-private, blizzard#410)."""
+"""SQLAlchemy adapter for the escalation repository seam (package-private)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from blizzard.runner.store.schema import escalation_closures, lease_closures, le
 
 _log = get_logger("blizzard.runner.store")
 
-# The closure reasons "open escalation" derives from (issue #51): ordinary plus the two escalation mints.
+# The closure reasons "open escalation" derives from: ordinary plus the two escalation mints.
 _ESCALATION_REASONS = ("escalated", "owner-unresolvable-mint", "no-acceptable-harness-mint")
 
 
@@ -50,7 +50,7 @@ class EscalationStore:
 
     @staticmethod
     def _escalation_select():  # type: ignore[no-untyped-def]
-        # The lease's current generation's own recorded version (blizzard#441) — `id`
+        # The lease's current generation's own recorded version — `id`
         # orders "newest generation" here exactly as the liveness store's own
         # `latest_spawn_harness_version` does: insertion order, not `spawned_at`.
         latest_harness_version = (
@@ -70,7 +70,7 @@ class EscalationStore:
                 leases.c.epoch,
                 leases.c.session_id,
                 leases.c.harness_id,
-                # The escalated lease's session stamps (issue #144) — joined here rather
+                # The escalated lease's session stamps — joined here rather
                 # than read back per row.
                 lease_context.c.session_name,
                 lease_context.c.resolved_model,

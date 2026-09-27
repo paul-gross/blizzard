@@ -1,4 +1,4 @@
-"""``blizzard hub analytics`` — blizzard#254: operator verbs over derived transcript-event analytics."""
+"""``blizzard hub analytics`` — operator verbs over derived transcript-event analytics."""
 
 from __future__ import annotations
 
@@ -107,7 +107,7 @@ def analytics_re_derive(cli: CliContext, segment_id: str | None, chunk_id: str |
     cli.show_lines(result, f"derived {result['derived']}, {result['remaining']} remaining in scope")
 
 
-# `blizzard hub analytics events`/`summary` — shared filter options (blizzard#257 D2): one
+# `blizzard hub analytics events`/`summary` — shared filter options: one
 # declaration per flag, so each verb's command stacks whichever of them its dataset(s) take.
 
 
@@ -247,7 +247,7 @@ def analytics_events(
     limit: int | None,
     ndjson: bool,
 ) -> None:
-    """Read the derived transcript-event projection (blizzard#255), every ``/events``
+    """Read the derived transcript-event projection, every ``/events``
     filter as a flag: a bounded page by default, or the whole filtered set streamed as
     NDJSON to stdout under ``--ndjson``."""
     if ndjson:
@@ -283,16 +283,16 @@ def analytics_events(
     cli.show(body, EventListing(body["events"]))
 
 
-# `blizzard hub analytics summary` — blizzard#257 D1/D2: one verb over the ten read
+# `blizzard hub analytics summary` — one verb over the ten read
 # rollup routes, an explicit dataset→route table (a `-`↔`/` rule would 404 on
 # `agent-types`), and an explicit per-dataset filter-applicability table — a filter
 # inapplicable to the chosen dataset is refused, never silently dropped.
 
-#: The four scope filters every dataset takes — the common ground D2 builds each
-#: dataset's own applicable set on top of.
+#: The four scope filters every dataset takes — the common ground each
+#: dataset's own applicable set builds on top of.
 _SCOPE_FILTERS = frozenset({"graph_id", "source", "since", "until"})
 
-#: The four provenance filters the counts routes honor (blizzard#439 D6).
+#: The four provenance filters the counts routes honor.
 _PROVENANCE_FILTERS = frozenset({"harness_id", "harness_version", "model", "effort"})
 
 #: The flag each filter's dest name renders as, for a per-dataset applicability error.
@@ -418,7 +418,7 @@ def analytics_summary(
     limit: int | None,
     ndjson: bool,
 ) -> None:
-    """Read one of the canned counts or operational-dataset rollups (blizzard#255/#256).
+    """Read one of the canned counts or operational-dataset rollups.
     Only spend-chunks pages or streams; a filter DATASET's own route does not expose is
     refused."""
     spec = _DATASETS[dataset]

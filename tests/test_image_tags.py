@@ -1,5 +1,5 @@
 """``scripts/image-tags.sh`` — the pure function deciding the GHCR tag fan-out for
-a release tag (issue #189). Pulled out of workflow YAML precisely so this is
+a release tag. Pulled out of workflow YAML precisely so this is
 unit-testable: the logic that decides whether ``latest`` moves lives here, not
 buried in ``.github/workflows/release.yml``.
 """

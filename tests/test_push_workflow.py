@@ -1,5 +1,5 @@
 """``.github/workflows/push.yml``'s ``dev-image`` job — the dogfood image
-channel published for every proven `master` commit (issue #200). Static YAML
+channel published for every proven `master` commit. Static YAML
 assertions only, the same docker-free shape as ``tests/test_release_workflow.py``:
 no docker/GHCR credentials, no live build.
 """

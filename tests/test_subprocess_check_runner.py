@@ -1,4 +1,4 @@
-"""The subprocess check-runner adapter (unit tier, issue #114).
+"""The subprocess check-runner adapter (unit tier).
 
 Real subprocesses prove the reference ``ICheckRunner`` binding: exit 0 is a pass,
 non-zero is a red check, a timeout is a red check (never a raise), output is captured

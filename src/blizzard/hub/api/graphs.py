@@ -3,7 +3,7 @@
 The controller stays read-only over the store (``bzh:controller-read-only``), resolving a
 YAML body or a ``graph_id`` into an object before delegating to the domain
 (``bzh:domain-takes-objects``). ``reject_runner_principal`` confines a runner's bearer
-token to the fleet router (issue #104)."""
+token to the fleet router."""
 
 from __future__ import annotations
 
@@ -141,7 +141,7 @@ def mint_graph(request: GraphMintRequest, services: Annotated[HubServices, Depen
 def sync_graphs(services: Annotated[HubServices, Depends(get_services)]) -> GraphSyncResponse:
     """Reconcile the packaged graph set against the store, minting only what changed.
 
-    Idempotent, so it is safe to run unconditionally (issue #146). Registered above
+    Idempotent, so it is safe to run unconditionally. Registered above
     ``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a
     graph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict."""
     outcomes = GraphReconciliation(services.graph_mint, services.graphs).outcomes()
@@ -157,7 +157,7 @@ def sync_graphs(services: Annotated[HubServices, Depends(get_services)]) -> Grap
 def list_graphs(services: Annotated[HubServices, Depends(get_services)]) -> list[GraphSummaryView]:
     """Every minted graph, newest first, newest non-retired per name marked ``effective``.
 
-    Reads the listing-shape projection (issue #421) — nothing here touches nodes,
+    Reads the listing-shape projection — nothing here touches nodes,
     edges, sessions or artifacts."""
     graphs = services.graphs.list_summaries()
     retired_ids = services.graphs.retired_graph_ids()
@@ -196,7 +196,7 @@ def retire_graph(
     graph_id: str, request: GraphLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> GraphView:
     """Retire a graph — excludes it from name resolution; the claim on any chunk
-    already pinned to it runs on untouched (issue #101). 404 on an unknown id."""
+    already pinned to it runs on untouched. 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
@@ -213,8 +213,8 @@ def retire_graph(
 def enable_graph(
     graph_id: str, request: GraphLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> GraphView:
-    """Re-enable a retired graph — restores normal newest-per-name derivation
-    (issue #101). Idempotent on an already-enabled graph; 404 on an unknown id."""
+    """Re-enable a retired graph — restores normal newest-per-name derivation.
+    Idempotent on an already-enabled graph; 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
@@ -231,7 +231,7 @@ def enable_graph(
 def set_graph_follow_latest(
     graph_id: str, request: GraphPolicyRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> GraphView:
-    """Set this graph's follow-latest policy — ``true``/``false``/``null`` (issue #164).
+    """Set this graph's follow-latest policy — ``true``/``false``/``null``.
 
     Appends a policy fact rather than mutating the immutable ``graphs`` row; explicit
     ``null`` reverts to inheriting the hub default and is itself an appended fact. Scoped

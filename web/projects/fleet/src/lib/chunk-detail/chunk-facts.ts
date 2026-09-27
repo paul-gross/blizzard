@@ -7,22 +7,22 @@ import { KitButton } from '../kit/kit-button';
 import { KitFactList, type KitFact } from '../kit/kit-fact-list';
 import { formatUtcYmd } from '../when';
 
-/** Emitted when the operator repins a not-ready chunk's graph from the dock (issue #27). */
+/** Emitted when the operator repins a not-ready chunk's graph from the dock. */
 export interface EditGraphEvent {
   readonly chunkId: string;
   readonly graphId: string;
 }
 
 /**
- * The chunk's own facts (issue #79) — the fixed-height glance a long issue
+ * The chunk's own facts — the fixed-height glance a long issue
  * body must not scroll away: status, node, runner, attempts, and its pinned
  * **graph**, editable inline (text-input-and-Set) while the chunk is unclaimed and has
- * not yet moved (issue #27, widened by #120, narrowed by #271). The edit row is gated
+ * not yet moved (widened by #120, narrowed by #271). The edit row is gated
  * on {@link editable} — the fact, not a confirm — so the control simply disappears once
  * the pin is the engine's rather than staying up to fail a 409.
  *
- * A **Model** row stood beside Graph with the same inline editor until issue #144
- * retired `Chunk.model` — a knob that never reached the envelope, so the board offered
+ * A **Model** row stood beside Graph with the same inline editor until `Chunk.model`
+ * was retired — a knob that never reached the envelope, so the board offered
  * an edit that changed nothing about what the fleet ran. Its replacements
  * (`default_model`/`default_effort`) deliberately have no web surface for now: they are
  * written with `blizzard hub chunk set --default-model/--default-effort` and read back
@@ -43,8 +43,8 @@ export class ChunkFacts {
   /** The chunk aggregate to render (status, node, route, epoch, graph). */
   readonly detail = input.required<ChunkDetail>();
 
-  /** Whether the current identity may set the chunk's graph (`chunk:control` —
-   * issue #210). Withholds the edit row when `false`, alongside {@link editable};
+  /** Whether the current identity may set the chunk's graph (`chunk:control`).
+   * Withholds the edit row when `false`, alongside {@link editable};
    * `null`/pending resolves to `false` (hidden until confirmed). */
   readonly canControl = input(false);
 
@@ -64,7 +64,7 @@ export class ChunkFacts {
    * since both apps have this route. */
   readonly chunkLinkBase = input<readonly string[]>(['/board', 'chunk']);
 
-  /** Emitted when the operator sets a not-ready chunk's graph (issue #27). No
+  /** Emitted when the operator sets a not-ready chunk's graph. No
    * confirm — repinning either before the chunk has run costs nothing to undo. */
   readonly editGraph = output<EditGraphEvent>();
 
@@ -85,7 +85,7 @@ export class ChunkFacts {
     return epoch === null || epoch === undefined ? '—' : String(epoch);
   });
 
-  /** The Graph fact row's label (issue #102) — the pinned graph's {@link compactRef}
+  /** The Graph fact row's label — the pinned graph's {@link compactRef}
    * (`G-XXXX`), with the graph's `name` and `created_at` (as `YYYYMMDD`) appended as
    * `#<name>-<YYYYMMDD>` when both are present on the detail *and* `created_at` parses.
    * Either absent (an older payload) or unparseable (`formatUtcYmd` degrading to `''`)
@@ -101,7 +101,7 @@ export class ChunkFacts {
   });
 
   /** Whether the chunk's graph may be edited — mirrors `EditService.edit`'s own two
-   * conditions (issue #27, widened by #120, narrowed by #271) rather than the status
+   * conditions (widened by #120, narrowed by #271) rather than the status
    * half alone: unclaimed **and** never moved. A chunk detached mid-graph derives
    * `ready` again while standing on a node of its old graph, and re-pinning it there is
    * a migration's job, so the facts column withholds the row rather than offer an edit
@@ -136,7 +136,7 @@ export class ChunkFacts {
     return neighbor.status ?? 'unknown';
   }
 
-  /** Emit a graph repin — no-op on a blank id (issue #27). */
+  /** Emit a graph repin — no-op on a blank id. */
   protected submitGraph(graphId: string): void {
     const trimmed = graphId.trim();
     if (!trimmed) return;

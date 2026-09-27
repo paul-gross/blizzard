@@ -1,5 +1,5 @@
 """``blizzard runner garden`` — a worker's own routine's live-plus-``delivered`` finding
-bucket (D4, blizzard#583 D2) and open garden-proposal docket."""
+bucket and open garden-proposal docket."""
 
 from __future__ import annotations
 

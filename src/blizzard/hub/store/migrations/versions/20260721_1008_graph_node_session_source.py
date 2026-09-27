@@ -1,4 +1,4 @@
-"""graph node session_source — targeted node-entry resume (issue #115, hub store tree)
+"""graph node session_source — targeted node-entry resume (hub store tree)
 
 ``session_source`` carries a ``resume:<node>``'s parsed target; nullable, no backfill.
 Revision ID: 20260721_1008_hub_graph_node_session_source

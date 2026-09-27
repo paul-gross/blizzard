@@ -1,4 +1,4 @@
-"""The selftest job resource's data shapes — pure, no I/O (issue #54).
+"""The selftest job resource's data shapes — pure, no I/O.
 
 :class:`SelfTestRun` is a resource with a result, not an RPC verb. Check names are
 module constants rather than free-form strings, so every reader agrees on the same
@@ -11,7 +11,7 @@ from typing import Literal
 
 SelfTestStatus = Literal["running", "passed", "failed"]
 
-# The seven adapter-drift checks, in the order a run performs them (blizzard#438 added the last two).
+# The seven adapter-drift checks, in the order a run performs them (the last two were added later).
 SPAWN_SESSION_ID = "spawn_session_id"
 END_TO_END_EDIT_COMMIT = "end_to_end_edit_commit"
 VERDICT_ELICITATION = "verdict_elicitation"

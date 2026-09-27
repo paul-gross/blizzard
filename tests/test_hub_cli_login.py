@@ -1,5 +1,5 @@
-"""``blizzard hub login`` / ``logout`` + the actionable-401 mapping (unit tier, issue
-#96) — driven with ``cli_login``'s own mechanics stubbed (proven for real in
+"""``blizzard hub login`` / ``logout`` + the actionable-401 mapping (unit tier)
+— driven with ``cli_login``'s own mechanics stubbed (proven for real in
 ``tests/test_cli_login_mechanics.py``) and ``httpx``/``SessionFile`` stubbed the
 same way every other CLI unit test stubs the hub, so no real hub or browser is
 needed here.

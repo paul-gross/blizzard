@@ -1,4 +1,4 @@
-"""The mechanical parity guard (paul-gross/blizzard-mock#4) — the service tier's own
+"""The mechanical parity guard — the service tier's own
 sentinel against the real wire growing a mock counterpart forgets to serve.
 
 Two one-sided directions against the mock fleet's own served ``/openapi.json``: the mock
@@ -51,8 +51,8 @@ def _protocol_method_names(proto: type) -> set[str]:
     """Every non-dunder method declared on ``proto`` itself or an inherited ``Protocol`` base.
 
     Reads ``vars()`` across the MRO (no ``get_protocol_members`` before 3.13) — ``IHubClient``
-    composes ``IChunkStatusReader`` rather than re-declaring its method (blizzard#521's
-    seam-size narrowing), so an inherited name must count the same as one declared directly."""
+    composes ``IChunkStatusReader`` rather than re-declaring its method (narrowing the
+    client seam's size), so an inherited name must count the same as one declared directly."""
     return {
         name
         for klass in proto.__mro__

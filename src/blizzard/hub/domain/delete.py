@@ -1,5 +1,5 @@
 """Chunk deletion — the operator's withdrawal of an unacquired chunk's hub items, and
-the chunk itself (issue #364). A hub item and its chunk live and die together: deleting
+the chunk itself. A hub item and its chunk live and die together: deleting
 the chunk withdraws every open ``hub:``-source pointer it holds, in one composite store
 write — reached from both a direct chunk delete and an unacquired holder's withdrawal.
 Gated the same way grouping is: a paused or human-held chunk is refused too, not only a
@@ -18,7 +18,7 @@ from blizzard.hub.domain.work import Chunk, IWriteWorkItemRepository
 
 
 class ChunkNotDeletable(ValueError):
-    """A delete targeted a chunk that is not free to be deleted (issue #364)."""
+    """A delete targeted a chunk that is not free to be deleted."""
 
     def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
         super().__init__(
@@ -32,7 +32,7 @@ class ChunkNotDeletable(ValueError):
 
 class ChunkHasDependents(Exception):
     """A delete targeted a chunk that is a standing prerequisite for other chunks
-    (issue #460) — refused, naming the dependents, rather than orphaning their edges."""
+    — refused, naming the dependents, rather than orphaning their edges."""
 
     def __init__(self, chunk_id: str, dependent_chunk_ids: list[str]) -> None:
         super().__init__(
@@ -60,7 +60,7 @@ class DeleteService:
         self._facts = facts
         self._items = items
         self._clock = clock
-        # Shared with ClaimService/EditService/RestartService (issue #120), so a claim
+        # Shared with ClaimService/EditService/RestartService, so a claim
         # can't land on a chunk this write is mid-way through deleting.
         self._claim_lock = claim_lock
         self._dependencies = dependencies
@@ -70,7 +70,7 @@ class DeleteService:
         ``chunk`` holds, atomically. Raises :class:`ChunkNotFound` for one already
         grouped or deleted, :class:`ChunkNotDeletable` for one held or terminal, and
         :class:`ChunkHasDependents` for one a standing prerequisite for another chunk
-        (issue #460) — every guard read taken fresh under the lock."""
+        — every guard read taken fresh under the lock."""
         with self._claim_lock:
             facts = self._facts.load_facts(chunk.chunk_id)
             if facts is None:

@@ -1,4 +1,4 @@
-"""pause parks (issue #46) — a table pair separate from ``park_facts``/``park_resumes``,
+"""pause parks — a table pair separate from ``park_facts``/``park_resumes``,
 since a nullable ``question_id`` there would make ``NOT IN (... NULL)`` swallow every row
 
 Revision ID: 20260717_0446_runner_pause_parks

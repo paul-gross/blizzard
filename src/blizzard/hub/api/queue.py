@@ -1,4 +1,4 @@
-"""Queue and backlog routes — read, replace, and group (issues #87, #104).
+"""Queue and backlog routes — read, replace, and group.
 
 The ``ready`` queue and ``not_ready`` list each rank independently
 (``bzh:ranking-is-per-list``); controllers stay read-only and delegate writes to the
@@ -169,7 +169,7 @@ class ReadyQueue:
 def _domain_capabilities(capabilities: Sequence[WireRunnerCapability]) -> tuple[RunnerCapability, ...]:
     """The wire->domain conversion :func:`~blizzard.hub.api.fleet.register_runner`
     already applies to a runner's registration snapshot — the matched peek's own request
-    (D7) carries the same shape, so it is converted the same way."""
+    carries the same shape, so it is converted the same way."""
     return tuple(
         RunnerCapability(
             harness_id=c.harness_id, version=c.version, tiers=tuple(c.tiers), default=c.default, available=c.available
@@ -217,8 +217,8 @@ class MatchedPeek:
                     graph_id=chunk.graph_id,
                     position=self.entry.position,
                     work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
-                    # A matched entry is, by construction, never blocked (D8 applies the
-                    # policy to that dimension too before one is ever selected).
+                    # A matched entry is, by construction, never blocked (`select_matched_entry`'s own
+                    # policy check covers that dimension too before one is ever selected).
                     blocked=None,
                 )
             ]
@@ -247,7 +247,7 @@ def get_queue(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> QueuePageView:
-    """The hub-ordered ready queue, read-only and keyset-paginated (blizzard#526 D3/D4/D7)
+    """The hub-ordered ready queue, read-only and keyset-paginated
     — honours reorder/replace + grouping."""
     statuses = services.chunks.facts.load_all_statuses()
     try:
@@ -277,7 +277,7 @@ def replace_queue(
 def reposition_queue(
     request: QueuePositionRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> QueuePeekResponse:
-    """Single-chunk fractional reorder (issue #137).
+    """Single-chunk fractional reorder.
 
     Resolves both ids against the current ready set: ``409`` names either one if it is
     not ready, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves the chunk to
@@ -341,8 +341,8 @@ def get_backlog(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> BacklogPageView:
-    """The hub-ordered ``not_ready`` list, read-only and keyset-paginated (blizzard#526
-    D3/D4/D7) — an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``."""
+    """The hub-ordered ``not_ready`` list, read-only and keyset-paginated
+    — an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``."""
     statuses = services.chunks.facts.load_all_statuses()
     try:
         page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit)
@@ -392,9 +392,9 @@ def group_chunks(
     services: Annotated[HubServices, Depends(get_services)],
 ) -> object:
     """Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``
-    participants alike (issue #141); 409 names the first chunk a runner holds, or one
+    participants alike; 409 names the first chunk a runner holds, or one
     already finished. The survivor also absorbs each folded chunk's standing dependency
-    edges (issue #460); 409 refuses a fold that would close a cycle."""
+    edges; 409 refuses a fold that would close a cycle."""
     before = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         result = services.group.group(chunk_id, request.merge_chunk_ids)
@@ -405,7 +405,7 @@ def group_chunks(
     except FoldWouldCloseCycle as exc:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
     # The survivor's status comes from the group result, never a ``"ready"`` constant:
-    # grouping backlog chunks leaves a backlog survivor (issue #141).
+    # grouping backlog chunks leaves a backlog survivor.
     survivor = result.survivor
     services.events.publish_queue_changed()
     key = f"chunk_grouped:{result.grouped_id}" if result.grouped_id is not None else None

@@ -1,5 +1,4 @@
-"""The runner-local environment-pool list — ``GET /api/environments`` (issue #51, extended to the full
-pool by issue #106).
+"""The runner-local environment-pool list — ``GET /api/environments``.
 
 Every environment in the runner's configured pool, held or free: a held row carries the chunk it is
 bound to and when, a free row carries neither. Derived at read time from the ``held`` binding facts

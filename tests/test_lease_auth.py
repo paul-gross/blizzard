@@ -1,4 +1,4 @@
-"""Lease-token authorization (unit tier) — ``LeaseToken`` (issue #113, Phase 2).
+"""Lease-token authorization (unit tier) — ``LeaseToken``.
 
 A pure value over already-loaded values (``bzh:domain-takes-objects``): no store, no
 HTTP, no clock — mirroring ``tests/test_route_auth.py``'s shape for ``RouteToken``.

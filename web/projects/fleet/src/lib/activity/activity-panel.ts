@@ -22,7 +22,7 @@ const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind
 ]);
 
 /**
- * A `runner-changed` frame as prose (issue #151) — e.g. `runner runner-local paused by
+ * A `runner-changed` frame as prose — e.g. `runner runner-local paused by
  * operator`, or `runner runner-local locally paused by runner-ceiling — spend ceiling
  * reached`. A kind with no phrasing above degrades to the raw kind rather than dropping
  * the row, on the same reasoning as {@link summarize}'s default: an unrecognized frame is
@@ -44,8 +44,8 @@ interface RowSummary {
 }
 
 /**
- * A human-readable summary of a hub event (issue #25 — "a legible summary"; widened by
- * issue #212 to a two-line block for `chunk-changed`). Maps the board's live vocabulary
+ * A human-readable summary of a hub event ("a legible summary"; widened to a two-line
+ * block for `chunk-changed`). Maps the board's live vocabulary
  * (events/broker.py) onto plain phrasing; an unknown type degrades to its raw name
  * rather than dropping the row.
  */
@@ -78,7 +78,7 @@ function summarize(event: LoggedEvent): RowSummary {
 }
 
 /**
- * The rendered-row cap for the merged backfill + live feed (issue #213 Phase 4) —
+ * The rendered-row cap for the merged backfill + live feed —
  * reconciled with the backend's own `GET /api/activity` `limit` (`ACTIVITY_LIMIT`,
  * `activity.query.ts`) so the two stay the same number in one place a future reader can
  * find, rather than two caps that happen to agree by coincidence.
@@ -116,7 +116,7 @@ function fromActivity(row: ActivityView, seq: number): LoggedEvent {
 }
 
 /**
- * The Activity feed panel's **container** (issue #213 Phase 4, split from the formerly
+ * The Activity feed panel's **container** (split from the formerly
  * presentational `activity-panel.ts` — `bzh:frontend-container-presentational`).
  *
  * Owns two independent reads of the same underlying feed and merges them into one
@@ -130,7 +130,7 @@ function fromActivity(row: ActivityView, seq: number): LoggedEvent {
  *   empty and filling in only as new frames arrive.
  *
  * The two are merged in {@link merged}: a backfilled row and a live frame naming the
- * same `key` (issue #213 Phase 2) must render as exactly one row, preferring the live
+ * same `key` must render as exactly one row, preferring the live
  * copy (it may carry more current info) — so the merge drops a backfilled row whose
  * `key` also names a live frame already present, never the other way around. A row
  * with no `key` at all can't collide with anything and always renders standalone. The

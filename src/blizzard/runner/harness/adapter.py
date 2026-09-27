@@ -3,7 +3,7 @@
 Four operations cover every headless-run + persisted-session + resume harness: ``spawn``,
 ``resume_with_message``, ``resume_command``, and ``parse_verdict``, plus usage translation
 and the transcript source. Provider subscription sampling is a separate, provider-selected
-seam (blizzard#436). Adapters stay dumb (``bzh:deterministic-shell``): they never decide."""
+seam. Adapters stay dumb (``bzh:deterministic-shell``): they never decide."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ class HarnessSpawnError(RuntimeError):
     """The harness binary could not be launched (missing binary, bad workdir).
 
     Part of the adapter contract (``spawn`` raises it), so it lives on the public seam
-    rather than an internal adapter (issue #125)."""
+    rather than an internal adapter."""
 
 
 class WorkerIdentityError(RuntimeError):
@@ -41,7 +41,7 @@ class WorkerIdentityError(RuntimeError):
 
 @dataclass(frozen=True)
 class WorkerPreamble:
-    """The runner's machine-local preamble prepended to the envelope (issue #17): held
+    """The runner's machine-local preamble prepended to the envelope: held
     environments, lease identity and token, the local-API URL, the spawn cwd, and
     injected capture paths. Never sent to the hub."""
 
@@ -57,7 +57,7 @@ class WorkerPreamble:
 
 @dataclass(frozen=True)
 class WorkerHandle:
-    """The facts a launch is authoritative on once identified (D1/D2) — this IS a
+    """The facts a launch is authoritative on once identified — this IS a
     :class:`PendingWorkerHandle` for any harness that already knows its session id at
     launch (every binding today): ``await_identity`` is trivially itself. A harness
     whose identity only arrives later returns a distinct pending type instead."""
@@ -65,10 +65,10 @@ class WorkerHandle:
     session_id: str  # harness-assigned where it self-assigns, else the honored hint
     pid: int
     process_start_time: str  # stable across pid reuse — REAP keys on (pid, start_time)
-    pgid: int  # the owned process group (D3) — every launch gets one; never absent in memory
+    pgid: int  # the owned process group — every launch gets one; never absent in memory
     confirm_durable: Callable[[], None] = field(
         default=lambda: None, compare=False
-    )  # F1's disarm signal; no-op default
+    )  # disarms the daemon-death kill signal once durably recorded; no-op default
 
     def await_identity(self, timeout: float) -> WorkerHandle:
         """Already identified at launch — this handle is its own phase two."""
@@ -77,9 +77,9 @@ class WorkerHandle:
 
 @dataclass(frozen=True)
 class ResumeHandle:
-    """The OS facts a resume launch is authoritative on (D3): its pid and the REAL
+    """The OS facts a resume launch is authoritative on: its pid and the REAL
     process group the launcher recorded for it — never inferred as ``pid`` at the call
-    site. Mirrors :class:`WorkerHandle`'s shape exactly: a resume launches deferred (D4)
+    site. Mirrors :class:`WorkerHandle`'s shape exactly: a resume launches deferred
     just like a fresh spawn or a judge, so it carries the same disarm signal and start time."""
 
     pid: int
@@ -87,11 +87,11 @@ class ResumeHandle:
     process_start_time: str  # stable across pid reuse — `_wake` records it straight through
     confirm_durable: Callable[[], None] = field(
         default=lambda: None, compare=False
-    )  # F1's disarm signal; no-op default
+    )  # disarms the daemon-death kill signal once durably recorded; no-op default
 
 
 class PendingWorkerHandle(Protocol):
-    """``spawn``'s own phase-one return (D1): the launched process's OS facts — pid, start
+    """``spawn``'s own phase-one return: the launched process's OS facts — pid, start
     time, and owned group — durable-worthy before any identity is known. A Protocol, not a
     dataclass, since ``await_identity`` may block or read a stream rather than merely
     return data already in hand."""
@@ -113,7 +113,7 @@ class PendingWorkerHandle(Protocol):
         ...
 
     def confirm_durable(self) -> None:
-        """F1's disarm signal: call once — and only once the caller's own durable record
+        """Call once — and only once the caller's own durable record
         naming this launch's pid/pgid has actually landed. Before that, the daemon's own
         death (crash or graceful, indistinguishable to the OS) must still kill this launch
         outright (the execution spec's narrow handshake window); after, neither should, so
@@ -138,9 +138,9 @@ class IHarnessWorkerLifecycle(Protocol):
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> PendingWorkerHandle:
-        """Start a headless worker; return its pending handle (D1) — pid, start time, and
+        """Start a headless worker; return its pending handle — pid, start time, and
         process group, before identity is confirmed. ``model``/``effort``/
-        ``compaction_window`` (issue #144, blizzard#343) arrive already resolved. Each
+        ``compaction_window`` arrive already resolved. Each
         binding applies the knobs its harness needs per invocation; ``resume_from`` (#115)
         continues a session. ``await_identity``'s result is authoritative."""
         ...
@@ -172,7 +172,7 @@ class IHarnessWorkerLifecycle(Protocol):
         compaction_window: str | None = None,
     ) -> ResumeHandle:
         """Headless resume-with-message; returns the new launch's pid and its REAL,
-        launcher-recorded process group (D3), never a caller-inferred ``pgid=pid``. Kill
+        launcher-recorded process group, never a caller-inferred ``pgid=pid``. Kill
         first. ``stdout_path`` is the injected stdout capture; empty inherits stdout.
         ``preamble``/``chunk_id`` re-supply the per-lease identity ``--resume`` inherits
         none of. The caller supplies the session's resolved ``model``/``effort``/
@@ -193,10 +193,10 @@ class IHarnessWorkerLifecycle(Protocol):
         compaction_window: str | None = None,
     ) -> WorkerHandle:
         """Launch the judgement prompt into the session and return immediately — the
-        detached half of the launch/collect elicitation (blizzard#443).
+        detached half of the launch/collect elicitation.
 
         Mirrors ``spawn``: the reply lands in ``output_path`` (never empty — an unwritable
-        target raises ``HarnessSpawnError`` rather than proceeding uncollectable, D4) and the
+        target raises ``HarnessSpawnError`` rather than proceeding uncollectable) and the
         caller reads it back once the returned handle's process has exited. ``model``
         supplies the session stamp to bindings that reassert it. ``preamble``/``chunk_id``
         re-supply worker identity. Supported bindings reassert ``compaction_window`` and
@@ -216,13 +216,13 @@ class IHarnessWorkerLifecycle(Protocol):
 
         ``attended=True`` composes the exec'd command (#258), reasserting the configured permission mode; the default
         composes the advertised paste string. Carries the stamped ``model``/``effort``, deliberately no
-        ``compaction_window`` (blizzard#343 — not a fleet-driven turn)."""
+        ``compaction_window`` (not a fleet-driven turn)."""
         ...
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         """The per-lease worker-identity child env spawn/judge/resume are built from.
 
-        Exposed on the seam (issue #258) because ``--resume`` inherits no spawn env. It
+        Exposed on the seam because ``--resume`` inherits no spawn env. It
         is never rendered into the printable ``resume_command``: the lease token stays
         off display surfaces."""
         ...
@@ -234,7 +234,7 @@ class IHarnessModelResolution(Protocol):
     unresolvable one."""
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
-        """Resolve a preference list to a native model name (issue #144): left-to-right,
+        """Resolve a preference list to a native model name: left-to-right,
         first resolvable entry wins; an unresolvable entry is skipped, never an error; an
         empty or fully-unresolvable list falls back to the adapter default. Tier aliases
         are unordered roles, never a scale — nothing substitutes downward (pinned by
@@ -249,7 +249,7 @@ class IHarnessModelResolution(Protocol):
         ...
 
     def resolve_effort(self, value: str | None) -> str | None:
-        """Resolve an authored effort value to this harness's native tier (issue #144).
+        """Resolve an authored effort value to this harness's native tier.
 
         A single value rather than a list: every adapter can map an ordinal *somewhere*.
         ``low|medium|high|max`` is the well-known vocabulary. ``None`` in returns ``None``,
@@ -257,13 +257,13 @@ class IHarnessModelResolution(Protocol):
         ...
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
-        """Resolve an authored compaction-window value to this harness's own vocabulary
-        (blizzard#343) — the same never-fails-a-spawn contract as ``resolve_effort``:
+        """Resolve an authored compaction-window value to this harness's own vocabulary —
+        the same never-fails-a-spawn contract as ``resolve_effort``:
         unrecognized, unsupported, and ``None`` all return ``None``."""
         ...
 
     def resolvable_tier_ids(self) -> tuple[str, ...]:
-        """The tier ids this adapter can resolve (blizzard#433) — built-ins and any
+        """The tier ids this adapter can resolve — built-ins and any
         operator-declared alias alike, an overridden id appearing once. The capability
         snapshot's own source; never itself a spawn-time resolution."""
         ...
@@ -306,7 +306,7 @@ class IHarnessUsageAccounting(Protocol):
         ``model``) or because ``model`` is unresolved and this binding has no configured
         default of its own to fall back on (OpenCode) — never true merely because ``model``
         is unresolved: a binding with its own default prices off that without paying for
-        a read (blizzard#640)."""
+        a read."""
         ...
 
     def parse_usage(
@@ -339,7 +339,7 @@ class IHarnessUsageAccounting(Protocol):
 
 class IHarnessUsageLimits(Protocol):
     """Classifying an invocation's own output as a subscription-usage-limit exit
-    (``bzh:seam-size-ceiling``, blizzard#594) — a slice of its own rather than joining
+    (``bzh:seam-size-ceiling``) — a slice of its own rather than joining
     ``IHarnessUsageAccounting``: that slice's mandate is producing a ``UsageSample``, this
     one a fact the loop decides what to do with (``bzh:deterministic-shell``)."""
 
@@ -354,7 +354,7 @@ class IHarnessUsageLimits(Protocol):
 
 class IHarnessProviderOverload(Protocol):
     """Classifying an invocation's own exit as a provider-overloaded (529) one
-    (``bzh:seam-size-ceiling``, blizzard#595) — its own slice for the same reason
+    (``bzh:seam-size-ceiling``) — its own slice for the same reason
     ``IHarnessUsageLimits`` is: a fact the loop decides what to do with
     (``bzh:deterministic-shell``), not a ``UsageSample``."""
 
@@ -395,14 +395,14 @@ class IHarnessHealthProbe(Protocol):
     def supported_version_display(self) -> str | None:
         """:meth:`supported_version`'s own declared literal display string, or ``None``
         alongside its ``None`` — never ``str(SpecifierSet)``, whose clause order does not
-        match how the range reads in docs (blizzard#604)."""
+        match how the range reads in docs."""
         ...
 
     def normalize_version(self, raw: str | None) -> str | None:
         """This binding's own raw ``observe_version`` output, reduced to the bare version
         :meth:`supported_version`'s membership check and any corpus lookup compare against —
         each binding owns its own raw shape, never a normalizer shared across bindings by
-        default (blizzard#606)."""
+        default."""
         ...
 
     def classifies_offline(self) -> bool:
@@ -425,7 +425,7 @@ class IHarnessLifecycleAndVerdict(IHarnessWorkerLifecycle, IHarnessVerdictParsin
 
 
 class IHarnessSelfTestSeam(IHarnessWorkerLifecycle, IHarnessVerdictParsing, IHarnessUsageAccounting, Protocol):
-    """The selftest canary's own composed slice (``bzh:seam-size-ceiling``, blizzard#438):
+    """The selftest canary's own composed slice (``bzh:seam-size-ceiling``):
     :class:`IHarnessLifecycleAndVerdict`'s pair plus usage accounting, its widened roster's
     ``UsageParsing``/``TranscriptReadability`` checks needing ``parse_usage`` and
     ``transcript_source`` too — still narrower than the full adapter, which it takes no
@@ -449,7 +449,7 @@ class IHarnessAdapter(
     takes this alias; a caller takes the narrowest slice its job needs."""
 
     def transcript_source(self) -> IHarnessTranscriptSource:
-        """This harness's transcript source (blizzard#245).
+        """This harness's transcript source.
 
         An accessor rather than three methods folded onto this Protocol: the source is a
         cohesive sub-seam with its own configuration and lifetime. A harness with no

@@ -1,5 +1,5 @@
 """finding_facts.ref — an `add` fact's own submission-local ref, null for every other
-kind (blizzard#394), the same convention `note` already carries for `gone`.
+kind, the same convention `note` already carries for `gone`.
 
 Revision ID: 20260902_1000_finding_facts_ref
 Revises: 20260902_0900_chunk_dependencies

@@ -48,10 +48,10 @@ nothing lost, only deferred.
 
 Both the shutdown and crash paths mark only live work with a session to re-attach: a lease still unspawned, dormant on a
 question or an operator pause, backing off after a provider overload, or holding a buffered completion awaiting flush
-has nothing to resume — each is already owned by the step that parked it. A standing operator `chunk pause` outranks restart-resume: a pause the runner already
-parked on locally is never marked and stays parked, ADVANCE lifting it when the pause clears, while a pause recorded
-only at the hub is discovered by RESUME's own re-attach read, which re-parks the lease instead of respawning — either
-way the pause fact, not the restart, decides.
+has nothing to resume — each is already owned by the step that parked it. A standing operator `chunk pause` outranks
+restart-resume: a pause the runner already parked on locally is never marked and stays parked, ADVANCE lifting it when
+the pause clears, while a pause recorded only at the hub is discovered by RESUME's own re-attach read, which re-parks
+the lease instead of respawning — either way the pause fact, not the restart, decides.
 
 The crash path drops three more cases the shutdown path would have observed directly, and none lands in the same place:
 a spawn that recorded a session-end goes exit-is-done, ADVANCE judging the completed work — with no re-attach, unless a
@@ -64,16 +64,15 @@ and ADVANCE claims it — the verdict elicited from the dead session, a retry co
 attempt recorded via ADVANCE rather than a reap. The session-end and stale-heartbeat cases converge on ADVANCE by
 different routes; ADVANCE consults no session-end fact — the exit, not the declaration, routes a lease to it.
 
-A worker whose exit ADVANCE already claimed, but whose verdict elicitation is itself still in flight (blizzard#443),
-survives a restart the same way any other durable state does: the launch that recorded the in-flight row and the pid it
-started are both facts on disk, not daemon memory. REAP still passes the lease (the worker's own pid is long gone,
-exit-is-done), and ADVANCE's collect check reads the elicitation's own pid against `/proc` fresh — a process that
-outlived the crash is re-adopted untouched, its reply collected whenever it finishes; one that did not is read as lost,
-exactly like an ordinary crash mid-elicitation, and relaunched under the same staleness bound a live loss uses (no retry
-consumed either way), or the attempt is failed once that bound has passed. A crash between the in-flight record landing
-and the process actually starting — the same un-armable gap `SPAWN`'s own mint-before-spawn window accepts — is read the
-same way: no recorded pid reads as "not running," so recovery relaunches rather than waiting on a process nothing can
-confirm exists.
+A worker whose exit ADVANCE already claimed, but whose verdict elicitation is itself still in flight, survives a restart
+the same way any other durable state does: the launch that recorded the in-flight row and the pid it started are both
+facts on disk, not daemon memory. REAP still passes the lease (the worker's own pid is long gone, exit-is-done), and
+ADVANCE's collect check reads the elicitation's own pid against `/proc` fresh — a process that outlived the crash is
+re-adopted untouched, its reply collected whenever it finishes; one that did not is read as lost, exactly like an
+ordinary crash mid-elicitation, and relaunched under the same staleness bound a live loss uses (no retry consumed either
+way), or the attempt is failed once that bound has passed. A crash between the in-flight record landing and the process
+actually starting — the same un-armable gap `SPAWN`'s own mint-before-spawn window accepts — is read the same way: no
+recorded pid reads as "not running," so recovery relaunches rather than waiting on a process nothing can confirm exists.
 
 REAP expires narrowly: a lease minted but never spawned, and a worker still alive but stalled past the liveness window;
 a session-bearing lease whose process is simply gone is not reaped — that one belongs to ADVANCE (the worker declared
@@ -87,11 +86,11 @@ land already recorded is skipped on redelivery — a crash mid-delivery lands th
 
 ## Provider-overload backoff
 
-A worker generation or judge elicitation can exit because the harness's own provider returned an overload signal
-(Claude Code's `server_error`/529 assistant reply, an OpenCode 529 or `overloaded` error event) rather than because the
-turn actually finished. The runner classifies that exit the same way it classifies a usage limit — a translated fact,
-never inferred from cost or token figures — and, short of five consecutive overloads on the one lease, backs the lease
-off instead of judging it: no verdict is elicited, no retry is consumed, and the epoch is unchanged. The agent slot and
+A worker generation or judge elicitation can exit because the harness's own provider returned an overload signal (Claude
+Code's `server_error`/529 assistant reply, an OpenCode 529 or `overloaded` error event) rather than because the turn
+actually finished. The runner classifies that exit the same way it classifies a usage limit — a translated fact, never
+inferred from cost or token figures — and, short of five consecutive overloads on the one lease, backs the lease off
+instead of judging it: no verdict is elicited, no retry is consumed, and the epoch is unchanged. The agent slot and
 every bound environment stay held exactly as a dormant, ask-parked lease's do, and the same session resumes in place —
 only `pid`/`process_start_time` rewritten — once a durable `resume_after` passes: 60s after the first overload in a
 streak, doubling each further consecutive one (120s, 240s, 480s), capped at 15 minutes though the cap is never actually
@@ -102,11 +101,10 @@ first delay rather than continuing where an old streak left off.
 exactly like an ask- or pause-parked one: REAP and RESUME leave it alone, and ADVANCE's own no-op-until-due check
 (`bzh:facts-not-status` — "is it backing off" is never itself cached; each tick derives it fresh off the durable
 `resume_after`) picks the wait back up wherever the outage left it, waking it late rather than early or not at all. A
-judge elicitation's own overload is closed the same way a worker
-generation's is — by the next invocation's own identity moving on, generation for a worker, launch instant for a
-judge — never a separate closing write. The fifth consecutive overload on a lease falls through to today's ordinary
-path: a worker generation is judged as usual, a verdict-less judge elicitation fails the attempt as usual, spending a
-retry only there.
+judge elicitation's own overload is closed the same way a worker generation's is — by the next invocation's own identity
+moving on, generation for a worker, launch instant for a judge — never a separate closing write. The fifth consecutive
+overload on a lease falls through to today's ordinary path: a worker generation is judged as usual, a verdict-less judge
+elicitation fails the attempt as usual, spending a retry only there.
 
 ## How the contract is exercised
 

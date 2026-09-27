@@ -1,7 +1,7 @@
 import type { TranscriptSegmentIndexEntry, TransitionView } from '../api/hub';
 import { nodeStepKey } from '../node-step';
 
-/** The reserved terminal node id (`review:F2`) — the domain's `RESERVED_TERMINAL`
+/** The reserved terminal node id — the domain's `RESERVED_TERMINAL`
  * (`src/blizzard/hub/domain/graph.py`). Duplicated here (not a backend import) since
  * the wire model carries `current_node_id` as a plain string, not a discriminated
  * value. A completed chunk's `current_node_id()` is this terminal — never a step that
@@ -9,7 +9,7 @@ import { nodeStepKey } from '../node-step';
 const DONE_TERMINAL = 'done';
 
 /**
- * One node-history step's transcript-segment group (blizzard#248 D5) — joined to
+ * One node-history step's transcript-segment group — joined to
  * `ChunkDetail.history` by `(node_id, epoch)`: a {@link TransitionView}'s own
  * `from_node_id`/`epoch` name the step that *produced* it (the node that ran and then
  * transitioned out), the same pair a segment's `node_id`/`epoch` carries — not
@@ -26,9 +26,9 @@ export interface TranscriptStep {
    * yet, since it has not transitioned out. */
   readonly current: boolean;
   /** `false` for a segment group whose `(node_id, epoch)` matched no history row and
-   * isn't the in-flight step (D5's "must not silently hide conversation" case). */
+   * isn't the in-flight step ("must not silently hide conversation" case). */
   readonly matched: boolean;
-  /** This step's segments, ordered by `spawn_generation` — resume-seam links (D6) are
+  /** This step's segments, ordered by `spawn_generation` — resume-seam links are
    * this array's own adjacent indices, not a separate field. */
   readonly segments: readonly TranscriptSegmentIndexEntry[];
 }
@@ -38,7 +38,7 @@ function bySpawnGeneration(entries: readonly TranscriptSegmentIndexEntry[]): Tra
 }
 
 /**
- * Group a chunk's transcript segments into one entry per node-history step (D5), plus
+ * Group a chunk's transcript segments into one entry per node-history step, plus
  * the in-flight step and any segment group history doesn't name — a pure function over
  * the segment index and the chunk's own history/current-step fields, unit-testable
  * without a client.
@@ -80,8 +80,8 @@ export function deriveTranscriptSteps(
   // Epochs are chunk-globally unique (minted once, at spawn), so an epoch a history
   // row already claimed can never legitimately belong to the in-flight step too — it
   // means a transition has already landed and `current_node_id` has moved on while
-  // `latest_epoch` (minted only at the *next* lease's spawn) hasn't caught up yet
-  // (`review:F3`). Suppressing the step here, rather than rendering it with a stale
+  // `latest_epoch` (minted only at the *next* lease's spawn) hasn't caught up yet.
+  // Suppressing the step here, rather than rendering it with a stale
   // epoch, avoids a false `<next node> · epoch <previous epoch>` "in progress" step.
   if (
     current.nodeId !== null &&
@@ -120,7 +120,7 @@ export function deriveTranscriptSteps(
   return steps;
 }
 
-/** The open segment's resume-seam links (blizzard#248 D6), both derived from the same
+/** The open segment's resume-seam links, both derived from the same
  * ordering: {@link TranscriptStep.segments} is already sorted by `spawn_generation`, so
  * the segment immediately before/after the open one in its own step's array *is* the
  * continued-from/continues-in link — no separate field carries either direction. */
@@ -132,9 +132,9 @@ export interface SegmentSeams {
 const NO_SEAMS: SegmentSeams = { continuedFrom: null, continuesIn: null };
 
 /**
- * Resolve one open segment's resume-seam links against `steps` (D5's own groups) — a
- * pure function over `(steps, segmentId)`, unit-testable without a mounted component
- * (`review:F11`), the same shape `deriveTranscriptSteps` already gives the step
+ * Resolve one open segment's resume-seam links against `steps` (each one's own segment
+ * group) — a pure function over `(steps, segmentId)`, unit-testable without a mounted
+ * component, the same shape `deriveTranscriptSteps` already gives the step
  * derivation itself.
  */
 export function resolveSegmentSeams(

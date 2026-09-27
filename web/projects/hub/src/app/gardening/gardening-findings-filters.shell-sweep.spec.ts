@@ -10,7 +10,7 @@ import { GardeningFindingDetail } from './gardening-finding-detail';
 import { GardeningFindingsPage } from './gardening-findings-page';
 
 /**
- * The findings tab's own filter row (blizzard#486, phase 2 of 2): widened to every
+ * The findings tab's own filter row (phase 2 of 2): widened to every
  * routine and every scope, the four chip rows (routine, scope, class, state) now
  * carry a leading "All" option apiece, and a row from a widened bucket carries its
  * own routine/scope alongside the class and ref (`finding-list.css`'s `.fl-routine`/
@@ -21,12 +21,12 @@ import { GardeningFindingsPage } from './gardening-findings-page';
  * without ever checking whether a long routine/scope pair actually overflows them.
  * Also proves a long, unbroken class name still shrinks-and-ellipsizes on
  * `.fl-class`'s own line, alongside `.fl-ref`, rather than wrapping the ref onto a
- * second line once `.fl-routine`/`.fl-scope` render too (review:F2) — jsdom would
+ * second line once `.fl-routine`/`.fl-scope` render too — jsdom would
  * happily lay out `flex-wrap: wrap` without ever exercising the hypothetical-size
  * wrap decision the bug lived in.
  *
- * A second sweep alongside it covers a review-sourced finding (blizzard#582 D1,
- * `fnd_3` below) — no routine at all, its own `severity` and raising chunk
+ * A second sweep alongside it covers a review-sourced finding
+ * (`fnd_3` below) — no routine at all, its own `severity` and raising chunk
  * (`raised_by_chunk_id`) rendered in the routine/scope pair's own wrapping slot
  * (`finding-list.css`'s `.fl-source`/`.fl-severity`/`.fl-raised-by`) — the same
  * genuine-overflow proof jsdom cannot make for that row either.
@@ -61,10 +61,10 @@ const SCOPES = [
 ];
 
 /** Two findings from two distinct routines and two distinct scopes, so the
- * disambiguation markup (blizzard#486) has something genuine to render. `fnd_1`'s
+ * disambiguation markup has something genuine to render. `fnd_1`'s
  * `class` is deliberately a long, unbroken 40+ character run — proves `.fl-class`
  * shrinks-and-ellipsizes on its own line rather than pushing `.fl-ref` onto a
- * second line once `.fl-routine`/`.fl-scope` also render (review:F2). */
+ * second line once `.fl-routine`/`.fl-scope` also render. */
 const FINDINGS = [
   {
     finding_id: 'fnd_1',
@@ -90,7 +90,7 @@ const FINDINGS = [
     observed_count: 1,
     last_seen_at: '2026-01-10T00:00:00Z',
   },
-  /** A review-sourced finding (blizzard#582 D1) — `routine_name` is `null` (a review
+  /** A review-sourced finding — `routine_name` is `null` (a review
    * finding carries no routine at all, never merely an unnamed one), and it carries
    * its own `severity` and `raised_by_chunk_id` in place of the routine/scope
    * disambiguation the two rows above render. Proves the row shows that gracefully
@@ -206,7 +206,7 @@ describe('gardening findings filter row and row disambiguation shell sweep (web:
         `${width}px: the disambiguated row overflows horizontally (${row.scrollWidth} > ${row.clientWidth})`,
       ).toBeLessThanOrEqual(row.clientWidth);
 
-      // The long, unbroken class name (review:F2) must shrink-and-ellipsize on
+      // The long, unbroken class name must shrink-and-ellipsize on
       // `.fl-class`'s own line rather than wrap `.fl-ref` onto a second line — proven
       // by the two sharing the same `top`, not merely by the row's own overall
       // scrollWidth, which the wrap bug above didn't move.
@@ -240,7 +240,7 @@ describe('gardening findings filter row and row disambiguation shell sweep (web:
         expect(row).not.toBeNull();
 
         // No routine — a review-sourced finding carries none, and the row must show
-        // that gracefully (blizzard#582) rather than a blank or broken chip.
+        // that gracefully rather than a blank or broken chip.
         expect(row.querySelector('.fl-routine')).toBeNull();
         expect(row.querySelector('.fl-scope')?.textContent?.trim()).toBe('blizzard');
 

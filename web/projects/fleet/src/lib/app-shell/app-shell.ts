@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 /**
  * The shared app-root shell — the top-level ordering both the hub and the
  * runner app roots render their chrome through, rather than each hand-rolling
- * its own `.layout`/`.shell` flex column (issue #325). Four projection slots,
+ * its own `.layout`/`.shell` flex column. Four projection slots,
  * fixed in this DOM order: `[shell-header]` (the desktop app header or the
  * mobile titlebar), `[shell-nav]` (the desktop tab strip), the default slot
  * (the routed content, typically a `<router-outlet>`), and `[shell-tab-bar]`

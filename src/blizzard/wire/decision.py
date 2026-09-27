@@ -39,7 +39,7 @@ class DocketEntryView(BaseModel):
 class DecisionSubmission(BaseModel):
     """A runner-config gate: submit a decision in place of a transition, carrying the
     gated step's artifacts, proposed work items, and fencing epoch as one atomic write.
-    ``proposals`` is legal only from a node declaring ``proposes_work_items`` (D4, D6)."""
+    ``proposals`` is legal only from a node declaring ``proposes_work_items``."""
 
     from_node_id: str  # the gated node — its choices become the decision's
     epoch: int  # the step's lease fence, checked against the chunk's latest

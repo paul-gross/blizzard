@@ -63,7 +63,7 @@ _ANSWER_SCRIPT = (
     '"-c", "user.name=Mock Harness", "commit", "-m", '
     '"feat: resolve the board answer and land the change"], check=True); '
     # Push the branch and declare it through the real `blizzard runner artifact commit`
-    # verb (issue #143, Phase 4).
+    # verb.
     '_branch = subprocess.run(["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"], '
     "check=True, capture_output=True, text=True).stdout.strip(); "
     '_commit = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"], '
@@ -369,7 +369,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(col("waiting").get_by_test_id("chunk-status")).to_have_text("waiting_on_human")
                 expect(ready_card(chunk_a)).to_have_count(1)  # A still ready, still queued
 
-                # Selecting must not move the board (issue #21) — the one assertion here
+                # Selecting must not move the board — the one assertion here
                 # that needs real layout; the unit tier's jsdom cannot see this at all.
                 expect(page.get_by_test_id("chunk-detail-empty")).to_be_visible()
                 board_at_rest = page.get_by_test_id("board").bounding_box()
@@ -390,7 +390,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                     time.sleep(0.3)
                 assert hub.get("/api/questions").json() == [], "the board answer did not close the open question"
 
-                # B's landing frees the runner's only agent slot in the same tick (blizzard#202).
+                # B's landing frees the runner's only agent slot in the same tick.
                 page.get_by_test_id("runner-toggle").click()  # Pause — the *hub's* brake, not the runner's own
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "true")
                 expect(page.get_by_test_id("runner-hub-paused")).to_be_visible()
@@ -400,13 +400,13 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 status = _tick_until(config, hub, chunk_b, fenced, {"done", "needs_human", "stopped"}, 120.0)
                 assert status == "done", f"survivor did not land after the board answer (status {status!r})"
                 expect(col_cards("done")).to_have_count(1)
-                # issue #215: in the DONE column the node slot is the one place "done"
+                # In the DONE column the node slot is the one place "done"
                 # renders — no duplicate status label.
                 expect(col("done").get_by_test_id("chunk-node")).to_have_text("done")
                 expect(col("done").get_by_test_id("chunk-status")).to_have_count(0)
 
                 # The dock (still filled with B) renders the node history and the artifact
-                # store (issue #21).
+                # store.
                 expect(page.get_by_test_id("detail-status")).to_have_text("done")
                 assert page.get_by_test_id("history-step").count() >= 1, "detail shows no node history"
                 assert page.get_by_test_id("artifact").count() >= 1, "detail shows no artifacts"
@@ -434,19 +434,19 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 else:
                     expect(viewer).to_contain_text(target_artifact["commit_hash"])
 
-                # `< board` breadcrumb → back, chunk re-selected (blizzard#203) — client-side
+                # `< board` breadcrumb → back, chunk re-selected — client-side
                 # nav, distinct from the fresh-mount `page.goto` below.
                 page.get_by_test_id("mobile-chunk-back").click()
                 expect(page).to_have_url(f"http://127.0.0.1:{hub_port}/board?chunk={chunk_b}")
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
 
-                # A fresh mount of the board's chunk-selection URL contract (issue #162).
+                # A fresh mount of the board's chunk-selection URL contract.
                 page.goto(f"http://127.0.0.1:{hub_port}/board?chunk={chunk_b}", wait_until="load")
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                 expect(page.get_by_test_id("detail-status")).to_have_text("done")
 
                 # Dismissing clears the dock back to its rest state, and the board still
-                # has not moved — the round trip is geometry-neutral (issue #21).
+                # has not moved — the round trip is geometry-neutral.
                 page.get_by_test_id("detail-close").click()
                 expect(page.get_by_test_id("chunk-detail-empty")).to_be_visible()
                 assert page.get_by_test_id("board").bounding_box() == board_at_rest, (
@@ -508,7 +508,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 page.get_by_test_id("confirm-dialog-confirm").click()
                 expect(page.get_by_test_id("chunk-pause-by")).to_have_count(0)  # the dock live-updates too
 
-                # A few bounded ticks — enough to see forward progress again (issue #46),
+                # A few bounded ticks — enough to see forward progress again,
                 # without racing the full journey B already travelled.
                 _tick_n(config, fenced, 3)
                 resumed_status = hub.get(f"/api/chunks/{chunk_a}").json()["status"]

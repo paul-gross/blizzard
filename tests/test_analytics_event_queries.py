@@ -1,6 +1,6 @@
 """The analytics event query seam: every filter alone and combined, keyset paging
 covering a result set exactly once with no repeats, and the four canned counts honoring
-the same filters (blizzard#255, Phase 2 — component tier)."""
+the same filters (component tier)."""
 
 from __future__ import annotations
 
@@ -144,7 +144,7 @@ def store(tmp_path: Path) -> AnalyticsEventQueryStore:
         ),
         provenance=_OTHER_PROVENANCE,
     )
-    # A prior-version row — must never surface under `_VERSION`'s reads (D1: mixing
+    # A prior-version row — must never surface under `_VERSION`'s reads (mixing
     # versions double-counts the same occurrence).
     insert_events(
         "sg_1",

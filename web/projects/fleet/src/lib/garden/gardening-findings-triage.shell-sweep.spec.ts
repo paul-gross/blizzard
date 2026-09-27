@@ -23,7 +23,7 @@ async function loadDesignTokens(): Promise<void> {
  * The findings triage list's own half of `web:shell-sweep` — a real,
  * headless-Chromium proof of the three classes of claim jsdom cannot make: the
  * list itself must stay unclipped at the phone widths gardening is actually
- * reached at (`bzh:narrow-viewport-tier-rule`); a `gone`-flagged row (D8) must
+ * reached at (`bzh:narrow-viewport-tier-rule`); a `gone`-flagged row must
  * carry a genuinely different computed style from a plain row — not merely a
  * different class name jsdom would accept without evaluating it against
  * `finding-list.css`; and the row's own summary headline must genuinely clamp to
@@ -200,7 +200,7 @@ describe('FleetFindingList delivered-state badge shell sweep (web:shell-sweep)',
       await page.viewport(1400, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
-      // `delivered` (blizzard#583 D5) reads `takeover`'s tone, distinct from
+      // `delivered` reads `takeover`'s tone, distinct from
       // `resolved`'s `done` — jsdom would accept either CSS custom-property
       // reference without evaluating it, so this only passes if the browser
       // actually resolves the two to different colors. The testid rides

@@ -33,7 +33,7 @@ const LEASE = (overrides: Record<string, unknown> = {}) => ({
 });
 
 /**
- * A minimal-but-complete `DashboardView` (issue #311) — every rail below
+ * A minimal-but-complete `DashboardView` — every rail below
  * `LocalPanel` now reads one shared `GET /api/dashboard` poll rather than one
  * endpoint each, so a test overrides just the section(s) it cares about via
  * `overrides` rather than stubbing a path of its own.
@@ -87,7 +87,7 @@ function routes(
 let navigateSpy: MockInstance<Router['navigate']>;
 
 /**
- * A real router (issue #318 needs one anyway — `MachineDetailHeader`'s chunk
+ * A real router (needs one anyway — `MachineDetailHeader`'s chunk
  * name is now a `routerLink`), seeded with `initialQuery` before the panel
  * mounts so its first render already reflects a deep-linked URL. The catch-all
  * route is a no-op destination: `LocalPanel` is created directly rather than
@@ -410,7 +410,7 @@ describe('LocalPanel', () => {
       const fixture = await render({ chunk: CHUNK, attempt: OLDER().lease_id });
       const el = fixture.nativeElement as HTMLElement;
 
-      // `?attempt=` belongs to the chunk detail route (issue #318), which this
+      // `?attempt=` belongs to the chunk detail route, which this
       // board neither reads nor writes — selection rewrites `chunk` and nothing else.
       const rows = el.querySelectorAll<HTMLElement>('[data-testid="chunk-row"]');
       rows[1].click();

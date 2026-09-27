@@ -1,5 +1,5 @@
 """``ProviderEntry.registry`` — provider construction, config validation, secret
-resolution from the environment (unit tier, issue #92).
+resolution from the environment (unit tier).
 """
 
 from __future__ import annotations

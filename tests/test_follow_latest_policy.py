@@ -1,4 +1,4 @@
-"""The standing follow-latest migration policy (issue #164).
+"""The standing follow-latest migration policy.
 
 Two tiers: the precedence rule (`FollowLatest`) is a pure value object at the unit
 tier; the policy's effect on a real transition is driven over the live HTTP surface at

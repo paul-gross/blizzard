@@ -43,7 +43,7 @@ export { type EdgeKind, type EdgeTarget };
  */
 
 const DONE_RADIUS = 24;
-/** The synthetic source dagre lays out above the entry node (blizzard#207) — sized
+/** The synthetic source dagre lays out above the entry node — sized
  * to match {@link DONE_RADIUS} so the START and DONE circles read as a pair. */
 const START_RADIUS = DONE_RADIUS;
 /** Dagre graph-lib id for the synthetic start node/edge — never a real `node_id`

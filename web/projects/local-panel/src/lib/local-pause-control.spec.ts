@@ -132,7 +132,7 @@ describe('LocalPauseControl', () => {
     expect(style).not.toContain('var(--red)');
   });
 
-  // --- Local pause reason (blizzard#594) ----------------------------------------
+  // --- Local pause reason ----------------------------------------
   //
   // A usage-limit pause, a spend-ceiling pause, and a manual pause must read distinctly:
   // the first two carry `pause.local_reason`, a manual one carries none at all.

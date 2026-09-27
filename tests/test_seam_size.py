@@ -21,7 +21,7 @@ _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 
 _SEAM_SIZE_LIMIT = 12
 
-#: blizzard#521 narrowed IHubClient from 15 to 13 methods (retiring get_chunk/report_lease/
+#: Narrowed IHubClient from 15 to 13 methods (retiring get_chunk/report_lease/
 #: report_escalation for the batch chunk_statuses read), then composed chunk_statuses from
 #: the narrower IChunkStatusReader instead of re-declaring it — leaving 12 own methods, at
 #: the limit rather than over it, so the seam carries no registered exception any more.

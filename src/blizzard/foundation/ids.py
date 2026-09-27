@@ -33,16 +33,16 @@ LEASE_PREFIX = "lease"
 TAKEOVER_PREFIX = "tko"
 SELFTEST_PREFIX = "self"
 HUB_EXEC_SLOT_PREFIX = "hes"
-MIGRATION_PREFIX = "mg"  # a chunk_migrations fact (issue #90)
-USER_PREFIX = "usr"  # a hub-local user (issue #91)
-SEGMENT_PREFIX = "seg"  # a transcript segment, the hub's idempotence key (issue #246)
-WORK_ITEM_PREFIX = "wi"  # a hub-owned work item (issue #357)
+MIGRATION_PREFIX = "mg"  # a chunk_migrations fact
+USER_PREFIX = "usr"  # a hub-local user
+SEGMENT_PREFIX = "seg"  # a transcript segment, the hub's idempotence key
+WORK_ITEM_PREFIX = "wi"  # a hub-owned work item
 WORK_ITEM_PROPOSAL_PREFIX = "wip"  # a proposed work item riding a node-step's completion
-ROUTINE_PREFIX = "rtn"  # a routine (issue #389) — a scope has no prefix; its slug is its id
-FINDING_PREFIX = "fin"  # a finding (blizzard#390) — one instance a routine's run observed
-FINDING_SET_PREFIX = "fins"  # the set a delivered finding list mints, one per artifact (blizzard#390)
-GARDEN_PROPOSAL_PREFIX = "gprop"  # a garden proposal (blizzard#390) — never confused with a work-item proposal
-DEPENDENCY_EDGE_PREFIX = "dep"  # a chunk_dependencies row (issue #456)
+ROUTINE_PREFIX = "rtn"  # a routine — a scope has no prefix; its slug is its id
+FINDING_PREFIX = "fin"  # a finding — one instance a routine's run observed
+FINDING_SET_PREFIX = "fins"  # the set a delivered finding list mints, one per artifact
+GARDEN_PROPOSAL_PREFIX = "gprop"  # a garden proposal — never confused with a work-item proposal
+DEPENDENCY_EDGE_PREFIX = "dep"  # a chunk_dependencies row
 
 
 @dataclass(frozen=True)

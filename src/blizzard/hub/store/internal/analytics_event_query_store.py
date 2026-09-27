@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the analytics event query seam (package-private, blizzard#255).
+"""SQLAlchemy adapter for the analytics event query seam (package-private).
 
 Reads ``transcript_events`` directly — the same table :mod:`transcript_event_store`
 writes — rather than depending on that adapter: two ``internal/`` adapters sharing one

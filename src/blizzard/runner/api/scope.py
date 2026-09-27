@@ -1,5 +1,5 @@
-"""``GET /api/leases/{lease_id}/scopes`` — the deployment's scope vocabulary (blizzard#582
-D2), lease-scoped and token-authorized, then forwarded to the hub as the runner
+"""``GET /api/leases/{lease_id}/scopes`` — the deployment's scope vocabulary, lease-scoped
+and token-authorized, then forwarded to the hub as the runner
 principal — the shape ``runner/api/garden.py`` already sets for a lease-token-authorized,
 hub-proxied read (``bzh:pluggable-seams``)."""
 

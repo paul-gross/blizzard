@@ -1,8 +1,8 @@
-"""``blizzard hub record-marker`` — the mid-run marker callback CLI (issue #65/#230).
+"""``blizzard hub record-marker`` — the mid-run marker callback CLI.
 
 A pure client of the injected ``BZ_HUB_MARKER_CALLBACK_URL``: stubs ``httpx.post`` to
 prove the command authorizes its write with the run's marker capability token via
-:data:`~blizzard.hub.api.marker_auth._MARKER_TOKEN_HEADER` (issue #240), and refuses to
+:data:`~blizzard.hub.api.marker_auth._MARKER_TOKEN_HEADER`, and refuses to
 post when either the callback URL or the token is missing."""
 
 from __future__ import annotations

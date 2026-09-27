@@ -20,7 +20,7 @@ from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
 
 
 def _usage_total_stmt(since: datetime, until: datetime | None) -> Select[Any]:
-    """The fold ``usage_total_since`` executes (blizzard#517 D2) — one row of aggregates,
+    """The fold ``usage_total_since`` executes — one row of aggregates,
     modeled on ``analytics_operational_store.py``'s ``_spend_group_stmt``."""
     u = s.usage_facts
     stmt = select(*usage_aggregate_columns()).where(u.c.recorded_at >= since)

@@ -1,6 +1,6 @@
-"""Maps a hub segment's wire turns onto the runner's transcript read model (blizzard#249).
+"""Maps a hub segment's wire turns onto the runner's transcript read model.
 
-One-to-one, not a narrowing: blizzard#248 D1/D2 widened :class:`Turn` to the segment wire's
+One-to-one, not a narrowing: :class:`Turn` was widened to the segment wire's
 own shape, so thinking turns, tool calls and nested sidechains all survive the trip. Total
 rather than raising — a body validating against :class:`TurnSegmentView` is proven
 well-typed, never internally consistent, so a bad field degrades past this 200-always seam."""

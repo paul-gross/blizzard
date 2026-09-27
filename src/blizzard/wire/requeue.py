@@ -1,4 +1,4 @@
-"""``blizzard runner requeue`` — wire body (issue #53).
+"""``blizzard runner requeue`` — wire body.
 
 Behind ``POST /chunks/{id}/requeues``.
 """

@@ -1,7 +1,6 @@
-"""The fleet-router partition — structural runner-auth enforcement (component tier,
-issue #87).
+"""The fleet-router partition — structural runner-auth enforcement (component tier).
 
-Proves the Phase 3 partition: a valid runner token is confined to the fleet router
+Proves the partition: a valid runner token is confined to the fleet router
 (authenticates a fleet verb, rejected on an operator verb) and every verb this phase
 moved is gone from its old anonymous path."""
 

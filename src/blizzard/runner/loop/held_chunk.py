@@ -89,7 +89,7 @@ class HeldChunk:
             self.ctx.hub.hub_advance(self.chunk_id)
         except HubClientError:
             return  # hub unreachable — retried next tick
-        self.ctx.chunk_views.invalidate(self.chunk_id)  # D5 — a later get() this tick sees the step
+        self.ctx.chunk_views.invalidate(self.chunk_id)  # a later get() this tick sees the step
 
     def _spawn_advanced_node(self) -> None:
         """Spawn the held chunk's current node into its already-bound, warm environment.
@@ -133,7 +133,7 @@ class HeldChunk:
         if response.outcome == ApplyOutcome.FAILURE:
             _log.warning("resolving transition rejected", chunk_id=self.chunk_id, detail=response.detail or "")
             return
-        self.ctx.chunk_views.invalidate(self.chunk_id)  # D5 — a later get() this tick sees the resolution
+        self.ctx.chunk_views.invalidate(self.chunk_id)  # a later get() this tick sees the resolution
         _log.info("gate resolved — advancing chunk", chunk_id=self.chunk_id, choice=decision.resolved_choice)
         self.apply(
             response.outcome, response.next_envelope, self.ctx.stores.environments.bindings_for_chunk(self.chunk_id)

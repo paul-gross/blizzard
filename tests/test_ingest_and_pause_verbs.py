@@ -1,8 +1,8 @@
 """The client verbs that wrap the hub's ingest + the runner's own declarative pause.
 
 Hub verbs (``ingest``/``promote``/``detach``/``stop``) are unit tier: pure clients driven
-with ``httpx.post`` stubbed. ``runner pause``/``start`` are the runner's own local API
-(issue #43); tests driving them against a live daemon on a real socket are component tier.
+with ``httpx.post`` stubbed. ``runner pause``/``start`` are the runner's own local API;
+tests driving them against a live daemon on a real socket are component tier.
 """
 
 from __future__ import annotations
@@ -273,12 +273,12 @@ def test_detach_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub chunk stop` (issue #118)
+# `blizzard hub chunk stop`
 
 
 @pytest.mark.unit
 def test_stop_posts_to_the_chunk_and_reports_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The verb POSTs to the chunk's stop sub-resource, carrying ``--by`` (issue #118)."""
+    """The verb POSTs to the chunk's stop sub-resource, carrying ``--by``."""
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -342,12 +342,12 @@ def test_stop_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub chunk done` (issue #294)
+# `blizzard hub chunk done`
 
 
 @pytest.mark.unit
 def test_done_posts_to_the_chunk_and_reports_completed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The verb POSTs to the chunk's complete sub-resource, carrying ``--by`` (issue #294)."""
+    """The verb POSTs to the chunk's complete sub-resource, carrying ``--by``."""
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -397,12 +397,12 @@ def test_done_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub chunk pause` / `chunk resume` (issue #46)
+# `blizzard hub chunk pause` / `chunk resume`
 
 
 @pytest.mark.unit
 def test_pause_chunk_posts_to_the_chunk_and_reports_paused(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The verb POSTs to the chunk's pause sub-resource, carrying ``--by`` (issue #46)."""
+    """The verb POSTs to the chunk's pause sub-resource, carrying ``--by``."""
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -451,7 +451,7 @@ def test_pause_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.unit
 def test_resume_chunk_posts_to_the_chunk_and_reports_resumed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The verb POSTs to the chunk's resume sub-resource — never refused (issue #46)."""
+    """The verb POSTs to the chunk's resume sub-resource — never refused."""
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -485,7 +485,7 @@ def test_resume_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub chunk delete` (issue #364)
+# `blizzard hub chunk delete`
 
 
 @pytest.mark.unit
@@ -589,7 +589,7 @@ def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
     on an ephemeral port so a test never collides with a daemon on the box.
     """
     config = RunnerConfig.load(root, port=0)
-    # Pin the SSO auth-mode probe (issue #95) to a none-mode (unreachable) hub so the
+    # Pin the SSO auth-mode probe to a none-mode (unreachable) hub so the
     # human-lane gating resolves to the authless path these hub-free tests assume.
     config = dataclasses.replace(config, hub_url="http://127.0.0.1:1")
     app = build_hosted_app(config).app
@@ -622,7 +622,7 @@ def _await_socket(path: Path, timeout: float = 10.0) -> None:
 
 
 def _no_hub(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fail loudly if a local verb reaches for the hub — it must never (issue #43)."""
+    """Fail loudly if a local verb reaches for the hub — it must never."""
 
     def explode(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("a local verb contacted the hub; it must be a pure client of the local API")
@@ -674,7 +674,7 @@ def test_start_clears_the_local_brake(tmp_path: Path, monkeypatch: pytest.Monkey
 
 @pytest.mark.component
 def test_pause_reports_itself_upward_atomically(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The brake and the fact reporting it upward are one write (issue #43); asserting
+    """The brake and the fact reporting it upward are one write; asserting
     the buffered fact, not just the flag, is the point."""
     root = _init_runner(tmp_path)
     _no_hub(monkeypatch)
@@ -728,7 +728,7 @@ def test_pause_over_tcp_when_runner_url_is_given(tmp_path: Path, monkeypatch: py
 @pytest.mark.unit
 def test_dir_and_runner_url_conflict_only_on_the_command_line(tmp_path: Path) -> None:
     """A genuine tie is ambiguous; an ambient $BZ_RUNNER_DIR beside an explicit flag is
-    not — erroring on the ambient combination would break --runner-url fleet-wide (issue #39)."""
+    not — erroring on the ambient combination would break --runner-url fleet-wide."""
     root = _init_runner(tmp_path)
     both = CliRunner().invoke(
         runner_group, ["pause", "--dir", str(root), "--runner-url", "http://127.0.0.1:9"], env={"BZ_RUNNER_DIR": None}

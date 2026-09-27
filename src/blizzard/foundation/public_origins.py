@@ -1,4 +1,4 @@
-"""The browser-reachable origins a runner declares for its SSO federation callback (issue #287).
+"""The browser-reachable origins a runner declares for its SSO federation callback.
 
 A ``redirect_uri`` instructs the hub to POST an identity token to an address, so the acceptable set is
 declared and registered up front, never derived from a request. Placed here to mirror

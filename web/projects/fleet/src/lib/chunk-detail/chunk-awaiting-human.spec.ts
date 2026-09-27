@@ -64,7 +64,7 @@ const WAITING_DECISION_DETAIL: ChunkDetail = {
 };
 
 /** One answered question in the chunk's list — `delivered` says whether the runner has
- * carried it back into the resumed session yet (issue #165). */
+ * carried it back into the resumed session yet. */
 function answered(overrides: Partial<QuestionView> & Pick<QuestionView, 'question_id'>): QuestionView {
   return {
     chunk_id: 'ch_01trail000000000000000000000',

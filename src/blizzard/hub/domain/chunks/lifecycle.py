@@ -12,7 +12,7 @@ class IReadChunkLifecycleRepository(Protocol):
     byte-identical query, so a caller needing it depends on that seam instead."""
 
     def is_ephemeral(self, chunk_id: str) -> bool:
-        """Whether ``chunk_id`` names a grouped-away or deleted chunk (issue #456) — the
+        """Whether ``chunk_id`` names a grouped-away or deleted chunk — the
         read that tells an ephemeral prerequisite apart from one never minted at all,
         since :meth:`~blizzard.hub.domain.chunks.record.IReadChunkRecordRepository.get`
         answers ``None`` for both. The record seam's exclusion of ephemeral ids from
@@ -24,14 +24,14 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
     """Read-write chunk-lifecycle access."""
 
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
-        """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46).
+        """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins.
 
         Always writes a fresh row (never a no-op — "newest fact wins" reads, it does not
         skip writes), so the ``chunk_pause_facts.id`` comes back unconditionally."""
         ...
 
     def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> int:
-        """Append the ``chunk.stopped`` fact — terminal operator abandonment (issue #118) —
+        """Append the ``chunk.stopped`` fact — terminal operator abandonment —
         and, atomically in the same store transaction, release any live route and any held
         fleet-wide hub-exec slot. Returns the freshly-written ``chunk_stopped.id``, not the
         ``route_released.id`` this same transaction may also write."""
@@ -39,7 +39,7 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
 
     def record_completion(self, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.completed`` fact — an operator's manual completion, including from
-        ``stopped`` (issue #294) — and, atomically in the same store transaction, release any
+        ``stopped`` — and, atomically in the same store transaction, release any
         live route and any held fleet-wide hub-exec slot, mirroring :meth:`record_stop`. The
         caller has already checked the chunk is not already ``done``. Returns the freshly-written
         ``chunk_completed.id``."""

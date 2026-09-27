@@ -1,6 +1,6 @@
 """Subprocess adapter for the check-runner seam (package-private) — the reference
 :class:`~blizzard.runner.loop.checks.ICheckRunner` binding, running a node's authored ``checks:``
-command in a leased worktree under a timeout and capturing a bounded output tail (issue #114).
+command in a leased worktree under a timeout and capturing a bounded output tail.
 
 The child environment is built from the worker-env allowlist (``bzh:worker-env-allowlist``): a check
 runs arbitrary repo tooling, so a daemon credential must be absent by construction, not filtered."""

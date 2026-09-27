@@ -26,7 +26,7 @@ def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str):  # type:
 def _ingest_backlog(hub: HubHarness, n: int) -> str:
     """Ingest one chunk holding a distinct pointer and leave it ``not_ready``.
 
-    A freshly ingested chunk rests in the backlog. Grouping takes it there (issue #141);
+    A freshly ingested chunk rests in the backlog. Grouping takes it there;
     peeking and reordering, which *are* the ready queue, need :func:`_ingest`'s promote.
     """
     pointer = {"source": "default", "ref": str(n)}
@@ -83,7 +83,7 @@ def _pause(tmp_path: Path, hub: HubHarness, chunk_id: str) -> None:
 
 
 def test_paused_ready_chunk_is_excluded_from_the_queue(tmp_path: Path) -> None:
-    # The free win (issue #46 §4): list_ready()/peek filter on ChunkStatus.READY, so a
+    # The free win: list_ready()/peek filter on ChunkStatus.READY, so a
     # paused chunk drops out with no queue filter at all — pinned as a property.
     hub = build_hub(tmp_path)
     a, b = _ingest(hub, 1), _ingest(hub, 2)
@@ -104,11 +104,11 @@ def test_paused_chunk_with_a_live_route_is_still_excluded_from_the_queue(tmp_pat
     _pause(tmp_path, hub, a)
     assert _peek_ids(hub) == [b]
     # Confirms this is the pause branch, not merely "running is already excluded":
-    # paused wins over running in the derivation precedence (D-067/issue #46).
+    # paused wins over running in the derivation precedence (D-067).
     assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "paused"
 
 
-# Newest-fact-wins across the store seam (issue #46): reverse the ``id``-ordered
+# Newest-fact-wins across the store seam: reverse the ``id``-ordered
 # hydration and every resume silently becomes a no-op — the unit tier can't see that.
 
 
@@ -182,7 +182,7 @@ def test_group_is_pointer_union_deduped(tmp_path: Path) -> None:
 
 
 def test_group_merges_backlog_chunks_without_promoting_any_of_them(tmp_path: Path) -> None:
-    # Issue #141: three freshly minted chunks merge as they are — no promote, so none
+    # Three freshly minted chunks merge as they are — no promote, so none
     # is claimable mid-flow, and the survivor stays in the backlog.
     hub = build_hub(tmp_path)
     survivor, b, c = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2), _ingest_backlog(hub, 3)

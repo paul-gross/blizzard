@@ -1,5 +1,5 @@
 """Session-cookie/bearer resolution + the ``require(<permission>)`` route dependency —
-the human-plane edge seam (issue #91).
+the human-plane edge seam.
 
 A presented credential is hashed and resolved via the **read** repository; the
 sliding-expiry write is delegated to the domain (``bzh:controller-read-only``).

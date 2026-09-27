@@ -1,5 +1,5 @@
 """``blizzard runner artifact commit`` — the verb's identity handling and rejection
-surfacing (unit tier, issue #143 Phase 3): ``httpx.post`` stubbed, no live socket. Like
+surfacing (unit tier): ``httpx.post`` stubbed, no live socket. Like
 ``artifact create``, this does not soft-fail: a rejection must reach the worker as a
 non-zero exit. Carries no ``--forge`` — the origin comes from the repo manifest.
 """
@@ -51,7 +51,7 @@ def test_commit_verb_posts_inherited_identity_and_declaration_body(monkeypatch: 
 
 @pytest.mark.unit
 def test_commit_verb_echoes_a_confirmation_naming_repo_branch_and_sha(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Issue #584: a silent exit 0 was indistinguishable from a no-op — the worker must see
+    """A silent exit 0 was indistinguishable from a no-op — the worker must see
     what was recorded without a second call."""
     monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResponse())
     result = CliRunner().invoke(

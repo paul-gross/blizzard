@@ -1,4 +1,4 @@
-"""httpx adapter for the archived-transcript seam (blizzard#249, D4) — a sibling of
+"""httpx adapter for the archived-transcript seam — a sibling of
 ``runner/loop/internal/http_hub.py``, the runner's other outbound hub adapter.
 
 All httpx and pydantic-wire usage is confined here: the hub's transcript-segments read is
@@ -48,7 +48,7 @@ class HttpArchivedTranscriptRepository:
             _log.error("hub unreachable for archived transcript", chunk_id=chunk_id, node_id=node_id, error=str(exc))
             return _answer("unreachable")
         if resp.status_code in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
-            # A refusal is a definite answer, not a transport failure (D1) — the caller
+            # A refusal is a definite answer, not a transport failure — the caller
             # falls back to local exactly like "holds nothing" would. Logged, never silent.
             _log.error(
                 "hub refused archived transcript read", chunk_id=chunk_id, node_id=node_id, status=resp.status_code

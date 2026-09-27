@@ -14,7 +14,7 @@ from blizzard.hub.domain.graph import Graph, GraphSummary, IReadGraphRepository
 def graph_by_ref(graphs: IReadGraphRepository, ref: str) -> Graph:
     """The graph a request names, by id or by name — a name resolving to its newest enabled mint.
 
-    404 when neither does: a name whose every mint is retired reads as unknown here (issue #101),
+    404 when neither does: a name whose every mint is retired reads as unknown here,
     while a retired graph named by id resolves and is refused by the domain instead."""
     graph = graphs.get(ref) or graphs.get_enabled_by_name(ref)
     if graph is None:
@@ -25,7 +25,7 @@ def graph_by_ref(graphs: IReadGraphRepository, ref: str) -> Graph:
 @dataclass
 class GraphNames:
     """The graph summaries and node names one read resolves, primed in bulk and
-    memoised by id (issue #421) — backed by :class:`IReadGraphRepository`'s narrow
+    memoised by id — backed by :class:`IReadGraphRepository`'s narrow
     projections, never a full :class:`Graph`. An id nothing primed still resolves
     lazily, one graph at a time, the first time it's asked for."""
 
@@ -67,7 +67,7 @@ class GraphNames:
         return summary.created_at if summary is not None else None
 
     def node_name(self, graph_id: str | None, node_id: str | None) -> str | None:
-        """``node_id``'s human name *in the graph that named it* (issue #90) — ``None`` when
+        """``node_id``'s human name *in the graph that named it* — ``None`` when
         either is unresolvable, so a step from a graph since deleted degrades to its raw id."""
         if graph_id is None or node_id is None:
             return None

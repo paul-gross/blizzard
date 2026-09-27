@@ -6,7 +6,7 @@ import { KitDialog } from './kit-dialog';
 
 /**
  * `KitDialog`'s own half of `web:shell-sweep`
- * (`blizzard-context:/verification/blizzard.md` bzh:web-shell-sweep, blizzard#399 D6)
+ * (`blizzard-context:/verification/blizzard.md` bzh:web-shell-sweep)
  * — the modal shell's three claims jsdom cannot evaluate: the scrim genuinely covers
  * the full viewport (a real `getBoundingClientRect` against `window.inner*`), the
  * panel centres itself and its own `.body` scrolls a tall projection while the page

@@ -1,5 +1,5 @@
-"""Garden-proposal authoring routes — create/edit/attach/detach (blizzard#631,
-component tier). Seeded straight through ``GardenProposalStore``/``FindingStore``/
+"""Garden-proposal authoring routes — create/edit/attach/detach
+(component tier). Seeded straight through ``GardenProposalStore``/``FindingStore``/
 ``RoutineStore``, the ``tests/test_garden_proposal_api.py`` shape."""
 
 from __future__ import annotations
@@ -174,7 +174,7 @@ def test_create_a_blank_title_is_422(tmp_path: Path) -> None:
 
 
 def test_create_a_finding_from_a_different_routine_and_scope_than_the_named_routine(tmp_path: Path) -> None:
-    """A proposal carries no scope: its findings may span any routines/scopes (blizzard#631)."""
+    """A proposal carries no scope: its findings may span any routines/scopes."""
     hub = build_hub(tmp_path)
     _seed_scope(hub, "blizzard")
     _seed_scope(hub, "runner")
@@ -238,7 +238,7 @@ def test_edit_an_accepted_proposal_is_409(tmp_path: Path) -> None:
 
 
 def test_edit_an_operator_authored_proposal_while_open(tmp_path: Path) -> None:
-    """`edit` works on either origin while open (blizzard#631)."""
+    """`edit` works on either origin while open."""
     hub = build_hub(tmp_path)
     _seed_scope(hub)
     created = hub.client.post("/api/garden-proposals", json={"title": "t", "class": "c", "body": "b"})

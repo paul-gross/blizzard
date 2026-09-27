@@ -1,4 +1,4 @@
-"""The store-read-index gate (blizzard#525) — runner and hub halves.
+"""The store-read-index gate — runner and hub halves.
 
 Drives every read method of every runner/hub ``IRead*`` Protocol against a real, migrated-to-head sqlite store and
 fails if any plans a scan or automatic covering index over a table not on ``tests/store_scan_allowlist.py``'s

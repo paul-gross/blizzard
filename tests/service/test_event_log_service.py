@@ -101,7 +101,7 @@ def test_a_replayed_event_seq_folds_exactly_once(tmp_path: Path) -> None:
 
 
 def test_activity_backfill_merges_several_cause_families_bounded_and_newest_first(tmp_path: Path) -> None:
-    """``GET /api/activity`` (issue #213) serializes ActivityView's real field names over
+    """``GET /api/activity`` serializes ActivityView's real field names over
     the wire, merges chunk/event/runner cause families newest-first, bounded by ``limit``
     and windowed by ``since``."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)

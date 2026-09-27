@@ -169,7 +169,7 @@ describe('SessionRecovery (issue #312)', () => {
     restore = second.restore;
 
     // An ordinary session poll resolving no username along the way must not clear
-    // the mark — only a resolved username does (D4).
+    // the mark — only a resolved username does.
     await runnerApi.readSessionApiAuthSessionGet({ throwOnError: false });
 
     // A further no-session 401: the mark still stands, so this sets `recovering`

@@ -1,4 +1,4 @@
-"""``harness/internal/claude_code_normalizer.py`` (blizzard#245, blizzard#267).
+"""``harness/internal/claude_code_normalizer.py``.
 
 Unit tier: :meth:`NormalizedFile.of_lines` / ``.join_sidecars`` need no filesystem —
 thinking turns, structured tool input, sidechain assembly and its record-level link
@@ -245,7 +245,7 @@ def test_harness_version_is_none_when_no_record_carries_one() -> None:
     assert result.harness_version is None
 
 
-# --- New: sidechain link routes (blizzard#245) ---
+# --- New: sidechain link routes ---
 
 
 @pytest.mark.unit
@@ -268,7 +268,7 @@ def test_agent_id_join_candidate_surfaces_for_a_tool_result_carrying_agent_id() 
 @pytest.mark.unit
 def test_agent_id_is_not_attributed_when_one_record_resolves_two_tool_results() -> None:
     """An ambiguous record with more than one `tool_result` is not stamped as
-    *attached* (F13's guard), but must still surface as a discovered candidate."""
+    *attached*, but must still surface as a discovered candidate."""
     lines = [
         fx.assistant_tool_use("t1", "Task", {"prompt": "job 1"}, uuid="a1"),
         fx.assistant_tool_use("t2", "Task", {"prompt": "job 2"}, uuid="a2"),
@@ -302,7 +302,7 @@ def test_agent_id_is_not_attributed_when_one_record_resolves_two_tool_results() 
 
 @pytest.mark.unit
 def test_agent_id_is_a_discovered_candidate_even_when_its_tool_use_is_not_in_these_lines() -> None:
-    """F1: `discovered_agent_ids` must not share `agent_id_by_tool_turn`'s limitation
+    """`discovered_agent_ids` must not share `agent_id_by_tool_turn`'s limitation
     of needing a matching `tool_use` in the same `of_lines` call."""
     lines = [fx.tool_result("t1", "spawned", agent_id="agent-abc")]  # no matching tool_use in these lines
     result = NormalizedFile.of_lines(lines)
@@ -533,7 +533,7 @@ def test_threading_stays_fast_under_duplicate_uuid_values() -> None:
     assert [r.content for r in runs[0].records[1:]] == [f"link {i}" for i in range(n)]
 
 
-# --- New: agent-id join, route 1 (`NormalizedFile.join_sidecars`, blizzard#267) ---
+# --- New: agent-id join, route 1 (`NormalizedFile.join_sidecars`) ---
 
 
 @pytest.mark.unit

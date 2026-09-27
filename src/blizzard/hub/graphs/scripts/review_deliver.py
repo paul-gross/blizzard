@@ -1,4 +1,4 @@
-"""The `record-findings` node's own script (blizzard#582) — posts to the hub's
+"""The `record-findings` node's own script — posts to the hub's
 review-findings-delivery route and reports the outcome. The route reads the chunk's own
 newest `review-finding-delta` artifact server-side, so this script carries no body. Pure
 stdlib (`bzh:deterministic-shell`), built on `land_common`'s own `ScriptEnv`/

@@ -41,10 +41,10 @@ from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSeg
 
 _log = get_logger("blizzard.runner.hub")
 
-#: The prefix every runner->hub call in this client goes under (issue #87).
+#: The prefix every runner->hub call in this client goes under.
 _FLEET_API = "/api/fleet"
 
-#: Overrides the shared client's own default timeout for this one call (issue #246).
+#: Overrides the shared client's own default timeout for this one call.
 _TRANSCRIPT_PUSH_TIMEOUT_SECONDS = 5.0
 
 #: Caps a single ``chunk-statuses`` GET's ``chunk_id`` query-param count — a tick's primed id
@@ -67,7 +67,7 @@ class HttpHubClient:
             raise self._wrap(exc, f"POST {path}") from exc
         if resp.status_code == httpx.codes.UNAUTHORIZED:
             # No token, or the matched verb's own always-raising demand for a principal
-            # (D7) — the legacy verb serves this caller in every auth mode instead.
+            # — the legacy verb serves this caller in every auth mode instead.
             return QueuePeekResponse.model_validate(self._get(path).json())
         self._raise_for_status(resp, f"POST {path}")
         return QueuePeekResponse.model_validate(resp.json())

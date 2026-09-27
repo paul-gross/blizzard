@@ -104,7 +104,7 @@ def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: 
 
 
 def test_hub_usage_facts_harness_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``usage_facts.harness_id``/``harness_version`` (blizzard#441) — downgrades to this
+    """``usage_facts.harness_id``/``harness_version`` — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from a
     revision marker, which a ``downgrade()`` that dropped nothing would satisfy just as well."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -150,7 +150,7 @@ def test_hub_usage_facts_estimated_cost_column_survives_migration_roundtrip(tmp_
 
 
 def test_runner_usage_facts_harness_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``usage_facts.harness_id``/``harness_version`` (blizzard#441), the runner's own
+    """``usage_facts.harness_id``/``harness_version``, the runner's own
     durable row — downgrades to this revision's own parent by id, so the drop half is
     asserted rather than inferred from a revision marker."""
     config = runner_runtime.init_environment(tmp_path)  # upgrades to head
@@ -196,7 +196,7 @@ def test_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> N
 
 
 def test_work_items_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``work_items`` + ``work_item_sequence`` (issue #357) — downgrades to this
+    """``work_items`` + ``work_item_sequence`` — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from
     a revision marker a no-op ``downgrade()`` would satisfy just as well."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -243,7 +243,7 @@ def test_work_item_strikes_table_survives_migration_roundtrip(tmp_path: Path) ->
 
 
 def test_scopes_and_routines_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``scopes``, ``scope_lifecycle_facts``, ``routines`` (blizzard#389) — one
+    """``scopes``, ``scope_lifecycle_facts``, ``routines`` — one
     hand-written revision mints all three; downgrades to its own parent by id, so the
     drop half is asserted rather than inferred from a revision marker."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -268,7 +268,7 @@ def test_scopes_and_routines_tables_survive_migration_roundtrip(tmp_path: Path) 
 
 def test_findings_and_proposals_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
     """``findings``, ``finding_sets``, ``finding_facts``, ``garden_proposals``,
-    ``garden_proposal_findings`` (blizzard#390) — one hand-written revision mints all
+    ``garden_proposal_findings`` — one hand-written revision mints all
     five; downgrades to its own parent by id, so the drop half is asserted rather than
     inferred from a revision marker."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -292,7 +292,7 @@ def test_findings_and_proposals_tables_survive_migration_roundtrip(tmp_path: Pat
 
 
 def test_work_items_routine_run_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``work_items.routine_name``/``scope_slug``/``run_mode`` (blizzard#392) —
+    """``work_items.routine_name``/``scope_slug``/``run_mode`` —
     downgrades to this revision's own parent by id, so the drop half is asserted rather
     than inferred from a revision marker a no-op ``downgrade()`` would satisfy just as
     well."""
@@ -317,7 +317,7 @@ def test_work_items_routine_run_columns_survive_migration_roundtrip(tmp_path: Pa
 
 
 def test_finding_sets_routine_name_column_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``finding_sets.routine_name`` (blizzard#392) — downgrades to this revision's own
+    """``finding_sets.routine_name`` — downgrades to this revision's own
     parent by id, so the drop half is asserted rather than inferred from a revision
     marker a no-op ``downgrade()`` would satisfy just as well."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -341,7 +341,7 @@ def test_finding_sets_routine_name_column_survives_migration_roundtrip(tmp_path:
 
 
 def test_garden_proposal_closures_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``garden_proposal_closures`` (blizzard#395) — one hand-written revision mints the
+    """``garden_proposal_closures`` — one hand-written revision mints the
     table; downgrades to its own parent by id, so the drop half is asserted rather than
     inferred from a revision marker."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -364,7 +364,7 @@ def test_garden_proposal_closures_table_survives_migration_roundtrip(tmp_path: P
 
 
 def test_chunk_dependencies_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``chunk_dependencies`` (issue #456) — one hand-written revision mints the table;
+    """``chunk_dependencies`` — one hand-written revision mints the table;
     downgrades to its own parent by id, so the drop half is asserted rather than inferred
     from a revision marker a no-op ``downgrade()`` would satisfy just as well."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -387,7 +387,7 @@ def test_chunk_dependencies_table_survives_migration_roundtrip(tmp_path: Path) -
 
 
 def test_runner_external_usage_misses_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``runner_external_usage_misses`` (blizzard#504 D7) — one hand-written revision mints
+    """``runner_external_usage_misses`` — one hand-written revision mints
     the table; downgrades to its own parent by id, so the drop half is asserted rather than
     inferred from a revision marker a no-op ``downgrade()`` would satisfy just as well."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -413,7 +413,7 @@ _ROUTINE_SCOPES_JOIN_PARENT = "20260905_1100_hub_runner_external_usage_slug"
 
 
 def test_routine_scopes_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``routine_scopes`` (blizzard#488) — downgrades to this revision's own parent by
+    """``routine_scopes`` — downgrades to this revision's own parent by
     id, so the drop half is asserted rather than inferred from a revision marker a
     no-op ``downgrade()`` would satisfy just as well."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -536,7 +536,7 @@ def test_runner_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Pat
 
 
 def test_invocation_boundaries_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """The transcript invocation-boundary ledger (blizzard#437 D6/D11) — downgrades to this
+    """The transcript invocation-boundary ledger — downgrades to this
     revision's own parent by id, so the drop half is asserted rather than inferred from a
     revision marker, which a ``downgrade()`` that dropped nothing would satisfy just as well."""
     config = runner_runtime.init_environment(tmp_path)  # upgrades to head
@@ -559,7 +559,7 @@ def test_invocation_boundaries_table_survives_migration_roundtrip(tmp_path: Path
 
 
 def test_external_usage_samples_miss_reason_and_renewal_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``external_usage_samples.miss_reason``/``renewal`` (blizzard#504) — both nullable,
+    """``external_usage_samples.miss_reason``/``renewal`` — both nullable,
     no backfill since no historical row carries either fact; downgrading past this
     revision drops both columns again."""
     config = runner_runtime.init_environment(tmp_path)  # upgrades to head
@@ -582,7 +582,7 @@ def test_external_usage_samples_miss_reason_and_renewal_columns_survive_migratio
 
 
 def test_external_usage_samples_slug_backfills_the_legacy_anthropic_slug(tmp_path: Path) -> None:
-    """``external_usage_samples.slug`` (blizzard#436 phase 2) backfills a pre-existing row
+    """``external_usage_samples.slug`` (phase 2) backfills a pre-existing row
     to the legacy Anthropic slug, and downgrading past it drops the column again."""
     config = runner_runtime.init_environment(tmp_path)  # upgrades to head
     runner = runner_runtime.migration_runner(config)
@@ -669,7 +669,7 @@ def test_usage_facts_reported_cost_backfills_every_historical_row_from_its_cost(
 
 
 def test_runner_external_usage_slug_widens_the_primary_key_and_backfills_the_legacy_row(tmp_path: Path) -> None:
-    """``runner_external_usage``'s join key (blizzard#436 phase 3) backfills a pre-existing
+    """``runner_external_usage``'s join key (phase 3) backfills a pre-existing
     row to the legacy slug/name, widens the primary key to ``(runner_id, slug)``, and
     downgrading past it restores the single-column key."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -826,7 +826,7 @@ def _old_formula_fingerprint(rows: list[tuple[int, bool, bytes]]) -> str:
 
 
 def test_transcript_segments_content_digest_backfills_and_carries_markers_forward(tmp_path: Path) -> None:
-    """blizzard#513 D1/D3 — the backfill computes every digest from raw stored bytes with
+    """The backfill computes every digest from raw stored bytes with
     no decompression; a marker matching the retired whole-segment formula carries forward,
     one that doesn't stays stale for the next pass to correctly re-derive."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
@@ -913,7 +913,7 @@ def test_transcript_segments_content_digest_backfills_and_carries_markers_forwar
     assert markers["v1"] == _digests_fingerprint(expected_digests)  # carried forward
     assert markers["v2"] == "stale-fp"  # left stale — correctly re-derived next pass
 
-    # downgrade() drops the column and leaves markers as they are (D3).
+    # downgrade() drops the column and leaves markers as they are.
     runner.downgrade("20260907_1000_event_log_runner_id_nullable")
     engine = create_engine_from_url(url)
     try:
@@ -923,7 +923,7 @@ def test_transcript_segments_content_digest_backfills_and_carries_markers_forwar
 
 
 def test_transcript_segments_content_digest_resumes_after_an_interrupted_first_pass(tmp_path: Path) -> None:
-    """blizzard#513 D3 — a crash between `add_column` and the closing `alter_column(...,
+    """A crash between `add_column` and the closing `alter_column(...,
     nullable=False)` leaves the column present but still nullable and unbackfilled; a
     retried `upgrade()` must finish the backfill and the NOT NULL close, not short-circuit
     on column presence alone the way a bare `_has_column` guard would."""
@@ -1062,7 +1062,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260722_1200_hub_artifact_forge", "graph_nodes", ("checks_cwd", "checks_timeout")),
     ("hub", "20260722_1200_hub_artifact_forge", "graph_choices", ("requires_checks",)),
     ("hub", "20260801_1600_hub_runner_external_usage", "escalations", ("wrapped_takeover_command",)),
-    # hub tree — instances 1-5 (blizzard#299)
+    # hub tree — instances 1-5
     ("hub", "20260718_0030_hub_node_poll", "runner_registrations", ("token_hash",)),
     ("hub", "20260718_1225_hub_chunk_migrations", "runner_registrations", ("env_capacity",)),
     ("hub", "20260721_1300_hub_auth_superuser_bootstrap", "runner_registrations", ("public_url", "redirect_uris")),
@@ -1093,9 +1093,9 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     # runner tree — instance 7 (drop-and-recreate: environment_id added, forge dropped)
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("environment_id",)),
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("forge",), "removed"),
-    # runner tree — subscription-sampling's per-slug join key (blizzard#436 phase 2)
+    # runner tree — subscription-sampling's per-slug join key (phase 2)
     ("runner", "20260801_1500_runner_external_usage_samples", "external_usage_samples", ("slug",)),
-    # hub tree — subscription-sampling's per-slug join key (blizzard#436 phase 3)
+    # hub tree — subscription-sampling's per-slug join key (phase 3)
     (
         "hub",
         "20260801_1600_hub_runner_external_usage",

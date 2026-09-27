@@ -1,5 +1,5 @@
 """event_log — creates the hub's durable, append-only operational event feed: typed,
-severity-ranked, clock-stamped (issue #125, hub store tree)
+severity-ranked, clock-stamped (hub store tree)
 
 Revision ID: 20260721_1600_hub_event_log
 Revises: 20260721_1500_hub_cli_auth_state_user

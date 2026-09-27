@@ -1,5 +1,5 @@
 """The selftest's seven checks — deterministic orchestration (``bzh:deterministic-shell``)
-over the harness and scratch-git seams (``bzh:pluggable-seams``), issue #54.
+over the harness and scratch-git seams (``bzh:pluggable-seams``).
 
 Every op runs against one throwaway scratch repo the ``IScratchGit`` seam mints and
 tears down — no chunk, lease, environment binding, or hub call is ever on this path.
@@ -120,11 +120,11 @@ class Spawn:
             pending = scratch.adapter.spawn(
                 cls._envelope(), cls._preamble(scratch.workdir), session_hint=scratch.session_id
             )
-            pending.confirm_durable()  # F1: no durable record here to threaten — disarm now
+            pending.confirm_durable()  # no durable record here to threaten — disarm now
             handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
         except Exception as exc:  # the adapter is untrusted external-CLI surface
             return cls(SelfTestCheck(SPAWN_SESSION_ID, False, f"spawn raised: {exc}"), None)
-        # The harness-neutral claim (D1/D2): non-empty and authoritative. Hint-equality is
+        # The harness-neutral claim: non-empty and authoritative. Hint-equality is
         # demanded only where the adapter declares it honors the hint (Claude Code does).
         if not handle.session_id:
             detail = "spawn returned an empty session id — never authoritative"
@@ -187,8 +187,8 @@ class Judge(Check):
             handle = scratch.adapter.judge(scratch.workdir, scratch.session_id, _JUDGEMENT_PROMPT, output_path)
         except Exception as exc:
             return SelfTestCheck(VERDICT_ELICITATION, False, f"judge raised: {exc}")
-        handle.confirm_durable()  # F1: no durable record here to threaten — disarm now
-        # The detached launch/collect shape (blizzard#443): the canary waits out the same
+        handle.confirm_durable()  # no durable record here to threaten — disarm now
+        # The detached launch/collect shape: the canary waits out the same
         # bounded poll `end_to_end_edit_commit` uses, then reads the reply back itself.
         if not Worker(scratch.process, handle.pid).wait_for_exit(handle.process_start_time):
             return SelfTestCheck(VERDICT_ELICITATION, False, "judgement process never exited")
@@ -210,7 +210,7 @@ class Resume(Check):
             )
         except Exception as exc:
             return SelfTestCheck(AUTOMATED_RESUME, False, f"resume_with_message raised: {exc}")
-        resumed.confirm_durable()  # F1: no durable record here to threaten — disarm now
+        resumed.confirm_durable()  # no durable record here to threaten — disarm now
         if resumed.pid <= 0:
             return SelfTestCheck(
                 AUTOMATED_RESUME, False, f"resume_with_message returned a non-positive pid ({resumed.pid})"
@@ -218,8 +218,8 @@ class Resume(Check):
         worker = Worker(scratch.process, resumed.pid)
         # Bounded wait first, so a fast-finishing resume actually flushes its own output —
         # `UsageParsing` reads this same file, and reaping (killing) immediately here left
-        # it always empty, unable to catch a real parse-usage regression (blizzard#438,
-        # review F6). A hung resume still gets killed by `reap()` below, exactly as before.
+        # it always empty, unable to catch a real parse-usage regression. A hung resume
+        # still gets killed by `reap()` below, exactly as before.
         worker.wait_for_exit(resumed.process_start_time)
         # Reaped here so no live process outlives the scratch dir it is cwd'd into
         # (tests/test_runner_selftest.py).
@@ -241,7 +241,7 @@ class ResumeCommand(Check):
 
 class UsageParsing(Check):
     """Whether ``parse_usage`` can be handed the resume check's captured stdout without
-    raising (blizzard#438). A missing usage envelope is a legitimate answer here (a canary
+    raising. A missing usage envelope is a legitimate answer here (a canary
     harness may never emit real provider usage), so this only asserts the parse path stays
     exception-free — not that a sample was actually found."""
 

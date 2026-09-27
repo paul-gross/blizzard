@@ -1,4 +1,4 @@
-"""The spawn-cwd rule — one owner (issue #29).
+"""The spawn-cwd rule — one owner.
 
 The one owner of "what was this worker's cwd" — one caller *sets* it, another *guesses*
 it back, and two copies would disagree. ``None`` is a legitimate answer for a closed

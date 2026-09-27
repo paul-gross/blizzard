@@ -1,5 +1,5 @@
 """session-end signal fact table (runner store tree) — ``session_ends`` records the
-durable "the worker declared done" fact whose *absence* marks a crash (issue #13).
+durable "the worker declared done" fact whose *absence* marks a crash.
 
 Revision ID: 20260715_1641_runner_session_ends
 Revises: 20260715_1633_runner_workspace_prompt

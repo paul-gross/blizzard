@@ -1,4 +1,4 @@
-"""``POST /chunks/{id}/requeues`` (issue #53).
+"""``POST /chunks/{id}/requeues``.
 
 Exercised over a real store via TestClient: the route's shape, its 409/503 forms, and
 the store-derivation it delegates to :class:`RequeueService`.

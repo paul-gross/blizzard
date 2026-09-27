@@ -1,4 +1,4 @@
-"""``GET /api/routines/{routine_id}/baselines`` (blizzard#399 D5, service tier) — the
+"""``GET /api/routines/{routine_id}/baselines`` (service tier) — the
 shape a delivered run's baseline serves against a real hub daemon, and the 404 on an
 unknown routine id. Reuses the garden delivery stack `test_finding_exits_service.py`
 already stands up; FLEET_VIEW enforcement is the component-tier
@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.service, service_gate]
 
 def _land(g: Garden, *, repo: str, commit: str) -> None:
     """Post a `merged/<repo>` hub-marker on a throwaway chunk — the one production
-    choke point `record_delivery_repo_landed` reads (blizzard#399 D1). The garden
+    choke point `record_delivery_repo_landed` reads. The garden
     routine's own `deliver` node never lands a repo (its graph produces zero commits,
     per `garden-routine/graph.yaml`), so a real landing has to come through the same
     route a commit-landing delivery lane's `land` step actually posts to."""
@@ -55,7 +55,7 @@ def test_baselines_serves_the_swept_scopes_recorded_revision(tmp_path: Path) -> 
 
 
 def test_baselines_after_a_second_sweep_still_serves_one_newest_entry(tmp_path: Path) -> None:
-    """D5 — one entry per scope, never one per sweep."""
+    """One entry per scope, never one per sweep."""
     with garden_stack(tmp_path) as g:
         seed(g, 1)
         second = deliver(g, [add_op("src/app.py:second")])

@@ -1,4 +1,4 @@
-"""transcript_segments.agent_tool_use_ids (blizzard#338) — the agent-id -> spawning
+"""transcript_segments.agent_tool_use_ids — the agent-id -> spawning
 ``tool_use_id`` map, so a sidecar read AFTER the result that named the pair still links.
 
 Revision ID: 20260816_1100_runner_transcript_agent_tool_use_ids

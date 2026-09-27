@@ -52,7 +52,7 @@ export class FleetView {
   readonly pendingRunnerIds = input<readonly string[]>([]);
 
   /** The page's last pause/resume failure, or `null` — rendered as a visible inline
-   * notice near the registry (issue #42's "report, don't swallow"). */
+   * notice near the registry ("report, don't swallow"). */
   readonly actionError = input<string | null>(null);
 
   /** Whether `row`'s own hub pause/resume mutation is in flight — the per-row

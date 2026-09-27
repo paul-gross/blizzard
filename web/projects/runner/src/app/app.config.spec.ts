@@ -8,7 +8,7 @@ import { appConfig } from './app.config';
 
 /**
  * Proves `provideSessionRecovery()` is actually reachable through the runner
- * app's own production provider list (issue #312) — every other
+ * app's own production provider list — every other
  * `SessionRecovery` spec assembles its own providers (`session-recovery.spec.ts`),
  * which would stay green even if `app.config.ts` forgot to call
  * `provideSessionRecovery()`. `blizzard:e2e` gates no PR and no push
@@ -19,7 +19,7 @@ describe('runner appConfig wires session recovery (issue #312)', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    // blizzard#347: this project's specs share one jsdom/module registry under
+    // This project's specs share one jsdom/module registry under
     // single-worker scheduling (Angular's unit-test builder defaults Vitest to
     // `isolate: false`), so a sibling spec's leaked renewal mark could otherwise
     // become this test's starting state. Seed the exact dirty state a leak

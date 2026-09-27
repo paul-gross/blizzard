@@ -1,4 +1,4 @@
-"""superuser_bootstrap — the ``auth.superuser`` bootstrap lifecycle (issue #94, hub store tree)
+"""superuser_bootstrap — the ``auth.superuser`` bootstrap lifecycle (hub store tree)
 
 A singleton row carrying a foreign key onto ``users``, so this revision follows the identity spine.
 Revision ID: 20260721_1300_hub_auth_superuser_bootstrap

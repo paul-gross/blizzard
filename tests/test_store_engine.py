@@ -1,4 +1,4 @@
-"""``create_engine_from_url``'s sqlite pragmas (``bzh:sql-portable``) — blizzard#512.
+"""``create_engine_from_url``'s sqlite pragmas (``bzh:sql-portable``).
 
 Six pragmas applied to every sqlite connection the factory opens: WAL journaling,
 NORMAL synchronous, a 5s busy timeout, a 64 MiB page cache, a 256 MiB mmap window, and

@@ -43,10 +43,10 @@ fleet-kit-panel.board-panel {
   width: min(320px, 80%);
 }
 /* One equal track per lane, laid out by flow rather than a repeat() count —
-   LANES is the single owner of how many lanes there are (issue #137 added
-   READY), and a hard-coded count here is a second place to forget.
+   LANES is the single owner of how many lanes there are (READY included),
+   and a hard-coded count here is a second place to forget.
    grid-auto-rows: 100% constrains the (only) implicit row to the grid's own
-   height instead of the tallest lane's content (issue #309) — each column
+   height instead of the tallest lane's content — each column
    host then resolves to the panel's height rather than stretching past it,
    so BoardColumn's own .b-col-body (overflow-y: auto) is what scrolls, one
    lane at a time, instead of a single outer scrollbar dragging all six. */

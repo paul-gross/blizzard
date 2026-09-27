@@ -68,7 +68,7 @@ def test_adv_dwf_declares_the_four_tiers_and_bounds_only_the_accumulating_ones()
     assert doc.sessions["verification"].rotate is not None
     assert doc.sessions["gate"].rotate is None
     assert doc.sessions["planning"].rotate is None
-    # Every pool declares the same window (blizzard#343) — one number, no per-pool special
+    # Every pool declares the same window — one number, no per-pool special
     # case. It sits ABOVE `rotate.max_context_tokens`, so rotation ends an ordinary lineage
     # before the window is reached: the window is a ceiling for the single invocation
     # rotation cannot preempt, not a routine event that fires repeatedly inside one build.

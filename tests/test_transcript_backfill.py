@@ -1,4 +1,4 @@
-"""The transcript backfill verb (component tier, blizzard#250) — store-driven session
+"""The transcript backfill verb (component tier) — store-driven session
 selection, dedupe by session id, the merged import of a resumed session, and the
 imported/already-present/gone report."""
 

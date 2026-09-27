@@ -1,4 +1,4 @@
-"""garden_proposal_closures — one closure fact per pass or accept (blizzard#395). One
+"""garden_proposal_closures — one closure fact per pass or accept. One
 new table.
 
 Revision ID: 20260831_0945_garden_proposal_closures

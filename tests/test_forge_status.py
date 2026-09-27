@@ -1,4 +1,4 @@
-"""The forge-status projection (issue #179) — derivation and the reconciler.
+"""The forge-status projection — derivation and the reconciler.
 
 ``WorkStatusMarker.of`` is a pure, exhaustive derivation (unit tier); ``live_work_refs()`` and
 ``AnnotationReconciler.sweep()`` are exercised against a real, migrated chunk store with a

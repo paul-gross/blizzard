@@ -6,8 +6,8 @@
   [class.enabled]="!renderedRetired()"
   >{{ renderedRetired() ? 'retired' : 'enabled' }}</span
 >
-<!-- Retire/re-enable are graph authoring — gated on graph:edit (admin-tier,
-     issue #93): a contributor sees the lifecycle text but not the control. The
+<!-- Retire/re-enable are graph authoring — gated on graph:edit, an admin-tier
+     permission: a contributor sees the lifecycle text but not the control. The
      control shown stays keyed off the real `retired()`, not the pending
      override, so a pending mutation's own predicted outcome never flips which
      verb the next click would fire. -->

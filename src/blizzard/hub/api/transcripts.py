@@ -1,8 +1,8 @@
-"""Transcript-segment routes (blizzard#247) — the operator-plane discovery/content reads,
-plus the wire<->domain rendering the fleet router's ingest and lease-read routes share
-(issue #249). The discovery route (D12) returns segment metadata and byte counts only —
+"""Transcript-segment routes — the operator-plane discovery/content reads,
+plus the wire<->domain rendering the fleet router's ingest and lease-read routes share.
+The discovery route returns segment metadata and byte counts only —
 never turn content — so a caller must hold a ``segment_id`` from it before the content
-route answers anything. Gated on :data:`~blizzard.auth_core.TRANSCRIPT_READ` (D11)."""
+route answers anything. Gated on :data:`~blizzard.auth_core.TRANSCRIPT_READ`."""
 
 from __future__ import annotations
 
@@ -40,8 +40,8 @@ router = APIRouter(prefix="/api", tags=["transcripts"], dependencies=[Depends(re
 
 
 def to_domain_record(record: TranscriptSegmentRecord, *, runner_id: str) -> SegmentRecord:
-    """The wire ingest record, store-shaped — turns serialized once here (D4's byte
-    count is measured off this same JSON text) rather than re-serialized per read."""
+    """The wire ingest record, store-shaped — turns serialized once here (the byte
+    count recorded elsewhere is measured off this same JSON text) rather than re-serialized per read."""
     turns_json = json.dumps([turn.model_dump(mode="json") for turn in record.turns])
     return SegmentRecord(
         segment_id=record.segment_id,
@@ -116,9 +116,9 @@ def lease_content_view(
     chunk_id: str, node_id: str, epoch: int, records: list[SegmentRecordContent]
 ) -> LeaseTranscriptView:
     """The fleet router's lease-transcript route renders through this — :func:`_rendered_turns`
-    over a lease's full record set rather than one segment's (D2, issue #249). ``index`` is
-    renumbered across the whole read: a segment's own is producer-minted and generation-local
-    (D9), so concatenating a lease's generations would otherwise restart it at zero mid-list."""
+    over a lease's full record set rather than one segment's. ``index`` is
+    renumbered across the whole read: a segment's own is producer-minted and generation-local,
+    so concatenating a lease's generations would otherwise restart it at zero mid-list."""
     turns, _final, truncated = _rendered_turns(records)
     renumbered = [turn.model_copy(update={"index": i}) for i, turn in enumerate(turns)]
     return LeaseTranscriptView(chunk_id=chunk_id, node_id=node_id, epoch=epoch, truncated=truncated, turns=renumbered)
@@ -135,7 +135,7 @@ def lease_content_view(
 def list_transcript_segments(
     chunk_id: str, services: Annotated[HubServices, Depends(get_services)]
 ) -> TranscriptSegmentIndexView:
-    """The chunk's segment index (D12) — metadata and byte counts only, never turns."""
+    """The chunk's segment index — metadata and byte counts only, never turns."""
     if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     rows = services.transcripts.segments_for_chunk(chunk_id)
@@ -151,7 +151,7 @@ def get_transcript_segment(
     chunk_id: str, segment_id: str, services: Annotated[HubServices, Depends(get_services)]
 ) -> TranscriptSegmentContentView:
     """One segment's decompressed turns, concatenated across its stored records in
-    turn-range order — the lazy per-segment content read (D12)."""
+    turn-range order — the lazy per-segment content read."""
     if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     records = services.transcripts.records_for_segment(chunk_id, segment_id)

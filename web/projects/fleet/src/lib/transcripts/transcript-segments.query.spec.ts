@@ -131,7 +131,7 @@ describe('injectHubChunkTranscriptSegmentQuery', () => {
  * {@link injectHubChunkTranscriptsQuery} does internally — never as reactive Angular
  * inputs, since which plane a component reads from never changes over its lifetime. One
  * host class per plane mirrors that: each closes over its own plane's client the same way
- * a hub-app or runner-app call site would (D5). */
+ * a hub-app or runner-app call site would. */
 function definePlaneTranscriptsQueryHost(client: Client, plane: TranscriptPlane) {
   @Component({
     selector: 'fleet-test-plane-transcripts-query-host',

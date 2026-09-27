@@ -15,7 +15,7 @@ import {
 import { KitPanel } from '../kit/kit-panel';
 
 /**
- * The chunk detail page's General tab (blizzard#337) — the hub's and the
+ * The chunk detail page's General tab — the hub's and the
  * runner's own `chunk-general-tab.ts` unified into the one `fleet` owner both
  * pages compose, alongside their other cross-app `chunk-page/` pieces
  * ({@link ChunkPageShell}, {@link ChunkPageHeader}).
@@ -24,7 +24,7 @@ import { KitPanel } from '../kit/kit-panel';
  * composes (`bzh:frontend-kit`) — {@link ChunkFacts} + {@link ChunkTokenBreakdown},
  * {@link ChunkIssuePane}, {@link ChunkTimeline},
  * {@link ChunkAwaitingHuman} — this component only picks the arrangement: a
- * two-column grid at ≥720px (blizzard#203) — work item (its facts and, when the
+ * two-column grid at ≥720px — work item (its facts and, when the
  * chunk has any, its dependency edges either way) and issues stacked in the left
  * column, node history beside them spanning both rows, asks · decisions spanning
  * the full width below — collapsing to one stacked column, DOM order, below it.
@@ -54,16 +54,16 @@ export class ChunkGeneralTab {
   /** The chunk's related work-source items + fetch state. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
 
-  /** Whether the current identity may set the chunk's graph (`chunk:control` —
-   * issue #210), forwarded to {@link ChunkFacts}. */
+  /** Whether the current identity may set the chunk's graph (`chunk:control`),
+   * forwarded to {@link ChunkFacts}. */
   readonly canControl = input(false);
 
-  /** Whether the current identity may answer an open question (`question:answer` —
-   * issue #210), forwarded to {@link ChunkAwaitingHuman}. */
+  /** Whether the current identity may answer an open question (`question:answer`),
+   * forwarded to {@link ChunkAwaitingHuman}. */
   readonly canAnswer = input(false);
 
-  /** Whether the current identity may resolve an open gate decision (`gate:resolve` —
-   * issue #210), forwarded to {@link ChunkAwaitingHuman}. */
+  /** Whether the current identity may resolve an open gate decision (`gate:resolve`),
+   * forwarded to {@link ChunkAwaitingHuman}. */
   readonly canResolve = input(false);
 
   /** Whether the resolve-decision mutation is in flight, forwarded to
@@ -81,7 +81,7 @@ export class ChunkGeneralTab {
 
   /** Forwarded to {@link ChunkIssuePane}'s own `placement` — `'center'` (the
    * default, the hub's rendering) or `'inline'`, the runner's narrow chunk
-   * detail route (issue #318). */
+   * detail route. */
   readonly issuePanePlacement = input<'center' | 'inline'>('center');
 
   /** Whether General includes its node-history summary. Defaults to `true`; a caller

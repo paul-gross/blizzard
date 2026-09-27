@@ -4,7 +4,7 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 (``bzh:facts-not-status``): every write appends a row; nothing here derives status.
 Timestamps arrive already stamped (``bzh:injected-clock``).
 
-D6: ``activity_facts_since`` stays one bounded read per mapped fact table on one
+``activity_facts_since`` stays one bounded read per mapped fact table on one
 connection, unchanged by the seam carve — it was already many single-table reads
 folded into one ``with self._store.read(...)`` block before the carve, and stays that
 shape now."""
@@ -29,8 +29,8 @@ from blizzard.hub.domain.work import DEFAULT_EVENT_LIST_LIMIT, SEVERITY_RANK, Ac
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 
-# The hub coordinator's own reserved ``transitions.runner_id`` (issue #213) — the only
-# fact-table difference between a ``hub-advanced`` and a ``node-completed`` transition.
+# The hub coordinator's own reserved ``transitions.runner_id`` — the only fact-table
+# difference between a ``hub-advanced`` and a ``node-completed`` transition.
 _HUB_RUNNER_ID = "hub"
 
 # --- activity_facts_since's per-source base statements: each is what `_bounded` (below)
@@ -40,15 +40,14 @@ _HUB_RUNNER_ID = "hub"
 
 
 def _bounded_stmt(stmt: Select[Any], *, ts_col: Any, pk_col: Any, since: datetime, limit: int) -> Select[Any]:
-    """``activity_facts_since``'s shared bound over a source's base statement (issue
-    #213, AC4: never a full-table scan) — a pure builder, split from `_bounded` so a
-    test can compile the exact statement a source executes."""
+    """``activity_facts_since``'s shared bound over a source's base statement (never a full-table scan) — a pure
+    builder, split from `_bounded` so a test can compile the exact statement a source executes."""
     return stmt.where(ts_col >= since).order_by(ts_col.desc(), pk_col.desc()).limit(limit)
 
 
 def _narrow_persisted_severity(*, kind: str, severity: str) -> EventLogSeverity:
     """A row's ``severity`` as it was written, or the value its ``kind`` declares when it
-    was not (issue #106) — no migration: ingest has rejected an outside-the-vocabulary
+    was not — no migration: ingest has rejected an outside-the-vocabulary
     pair since the fix, so this only ever narrows a row a since-fixed hub bug persisted
     before it (``hub-node-unroutable-outcome`` once wrote ``severity="error"``). A kind
     this table no longer recognizes narrows to ``critical``, the conservative read."""
@@ -273,8 +272,8 @@ class ChunkEventsStore:
             if since is not None:
                 stmt = stmt.where(s.event_log.c.recorded_at >= since)
             # Ranked from the domain's own vocabulary (`SEVERITY_RANK`), not restated here.
-            # Ingest has rejected a severity outside it since issue #106, so `else_` is
-            # reached only by a since-fixed legacy row — `_narrow_persisted_severity`
+            # Ingest has rejected a severity outside it, so `else_` is reached only by a
+            # since-fixed legacy row — `_narrow_persisted_severity`
             # narrows the value the row is served with; its raw column value still ranks
             # last here, a pre-existing row's SQL sort position, not its served severity.
             severity_rank = case(
@@ -338,7 +337,7 @@ class ChunkEventsStore:
         ``transitions``/``chunk_migrations``, which carry their own column."""
         with self._store.read("activity_facts_since") as conn:
             rows: list[ActivityRow] = []
-            # Resolved once (issue #364): every fact-source block below excludes a
+            # Resolved once: every fact-source block below excludes a
             # deleted chunk by referencing this same subquery, rather than repeating it.
             deleted = _deleted_chunk_ids_stmt()
             rows += self._bounded(
@@ -639,8 +638,7 @@ class ChunkEventsStore:
     def _bounded(conn: Connection, stmt, *, ts_col, pk_col, since: datetime, limit: int, builder):  # type: ignore[no-untyped-def]
         """Run one source's own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit`` bounded
         read and reshape each row via ``builder`` — the one piece every
-        :meth:`activity_facts_since` source shares (issue #213, AC4: never a full-table
-        scan)."""
+        :meth:`activity_facts_since` source shares (never a full-table scan)."""
         bounded_stmt = _bounded_stmt(stmt, ts_col=ts_col, pk_col=pk_col, since=since, limit=limit)
         return [builder(row) for row in conn.execute(bounded_stmt).all()]
 
@@ -657,7 +655,7 @@ class ChunkEventsStore:
         detail: dict | None,
         at: datetime,
     ) -> int:
-        # Append-only operational fact (issue #125), no epoch fence. `detail` serializes
+        # Append-only operational fact, no epoch fence. `detail` serializes
         # to JSON text here; `chunk_id` is None for a runner-scoped event.
         with self._store.write("record_event") as conn:
             result = conn.execute(

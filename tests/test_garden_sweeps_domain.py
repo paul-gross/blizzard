@@ -1,6 +1,6 @@
 """``compute_sweeps`` (unit tier) — the pure fold over a routine's unwindowed
-``finding_sets`` rows into the last-swept table (D2, D3, D4) and the windowed
-measurement series (D2, D5). No store — a plain list of ``SweepFact`` in, a
+``finding_sets`` rows into the last-swept table and the windowed
+measurement series. No store — a plain list of ``SweepFact`` in, a
 ``GardenSweeps`` out."""
 
 from __future__ import annotations
@@ -100,7 +100,7 @@ def test_a_set_with_no_measurement_contributes_no_reading() -> None:
 
 
 def test_a_retired_scope_this_routine_has_swept_is_still_listed() -> None:
-    """D3: `scope_slugs` carries only the routine's declared set, retired scopes
+    """`scope_slugs` carries only the routine's declared set, retired scopes
     already filtered out by the caller — a retired scope must still surface if `facts`
     names it."""
     facts = [_fact("fins_1", scope_slug="retired-scope", day=2)]

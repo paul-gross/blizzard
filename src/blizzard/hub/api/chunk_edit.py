@@ -16,7 +16,7 @@ from blizzard.wire.chunk import ChunkPatchRequest
 
 @dataclass(frozen=True)
 class ChunkPatchBody:
-    """A ``PATCH /chunks/{id}`` body, read field by field and applied (issue #124).
+    """A ``PATCH /chunks/{id}`` body, read field by field and applied.
 
     Refuses a blank value with 422 and an unresolvable graph with 404; every *semantic*
     refusal stays ``EditService.edit``'s, so reading a body never decides whether the edit

@@ -91,7 +91,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # `capture_signals()` window and re-raises the caught signal through it once `run()`'s
     # internal shutdown completes (see uvicorn.Server._capture_signals). Left at the
     # Python default, that re-raise terminates the process outright — skipping every line
-    # after `run()`, `dispose()` (D5) included. Pre-installing a handler here, mirroring
+    # after `run()`, `dispose()` included. Pre-installing a handler here, mirroring
     # the runner's `host` (`runner/cli/runtime.py`), makes the re-raise a no-op signal
     # delivery instead, so `run()` actually returns and disposal below runs.
     def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
@@ -103,6 +103,6 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         server.run()
     finally:
         # Disposes the engine `build_hosted_app` carried on `app.state`, once the server
-        # has actually stopped serving and the sweeps have drained (D5). In `finally` so
+        # has actually stopped serving and the sweeps have drained. In `finally` so
         # an exception out of `run()` still disposes it rather than leaking `-wal`.
         app.state.engine.dispose()

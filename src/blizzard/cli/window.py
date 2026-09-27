@@ -1,5 +1,5 @@
 """The ``--since``/``--until`` window flags shared by the hub and runner analytics
-verbs (blizzard#545) — one declaration, since the operator's ``--since`` stays optional
+verbs — one declaration, since the operator's ``--since`` stays optional
 (``GET /api/analytics/...``'s own default-all-time reads) while the runner's is
 required (the fleet route's own 422-unset window, ``bzh:utc-instants``)."""
 

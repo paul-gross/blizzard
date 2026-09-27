@@ -1,4 +1,4 @@
-"""``GardenProposalClosureService`` (unit tier, blizzard#395): a blank pass reason is
+"""``GardenProposalClosureService`` (unit tier): a blank pass reason is
 refused, an already-closed proposal refuses either verb naming it, and a declining
 accept records `declined` without touching ``WorkItemEditService``. The
 accept-with-mint path is component-tested against a real store instead
@@ -204,7 +204,7 @@ def test_accept_declining_to_mint_records_declined_and_touches_no_item_service()
     )
 
 
-# --- _compose_minted_body (blizzard#397 Phase 3) -------------------------------
+# --- _compose_minted_body -------------------------------
 
 
 def test_compose_wraps_the_given_body_with_one_findings_bullet() -> None:
@@ -253,7 +253,7 @@ def test_compose_returns_the_body_unchanged_when_findings_is_empty() -> None:
     assert body == "the case"
 
 
-# --- classify_proposal_count_bucket (blizzard#547) -----------------------------
+# --- classify_proposal_count_bucket -----------------------------
 
 
 def test_classify_no_closure_is_open() -> None:

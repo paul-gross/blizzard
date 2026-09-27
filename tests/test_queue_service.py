@@ -1,5 +1,5 @@
-"""QueueService (unit tier) — the ready-queue/backlog sort key, facts only (issue #137,
-``bzh:ranking-is-per-list``).
+"""QueueService (unit tier) — the ready-queue/backlog sort key, facts only
+(``bzh:ranking-is-per-list``).
 
 :meth:`QueueService.ordered` and :meth:`reposition` share one sort key across both lists
 — proven by driving each through :data:`QueueList.READY` and :data:`.NOT_READY` alike,
@@ -43,7 +43,7 @@ def test_never_promoted_chunk_falls_back_to_minted_at() -> None:
 
 
 def test_promoted_but_unmoved_chunk_falls_back_to_promoted_at_not_minted_at() -> None:
-    # A chunk minted long ago but promoted late (issue #137's fix): its fallback sort
+    # A chunk minted long ago but promoted late: its fallback sort
     # key is the later promoted_at, so it lands at the tail, not mid-queue by mint order.
     chunk = _chunk("chk_1")
     position = QueueService._effective_position(chunk, {}, {"chk_1": _PROMOTED})

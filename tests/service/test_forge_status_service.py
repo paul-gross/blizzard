@@ -1,4 +1,4 @@
-"""The forge-status annotation loop against a real running hub (issue #179, Phase 5).
+"""The forge-status annotation loop against a real running hub.
 
 A real hosted hub, opted into ``annotate = true``, drives its background sweep against
 the real ``blizzard-mock`` forge; a hub with no opted-in source is the negative control —

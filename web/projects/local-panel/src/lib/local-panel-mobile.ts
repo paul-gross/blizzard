@@ -16,7 +16,7 @@ import { LocalSubscriptions } from './local-subscriptions';
  * order: machine info/status first (the hub link, `local-info`), then
  * agents/leases (`AgentRow` already carries its own heartbeat-freshness bar
  * per row), then chunks on this machine, then local asks, then subscriptions
- * (blizzard#504's per-provider sampling diagnostics). Every section is a
+ * (the per-provider sampling diagnostics). Every section is a
  * desktop-layout component reused verbatim (`bzh:frontend-kit`) — this shell
  * only orders and stacks them, it never forks or re-styles their internals.
  *
@@ -29,16 +29,16 @@ import { LocalSubscriptions } from './local-subscriptions';
  * execution facts (lease/session/pid/env/workdir/heartbeat) the desktop dock
  * renders; this shell only swaps which of the two screens is mounted and adds
  * the back affordance a drill-down needs. Selection itself stays the container's
- * (and the URL's, issue #99), so a detail screen is deep-linkable and the
+ * (and the URL's), so a detail screen is deep-linkable and the
  * device back button walks out of it like any other navigation.
  *
- * {@link LocalPauseControl} (issue #133) is likewise **not** mounted here —
+ * {@link LocalPauseControl} is likewise **not** mounted here —
  * a deliberate scope decision, not an oversight: #133 shipped desktop-only,
  * so a mobile operator sees neither the local pause toggle nor the "paused
  * by hub" badge today. Mounting it (and wiring a home for it in this single
  * scrolling column) is left to the next mobile chunk.
  *
- * Owns no titlebar (issue #325): the shared `MobileTitlebar` chrome — its
+ * Owns no titlebar: the shared `MobileTitlebar` chrome — its
  * live dot, its overflow menu, and the signed-in identity/logout row inside
  * that menu — moved up to the app root's own `app-mobile-titlebar`
  * (`../../runner/src/app/nav/mobile-titlebar.ts`'s `MobileTitlebar`), the

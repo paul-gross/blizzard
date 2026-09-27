@@ -1,6 +1,6 @@
-"""The gardening run dialog, in a real browser (blizzard#399 D6): a real Chromium
+"""The gardening run dialog, in a real browser: a real Chromium
 (Playwright) opens it from the selected routine's own panel, proving the related-set
-picker (D6) — no free-text mint — and the never-swept delta-steering (D5) round-trip
+picker — no free-text mint — and the never-swept delta-steering round-trip
 against a live hub. No runner or forge traffic: the routine's run mints a queued
 chunk, never executed here. Needs the built bundle (``mise run web-build``)."""
 
@@ -42,7 +42,7 @@ def _graph_yaml(name: str) -> str:
 
 def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) -> None:
     """Opens the run dialog off the selected routine's own panel, proves it offers only
-    the routine's own related set (D6) — its own default plus a scope linked ahead of
+    the routine's own related set — its own default plus a scope linked ahead of
     time, no free-text mint — and lands on the confirmation naming a real chunk id and
     linking to the board — against a live hub, no fixtures."""
     if not chromium_available:
@@ -101,13 +101,13 @@ def test_gardening_run_dialog_browser(tmp_path: Path, chromium_available: bool) 
                 expect(dialog).to_be_visible()
                 expect(page.get_by_test_id("run-dialog-title")).to_contain_text("gardening-e2e-routine")
 
-                # --- The dialog offers only the routine's related set (D6) ---------------
+                # --- The dialog offers only the routine's related set --------------------
                 expect(page.get_by_test_id("run-scope-option-gardening-e2e-default")).to_be_visible()
                 expect(page.get_by_test_id("run-scope-option-gardening-e2e-related")).to_be_visible()
                 expect(page.get_by_test_id("run-scope-option-gardening-e2e-unrelated")).to_have_count(0)
                 expect(page.get_by_test_id("run-scope-option-new")).to_have_count(0)
 
-                # --- The never-swept default scope steers to full (D5) -------------------
+                # --- The never-swept default scope steers to full ------------------------
                 page.get_by_test_id("run-scope-option-gardening-e2e-default").click()
                 expect(page.get_by_test_id("run-mode-never-swept")).to_be_visible()
                 expect(page.get_by_test_id("run-mode-delta")).to_be_disabled()

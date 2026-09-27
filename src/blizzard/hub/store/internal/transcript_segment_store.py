@@ -1,8 +1,8 @@
-"""SQLAlchemy adapter for the transcript-segment seam (package-private, blizzard#247).
+"""SQLAlchemy adapter for the transcript-segment seam (package-private).
 
 All ``sqlalchemy`` and ``zlib`` usage is confined here (``bzh:dependency-inversion``) —
 the domain hands this adapter plain turns JSON text and reads plain turns JSON text
-back; compression (D10) is a storage detail the domain never sees."""
+back; compression is a storage detail the domain never sees."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 
 def content_digest(*, turn_range_start: int, rejected: bool, content: bytes | None) -> str:
     """One record's own fingerprint of ``(turn_range_start, rejected, content)``
-    (blizzard#513 D1) — computed here, by the same statement that writes those columns,
+    — computed here, by the same statement that writes those columns,
     so a bulk candidacy read can compare stored digests without ever reading `content`.
     The migration that backfilled ``content_digest`` restates this formula frozen
     (``bzh:frozen-revisions``); a future change here does not reach already-migrated rows."""
@@ -97,7 +97,7 @@ def _lease_runner_ids_stmt(chunk_id: str, node_id: str, epoch: int) -> Select[An
 
 
 def _superseded_segment_ids(chunk_id: str, node_id: str, epoch: int, runner_id: str) -> Select[Any]:
-    """Every segment id some OTHER segment of this lease declares it replaces (blizzard#250).
+    """Every segment id some OTHER segment of this lease declares it replaces.
     Scoped to the lease rather than global: a pointer only ever names a sibling of its own.
     Deliberately not named ``_stmt`` — it is only ever a subquery, never executed on its own,
     and the compile sweep enumerates exactly the builders the store executes."""
@@ -216,7 +216,7 @@ def _update_to_accepted_stmt(
     record: SegmentRecord, *, byte_count: int, codec: str, content: bytes, at: datetime
 ) -> Update:
     # Re-adjudication refreshes: a re-offer's identity fields replace the original rejected
-    # offer's, same as an insert (blizzard#290); the WHERE-matched natural key is a no-op here.
+    # offer's, same as an insert; the WHERE-matched natural key is a no-op here.
     return _natural_key_rejected_row(record).values(
         **_identity_values(record),
         rejected=False,
@@ -231,7 +231,7 @@ def _update_to_accepted_stmt(
 
 def _update_still_rejected_stmt(record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> Update:
     # Re-adjudication refreshes: see `_update_to_accepted_stmt`. `byte_count` replaces rather than
-    # accumulates (blizzard#290) — why, in tests/test_transcript_segment_store.py.
+    # accumulates — why, in tests/test_transcript_segment_store.py.
     return _natural_key_rejected_row(record).values(
         **_identity_values(record),
         rejection_reason=reason,
@@ -273,7 +273,7 @@ class TranscriptSegmentStore:
         ]
 
     def runner_id_for_lease(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
-        """The single ``runner_id`` on a lease's stored segments (D2) — asserted, not
+        """The single ``runner_id`` on a lease's stored segments — asserted, not
         assumed: a ``LIMIT 1`` with no ``ORDER BY`` would silently 403 the legitimate
         owner should two runners' rows ever share one key, so a violation raises here
         instead of picking an arbitrary row."""
@@ -359,12 +359,12 @@ class TranscriptSegmentStore:
 
     @staticmethod
     def _compress(turns_json: str, codec: str) -> bytes:
-        assert codec == "zlib", codec  # the store's only codec today (D10)
+        assert codec == "zlib", codec  # the store's only codec today
         return zlib.compress(turns_json.encode("utf-8"))
 
     @staticmethod
     def _decompress(content: bytes, codec: str | None) -> str:
-        assert codec == "zlib", codec  # the store's only codec today (D10)
+        assert codec == "zlib", codec  # the store's only codec today
         return zlib.decompress(content).decode("utf-8")
 
     @staticmethod

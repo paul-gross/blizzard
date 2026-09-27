@@ -1,5 +1,5 @@
 """``GET /api/fleet/chunk-statuses`` — the runner tick's slim batch status read (component
-tier, blizzard#521).
+tier).
 
 Proves the route reads the requested chunks' facts, routes, and live decisions with one
 bulk-by-id-set query each, so the query count stays flat as the batch grows and never

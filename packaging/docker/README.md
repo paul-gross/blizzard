@@ -40,8 +40,8 @@ Everything durable lives under a single documented path: **`/var/lib/blizzard/hu
 
 ## Environment variables
 
-The container image is configured by its runtime environment (issue #187) — see `docs/deployment/install.md`'s
-"Overriding config values from the environment" for the full precedence rule (CLI flag > environment > toml > default).
+The container image is configured by its runtime environment — see `docs/deployment/install.md`'s "Overriding config
+values from the environment" for the full precedence rule (CLI flag > environment > toml > default).
 
 | Variable                          | Image default                           | Purpose                                                                                                    |
 | --------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------- |

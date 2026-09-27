@@ -1,4 +1,4 @@
-"""``blizzard hub item`` — blizzard#361: operator verbs over one work item."""
+"""``blizzard hub item`` — operator verbs over one work item."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from blizzard.hub.cli.inputs import read_body_file
 
 
 class WorkToken(click.ParamType):
-    """A work-item token as typed (``hub:42``, ``blizzard#123``), parsed once here at
+    """A work-item token as typed (``hub:<n>``, ``<repo>#<n>``), parsed once here at
     the CLI edge into the plain ``(source, ref)`` path segments the wire carries."""
 
     name = "token"
@@ -91,7 +91,7 @@ def item_create(cli: CliContext, title: str, body_file: str, priority: str, sour
 def item_edit(
     cli: CliContext, token: tuple[str, str], title: str | None, body_file: str | None, priority: str | None
 ) -> None:
-    """Edit the item at TOKEN (e.g. hub:42) in place — only the given fields change."""
+    """Edit the item at TOKEN (e.g. hub:<n>) in place — only the given fields change."""
     source, ref = token
     json_body: dict[str, object] = {}
     if title is not None:
@@ -114,7 +114,7 @@ def item_edit(
 @click.argument("token", type=WorkToken())
 @click.option("--yes", is_flag=True, default=False, help="Skip the confirmation prompt.")
 def item_delete(cli: CliContext, token: tuple[str, str], yes: bool) -> None:
-    """Withdraw the item at TOKEN (e.g. hub:42)."""
+    """Withdraw the item at TOKEN (e.g. hub:<n>)."""
     source, ref = token
     if not yes and not click.confirm(f"withdraw {source}:{ref}?"):
         raise click.Abort()

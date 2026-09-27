@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the transcript-event seam (package-private, blizzard#254).
+"""SQLAlchemy adapter for the transcript-event seam (package-private).
 
 Reads ``transcript_segments`` directly — the same table :mod:`transcript_segment_store`
 adapts — rather than depending on that adapter: two ``internal/`` adapters sharing one
@@ -66,8 +66,8 @@ def _derived_segment_ids_stmt() -> Select[Any]:
 
 
 def _candidacy_digests_stmt(chunk_id: str | None = None) -> Select[Any]:
-    """Each visible segment's own ``content_digest`` and ``harness_version`` (blizzard#513
-    D2) — the latter folds per shipped window, so a still-rejected re-offer that only
+    """Each visible segment's own ``content_digest`` and ``harness_version``
+    — the latter folds per shipped window, so a still-rejected re-offer that only
     refreshes it still changes the fingerprint. No ``content`` column named — the
     candidacy read's whole point. Ordered so a segment's rows arrive in range order."""
     return (
@@ -83,7 +83,7 @@ def _candidacy_digests_stmt(chunk_id: str | None = None) -> Select[Any]:
 
 
 def _derivation_signature_stmt() -> Select[Any]:
-    """The change probe's one cheap aggregate read (blizzard#524 D5): row count, max
+    """The change probe's one cheap aggregate read: row count, max
     ``id``, and max ``received_at`` over ``transcript_segments``, plus the ``chunks`` row
     count as a scalar subquery, so the whole probe is one statement. No per-row read: a
     fixed number of aggregates regardless of corpus size."""
@@ -239,7 +239,7 @@ def _fingerprint_from_parts(parts: Sequence[tuple[str, str | None]]) -> str:
 
 def content_fingerprint(records: Sequence[Any]) -> str:
     """A deterministic fingerprint of a segment's own content plus its own
-    ``harness_version`` (blizzard#513 D1) — content via each record's ``content_digest``,
+    ``harness_version`` — content via each record's ``content_digest``,
     harness_version folded in too since a still-rejected re-offer can refresh it with no
     content change. Rebased onto persisted state, not raw content: recomputing it never
     reads a content byte."""
@@ -247,7 +247,7 @@ def content_fingerprint(records: Sequence[Any]) -> str:
 
 
 def _provenance(rows: Sequence[Any]) -> SegmentProvenance:
-    """A segment's frozen provenance (blizzard#439 D3): ``harness_id``/``model``/``effort``
+    """A segment's frozen provenance: ``harness_id``/``model``/``effort``
     are identical on every stored record, so the first states them; ``harness_version`` is
     folded per shipped window on the runner (only the window that observed it carries a
     value) and re-folded here the same way, over every row in ``turn_range_start`` order,
@@ -270,7 +270,7 @@ def _decode_turns(records: Sequence[Any]) -> list[TurnSegmentView]:
     for row in records:
         if row.rejected or row.content is None:
             continue
-        assert row.codec == "zlib", row.codec  # the store's only codec today (D10)
+        assert row.codec == "zlib", row.codec  # the store's only codec today
         turns_json = zlib.decompress(row.content).decode("utf-8")
         turns.extend(TurnSegmentView.model_validate(turn) for turn in json.loads(turns_json))
     return turns

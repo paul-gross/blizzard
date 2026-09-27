@@ -1,8 +1,8 @@
-"""Two opposing dependency declarations racing resolve to exactly one commit (issue
-#456, component tier).
+"""Two opposing dependency declarations racing resolve to exactly one commit
+(component tier).
 
 ``DependencyService`` shares its ``threading.Lock`` with ``ClaimService``, ``EditService``,
-and ``RestartService`` (issue #120). These tests patch the store's write to pause mid-write,
+and ``RestartService``. These tests patch the store's write to pause mid-write,
 proving an opposing declaration blocks on that lock rather than racing underneath it."""
 
 from __future__ import annotations
@@ -137,7 +137,7 @@ def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_
 
 
 def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_shared_lock(tmp_path: Path) -> None:
-    """D2: ``GroupService`` now holds the shared lock for its whole fold, so a declaration naming the folded-away
+    """``GroupService`` now holds the shared lock for its whole fold, so a declaration naming the folded-away
     chunk as prerequisite blocks mid-fold until the fold's write releases the lock — reached (and paused) almost
     immediately, since this fold carries no edges of its own."""
     hub = build_hub(tmp_path)

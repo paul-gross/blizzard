@@ -125,7 +125,7 @@ it is gone.
 
 ## A run's bucket also holds review-sourced findings
 
-A delivery lane's own review round can raise a finding too (`review/finding-format`, blizzard#582) — filed under a
+A delivery lane's own review round can raise a finding too (`review/finding-format`) — filed under a
 scope exactly like this routine's own, but with no routine lineage behind it. A run sweeping that same scope reads
 those findings in its own live-plus-`delivered` bucket alongside its routine's, and may answer one with `observed` or
 `gone` exactly as it would one of its own: liveness is derived from facts, not from which format minted the finding.

@@ -1,5 +1,5 @@
-"""scopes, scope_lifecycle_facts, routines — the routine-and-scope hub entities
-(blizzard#389); `routines` is frozen (`bzh:frozen-revisions`) — reshaped by 20260916_1000_hub_authored_harnesses.
+"""scopes, scope_lifecycle_facts, routines — the routine-and-scope hub entities;
+`routines` is frozen (`bzh:frozen-revisions`) — reshaped by 20260916_1000_hub_authored_harnesses.
 
 Revision ID: 20260828_1000_scopes_and_routines
 Revises: 20260826_0930_close_intents_backfill

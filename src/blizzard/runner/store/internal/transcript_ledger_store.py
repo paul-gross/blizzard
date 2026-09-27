@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the transcript segment ledger repository seam (package-private,
-blizzard#410)."""
+"""SQLAlchemy adapter for the transcript segment ledger repository seam (package-private)."""
 
 from __future__ import annotations
 
@@ -415,7 +414,7 @@ class TranscriptLedgerStore:
         """The stored map merged with this window's pairs, as `values()` kwargs — empty when
         nothing was learned, so the column is left untouched rather than rewritten. Merged in
         the CALLER's transaction: a pair persisted without the cursor that read it re-learns
-        nothing (blizzard#338)."""
+        nothing."""
         if not learned:
             return {}
         row = conn.execute(

@@ -1,4 +1,4 @@
-"""runner environment-pool capacity: ``env_capacity`` on the registry (issue #69). Nullable — a client
+"""runner environment-pool capacity: ``env_capacity`` on the registry. Nullable — a client
 predating the field reports none rather than a guessed total. A rotating column, added idempotently.
 
 Revision ID: 20260718_1300_hub_runner_env_capacity

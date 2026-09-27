@@ -18,7 +18,7 @@ import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters
  * The `/gardening/findings` sub-tab — the findings triage list and its filter row,
  * beside a `<router-outlet>` holding whichever finding the URL names
  * (`gardening-finding-detail.ts`, where triage itself lives). Split off the
- * combined runs-and-findings surface blizzard#401 Phase 3 built; runs and findings
+ * combined runs-and-findings surface built; runs and findings
  * are unrelated concepts and get one tab each now.
  *
  * `gardening-scopes-page.ts`'s own parent-list/child-detail shape, and the tab
@@ -63,9 +63,9 @@ export class GardeningFindingsPage {
    * `introduced` show in the detail pane once the row is picked, not here;
    * `last_seen_at` rides both, since the row's own fourth line is the most recent
    * observation. Only the dimension the active filter leaves unnamed shows on the
-   * row (D4): a bucket widened to every routine or every scope needs each row to
+   * row: a bucket widened to every routine or every scope needs each row to
    * say which it came from, but a bucket already filtered to one doesn't need it
-   * repeated on every row. `source`/`severity`/`raised_by_chunk_id` (blizzard#582)
+   * repeated on every row. `source`/`severity`/`raised_by_chunk_id`
    * ride every row verbatim — unlike routine/scope they carry no filter-dependent
    * `null`-out, since `FleetFindingList` only renders them at all for a
    * `source === 'review'` row. */

@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the usage/context-sample repository seam (package-private,
-blizzard#410)."""
+"""SQLAlchemy adapter for the usage/context-sample repository seam (package-private)."""
 
 from __future__ import annotations
 
@@ -100,9 +99,9 @@ class UsageStore:
         return value
 
     def latest_external_usage_windows(self, slug: str) -> tuple[ExternalSubscriptionUsageWindow, ...]:
-        # A NULL-payload row is a recorded failed-sample attempt (blizzard#594 review F4) —
-        # excluded here so a sampler miss never hides an older still-valid 100%-utilized
-        # window behind it, which would silently drop D4's fallback reset time.
+        # A NULL-payload row is a recorded failed-sample attempt — excluded here so a
+        # sampler miss never hides an older still-valid 100%-utilized window behind it,
+        # which would silently drop the fallback reset time.
         stmt = (
             select(external_usage_samples.c.payload)
             .where(and_(external_usage_samples.c.slug == slug, external_usage_samples.c.payload.is_not(None)))

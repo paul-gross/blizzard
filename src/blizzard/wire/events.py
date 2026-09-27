@@ -1,4 +1,4 @@
-"""Operational event-log wire bodies — the ``GET /api/events`` read (issue #125).
+"""Operational event-log wire bodies — the ``GET /api/events`` read.
 
 A typed, severity-ranked record of the operationally-significant things that happen to
 runners and workers, with the currently-open escalations projected into the same feed as
@@ -17,7 +17,7 @@ from blizzard.foundation.event_log import EventLogSeverity
 class EventView(BaseModel):
     """One operational event on the wire — an ``event_log`` row or a projected open
     escalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped
-    event; ``runner_id`` is absent for a projected escalation (issue #155 — ``null``,
+    event; ``runner_id`` is absent for a projected escalation (``null``,
     never ``""``); ``detail`` is the event-specific JSON payload."""
 
     id: int

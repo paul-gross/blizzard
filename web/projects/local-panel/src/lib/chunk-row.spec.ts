@@ -56,7 +56,7 @@ async function render(workItemsResponse: () => unknown) {
 
 /**
  * `ChunkRow`'s own concern is the per-row {@link injectChunkTitleQuery} enrichment
- * read (issue #28, decision 1) — everything else the old row carried (markup, the
+ * read (decision 1) — everything else the old row carried (markup, the
  * derived status border, click/Enter/Space selection) is `ChunkRowView`'s, plain-input
  * covered in `chunk-row-view.spec.ts` with no query stub required.
  */

@@ -8,7 +8,7 @@ function clampPct(pct: number): number {
 }
 
 /**
- * The runner registry's rate-limit pacing gauge (issue #218) — a stacked pair of
+ * The runner registry's rate-limit pacing gauge — a stacked pair of
  * continuous bars for one external-subscription window (`"5h"`/`"7d"`): the top bar is
  * the harness account's reported **utilization**, the bottom bar is how far the window
  * has **elapsed** toward its own reset. Both are percentages in `[0, 100]`, clamped here

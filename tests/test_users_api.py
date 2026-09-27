@@ -1,5 +1,5 @@
 """``GET /api/users`` / ``POST /api/users/{user_id}/role`` — the admin page's user
-listing and role-assignment API (issue #94).
+listing and role-assignment API.
 
 Proves the route wires the role-change rules correctly: gating, 404/400/403 mapping,
 the "takes effect on next request without re-login" AC, and the rendered ``UserView``.
@@ -153,7 +153,7 @@ def test_admin_promotes_a_guest_to_contributor(tmp_path: Path) -> None:
 
 
 def test_assigned_role_is_returned_by_a_fresh_list_users_read(tmp_path: Path) -> None:
-    """Assign-then-read-back (issue #209): a follow-up ``GET /api/users`` — a
+    """Assign-then-read-back: a follow-up ``GET /api/users`` — a
     distinct request from the mutation, mirroring a page reload — must reflect
     the new role, not just the assignment response's own rendered ``UserView``."""
     hub = build_hub(tmp_path, auth_mode="oauth")

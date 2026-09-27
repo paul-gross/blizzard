@@ -1,6 +1,6 @@
-"""Garden delivery route — the hub-executed delivery node's own POST (blizzard#393
-Phase 4, component tier). Seeds a chunk via ``seed_work_item`` (its own resting chunk),
-records a run context through ``RunContextStore`` (Phase 1), and posts delta/proposal
+"""Garden delivery route — the hub-executed delivery node's own POST (component tier).
+Seeds a chunk via ``seed_work_item`` (its own resting chunk),
+records a run context through ``RunContextStore``, and posts delta/proposal
 artifacts recorded via ``services.chunks.record_hub_artifact`` — the
 ``test_hub_marker_auth`` shape, minus the OAuth gate (``build_hub``'s default
 ``auth_mode=none`` grants everything without a session)."""
@@ -58,8 +58,8 @@ def _deliver_node(node_id: str = _NODE_ID, *, graph_id: str = "gr_delivery") -> 
 
 
 def _seed_chunk(hub: HubHarness, *, with_run_context: bool = True) -> str:
-    """A work item with its own resting chunk (issue #357's own two-step mint), plus a
-    recorded run context for it (Phase 1) unless ``with_run_context`` is False — the
+    """A work item with its own resting chunk (its own two-step mint), plus a
+    recorded run context for it unless ``with_run_context`` is False — the
     chunk id the delivery route resolves through. The graph carries the one node the
     route's ``node_id`` names, so ``graph.node_by_id`` resolves it."""
     store_connections = hub_store_connections(hub.engine)
@@ -290,7 +290,7 @@ def test_an_empty_docket_is_recorded(tmp_path: Path) -> None:
 
 
 def test_an_observed_op_admits_a_review_sourced_finding_on_the_runs_own_scope(tmp_path: Path) -> None:
-    """blizzard#582 D3: the delivery's known-findings set is widened with review-sourced
+    """The delivery's known-findings set is widened with review-sourced
     findings on the run's own scope, so an `observed`/`gone` op may transform one under
     the same same-scope constraint any routine-sourced finding is already held to."""
     hub = build_hub(tmp_path)
@@ -591,7 +591,7 @@ def test_a_replayed_delivery_still_reports_recorded_and_mints_nothing_new(tmp_pa
 
 
 def test_a_replayed_delivery_stays_recorded_even_after_one_of_its_findings_exits(tmp_path: Path) -> None:
-    """blizzard#394 review F3: a replay of an already-fully-materialized delivery must
+    """A replay of an already-fully-materialized delivery must
     stay a no-op `recorded` (machinery.md §Delivery) even when a person exits a finding
     that delivery's own op named in the meantime — re-validating today's live state
     against yesterday's already-recorded content would otherwise turn the replay into a
@@ -650,7 +650,7 @@ def test_a_later_delivery_re_carrying_the_same_proposals_mints_no_duplicate(tmp_
     chunk_id = _seed_chunk(hub)
     finding_id = Id.mint(FINDING_PREFIX, hub.clock).value
     _seed_finding(hub, finding_id)
-    _record_artifact(hub, chunk_id, name="delta", content=_delta())  # a clean delta — D3's own requirement
+    _record_artifact(hub, chunk_id, name="delta", content=_delta())  # a clean delta
     _record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
 
     first = _post(hub, chunk_id, delta=["delta"], proposals=["docket"])

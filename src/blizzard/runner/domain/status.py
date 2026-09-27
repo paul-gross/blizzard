@@ -1,4 +1,4 @@
-"""The runner's machine-local status view (``bzh:domain-core``, issue #51).
+"""The runner's machine-local status view (``bzh:domain-core``).
 
 This runner's own capacities, environment pool, open asks, and parked escalations, all
 derived from store facts at read time (``bzh:facts-not-status``). Hub *reachability* has
@@ -44,7 +44,7 @@ class PauseState:
     Reported apart because they are cleared by different verbs
     (``blizzard runner start`` vs. ``blizzard hub runner resume``). ``local_reason`` is the
     local brake's own reason (a usage limit, the spend ceiling), ``None`` on a plain operator
-    pause or when the brake is not engaged locally at all (blizzard#594)."""
+    pause or when the brake is not engaged locally at all."""
 
     local: bool
     hub: bool
@@ -88,7 +88,7 @@ class RunnerStatusSummary:
 
 @dataclass(frozen=True)
 class EnvironmentSlot:
-    """One environment in the runner's configured pool (issue #106). Every pool
+    """One environment in the runner's configured pool. Every pool
     environment surfaces, held or not: ``chunk_id``/``held_since`` are set only while the
     environment is bound, ``None`` otherwise — never an invented ref for an idle slot."""
 
@@ -101,7 +101,7 @@ class EnvironmentSlot:
 class EscalationView:
     """One parked escalation with its literal, ready-to-paste resume command. The
     session's own configuration rides beside it — its declared pool and the model/effort
-    it ran under (issue #144). All three are ``None`` for a session on the bare
+    it ran under. All three are ``None`` for a session on the bare
     vocabulary, which belongs to no pool, or one predating the stamps."""
 
     chunk_id: str
@@ -119,7 +119,7 @@ class EscalationView:
 
 @dataclass(frozen=True)
 class OpenTakeoverView:
-    """One open operator takeover (issue #51, recovery for #52) — the recovery surface
+    """One open operator takeover — the recovery surface
     for a takeover a stranded client left open with no other way to find its
     ``takeover_id``."""
 
@@ -131,12 +131,11 @@ class OpenTakeoverView:
 
 class RunnerStatusService:
     """Composition-root-wired: the store, clock, harness registry, and this runner's own
-    identity/config — everything ``blizzard runner status`` renders (issue #51).
+    identity/config — everything ``blizzard runner status`` renders.
 
     Reads across seven concepts (pause, leases, outbound, environments, asks, takeover,
     escalations), so it holds the :class:`~blizzard.runner.stores.RunnerReadStores` bundle
-    (D4) — every one of its store calls is a query, so it takes the narrowed bundle
-    (blizzard#412)."""
+    — every one of its store calls is a query, so it takes the narrowed bundle."""
 
     def __init__(
         self,
@@ -187,7 +186,7 @@ class RunnerStatusService:
         )
 
     def environments(self) -> list[EnvironmentSlot]:
-        """The full configured pool (issue #106), joined against the held binding facts.
+        """The full configured pool, joined against the held binding facts.
         A bound environment never silently vanishes: a binding whose id has fallen out of
         the pool still surfaces, and — since ``env_bindings`` has no unique constraint on
         ``environment_id`` — so does every extra binding past the first on one id."""
@@ -250,7 +249,7 @@ class RunnerStatusService:
             if session is not None:
                 bindings = held_by_chunk.get(escalation.chunk_id, [])
                 if bindings:
-                    # Composed from the escalation's own stamps (issue #144), not a fresh
+                    # Composed from the escalation's own stamps, not a fresh
                     # resolution: the operator lands in the configuration it ran with.
                     try:
                         resume_command = self._resolved_harness(session).resume_command(

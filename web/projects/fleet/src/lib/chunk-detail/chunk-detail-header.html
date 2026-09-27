@@ -57,14 +57,14 @@
   <div class="d-meta">
     <!-- Who paused the chunk, read off the pause fact — the header states it because
          a paused chunk that is also parked on a question derives waiting_on_human, so
-         the status cell above would never say so (issue #46). -->
+         the status cell above would never say so. -->
     @if (pause(); as p) {
       <span class="pb" data-testid="chunk-pause-by">Paused by {{ p.by }}</span>
     }
     <!-- Pause/Resume is the header's one primary button — the halves of one choice
          (pause keeps the claim, detach gives it away, now inside the ⋯ menu below).
          Unlike Detach it does not hang off the route, so it renders whether or not a
-         route is live (issue #46). -->
+         route is live. -->
     <div class="d-actions">
       @if (canControl()) {
         @if (pause()) {
@@ -94,7 +94,7 @@
       }
     </div>
     <!-- A non-interactive fact, not a button's object anymore — Detach moved into
-         the ⋯ menu, which names its own runner in its own label/copy (issue #42). -->
+         the ⋯ menu, which names its own runner in its own label/copy. -->
     @if (route(); as r) {
       <span class="claimed" data-testid="route-info" [attr.title]="r.runner_id">Claimed by {{ r.runner_id }}</span>
     }

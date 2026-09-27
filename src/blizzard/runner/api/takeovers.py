@@ -1,8 +1,8 @@
-"""``blizzard runner takeover`` — ``POST``/``PATCH /chunks/{id}/takeovers`` (issue #52).
+"""``blizzard runner takeover`` — ``POST``/``PATCH /chunks/{id}/takeovers``.
 
 ``POST`` opens a takeover and returns the adapter-composed interactive command plus its
 workdir — the daemon never touches a TTY; ``PATCH`` marks it ended. ``GET /takeovers``
-(issue #51) lists every one still open, the stranded-takeover recovery surface."""
+lists every one still open, the stranded-takeover recovery surface."""
 
 from __future__ import annotations
 

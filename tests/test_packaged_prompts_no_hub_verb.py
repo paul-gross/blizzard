@@ -1,4 +1,4 @@
-"""No packaged node prompt names a `blizzard hub` verb (unit tier, D7).
+"""No packaged node prompt names a `blizzard hub` verb (unit tier).
 
 A worker holds no hub credential and no `BZ_HUB_URL` in its spawn environment — `blizzard
 hub` is the anonymous operator's own CLI, over a different transport than the

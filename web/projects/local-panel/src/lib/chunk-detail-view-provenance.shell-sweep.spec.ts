@@ -6,7 +6,7 @@ import { page } from 'vitest/browser';
 import { MachineDetailView } from './chunk-detail-view';
 
 /**
- * The escalation resume box's harness-provenance badge (blizzard#441), the tooled half
+ * The escalation resume box's harness-provenance badge, the tooled half
  * of `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method — a real,
  * headless-Chromium proof that the badge renders beside the resume command at the
  * runner's own narrow, mobile-reachable width, with no page error and no horizontal

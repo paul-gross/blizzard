@@ -2,7 +2,7 @@
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every read below folds already-recorded rows; nothing derives
-a status column. Read-only (D2, ``blizzard-context/architecture/repository-access.md``):
+a status column. Read-only (``blizzard-context/architecture/repository-access.md``):
 ``load_facts``/``load_all_facts``/``load_facts_for``/``load_all_statuses`` each project
 the union of every other seam's own writes, so this adapter has no write half.
 """
@@ -120,8 +120,8 @@ class ChunkFactsStore:
         return result.get(chunk_id)
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
-        """See :meth:`~blizzard.hub.domain.chunks.facts.IReadChunkFactsRepository.load_all_facts`
-        (issue #374) — one bounded query per fact table across the whole store, grouped by
+        """See :meth:`~blizzard.hub.domain.chunks.facts.IReadChunkFactsRepository.load_all_facts` —
+        one bounded query per fact table across the whole store, grouped by
         chunk id in Python, rather than :meth:`load_facts`'s per-chunk fan-out.
         ``activity_facts_since`` is this shape's precedent. Every family reproduces
         :meth:`load_facts`'s row construction verbatim; only ``chunk_pause_facts`` is read
@@ -186,8 +186,8 @@ class ChunkFactsStore:
         restart_rows = _rows(conn, s.chunk_restarts, batch) if "restarts" in families else []
 
         # The executor map spans every graph any fetched movement fact touched, keyed by
-        # (graph_id, node_id) so a node id shared by two graphs never collides (issues
-        # #90, #111, #370) — built only when a movement family was actually requested.
+        # (graph_id, node_id) so a node id shared by two graphs never collides — built
+        # only when a movement family was actually requested.
         executors: dict[tuple[str, str], Executor] = {}
         if {"transitions", "migrations", "restarts"} & families:
             graph_ids = (
@@ -256,7 +256,7 @@ class ChunkFactsStore:
 
         questions: dict[str, list[QuestionFact]] = defaultdict(list)
         if "questions" in families:
-            # Scoped to the requested batch's own questions (blizzard#421); the whole-fleet
+            # Scoped to the requested batch's own questions; the whole-fleet
             # call leaves this unfiltered, building the answered set for every chunk at once.
             answered_stmt = select(s.question_answers.c.question_id).join(
                 s.questions, s.questions.c.question_id == s.question_answers.c.question_id
@@ -309,7 +309,7 @@ class ChunkFactsStore:
                     recorded_at=m.recorded_at,
                     landed_node_executor=executors.get((m.to_graph_id, m.landed_node_id), Executor.RUNNER),
                     # Null for a row predating the discriminator — read as unrecorded, never
-                    # guessed at (issue #164).
+                    # guessed at.
                     source=MigrationSource(m.source) if m.source else None,
                 )
             )

@@ -1,4 +1,4 @@
-"""Phase 2 of the derive-once read sweep (component tier): a single-chunk write verb's
+"""The derive-once read sweep (component tier): a single-chunk write verb's
 domain gate reuses `ChunkChanged.before`'s own facts load instead of reloading them, and
 `answer_question` stops re-reading the question row it already has once it wins the CAS.
 Identity resolves through one `Depends(require(...))` now, not a second manual resolve."""

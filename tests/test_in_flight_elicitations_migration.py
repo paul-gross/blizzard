@@ -1,4 +1,4 @@
-"""The in-flight-elicitations migration (blizzard#443, Phase 1 — component tier): applies
+"""The in-flight-elicitations migration (component tier): applies
 from an empty store to head, and survives a downgrade/upgrade roundtrip."""
 
 from __future__ import annotations

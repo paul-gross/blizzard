@@ -25,7 +25,7 @@ export interface RunSubmission {
 }
 
 /**
- * The gardening run dialog's presentational view (blizzard#399 D6) — three fields
+ * The gardening run dialog's presentational view — three fields
  * (scope, mode, charge note) and nothing else, the delta baseline display, the run
  * submission, and the post-run confirmation, all over inputs and outputs only. No query
  * or client dependency: the container injects the scope reads and the run mutation and
@@ -58,13 +58,13 @@ export interface RunSubmission {
 export class GardeningRunDialogView {
   readonly routineName = input.required<string>();
 
-  /** Every non-retired scope, previously-swept-by-this-routine first (D5) — the
+  /** Every non-retired scope, previously-swept-by-this-routine first — the
    * container's own ordering. */
   readonly scopes = input.required<readonly ScopeView[]>();
 
   readonly sweptSlugs = input.required<ReadonlySet<string>>();
 
-  /** Every scope this routine has swept, D5's own read — looked up by the currently
+  /** Every scope this routine has swept — looked up by the currently
    * selected scope to resolve the delta baseline display and the delta-steering rule. */
   readonly baselines = input.required<readonly RoutineBaselineView[]>();
 
@@ -73,12 +73,12 @@ export class GardeningRunDialogView {
 
   readonly submitting = input(false);
 
-  /** Set on a failed scope create or run (D3's surfaced refusal); `null` between
+  /** Set on a failed scope create or run (a surfaced refusal); `null` between
    * attempts. */
   readonly submitError = input<string | null>(null);
 
   /** The completed run, once submitted successfully — flips the dialog from the form
-   * to the confirmation (D6). */
+   * to the confirmation. */
   readonly confirmedRun = input<RoutineRunResponse | null>(null);
 
   readonly closed = output<void>();
@@ -90,7 +90,7 @@ export class GardeningRunDialogView {
   protected readonly note = signal('');
 
   /** The delta baseline for the currently selected scope, or `undefined` for a
-   * never-swept pair or no selection yet — D5's own read is the one fact both this
+   * never-swept pair or no selection yet — it is the one fact both this
    * display and {@link deltaAvailable} rest on. */
   protected readonly selectedBaseline = computed<RoutineBaselineView | undefined>(() => {
     const sel = this.scopeSelection();
@@ -115,7 +115,7 @@ export class GardeningRunDialogView {
         this.scopeSelection.set(scopes[0].slug);
       }
     });
-    // The delta-steering rule (D5): a scope that stops carrying a baseline — the
+    // The delta-steering rule: a scope that stops carrying a baseline — the
     // operator switched to a never-swept or new one — steers back to full rather than
     // leaving delta selected with nothing to run it against.
     effect(() => {

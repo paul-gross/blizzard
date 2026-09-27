@@ -1,4 +1,4 @@
-"""Graphs router ``reject_runner_principal`` guard (issue #104, S5), component tier.
+"""Graphs router ``reject_runner_principal`` guard (S5), component tier.
 
 ``graphs.py`` was the one operator router still missing
 ``dependencies=[Depends(reject_runner_principal)]``. This closes that gap: a runner's

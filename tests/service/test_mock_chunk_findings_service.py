@@ -1,5 +1,5 @@
 """``GET /api/fleet/chunks/{id}/findings`` and its ``/{finding_id}`` sibling — proven
-against a real ``blizzard-mock-hub`` subprocess (blizzard#397 Phase 1), over an actual
+against a real ``blizzard-mock-hub`` subprocess, over an actual
 process boundary rather than the in-process FastAPI test client
 ``tests/test_fleet_chunk_findings_api.py`` uses. Mirrors
 ``tests/service/test_system_artifacts_service.py``'s bare-``mock_hub``-client shape: no

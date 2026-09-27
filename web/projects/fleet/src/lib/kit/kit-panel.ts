@@ -13,7 +13,7 @@ import { ChangeDetectionStrategy, Component, Directive, computed, contentChild, 
 export class KitPanelHeader {}
 
 /**
- * The panel shell (issue #78) — the chrome every board and machine-panel
+ * The panel shell — the chrome every board and machine-panel
  * section duplicated: the bezeled panel body, the header row with an engraved
  * uppercase label and an optional count, and a scrolling body slot below it.
  * Presentational only, no query/mutation/client injection: it renders exactly
@@ -50,7 +50,7 @@ export class KitPanelHeader {}
  * `bodyScroll` (default `true`, today's behavior) gates whether `.p-body`
  * itself scrolls. The runners, asks, and activity feed rails leave it at the
  * default — a single scrolling body is right for them. The board panel
- * (issue #309) sets it `false`: its content manages its own per-lane
+ * sets it `false`: its content manages its own per-lane
  * scrolling internally, and a second scroll container one level up is the
  * bug, not a feature — `.p-body` instead clips to the panel's height so its
  * content can resolve a real height to lay out against.

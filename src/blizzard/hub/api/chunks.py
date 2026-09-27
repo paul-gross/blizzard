@@ -1,4 +1,4 @@
-"""Chunk routes — the anonymous **operator** surface (issue #87).
+"""Chunk routes — the anonymous **operator** surface.
 
 Controllers stay read-only over the store (``bzh:controller-read-only``); list/detail
 reads derive status and current node from facts (``bzh:facts-not-status``), never a
@@ -92,7 +92,7 @@ router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_
 
 @dataclass(frozen=True)
 class OpenDecision:
-    """A chunk's graph gate (issue #87)."""
+    """A chunk's graph gate."""
 
     services: HubServices
     chunk_id: str
@@ -115,7 +115,7 @@ class OpenDecision:
 def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
     """Ingest by source-native token; 422 on a token no configured source
     claims; 409 on a pointer held by a live chunk; 503 if every graph named after the
-    packaged default has been retired (issue #101 — the operator's brake, not a code
+    packaged default has been retired (the operator's brake, not a code
     bug: re-enable one or mint a new one)."""
     if not request.tokens:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one token required")
@@ -158,24 +158,24 @@ def list_chunks(
     """The fleet chunk list — derived status per chunk, bounded and keyset-paginated.
 
     Only the page's own rows render, but live-holder and blocked-marking derivation still
-    see the whole fleet (D6 below) — a pointer this page renders can be held live by a
+    see the whole fleet — a pointer this page renders can be held live by a
     chunk outside it, same for a dependent's prerequisite."""
     names = GraphNames(services.graphs)
     facts = services.chunks.facts.load_all_facts()
     routes = services.chunks.route.load_all_routes()
     # The dependency edges join the same bulk facts pass at this call site, not
-    # inside a store (``bzh:dependency-inversion``, issue #457, D2).
+    # inside a store (``bzh:dependency-inversion``).
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
     try:
         page = services.chunks.record.list_page(cursor=cursor, limit=limit)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
-    # D6: live-holder resolution needs every chunk's pointers, not just this page's —
+    # Live-holder resolution needs every chunk's pointers, not just this page's —
     # narrowing to the page could miss a pointer another, unlisted chunk holds live.
     all_chunks = services.chunks.record.list_all()
     # One priming call resolves the page's own pinned graphs' name/entry-node/node-names
-    # up front (issue #421) — narrowed to the page, since nothing outside it is rendered.
+    # up front — narrowed to the page, since nothing outside it is rendered.
     names.prime(chunk.graph_id for chunk in page.chunks)
     # Derives from the chunks and statuses already loaded above, no further fact load.
     live_holders = resolve_live_holders(
@@ -205,7 +205,7 @@ def _neighbor_view(neighbor: ChunkNeighbor) -> ChunkNeighborView:
 def _dependency_views_for_chunk(
     services: HubServices, chunk_id: str, *, status: ChunkStatus
 ) -> tuple[BlockedView | None, ChunkNeighborhoodView]:
-    """``GET /api/chunks/{chunk_id}``'s blocked marking and neighborhood (D2, D5, issues #457, #462) — both derived
+    """``GET /api/chunks/{chunk_id}``'s blocked marking and neighborhood — both derived
     from the one standing-edges read and one statuses map, since a chunk's dependent edges are a subset of its own
     neighborhood edges and reading them separately would risk a release or completion landing between the two reads.
     ``status`` is the caller's own already-derived value for ``chunk_id``, so this need not reload its facts a second
@@ -230,7 +230,7 @@ def _dependency_views_for_chunk(
 
 @dataclass(frozen=True)
 class FleetPulse:
-    """Every chunk's derived status folded to the four fleet-summary counts (issue #76)."""
+    """Every chunk's derived status folded to the four fleet-summary counts."""
 
     services: HubServices
 
@@ -238,7 +238,7 @@ class FleetPulse:
         """Not a route of its own here. Derives each chunk's status the same way
         :func:`list_chunks` does, but yields only the four bucket integers, so the payload
         is a fixed four numbers regardless of fleet size. Reads the fleet's facts with one
-        bulk query rather than fanning ``load_facts`` out per chunk (issue #374)."""
+        bulk query rather than fanning ``load_facts`` out per chunk."""
         summary = FleetSummary.of(facts.status() for facts in self.services.chunks.facts.load_all_facts().values())
         return FleetSummaryView(
             ready=summary.ready,
@@ -257,7 +257,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
     chunk_status = facts.status()
     blocked, neighborhood = _dependency_views_for_chunk(services, chunk_id, status=chunk_status)
-    # Primed with every graph id this chunk's history ever names (issue #421).
+    # Primed with every graph id this chunk's history ever names.
     names = GraphNames(services.graphs)
     names.prime(_detail_graph_ids(chunk, facts))
     return ChunkView.of(services, chunk, names=names, blocked=blocked, facts=facts, neighborhood=neighborhood).detail()
@@ -369,11 +369,11 @@ def record_garden_delivery(
             proposal_artifact_id_by_name[name] = artifact.artifact_id
 
     # Checked before validation: a replay must stay a no-op even if a finding this delivery
-    # named was since exited by a person (blizzard#394 D3) — never re-validated against live state.
+    # named was since exited by a person — never re-validated against live state.
     if services.garden_delivery.already_delivered(chunk_id=chunk_id, node_id=node_id, epoch=epoch):
         return GardenDeliveryResponse(outcome="recorded", detail="")
 
-    # Widened with this run's own scope's review-sourced findings (blizzard#582 D3), so an
+    # Widened with this run's own scope's review-sourced findings, so an
     # `observed`/`gone` op or a proposal citation admits one under the same-scope constraint.
     known_findings = services.findings.list_for_routine(run.routine_name, include_gone=True)
     known_findings += services.findings.list_by_source(scope_slug=run.scope_slug, source="review", include_gone=True)
@@ -404,7 +404,7 @@ def record_garden_delivery(
     return GardenDeliveryResponse(outcome="recorded", detail="")
 
 
-#: The `review` node's own fixed `produces:` asset name (blizzard#582 D8).
+#: The `review` node's own fixed `produces:` asset name.
 _REVIEW_FINDING_DELTA_ARTIFACT = "review-finding-delta"
 
 
@@ -419,10 +419,10 @@ def record_review_findings_delivery(
     epoch: int,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> ReviewFindingsDeliveryResponse:
-    """The `record-findings` node's own route (blizzard#582) — validates the chunk's
+    """The `record-findings` node's own route — validates the chunk's
     newest `review-finding-delta` artifact and, on success, materializes its `deferred`
     entries in one transaction. A malformed delta or an unresolvable node is an
-    ``invalid`` outcome at a 200, never an error response. Idempotent per chunk (D6)."""
+    ``invalid`` outcome at a 200, never an error response. Idempotent per chunk."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -433,7 +433,7 @@ def record_review_findings_delivery(
             outcome="invalid", detail=f"unknown node {node_id!r} for chunk {chunk_id}"
         )
 
-    # Checked before validation (D6): a replay must stay a no-op.
+    # Checked before validation: a replay must stay a no-op.
     if services.review_findings.already_delivered(chunk_id=chunk_id):
         return ReviewFindingsDeliveryResponse(outcome="recorded", detail="")
 
@@ -543,7 +543,7 @@ def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
 def pause_chunk(
     chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
-    """Set a chunk's operator pause brake — the claim is kept, unlike detach (issue #46)."""
+    """Set a chunk's operator pause brake — the claim is kept, unlike detach."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -553,7 +553,7 @@ def pause_chunk(
     except ChunkNotPausable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = change.publish(cause="paused", key=f"chunk_pause_facts:{pause_fact_id}")
-    services.events.publish_queue_changed()  # a pause moves the chunk out of the ready queue (issue #46)
+    services.events.publish_queue_changed()  # a pause moves the chunk out of the ready queue
     return ChunkView.of(services, chunk, facts=facts).summary()
 
 
@@ -566,14 +566,14 @@ def pause_chunk(
 def resume_chunk(
     chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
-    """Clear a chunk's operator pause brake — idempotent, never refused (issue #46)."""
+    """Clear a chunk's operator pause brake — idempotent, never refused."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     pause_fact_id = services.pause.resume(chunk, by=request.by)
     facts = change.publish(cause="resumed", key=f"chunk_pause_facts:{pause_fact_id}")
-    services.events.publish_queue_changed()  # a resume can re-admit the chunk to the queue (issue #46)
+    services.events.publish_queue_changed()  # a resume can re-admit the chunk to the queue
     return ChunkView.of(services, chunk, facts=facts).summary()
 
 
@@ -586,7 +586,7 @@ def resume_chunk(
 def stop_chunk(
     chunk_id: str, request: ChunkStopRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
-    """Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
+    """Terminally abandon CHUNK — the operator's last-resort verb.
 
     Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
     re-derives ``ready``, releases any live route, and supersedes any open escalation. 409
@@ -613,7 +613,7 @@ def stop_chunk(
 def complete_chunk(
     chunk_id: str, request: ChunkCompleteRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
-    """Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).
+    """Manually complete CHUNK, from any non-``done`` status, including ``stopped``.
     Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route
     and held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:
     completing an already-``done`` chunk is a harmless no-op. 404 only when the chunk is
@@ -661,7 +661,7 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
 def patch_chunk(
     chunk_id: str, request: ChunkPatchRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkPatchResponse:
-    """Apply the body's fields in one all-or-nothing edit (issue #124).
+    """Apply the body's fields in one all-or-nothing edit.
 
     404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a
     refused edit."""
@@ -703,9 +703,9 @@ def delete_chunk(
     chunk_id: str, request: ChunkDeleteRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkDeleteResponse:
     """Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
-    in the same write (issue #364). 404 for an unknown chunk or one a race deletes
+    in the same write. 404 for an unknown chunk or one a race deletes
     between resolving it and this write; 409 for one held, terminal, or a standing
-    prerequisite for another chunk (issue #460), naming the dependents in that case.
+    prerequisite for another chunk, naming the dependents in that case.
     Irreversible: CHUNK is gone from every read the instant this returns."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
@@ -725,8 +725,8 @@ def delete_chunk(
 
 
 def _author_view(author: AuthorView) -> WorkItemAuthorView:
-    """A seam-level :class:`AuthorView` onto the wire — no vocabulary resolved here
-    (blizzard#362): the source already resolved it, this only reshapes the fields."""
+    """A seam-level :class:`AuthorView` onto the wire — no vocabulary resolved here:
+    the source already resolved it, this only reshapes the fields."""
     return WorkItemAuthorView(
         kind=author.kind,
         user_id=author.user_id,
@@ -796,7 +796,7 @@ def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_s
     return WorkItemsView(items=entries)
 
 
-# `/pm-items` is a deprecated alias onto the *same handler* as `/work-items` (issue #55):
+# `/pm-items` is a deprecated alias onto the *same handler* as `/work-items`:
 # an HTTP path is reachable by out-of-tree clients we do not ship and cannot redeploy.
 router.add_api_route(
     "/chunks/{chunk_id}/pm-items",

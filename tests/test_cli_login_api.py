@@ -1,7 +1,7 @@
-"""``client=cli``'s PKCE loopback/paste-code login (component tier, issue #96).
+"""``client=cli``'s PKCE loopback/paste-code login (component tier).
 
 Drives the hub-as-IdP surface with a fake browser: ``authorize`` delivers a *code*
-rather than a runner-style JWT for ``client=cli`` (decision D6), redeemed at
+rather than a runner-style JWT for ``client=cli``, redeemed at
 ``POST /api/auth/cli/token`` for the session token every later verb bears.
 """
 

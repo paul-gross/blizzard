@@ -1,9 +1,8 @@
-"""Routine routes — create, list, read, edit, retire, enable, run, trend, and sweep
-(issue #389, blizzard#392).
+"""Routine routes — create, list, read, edit, retire, enable, run, trend, and sweep.
 
 The controller stays read-only (``bzh:controller-read-only``), resolving a ``routine_id``
 before delegating to the domain. ``GET /routines/trend`` is declared ahead of ``GET
-/routines/{routine_id}`` so the literal path wins; ``sweeps`` nests under a resolved id (D6)."""
+/routines/{routine_id}`` so the literal path wins; ``sweeps`` nests under a resolved id."""
 
 from __future__ import annotations
 
@@ -144,8 +143,8 @@ def _require_until_after_since(since: datetime, until: datetime) -> None:
 
 @dataclass(frozen=True)
 class _TrendWindow:
-    """One ``GET /routines/trend`` request's parsed window (blizzard#394,
-    `SpendWindow`'s own shape, `src/blizzard/hub/api/spend.py`) — a malformed edge or a
+    """One ``GET /routines/trend`` request's parsed window (`SpendWindow`'s own shape,
+    `src/blizzard/hub/api/spend.py`) — a malformed edge or a
     non-positive ``period_days`` is the 422 it names."""
 
     since: datetime
@@ -153,7 +152,7 @@ class _TrendWindow:
     introduced_boundary: datetime
     period_days: int
 
-    #: The span/`period_days` bucket cap — otherwise unbounded (blizzard#394).
+    #: The span/`period_days` bucket cap — otherwise unbounded.
     _MAX_PERIODS = 366
 
     @classmethod
@@ -217,7 +216,7 @@ def routine_trend(
 ) -> TrendView:
     """`routine`'s finding inflow-against-outflow over `[since, until)`: per
     `period_days`-wide period, findings created and per-kind exit counts, the outflow/
-    withdrawn roll-ups (D2), and the D5 age cut against `introduced_boundary`. 404 on an
+    withdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an
     unknown routine name; 422 on a malformed instant, a non-positive `period_days`, a
     non-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`."""
     if services.routines.get_by_name(routine) is None:
@@ -260,9 +259,9 @@ def routine_proposal_counts(
     routine: Annotated[str | None, Query()] = None,
     origin: Annotated[GardenProposalOrigin | None, Query()] = None,
 ) -> GardenProposalCountsView:
-    """Garden-proposal counts (blizzard#547) per origin, routine, and class over
+    """Garden-proposal counts per origin, routine, and class over
     `[since, until)`, split into open/passed/accepted-with-item/accepted-without-item —
-    `created` is their sum (blizzard#631). `routine` narrows to one routine's rows of
+    `created` is their sum. `routine` narrows to one routine's rows of
     both origins when given; 404 on an unknown one. `origin` narrows to one origin. 422
     on a malformed instant or `until <= since`."""
     parsed_since = _parse_instant(since, field="since")
@@ -311,7 +310,7 @@ def _baseline_view(baseline: RoutineBaseline) -> RoutineBaselineView:
 def routine_baselines(
     routine_id: str, services: Annotated[HubServices, Depends(get_services)]
 ) -> list[RoutineBaselineView]:
-    """Every scope `routine_id` has swept (D5) — see
+    """Every scope `routine_id` has swept — see
     `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.
     404 on an unknown routine id."""
     routine = services.routines.get(routine_id)
@@ -326,8 +325,8 @@ def routine_baselines(
     dependencies=[Depends(require(FLEET_VIEW))],
 )
 def list_routine_scopes(routine_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[str]:
-    """Every scope slug linked to `routine_id`, sorted (blizzard#488) — its own default
-    scope is always among them (D8). 404 on an unknown routine id."""
+    """Every scope slug linked to `routine_id`, sorted — its own default
+    scope is always among them. 404 on an unknown routine id."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
@@ -337,7 +336,7 @@ def list_routine_scopes(routine_id: str, services: Annotated[HubServices, Depend
 def _resolve_scope_for_membership(scope_slug: str, services: HubServices) -> Scope:
     """Parse and resolve `scope_slug` for a link/unlink write: 422 on a malformed slug,
     404 on a well-formed but unknown one — a management verb never silently mints
-    (`hub scope create` is the one deliberate mint path, D8's own carve-out)."""
+    (`hub scope create` is the one deliberate mint path)."""
     try:
         slug = ScopeSlug.parse(scope_slug)
     except ScopeSlugError as exc:
@@ -356,7 +355,7 @@ def _resolve_scope_for_membership(scope_slug: str, services: HubServices) -> Sco
 def link_routine_scope(
     routine_id: str, scope_slug: str, services: Annotated[HubServices, Depends(get_services)]
 ) -> Response:
-    """Link `scope_slug` into `routine_id`'s own set (blizzard#488); idempotent. 404 on
+    """Link `scope_slug` into `routine_id`'s own set; idempotent. 404 on
     an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed
     scope slug."""
     routine = services.routines.get(routine_id)
@@ -375,9 +374,9 @@ def link_routine_scope(
 def unlink_routine_scope(
     routine_id: str, scope_slug: str, services: Annotated[HubServices, Depends(get_services)]
 ) -> Response:
-    """Unlink `scope_slug` from `routine_id`'s own set (blizzard#488); idempotent. 404
+    """Unlink `scope_slug` from `routine_id`'s own set; idempotent. 404
     on an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed
-    scope slug, or on naming the routine's own default scope (D8) — always a member of
+    scope slug, or on naming the routine's own default scope — always a member of
     its own set."""
     routine = services.routines.get(routine_id)
     if routine is None:
@@ -453,7 +452,7 @@ def enable_routine(
 @dataclass(frozen=True)
 class _SweepWindow:
     """One ``GET /routines/{routine_id}/sweeps`` request's parsed window — the
-    measurement series' own ``[since, until)`` (D2); last-swept ignores it. Reuses
+    measurement series' own ``[since, until)``; last-swept ignores it. Reuses
     `_parse_instant`/`_require_until_after_since` so a malformed instant or an
     inverted span answers the same 422 both routes name."""
 
@@ -502,9 +501,9 @@ def routine_sweeps(
     since: Annotated[str, Query()],
     until: Annotated[str, Query()],
 ) -> GardenSweepsView:
-    """``routine_id``'s per-scope last-swept table (D2, D3, D4) — the routine's declared
+    """``routine_id``'s per-scope last-swept table — the routine's declared
     set, retired scopes filtered out unless already swept while linked — and its
-    measurement series (D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a
+    measurement series over ``[since, until)``. 404 on an unknown id; 422 on a
     malformed instant or a non-positive span."""
     routine = services.routines.get(routine_id)
     if routine is None:
@@ -543,13 +542,13 @@ def run_routine(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> object:
-    """Mint, ingest, and promote a hub work item from the routine, in one act
-    (blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
+    """Mint, ingest, and promote a hub work item from the routine, in one act.
+    404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
     ``mode``, or an effective scope no scope row holds or outside the routine's own
-    related set (blizzard#399 D1, D4 — never minted); 503 on a retired routine
+    related set (never minted); 503 on a retired routine
     (checked first, before the mode or scope is even parsed), a retired effective
     scope, or a graph name with no
-    enabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s own
+    enabled mint (mirroring ``POST /work-sources/{source}/items``'s own
     retired-default-graph shape); 409 on an out-of-band ingest already holding the
     allocated ref's pointer."""
     routine = services.routines.get(routine_id)

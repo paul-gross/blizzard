@@ -1,5 +1,5 @@
 """Unit tests for the hub's sweep-loop background driver (``Sweep``), shared by the
-forge-status annotation loop (issue #179) and the close-intent drain loop (blizzard#383),
+forge-status annotation loop and the close-intent drain loop,
 and for ``_lifespan``'s task-starting conditions.
 """
 
@@ -67,7 +67,7 @@ async def test_loop_survives_a_sweep_that_raises() -> None:
 
 async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
     """A long interval, but the loop returns almost immediately once ``shutdown`` fires
-    concurrently — the wait races the event rather than holding a drain (issue #47)."""
+    concurrently — the wait races the event rather than holding a drain."""
     reconciler = _CountingReconciler()
     shutdown = asyncio.Event()
 
@@ -97,9 +97,9 @@ class _FakeWorkSources:
 class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``_lifespan``
     reads: ``work_sources`` (the forge-status start-condition), ``close_drain``
-    (blizzard#383 — started unconditionally, no source gate), ``event_derivation``
-    (blizzard#254 — started unconditionally too), and ``work_item_materialization``
-    (blizzard#366 D9 — the same)."""
+    (started unconditionally, no source gate), ``event_derivation``
+    (started unconditionally too), and ``work_item_materialization``
+    (the same)."""
 
     def __init__(
         self,
@@ -132,9 +132,9 @@ class _FakeApp:
 
 
 async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_path: Path) -> None:
-    """blizzard#254 D1: no work source opts a chunk's transcript events into anything —
-    the sweep is yielded and started regardless. Its jitter never delays this first pass
-    (blizzard#524 D8), so no jitter override is needed here."""
+    """No work source opts a chunk's transcript events into anything —
+    the sweep is yielded and started regardless. Its jitter never delays this first pass,
+    so no jitter override is needed here."""
     event_derivation = _CountingReconciler()
     services = _FakeServices(work_sources=_FakeWorkSources())
     services.event_derivation = event_derivation
@@ -147,7 +147,7 @@ async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_pat
 
 
 async def test_lifespan_starts_the_work_item_materialization_loop_unconditionally(tmp_path: Path) -> None:
-    """blizzard#366 D9: materialization is idempotent inside one transaction against one
+    """Materialization is idempotent inside one transaction against one
     store, so there is nothing a work-source opt-in would protect — the sweep is yielded
     and started regardless, the same ground ``event_derivation`` stands on."""
     materialization = _CountingReconciler()
@@ -162,7 +162,7 @@ async def test_lifespan_starts_the_work_item_materialization_loop_unconditionall
 
 
 async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Path) -> None:
-    """blizzard#383 D3: the enqueue is source-agnostic, so the drain runs whether or not
+    """The enqueue is source-agnostic, so the drain runs whether or not
     any source is close-capable today — the sweep is yielded and started regardless,
     like its two siblings above."""
     close_drain = _CountingReconciler()
@@ -177,12 +177,12 @@ async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Pa
 
 
 # --------------------------------------------------------------------------- #
-# jitter, elapsed-time logging, and overrun warning (blizzard#524 D8)
+# jitter, elapsed-time logging, and overrun warning
 
 
 async def test_the_first_pass_runs_immediately_even_with_a_large_jitter() -> None:
     """A freshly booted or crash-recovered process must not wait out a sweep's own
-    jitter before its first, convergence-critical pass (blizzard#524 D8) — only its
+    jitter before its first, convergence-critical pass — only its
     second pass onward is offset."""
     reconciler = _CountingReconciler()
     shutdown = asyncio.Event()

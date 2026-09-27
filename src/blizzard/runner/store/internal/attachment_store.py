@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the attachment repository seam (package-private, blizzard#410)."""
+"""SQLAlchemy adapter for the attachment repository seam (package-private)."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ class AttachmentStore:
         attached_at: datetime,
     ) -> None:
         # A single committed transaction — durable the instant this returns, so it
-        # survives a `kill -9` right after (issue #113).
+        # survives a `kill -9` right after.
         with self._store.begin() as conn:
             conn.execute(
                 attachments.insert().values(

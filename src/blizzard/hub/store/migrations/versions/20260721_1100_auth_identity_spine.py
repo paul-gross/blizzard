@@ -1,4 +1,4 @@
-"""users / identities / sessions — the auth identity spine (issue #91, hub store tree).
+"""users / identities / sessions — the auth identity spine (hub store tree).
 Parents before children so the FKs from ``identities`` and ``sessions`` resolve.
 
 Revision ID: 20260721_1100_hub_auth_identity_spine

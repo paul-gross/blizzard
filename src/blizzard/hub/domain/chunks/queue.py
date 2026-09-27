@@ -18,7 +18,7 @@ class IReadChunkQueueRepository(Protocol):
 
     def promoted_ats(self) -> dict[str, datetime]:
         """Each promoted chunk's ``chunk_promoted.promoted_at`` — the ready-queue's
-        fallback sort instant (issue #137) once a chunk has never had an explicit
+        fallback sort instant once a chunk has never had an explicit
         position stamped, superseding a never-promoted chunk's own ``minted_at``."""
         ...
 
@@ -43,13 +43,13 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
 
     def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
         """Append every ``(chunk_id, position)`` pair's new queue position in one write
-        transaction (issue #421 follow-up) — a whole-order replace of N chunks costs one
+        transaction — a whole-order replace of N chunks costs one
         write, not N; order derives."""
         ...
 
     def record_backlog_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
         """Same shape as :meth:`record_queue_positions`, but each pair is guarded against
         a chunk promoted since the caller resolved its backlog candidates — a promote's
-        fresh tail stamp must never be overridden by a reorder that raced it (issue
-        #137's backlog follow-up); the guard itself is one bulk read, not one per pair."""
+        fresh tail stamp must never be overridden by a reorder that raced it; the
+        guard itself is one bulk read, not one per pair."""
         ...

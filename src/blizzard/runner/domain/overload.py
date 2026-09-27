@@ -1,4 +1,4 @@
-"""Provider-overload backoff facts and policy (blizzard#595).
+"""Provider-overload backoff facts and policy.
 
 An overloaded harness invocation (worker or judge) is not judged, consumes no retry, and
 keeps its epoch — the same lease resumes in place after an exponential backoff. Facts are
@@ -29,7 +29,7 @@ __all__ = [
 
 InvocationKind = Literal["worker", "judge"]
 
-#: The declared policy (D6): the first overload in a streak backs off this long, doubling.
+#: The declared policy: the first overload in a streak backs off this long, doubling.
 BACKOFF_BASE_SECONDS = 60
 #: Part of the policy formula; never actually reached at ``BACKOFF_LIMIT``.
 BACKOFF_CAP_SECONDS = 15 * 60
@@ -56,7 +56,7 @@ class OverloadFactRecord:
 
 
 def backoff_delay(streak_ordinal: int) -> timedelta:
-    """The wait before this streak position's own resume (D6) — 60/120/240/480s for
+    """The wait before this streak position's own resume — 60/120/240/480s for
     ordinals 1-4, capped at 15 minutes (never reached at :data:`BACKOFF_LIMIT`).
     ``streak_ordinal`` is 1-indexed: the first overload in a streak backs off 60s."""
     seconds = min(BACKOFF_BASE_SECONDS * (2 ** (streak_ordinal - 1)), BACKOFF_CAP_SECONDS)
@@ -74,7 +74,7 @@ class IReadOverloadRepository(Protocol):
     def open_overload_facts(self) -> list[OverloadFactRecord]:
         """Every un-reset overload fact with a non-null ``resume_after`` — the backing-off
         candidates a caller narrows further against the lease's own current generation or
-        elicitation launch (D7), read once per tick like ``pause_parked_lease_ids``. A fact
+        elicitation launch, read once per tick like ``pause_parked_lease_ids``. A fact
         whose lease has since closed is excluded here too (``bzh:open-facts-declare-closure``):
         a hub-terminal ending never writes a reset or a later overload of its own, so without
         this the fact would otherwise stand forever."""
@@ -97,7 +97,7 @@ class IWriteOverloadRepository(IReadOverloadRepository, Protocol):
         observed_at: datetime,
         resume_after: datetime | None,
     ) -> None:
-        """Durably record one overload exit (D5). Insert-if-absent keyed on
+        """Durably record one overload exit. Insert-if-absent keyed on
         ``(lease_id, epoch, invocation_kind, invocation_identity)`` — re-classifying the
         same exit on a later pass writes nothing, mirroring ``nudge_facts``'s own
         check-then-insert (``bzh:sql-portable``)."""
@@ -105,7 +105,7 @@ class IWriteOverloadRepository(IReadOverloadRepository, Protocol):
 
     def record_reset(self, *, lease_id: str, epoch: int, at: datetime) -> None:
         """Durably close every open overload fact on this (lease, epoch) — written only
-        when a clean exit finds a streak open there (D5), so a later overload starts a
+        when a clean exit finds a streak open there, so a later overload starts a
         fresh streak at ordinal 1."""
         ...
 
@@ -123,7 +123,7 @@ def backing_off_facts(
     overload: IReadOverloadRepository, liveness: _IReadLeaseGeneration, elicitations: IReadElicitationRepository
 ) -> dict[str, OverloadFactRecord]:
     """Every active lease currently backing off, keyed by lease id — read once per tick
-    like ``pause_parked_lease_ids`` (D7). A candidate closes implicitly: a worker's own
+    like ``pause_parked_lease_ids``. A candidate closes implicitly: a worker's own
     generation moving past the recorded one, or a judge's elicitation relaunching under a
     fresh identity, both mean this invocation was already acted on, with no separate
     closing write. The per-fact generation and elicitation reads are each collapsed into

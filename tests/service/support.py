@@ -100,7 +100,7 @@ def require_winter_source() -> Path:
 
 
 def require_stub_idp() -> Path:
-    """The provisioned sibling ``blizzard-mock`` venv bin with the stub IdP (issue #92),
+    """The provisioned sibling ``blizzard-mock`` venv bin with the stub IdP,
     or skip — a separate check from :func:`require_mock_fleet` since most service-tier
     scenarios need no OAuth counterpart at all."""
     bin_dir = _mock_bin_dir()
@@ -155,7 +155,7 @@ def require_codex_app_server_surface(bin_dir: Path) -> Path:
 
 
 def _mock_daemon_log(name: str, port: int, log_dir: Path | None) -> Path:
-    """Where one mock daemon's merged output goes (issue #145, ``bzh:daemon-stdout-to-file``).
+    """Where one mock daemon's merged output goes (``bzh:daemon-stdout-to-file``).
 
     The mock fleet's daemons own no runtime directory, so ``log_dir`` defaults to
     :func:`~tests.support.shared_daemon_log_dir`; named by daemon and port so several
@@ -183,7 +183,7 @@ def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
 
 
 # The scripted build node: commits a file, pushes the branch, and declares it via
-# `blizzard runner artifact commit` (issue #143).
+# `blizzard runner artifact commit`.
 BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -304,7 +304,7 @@ def mock_hub_chunk_spec(work_ref: str) -> dict:
     }
 
 
-#: The pool name ``build``/``review`` share (issue #144) — declaring the SAME ``session_name`` resumes the first node's minted session, the cross-node-resume shape this exercises.
+#: The pool name ``build``/``review`` share — declaring the SAME ``session_name`` resumes the first node's minted session, the cross-node-resume shape this exercises.
 OPENCODE_SESSION_POOL = "opencode-pool"
 
 #: ``review``'s base turn: a no-op; the verdict comes from the judgement resume, not this.
@@ -313,7 +313,7 @@ OPENCODE_REVIEW_JUDGEMENT = "verdict('pass', 'resumed the same OpenCode session;
 
 
 def mock_hub_opencode_chunk_spec(work_ref: str) -> dict:
-    """A scripted build -> review -> done chunk run entirely under OpenCode (D9/D10).
+    """A scripted build -> review -> done chunk run entirely under OpenCode.
     ``build`` and ``review`` share one ``session_name`` pool: ``build`` mints the pool's
     head fresh and resumes it for its own judgement; ``review`` then resumes that SAME
     session twice more — the cross-node resume the execution spec's OpenCode binding must serve."""
@@ -358,14 +358,14 @@ def mock_hub_escalating_chunk_spec(work_ref: str) -> dict:
 
 #: The entry generation calls ``usage_limited()`` immediately and never reaches its own
 #: judgement — the classifier in ``Advance._advance_exited_worker`` intercepts the exit
-#: before any judge is launched (blizzard#594), the same shape as the crash tier's own
+#: before any judge is launched, the same shape as the crash tier's own
 #: ``usage_limited_graph_yaml``. No ``produces:`` is declared: this scenario proves the
 #: pause, not delivery, so nothing needs the runner's own local API up.
 USAGE_LIMITED_BUILD_SCRIPT = "usage_limited()\n"
 
 
 def mock_hub_usage_limited_chunk_spec(work_ref: str) -> dict:
-    """A single-node chunk whose entry generation exits usage-limited (blizzard#594): the
+    """A single-node chunk whose entry generation exits usage-limited: the
     runner's own local brake engages and the lease parks in place, consuming no retry."""
     spec = mock_hub_chunk_spec(work_ref)
     spec["nodes"]["build"]["prompt"] = USAGE_LIMITED_BUILD_SCRIPT

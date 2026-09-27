@@ -3,7 +3,7 @@
     "analytics": {
       "commands": {
         "events": {
-          "help": "Read the derived transcript-event projection (blizzard#255), every ``/events``\nfilter as a flag: a bounded page by default, or the whole filtered set streamed as\nNDJSON to stdout under ``--ndjson``.",
+          "help": "Read the derived transcript-event projection, every ``/events``\nfilter as a flag: a bounded page by default, or the whole filtered set streamed as\nNDJSON to stdout under ``--ndjson``.",
           "params": [
             {
               "hidden": false,
@@ -205,7 +205,7 @@
             }
           ],
           "path": "hub analytics events",
-          "short_help": "Read the derived transcript-event projection (blizzard#255), every ``/events`` filter as a flag: a bounded page by default, or the whole filtered set streamed as NDJSON to stdout under ``--ndjson``."
+          "short_help": "Read the derived transcript-event projection, every ``/events`` filter as a flag: a bounded page by default, or the whole filtered set streamed as NDJSON to stdout under ``--ndjson``."
         },
         "re-derive": {
           "help": "Force the standing derivation sweep's own replacement unit now, rather than\nwaiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate\n(neither option given). No downtime. Prints ``derived``/``remaining``; a nonzero\n``remaining`` on a chunk/all-scoped call means running it again continues from where\nit left off.",
@@ -270,7 +270,7 @@
           "short_help": "Force the standing derivation sweep's own replacement unit now, rather than waiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate (neither option given)."
         },
         "summary": {
-          "help": "Read one of the canned counts or operational-dataset rollups (blizzard#255/#256).\nOnly spend-chunks pages or streams; a filter DATASET's own route does not expose is\nrefused.",
+          "help": "Read one of the canned counts or operational-dataset rollups.\nOnly spend-chunks pages or streams; a filter DATASET's own route does not expose is\nrefused.",
           "params": [
             {
               "hidden": false,
@@ -483,7 +483,7 @@
             }
           ],
           "path": "hub analytics summary",
-          "short_help": "Read one of the canned counts or operational-dataset rollups (blizzard#255/#256)."
+          "short_help": "Read one of the canned counts or operational-dataset rollups."
         }
       },
       "help": "Operator verbs over derived transcript-event analytics.",
@@ -494,7 +494,7 @@
     "chunk": {
       "commands": {
         "delete": {
-          "help": "Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364) \u2014 a\npure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless\n``--yes``. 409 when CHUNK is held, terminal, or a standing prerequisite for another\nchunk, which the response names; 404 only when CHUNK is unknown.",
+          "help": "Delete unacquired CHUNK, withdrawing every open hub item it holds \u2014 a\npure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless\n``--yes``. 409 when CHUNK is held, terminal, or a standing prerequisite for another\nchunk, which the response names; 404 only when CHUNK is unknown.",
           "params": [
             {
               "hidden": false,
@@ -553,7 +553,7 @@
             }
           ],
           "path": "hub chunk delete",
-          "short_help": "Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364) \u2014 a pure client of ``DELETE /api/chunks/{id}``."
+          "short_help": "Delete unacquired CHUNK, withdrawing every open hub item it holds \u2014 a pure client of ``DELETE /api/chunks/{id}``."
         },
         "depend": {
           "help": "Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID.\n\nA pure client of ``POST /api/chunks/{id}/dependencies``. Idempotent \u2014 an\nalready-standing pair is reported back rather than refused. 404 for an unknown\ndependent or prerequisite; 409 for a dependent past its declarable window, a\ncycle the edge would close, or an ephemeral prerequisite.",
@@ -658,7 +658,7 @@
           "short_help": "Forcibly release CHUNK from its runner."
         },
         "done": {
-          "help": "Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).\nA pure client of ``POST /api/chunks/{id}/complete``. The chunk derives ``done``; any live\nroute and held hub-exec slot are released in the same operation, and its work refs become\neligible for closure. Idempotent \u2014 an already-``done`` chunk is a harmless no-op, never\nrefused.",
+          "help": "Manually complete CHUNK, from any non-``done`` status, including ``stopped``.\nA pure client of ``POST /api/chunks/{id}/complete``. The chunk derives ``done``; any live\nroute and held hub-exec slot are released in the same operation, and its work refs become\neligible for closure. Idempotent \u2014 an already-``done`` chunk is a harmless no-op, never\nrefused.",
           "params": [
             {
               "hidden": false,
@@ -706,7 +706,7 @@
             }
           ],
           "path": "hub chunk done",
-          "short_help": "Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294)."
+          "short_help": "Manually complete CHUNK, from any non-``done`` status, including ``stopped``."
         },
         "group": {
           "help": "Merge MERGE_IDS into CHUNK_ID, the survivor \u2014 a pure client of\n``POST /api/chunks/{id}/group``. Every id must be **unacquired** (409 otherwise); the\nsurvivor absorbs the union of work refs, keeps its own status, and absorbs each\nmerged chunk's standing dependency edges, refused 409 if that would close a cycle.",
@@ -829,7 +829,7 @@
           "short_help": "The fleet chunk list \u2014 derived status per chunk."
         },
         "migrate": {
-          "help": "Set, overwrite, or clear CHUNK's standing migration intent (issue #124).\n\n``--node`` present selects ``forced``, absent selects ``auto``; ``--cancel`` clears\na standing intent and conflicts with ``--to-graph``/``--node``. The intent is consulted\nat the chunk's next transition.",
+          "help": "Set, overwrite, or clear CHUNK's standing migration intent.\n\n``--node`` present selects ``forced``, absent selects ``auto``; ``--cancel`` clears\na standing intent and conflicts with ``--to-graph``/``--node``. The intent is consulted\nat the chunk's next transition.",
           "params": [
             {
               "hidden": false,
@@ -899,10 +899,10 @@
             }
           ],
           "path": "hub chunk migrate",
-          "short_help": "Set, overwrite, or clear CHUNK's standing migration intent (issue #124)."
+          "short_help": "Set, overwrite, or clear CHUNK's standing migration intent."
         },
         "pause": {
-          "help": "Pause CHUNK \u2014 the runner interrupts and parks the worker but keeps the claim (issue #46).\n\nThe worker gets a brief grace period to wind down before being force-stopped if it hasn't\nalready exited; its spend so far is recorded when it resumes. A pure client of the hub API:\n``POST /api/chunks/{id}/pause``. 409 when the chunk is done/stopped/delivering.",
+          "help": "Pause CHUNK \u2014 the runner interrupts and parks the worker but keeps the claim.\n\nThe worker gets a brief grace period to wind down before being force-stopped if it hasn't\nalready exited; its spend so far is recorded when it resumes. A pure client of the hub API:\n``POST /api/chunks/{id}/pause``. 409 when the chunk is done/stopped/delivering.",
           "params": [
             {
               "hidden": false,
@@ -950,10 +950,10 @@
             }
           ],
           "path": "hub chunk pause",
-          "short_help": "Pause CHUNK \u2014 the runner interrupts and parks the worker but keeps the claim (issue #46)."
+          "short_help": "Pause CHUNK \u2014 the runner interrupts and parks the worker but keeps the claim."
         },
         "pm": {
-          "help": "Deprecated alias for ``blizzard hub chunk work-items`` (issue #55).",
+          "help": "Deprecated alias for ``blizzard hub chunk work-items``.",
           "params": [
             {
               "hidden": false,
@@ -990,7 +990,7 @@
             }
           ],
           "path": "hub chunk pm",
-          "short_help": "Deprecated alias for ``blizzard hub chunk work-items`` (issue #55)."
+          "short_help": "Deprecated alias for ``blizzard hub chunk work-items``."
         },
         "promote": {
           "help": "Promote a not-ready CHUNK to ready so a runner may claim it.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent \u2014 promoting\nan already-ready chunk is a harmless no-op; 404 only when the chunk is unknown.",
@@ -1135,7 +1135,7 @@
           "short_help": "Close an escalation by supersession: requeue CHUNK at its current node."
         },
         "restart": {
-          "help": "Force CHUNK onto a node now, on a freshly minted session (issues #370, #371).\n\nA pure client of ``POST /api/chunks/{id}/restart``. The move has already happened when the call\nreturns: the running attempt is torn down and re-entered, where ``migrate`` only records an\nintent for the next transition. 409 when CHUNK is terminal or the target refuses it.",
+          "help": "Force CHUNK onto a node now, on a freshly minted session.\n\nA pure client of ``POST /api/chunks/{id}/restart``. The move has already happened when the call\nreturns: the running attempt is torn down and re-entered, where ``migrate`` only records an\nintent for the next transition. 409 when CHUNK is terminal or the target refuses it.",
           "params": [
             {
               "hidden": false,
@@ -1205,10 +1205,10 @@
             }
           ],
           "path": "hub chunk restart",
-          "short_help": "Force CHUNK onto a node now, on a freshly minted session (issues #370, #371)."
+          "short_help": "Force CHUNK onto a node now, on a freshly minted session."
         },
         "resume": {
-          "help": "Resume a paused CHUNK \u2014 the runner resumes the parked worker in place (issue #46).\n\nA pure client of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming\nan unpaused chunk is a harmless no-op. 404 only when the chunk is unknown.",
+          "help": "Resume a paused CHUNK \u2014 the runner resumes the parked worker in place.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming\nan unpaused chunk is a harmless no-op. 404 only when the chunk is unknown.",
           "params": [
             {
               "hidden": false,
@@ -1256,10 +1256,10 @@
             }
           ],
           "path": "hub chunk resume",
-          "short_help": "Resume a paused CHUNK \u2014 the runner resumes the parked worker in place (issue #46)."
+          "short_help": "Resume a paused CHUNK \u2014 the runner resumes the parked worker in place."
         },
         "set": {
-          "help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144).\n\nA pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and\napplied all-or-nothing. At least one option is required; 409 for the defaults once\nCHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271).",
+          "help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call.\n\nA pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and\napplied all-or-nothing. At least one option is required; 409 for the defaults once\nCHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271).",
           "params": [
             {
               "hidden": false,
@@ -1340,7 +1340,7 @@
             }
           ],
           "path": "hub chunk set",
-          "short_help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144)."
+          "short_help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call."
         },
         "show": {
           "help": "One chunk's full aggregate \u2014 status, current node, route, pointers, cost.",
@@ -1383,7 +1383,7 @@
           "short_help": "One chunk's full aggregate \u2014 status, current node, route, pointers, cost."
         },
         "stop": {
-          "help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb (issue #118).\n\nA pure client of ``POST /api/chunks/{id}/stop``. The chunk derives ``stopped`` and\nnever re-derives ``ready``; any live route is released and any open escalation closed\nin the same operation. 409 when already done/stopped. There is no ``un-stop``.",
+          "help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb.\n\nA pure client of ``POST /api/chunks/{id}/stop``. The chunk derives ``stopped`` and\nnever re-derives ``ready``; any live route is released and any open escalation closed\nin the same operation. 409 when already done/stopped. There is no ``un-stop``.",
           "params": [
             {
               "hidden": false,
@@ -1431,7 +1431,7 @@
             }
           ],
           "path": "hub chunk stop",
-          "short_help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb (issue #118)."
+          "short_help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb."
         },
         "work-items": {
           "help": "CHUNK's work items, pass-through \u2014 one entry per work ref, vendor-native.\n\nA pure client of ``GET /api/chunks/{id}/work-items``; a per-pointer forge failure\ndegrades to that entry's own ``error`` rather than failing the whole read.",
@@ -1511,7 +1511,7 @@
           "short_help": "List open decisions awaiting a human (gate surfacing)."
         },
         "resolve": {
-          "help": "Resolve an open decision by picking CHOICE (first-write-wins).\n\nA pure client of ``POST /api/decisions/{id}/resolutions`` (issue #104's pluralized\nresolution route).",
+          "help": "Resolve an open decision by picking CHOICE (first-write-wins).\n\nA pure client of ``POST /api/decisions/{id}/resolutions`` (the pluralized\nresolution route).",
           "params": [
             {
               "hidden": false,
@@ -2541,7 +2541,7 @@
           "short_help": "Re-enable a retired GRAPH_ID \u2014 restores normal newest-per-name derivation."
         },
         "follow-latest": {
-          "help": "Set GRAPH_ID's follow-latest policy: true, false, or inherit (issue #164).\n\nWith the policy on, a chunk pinned to this mint re-pins to the newest enabled mint\nof the same *name* at its next transition. ``inherit`` (the stored ``null``, and\nevery mint's default) defers to the hub's own ``follow_latest``.",
+          "help": "Set GRAPH_ID's follow-latest policy: true, false, or inherit.\n\nWith the policy on, a chunk pinned to this mint re-pins to the newest enabled mint\nof the same *name* at its next transition. ``inherit`` (the stored ``null``, and\nevery mint's default) defers to the hub's own ``follow_latest``.",
           "params": [
             {
               "hidden": false,
@@ -2600,7 +2600,7 @@
             }
           ],
           "path": "hub graph follow-latest",
-          "short_help": "Set GRAPH_ID's follow-latest policy: true, false, or inherit (issue #164)."
+          "short_help": "Set GRAPH_ID's follow-latest policy: true, false, or inherit."
         },
         "list": {
           "help": "List every minted graph, newest first \u2014 name, graph_id, effective, retired.",
@@ -2763,7 +2763,7 @@
           "short_help": "One graph's full reified definition \u2014 session pools, nodes, and edges."
         },
         "sync": {
-          "help": "Reconcile the hub's packaged graphs into its store, minting only what changed.\n\nThe deploy verb (issue #146) \u2014 graphs live in the store, not on disk, so run it at\nthe end of every deploy; it is idempotent. The **hub's own** packaged set is what is\nreconciled, not this CLI's. Exits non-zero only if a packaged graph failed to load.",
+          "help": "Reconcile the hub's packaged graphs into its store, minting only what changed.\n\nThe deploy verb \u2014 graphs live in the store, not on disk, so run it at\nthe end of every deploy; it is idempotent. The **hub's own** packaged set is what is\nreconciled, not this CLI's. Exits non-zero only if a packaged graph failed to load.",
           "params": [
             {
               "hidden": false,
@@ -2964,7 +2964,7 @@
           "short_help": "Author a fresh item at SOURCE, minting its resting chunk."
         },
         "delete": {
-          "help": "Withdraw the item at TOKEN (e.g. hub:42).",
+          "help": "Withdraw the item at TOKEN (e.g. hub:<n>).",
           "params": [
             {
               "hidden": false,
@@ -3015,7 +3015,7 @@
           "short_help": "Withdraw the item at TOKEN (e.g."
         },
         "edit": {
-          "help": "Edit the item at TOKEN (e.g. hub:42) in place \u2014 only the given fields change.",
+          "help": "Edit the item at TOKEN (e.g. hub:<n>) in place \u2014 only the given fields change.",
           "params": [
             {
               "hidden": false,
@@ -3094,7 +3094,7 @@
       "short_help": "Operator verbs over one work item: author, edit, or withdraw it at its source."
     },
     "login": {
-      "help": "Log into the hub (issue #96) \u2014 opens the browser to authorize and stores the\nresulting session token locally. ``--paste`` uses the paste-code fallback for a\nshell with no reachable loopback listener; ``--no-browser`` still runs the loopback\nflow, printing the URL.",
+      "help": "Log into the hub \u2014 opens the browser to authorize and stores the\nresulting session token locally. ``--paste`` uses the paste-code fallback for a\nshell with no reachable loopback listener; ``--no-browser`` still runs the loopback\nflow, printing the URL.",
       "params": [
         {
           "hidden": false,
@@ -3131,10 +3131,10 @@
         }
       ],
       "path": "hub login",
-      "short_help": "Log into the hub (issue #96) \u2014 opens the browser to authorize and stores the resulting session token locally."
+      "short_help": "Log into the hub \u2014 opens the browser to authorize and stores the resulting session token locally."
     },
     "logout": {
-      "help": "Log out of the hub (issue #96) \u2014 deletes the locally stored session token and\nrevokes it at the hub, so it stops resolving even if it leaked. A no-op (locally)\nif never logged in; the revoke call is best-effort (a hub already unreachable, or\nan already-expired session, does not block the local cleanup).",
+      "help": "Log out of the hub \u2014 deletes the locally stored session token and\nrevokes it at the hub, so it stops resolving even if it leaked. A no-op (locally)\nif never logged in; the revoke call is best-effort (a hub already unreachable, or\nan already-expired session, does not block the local cleanup).",
       "params": [
         {
           "hidden": false,
@@ -3149,7 +3149,7 @@
         }
       ],
       "path": "hub logout",
-      "short_help": "Log out of the hub (issue #96) \u2014 deletes the locally stored session token and revokes it at the hub, so it stops resolving even if it leaked."
+      "short_help": "Log out of the hub \u2014 deletes the locally stored session token and revokes it at the hub, so it stops resolving even if it leaked."
     },
     "migrate": {
       "help": "Apply pending store migrations, or reverse with --down <rev>.",
@@ -3194,7 +3194,7 @@
     "question": {
       "commands": {
         "answer": {
-          "help": "Answer an open question (first-write-wins CAS at the hub).\n\nA racing second answer loses and is told who already answered. A pure client of\n``POST /api/questions/{id}/answers`` (issue #104).",
+          "help": "Answer an open question (first-write-wins CAS at the hub).\n\nA racing second answer loses and is told who already answered. A pure client of\n``POST /api/questions/{id}/answers``.",
           "params": [
             {
               "hidden": false,
@@ -3293,7 +3293,7 @@
     "queue": {
       "commands": {
         "move": {
-          "help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).\n\nClient of the fractional ``POST /api/queue/position`` (issue #137); 409 when CHUNK_ID\nis not in the ready list, not the backlog.",
+          "help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).\n\nClient of the fractional ``POST /api/queue/position``; 409 when CHUNK_ID\nis not in the ready list, not the backlog.",
           "params": [
             {
               "hidden": false,
@@ -3344,7 +3344,7 @@
           "short_help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front)."
         },
         "set": {
-          "help": "Replace the whole ready-queue order with CHUNK_IDS, front to back.\n\nA pure client of ``PUT /api/queue`` \u2014 an idempotent whole-order replacement\n(issue #104). Every id must be in the ready list, not the backlog (409), and must\nnot repeat (422); a chunk not named keeps its relative order, appended last.",
+          "help": "Replace the whole ready-queue order with CHUNK_IDS, front to back.\n\nA pure client of ``PUT /api/queue`` \u2014 an idempotent whole-order replacement.\nEvery id must be in the ready list, not the backlog (409), and must\nnot repeat (422); a chunk not named keeps its relative order, appended last.",
           "params": [
             {
               "hidden": false,
@@ -3384,7 +3384,7 @@
           "short_help": "Replace the whole ready-queue order with CHUNK_IDS, front to back."
         },
         "show": {
-          "help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained\nto its whole order (blizzard#526 D7).",
+          "help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained\nto its whole order.",
           "params": [
             {
               "hidden": false,
@@ -3410,7 +3410,7 @@
             }
           ],
           "path": "hub queue show",
-          "short_help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained to its whole order (blizzard#526 D7)."
+          "short_help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained to its whole order."
         }
       },
       "help": "Operator verbs over the ready queue: show its order, replace it, move one chunk.",
@@ -3419,7 +3419,7 @@
       "short_help": "Operator verbs over the ready queue: show its order, replace it, move one chunk."
     },
     "record-marker": {
-      "help": "A hub command node's ``run:`` script: record a marker artifact mid-run (#65).\n\nThe injected ``BZ_HUB_MARKER_CALLBACK_URL`` already carries this run's chunk, node,\nand epoch. Idempotent per marker NAME; authorized by ``BZ_HUB_MARKER_TOKEN``\n(issue #230), whose absence is named rather than posted unauthenticated.",
+      "help": "A hub command node's ``run:`` script: record a marker artifact mid-run (#65).\n\nThe injected ``BZ_HUB_MARKER_CALLBACK_URL`` already carries this run's chunk, node,\nand epoch. Idempotent per marker NAME; authorized by ``BZ_HUB_MARKER_TOKEN``,\nwhose absence is named rather than posted unauthenticated.",
       "params": [
         {
           "hidden": false,
@@ -3448,7 +3448,7 @@
       "short_help": "A hub command node's ``run:`` script: record a marker artifact mid-run (#65)."
     },
     "rotate-signing-key": {
-      "help": "Rotate the hub's IdP signing keypair (issue #95) \u2014 a fresh key signs immediately; the\nold key still verifies already-issued tokens, and no restart is needed. A no-op error under\n``auth.mode = \"none\"`` (no keypair exists). Human-plane, gated on ``user:manage`` \u2014 under\n``auth.mode = \"oauth\"`` this requires a hub session (``blizzard hub login``, issue #96).",
+      "help": "Rotate the hub's IdP signing keypair \u2014 a fresh key signs immediately; the\nold key still verifies already-issued tokens, and no restart is needed. A no-op error under\n``auth.mode = \"none\"`` (no keypair exists). Human-plane, gated on ``user:manage`` \u2014 under\n``auth.mode = \"oauth\"`` this requires a hub session (``blizzard hub login``).",
       "params": [
         {
           "hidden": false,
@@ -3463,12 +3463,12 @@
         }
       ],
       "path": "hub rotate-signing-key",
-      "short_help": "Rotate the hub's IdP signing keypair (issue #95) \u2014 a fresh key signs immediately; the old key still verifies already-issued tokens, and no restart is needed."
+      "short_help": "Rotate the hub's IdP signing keypair \u2014 a fresh key signs immediately; the old key still verifies already-issued tokens, and no restart is needed."
     },
     "routine": {
       "commands": {
         "create": {
-          "help": "Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.\n\nDEFAULT_SCOPE_SLUG mints a fresh scope if unseen (D4). GRAPH_NAME must resolve to\nan enabled graph.",
+          "help": "Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.\n\nDEFAULT_SCOPE_SLUG mints a fresh scope if unseen. GRAPH_NAME must resolve to\nan enabled graph.",
           "params": [
             {
               "hidden": false,
@@ -4050,13 +4050,13 @@
               "short_help": "Unlink SCOPE_SLUG from ROUTINE_ID's own scope set; idempotent."
             }
           },
-          "help": "Manage a routine's scope membership (blizzard#488): add, remove.",
+          "help": "Manage a routine's scope membership: add, remove.",
           "params": [],
           "path": "hub routine scope",
-          "short_help": "Manage a routine's scope membership (blizzard#488): add, remove."
+          "short_help": "Manage a routine's scope membership: add, remove."
         },
         "show": {
-          "help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults,\nand its linked scopes (blizzard#488).",
+          "help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults,\nand its linked scopes.",
           "params": [
             {
               "hidden": false,
@@ -4093,7 +4093,7 @@
             }
           ],
           "path": "hub routine show",
-          "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults, and its linked scopes (blizzard#488)."
+          "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults, and its linked scopes."
         },
         "sweeps": {
           "help": "NAME's per-scope last-swept table \u2014 its declared scope set, retired scopes\nfiltered out unless already swept while linked \u2014 and its measurement series over\n--since/--until.",

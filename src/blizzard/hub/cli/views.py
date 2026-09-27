@@ -64,7 +64,7 @@ class RunnerRow:
 
     @property
     def brake(self) -> str:
-        """Name which brake is on (issue #43; pinned by
+        """Name which brake is on (pinned by
         tests/test_hub_cli_status.py::test_status_names_a_hub_pause_with_no_local_brake)."""
         brakes = []
         if self.row.get("hub_paused"):

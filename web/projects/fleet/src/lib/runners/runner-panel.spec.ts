@@ -20,7 +20,7 @@ const CONTRIBUTOR_ME = {
 
 const NOW = new Date().toISOString();
 // One runner per pause state: none, the fleet's brake, the runner's own, and both
-// (blizzard#43 — they are separate concepts and the strip must say which).
+// (they are separate concepts and the strip must say which).
 const runner = (id: string, over: Partial<Record<string, unknown>> = {}) => ({
   runner_id: id,
   workspace_id: 'ws_a',
@@ -56,7 +56,7 @@ const RUNNERS = {
 // the pair the claim-status tone assertion (#156) reads, where the node alone would
 // make the two lines identical.
 //
-// The done row documents the shape the hub sends (issue #140): a terminal chunk reports
+// The done row documents the shape the hub sends: a terminal chunk reports
 // `runner_id: null` / `environment_count: 0` even when its route facts still name the
 // runner that worked it. It is a fixture, NOT a regression guard — the panel reaches it
 // on the same unrouted branch `ch_01idle…` already covers, so removing it fails nothing.

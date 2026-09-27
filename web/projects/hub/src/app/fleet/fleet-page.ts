@@ -79,7 +79,7 @@ export class FleetPage {
     });
   });
 
-  /** The page's last pause/resume failure, or `null` (issue #42's "report, don't
+  /** The page's last pause/resume failure, or `null` ("report, don't
    * swallow") — reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
 

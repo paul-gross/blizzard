@@ -52,8 +52,8 @@
   min-height: 0;
 }
 /* bodyScroll(false): this panel's content owns its own scrolling, so
-   .p-body only clips — a second auto scrollbar here is exactly the bug
-   (issue #309): it grabs the drag instead of the content's own scroller. */
+   .p-body only clips — a second auto scrollbar here is exactly the bug:
+   it grabs the drag instead of the content's own scroller. */
 .p-body--noscroll {
   overflow: hidden;
 }

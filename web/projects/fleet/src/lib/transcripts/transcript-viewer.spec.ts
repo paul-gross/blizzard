@@ -315,7 +315,7 @@ describe('TranscriptViewer', () => {
     innerOpenButton?.click();
 
     // The outer turn's own index (0) is prepended in front of the inner emission's own
-    // path (also 0) — exactly the collision `review:F3`'s fix disambiguates.
+    // path (also 0) — exactly the collision the path-prepending fix disambiguates.
     expect(emitted).toEqual([{ turn: innerSidechainTurn, path: [0, 0] }]);
   });
 
@@ -394,7 +394,7 @@ describe('TranscriptViewer', () => {
 
   describe('turn timestamps render in browser-local time (issue #136, review:F8)', () => {
     // Re-homed from `local-panel/transcript-panel.spec.ts` when `turnClockInfo`/
-    // `turnAbsolute` moved here (blizzard#248 D3/D4) — pin both the zone and "now" so the
+    // `turnAbsolute` moved here — pin both the zone and "now" so the
     // local-day boundary is deterministic.
     beforeEach(() => {
       vi.stubEnv('TZ', 'America/New_York');

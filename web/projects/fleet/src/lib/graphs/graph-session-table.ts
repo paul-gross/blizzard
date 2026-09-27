@@ -4,9 +4,9 @@ import type { GraphSessionView } from '../api/hub';
 import { harnessName } from '../harness-name';
 
 /**
- * The graph detail's **session declaration** table (issue #144) — the graph-level
+ * The graph detail's **session declaration** table — the graph-level
  * `sessions:` map, read-only: each declaration's prioritized model preference list,
- * acceptable harness set, effort, compaction window (blizzard#343), and
+ * acceptable harness set, effort, compaction window, and
  * rotation bounds.
  *
  * It is what makes a node meta line reading `fresh:code` legible: `sessionLabel`

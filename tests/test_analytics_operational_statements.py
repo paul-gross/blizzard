@@ -1,6 +1,6 @@
 """The operational analytics query adapter's statements: every one it executes compiles
-under both dialects and stays on the portable expression surface (blizzard#256, Phases
-2-4 — unit tier). Mirrors ``test_analytics_event_query_statements.py``'s sweep shape."""
+under both dialects and stays on the portable expression surface (unit tier).
+Mirrors ``test_analytics_event_query_statements.py``'s sweep shape."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def test_every_statement_the_store_executes_compiles_under_both_dialects() -> No
 
 @pytest.mark.parametrize("builder_name", ["_duration_rows_stmt", "_duration_lease_min_stmt"])
 def test_duration_statements_narrow_via_a_correlated_subquery_not_a_bound_id_list(builder_name: str) -> None:
-    """F1: pinned structurally — a row-value ``IN (SELECT ...)`` keyed on the whole
+    """Pinned structurally — a row-value ``IN (SELECT ...)`` keyed on the whole
     ``(chunk_id, epoch)`` pair, not ``chunk_id`` alone (which still matches a bare
     ``"IN (SELECT"`` check but leaks a migrated chunk's other-graph epoch)."""
     stmt = getattr(store_module, builder_name)(_CRITERIA)
@@ -70,9 +70,9 @@ def test_duration_statements_narrow_via_a_correlated_subquery_not_a_bound_id_lis
 
 
 def test_graph_entry_nodes_narrows_via_a_correlated_subquery_not_a_bound_id_list() -> None:
-    """F2: ``graphs.graph_id`` is a per-mint id, so a materialized list bound one host
-    parameter per graph version any chunk has ever run — pinned structurally, mirroring
-    F1's fix shape."""
+    """``graphs.graph_id`` is a per-mint id, so a materialized list bound one host
+    parameter per graph version any chunk has ever run — pinned structurally, the same
+    correlated-subquery shape used above."""
     sql = str(store_module._graph_entry_nodes_stmt(_CRITERIA).compile(dialect=sqlite.dialect()))
     assert "graph_id IN (SELECT" in sql, sql
 
@@ -97,7 +97,7 @@ def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> No
         for node in ast.walk(source)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute"
     ]
-    # 2 durations (rows, lease min — F6, review round 4: no separate group-existence
+    # 2 durations (rows, lease min — review round 4: no separate group-existence
     # probe) + 3 spend + outcomes' own 8-query fan-out — one `.execute()` site each.
     assert len(executed) == 13
     for arg in executed:

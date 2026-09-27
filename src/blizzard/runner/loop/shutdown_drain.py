@@ -1,4 +1,4 @@
-"""The graceful-shutdown worker drain (issue #12) — ``ResumeMarking.on_shutdown``'s step.
+"""The graceful-shutdown worker drain — ``ResumeMarking.on_shutdown``'s step.
 
 SIGINTs every marked lease's process group, waits at most :data:`SHUTDOWN_DRAIN_DEADLINE`
 in total (one shared budget, not one per worker), then SIGKILLs any survivor. Makes no

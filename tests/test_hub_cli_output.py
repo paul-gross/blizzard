@@ -1,4 +1,4 @@
-"""The ``--json`` output shape on the noun-group operator verbs (issue #104): a read
+"""The ``--json`` output shape on the noun-group operator verbs: a read
 verb prints the raw response body, and a write verb echoes its typed response the same
 way.
 """

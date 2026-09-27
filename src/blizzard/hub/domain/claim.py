@@ -2,8 +2,8 @@
 
 The ``POST /routes`` domain rule: the hub accepts **exactly one** claim per chunk, and
 the winning claim's result carries the chunk's first node envelope. A runner marked
-``hub_paused`` is refused before the race is run, and only for new claims (issue #44).
-The load-facts → check-live-route → record-route sequence is an atomic CAS (issue #120)."""
+``hub_paused`` is refused before the race is run, and only for new claims.
+The load-facts → check-live-route → record-route sequence is an atomic CAS."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ class ClaimConflict(Exception):
 
 
 class ClaimDeniedPaused(Exception):
-    """The claiming runner is paused at the hub registry — refused before any race (issue #44).
+    """The claiming runner is paused at the hub registry — refused before any race.
 
     Distinct from :class:`ClaimConflict`: this runner did not lose to another claimant,
     it was never eligible to claim in the first place."""
@@ -61,7 +61,7 @@ class ClaimDeniedPaused(Exception):
 class ClaimDeniedTerminal(Exception):
     """The chunk is already terminal ({done, stopped}) — refused before the race,
     mirroring :class:`ClaimDeniedPaused`'s shape: this is not a race loss, the chunk
-    can never be claimed again. Closes the peek-then-claim window (issue #118) by
+    can never be claimed again. Closes the peek-then-claim window by
     re-deriving status fresh, under the claim lock, rather than trusting the peek."""
 
     def __init__(self, *, chunk_id: str, status: ChunkStatus) -> None:
@@ -73,7 +73,7 @@ class ClaimDeniedTerminal(Exception):
 class ClaimDeniedDependency(Exception):
     """The chunk stands on a prerequisite that has not reached ``done`` — refused before
     the race, mirroring :class:`ClaimDeniedTerminal`'s shape. Re-derived fresh under the
-    claim lock (blizzard#458) so a race between a peek and a claim can never slip a
+    claim lock so a race between a peek and a claim can never slip a
     blocked chunk through, whether the edge landed or the prerequisite finished after the
     peek. Names the one standing edge found unmet, earliest-declared first — not every
     unmet edge the chunk may carry."""
@@ -87,7 +87,7 @@ class ClaimDeniedDependency(Exception):
 class ClaimDeniedIncompatible(Exception):
     """The claiming runner's stored capabilities can no longer run every statically
     reachable runner-owned lineage from the chunk's current node — refused outright,
-    mirroring :class:`ClaimDeniedDependency`'s shape (blizzard#433 D9). A registration
+    mirroring :class:`ClaimDeniedDependency`'s shape. A registration
     reporting no capabilities never reaches this check (see ``_claim_locked``)."""
 
     def __init__(self, *, chunk_id: str, runner_id: str) -> None:
@@ -100,7 +100,7 @@ class ClaimDeniedIncompatible(Exception):
 class ClaimResult:
     """A won claim — the route fact, its first node envelope, and the route's plaintext
     capability token (issue #84a). ``route_token`` is returned exactly once, here; only
-    its sha256 hash is persisted. ``route_id`` (issue #213) is the freshly-minted route
+    its sha256 hash is persisted. ``route_id`` is the freshly-minted route
     id, which :class:`~blizzard.hub.domain.fleet.Route` itself does not carry."""
 
     route: Route
@@ -135,7 +135,7 @@ class ClaimService:
         self._registry = registry
         self._clock = clock
         # Serializes the check-live-route → record-route CAS; shared with the edit path
-        # so a concurrent edit and claim resolve to exactly one winner (issue #120).
+        # so a concurrent edit and claim resolve to exactly one winner.
         self._claim_lock = claim_lock
 
     # runner_id resolves a paused-runner guard, a domain rule (bzh:domain-takes-objects).
@@ -172,7 +172,7 @@ class ClaimService:
         if existing is not None:
             raise ClaimConflict(held_by_runner_id=existing.runner_id)
 
-        # Re-read the chunk under the lock: an edit that landed first (issue #120) may have
+        # Re-read the chunk under the lock: an edit that landed first may have
         # moved `graph_id`/`model` since the edge resolved the handed-in objects.
         current = self._record.get(chunk.chunk_id)
         if current is None:  # pragma: no cover - the chunk cannot vanish mid-claim
@@ -186,14 +186,14 @@ class ClaimService:
 
         facts = self._facts.load_facts(chunk.chunk_id)
         # Re-derive status fresh under the claim lock: a stop landing between this
-        # runner's peek and its claim POST is invisible to the peek (issue #118).
+        # runner's peek and its claim POST is invisible to the peek.
         status = facts.status() if facts is not None else ChunkStatus.NOT_READY
         if status in TERMINAL_STATUSES:
             raise ClaimDeniedTerminal(chunk_id=chunk.chunk_id, status=status)
 
-        # Re-derived fresh under the same lock (blizzard#458): a declared edge or a
+        # Re-derived fresh under the same lock: a declared edge or a
         # prerequisite's completion landing after this runner's peek is invisible to the
-        # peek, exactly as a terminal transition is (issue #118).
+        # peek, exactly as a terminal transition is.
         unmet = self._unmet_prerequisite(chunk.chunk_id)
         if unmet is not None:
             raise ClaimDeniedDependency(chunk_id=chunk.chunk_id, prerequisite_chunk_id=unmet)
@@ -205,7 +205,7 @@ class ClaimService:
         if node is None:  # pragma: no cover - a pinned graph always resolves its own node
             raise ClaimConflict(held_by_runner_id=runner_id)
 
-        # Re-fetched fresh under the lock (blizzard#433 D9), never the pre-lock read the
+        # Re-fetched fresh under the lock, never the pre-lock read the
         # paused guard used: a capability change landing after this runner's peek must not race the claim.
         registration = self._registry.get_runner(runner_id)
         if registration is not None and registration.capabilities:

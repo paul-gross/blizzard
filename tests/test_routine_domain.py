@@ -1,4 +1,4 @@
-"""``RoutineAuthoring`` (unit tier, blizzard#389): create/edit over fake repositories —
+"""``RoutineAuthoring`` (unit tier): create/edit over fake repositories —
 a duplicate name is refused on create, a name change is refused on edit naming the
 current name, an unresolved graph name is refused naming it, and naming a default scope
 mints it through the real :class:`ScopeRegistry` — the
@@ -132,7 +132,7 @@ def _as_write_routines(fake: _FakeRoutineRepo) -> IWriteRoutineRepository:
 @dataclass
 class _FakeRoutineScopeRepo:
     """A plain in-memory ``(routine_id, scope_slug)`` set — mirrors the real
-    ``RoutineScopeStore``'s idempotent link/unlink (blizzard#488)."""
+    ``RoutineScopeStore``'s idempotent link/unlink."""
 
     linked: set[tuple[str, str]] = field(default_factory=set)
 
@@ -266,7 +266,7 @@ def test_edit_naming_an_unresolved_graph_is_refused_naming_it() -> None:
         authoring.edit(routine, name="nightly", graph_name="ghost", default_scope_slug=ScopeSlug.parse("blizzard"))
 
 
-# --- The routine_scopes join invariant (D8, blizzard#488) ----------------------------
+# --- The routine_scopes join invariant ----------------------------
 
 
 def test_create_links_the_default_scope_into_the_routines_own_set() -> None:
@@ -288,8 +288,8 @@ def test_edit_links_the_new_default_scope_but_does_not_unlink_the_old_one() -> N
 
 
 class TestRoutineScopeMembership:
-    """``RoutineScopeMembership`` (unit tier, blizzard#488): link/unlink delegate to the
-    repository, and unlink refuses a routine's own default scope (D8)."""
+    """``RoutineScopeMembership`` (unit tier): link/unlink delegate to the
+    repository, and unlink refuses a routine's own default scope."""
 
     def _routine(self, *, default_scope_slug: str = "blizzard") -> Routine:
         return Routine(

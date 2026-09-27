@@ -7,7 +7,7 @@ import type { ChunkDetail } from '../api/hub';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
- * The dock header's action row at narrow widths (issue #461 round 3 F4) — a real
+ * The dock header's action row at narrow widths (round 3) — a real
  * layout claim jsdom cannot make: it never actually lays out `.d-meta`/`.d-actions`'s
  * flex row, so `web:unit-test` cannot see a control pushed past the dock's own edge.
  * This mounts the header with every in-flow control live at once — a routed,
@@ -46,7 +46,7 @@ const WIDTHS = [800, 390, 320];
 const SWEPT = ['pause-chunk', 'chunk-actions-menu', 'detail-close'] as const;
 
 /** The menu panel's own items, once opened — a routed, pausable, deletable chunk
- * (D6's `blocking` gate open) makes all three live at once. */
+ * (`blocking` gate open) makes all three live at once. */
 const MENU_ITEMS = ['detach-chunk', 'complete-chunk', 'delete-chunk'] as const;
 
 async function renderHeader(width: number): Promise<{ root: HTMLElement; fixture: ReturnType<typeof TestBed.createComponent<ChunkDetailHeader>> }> {

@@ -2,7 +2,7 @@
 
 Mint, closure, and lookups by lease or chunk identity. :meth:`LeaseRecordStore.record_closure`
 also finalizes the lease's open transcript segments in the SAME transaction — a
-cross-concept write D1 keeps inside this one ``store/internal/`` package."""
+cross-concept write keeps inside this one ``store/internal/`` package."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from blizzard.runner.store.schema import (
 
 _log = get_logger("blizzard.runner.store")
 
-# The closure reason an attempt an operator's restart superseded carries (issue #370) —
+# The closure reason an attempt an operator's restart superseded carries —
 # read back to keep that attempt out of the node's retry budget.
 _PREEMPTED_REASON = "preempted"
 
@@ -111,7 +111,7 @@ class LeaseRecordStore:
         ]
 
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
-        # A preempted attempt was superseded, not spent (issue #370): counting it would carry
+        # A preempted attempt was superseded, not spent: counting it would carry
         # the node toward exhaustion and escalate the very chunk the operator is rescuing.
         preempted = select(lease_closures.c.lease_id).where(lease_closures.c.reason == _PREEMPTED_REASON)
         # A never-spawned escalation-mint lease isn't spent either — its own closure
@@ -131,7 +131,7 @@ class LeaseRecordStore:
 
     def latest_epoch(self, chunk_id: str) -> int:
         lease_stmt = select(func.max(leases.c.epoch)).where(leases.c.chunk_id == chunk_id)
-        # A forced takeover's fence bump (issue #52) mints no local lease, so it is folded
+        # A forced takeover's fence bump mints no local lease, so it is folded
         # in here alongside the lease-minted epochs.
         fence_stmt = select(func.max(takeovers.c.fence_epoch)).where(takeovers.c.chunk_id == chunk_id)
         with self._store.connect() as conn:
@@ -207,8 +207,8 @@ class LeaseRecordStore:
                 )
                 key = result.inserted_primary_key
                 event_seq = int(key[0]) if key is not None else 0
-            # Segments are final by step close (issue #246) — finalized atomically here, on
-            # the transcript lane's OWN buffer (D3), never `outbound_buffer` above.
+            # Segments are final by step close — finalized atomically here, on
+            # the transcript lane's OWN buffer, never `outbound_buffer` above.
             open_segments = conn.execute(
                 select(transcript_segments)
                 .where(transcript_segments.c.lease_id == lease_id)

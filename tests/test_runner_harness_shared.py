@@ -1,4 +1,4 @@
-"""``harness_shared.normalize_opencode_version`` (blizzard#438) — the one version normalizer
+"""``harness_shared.normalize_opencode_version`` — the one version normalizer
 both the live OpenCode probe and the health/capability-snapshot path route a membership or
 corpus-lookup check through, moved here verbatim from its original OpenCode-probe-only home
 so the two paths can never disagree about what "the observed version" means. Also

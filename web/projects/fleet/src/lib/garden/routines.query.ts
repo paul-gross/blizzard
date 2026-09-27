@@ -77,7 +77,7 @@ export function injectHubRoutineTrendQuery(
 
 /**
  * Hub `GET /api/routines/{routine_id}/sweeps` read — one routine's per-scope
- * last-swept table (unwindowed) and its measurement series over `[since, until)` (D2).
+ * last-swept table (unwindowed) and its measurement series over `[since, until)`.
  * Disabled while `routineId()` is `null`, the same rest state
  * {@link injectHubRoutineTrendQuery} carries.
  */
@@ -101,7 +101,7 @@ export function injectHubRoutineSweepsQuery(routineId: () => string | null, sinc
 }
 
 /**
- * Hub `GET /api/routines/proposal-counts` read (blizzard#547) — one routine's
+ * Hub `GET /api/routines/proposal-counts` read — one routine's
  * garden-proposal counts, per class, over `[since, until)`. Every window argument is
  * an accessor, `injectHubRoutineTrendQuery`'s own shape; disabled while
  * `routineName()` is `null`, the same "nothing selected" rest state.

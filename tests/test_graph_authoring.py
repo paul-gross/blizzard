@@ -225,7 +225,7 @@ def test_edge_for_choice_resolves_by_name() -> None:
     assert RESERVED_TERMINAL not in {n.name for n in graph.nodes}
 
 
-# --- `produces:` — scalar-or-mapping normalization (D1, issue #143) ---
+# --- `produces:` — scalar-or-mapping normalization ---
 
 
 def _produces_doc(produces: object) -> dict[str, object]:
@@ -275,7 +275,7 @@ def test_parse_rejects_an_unknown_produces_kind() -> None:
 
 def test_reify_carries_checks_gating_fields() -> None:
     """``checks_cwd``/``checks_timeout`` on a node and ``requires_checks`` on a choice
-    (issue #114) survive reify onto the immutable ``Node``/``Choice``."""
+    survive reify onto the immutable ``Node``/``Choice``."""
     doc = GraphDoc.of(
         {
             "name": "t",

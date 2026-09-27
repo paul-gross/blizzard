@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 /**
  * The graph detail's **lifecycle status** section — the action-error line
- * (issue #42's report-don't-swallow pattern) and the entry-node line. Ordinary
+ * (report-don't-swallow pattern) and the entry-node line. Ordinary
  * body content below `fleet-kit-panel`'s header bar, where `GraphDetailHeader`
  * (the identity supplement — lifecycle text, graph id, and the retire/re-enable
  * control itself) lives instead: the retire/re-enable confirm-then-emit pair
@@ -19,7 +19,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   styleUrl: './graph-detail-lifecycle.css',
 })
 export class GraphDetailLifecycle {
-  /** Set on a failed retire/enable (issue #42's report-don't-swallow pattern), or
+  /** Set on a failed retire/enable (report-don't-swallow pattern), or
    * `null` between attempts. */
   readonly actionError = input<string | null>(null);
 

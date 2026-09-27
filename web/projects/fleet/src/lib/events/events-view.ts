@@ -30,7 +30,7 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
 };
 
 /**
- * The Events tab's presentational half (blizzard#125 Phase 4) — the operational
+ * The Events tab's presentational half — the operational
  * event feed's row list, its severity/runner/chunk filter chips, and the
  * click-to-open chunk deep-link. Renders exactly the events and filter state it is
  * handed; injects no query of its own.

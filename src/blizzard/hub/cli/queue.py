@@ -1,4 +1,4 @@
-"""``blizzard hub queue`` — issues #87/#104: operator verbs over the ready queue."""
+"""``blizzard hub queue`` — operator verbs over the ready queue."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def queue_group() -> None:
 @queue_group.command("show", cls=FleetCommand)
 def queue_show(cli: CliContext) -> None:
     """The hub-ordered ready queue, read-only — a client of ``GET /api/queue``, drained
-    to its whole order (blizzard#526 D7)."""
+    to its whole order."""
     entries = cli.get_all("/api/queue", "GET /queue", key="entries")
     cli.show({"entries": entries}, QueueListing(entries))
 
@@ -38,8 +38,8 @@ def queue_show(cli: CliContext) -> None:
 def queue_set(cli: CliContext, chunk_ids: tuple[str, ...]) -> None:
     """Replace the whole ready-queue order with CHUNK_IDS, front to back.
 
-    A pure client of ``PUT /api/queue`` — an idempotent whole-order replacement
-    (issue #104). Every id must be in the ready list, not the backlog (409), and must
+    A pure client of ``PUT /api/queue`` — an idempotent whole-order replacement.
+    Every id must be in the ready list, not the backlog (409), and must
     not repeat (422); a chunk not named keeps its relative order, appended last."""
     resp = cli.put(
         "/api/queue",
@@ -60,7 +60,7 @@ def queue_set(cli: CliContext, chunk_ids: tuple[str, ...]) -> None:
 def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
     """Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).
 
-    Client of the fractional ``POST /api/queue/position`` (issue #137); 409 when CHUNK_ID
+    Client of the fractional ``POST /api/queue/position``; 409 when CHUNK_ID
     is not in the ready list, not the backlog."""
     entries = cli.get_all("/api/queue", "GET /queue", key="entries")
     rest = [entry["chunk_id"] for entry in entries if entry["chunk_id"] != chunk_id]

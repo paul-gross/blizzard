@@ -11,9 +11,9 @@ from pydantic import BaseModel
 
 
 class RunnerCapability(BaseModel):
-    """One harness binding this runner can execute (blizzard#433) — the id, its observed
+    """One harness binding this runner can execute — the id, its observed
     version (``None`` when the binding exposes none), the tier ids it can resolve, and
-    whether it is this runner's default binding. ``available`` (blizzard#438) defaults
+    whether it is this runner's default binding. ``available`` defaults
     ``True`` so a runner asserting none matches exactly as it did before this field
     existed — never a reason to strand a pre-upgrade runner."""
 
@@ -43,10 +43,10 @@ class RunnerRegistrationRequest(BaseModel):
     runner_id: str
     workspace_id: str
     env_capacity: int | None = None
-    #: The runner's own browser-reachable base URL (issue #95) — optional; a runner that
+    #: The runner's own browser-reachable base URL — optional; a runner that
     #: registers none cannot be an IdP-authorize ``client``.
     url: str | None = None
-    #: The allowed redirect URIs a browser may be bounced to for this runner (issue #95)
+    #: The allowed redirect URIs a browser may be bounced to for this runner
     #: — exact-match only (the open-redirect guard). Empty registers none.
     redirect_uris: list[str] = []
     #: The runner's capability snapshot — every harness/tier it can execute right now.
@@ -74,7 +74,7 @@ class RunnerEnrollmentResponse(BaseModel):
 
 class ExternalSubscriptionUsageWindowView(BaseModel):
     """One rate-limit window's utilization, as the harness's own account reported it
-    (issue #218) — ``window`` is the harness-native label, ``utilization_pct`` is 0-100,
+    — ``window`` is the harness-native label, ``utilization_pct`` is 0-100,
     ``resets_at`` the reset instant, ``window_seconds`` the window's length."""
 
     window: str
@@ -84,16 +84,16 @@ class ExternalSubscriptionUsageWindowView(BaseModel):
 
 
 class SubscriptionUsageView(BaseModel):
-    """One reported subscription's newest sampled usage, carrying its identity
-    (issue #218). ``slug`` is the runner-unique join key, ``name`` the operator-facing
-    label. ``sampled_at`` is ``None`` for a miss-only row (blizzard#504 D7) — ``condition``
+    """One reported subscription's newest sampled usage, carrying its identity.
+    ``slug`` is the runner-unique join key, ``name`` the operator-facing
+    label. ``sampled_at`` is ``None`` for a miss-only row — ``condition``
     carries the reason in that case, and ``windows`` is empty."""
 
     slug: str
     name: str
     sampled_at: str | None = None
     windows: list[ExternalSubscriptionUsageWindowView]
-    #: ``"credential_lapsed"`` when the newest reported miss outranks the newest sample (D7); ``None`` otherwise.
+    #: ``"credential_lapsed"`` when the newest reported miss outranks the newest sample; ``None`` otherwise.
     condition: str | None = None
     #: The newest reported miss's own reason; ``None`` when there is none.
     miss_reason: str | None = None
@@ -104,7 +104,7 @@ class SubscriptionUsageView(BaseModel):
 class RunnerView(BaseModel):
     """One fleet-registry row — derived liveness, both brakes, and advisory subscription usage.
 
-    The two brakes stay separate (issues #43, #45): ``hub_paused`` is claims-only, while
+    The two brakes stay separate (#45): ``hub_paused`` is claims-only, while
     ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory."""
 
     runner_id: str
@@ -114,8 +114,8 @@ class RunnerView(BaseModel):
     online: bool
     hub_paused: bool  # the fleet paused it — `blizzard hub runner pause`, cleared by `hub runner resume`
     locally_paused: bool = False  # it paused itself — spawns nothing, `blizzard runner pause`/`start`
-    # The local pause's own cause, populated only alongside a true `locally_paused`
-    # (issue #61); `reason` is `None` for a manual pause.
+    # The local pause's own cause, populated only alongside a true `locally_paused`;
+    # `reason` is `None` for a manual pause.
     locally_paused_by: str | None = None
     locally_paused_reason: str | None = None
     # The configured environment-pool size — ``None`` when none was reported, never zero.

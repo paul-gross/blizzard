@@ -1,5 +1,5 @@
 """``blizzard hub queue move`` (unit tier) — a client of the single-chunk fractional
-``POST /api/queue/position``, driven here with ``httpx`` stubbed (issue #137).
+``POST /api/queue/position``, driven here with ``httpx`` stubbed.
 """
 
 from __future__ import annotations

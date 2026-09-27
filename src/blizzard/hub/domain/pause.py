@@ -1,4 +1,4 @@
-"""Chunk pause — the operator's per-chunk brake, orthogonal to detach (issue #46).
+"""Chunk pause — the operator's per-chunk brake, orthogonal to detach.
 
 Pause stamps a ``chunk.paused`` fact and resume a ``chunk.resumed``; newest-fact-wins,
 so a re-pause after a resume derives ``paused`` again. Pause **keeps the claim** — no
@@ -25,7 +25,7 @@ class ChunkNotPausable(Exception):
 
 
 class PauseService:
-    """Set or clear a chunk's operator pause brake without touching its route (issue #46)."""
+    """Set or clear a chunk's operator pause brake without touching its route."""
 
     def __init__(self, *, lifecycle: IWriteChunkLifecycleRepository, clock: IClock) -> None:
         self._lifecycle = lifecycle

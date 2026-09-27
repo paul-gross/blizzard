@@ -11,8 +11,7 @@ import { FleetWhen } from '../when-display';
 const ASSIGNABLE_ROLES: readonly string[] = ['pending', 'guest', 'contributor', 'admin'];
 
 /**
- * The admin page's user table (issue #94; `pending` added by issue #210) —
- * presentational: renders `users()` with a role selector per row, gated by the two
+ * The admin page's user table — presentational: renders `users()` with a role selector per row, gated by the two
  * hub-side rules a `superuser`-tiered actor clears and an `admin`-tiered one does not
  * (`AuthService.assign_role`'s own rules, mirrored here so a disabled control never
  * invites a refused request rather than catching the 403 after the fact):

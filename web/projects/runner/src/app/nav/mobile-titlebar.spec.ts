@@ -37,7 +37,7 @@ describe('MobileTitlebar (runner)', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="local-panel-mobile-titlebar"]')).not.toBeNull();
-    // The CDK renders the menu into an overlay on `document.body` (issue #161).
+    // The CDK renders the menu into an overlay on `document.body`.
     expect(document.body.querySelector('[data-testid="local-panel-mobile-appearance"]')).toBeNull();
 
     el.querySelector<HTMLElement>('[data-testid="local-panel-mobile-titlebar-menu"]')?.click();
@@ -89,7 +89,7 @@ describe('MobileTitlebar (runner)', () => {
   });
 
   /*
-   * The titlebar menu is a real `role="menu"` since the CDK rebuild (issue #161),
+   * The titlebar menu is a real `role="menu"` since the CDK rebuild,
    * so everything actionable inside it has to be a menu item: CDK's roving focus
    * only rovers `CdkMenuItem`s and `Tab` closes the menu rather than falling
    * through to a plain button, which would strand the identity block's own Log

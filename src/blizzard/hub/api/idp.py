@@ -1,4 +1,4 @@
-"""The hub-as-IdP surface (issues #95, #96) — ``authorize``, ``jwks.json``, and the
+"""The hub-as-IdP surface — ``authorize``, ``jwks.json``, and the
 ``client=cli`` PKCE code exchange.
 
 Public plane throughout: an unauthenticated browser must reach ``authorize`` to *start*
@@ -41,7 +41,7 @@ CLI_OOB_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
 
 @dataclass(frozen=True)
 class CliRedirect:
-    """The ``cli`` client id's built-in redirect form (issue #96) — an ephemeral ``127.0.0.1``
+    """The ``cli`` client id's built-in redirect form — an ephemeral ``127.0.0.1``
     loopback callback, or the fixed out-of-band paste-code marker."""
 
     uri: str
@@ -222,9 +222,9 @@ def authorize(
             return_to = f"{return_to}?{request.url.query}"
         if len(providers) == 1:
             # Single-provider fast path (AC): no chooser hop — the dance lands the
-            # browser back on this exact URL with a session (decision D5).
+            # browser back on this exact URL with a session.
             return RedirectResponse(f"/api/auth/{providers[0].name}/authorize?return_to={quote(return_to, safe='')}")
-        # Two or more providers (issue #128): no single dance to auto-run, so hand the
+        # Two or more providers: no single dance to auto-run, so hand the
         # browser to a chooser carrying this pending request as its return target.
         return RedirectResponse(f"/login?return_to={quote(return_to, safe='')}")
 
@@ -257,7 +257,7 @@ def jwks(request: Request) -> dict[str, object]:
 
 
 class CliTokenRequest(BaseModel):
-    """``POST /api/auth/cli/token``'s body (issue #96) — the CLI's PKCE code exchange."""
+    """``POST /api/auth/cli/token``'s body — the CLI's PKCE code exchange."""
 
     code: str
     code_verifier: str
@@ -265,14 +265,14 @@ class CliTokenRequest(BaseModel):
 
 
 class CliTokenResponse(BaseModel):
-    """The minted hub session token (decision D6) — never a runner-style JWT."""
+    """The minted hub session token — never a runner-style JWT."""
 
     token: str
 
 
 @router.post("/cli/token", response_model=CliTokenResponse)
 def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse:
-    """Redeem a ``client=cli`` authorize code for a hub session token (issue #96).
+    """Redeem a ``client=cli`` authorize code for a hub session token.
 
     Public plane — there is no session yet; this route is what mints one. One
     undifferentiated 400 covers every failure, telling a caller nothing about which."""
@@ -292,7 +292,7 @@ def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse:
     dependencies=[Depends(reject_runner_principal), Depends(require(USER_MANAGE))],
 )
 def rotate_signing_key(request: Request) -> Response:
-    """Mint a fresh current signing key, demoting the old current to previous (issue
-    #95). Human-plane, gated on ``user:manage`` and closed to a runner bearer token."""
+    """Mint a fresh current signing key, demoting the old current to previous.
+    Human-plane, gated on ``user:manage`` and closed to a runner bearer token."""
     IdpSurface.of(request).signing.rotate()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

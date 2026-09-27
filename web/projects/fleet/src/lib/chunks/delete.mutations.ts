@@ -5,7 +5,7 @@ import { deleteChunkApiChunksChunkIdDelete } from '../api/hub';
 import { chunkDeleteMutationKey } from '../mutation-keys';
 import { hubBacklogKey, hubChunkKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
-/** Delete an unacquired chunk (issue #364) — the board's counterpart of
+/** Delete an unacquired chunk — the board's counterpart of
  * `blizzard hub chunk delete`. Withdraws the chunk's hub item(s); there is no undo.
  * Reachable only from `not_ready`/`ready`, mirroring Detach's own live-route
  * guard: an unacquired chunk has no route to release, so it has no runner to

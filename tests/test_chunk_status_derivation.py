@@ -114,7 +114,7 @@ def test_reclaimed_after_release_is_running_again() -> None:
 
 
 def test_same_instant_detach_takes_effect() -> None:
-    """Issue #41: a release recorded after the create in real write order — its
+    """A release recorded after the create in real write order — its
     ``seq`` is higher — wins a same-instant tie, so the chunk derives out of
     ``running`` even though ``created_at == released_at``."""
     facts = ChunkFacts(
@@ -128,7 +128,7 @@ def test_same_instant_detach_takes_effect() -> None:
 
 def test_same_instant_reclaim_still_derives_running() -> None:
     """A fresh ``route.created`` with a higher ``seq`` than a same-instant prior release
-    still wins the tie, so no live route is lost (issue #41)."""
+    still wins the tie, so no live route is lost."""
     facts = ChunkFacts(
         minted=True,
         routes_created=[RouteCreatedFact(created_at=_at(1), seq=1), RouteCreatedFact(created_at=_at(2), seq=3)],
@@ -185,7 +185,7 @@ def test_earlier_acquisitions_token_is_excluded_after_reclaim() -> None:
 
 
 def test_a_rekey_fact_supersedes_the_original_token() -> None:
-    """Phase 6 re-key: a second token_minted fact for the same live route, minted
+    """Re-key: a second token_minted fact for the same live route, minted
     later, must win — newest-fact-wins, no separate revocation needed."""
     routes_created = [RouteCreatedFact(created_at=_at(1), seq=1)]
     tokens = [
@@ -473,7 +473,7 @@ def test_current_node_and_epoch_none_before_any_fact() -> None:
     assert facts.latest_epoch() is None
 
 
-# --- Operator restart (issue #370) --------------------------------------------
+# --- Operator restart --------------------------------------------
 
 
 def _restart(node_id: str, *, executor: Executor = Executor.RUNNER, at: int, epoch: int) -> RestartFact:
@@ -575,7 +575,7 @@ def test_a_migration_still_wins_a_tie_against_the_transition_it_supersedes() -> 
     assert facts.current_node_id() == "nd_landed"
 
 
-# --- Pause (issue #46) --------------------------------------------------------
+# --- Pause --------------------------------------------------------
 
 
 def test_paused_wins_over_delivering() -> None:
@@ -649,7 +649,7 @@ def test_stopped_wins_over_paused() -> None:
 
 
 def test_operator_completion_after_a_stop_derives_done() -> None:
-    # The motivating case (issue #294): a later hand-completion outranks the stop it follows.
+    # The motivating case: a later hand-completion outranks the stop it follows.
     facts = ChunkFacts(
         minted=True, stopped=True, stopped_at=_at(4), operator_completed=True, operator_completed_at=_at(6)
     )
@@ -713,7 +713,7 @@ def test_re_pause_after_resume_derives_paused_again() -> None:
     assert facts.status() is ChunkStatus.PAUSED
 
 
-# `open_pause` is the wire's sole pause source (issue #46 §4) and must never be
+# `open_pause` is the wire's sole pause source (§4) and must never be
 # rewritten in terms of `derive_chunk_status`, which is a lossy read of PAUSED.
 
 
@@ -844,7 +844,7 @@ def test_open_pause_reads_the_fact_on_a_done_chunk() -> None:
     assert facts.open_pause() is not None
 
 
-# derive_completed_at (issue #173) — mirrors derive_chunk_status's branch order.
+# derive_completed_at mirrors derive_chunk_status's branch order.
 # --------------------------------------------------------------------------- #
 
 

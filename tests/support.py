@@ -93,7 +93,7 @@ _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def hub_store_connections(engine: Engine) -> HubStoreConnections:
-    """The ``hub/store/internal/`` seam (issue #413) every adapter test wires over its
+    """The ``hub/store/internal/`` seam every adapter test wires over its
     own migrated engine — one helper so every adapter's test file constructs it
     identically."""
     return HubStoreConnections(engine, HubStoreErrorFactory(get_logger("test")))
@@ -521,7 +521,7 @@ class HubHarness:
     engine: Engine
     events: EventBroker = field(default_factory=EventBroker)
     #: The wired app, so a test can build a second ``TestClient`` with a different peer
-    #: address — the forwarded-header trust tests (issue #130) need a concrete IP peer.
+    #: address — the forwarded-header trust tests need a concrete IP peer.
     app: FastAPI | None = None
 
 
@@ -611,11 +611,11 @@ def build_hub(
     )
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
     editors: dict[str, IWorkEditor] = {}
-    # The built-in `hub` source is seated as a closer unconditionally (issue #360),
+    # The built-in `hub` source is seated as a closer unconditionally,
     # mirroring `WorkSourceEntry.registry`'s production wiring.
     closers: dict[str, IWorkCloser] = {}
     # Constructed once here, ahead of both the work-source registry and `build_services`
-    # below — mirrors `build_hosted_app`'s own wiring (issue #364).
+    # below — mirrors `build_hosted_app`'s own wiring.
     claim_lock = threading.Lock()
     store_connections = hub_store_connections(engine)
     user_store = UserRepository(store_connections, RepoErrorFactory(get_logger("blizzard.hub.auth")))
@@ -666,7 +666,7 @@ def build_hub(
         hub_marker_callback_base_url="http://testserver",
         forge_owner=forge_owner,
         oauth_registry=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
-        # The IdP signing-key lifecycle (issue #95) — wired only under `oauth`, mirroring
+        # The IdP signing-key lifecycle — wired only under `oauth`, mirroring
         # `hub/app.py`'s own `build_hosted_app` gating exactly.
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
@@ -703,7 +703,7 @@ def write_work_sources(hub_dir: Path, sources: Sequence[WorkSourceConfig]) -> Hu
 
 def write_mock_harness_credentials(runner_dir: Path) -> tuple[str, str]:
     """Fixture-controlled, always-valid credential files for the harness-health probes
-    (blizzard#438) — neither mock CLI is a real, logged-in provider, so a runner driven
+    — neither mock CLI is a real, logged-in provider, so a runner driven
     against them needs its own disposable stand-ins rather than reading whatever (if
     anything) sits at each probe's real-credential-store default on this machine.
     Returns ``(claude_code_credentials_path, opencode_auth_path)``."""
@@ -719,7 +719,7 @@ def daemon_log_sink(path: Path) -> IO[str]:
 
     A long-lived daemon must NEVER get ``stdout=PIPE`` (``bzh:daemon-stdout-to-file``):
     nothing here drains it, so the daemon wedges once the pipe buffer fills, surfacing
-    as an unrelated timeout far from the cause (issue #145)."""
+    as an unrelated timeout far from the cause."""
     path.parent.mkdir(parents=True, exist_ok=True)
     return path.open("a", buffering=1)
 
@@ -869,7 +869,7 @@ def chunk_facts_of(hub: HubHarness, chunk_id: str) -> ChunkFacts:
 
 
 def write_chunk_pause_facts(tmp_path: Path, chunk_id: str, *facts: tuple[bool, datetime]) -> None:
-    """Append ``chunk_pause_facts`` rows for ``chunk_id``, in argument order (issue #46).
+    """Append ``chunk_pause_facts`` rows for ``chunk_id``, in argument order.
 
     Not a stand-in for the pause route: this exists for the one thing it cannot express
     — **arbitrary ``set_at`` values**, since the route stamps a single ``clock.now()``.
@@ -890,7 +890,7 @@ def seed_user(
     """Insert one ``users`` row directly (a raw-write test helper, mirrors
     ``write_chunk_pause_facts``) and return the domain object.
 
-    No login mechanism exists yet (issue #91), so a test wanting a ``ResolvedIdentity``
+    No login mechanism exists yet, so a test wanting a ``ResolvedIdentity``
     seeds the row directly rather than through a route."""
     user = User(
         user_id=Id.mint(USER_PREFIX, hub.clock).value,
@@ -925,8 +925,8 @@ def seed_session(hub: HubHarness, user: User) -> str:
 def assert_utc_iso(value: object) -> None:
     """Assert ``value`` is a literal ISO-8601 string carrying an explicit UTC offset.
 
-    Pins the wire **bytes**, not a parsed-then-compared value (issue #28,
-    ``bzh:utc-instants``): a naive string re-parses fine on the same box that emitted it,
+    Pins the wire **bytes**, not a parsed-then-compared value
+    (``bzh:utc-instants``): a naive string re-parses fine on the same box that emitted it,
     so only the literal trailing designator (``+00:00`` / ``Z``) catches the bug."""
     assert isinstance(value, str), f"expected an ISO-8601 timestamp string, got {value!r}"
     assert value.endswith("+00:00") or value.endswith("Z"), f"timestamp missing a UTC offset: {value!r}"
@@ -1026,7 +1026,7 @@ def seed_work_item(
     at: datetime,
 ) -> WorkItemRecord:
     """Seed one hub-owned work item plus its resting chunk, mirroring production's own
-    two-step mint (``WorkItemEditService.create``, blizzard#359) — there is no chunkless
+    two-step mint (``WorkItemEditService.create``) — there is no chunkless
     filing path to seed around. Callers still seed ``graph_id``'s own row first
     (``seed_graph``); this only seeds the item and its chunk."""
     ref = store.allocate_ref(source)

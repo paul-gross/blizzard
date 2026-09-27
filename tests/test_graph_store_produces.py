@@ -1,6 +1,6 @@
-"""``graph_nodes.produces`` JSON encode/decode (unit tier, issue #143).
+"""``graph_nodes.produces`` JSON encode/decode (unit tier).
 
-The column stays JSON ``TEXT`` across D1 (no migration): a legacy row carries a plain
+The column stays JSON ``TEXT`` across the change (no migration): a legacy row carries a plain
 ``list[str]``, a row minted since carries ``list[{name, kind}]``, and
 :class:`~blizzard.hub.store.internal.graph_store.ProducesColumn` normalizes both to
 :class:`ProducesSpec`; this pins both directions plus the round trip."""

@@ -1,4 +1,4 @@
-"""The chunk-usage store's own statement, ``_usage_total_stmt`` (blizzard#517, unit
+"""The chunk-usage store's own statement, ``_usage_total_stmt`` (unit
 tier): it compiles under both dialects, stays on the portable expression surface, and
 selects only ungrouped aggregates — so it returns one row by construction, never a
 per-fact object. Mirrors ``test_analytics_operational_statements.py``'s sweep shape.
@@ -46,7 +46,7 @@ def test_usage_total_stmt_leaves_no_raw_text_on_the_portable_surface() -> None:
 def test_usage_total_stmt_selects_only_ungrouped_aggregates() -> None:
     """No ``GROUP BY`` and every selected column is a `func.*` aggregate — so the
     statement returns exactly one row regardless of how many facts match, and
-    ``usage_total_since`` builds no per-row `UsageFact` object (blizzard#517)."""
+    ``usage_total_since`` builds no per-row `UsageFact` object."""
     stmt = store_module._usage_total_stmt(_SINCE, None)
     assert not stmt._group_by_clauses  # type: ignore[attr-defined]
     for column in stmt.selected_columns:
@@ -56,7 +56,7 @@ def test_usage_total_stmt_selects_only_ungrouped_aggregates() -> None:
 
 @pytest.mark.component
 def test_spend_range_query_plans_as_an_index_search(tmp_path: Path) -> None:
-    """The spend read's range predicate (blizzard#517) plans through
+    """The spend read's range predicate plans through
     ``ix_usage_facts_recorded_at`` rather than a full table scan. Migrates a real
     disk-backed sqlite file and reads the query planner — component tier, unlike the
     rest of this file (`blizzard-context`'s tier rules)."""

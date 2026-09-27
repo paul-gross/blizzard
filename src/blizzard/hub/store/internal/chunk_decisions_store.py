@@ -79,8 +79,8 @@ class ChunkDecisionsStore:
         )
 
     def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
-        """See :meth:`~blizzard.hub.domain.chunks.decisions.IReadChunkDecisionsRepository.live_decisions_for`
-        (blizzard#521) — set-based throughout, unlike :meth:`_decision_row`'s per-decision
+        """See :meth:`~blizzard.hub.domain.chunks.decisions.IReadChunkDecisionsRepository.live_decisions_for` —
+        set-based throughout, unlike :meth:`_decision_row`'s per-decision
         docket/choices reads, sharing its closure rule via :meth:`_decision_closure_ids`.
         Newest-first per chunk, same "newest not-yet-transitioned" semantics as
         :meth:`decision_for_chunk`. Batched (`bzh:bulk-reconstitution`)."""

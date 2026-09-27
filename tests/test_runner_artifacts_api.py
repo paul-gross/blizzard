@@ -209,7 +209,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) -> None:
-    """The worker-authorization resolver's other half (issue #291): once an open
+    """The worker-authorization resolver's other half: once an open
     takeover names the (now closed) reference lease, its re-minted token reaches
     this route the same as an ordinary active lease would."""
     app, store = _app_with_store(tmp_path)
@@ -317,7 +317,7 @@ def test_get_returns_one_artifact_by_name(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_get_resolves_a_slash_containing_name(tmp_path: Path) -> None:
-    """A ``merged/<repo>`` delivery marker (issue #233) — the route's ``{name:path}``
+    """A ``merged/<repo>`` delivery marker — the route's ``{name:path}``
     converter must capture the slash rather than treating it as a path boundary."""
     envelope = {
         **_ENVELOPE,
@@ -349,7 +349,7 @@ def test_get_404_for_an_unknown_artifact_name(tmp_path: Path) -> None:
 
 
 # The envelope shape a chunk with several node-steps producing the same `produces:`
-# name (issue #169) — two `retrospective` entries, one per producing node.
+# name — two `retrospective` entries, one per producing node.
 _ENVELOPE_WITH_DUPLICATE_NAME: dict[str, object] = {
     **_ENVELOPE,
     "artifacts": [
@@ -768,7 +768,7 @@ _ENVELOPE_WITH_A_SYSTEM_COLLIDING_NAME: dict[str, object] = {
 
 @pytest.mark.component
 def test_get_bare_name_ambiguous_across_node_and_system_names_both(tmp_path: Path) -> None:
-    """The same read-time collision D3 resolves for a graph declaration applies to a
+    """The same read-time collision resolves for a graph declaration applies to a
     system artifact's global name — a node's own ``produces:`` output can collide with it,
     and the route owns the 409 rather than assuming it away."""
     app, store = _app_with_store(tmp_path)

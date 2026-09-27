@@ -1,4 +1,4 @@
-"""The spawn-gate call-site registry fitness test (issue #49).
+"""The spawn-gate call-site registry fitness test.
 
 A Python test, not a docstring enumeration to recount by hand: a new spawn primitive
 landing without the gate fails this test by name. AST-walks every function in the loop
@@ -27,8 +27,8 @@ _SCANNED = (_LOOP / "steps.py", _LOOP / "spawn.py", _LOOP / "judgement.py", _LOO
 #: `_launch` (reached only from `Judgement.run`'s own gated scope) and `_relaunch` (a lost
 #: elicitation's retry, reached only from `Judgement._lost`, which takes the gate itself before
 #: ever calling it — a paused runner defers the relaunch exactly as it defers a fresh one) both
-#: fan into `_elicit`, the shared render-and-launch half the two share (blizzard#443 review,
-#: F9) — reached only from those two already-gated (or gate-taking) scopes in turn.
+#: fan into `_elicit`, the shared render-and-launch half the two share
+#: — reached only from those two already-gated (or gate-taking) scopes in turn.
 _ALLOWED_UNGATED = frozenset({"_launch", "_relaunch", "_elicit", "_wake", "resume_on_unmet_produces"})
 
 _GATE_NAME = "suppressed"
@@ -114,7 +114,7 @@ def test_exempt_helpers_are_reached_only_from_gated_scopes() -> None:
 
 
 def test_resume_from_rides_the_gated_spawn_funnel() -> None:
-    """Node-entry resume (issue #115) threads ``resume_from`` into ``Spawner.spawn``'s
+    """Node-entry resume threads ``resume_from`` into ``Spawner.spawn``'s
     existing, already-gated spawn call — never a new, separately-gated harness-spawn
     call site of its own (AC5)."""
     carriers: list[str] = []

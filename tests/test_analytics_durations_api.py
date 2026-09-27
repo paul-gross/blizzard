@@ -1,6 +1,6 @@
-"""The analytics durations routes (blizzard#256, Phase 2, component tier): the
+"""The analytics durations routes (component tier): the
 TRANSCRIPT_READ auth triad, real completed-step rollups by node and by graph, every
-shared filter (D7), the epoch-join's resistance to a duplicate lease row (A7), a hub
+shared filter, the epoch-join's resistance to a duplicate lease row (A7), a hub
 step's own exit never faking a zero, two transitions chaining one epoch's intervals,
 a `since` edge inside a chained epoch, and a migrated chunk's post-migration graph
 never leaking past a pre-migration graph_id filter."""
@@ -64,7 +64,7 @@ nodes:
           to: done
 """
 
-#: A runner step feeding a hub-executed one (review round 1 F2) — the hub node's own
+#: A runner step feeding a hub-executed one — the hub node's own
 #: exit transition is written synchronously by the same completion that enters it.
 _HUB_STEP_GRAPH_YAML = """
 name: default-delivery
@@ -99,7 +99,7 @@ nodes:
 """
 
 #: A human gate reached by a runner step — entering it and resolving it later share one
-#: epoch, since resolving a gate mints no new lease (review round 1 F3/F4).
+#: epoch, since resolving a gate mints no new lease.
 _GATE_GRAPH_YAML = """
 name: default-delivery
 entry: build
@@ -310,7 +310,7 @@ def test_a_duplicate_lease_row_does_not_fan_out_the_join(tmp_path: Path) -> None
 
 def test_a_hub_executed_steps_own_exit_transition_carries_no_duration(tmp_path: Path) -> None:
     """A hub-executed node's own exit shares one instant with its own synthetic lease
-    mint by construction (review round 1 F2) — the real predecessor step shows up, the
+    mint by construction — the real predecessor step shows up, the
     hub's own instantaneous one does not."""
     runner = FakeHubCommandRunner()
     workdir = FakeHubWorkdir()
@@ -345,7 +345,7 @@ def test_a_hub_executed_steps_own_exit_transition_carries_no_duration(tmp_path: 
 def test_two_transitions_sharing_one_epoch_chain_their_intervals(tmp_path: Path) -> None:
     """A gate's entry and its later resolution both carry the epoch that led the chunk
     there — resolving a gate mints no new lease. Each interval measures from the movement
-    before it, or the gate's wait folds into the step leading to it (review round 1 F3/F4)."""
+    before it, or the gate's wait folds into the step leading to it."""
     hub, token, _graph_id, nodes = _seeded_hub(tmp_path, graph_yaml=_GATE_GRAPH_YAML)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
@@ -393,7 +393,7 @@ def test_two_transitions_sharing_one_epoch_chain_their_intervals(tmp_path: Path)
     }
 
 
-# --- the shared filter vocabulary (D7) -----------------------------------------------
+# --- the shared filter vocabulary -----------------------------------------------
 
 
 def test_the_time_range_filter_does_not_break_a_chained_epoch(tmp_path: Path) -> None:

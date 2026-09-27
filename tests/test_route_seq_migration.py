@@ -1,4 +1,4 @@
-"""The route-seq-tiebreak revision's route-event ``seq`` backfill (issue #41).
+"""The route-seq-tiebreak revision's route-event ``seq`` backfill.
 
 Exercises the backfill on a store migrated to the revision immediately before it,
 seeded with pre-existing ``route_created``/``route_released`` rows in the pre-``seq``

@@ -1,4 +1,4 @@
-"""The shared authz vocabulary both daemons import (issue #91, decision D3).
+"""The shared authz vocabulary both daemons import.
 
 A **dependency-free** domain package — no FastAPI, no SQLAlchemy (``bzh:domain-core``).
 :class:`Role` is a total order, carried declaratively as :data:`ROLE_PERMISSIONS`: a
@@ -40,15 +40,15 @@ QUEUE_REORDER = Permission("queue:reorder")
 #: Pause/resume/enroll a runner.
 RUNNER_PAUSE = Permission("runner:pause")
 #: Mint, edit (retire/enable), or otherwise author a workflow graph — also scope and
-#: routine authoring (blizzard#389), the same authoring tier.
+#: routine authoring, the same authoring tier.
 GRAPH_EDIT = Permission("graph:edit")
 #: Administer users and their roles (#94). Held by ``admin``+ (pinned by
 #: tests/test_auth_core.py::test_user_manage_is_admin_and_above).
 USER_MANAGE = Permission("user:manage")
-#: Read a chunk's stored transcript segments (blizzard#247, D11) — above ``fleet:view``,
+#: Read a chunk's stored transcript segments — above ``fleet:view``,
 #: since a transcript carries everything a worker saw, not just the fleet's state.
 TRANSCRIPT_READ = Permission("transcript:read")
-#: Force a transcript-event re-derivation (blizzard#254 D7) — a mutation, so above the
+#: Force a transcript-event re-derivation — a mutation, so above the
 #: read-only :data:`TRANSCRIPT_READ`.
 ANALYTICS_ADMIN = Permission("analytics:admin")
 

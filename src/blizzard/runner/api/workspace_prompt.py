@@ -1,6 +1,6 @@
 """The runner-local workspace-prompt endpoint — ``GET``/``PUT /api/workspace-prompt``.
 
-The **runtime** control over the standing workspace prompt (issue #17): ``GET`` returns the
+The **runtime** control over the standing workspace prompt: ``GET`` returns the
 store's override when set and the static config value otherwise, and ``PUT`` replaces it."""
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ class WorkspacePromptReplacement(BaseModel):
 
 @router.get("/workspace-prompt", response_model=WorkspacePromptResponse)
 def read_workspace_prompt(request: Request) -> WorkspacePromptResponse:
-    """The effective spawn preamble prompt: the runtime override if set, else static config (issue #17)."""
+    """The effective spawn preamble prompt: the runtime override if set, else static config."""
     wiring = RunnerWiring.of(request)
     stores, config = wiring.maybe_read_stores(), wiring.maybe_config()
     override = (
@@ -53,7 +53,7 @@ def read_workspace_prompt(request: Request) -> WorkspacePromptResponse:
 
 @router.put("/workspace-prompt", response_model=WorkspacePromptResponse)
 def replace_workspace_prompt(request_body: WorkspacePromptReplacement, request: Request) -> WorkspacePromptResponse:
-    """Replace the runtime workspace-prompt override — effective on subsequent spawns (issue #17)."""
+    """Replace the runtime workspace-prompt override — effective on subsequent spawns."""
     wiring = RunnerWiring.of(request)
     wiring.workspace_prompts().replace(wiring.config().workspace_id, prompt=request_body.prompt)
     return WorkspacePromptResponse(prompt=request_body.prompt, source="override")
@@ -61,7 +61,7 @@ def replace_workspace_prompt(request_body: WorkspacePromptReplacement, request: 
 
 @router.delete("/workspace-prompt", response_model=WorkspacePromptResponse)
 def clear_workspace_prompt(request: Request) -> WorkspacePromptResponse:
-    """Drop the runtime override so the runner's configured prompt resolves again (issue #344).
+    """Drop the runtime override so the runner's configured prompt resolves again.
 
     Distinct from overriding with empty text, which is itself a standing override; the response
     carries whatever the config now resolves to, effective on subsequent spawns."""

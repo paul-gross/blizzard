@@ -1,5 +1,5 @@
-"""``POST /api/leases/{id}/asks`` (issue #51) — token-authorized like every other worker
-verb (issue #291), plus its open-lane ``GET /api/asks`` counterpart.
+"""``POST /api/leases/{id}/asks`` — token-authorized like every other worker
+verb, plus its open-lane ``GET /api/asks`` counterpart.
 
 Exercised over a real store via TestClient: the route's 403/404/503 forms and the
 worker-authorization resolver's second half, an open takeover naming a closed lease."""
@@ -124,7 +124,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) -> None:
-    """The resolver's other half (issue #291): an open takeover's re-minted token
+    """The resolver's other half: an open takeover's re-minted token
     authorizes its closed reference lease the same as an active lease's token would —
     previously this route checked no token at all."""
     app, store = _app_with_store(tmp_path)

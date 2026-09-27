@@ -2,7 +2,7 @@
 
 Homed neutrally rather than on any one service's own module, so a service raising it
 never forces an importer of that service to pull in the rest of that service's own
-dependencies (issue #460)."""
+dependencies."""
 
 from __future__ import annotations
 

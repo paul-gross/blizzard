@@ -1,4 +1,4 @@
-"""``GardenDelivery`` (unit tier, blizzard#393 Phase 3): builds a ``DeliveryPlan`` from a
+"""``GardenDelivery`` (unit tier): builds a ``DeliveryPlan`` from a
 Phase-2 ``ValidatedDelivery`` over a fake repository — every id mints with the right
 prefix, every field maps through from the wire ops, an empty delta still yields exactly
 one finding_set entry and zero finding/fact entries (``bzh:domain-core``, the
@@ -117,13 +117,13 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
     assert finding.locus == "a.py:1"
     assert finding.summary == "s"
     assert finding.introduced == "b" * 40
-    assert finding.introduced_at is None  # no resolution supplied on `validated` (blizzard#394 D5)
+    assert finding.introduced_at is None  # no resolution supplied on `validated`
 
     assert [(f.finding_id, f.kind, f.note) for f in delta_materialization.facts] == [(finding.finding_id, "add", None)]
 
     fset = delta_materialization.finding_set
     assert fset.finding_set_id.startswith(f"{FINDING_SET_PREFIX}_")
-    # The fact attributes to the very set it was delivered under (blizzard#401 D1).
+    # The fact attributes to the very set it was delivered under.
     assert delta_materialization.facts[0].finding_set_id == fset.finding_set_id
     assert fset.artifact_id == "art_1"
     assert fset.scope_slug == "runner"
@@ -135,7 +135,7 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_an_add_op() -> None:
 
 def test_deliver_threads_a_resolved_introduced_at_onto_the_new_finding() -> None:
     """`validated.introduced_at` is keyed `(repo, sha)` — the same pair `check_delta`
-    resolved during validation (blizzard#394 D5) — never re-resolved here."""
+    resolved during validation — never re-resolved here."""
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
     commit_at = datetime(2025, 12, 25, tzinfo=UTC)
@@ -152,7 +152,7 @@ def test_deliver_threads_a_resolved_introduced_at_onto_the_new_finding() -> None
 
 def test_deliver_leaves_introduced_at_none_when_the_resolved_pair_is_absent() -> None:
     """A missing entry (never resolved — no forge, ambiguous repo count) reads as
-    unattributed, never a `KeyError` (blizzard#394 D5)."""
+    unattributed, never a `KeyError`."""
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
     delta = FindingDelta(scope="runner", revisions={"blizzard": "a" * 40}, findings=[_add(introduced="b" * 40)])
@@ -185,7 +185,7 @@ def test_deliver_builds_observed_and_gone_facts_carrying_the_gone_note() -> None
 
 
 def test_deliver_settles_a_gone_op_against_a_delivered_finding_to_resolved() -> None:
-    """blizzard#583 D3: a `gone` op naming a finding the bucket carries as `delivered`
+    """A `gone` op naming a finding the bucket carries as `delivered`
     completes that exit rather than merely flagging it — the settling fact carries the
     actor of the `delivered` fact it confirms, never `None`."""
     repo = _FakeGardenDeliveryRepo()
@@ -311,7 +311,7 @@ def test_deliver_builds_a_proposal_and_its_finding_links() -> None:
 
 def test_deliver_resolves_a_proposals_ref_citation_against_the_id_its_own_add_op_minted() -> None:
     """The `ref -> finding_id` map is built in the same walk that mints each `add` op's
-    id (D2) — a proposal citing that `ref` lands with the actual minted id in its link
+    id — a proposal citing that `ref` lands with the actual minted id in its link
     rows, never the submission-local spelling."""
     repo = _FakeGardenDeliveryRepo()
     service = GardenDelivery(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))

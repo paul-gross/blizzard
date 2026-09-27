@@ -21,8 +21,8 @@ export interface RepositionVars {
 }
 
 /**
- * `POST /api/queue/position` — a single-chunk reposition against an **anchor**
- * (issue #137), through the generated client (bzh:generated-client).
+ * `POST /api/queue/position` — a single-chunk reposition against an **anchor**,
+ * through the generated client (bzh:generated-client).
  *
  * The board expresses one move at a time, so this sends exactly that and lets the
  * hub place it: no whole-order array composed client-side off a possibly-stale

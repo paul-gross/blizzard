@@ -136,7 +136,7 @@ describe('TranscriptPanel', () => {
   it('delegates turns to the shared fleet-transcript-viewer, in order and kind-classed', async () => {
     // Full turn-kind coverage (env/asst/tool/thinking/sidechain, timestamps, caps) is
     // `TranscriptViewer`'s own spec (`fleet/lib/transcripts/transcript-viewer.spec.ts`)
-    // now that turn rendering moved there (blizzard#248 D3/D4) — this is a thin smoke
+    // now that turn rendering moved there — this is a thin smoke
     // test that the container still wires the query's turns through to it.
     const { el } = await render('L-903', (method, path) =>
       method === 'GET' && path === '/api/leases/L-903/transcript'

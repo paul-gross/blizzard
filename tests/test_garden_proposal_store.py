@@ -1,4 +1,4 @@
-"""``GardenProposalStore`` — the garden-proposal repository (blizzard#390, component
+"""``GardenProposalStore`` — the garden-proposal repository (component
 tier). Migrated-to-head sqlite-on-disk — the ``tests/test_routine_store.py`` shape."""
 
 from __future__ import annotations
@@ -378,7 +378,7 @@ def test_counts_by_class_query_count_is_flat_regardless_of_proposal_count(tmp_pa
 
 def test_two_proposals_with_overlapping_findings_stay_distinguished(tmp_path: Path) -> None:
     """The link table is per-proposal, so two proposals naming an overlapping finding
-    never collapse into one row set (D7)."""
+    never collapse into one row set."""
     store = _store(tmp_path)
     store.create(
         "gprop_1", routine_name="nightly", class_="c", title="t1", body="b", findings=["fin_1", "fin_2"], at=_NOW

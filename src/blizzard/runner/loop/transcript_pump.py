@@ -1,9 +1,9 @@
-"""The transcript lane's per-tick pump (issue #246) — advances each live segment's
+"""The transcript lane's per-tick pump — advances each live segment's
 forward-read cursor through ``IHarnessTranscriptSource.turns_since`` and enqueues its
-record(s) atomically with the cursor write (D3), one-or-more of blizzard#247's turn-range
+record(s) atomically with the cursor write, one-or-more of turn-range
 ``TranscriptSegmentRecord`` slices — a batch over the per-record cap SPLITS into several
 records rather than shrinking/emptying down to one. ``run()`` no-ops while
-``ctx.config.transcripts_ship`` is ``False`` (D5). Wired into ``tick`` by :class:`TranscriptDrain`."""
+``ctx.config.transcripts_ship`` is ``False``. Wired into ``tick`` by :class:`TranscriptDrain`."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ _EVENT_TRANSCRIPT_SIDECHAIN_DROPPED: EventLogKind = "transcript-sidechain-droppe
 
 
 def resolve_record_max_bytes(ctx: LoopContext) -> int:
-    """The configured per-record cap, or the module default (blizzard#338) — shared by
+    """The configured per-record cap, or the module default — shared by
     every producer and consumer of a rendered record's byte size."""
     configured = ctx.config.transcript_record_max_bytes
     return TRANSCRIPT_RECORD_MAX_BYTES if configured is None else configured
@@ -56,11 +56,11 @@ PUMP_LEASE_MAX_SECONDS = 5.0
 #: reports ``complete=True`` from looping forever if ``deadline`` is ever ``None``.
 _PUMP_LEASE_MAX_ITERATIONS = 1000
 
-#: The sidechain link route this pump resolves (blizzard#338): the agent-id join, made
+#: The sidechain link route this pump resolves: the agent-id join, made
 #: across a window boundary out of the segment's own persisted map rather than in-window.
 LATE_AGENT_ID_LINK = "agent-id-late"
 
-#: Never-silent reasons (D4) — only `_CHUNK_BUDGET_EXCEEDED` latches `stop_transcript_segment_shipping`.
+#: Never-silent reasons — only `_CHUNK_BUDGET_EXCEEDED` latches `stop_transcript_segment_shipping`.
 _RECORD_CAP_EXCEEDED = "record_cap_exceeded"
 _RECORD_UNSHIPPABLE = "record_unshippable"
 _CHUNK_BUDGET_EXCEEDED = "chunk_budget_exceeded"
@@ -72,7 +72,7 @@ _SOURCE_READ_TRUNCATED = "source_read_truncated"
 #: deadline — distinct from `_SOURCE_READ_TRUNCATED`, this tick's own incomplete read.
 _LEASE_CLOSURE_INCOMPLETE = "lease_closure_incomplete"
 
-#: The same loss on the backfill's own drain (blizzard#250) — named apart because no lease
+#: The same loss on the backfill's own drain — named apart because no lease
 #: closure is involved, ranked alike because the content is gone either way.
 BACKFILL_INCOMPLETE = "backfill_incomplete"
 
@@ -137,7 +137,7 @@ class TranscriptPump:
 
     @property
     def _chunk_max_bytes(self) -> int:
-        """The configured per-chunk budget, or the module default (blizzard#338). Widened for a
+        """The configured per-chunk budget, or the module default. Widened for a
         backfill window: a re-ship spends this budget a second time over the same chunk."""
         configured = self.ctx.config.transcript_chunk_max_bytes
         return CHUNK_TRANSCRIPT_MAX_BYTES if configured is None else configured
@@ -151,7 +151,7 @@ class TranscriptPump:
         if not self.ctx.config.transcripts_ship or not self.ctx.transcripts_wired:
             return
         segments = self.ctx.stores.transcript_ledger.open_transcript_segments()
-        # One store read each for the whole run (blizzard#246) — each segment this run
+        # One store read each for the whole run — each segment this run
         # ships advances `budget`/`shipped` locally, so a later segment sees the current
         # totals without re-querying a store this same run's own writes would make stale.
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
@@ -286,7 +286,7 @@ class TranscriptPump:
         ``_STUCK``: read, but the cursor didn't move — same treatment; see that branch's
         own comment. Otherwise ``_CAUGHT_UP``/``_INCOMPLETE`` from ``batch.complete``."""
         if segment.shipping_stopped_reason is not None:
-            return _CAUGHT_UP  # permanently stopped past the per-chunk budget (D4)
+            return _CAUGHT_UP  # permanently stopped past the per-chunk budget
         chunk_max_bytes = self._chunk_max_bytes
         budget_before = shipped.before(segment.chunk_id)
         if budget_before >= chunk_max_bytes:
@@ -322,7 +322,7 @@ class TranscriptPump:
             self._mark_record_truncated(segment, _SOURCE_READ_TRUNCATED)
         new_cursor = batch.next_position.token if batch.next_position is not None else segment.cursor
         # This segment's whole accumulated map, plus whatever this window just named — the
-        # link the LATE branches below resolve against (blizzard#338).
+        # link the LATE branches below resolve against.
         parents = {**segment.agent_tool_use_ids, **batch.agent_tool_use_ids}
         # Only a sidechain with no resolvable parent is still dropped. The latch is taken where
         # the warning is emitted, so a raise before it cannot latch an unwarned agent.
@@ -363,7 +363,7 @@ class TranscriptPump:
             segment, batch, turn_range_start, record_max_bytes=self._record_max_bytes, parents=parents
         )
         records, any_shrunk, any_unshippable = built.records, built.any_shrunk, built.any_unshippable
-        # The source's own tail-cap signal (D4) rides the LAST record this batch produced.
+        # The source's own tail-cap signal rides the LAST record this batch produced.
         if batch.truncated or batch.sidechain_truncated:
             records[-1]["record_truncated"] = True
         payloads = [json.dumps(record) for record in records]
@@ -480,7 +480,7 @@ def _tool_wire(tool: ToolCall) -> dict[str, Any]:
 
 def _late_link_wires(batch: TranscriptBatch, start_index: int, parents: Mapping[str, str]) -> list[dict[str, Any]]:
     """The turns this window synthesizes for content whose own anchor shipped in an earlier
-    one (blizzard#338): an output for a call already on the hub, and a subagent conversation
+    one: an output for a call already on the hub, and a subagent conversation
     whose spawning turn likewise. Both name that anchor by ``tool_use_id``, the only handle
     that survives a window boundary — and `lease_content_view`'s own index renumbering."""
     wires: list[dict[str, Any]] = []
@@ -601,7 +601,7 @@ _GroupOutcome = Literal["ok", "shrunk", "unshippable"]
 
 def _parent_of(sidechain: SidechainConversation, parents: Mapping[str, str]) -> str | None:
     """The ``tool_use_id`` of the call that spawned ``sidechain``, or ``None`` when nothing
-    ever named the pair — the one case still dropped and warned about (blizzard#338)."""
+    ever named the pair — the one case still dropped and warned about."""
     return parents.get(sidechain.agent_id) if sidechain.agent_id is not None else None
 
 
@@ -755,7 +755,7 @@ def _byte_cost(text: str) -> int:
 
 def _shrink_to_cap(record: dict[str, Any], record_max_bytes: int = TRANSCRIPT_RECORD_MAX_BYTES) -> dict[str, Any]:
     """Shrink turn text and tool-output fields in place — including nested sidechain turns —
-    until the serialized record fits the per-record cap (D4). Never drops a turn: every
+    until the serialized record fits the per-record cap. Never drops a turn: every
     shrinkable field is cut proportionally to its share of the overshoot, not just the single
     largest one, so a batch with many oversized fields converges in a few passes (a
     still-over-cap result is the caller's own :data:`_RECORD_UNSHIPPABLE`)."""

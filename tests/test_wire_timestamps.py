@@ -1,4 +1,4 @@
-"""The UTC-instants fitness test (issue #28, ``bzh:utc-instants``).
+"""The UTC-instants fitness test (``bzh:utc-instants``).
 
 1. **Structural guard** — AST-walks every module under ``src/blizzard/`` for a call to
    ``.isoformat()`` (``foundation/store/utc.py`` excluded, ``iso_utc``'s own impl).

@@ -119,7 +119,7 @@ def test_list_graphs_marks_newest_per_name_effective(tmp_path: Path) -> None:
 
 
 def test_list_graphs_over_retired_and_superseded_mints_renders_todays_shape(tmp_path: Path) -> None:
-    """``GET /api/graphs`` reads the listing-shape projection (issue #421) — proves its
+    """``GET /api/graphs`` reads the listing-shape projection — proves its
     response is unchanged over a fixture mixing a retired mint, a superseded-but-live
     mint, and the newest effective one."""
     hub = build_hub(tmp_path)
@@ -191,7 +191,7 @@ def test_get_graph_returns_full_view(tmp_path: Path) -> None:
 def test_get_graph_round_trips_session_source(tmp_path: Path) -> None:
     """A node's targeted ``session: resume:<name>`` form survives store persistence
     and the API node view; a bare ``resume``/``fresh`` node round-trips
-    ``session_source == None`` (issue #115, Slice 2)."""
+    ``session_source == None`` (Slice 2)."""
     hub = build_hub(tmp_path)
     graph_id = _mint(hub, _GRAPH_SESSION_SOURCE)
 
@@ -241,7 +241,7 @@ nodes:
 
 def test_get_graph_round_trips_checks_gating(tmp_path: Path) -> None:
     """A node's ``checks_cwd``/``checks_timeout`` and a choice's ``requires_checks``
-    (issue #114) survive store persistence and the API node view — the mint -> store ->
+    survive store persistence and the API node view — the mint -> store ->
     view round trip. An ungated choice reads ``requires_checks == False``."""
     hub = build_hub(tmp_path)
     graph_id = _mint(hub, _GRAPH_CHECKS_GATING)

@@ -1,4 +1,4 @@
-"""Chunk restart — the operator's forced move of a chunk onto a node, now (issues #370, #371).
+"""Chunk restart — the operator's forced move of a chunk onto a node, now.
 
 An **event**, not the standing intent a migration edit records: it lands a ``chunk.restarted``
 fact at a fresh epoch, which fences the running attempt out and re-aims the chunk. Naming another
@@ -44,7 +44,7 @@ class RestartNodeUnknown(Exception):
 
 
 class RestartCurrentNodeUnknown(Exception):
-    """The chunk stands on a node its own pinned graph does not carry (issue #370).
+    """The chunk stands on a node its own pinned graph does not carry.
 
     Refused rather than rewound to the entry node, as the claim path refuses one: the position
     is real, and defaulting it away would discard every node already come through."""
@@ -69,11 +69,11 @@ class RestartService:
     ) -> None:
         self._facts = facts
         self._movement = movement
-        # Read for one thing only — whether a cross-graph target is retired (issue #101). The
+        # Read for one thing only — whether a cross-graph target is retired. The
         # graphs themselves arrive resolved (``bzh:domain-takes-objects``).
         self._graphs = graphs
         self._clock = clock
-        # Shared with the claim and edit paths (issue #120): this move reads the chunk's facts
+        # Shared with the claim and edit paths: this move reads the chunk's facts
         # and then writes against them, the same read-then-write those two serialize on.
         self._claim_lock = claim_lock
 

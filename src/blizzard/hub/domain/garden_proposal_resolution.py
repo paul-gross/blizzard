@@ -1,6 +1,6 @@
-"""Garden-proposal-closure-triggered finding resolutions: delivery-triggered closure
-(blizzard#394, blizzard#583), when the item an accepted proposal minted is delivered, and
-the worker-facing read (blizzard#397), the findings a chunk's own accepted, minted
+"""Garden-proposal-closure-triggered finding resolutions: delivery-triggered closure,
+when the item an accepted proposal minted is delivered, and
+the worker-facing read, the findings a chunk's own accepted, minted
 proposal answers. Delivery closure is gated on `has_delivery_for_proposal`, not any one
 finding's current state, so a crash-retry
 (`blizzard-context:/architecture/crash-correctness/hub.md`) still completes an
@@ -29,8 +29,8 @@ def resolve_proposal_findings(
     """`finding_ids` resolved to their loaded `Finding` rows, in `finding_ids`' own
     order, silently dropping an id that no longer resolves; `live_only` additionally
     drops one whose current state is not `"live"`. The one walk every proposal→findings
-    reader (the accept route, the worker-facing read, the delivery-triggered exit) shares
-    (blizzard#397), so the three cannot drift on order, missing-id handling, or
+    reader (the accept route, the worker-facing read, the delivery-triggered exit) shares,
+    so the three cannot drift on order, missing-id handling, or
     liveness."""
     by_id = findings.get_many(finding_ids)
     rows = (by_id.get(fid) for fid in finding_ids)
@@ -39,7 +39,7 @@ def resolve_proposal_findings(
 
 class GardenProposalDeliveryResolution:
     """Closes an accepted, minted proposal's still-live findings to `delivered` when its
-    own item is delivered (blizzard#583) — the owning routine's next run is what settles
+    own item is delivered — the owning routine's next run is what settles
     them for good."""
 
     def __init__(

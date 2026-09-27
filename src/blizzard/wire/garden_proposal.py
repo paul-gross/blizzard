@@ -1,7 +1,7 @@
-"""Garden-proposal wire shapes (blizzard#390) — the submitted candidate and the read
+"""Garden-proposal wire shapes — the submitted candidate and the read
 view. Named `GardenProposal*` throughout — never the bare `Proposal` a work-item
-proposal already claims (D1). `closure`/`item_outcome` type on the domain's own enums,
-request and response alike (blizzard#395) — see ``blizzard.wire.work_source``'s module
+proposal already claims. `closure`/`item_outcome` type on the domain's own enums,
+request and response alike — see ``blizzard.wire.work_source``'s module
 docstring for the convention."""
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ class GardenProposalCandidate(BaseModel):
 
 
 class GardenProposalClosureView(BaseModel):
-    """How a garden proposal closed (blizzard#395) — a pass or an accept, either way
+    """How a garden proposal closed — a pass or an accept, either way
     terminal."""
 
     closure: GardenProposalClosureKind
@@ -42,7 +42,7 @@ class GardenProposalClosureView(BaseModel):
 
 class GardenProposalView(BaseModel):
     """A garden proposal, its closure carried alongside it once one exists.
-    `routine_name` is nullable — an operator-authored proposal (blizzard#631) may name
+    `routine_name` is nullable — an operator-authored proposal may name
     no routine; `created_by` is set only for one."""
 
     model_config = ConfigDict(populate_by_name=True)
@@ -60,7 +60,7 @@ class GardenProposalView(BaseModel):
 
 
 class GardenProposalsPageView(BaseModel):
-    """``GET /api/garden-proposals``'s own bounded page (blizzard#526 D3/D4) —
+    """``GET /api/garden-proposals``'s own bounded page —
     ``next_cursor`` is ``None`` exactly when this page is the last one."""
 
     proposals: list[GardenProposalView] = []
@@ -69,7 +69,7 @@ class GardenProposalsPageView(BaseModel):
 
 class GardenProposalPassRequest(BaseModel):
     """`POST /api/garden-proposals/{proposal_id}/pass` — passing wants a reason more
-    than accepting does (blizzard#395)."""
+    than accepting does."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -77,11 +77,11 @@ class GardenProposalPassRequest(BaseModel):
 
 
 class GardenProposalAcceptRequest(BaseModel):
-    """`POST /api/garden-proposals/{proposal_id}/accept` (blizzard#395). `mint_work_item`
+    """`POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`
     defaults to `True`: minting a linked hub work item is the default, and declining it
     is the deliberate act. `body` replaces the proposal's own body as the prose the
     minted item's "Related findings" template wraps, when the proposal's own body should
-    not be used; ignored when `mint_work_item` is `False` (blizzard#397)."""
+    not be used; ignored when `mint_work_item` is `False`."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -99,7 +99,7 @@ class GardenProposalAcceptResponse(GardenProposalView):
 
 
 class GardenProposalCreateRequest(BaseModel):
-    """`POST /api/garden-proposals` (blizzard#631) — mints an operator-authored proposal.
+    """`POST /api/garden-proposals` — mints an operator-authored proposal.
     `routine` is optional; when given it must name an existing routine. `findings` may
     be empty."""
 
@@ -113,7 +113,7 @@ class GardenProposalCreateRequest(BaseModel):
 
 
 class GardenProposalEditRequest(BaseModel):
-    """`PATCH /api/garden-proposals/{proposal_id}` (blizzard#631) — all-or-nothing
+    """`PATCH /api/garden-proposals/{proposal_id}` — all-or-nothing
     over the given fields; a field absent from the request is left unchanged. Carries no
     `routine`: a proposal's routine is fixed at create."""
 
@@ -125,7 +125,7 @@ class GardenProposalEditRequest(BaseModel):
 
 
 class GardenProposalFindingsRequest(BaseModel):
-    """`POST /api/garden-proposals/{proposal_id}/attach` and `.../detach` (blizzard#631)
+    """`POST /api/garden-proposals/{proposal_id}/attach` and `.../detach`
     — the finding ids to link or unlink."""
 
     model_config = ConfigDict(extra="forbid")

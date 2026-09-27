@@ -43,7 +43,7 @@ describe('summarizeChunkChange', () => {
     expect(summarizeChunkChange(noNext).transition).toBe('C-3YJ9 deliver → done');
   });
 
-  // --- Delete's actor (D7a, issue #364) -------------------------------------
+  // --- Delete's actor (D7a) -------------------------------------
 
   it('falls back to the deleting actor when a deleted-cause frame carries no runner_id', () => {
     const data: ChunkChangedData = {

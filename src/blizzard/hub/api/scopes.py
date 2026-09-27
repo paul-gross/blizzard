@@ -1,4 +1,4 @@
-"""Scope routes — create, list, read, edit, retire, and enable a scope (issue #389).
+"""Scope routes — create, list, read, edit, retire, and enable a scope.
 
 The controller stays read-only over the store (``bzh:controller-read-only``), resolving a
 slug into an object before delegating to the domain (``bzh:domain-takes-objects``).
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api", tags=["scopes"], dependencies=[Depends(reject_
 
 def scope_view(scope: Scope, *, retired: bool) -> ScopeView:
     """The one `Scope` -> `ScopeView` projection — reused as-is by the runner-facing
-    fleet route (`blizzard.hub.api.fleet`, blizzard#582 D2) rather than restated there."""
+    fleet route (`blizzard.hub.api.fleet`) rather than restated there."""
     return ScopeView(
         slug=scope.slug, description=scope.description, created_at=iso_utc(scope.created_at), retired=retired
     )
@@ -37,7 +37,7 @@ def scope_view(scope: Scope, *, retired: bool) -> ScopeView:
     dependencies=[Depends(require(GRAPH_EDIT))],
 )
 def create_scope(request: ScopeCreateRequest, services: Annotated[HubServices, Depends(get_services)]) -> ScopeView:
-    """Mint a scope, or no-op onto the existing one of the same slug (D4); 422 on a
+    """Mint a scope, or no-op onto the existing one of the same slug; 422 on a
     malformed slug, naming the rejected value."""
     try:
         slug = ScopeSlug.parse(request.slug)
@@ -105,7 +105,7 @@ def edit_scope(
 def retire_scope(
     slug: str, request: ScopeLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ScopeView:
-    """Retire a scope — a reversible brake (D3); 404 on an unknown slug."""
+    """Retire a scope — a reversible brake; 404 on an unknown slug."""
     scope = services.scopes.get(slug)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")
@@ -122,7 +122,7 @@ def retire_scope(
 def enable_scope(
     slug: str, request: ScopeLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ScopeView:
-    """Re-enable a retired scope (D3); idempotent, 404 on an unknown slug."""
+    """Re-enable a retired scope; idempotent, 404 on an unknown slug."""
     scope = services.scopes.get(slug)
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")

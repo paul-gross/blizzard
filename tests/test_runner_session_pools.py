@@ -1,4 +1,4 @@
-"""Named session pools, resolution, and the lease stamps (issue #144, phase 5).
+"""Named session pools, resolution, and the lease stamps (phase 5).
 
 Component tier over a **real store**, doubles only at the hub/harness/provider/probe
 seams — each phase's assertion reads back the *previous* phase's actually-recorded
@@ -156,7 +156,7 @@ def test_an_empty_pool_falls_back_to_minting_rather_than_erroring(tmp_path):  # 
 def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_linear(tmp_path):  # type: ignore[no-untyped-def]
     """A cyclic graph: build(`fresh:code`) → verify(`resume:code`) → build → verify.
     Two assertions: `fresh:<name>` is a **forced rotation point** (re-entry mints a
-    second head), and D2's pool-member sequence stays **linear**, never forking."""
+    second head), and the pool-member sequence stays **linear**, never forking."""
     store = _store(tmp_path)
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -207,7 +207,7 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
 
     assert h4.resume_froms == ["sess-code-2"]
 
-    # D2: the whole traversal's pool sequence is linear — one head at a time, never a fork.
+    # The whole traversal's pool sequence is linear — one head at a time, never a fork.
     pool_sessions = [
         lease.session_id for lease in sorted(_pool_leases(store, "ch_1", "code"), key=lambda lease: lease.created_at)
     ]
@@ -469,7 +469,7 @@ def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
         )
 
 
-# Rotation (issue #144, phase 6): a head is resumed only while every readable declared
+# Rotation (phase 6): a head is resumed only while every readable declared
 # threshold is under bound AND its stamped model matches; an unreadable signal is not a breach.
 
 
@@ -935,7 +935,7 @@ def test_a_head_with_no_model_stamp_cannot_drift(tmp_path):  # type: ignore[no-u
 
 @pytest.mark.component
 def test_max_transcript_bytes_fires_against_the_real_repository_at_the_production_root(tmp_path):  # type: ignore[no-untyped-def]
-    """The threshold end to end over the **real** transcript source (blizzard#245), at a
+    """The threshold end to end over the **real** transcript source, at a
     production path shape — not a scripted size. Pins that the comparison actually reads
     the thing it thinks it is, since a silently-``None`` ``size_bytes`` would stay green."""
     store = _store(tmp_path)

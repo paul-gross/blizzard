@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the invocation-boundary repository seam (package-private,
-blizzard#437 D6/D11)."""
+"""SQLAlchemy adapter for the invocation-boundary repository seam (package-private)."""
 
 from __future__ import annotations
 

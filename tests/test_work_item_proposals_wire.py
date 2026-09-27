@@ -1,6 +1,6 @@
 """The proposed-work-item payload on the wire (unit tier).
 
-``CompletionSubmission.proposals`` is a discriminated union on ``kind`` (D1): malformed
+``CompletionSubmission.proposals`` is a discriminated union on ``kind``: malformed
 input is refused at the wire edge, mechanically, before ``ApplyService`` ever sees it."""
 
 from __future__ import annotations

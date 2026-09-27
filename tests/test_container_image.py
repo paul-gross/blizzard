@@ -1,5 +1,5 @@
-"""The hub container image (``packaging/docker/``) — the static packaging contract
-(issue #188). No docker required — this is the docker-free static guard that catches
+"""The hub container image (``packaging/docker/``) — the static packaging contract.
+No docker required — this is the docker-free static guard that catches
 packaging rot even with no docker at all, in the default ``blizzard:unit-test`` tier.
 The image actually building and serving is ``blizzard:image-smoke``, local-only.
 """

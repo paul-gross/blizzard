@@ -1,4 +1,4 @@
-"""``blizzard runner init`` scaffolds the runner-owned OpenCode plugin (D7, phase 4) beside the
+"""``blizzard runner init`` scaffolds the runner-owned OpenCode plugin (phase 4) beside the
 permission/plugin document it already wrote in phase 2, and wires the two together — both
 still written under the runner's own runtime root, never inside a project repository."""
 

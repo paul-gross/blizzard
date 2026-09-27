@@ -1,4 +1,4 @@
-"""spawn-generation + daemon-liveness fact tables (issue #13): ``lease_spawns`` scopes a recovery check
+"""spawn-generation + daemon-liveness fact tables: ``lease_spawns`` scopes a recovery check
 to the process running *now*; ``daemon_liveness`` separates downtime from idle-at-crash.
 
 Revision ID: 20260716_0532_runner_crash_recovery_context

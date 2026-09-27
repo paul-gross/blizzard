@@ -83,7 +83,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         click.echo(f"warning: [worker] path_prepend entry does not exist: {missing}")
     with click_exception_on(RevisionMismatchError):
         ensure_current_revision(config)
-    # One broker for the process (D2): `host` is the one composer building both the
+    # One broker for the process: `host` is the one composer building both the
     # served app and the ticked loop, so every writer and the stream route share it.
     broker = EventBroker()
     hosted = build_hosted_app(config, events=broker)
@@ -94,7 +94,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     with click_exception_on(ConfigError):
         driver = PeriodicDriver(config, interval_seconds=interval, broker=broker, harness_health=hosted.harness_health)
 
-    # Two doors onto the one app (issue #43), bound up front so a clash fails startup loudly and
+    # Two doors onto the one app, bound up front so a clash fails startup loudly and
     # served by the single `Server` below, which keeps the shutdown path on one frame.
     with click_exception_on(ListenerError):
         sockets = Listeners.of(config).bound()
@@ -102,12 +102,12 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
     )
 
-    # The shared early-shutdown wrapper (D1/D3): sets `app.state.shutdown` ahead of
+    # The shared early-shutdown wrapper: sets `app.state.shutdown` ahead of
     # uvicorn's own drain, so `server.run()` returns and the `finally` below still runs.
     server = build_early_shutdown_server(app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown)
 
     # Installed before `server.run()`'s own `capture_signals()` window opens, so a signal in
-    # that gap still primes shutdown (D3) rather than being discarded; re-invoking it later is idempotent.
+    # that gap still primes shutdown rather than being discarded; re-invoking it later is idempotent.
     def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
         server.handle_exit(signum, frame)
 
@@ -133,7 +133,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         # uvicorn closes a pre-bound socket but does not unlink its file; leaving it would
         # make the next start take the stale-corpse path in `Uds.bound` for nothing.
         Uds(config.socket_path).unlink()
-        # Disposed last, once the resume marking's own store write is done (D5): a
+        # Disposed last, once the resume marking's own store write is done: a
         # gracefully stopped runner is a single-file store again.
         hosted.engine.dispose()
 
@@ -162,7 +162,7 @@ def tick_cmd(directory: str) -> None:
 @contextmanager
 def read_stores(config: RunnerConfig) -> Iterator[RunnerReadStores]:
     """The runner's read-only store bundle for a short-lived CLI verb — builds its own
-    engine and disposes it on exit (D5, hub:99), mirroring `daemon.py`'s `uds_client`
+    engine and disposes it on exit, mirroring `daemon.py`'s `uds_client`
     precedent for a composition-root helper another module calls into rather than
     repeating the construction."""
     engine = create_engine_from_url(config.db_url)

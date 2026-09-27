@@ -1,4 +1,4 @@
-"""The graph-level ``sessions:`` map — parse, validate, reify, round-trip (issue #144).
+"""The graph-level ``sessions:`` map — parse, validate, reify, round-trip.
 
 A graph gains named session declarations (``model`` preference list, ``effort``,
 ``rotate:`` thresholds); nodes reference one by name. The equality tests are
@@ -224,7 +224,7 @@ def test_fresh_naming_no_declared_session_is_rejected() -> None:
 
 
 def test_fresh_naming_a_node_is_rejected_even_though_the_node_exists() -> None:
-    # D1: `fresh` always mints, and a session minted at node `review` is not in `build`'s
+    # `fresh` always mints, and a session minted at node `review` is not in `build`'s
     # implicit lineage — so `fresh:<node>` would name nothing.
     result = Validator.of(GraphDoc.of(_doc(build_session="fresh:review"))).result
     assert not result.ok
@@ -278,7 +278,7 @@ def test_an_empty_compaction_window_string_is_rejected() -> None:
 
 
 def test_an_unrecognized_compaction_window_value_is_accepted_by_the_hub() -> None:
-    # Same rule as effort (blizzard#343): the adapter's vocabulary to recognize, not the
+    # Same rule as effort: the adapter's vocabulary to recognize, not the
     # hub's — the hub checks only that it is a non-empty string.
     result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"compaction_window": "bogus"}}))).result
     assert result.ok, result.errors

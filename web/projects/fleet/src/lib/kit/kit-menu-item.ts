@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, Directive, booleanAttribute, conten
 import { CdkMenuItem, CdkMenuItemRadio } from '@angular/cdk/menu';
 
 /*
- * The two menu-item shapes a {@link KitMenuPanel} holds (issue #161).
+ * The two menu-item shapes a {@link KitMenuPanel} holds.
  *
  * Both wear their CDK directive as a **host directive** rather than rendering
  * one inside their own template: `CdkMenu`'s item content query matches

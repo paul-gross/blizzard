@@ -1,6 +1,6 @@
-"""The delivery-materialization sweep (blizzard#366): a delivered chunk's accumulated
+"""The delivery-materialization sweep: a delivered chunk's accumulated
 ``work_item_proposals`` rows become real work items. Eventually convergent, never
-atomic with the landing (D1) — domain layer only (``bzh:domain-core``): every
+atomic with the landing — domain layer only (``bzh:domain-core``): every
 collaborator is either an injected Protocol or another domain-layer service
 (:class:`~blizzard.hub.domain.work_items.WorkItemEditService`,
 :class:`~blizzard.hub.domain.graph_authoring.GraphMintService`), never an adapter, so
@@ -31,10 +31,10 @@ _log = get_logger("blizzard.hub.work_item_materialization")
 
 
 class WorkItemMaterializationReconciler:
-    """Per not-yet-judged proposal of a delivered chunk (D2): mint a ``create``
-    proposal into the hub source (D7), or append an ``update`` proposal's evidence to
-    the item its pointer names (D6) — every proposal materializes, with no epoch filter
-    (D3). Unresolvable is recorded with its reason and never fails the sweep; a
+    """Per not-yet-judged proposal of a delivered chunk: mint a ``create``
+    proposal into the hub source, or append an ``update`` proposal's evidence to
+    the item its pointer names — every proposal materializes, with no epoch filter.
+    Unresolvable is recorded with its reason and never fails the sweep; a
     transient failure (a retired default graph, a pre-empted ref) records nothing and
     is retried next pass."""
 
@@ -61,8 +61,8 @@ class WorkItemMaterializationReconciler:
 
     def sweep(self) -> None:
         """One complete reconciliation pass over every not-yet-judged proposal of a
-        delivered chunk. An empty candidate set ends the pass immediately (blizzard#524
-        D6) — no default-graph resolution, which the loop below would otherwise repeat
+        delivered chunk. An empty candidate set ends the pass immediately
+        — no default-graph resolution, which the loop below would otherwise repeat
         for nothing on every steady-state tick. A proposal whose own ``data`` fails to
         parse or is missing a field it needs is recorded unresolved rather than raised, so
         one malformed row never wedges every proposal behind it (``bzh:crash-exemptions-hub``
@@ -72,7 +72,7 @@ class WorkItemMaterializationReconciler:
         if not proposals:
             _log.info("work item materialization sweep completed", created=0, updated=0, unresolved=0, deferred=0)
             return
-        # Resolved once per pass (blizzard#524 D6), not once per create-kind proposal —
+        # Resolved once per pass, not once per create-kind proposal —
         # invariant across one pass, since nothing inside the loop mints or retires a graph.
         default_graph = self._graph_mint.ensure_default_or_none(
             self._default_graph_doc, definition_yaml=self._default_graph_yaml
@@ -111,8 +111,8 @@ class WorkItemMaterializationReconciler:
     def _materialize_create(
         self, row: WorkItemProposalRow, data: dict, default_graph: Graph | None
     ) -> WorkItemMaterializationOutcome | None:
-        """D7: always the reserved hub source. ``None`` means a transient failure — the
-        default graph was retired (resolved once for the whole pass, blizzard#524 D6), or
+        """Always the reserved hub source. ``None`` means a transient failure — the
+        default graph was retired (resolved once for the whole pass), or
         an out-of-band ingest pre-empted the allocated ref — left unjudged for the next
         pass, not recorded terminal."""
         if row.runner_id is None:
@@ -137,7 +137,7 @@ class WorkItemMaterializationReconciler:
         return WorkItemMaterializationOutcome.CREATED if minted else None
 
     def _materialize_update(self, row: WorkItemProposalRow, data: dict) -> WorkItemMaterializationOutcome | None:
-        """D6: resolves only through a source that implements the editor capability —
+        """Resolves only through a source that implements the editor capability —
         today the hub source alone. Every other unresolvable case (nonexistent, closed,
         withdrawn) is the work item's own three named cases."""
         pointer = WorkRef(source=data["source"], ref=data["ref"])

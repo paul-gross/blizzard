@@ -90,8 +90,8 @@ class OneLiveLeasePerChunk(QueryCheck):
 
 
 class NoUnownedLiveLeaseProcess(QueryCheck):
-    """Once a lease closes, no generation it launched is left ambiguously provisional
-    (D1/D2) — a pid with neither an identified session nor a recorded identity failure.
+    """Once a lease closes, no generation it launched is left ambiguously provisional —
+    a pid with neither an identified session nor a recorded identity failure.
     Only CLOSED leases are checked: REAP always resolves a provisional generation, killing
     its group, before ``Attempt.fail`` closes the lease, so an ambiguous one means a leak."""
 
@@ -115,7 +115,7 @@ class NoUnownedLiveLeaseProcess(QueryCheck):
 
 @dataclass(frozen=True)
 class ActiveLeaseProcessIsLive(QueryCheck):
-    """:class:`NoUnownedLiveLeaseProcess`'s ACTIVE-lease counterpart (D1/D2): an OPEN
+    """:class:`NoUnownedLiveLeaseProcess`'s ACTIVE-lease counterpart: an OPEN
     lease's still-provisional generation, probed against a real OS process — a recorded
     pid with nothing running there is the crash-recovery gap RESUME exists to close. Also
     flags two ACTIVE leases recording the same (pid, start_time), liveness unprobed."""
@@ -230,8 +230,8 @@ class UniqueEnvBinding(QueryCheck):
 
 class GaplessOutboundSeq(QueryCheck):
     """A hole in the outbound buffer's retained seqs would break FIFO idempotent replay —
-    scoped to the pending floor upward, not every seq ever minted, since retention (issue
-    #520, `IWriteOutboundRepository.prune_outbound`) prunes below it. Mirrors
+    scoped to the pending floor upward, not every seq ever minted, since retention
+    (`IWriteOutboundRepository.prune_outbound`) prunes below it. Mirrors
     `GaplessTranscriptOutboundSeq`'s own scoping for its lane."""
 
     def run(self) -> list[Violation]:
@@ -252,8 +252,8 @@ class GaplessOutboundSeq(QueryCheck):
 
 
 class GaplessTranscriptOutboundSeq(QueryCheck):
-    """A hole in the transcript lane's own *pending* (unacked) seqs means a lost record
-    (D3, issue #246) — scoped to the pending window, not every seq ever minted (review
+    """A hole in the transcript lane's own *pending* (unacked) seqs means a lost record —
+    scoped to the pending window, not every seq ever minted (review
     since an acked non-final row is pruned outright."""
 
     def run(self) -> list[Violation]:
@@ -281,8 +281,8 @@ class GaplessTranscriptOutboundSeq(QueryCheck):
 
 class TranscriptSegmentFinalizedExactlyOnce(QueryCheck):
     """A finalized segment (`finalized_at` set) has exactly one `final` row buffered for it —
-    a step's segments are final by step close, landed once, never zero and never duplicated
-    (issue #246). Unconditional: every segment has a `normalizer_version` to declare, so this
+    a step's segments are final by step close, landed once, never zero and never duplicated.
+    Unconditional: every segment has a `normalizer_version` to declare, so this
     holds regardless of `[transcripts] ship` or whether a pump ever ran."""
 
     def run(self) -> list[Violation]:
@@ -316,7 +316,7 @@ class TranscriptSegmentFinalizedExactlyOnce(QueryCheck):
 
 
 class OneOpenPauseParkPerLease(QueryCheck):
-    """An *open* pause-park is a park fact with no pause-resume at or after it (issue #46);
+    """An *open* pause-park is a park fact with no pause-resume at or after it;
     a re-pause is legal."""
 
     def run(self) -> list[Violation]:
@@ -347,7 +347,7 @@ class OneOpenPauseParkPerLease(QueryCheck):
 
 
 class UsageAttributedOnce(QueryCheck):
-    """A harness invocation's usage is attributed once per (lease, generation, kind) (epic #57, issue #58)."""
+    """A harness invocation's usage is attributed once per (lease, generation, kind) (epic #57)."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
@@ -365,8 +365,8 @@ class UsageAttributedOnce(QueryCheck):
 
 
 class InvocationBoundaryClosedWhenLeaseClosed(QueryCheck):
-    """Every invocation boundary a closed lease ever opened is itself closed (blizzard#437
-    D11, ``bzh:open-facts-declare-closure``) — no lease_id may own a still-open boundary
+    """Every invocation boundary a closed lease ever opened is itself closed
+    (``bzh:open-facts-declare-closure``) — no lease_id may own a still-open boundary
     once its own closure fact is durable; `Attempt.close` is the one funnel every closure
     path shares, so a hub-terminal chunk closes its boundaries the same as any other."""
 
@@ -389,7 +389,7 @@ class InvocationBoundaryClosedWhenLeaseClosed(QueryCheck):
 
 class WorkerBoundaryKindExclusivePerGeneration(QueryCheck):
     """At most one worker-starting boundary — ``spawn``, ``resume``, or ``nudge`` — exists per
-    (lease, generation) (blizzard#437 Phase 4): the exclusivity ``UsageRecorder._worker_boundary``'s
+    (lease, generation): the exclusivity ``UsageRecorder._worker_boundary``'s
     try-each-kind lookup depends on. ``judge`` is excluded — it can coexist with one of the
     other three at the same generation by design."""
 
@@ -409,7 +409,7 @@ class WorkerBoundaryKindExclusivePerGeneration(QueryCheck):
 
 
 class NudgeAtMostOnce(QueryCheck):
-    """A lease's ``produces``-unmet nudge fires at most once per (lease, epoch) (issue #113)."""
+    """A lease's ``produces``-unmet nudge fires at most once per (lease, epoch)."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
@@ -426,7 +426,7 @@ class NudgeAtMostOnce(QueryCheck):
 
 
 class ChecksRecordedWhenMarked(QueryCheck):
-    """A ``checks_ran`` marker implies its check result rows exist (issue #114)."""
+    """A ``checks_ran`` marker implies its check result rows exist."""
 
     def run(self) -> list[Violation]:
         marked = {
@@ -499,7 +499,7 @@ class EpochConsistentTransitions(QueryCheck):
 
 class RouteSeqUnique(QueryCheck):
     """Per-chunk route ``seq`` is unique across ``route_created`` + ``route_released`` +
-    ``route_token_minted`` combined (issues #41, #84a)."""
+    ``route_token_minted`` combined (#84a)."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
@@ -540,7 +540,7 @@ class PerRepoLandIdempotent(QueryCheck):
 
 
 class PerRepoMarkerIdempotent(QueryCheck):
-    """At most one ``merged/<repo>`` marker artifact per (chunk, node, epoch, name) (issue #67)."""
+    """At most one ``merged/<repo>`` marker artifact per (chunk, node, epoch, name)."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
@@ -596,7 +596,7 @@ class NoDoubleDelivery(QueryCheck):
 
 class NoDoubleTerminalClosure(QueryCheck):
     """At most one terminal (``closed``/``gone``) ``work_item_closures`` outcome per
-    ``(chunk, source, ref)`` — the drain's idempotency guard (blizzard#383) is a
+    ``(chunk, source, ref)`` — the drain's idempotency guard is a
     ``retired_at`` check, not a store-level constraint, so a bug there would otherwise
     go unseen: the schema itself permits ``closed`` and ``gone`` to coexist."""
 
@@ -624,7 +624,7 @@ class NoDoubleTerminalClosure(QueryCheck):
 class NoPendingIntentAgainstATerminalRef(QueryCheck):
     """A pending (``retired_at IS NULL``) ``close_intents`` row whose ``(chunk, source,
     ref)`` already carries a terminal closure outcome is a stuck retirement — the drain
-    recorded the outcome but never retired the intent that rode it (blizzard#383)."""
+    recorded the outcome but never retired the intent that rode it."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
@@ -654,7 +654,7 @@ class NoPendingIntentAgainstATerminalRef(QueryCheck):
 
 class NoUnenqueuedClosableRef(QueryCheck):
     """A non-ephemeral chunk that has landed or been hand-completed owes a ``close_intents``
-    row for every still-open ``chunk_work_refs`` ref (D1, blizzard#383) — the nine
+    row for every still-open ``chunk_work_refs`` ref — the nine
     call-site-guarded ``_enqueue_close_intents`` invocations' own derived invariant. A terminal
     outcome or any ``close_intents`` row (retired or not) satisfies it; neither is a missed call."""
 
@@ -725,7 +725,7 @@ class OneLiveExecSlot(QueryCheck):
 class MigrationsAtomic(QueryCheck):
     """``hub:one-migration-per-node-epoch`` — one row per ``(chunk, from_node, epoch)``;
     ``hub:migration-pin-consistent`` — the chunk carries the newest migration's target pin;
-    ``hub:migration-route-released`` — a runner landing released the route (a hub landing, issue #111,
+    ``hub:migration-route-released`` — a runner landing released the route (a hub landing
     and an operator restart's own re-pin, #371, both keep it by design)."""
 
     def run(self) -> list[Violation]:
@@ -755,7 +755,7 @@ class MigrationsAtomic(QueryCheck):
             if cur is None or (m.recorded_at, m.epoch) >= (cur.recorded_at, cur.epoch):  # type: ignore[attr-defined]
                 newest[m.chunk_id] = m
         chunks = {c.chunk_id: c for c in self.conn.execute(select(hub.chunks))}
-        # A migration's landed node executor (issue #111). Node ids are globally-unique, so
+        # A migration's landed node executor. Node ids are globally-unique, so
         # one node_id -> executor map resolves any landing node.
         landed_executor = {
             row.node_id: row.executor
@@ -779,7 +779,7 @@ class MigrationsAtomic(QueryCheck):
                         f"chunk {chunk_id} pinned {chunk.graph_id} but its newest migration targets {m.to_graph_id}",  # type: ignore[attr-defined]
                     )
                 )
-            # **Membership**, not equality against `[model_after]` (issue #144) — the list may
+            # **Membership**, not equality against `[model_after]` — the list may
             # legitimately grow afterwards (pinned by tests/test_invariant_checker.py).
             elif m.model_after is not None and m.model_after not in DEFAULT_MODEL.decode(chunk.default_model):  # type: ignore[attr-defined]
                 violations.append(
@@ -789,7 +789,7 @@ class MigrationsAtomic(QueryCheck):
                         f"{m.model_after}, which its newest migration re-pinned",  # type: ignore[attr-defined]
                     )
                 )
-            # A hub landing (issue #111) and an operator restart's own re-pin (#371) both retain the
+            # A hub landing and an operator restart's own re-pin (#371) both retain the
             # route by design — neither is a torn write, so neither owes a release.
             keeps_route = (
                 landed_executor.get(m.landed_node_id) == Executor.HUB  # type: ignore[attr-defined]
@@ -818,7 +818,7 @@ class DerivationAndDelivery(FactsCheck):
             facts.status()
         except Exception as exc:  # a fact combination the derivation cannot resolve
             return [Violation("hub:derived-status-total", f"chunk {chunk_id} derivation raised {exc!r}")]
-        # Both terminal delivery facts require the terminal transition (issue #63):
+        # Both terminal delivery facts require the terminal transition:
         # ``delivery.landed`` and ``pr.closed``. An *open* PR is parked, so it is not flagged.
         if facts.delivery_landed or facts.pr_closed:
             newest = max(facts.transitions, key=lambda t: (t.recorded_at, t.epoch), default=None)
@@ -860,7 +860,7 @@ class RunnerInvariants:
     process: IProcessProbe = field(default_factory=LinuxProcessProbe)
 
     def run(self, *, after_recovery: bool = False) -> list[Violation]:
-        """``after_recovery=True`` additionally runs :class:`ActiveLeaseProcessIsLive` (D3).
+        """``after_recovery=True`` additionally runs :class:`ActiveLeaseProcessIsLive`.
         That check is sound only once a recovery pass has had its chance: a worker dying
         the instant its daemon does is the CORRECT immediate aftermath of a crash, not a
         violation, before REAP/RESUME ever reconciles it. A live-system or post-convergence
@@ -885,7 +885,7 @@ class RunnerInvariants:
                 violations.extend(check.run())
             if after_recovery:
                 violations.extend(ActiveLeaseProcessIsLive(conn, self.process).run())
-            # NOT checked, deliberately: "a pause-parked lease has no closure" (issue #46) — it is
+            # NOT checked, deliberately: "a pause-parked lease has no closure" — it is
             # false on a legal history; pinned by tests/test_pin_foundation.py.
         return violations
 
@@ -915,7 +915,7 @@ class SegmentChunkResolves(QueryCheck):
 class NoStandingDependencyCycle(QueryCheck):
     """The standing (unreleased) ``chunk_dependencies`` edges form no cycle — a derived
     cross-fact invariant with no engine constraint behind it, held only by
-    ``DependencyService`` under the claim lock (issue #456)."""
+    ``DependencyService`` under the claim lock."""
 
     def run(self) -> list[Violation]:
         graph: dict[str, list[str]] = {}
@@ -955,8 +955,7 @@ class NoStandingDependencyCycle(QueryCheck):
 class NoDuplicateStandingDependency(QueryCheck):
     """At most one standing (unreleased) edge per ordered ``(dependent, prerequisite)``
     pair — a durable invariant held only by domain code under the claim lock, since
-    ``chunk_dependencies`` carries no database uniqueness constraint on the pair
-    (issue #456)."""
+    ``chunk_dependencies`` carries no database uniqueness constraint on the pair."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []

@@ -534,8 +534,8 @@ def test_a_multi_repo_chunk_keeps_one_commit_per_repo() -> None:
 
 
 def test_build_hub_env_omits_the_marker_token_when_none_is_given() -> None:
-    """When `marker_token` is empty, the built env omits `BZ_HUB_MARKER_TOKEN`
-    (issue #230), mirroring every other optional env var's only-when-non-empty
+    """When `marker_token` is empty, the built env omits `BZ_HUB_MARKER_TOKEN`,
+    mirroring every other optional env var's only-when-non-empty
     convention."""
     _, merge_node = _reified_merge_node()
     chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
@@ -672,7 +672,7 @@ def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Pa
 
 @pytest.mark.component
 def test_a_stopped_chunk_fences_out_a_still_running_marker_write(tmp_path: Path) -> None:
-    """``record_stop`` mints no epoch (issue #118), so the ``run:`` list's still-live
+    """``record_stop`` mints no epoch, so the ``run:`` list's still-live
     epoch is exactly the chunk's newest — the epoch guard alone is inert against a stop,
     unlike the restart case above. The regardless-of-epoch half of ``bzh:epoch-fencing``
     is the only fence a marker write arriving after a stop has, and it must still hold:
@@ -753,7 +753,7 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
     # The chunk's work ref resolves through the default FakeWorkSource, feeding
     # BZ_HUB_FEATURE_TITLE.
     assert env["BZ_HUB_FEATURE_TITLE"] == "issue title"
-    # The mid-run marker-write capability token (issue #230).
+    # The mid-run marker-write capability token.
     assert env[ENV_MARKER_TOKEN]
     assert workdir.ensured == [chunk_id]
 
@@ -768,7 +768,7 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_the_env_addresses_this_visits_garden_delivery_route(tmp_path: Path) -> None:
     """`garden_deliver` reaches the hub only through the injected
-    ``BZ_HUB_GARDEN_DELIVERY_URL`` (blizzard#393), so the executor must address this
+    ``BZ_HUB_GARDEN_DELIVERY_URL``, so the executor must address this
     chunk, node and epoch — an absent or mis-built URL fails the node at runtime."""
     runner = FakeHubCommandRunner()
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
@@ -791,7 +791,7 @@ def test_the_env_addresses_this_visits_garden_delivery_route(tmp_path: Path) -> 
 @pytest.mark.component
 def test_the_env_addresses_this_visits_review_findings_route(tmp_path: Path) -> None:
     """``review_deliver`` reaches the hub only through the injected
-    ``BZ_HUB_REVIEW_FINDINGS_URL`` (blizzard#582). The route 404s here (this fixture
+    ``BZ_HUB_REVIEW_FINDINGS_URL``. The route 404s here (this fixture
     chunk carries no `review-finding-delta`), enough to prove the address is live."""
     runner = FakeHubCommandRunner()
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
@@ -1107,7 +1107,7 @@ def test_mid_run_marker_callback_records_a_marker(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_a_fresh_merged_marker_records_the_delivery_landed_fact(tmp_path: Path) -> None:
-    """blizzard#399 D1: a `merged/<repo>` marker is the sole production choke point for
+    """A `merged/<repo>` marker is the sole production choke point for
     `count_landed_since` — a fresh write records it, a replay never double-counts, and a
     non-`merged/` marker never touches it at all."""
     hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())

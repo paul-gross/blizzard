@@ -1,5 +1,5 @@
 """chunk pause facts — an operator-level brake over one chunk; append-only,
-newest-fact-wins, mirroring ``runner_pause_facts`` (hub store tree, issue #46)
+newest-fact-wins, mirroring ``runner_pause_facts`` (hub store tree)
 
 Revision ID: 20260717_0446_hub_chunk_pause_facts
 Revises: 20260716_2207_hub_route_seq_tiebreak

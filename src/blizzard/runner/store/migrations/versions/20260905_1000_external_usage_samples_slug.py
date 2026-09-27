@@ -1,5 +1,5 @@
 """external_usage_samples' subscription join key — ``slug``, backfilled to the legacy
-Anthropic slug for every existing row (blizzard#436).
+Anthropic slug for every existing row.
 
 Revision ID: 20260905_1000_runner_external_usage_samples_slug
 Revises: 20260831_1000_runner_in_flight_elicitations

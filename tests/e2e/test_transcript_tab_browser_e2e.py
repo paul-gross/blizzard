@@ -1,4 +1,4 @@
-"""The chunk board's Transcripts tab, browser e2e (blizzard#248 Phase 3).
+"""The chunk board's Transcripts tab, browser e2e.
 
 Seeds segments through ``POST /api/fleet/transcripts`` as a runner principal — the path
 ``tests/service/test_transcript_segments_service.py`` already drives, since the runner's
@@ -210,7 +210,7 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
                 page.get_by_test_id("tab-transcripts").click()
                 expect(page.get_by_test_id("chunk-transcripts-tab")).to_be_visible()
                 # No transition or lease here, so both segments' shared `(node_id, epoch)`
-                # matches no history row — the tab's *unmatched* bucket (D5, `review:F9`).
+                # matches no history row — the tab's *unmatched* bucket.
                 expect(page.get_by_test_id("transcript-step")).to_have_count(1)
                 expect(page.get_by_test_id("transcript-step")).to_contain_text("unmatched")
                 expect(page.get_by_test_id("transcript-segment-item").nth(0)).to_contain_text("Segment 1")
@@ -226,7 +226,7 @@ def test_chunk_transcripts_tab_browser(tmp_path: Path, chromium_available: bool)
                 expect(thinking.locator(".th-body")).to_have_text("weighing two approaches before committing to one")
 
                 # The nested sidechain is inline under its spawning tool call — expand the
-                # card first: a closed `<details>` still has `textContent` (round-2 review:F9).
+                # card first: a closed `<details>` still has `textContent`.
                 tool_call = page.locator(".turn.k-tool .tool-call")
                 tool_call.locator("summary").click()
                 nested = page.get_by_test_id("transcript-sidechain-nested")

@@ -1,4 +1,4 @@
-"""Runner operational-event emission — the failure funnel (issue #125, Phase 3).
+"""Runner operational-event emission — the failure funnel.
 
 Every surfaced attempt failure emits ONE ``event.recorded`` at ``Attempt.fail`` —
 retry→``warning``, escalate→``critical``, abandon→``info``, paused-defer→nothing. Each
@@ -77,7 +77,7 @@ def _events(store):  # type: ignore[no-untyped-def]
 def _dead_worker_ctx(store, **kwargs):  # type: ignore[no-untyped-def]
     """A context whose worker is dead (empty alive set) and whose judgement is verdict-less
     — driving ADVANCE into ``Attempt.fail(via="advance")`` on its collect pass (the second
-    ``Advance().run()`` after the launch/collect split, blizzard#443)."""
+    ``Advance().run()`` after the launch/collect split)."""
     hub = FakeHub()
     hub.envelopes = {"ch_1": make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])}
     return make_context(
@@ -90,7 +90,7 @@ def _dead_worker_ctx(store, **kwargs):  # type: ignore[no-untyped-def]
     )
 
 
-# --- change K: the Attempt.fail funnel ------------------------------------- #
+# --- the Attempt.fail funnel ------------------------------------- #
 
 
 def test_retry_branch_emits_a_warning_attempt_failed(tmp_path):  # type: ignore[no-untyped-def]
@@ -212,7 +212,7 @@ def test_at_most_once_a_second_tick_emits_no_duplicate(tmp_path):  # type: ignor
     assert len(_events(store)) == 1
 
 
-# --- change L: per-adapter command failures --------------------------------- #
+# --- per-adapter command failures --------------------------------- #
 
 
 def test_env_prep_failure_emits_a_command_failed(tmp_path):  # type: ignore[no-untyped-def]
@@ -238,14 +238,14 @@ def test_env_prep_failure_emits_a_command_failed(tmp_path):  # type: ignore[no-u
 
 
 class _VerifyFailsWorktreeGit(FakeWorktreeGit):
-    """A worktree git whose verify always raises — L(ii)'s catch site (issue #143, Phase 4)."""
+    """A worktree git whose verify always raises — L(ii)'s catch site."""
 
     def verify(self, origin_url: str, branch: str, commit: str) -> bool:
         raise WorktreeGitError("git ls-remote origin feat/x failed: remote rejected (no SSH_AUTH_SOCK)")
 
 
 def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path):  # type: ignore[no-untyped-def]
-    """A verify failure is informational only (issue #143): a read-only re-derivation
+    """A verify failure is informational only: a read-only re-derivation
     opens no unsafe window, so it is never re-raised — the declaration is simply
     dropped and ADVANCE proceeds into its ordinary verdict-less-exit failure path."""
     store = _store(tmp_path)

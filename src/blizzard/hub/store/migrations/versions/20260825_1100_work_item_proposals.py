@@ -1,6 +1,6 @@
 """work_item_proposals — a node completion's proposed work items, riding its transition
 or migration fact. One new table, FROZEN (``bzh:frozen-revisions``) since a later
-revision adds ``runner_id`` (blizzard#366).
+revision adds ``runner_id``.
 
 Revision ID: 20260825_1100_work_item_proposals
 Revises: 20260825_1050_graph_node_proposes_work_items

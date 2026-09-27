@@ -1,4 +1,4 @@
-"""The runner-local escalations list — ``GET /api/escalations`` (issue #51).
+"""The runner-local escalations list — ``GET /api/escalations``.
 
 Every chunk escalated to needs-human and not yet superseded, each with
 its ready-to-paste resume command. Derived at read time, with that command **recomputed**

@@ -1,4 +1,4 @@
-"""What a request effectively came from, once forwarded headers are resolved (issue #130)."""
+"""What a request effectively came from, once forwarded headers are resolved."""
 
 from __future__ import annotations
 

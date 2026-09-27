@@ -1,7 +1,7 @@
 import type { TranscriptSidechain, TranscriptTurn } from './transcript-turn';
 
 /**
- * A sidechain's address within one segment (blizzard#248 D7, `review:F3`) — the
+ * A sidechain's address within one segment — the
  * turn-index path from the segment's top-level turns down to the turn that owns the
  * addressed sidechain, one entry per nesting level. A scalar turn index cannot address a
  * sidechain nested more than one level deep: each sidechain's own turns index
@@ -29,7 +29,7 @@ export function parseSidechainPath(raw: string | null): SidechainPath {
 
 /**
  * Walk a {@link SidechainPath} from a segment's top-level turns down to the sidechain it
- * addresses, or `null` if any step of the path names nothing (`review:F3`). Each step
+ * addresses, or `null` if any step of the path names nothing. Each step
  * finds the turn at that level carrying the given index *and* a non-null sidechain — the
  * same shape a nested (`"tool"`) or unlinked (`"sidechain"`) turn both carry — then
  * descends into that sidechain's own turns for the next step.

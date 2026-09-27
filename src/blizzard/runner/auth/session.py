@@ -1,4 +1,4 @@
-"""The runner's own local session — a signed, stateless ``HttpOnly`` cookie (issue #95).
+"""The runner's own local session — a signed, stateless ``HttpOnly`` cookie.
 
 A small JSON payload HMAC-signed with a per-process secret minted at daemon startup
 (``bzh:injected-clock`` for the timestamps), so it costs no store schema and a restart
@@ -17,7 +17,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.store.utc import iso_utc
 
 SESSION_COOKIE_NAME = "bz_runner_session"
-#: Runner sessions are short (issue #95): hours, not days — renewal is a silent bounce
+#: Runner sessions are short: hours, not days — renewal is a silent bounce
 #: through the hub, so a short TTL costs nothing but an invisible round trip.
 SESSION_TTL = timedelta(hours=8)
 

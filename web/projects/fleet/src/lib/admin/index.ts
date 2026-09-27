@@ -1,5 +1,5 @@
 /*
- * `admin/`'s sub-barrel (issue #94, `bzh:frontend-disjoint-diffs`) — the admin page
+ * `admin/`'s sub-barrel (`bzh:frontend-disjoint-diffs`) — the admin page
  * feature's public surface, re-exported one line from the root `public-api.ts`.
  */
 

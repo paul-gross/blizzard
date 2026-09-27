@@ -1,7 +1,7 @@
-"""The single-use ``jti`` replay-cache seam (issue #95, decision D4).
+"""The single-use ``jti`` replay-cache seam.
 
 Store-backed (``jwt_jti_seen``) rather than in-memory, so the single-use guarantee
-survives a runner restart. **Crash correctness (D4):** ``check_and_record`` is a
+survives a runner restart. **Crash correctness:** ``check_and_record`` is a
 single-transaction insert under the ``jti`` primary key, so no crash lands in a partial
 write — no ``bzh:crash-point-registry`` entry or ``bzh:invariant-checker`` assertion."""
 

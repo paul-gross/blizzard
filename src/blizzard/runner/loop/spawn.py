@@ -40,11 +40,11 @@ _log = get_logger("blizzard.runner.loop")
 
 # The lease-mint -> spawn -> record window is the orphan-lease window REAP must absorb.
 _CP_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted; worker not spawned")
-# The transcript invocation boundary (blizzard#437 D6): a genuinely new pre-launch write.
+# The transcript invocation boundary: a genuinely new pre-launch write.
 _CP_AFTER_BOUNDARY = crashpoint(
     "spawn.after-boundary-record.before-spawn", "spawn invocation boundary durable; worker not yet launched"
 )
-# The two-phase spawn's three windows (D1/D2), each bracketing a durable write.
+# The two-phase spawn's three windows, each bracketing a durable write.
 _CP_AFTER_LAUNCH = crashpoint(
     "spawn.after-launch.before-provisional-record", "worker process launched; provisional ownership not yet durable"
 )
@@ -85,7 +85,7 @@ class Spawner:
     """Every path that puts a worker process behind a lease: the fresh, fresh-epoch spawn, and
     the per-lease identity a resume or a judgement re-supplies.
 
-    The local-pause brake (issue #45) is checked here, before any mutation — so a suppressed
+    The local-pause brake is checked here, before any mutation — so a suppressed
     start writes no fact, kills no pid and mints no lease."""
 
     ctx: LoopContext
@@ -142,8 +142,8 @@ class Spawner:
                 return
             owner = selection.harness_id
         else:
-            # Same registry-order default `capability_snapshot` advertises (blizzard#433);
-            # `None` (a no-bindings registry, D10) resolves below like any unresolvable owner.
+            # Same registry-order default `capability_snapshot` advertises;
+            # `None` (a no-bindings registry) resolves below like any unresolvable owner.
             owner = default_harness_id(self.ctx.harnesses) or ""
         # Resolve before minting: an owner this runner cannot serve must block its resume,
         # not leave a lease another harness could later adopt. Logged, not raised, so this blocks only this spawn.
@@ -161,8 +161,8 @@ class Spawner:
             node_name=envelope.node.node_name,
             resume=resumed,
         )
-        # The invocation boundary (D6/D11): a fresh spawn opens on the beginning sentinel; a
-        # `resume_from` continuation of an EXISTING session is a `resume`, reading its tail (F1).
+        # The invocation boundary: a fresh spawn opens on the beginning sentinel; a
+        # `resume_from` continuation of an EXISTING session is a `resume`, reading its tail.
         kind: InvocationBoundaryKind
         if resume_from is not None:
             kind = "resume"
@@ -196,7 +196,7 @@ class Spawner:
                 compaction_window=lease.compaction_window,
             )
         except HarnessSpawnError as exc:
-            # Surface the launch-time failure (issue #125) then RE-RAISE: nothing was ever
+            # Surface the launch-time failure then RE-RAISE: nothing was ever
             # launched, but the lease minted above is durable — REAP reaps it (a retry), below.
             OutboundFacts(self.ctx).command_failed(
                 chunk_id=chunk_id,
@@ -208,7 +208,7 @@ class Spawner:
             raise
         _CP_AFTER_LAUNCH.reached()  # the process exists; nothing about it is durable yet
         try:
-            # Phase one (D1/D2): durable BEFORE identity is awaited, so a crash anywhere past
+            # Phase one: durable BEFORE identity is awaited, so a crash anywhere past
             # this point leaves a real process's ownership recoverable rather than invisible.
             self.ctx.stores.liveness.record_provisional_spawn(
                 lease.lease_id,
@@ -219,19 +219,19 @@ class Spawner:
                 harness_id=owner,
             )
         except Exception:
-            # F1: unlike an OS crash, a plain raise here never disarms the trampoline on its
+            # Unlike an OS crash, a plain raise here never disarms the trampoline on its
             # own — kill it explicitly instead.
             self.ctx.process.kill_group(pending.pgid)
             raise
         _CP_AFTER_PROVISIONAL.reached()  # ownership durable; identity not yet known
-        # F1: disarmed only now — a crash before this line still kills the worker outright.
+        # Disarmed only now — a crash before this line still kills the worker outright.
         pending.confirm_durable()
-        # F8: still blocks the tick pass on one lease — unlike `judge()`'s already-identified,
+        # Still blocks the tick pass on one lease — unlike `judge()`'s already-identified,
         # pollable-later wait, there is no durable record shape yet for this one; bound kept short instead.
         try:
             handle = pending.await_identity(DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS)
         except WorkerIdentityError as exc:
-            # A real, durably-provisional process (D1/D2) — kill it and mark it unidentified;
+            # A real, durably-provisional process — kill it and mark it unidentified;
             # the lease stays OPEN until REAP's sweep closes it via `Attempt.fail` (a retry).
             self.ctx.process.kill_group(pending.pgid)
             self.ctx.stores.liveness.record_identity_failed(lease.lease_id, at=self.ctx.clock.now())
@@ -252,13 +252,13 @@ class Spawner:
             harness_version=version,
         )
         if self.ctx.events is not None:
-            # The 'created' mint alone leaves `spawning` -> `running` unannounced (D4).
+            # The 'created' mint alone leaves `spawning` -> `running` unannounced.
             self.ctx.events.publish_lease_changed(
                 lease.lease_id,
                 chunk_id,
                 cause="spawned",
             )
-        # Keyed on the HANDLE's session id — the authoritative continuation id (issue #149).
+        # Keyed on the HANDLE's session id — the authoritative continuation id.
         # Written after the spawn, so a durable fingerprint always implies the prose was sent.
         self.ctx.stores.session.record_session_preamble(spawned_session, fingerprint=rendered.fingerprint, at=now)
         _CP_AFTER_SPAWN.reached()
@@ -266,7 +266,7 @@ class Spawner:
     def enter_node(
         self, chunk_id: str, envelope: NodeEnvelope, environments: list[AcquiredEnvironment], *, via: str
     ) -> None:
-        """Spawn into this node, continuing whatever session it resolves to (issue #115) — a
+        """Spawn into this node, continuing whatever session it resolves to — a
         named pool's head, or a plain resume's own latest session. Either shape's owner failing
         to resolve right now escalates the chunk in place instead of spawning — an operation on
         an existing recorded session no other runner can resume, so nothing here loops a
@@ -438,7 +438,7 @@ class Spawner:
             self.ctx.stores.session.record_mint_owner(lease_id, harness_id)
         if self.ctx.events is not None:
             self.ctx.events.publish_lease_changed(lease_id, chunk_id, cause="created")
-        # A per-lease capability token (issue #113): only its hash is stashed durably, the
+        # A per-lease capability token: only its hash is stashed durably, the
         # plaintext carried forward to the spawn preamble alone and never persisted.
         token, token_hash = LeaseToken.mint()
         self.ctx.stores.tokens.record_lease_token(lease_id, token_hash, at)
@@ -459,7 +459,7 @@ class Spawner:
         # The store's runtime override when set, else the static config prompt — read here so a
         # replace applies to the next spawn with no restart.
         override = self.ctx.stores.workspace_prompt.workspace_prompt_override(self.ctx.config.workspace_id)
-        # `prior` is read ONLY when this spawn resumes a session (issue #149), so a fresh one can
+        # `prior` is read ONLY when this spawn resumes a session, so a fresh one can
         # never elide prose it has never seen; nothing recorded reads `None` and renders in full.
         return Preamble.of(
             runner_prompt=self.ctx.config.runner_prompt,

@@ -1,4 +1,4 @@
-"""transitions.recorded_at index — the activity feed's bounded read (issue #213, hub store tree)
+"""transitions.recorded_at index — the activity feed's bounded read (hub store tree)
 
 The one high-volume fact table read on a bounded ``recorded_at`` range, unindexed.
 Revision ID: 20260731_1200_hub_transitions_recorded_at

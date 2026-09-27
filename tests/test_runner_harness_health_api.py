@@ -1,8 +1,8 @@
-"""``GET /api/harness-health`` (blizzard#438, component tier) — the runner's own harness
+"""``GET /api/harness-health`` (component tier) — the runner's own harness
 health diagnostics, proven end-to-end: real route wiring over a real (if unreachable, for
 determinism) harness binary, and an injected cache proving degradations surface too.
 
-The route itself never probes (blizzard#438, F4) — it only reads the last result some
+The route itself never probes — it only reads the last result some
 earlier ``refresh()`` computed, the way the loop's own tick populates the cache it shares
 with the served app (``HostedApp.harness_health``) — so every test here calls ``refresh()``
 on the injected cache itself before reading the route, standing in for that tick."""
@@ -117,7 +117,7 @@ def test_reports_available_with_a_declared_degradation(tmp_path: Path) -> None:
 
 def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path) -> None:
     """A missing corpus manifest for an admitted OpenCode version degrades that binding
-    alone (blizzard#438) — `OpenCodeHealthProbe` construction never raises over it, and
+    alone — `OpenCodeHealthProbe` construction never raises over it, and
     it neither prevents Claude Code's own entry, in the same registry and cache, from
     reporting healthy, nor the route from responding at all. An unresolvable binary path
     (mirroring `test_reports_missing_binary_for_an_unresolvable_configured_path` above) keeps
@@ -163,8 +163,8 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path) 
 
 
 def test_admitted_range_surfaces_per_binding(tmp_path: Path) -> None:
-    """``admitted_range`` (blizzard#438) is populated from each binding's own
-    `supported_version()` display string — both Claude Code (blizzard#606) and OpenCode
+    """``admitted_range`` is populated from each binding's own
+    `supported_version()` display string — both Claude Code and OpenCode
     declare one today, each its own literal."""
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     process = LinuxProcessProbe()
@@ -198,8 +198,8 @@ def test_admitted_range_surfaces_per_binding(tmp_path: Path) -> None:
     assert resp.status_code == 200, resp.text
     items = {item["harness_id"]: item for item in resp.json()["items"]}
     assert items[CLAUDE_CODE_HARNESS_ID]["admitted_range"] == ADMITTED_CLAUDE_CODE_RANGE_DISPLAY
-    # Pinned literally (blizzard#604): `str(SpecifierSet(...))` reorders clauses to `<3.0,>=2.1`.
+    # Pinned literally: `str(SpecifierSet(...))` reorders clauses to `<3.0,>=2.1`.
     assert items[CLAUDE_CODE_HARNESS_ID]["admitted_range"] == ">=2.1,<3.0"
     assert items[OPENCODE_HARNESS_ID]["admitted_range"] == ADMITTED_OPENCODE_RANGE_DISPLAY
-    # Pinned literally (blizzard#604): `str(SpecifierSet(...))` reorders clauses to `<2.0,>=1.18.25`.
+    # Pinned literally: `str(SpecifierSet(...))` reorders clauses to `<2.0,>=1.18.25`.
     assert items[OPENCODE_HARNESS_ID]["admitted_range"] == ">=1.18.25,<2.0"

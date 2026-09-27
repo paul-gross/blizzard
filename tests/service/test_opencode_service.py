@@ -257,7 +257,7 @@ def test_opencode_transcript_is_read_back_through_the_runner_http_api(tmp_path: 
 def test_opencode_transcript_segment_carries_opencode_provenance_through_the_runners_local_index(
     tmp_path: Path,
 ) -> None:
-    """blizzard#437 D4: a real ``mock-opencode`` session's segment stamps the pre-existing
+    """A real ``mock-opencode`` session's segment stamps the pre-existing
     `harness_id` provenance column `"opencode"`, not `"claude_code"` or unset, through the
     runner's own local segment index."""
     bin_dir = require_mock_fleet()
@@ -347,8 +347,8 @@ _OPENCODE_CRASH_JUDGEMENT_SCRIPT = (
 
 def _opencode_crash_chunk_spec(work_ref_url: str) -> dict:
     """A build -> deliver chunk whose build node hard-crashes its first OpenCode invocation
-    mid-turn, then recovers through a genuine requeue onto a fresh session (blizzard#437
-    Phase 4's boundary-scoped usage recovery, proven for OpenCode specifically)."""
+    mid-turn, then recovers through a genuine requeue onto a fresh session
+    (boundary-scoped usage recovery, proven for OpenCode specifically)."""
     return {
         "graph_id": "gr_opencode_crash_recovery",
         "entry": "build",

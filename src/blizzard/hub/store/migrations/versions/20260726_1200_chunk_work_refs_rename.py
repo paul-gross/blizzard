@@ -1,4 +1,4 @@
-"""``chunk_pm_pointers`` -> ``chunk_work_refs`` (issue #55, hub store tree). A **pure rename**, guarded
+"""``chunk_pm_pointers`` -> ``chunk_work_refs`` (hub store tree). A **pure rename**, guarded
 on the table names actually present. Earlier revisions keep the old name (``canon:no-retro``).
 
 Revision ID: 20260726_1200_hub_chunk_work_refs_rename

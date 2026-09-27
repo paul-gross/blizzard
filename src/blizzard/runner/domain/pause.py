@@ -1,4 +1,4 @@
-"""The hub-mirrored/local pause brake and daemon-liveness repository seam (blizzard#410)."""
+"""The hub-mirrored/local pause brake and daemon-liveness repository seam."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ __all__ = ["IReadPauseRepository", "IWritePauseRepository", "PauseParkRecord", "
 
 @dataclass(frozen=True)
 class PauseParkRecord:
-    """One open pause park (issue #46, blizzard#627): a lease dormant on an operator pause,
+    """One open pause park: a lease dormant on an operator pause,
     its interrupt's own facts."""
 
     lease_id: str
@@ -31,7 +31,7 @@ class IReadPauseRepository(Protocol):
     """Read-only pause-brake and daemon-liveness queries (held by read-path edges)."""
 
     def hub_contact_at(self, runner_id: str) -> datetime | None:
-        """When the runner last **successfully** reached the hub, or ``None`` if never (issue #51).
+        """When the runner last **successfully** reached the hub, or ``None`` if never.
 
         :meth:`~IWritePauseRepository.set_hub_paused` is only called after a successful hub
         round trip (``runner/loop/steps.py``), so its ``updated_at`` **is** the last-successful-
@@ -46,20 +46,20 @@ class IReadPauseRepository(Protocol):
         ...
 
     def local_paused(self, runner_id: str) -> bool:
-        """This runner's own brake, derived from the newest local pause fact (issue #43).
+        """This runner's own brake, derived from the newest local pause fact.
 
-        Distinct from ``hub_paused``: it blocks every spawn site, not claims alone (issue
-        #45). Defaults False when the operator has never set it."""
+        Distinct from ``hub_paused``: it blocks every spawn site, not claims alone.
+        Defaults False when the operator has never set it."""
         ...
 
     def local_pause_reason(self, runner_id: str) -> str | None:
-        """The newest local pause fact's own reason (blizzard#594) — ``None`` on a plain
+        """The newest local pause fact's own reason — ``None`` on a plain
         operator pause, or when the brake has never been set. Read independently of
         :meth:`local_paused` so a caller decides for itself whether to consult it."""
         ...
 
     def last_daemon_liveness(self) -> datetime | None:
-        """When the runner was last known alive, or ``None`` if it never ticked (issue #13).
+        """When the runner was last known alive, or ``None`` if it never ticked.
 
         The crash-time reference startup recovery classifies staleness against, stamped
         each tick, so the newest value is when the daemon died to within one tick."""
@@ -67,7 +67,7 @@ class IReadPauseRepository(Protocol):
 
     def pause_parked_lease_ids(self) -> set[str]:
         """Leases dormant on an operator pause — a pause-park fact with no later
-        pause-resume at or after it (issue #46).
+        pause-resume at or after it.
 
         The pause-park half of
         :meth:`~blizzard.runner.domain.asks.IReadAskRepository.parked_lease_ids`'s union."""
@@ -75,7 +75,7 @@ class IReadPauseRepository(Protocol):
 
     def open_pause_parks(self) -> dict[str, PauseParkRecord]:
         """Every open pause park by lease id — :meth:`pause_parked_lease_ids`'s leases, each with
-        its ``parked_at`` and the elicitation its interrupt signalled (blizzard#627). Hoisted once
+        its ``parked_at`` and the elicitation its interrupt signalled. Hoisted once
         per tick (``bzh:bulk-reconstitution``) for the teardown ADVANCE completes over later
         ticks. A lease re-parked across a crash reads its newest park. Closes on a terminal
         chunk-end via the hub: a terminated lease is no longer active, so ADVANCE's
@@ -87,7 +87,7 @@ class IWritePauseRepository(IReadPauseRepository, Protocol):
     """Read-write pause-brake and daemon-liveness store — held only by the domain."""
 
     def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
-        """Stamp the runner as alive at ``alive_at`` — the tick's liveness beat (issue #13).
+        """Stamp the runner as alive at ``alive_at`` — the tick's liveness beat.
 
         Upserted, one row per runner: only the newest instant matters, and it is the crash-time
         reference startup recovery reads back via :meth:`last_daemon_liveness`."""
@@ -108,31 +108,31 @@ class IWritePauseRepository(IReadPauseRepository, Protocol):
         report_payload: str,
         reason: str | None = None,
     ) -> int:
-        """Append a local pause/start fact **and** its hub-bound report, atomically
-        (issue #43), and return the buffered report's seq. Appends rather than upserts:
+        """Append a local pause/start fact **and** its hub-bound report, atomically,
+        and return the buffered report's seq. Appends rather than upserts:
         a locally-minted fact, not a mirror; taking the buffer entry here makes the
         brake and its report crash-atomic (``tests/test_ingest_and_pause_verbs.py``).
         ``reason`` is stored alongside the fact so :meth:`~IReadPauseRepository.local_pause_reason`
-        can read it back locally, not only through the hub-bound report (blizzard#594)."""
+        can read it back locally, not only through the hub-bound report."""
         ...
 
     def record_pause_park(
         self, *, lease_id: str, chunk_id: str, parked_at: datetime, interrupted_elicitation_id: int | None = None
     ) -> None:
-        """Park a lease on an operator pause — dormant, its env bindings held (issue #46).
+        """Park a lease on an operator pause — dormant, its env bindings held.
         ``interrupted_elicitation_id`` names the in-flight elicitation the park's own
         interrupt signalled, in the same insert (``bzh:facts-not-status``); ``None`` when it
         signalled none."""
         ...
 
     def record_pause_park_resume(self, *, lease_id: str, resumed_at: datetime) -> None:
-        """End a lease's pause-park — the operator resumed it (issue #46)."""
+        """End a lease's pause-park — the operator resumed it."""
         ...
 
 
 class PauseService:
     """Composition-root-wired: the pause store, the clock, and the optional event
-    publisher (D4, blizzard#412)."""
+    publisher."""
 
     def __init__(
         self, store: IWritePauseRepository, clock: IClock, *, events: IRunnerEventPublisher | None = None
@@ -142,7 +142,7 @@ class PauseService:
         self._events = events
 
     def set_local_pause(self, runner_id: str, *, paused: bool, by: str) -> None:
-        """Set this runner's own pause brake and its upward report, atomically (issue #43).
+        """Set this runner's own pause brake and its upward report, atomically.
 
         The brake and its hub-bound report are one write: mirroring runs hub→runner only,
         so a brake never reported up would never be repaired
@@ -161,7 +161,7 @@ class PauseService:
             self._events.publish_fact_changed(seq=seq, kind=report_kind, chunk_id=None, lease_id=None)
 
     def engage(self, runner_id: str, *, by: str, reason: str) -> None:
-        """Engage the local brake with a durable reason (blizzard#594) — once: already
+        """Engage the local brake with a durable reason — once: already
         engaged for any cause (an operator pause, the spend ceiling, a prior usage limit)
         leaves the standing fact and its reason untouched, exactly as :meth:`set_local_pause`
         is engage-idempotent from the operator's own side. The operator's clear

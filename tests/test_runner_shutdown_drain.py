@@ -1,4 +1,4 @@
-"""The graceful-shutdown worker drain (issue #12) — ``ShutdownDrain`` on its own, driven
+"""The graceful-shutdown worker drain — ``ShutdownDrain`` on its own, driven
 entirely off a virtual clock, a scripted probe, and a recording sleep. No real process:
 ``tests/test_runner_process.py`` proves ``interrupt_group`` against one instead."""
 
@@ -68,7 +68,7 @@ def test_drain_interrupts_the_marked_groups_pgid_and_stops_once_it_exits() -> No
 @pytest.mark.unit
 def test_drain_sigkills_a_survivor_once_the_shared_deadline_passes() -> None:
     """A worker that ignores SIGINT is SIGKILLed once the deadline elapses, and the drain
-    returns rather than waiting further (issue #12 acceptance criterion 4)."""
+    returns rather than waiting further."""
     probe = FakeProbe(alive={(100, "start-100")}, groups_alive={100})
     clock = FixedClock(_NOW)
 
@@ -83,7 +83,7 @@ def test_drain_sigkills_a_survivor_once_the_shared_deadline_passes() -> None:
 
 @pytest.mark.unit
 def test_drain_skips_a_lease_with_no_recorded_pgid() -> None:
-    """An unknowing caller left `pgid` unrecorded (D3) — nothing durable to signal, so the
+    """An unknowing caller left `pgid` unrecorded — nothing durable to signal, so the
     drain leaves it for the unit's own final cgroup teardown rather than guessing a group."""
     probe = FakeProbe(alive={(100, "start-100")})
 

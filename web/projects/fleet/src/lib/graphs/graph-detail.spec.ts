@@ -72,7 +72,7 @@ describe('GraphDetail', () => {
     expect(el.querySelector('[data-testid="graph-detail-body"]')).toBeNull();
   });
 
-  // --- Retire / re-enable mutation wiring (issue #101) -----------------------------
+  // --- Retire / re-enable mutation wiring -----------------------------
 
   it('fires the retire client call once the header emits retire (operator confirmed)', async () => {
     const fixture = await mount('gr_build_v2', (method, path) => {

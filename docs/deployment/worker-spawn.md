@@ -5,10 +5,10 @@
 Every session is recorded and read under a harness id. A runner build binds two: `claude_code`, built once at startup
 from `[worker]`'s `harness_binary` (and its sibling knobs below) in `blizzard-runner.toml`, and `opencode`, built from
 its own `[opencode]` table ("OpenCode configuration" below) — each the same binary every spawn, judge, and resume child
-for that harness runs. Claude Code's own admitted-version range is currently `>=2.1,<3.0` (blizzard#606), checked by
-membership alone with pre-releases excluded, and backed by no compatibility corpus — unlike OpenCode's own range below,
-an admitted Claude Code version is never run through an offline classification, so nothing about it can read
-`unknown_version` once observed. Which one a fresh mint actually spawns under is a per-`sessions:` entry declaration
+for that harness runs. Claude Code's own admitted-version range is currently `>=2.1,<3.0`, checked by membership alone
+with pre-releases excluded, and backed by no compatibility corpus — unlike OpenCode's own range below, an admitted
+Claude Code version is never run through an offline classification, so nothing about it can read `unknown_version` once
+observed. Which one a fresh mint actually spawns under is a per-`sessions:` entry declaration
 (`harnesses:`/`default_harnesses`, "Acceptable harness set" below), never a runner-wide switch, so a deployment that
 never names `opencode` anywhere never spawns it under that binding. Binding a harness does carry one small, bounded cost
 regardless of whether anything ever spawns under it: each bound binary's version is probed and cached for the
@@ -121,12 +121,12 @@ tier in the list is skipped instead: such an entry was deliberately authored for
 never a "maybe this wasn't meant for me" native name, so silently substituting the runner's ambient default would spawn
 under a capability nobody asked for.
 
-For a session with a resolved model stamp, Claude Code reasserts that model on every invocation, including judgement
-and later resumes: `--resume` can choose the ambient default instead of the previous worker model. A newly minted
-session resolves its own pool's model; a session predating model stamps retains an unknown stamp and resumes without an
-explicit `--model`, so its model continuity cannot be guaranteed. Claude Code also does not restore a session's effort
-across `--resume` (it reverts to the settings-resolved default), so the runner passes `--effort` on every invocation
-when the session has an effort stamp.
+For a session with a resolved model stamp, Claude Code reasserts that model on every invocation, including judgement and
+later resumes: `--resume` can choose the ambient default instead of the previous worker model. A newly minted session
+resolves its own pool's model; a session predating model stamps retains an unknown stamp and resumes without an explicit
+`--model`, so its model continuity cannot be guaranteed. Claude Code also does not restore a session's effort across
+`--resume` (it reverts to the settings-resolved default), so the runner passes `--effort` on every invocation when the
+session has an effort stamp.
 
 ## Acceptable harness set
 
@@ -147,25 +147,25 @@ OpenCode's own knobs sit in `[opencode]`, parallel to `[worker]`'s Claude Code t
 two harnesses' bindings are independent, and no deployed `blizzard-runner.toml` needs an edit to keep working when this
 table is absent (its scaffolded default binds `opencode` on `PATH`). `binary` names the OpenCode executable, exactly as
 `harness_binary` does for Claude Code — and, exactly as for Claude Code, naming one that does not exist or is not
-executable is caught by the runner's own health evaluation (blizzard#438) rather than surfacing only at spawn: health
-recalculates at daemon start, after an operator-triggered selftest, and when the observed binary version changes, and a
-binding that fails any required check — missing binary, an incompatible or unknown observed version, failed
-authentication, an unmapped configured tier, or a recorded selftest failure — is marked unavailable. `HarnessSelector`
-skips an unavailable member with its own `"unhealthy"` reason ([observability.md](./observability.md)) rather than
-selecting it, so a node whose acceptable set includes `opencode` falls back to another member instead of failing at
-spawn, and escalates only once every member is exhausted. The binding stays visible, with its cause, in this runner's
-own `GET /api/harness-health` diagnostics; the hub sees only the boolean flag, never the cause. Claude Code's own
-health check is the same evaluation, membership-only (blizzard#606): an incompatible or unobserved version withholds
-availability exactly as OpenCode's does, but since Claude Code declares no compatibility corpus, an admitted version
-is never itself a cause — there is no `unknown_version` an admitted-but-unclassified Claude Code version could read.
-`[opencode.models.aliases]` and `[opencode.effort.aliases]` mirror `[models.aliases]`/ `[effort.aliases]` in shape but
-not in defaults — see "Model and effort tiers" above for why OpenCode's own table carries the whole mapping rather than
-overrides to a built-in one. `worker_config_path` names the runner-owned permission/plugin document
-`blizzard runner init` scaffolds beside `worker-settings.json` (never inside a project repository); it denies OpenCode's
-native, non-interactive `question` tool outright — a headless worker has no one to answer it, and `blizzard runner ask`
-is its lease-authenticated replacement — and names the heartbeat plugin ("Harness identity" above) for OpenCode to load.
-Effort reasserts on every OpenCode invocation exactly as it does for Claude Code, for the same reason: a mint-only value
-would silently drop across a resume.
+executable is caught by the runner's own health evaluation rather than surfacing only at spawn: health recalculates at
+daemon start, after an operator-triggered selftest, and when the observed binary version changes, and a binding that
+fails any required check — missing binary, an incompatible or unknown observed version, failed authentication, an
+unmapped configured tier, or a recorded selftest failure — is marked unavailable. `HarnessSelector` skips an unavailable
+member with its own `"unhealthy"` reason ([observability.md](./observability.md)) rather than selecting it, so a node
+whose acceptable set includes `opencode` falls back to another member instead of failing at spawn, and escalates only
+once every member is exhausted. The binding stays visible, with its cause, in this runner's own
+`GET /api/harness-health` diagnostics; the hub sees only the boolean flag, never the cause. Claude Code's own health
+check is the same evaluation, membership-only: an incompatible or unobserved version withholds availability exactly as
+OpenCode's does, but since Claude Code declares no compatibility corpus, an admitted version is never itself a cause —
+there is no `unknown_version` an admitted-but-unclassified Claude Code version could read. `[opencode.models.aliases]`
+and `[opencode.effort.aliases]` mirror `[models.aliases]`/ `[effort.aliases]` in shape but not in defaults — see "Model
+and effort tiers" above for why OpenCode's own table carries the whole mapping rather than overrides to a built-in one.
+`worker_config_path` names the runner-owned permission/plugin document `blizzard runner init` scaffolds beside
+`worker-settings.json` (never inside a project repository); it denies OpenCode's native, non-interactive `question` tool
+outright — a headless worker has no one to answer it, and `blizzard runner ask` is its lease-authenticated replacement —
+and names the heartbeat plugin ("Harness identity" above) for OpenCode to load. Effort reasserts on every OpenCode
+invocation exactly as it does for Claude Code, for the same reason: a mint-only value would silently drop across a
+resume.
 
 ## Compaction windows
 
@@ -199,11 +199,11 @@ An operator takeover session inverts this: your shell is the base with only a bo
 lease's `BLIZZARD_*` identity vars plus the daemon's `PATH` and `HOME`; `env_passthrough` is not forwarded and no
 allowlist filters your shell ([chunk-operations/takeover.md](./chunk-operations/takeover.md) owns the verb).
 
-`[worker]` `path_prepend` leads every one of those same child environments' `PATH` with the listed absolute
-directories — a mise shims directory, say — ahead of the daemon's own, so a spawned worker resolves the same
-version-manager tools an operator's shell does; entries repeat the daemon's own if already present rather than
-duplicating, and an empty list leaves `PATH` exactly as the daemon's. Each entry may use `~` for the operator's home,
-expanded once at config load; anything still relative after that fails config load, naming the key. A configured
-directory absent on disk does not fail startup — `runner host` warns about it once and still starts, and that entry
-simply never reaches a child's `PATH` until it exists. Because the takeover's own forwarded `PATH` above is the
-daemon's, an operator taking over a worker's session resolves the same prepended tools that worker did.
+`[worker]` `path_prepend` leads every one of those same child environments' `PATH` with the listed absolute directories
+— a mise shims directory, say — ahead of the daemon's own, so a spawned worker resolves the same version-manager tools
+an operator's shell does; entries repeat the daemon's own if already present rather than duplicating, and an empty list
+leaves `PATH` exactly as the daemon's. Each entry may use `~` for the operator's home, expanded once at config load;
+anything still relative after that fails config load, naming the key. A configured directory absent on disk does not
+fail startup — `runner host` warns about it once and still starts, and that entry simply never reaches a child's `PATH`
+until it exists. Because the takeover's own forwarded `PATH` above is the daemon's, an operator taking over a worker's
+session resolves the same prepended tools that worker did.

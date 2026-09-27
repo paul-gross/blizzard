@@ -1,4 +1,4 @@
-"""The runner-owned OpenCode permission/plugin document (execution spec, D7).
+"""The runner-owned OpenCode permission/plugin document (execution spec).
 
 Written beside ``worker-settings.json`` in the runtime root, and supplied to a spawned worker
 through ``OPENCODE_CONFIG``/``OPENCODE_CONFIG_CONTENT`` ("configuration_isolation"). Renders

@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the superuser-bootstrap repository seam (package-private,
-issue #94).
+"""SQLAlchemy adapter for the superuser-bootstrap repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the domain
 sees only :class:`~blizzard.hub.auth.models.SuperuserBootstrap`. There is at most one

@@ -18,7 +18,7 @@ import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-n
  * The diagram's detail pane — the selected node's full `GraphNodeView` (including
  * `prompt`/`judgement_prompt` and every inbound edge's `prompt_addendum`,
  * `graph-incoming-addenda.ts`'s own resolver), the selected edge's choice
- * (including its `prompt_addendum`, issue #208), or a neutral hint when nothing is
+ * (including its `prompt_addendum`), or a neutral hint when nothing is
  * selected. Presentational only: `graph`/`selection` are plain inputs, resolved
  * against `graph-diagram-selection.ts`'s pure resolvers
  * (`bzh:frontend-container-presentational`). Field rendering (retries, produces,

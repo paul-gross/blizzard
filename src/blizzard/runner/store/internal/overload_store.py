@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the provider-overload backoff repository seam (package-private,
-blizzard#595)."""
+"""SQLAlchemy adapter for the provider-overload backoff repository seam (package-private)."""
 
 from __future__ import annotations
 

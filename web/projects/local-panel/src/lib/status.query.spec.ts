@@ -51,7 +51,7 @@ describe('injectLocalPauseMutation (issue #133)', () => {
   });
 
   it('stays pending through the post-PATCH status re-read, not just the PATCH itself', async () => {
-    // The stale-read window (issue #133 review): if `onSuccess` fired the
+    // The stale-read window: if `onSuccess` fired the
     // invalidation fire-and-forget, `isPending()` would clear the instant the
     // PATCH resolved — before `runnerDashboardKey` re-read lands — so the toggle
     // would re-enable while still showing the pre-flip label, and a fast

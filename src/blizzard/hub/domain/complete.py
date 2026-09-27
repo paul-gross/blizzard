@@ -1,5 +1,5 @@
 """Chunk completion — the operator's manual closure of a chunk, reachable from any non-``done``
-status including ``stopped`` (issue #294). Appends the ``chunk.completed`` fact, which
+status including ``stopped``. Appends the ``chunk.completed`` fact, which
 ``ChunkFacts._operator_completion_outranks_stop`` lets outrank a stop at or before it
 (``bzh:facts-not-status``), releasing any live route and held hub-exec slot in the same store
 transaction, mirroring ``StopService``. Idempotent by no-op: an already-``done`` chunk writes

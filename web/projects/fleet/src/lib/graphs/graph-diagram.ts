@@ -28,7 +28,7 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
  * The `.node-name` / `.node-badge` / `.node-meta` / `.edge-label` rules below are
  * mirrored — size, weight, family and tracking — by `graph-text-measurer.ts`, which
  * sizes every box around them. Change the two together or boxes size to type this
- * component does not draw (issue #157).
+ * component does not draw.
  *
  * Colors are CSS classes bound to `tokens.css` custom properties (`--cyan`,
  * `--amber`, `--red`, `--green`, `--label-dim`), never baked into SVG attributes —
@@ -51,7 +51,7 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
  * choice, not an oversight: `graph-detail.ts`'s ever-present structured table
  * covers the edges/choices list for keyboard and screen-reader access, but a
  * node's prompt/judgement text and an edge's prompt addendum live only behind
- * this diagram's node/edge selection (issue #208). Making the diagram a focusable
+ * this diagram's node/edge selection. Making the diagram a focusable
  * widget tree (roving tabindex, `role="application"`, Enter/Space) is real work
  * the issue this shipped under did not ask for.
  */

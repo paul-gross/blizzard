@@ -1,4 +1,4 @@
-"""Delivery materialization (blizzard#393) — turning a :class:`ValidatedDelivery`
+"""Delivery materialization — turning a :class:`ValidatedDelivery`
 into the rows a passing delivery mints, written in one transaction
 (blizzard-product:/delivered/garden/machinery.md §Delivery). Sibling to ``garden_delivery.py``
 rather than folded into it so that module stays pure validation with no I/O; this one
@@ -43,8 +43,8 @@ class NewFinding:
     locus: str
     summary: str
     introduced: str | None
-    #: `introduced`'s own authored instant, already resolved by validation (blizzard#394
-    #: D5) — never re-resolved here, so a delivery spends the forge slot at most once.
+    #: `introduced`'s own authored instant, already resolved by validation
+    #: — never re-resolved here, so a delivery spends the forge slot at most once.
     introduced_at: datetime | None
 
 
@@ -55,12 +55,12 @@ class FindingFactRecord:
 
     finding_id: str
     kind: str  # add | observed | gone | resolved
-    finding_set_id: str  # the delivered list this fact belongs to (blizzard#401 D1)
+    finding_set_id: str  # the delivered list this fact belongs to
     note: str | None = None
     #: The `add` op's own submission-local ref, when it carried one — never set for
     #: `observed`/`gone`.
     ref: str | None = None
-    #: The `delivered` fact's own closer, carried onto its settling `resolved` fact (blizzard#583 D3).
+    #: The `delivered` fact's own closer, carried onto its settling `resolved` fact.
     actor: str | None = None
 
 
@@ -137,7 +137,7 @@ class IWriteGardenDeliveryRepository(Protocol):
         """Whether the ``(chunk_id, node_id, epoch)`` marker already exists — the same
         check :meth:`deliver` makes internally, exposed so a caller can short-circuit
         before re-validating a retry's content against state that may have drifted since
-        the original, successful attempt (blizzard#394 D3)."""
+        the original, successful attempt."""
         ...
 
 
@@ -179,7 +179,7 @@ class GardenDelivery:
 
         for delta, artifact_id in zip(validated.deltas, delta_artifact_ids, strict=True):
             # Minted before the facts loop below: every fact this delta produces
-            # attributes to the set that carried it (blizzard#401 D1).
+            # attributes to the set that carried it.
             finding_set_id = Id.mint(FINDING_SET_PREFIX, self._clock).value
             new_findings: list[NewFinding] = []
             facts: list[FindingFactRecord] = []
@@ -216,7 +216,7 @@ class GardenDelivery:
                 else:
                     assert isinstance(op, GoneFindingOp)
                     if op.id in validated.delivered_findings:
-                        # Already delivered — this completes the exit rather than flagging it (blizzard#583 D3).
+                        # Already delivered — this completes the exit rather than flagging it.
                         facts.append(
                             FindingFactRecord(
                                 finding_id=op.id,

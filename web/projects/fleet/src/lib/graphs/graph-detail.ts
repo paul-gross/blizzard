@@ -19,14 +19,13 @@ import { injectHubGraphQuery } from './graphs.query';
 /**
  * The graph explorer's **detail** view — one minted graph's immutable structure,
  * rendered in full: the entry node, a node table (executor, session, judged-by,
- * retries, checks, produces), and the graph-level session declarations (issue
- * #144). Consumes
+ * retries, checks, produces), and the graph-level session declarations. Consumes
  * `injectHubGraphQuery` reactively over the `graphId` input, which the host page
  * binds to the `/graphs/:graphId` route param — refresh-safe and deep-linkable by
  * construction (`bzh:generated-client`; no hand-written fetch).
  *
  * Mounts `<fleet-graph-diagram-view>` above the node table — the selectable DAG
- * render of the same `GraphView` plus its detail pane (blizzard#159), no re-fetch;
+ * render of the same `GraphView` plus its detail pane, no re-fetch;
  * the table stays the ever-present fallback surface, unaffected by a diagram-layout
  * failure. Every edge — its choice, its target, its description, and its prompt
  * addendum — is read by selecting it in that pane, which is the single place the
@@ -83,12 +82,12 @@ export class GraphDetail {
    * `false`, the same reasoning `admin-page.ts`'s `triadState` documents. */
   protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.graphQuery, false));
 
-  /** Whether the current identity may author graphs (`graph:edit`, admin-tier — issue
-   * #93) — gates the retire/re-enable control, forwarded to {@link GraphDetailHeader};
+  /** Whether the current identity may author graphs (`graph:edit`, admin-tier)
+   * — gates the retire/re-enable control, forwarded to {@link GraphDetailHeader};
    * `null`/pending resolves to `false`. */
   protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
 
-  /** Set on a failed retire/enable (issue #42's report-don't-swallow pattern);
+  /** Set on a failed retire/enable (report-don't-swallow pattern);
    * cleared at the start of the next attempt. */
   protected readonly actionError = signal<string | null>(null);
 
@@ -131,7 +130,7 @@ export class GraphDetail {
 
   protected readonly nodes = computed<readonly GraphNodeView[]>(() => this.graph()?.nodes ?? []);
 
-  /** The graph's declared sessions (issue #144) — empty for every graph minted before
+  /** The graph's declared sessions — empty for every graph minted before
    * #144, which is what makes the session table render nothing at all there. */
   protected readonly sessions = computed<readonly GraphSessionView[]>(() => this.graph()?.sessions ?? []);
 

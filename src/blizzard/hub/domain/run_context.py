@@ -1,6 +1,8 @@
-"""A run's identity (blizzard#393) — the routine, scope, and mode a work item's
-run executes under. Minted by blizzard#392; this seam only resolves it back, through a
-chunk's first work ref, to the ``work_item_runs`` row blizzard#392 wrote."""
+"""A run's identity — the routine, scope, and mode a work item's
+run executes under. Minted by
+:meth:`~blizzard.hub.store.internal.work_item_store.WorkItemStore.create_with_chunk_and_promote`;
+this seam only resolves it back, through a chunk's first work ref, to the ``work_item_runs``
+row that call wrote."""
 
 from __future__ import annotations
 

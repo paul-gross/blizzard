@@ -1,5 +1,5 @@
 """No packaged node prompt claims "cold eyes" unless its node actually runs fresh (unit
-tier, issue #148).
+tier).
 
 For every packaged ``*/graph.yaml``, a runner node whose main prompt says "cold eyes"
 must be ``session: fresh``, since a prompt is opaque prose to the parser. Excludes

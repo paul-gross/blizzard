@@ -1,4 +1,4 @@
-"""The runner's cached view of the hub's published JWKS (issue #95).
+"""The runner's cached view of the hub's published JWKS.
 
 Fetched lazily and cached by ``kid``; a :meth:`JwksCache.key_for` miss triggers exactly
 one re-fetch, so a rotated key is picked up with no restart. All ``httpx``/JWK-parsing

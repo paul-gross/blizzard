@@ -81,7 +81,7 @@ from tests.repo_files import repo_root
 pytestmark = pytest.mark.unit
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
-# Keyed off the admitted range's own committed corpus (blizzard#438) — there is exactly
+# Keyed off the admitted range's own committed corpus — there is exactly
 # one committed corpus today, but this stays correct once a second one lands.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION

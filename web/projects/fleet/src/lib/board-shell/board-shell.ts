@@ -16,8 +16,8 @@ export type { BoardCard, BoardReposition };
  * cards, filling the centre column above the chunk detail. The titlebar is not
  * here: it spans the whole window, so {@link BoardHeader} owns it.
  *
- * READY and BACKLOG are two of those columns (issue #137, and the backlog
- * ranking work that followed it), not a rail beside them: both are hub-ranked
+ * READY and BACKLOG are two of those columns (and the backlog
+ * ranking work that followed), not a rail beside them: both are hub-ranked
  * lists (`bzh:ranking-is-per-list`), so each renders top-to-bottom in its own
  * hub order ({@link readyOrder}/{@link backlogOrder}) and is reshaped in place:
  * card drags leave as {@link reposition}, lane-tagged so a container with both
@@ -78,13 +78,13 @@ export class BoardShell {
    * list it belongs to (forwarded as-is from {@link BoardColumn}). */
   readonly reposition = output<BoardReposition>();
 
-  /** Whether the current identity may promote a backlog chunk (`chunk:control` —
-   * issue #210), forwarded to every {@link BoardColumn}. `null`/pending resolves to
+  /** Whether the current identity may promote a backlog chunk (`chunk:control`),
+   * forwarded to every {@link BoardColumn}. `null`/pending resolves to
    * `false` (hidden until confirmed). */
   readonly canControl = input(false);
 
   /** Whether the current identity may reorder the ready queue or backlog
-   * (`queue:reorder` — issue #210), forwarded to the ranked {@link BoardColumn}s. */
+   * (`queue:reorder`), forwarded to the ranked {@link BoardColumn}s. */
   readonly canReorder = input(false);
 
   protected readonly columns = LANES;
@@ -141,7 +141,7 @@ export class BoardShell {
       if (left === right) return 0;
       return left < right ? -1 : 1;
     });
-    // DONE alone is ordered newest-first (issue #173) — a second lane-scoped
+    // DONE alone is ordered newest-first — a second lane-scoped
     // ordering, same shape as READY's above. A `null` completedAt (shouldn't happen
     // for a done-lane card, but not fabricated if it does) sorts last rather than
     // jumping to the top, and ties keep their relative order (stable sort).

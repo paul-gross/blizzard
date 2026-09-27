@@ -4,7 +4,7 @@ import { runnerApi } from 'fleet';
 import { runnerTranscriptKey } from './query-keys';
 
 /**
- * Runner `GET /api/leases/{lease_id}/transcript` read (issue #29) — the parsed
+ * Runner `GET /api/leases/{lease_id}/transcript` read — the parsed
  * conversation transcript for one lease, spanning both active and closed leases
  * (404 only for a lease that never existed at all; a spawning agent
  * or a missing/unreadable transcript is a normal 200 with `available: false` and
@@ -13,7 +13,7 @@ import { runnerTranscriptKey } from './query-keys';
  *
  * `enabled: leaseId() !== null` — no request fires until a row is selected.
  * `refetchInterval: false`, deliberately unlike {@link injectRunnerLeasesQuery}:
- * the runner's SSE stream (blizzard#317 Phase 4) carries no `transcript-changed`
+ * the runner's SSE stream carries no `transcript-changed`
  * kind — none of the six kinds it publishes says anything about a lease's
  * conversation content — so there is still no live signal for *this* read
  * specifically, event-driven or polled. Real-time transcript refresh stays

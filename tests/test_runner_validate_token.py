@@ -1,5 +1,5 @@
 """``FederationToken`` — signature/``kid``, audience, expiry (±30s leeway),
-and jti-replay checks (issue #95). Built against a locally-minted RSA keypair, mirroring
+and jti-replay checks. Built against a locally-minted RSA keypair, mirroring
 ``tests/test_auth_oauth_providers.py``'s own JWKS-building convention — no network,
 no dependency on the hub's own ``SigningKeyService``."""
 

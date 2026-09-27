@@ -1,4 +1,4 @@
-"""The session-id hasher (issue #91)."""
+"""The session-id hasher."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from blizzard.foundation.hashing import Sha256Hex
 class SessionId:
     """A session id in plaintext — handed out once at mint, presented on every request."""
 
-    #: ``secrets.token_urlsafe`` byte count for a minted session id — >= 128 bits (issue #91).
+    #: ``secrets.token_urlsafe`` byte count for a minted session id — >= 128 bits.
     BYTES: ClassVar[int] = 32
 
     plaintext: str

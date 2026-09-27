@@ -25,7 +25,7 @@ class WorkerStdoutFiles:
         return self._path(lease_id, generation, "stdout")
 
     def stderr_path(self, lease_id: str, generation: int) -> str:
-        """This lease's per-generation harness-**stderr** redirect target (issue #125), or
+        """This lease's per-generation harness-**stderr** redirect target, or
         ``""`` — so a launched worker that crashed to stderr leaves a readable tail for the
         ``worker-lost`` event."""
         return self._path(lease_id, generation, "stderr")
@@ -49,7 +49,7 @@ class WorkerStdoutFiles:
     def sweep(self, *, now: datetime, retention: timedelta) -> int:
         """Remove every captured stdout/stderr file older than ``retention``, judged by its
         own mtime — the periodic prune that bounds ``root``'s growth now that a lease's files
-        outlive its release (issue #58). Scans the whole directory rather than any one lease's
+        outlive its release. Scans the whole directory rather than any one lease's
         files, so it reaches generations whose owning lease is long gone. Returns the count
         removed; a file that vanishes mid-sweep is a no-op, not a fault."""
         if not self.root:

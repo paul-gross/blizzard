@@ -1,4 +1,4 @@
-"""The analytics event query seam (blizzard#255 D1/D6) — filterable events plus canned
+"""The analytics event query seam — filterable events plus canned
 counts, over the projection :mod:`extraction` and :mod:`derivation` populate.
 
 New, not an extension of :mod:`events` (``bzh:controller-read-only``): that module's
@@ -14,10 +14,10 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class EventQueryCriteria:
-    """Every filter this API owes (blizzard#255), all optional and freely combinable.
-    ``source`` is a ``chunk_work_refs`` existence test (D1), never a join — a chunk
+    """Every filter this API owes, all optional and freely combinable.
+    ``source`` is a ``chunk_work_refs`` existence test, never a join — a chunk
     carrying several refs would multiply event rows. ``extractor_version`` has no
-    default: mixing versions double-counts an occurrence (D1), so a caller names one."""
+    default: mixing versions double-counts an occurrence, so a caller names one."""
 
     extractor_version: str
     kind: str | None = None
@@ -30,7 +30,7 @@ class EventQueryCriteria:
     # An untimed event (no ``occurred_at``) falls outside every range, ``since``/``until`` alike.
     since: datetime | None = None
     until: datetime | None = None
-    # Provenance dimensions (blizzard#439 D6) — the segment's own frozen harness identity.
+    # Provenance dimensions — the segment's own frozen harness identity.
     harness_id: str | None = None
     harness_version: str | None = None
     model: str | None = None
@@ -64,7 +64,7 @@ class EventRecord:
 
 @dataclass(frozen=True)
 class EventPage:
-    """A bounded, keyset-paginated page (blizzard#255) — ``next_cursor`` is ``None``
+    """A bounded, keyset-paginated page — ``next_cursor`` is ``None``
     exactly when this page is the last one under ``criteria``'s ordering, so a caller
     drives a full bulk read by following it until absent."""
 
@@ -81,7 +81,7 @@ class CountRow:
 
 
 class IReadAnalyticsEventQueries(Protocol):
-    """Read-only event query Protocol (blizzard#255 D6) — the routes' own seam
+    """Read-only event query Protocol — the routes' own seam
     (``bzh:controller-read-only``, ``bzh:repository-split``). Every ``counts_by_*``
     orders its rows most-frequent first, key ascending as the tiebreak — the order a
     top-N reader takes a prefix of, and one two identical calls agree on."""

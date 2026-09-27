@@ -36,7 +36,7 @@ from blizzard.hub.store import schema as s
 
 @dataclass(frozen=True)
 class MigrationColumn:
-    """``chunks.intended_migration``'s JSON shape — ``None`` writes and reads ``NULL`` (issue #124)."""
+    """``chunks.intended_migration``'s JSON shape — ``None`` writes and reads ``NULL``."""
 
     def encode(self, intended: IntendedMigration | None) -> str | None:
         if intended is None:
@@ -54,7 +54,7 @@ class MigrationColumn:
 
 @dataclass(frozen=True)
 class ModelColumn:
-    """``chunks.default_model``'s column shape — a JSON ``list[str]`` (issue #144).
+    """``chunks.default_model``'s column shape — a JSON ``list[str]``.
 
     An empty preference list writes ``NULL`` rather than ``"[]"``, so "express no
     preference" reads identically however the chunk reached it."""
@@ -126,7 +126,7 @@ DEFAULT_MODEL = ModelColumn()
 DEFAULT_HARNESSES = ModelColumn()
 QUESTIONS = QuestionQuery()
 
-# The generic ``merged/<repo>`` landing marker (issue #67) — mirrors domain/work.py's own
+# The generic ``merged/<repo>`` landing marker — mirrors domain/work.py's own
 # copy (``LandedRepos``'s), which reads it back; each side owns its own constant.
 MARKER_PREFIX = "merged/"
 
@@ -140,7 +140,7 @@ def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
             chunk_id=chunk.chunk_id,
             graph_id=chunk.graph_id,
             minted_at=chunk.minted_at,
-            # `chunks.model` is deliberately omitted (issue #144) — the insert
+            # `chunks.model` is deliberately omitted — the insert
             # leans on its `server_default`.
             default_model=DEFAULT_MODEL.encode(chunk.default_model),
             default_effort=chunk.default_effort,
@@ -156,7 +156,7 @@ def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at:
     caller-supplied ``conn`` — mirrors :func:`insert_chunk_rows`'s shared-connection
     shape, so ``ChunkQueueStore.record_promote_with_tail_position`` and a routine run's
     own mint-and-promote composite write both fold the promote-then-tail-stamp pair into
-    their own transaction (blizzard#392). No idempotency check: a caller minting a fresh
+    their own transaction. No idempotency check: a caller minting a fresh
     chunk has nothing to check against, and ``record_promote_with_tail_position`` keeps
     its own ahead of this call. Returns the freshly-inserted ``chunk_promoted.id``."""
     result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
@@ -166,7 +166,7 @@ def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at:
 
 
 def record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime) -> int:
-    """Insert one ``chunk_deleted`` row on a caller-supplied ``conn`` (issue #364) —
+    """Insert one ``chunk_deleted`` row on a caller-supplied ``conn`` —
     mirrors :func:`insert_chunk_rows`'s shared-connection shape, so the withdrawal
     half of a composite delete write can fold this into its own transaction. Returns
     the freshly-inserted ``chunk_deleted.id``."""
@@ -176,7 +176,7 @@ def record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime
 
 
 def record_grouped_row_conn(conn: Connection, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
-    """Insert one ``chunk_grouped`` row on a caller-supplied ``conn`` (issue #460) —
+    """Insert one ``chunk_grouped`` row on a caller-supplied ``conn`` —
     mirrors :func:`record_deleted_row`'s shared-connection shape, so the fold's own
     composite write can fold every target's row into one transaction. Returns the
     freshly-inserted ``chunk_grouped.id``."""
@@ -194,7 +194,7 @@ def insert_materialization_row(
     reason: str | None,
     at: datetime,
 ) -> bool:
-    """Insert one ``work_item_materializations`` row on a caller-supplied ``conn`` (D5) —
+    """Insert one ``work_item_materializations`` row on a caller-supplied ``conn`` —
     mirrors :func:`insert_chunk_rows`/:func:`record_deleted_row`'s shared-connection
     shape, so the mint/append composites can fold this into their own transaction.
     Idempotent per ``proposal_id``: returns False and writes nothing when a judgment
@@ -218,7 +218,7 @@ def insert_materialization_row(
 
 
 def ephemeral_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
-    """Every chunk id gone from every read (issue #364) — the union of grouped-away
+    """Every chunk id gone from every read — the union of grouped-away
     and deleted chunks; widened here so every consumer across every seam inherits the
     exclusion."""
     grouped = {r.chunk_id for r in conn.execute(select(s.chunk_grouped.c.chunk_id)).all()}
@@ -270,9 +270,9 @@ def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
     """:meth:`~blizzard.hub.store.internal.chunk_route_store.ChunkRouteStore.route_of`'s
     query body, taking an already-open ``conn`` so a write transaction elsewhere (the
     lifecycle adapter's own ``record_stop``/``record_completion``) can resolve the same
-    question inside its own commit (issue #118). Delegates the tie-break to
+    question inside its own commit. Delegates the tie-break to
     :attr:`~blizzard.hub.domain.work.RouteHistory.newest`, so route liveness has exactly
-    one answer at a same-instant tie (issue #41)."""
+    one answer at a same-instant tie."""
     # (created_at, seq) desc — must stay in lockstep with the key
     # `RouteHistory.newest` orders by; that property, not this query, owns it.
     created = conn.execute(
@@ -329,7 +329,7 @@ def next_route_seq(conn: Connection, chunk_id: str) -> int:
 
 def graph_id_of(conn: Connection, chunk_id: str) -> str:
     """The chunk's then-current graph pin — the provenance a transition is stamped
-    with (issue #90). Read inside the writing transaction so a transition always
+    with. Read inside the writing transaction so a transition always
     carries the graph it actually moved within, even as a later migration re-pins
     ``chunks.graph_id`` in a subsequent write."""
     return conn.execute(select(s.chunks.c.graph_id).where(s.chunks.c.chunk_id == chunk_id)).scalar_one()
@@ -382,8 +382,8 @@ def insert_proposals(conn: Connection, proposals: list[WorkItemProposalRow], *, 
 
 
 def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> None:
-    """Enqueue one pending close intent per this chunk's still-open work ref (D1,
-    blizzard#383) — called, inside the caller's own transaction, from every write
+    """Enqueue one pending close intent per this chunk's still-open work ref — called,
+    inside the caller's own transaction, from every write
     that lands or completes a chunk, across the movement/delivery/lifecycle/decisions/
     artifacts/hub_exec seams. A chunk in the ephemeral set enqueues nothing; a ref
     already carrying a terminal ``work_item_closures`` outcome is skipped; a replayed

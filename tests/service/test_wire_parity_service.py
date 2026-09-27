@@ -1,8 +1,8 @@
-"""Wire-parity service tests (paul-gross/blizzard-mock#4): the real ``HttpHubClient``
+"""Wire-parity service tests: the real ``HttpHubClient``
 driven against the mock hub's wire.
 
 Proves three ``IHubClient`` endpoints are wire-compatible, plus one behavioral case
-(env release on a chunk-unknown 404, commit ``68238d0``, blizzard#9)."""
+(env release on a chunk-unknown 404, commit ``68238d0``)."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def _seed(hub) -> str:
     return resp.json()["chunk_id"]
 
 
-# 1. The batch chunk-status read (blizzard#521)
+# 1. The batch chunk-status read
 
 
 def test_chunk_statuses_reads_a_seeded_chunk_and_omits_an_unknown_one() -> None:
@@ -63,7 +63,7 @@ def test_chunk_statuses_reads_a_seeded_chunk_and_omits_an_unknown_one() -> None:
 def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -> None:
     """The escalation wire round trip through ``push_facts`` -> ``POST /api/fleet/events``
     — the runner's only path to it (``IHubClient.report_escalation`` had no callers and
-    is gone, blizzard#521). Real ingest is pinned by ``tests/test_store_and_forward.py``
+    is gone). Real ingest is pinned by ``tests/test_store_and_forward.py``
     and ``tests/test_runner_loop.py``."""
     bin_dir = require_mock_fleet()
     hub_port = _free_port()
@@ -205,7 +205,7 @@ def _bindings(config: RunnerConfig, chunk_id: str) -> list:
 
 
 def test_runner_releases_held_environment_when_hub_reports_chunk_unknown(tmp_path: Path) -> None:
-    """The env-release-on-404 path (commit ``68238d0``, blizzard#9): a chunk-scoped 404
+    """The env-release-on-404 path (commit ``68238d0``): a chunk-scoped 404
     is terminal, not transient — the runner releases every bound environment for the
     chunk. The mock's lever manufactures the 404 without deleting seeded state."""
     bin_dir = require_mock_fleet()

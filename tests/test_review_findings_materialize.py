@@ -1,4 +1,4 @@
-"""``ReviewFindingsMaterialize`` (unit tier, blizzard#582 Phase 1): builds a
+"""``ReviewFindingsMaterialize`` (unit tier): builds a
 ``ReviewFindingsPlan`` from a ``ValidatedReviewFindings`` over a fake repository — every
 id mints with the right prefix, every field maps through from the wire entry, an empty
 delta yields an empty plan (the ``tests/test_garden_delivery_materialize.py`` shape)."""

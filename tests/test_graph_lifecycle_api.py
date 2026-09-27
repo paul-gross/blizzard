@@ -201,7 +201,7 @@ def test_re_enabling_restores_effective(tmp_path: Path) -> None:
 
 
 # Retiring every version of the packaged *default* graph must survive a restart, not
-# be silently undone by the next lazy `ensure_default` (issue #101).
+# be silently undone by the next lazy `ensure_default`.
 
 
 def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path: Path) -> None:
@@ -236,7 +236,7 @@ def test_retiring_every_version_of_the_default_graph_survives_a_restart(tmp_path
 def test_ensure_default_disambiguates_a_retirement_with_a_cheap_existence_probe_not_a_full_listing(
     tmp_path: Path,
 ) -> None:
-    """blizzard#524 D6: the old disambiguation called ``list_all()``, fully reifying
+    """The old disambiguation called ``list_all()``, fully reifying
     every graph for a question that is really "does any graph of this name exist".
     ``any_minted`` answers it in one statement, independent of graph count."""
     hub = build_hub(tmp_path)

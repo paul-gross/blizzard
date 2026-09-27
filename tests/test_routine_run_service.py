@@ -1,8 +1,8 @@
-"""``RunService`` against a real store (blizzard#392, component tier) — ``build_hub``'s
+"""``RunService`` against a real store (component tier) — ``build_hub``'s
 own full wiring, exercised through ``HubServices.routine_run`` directly (no HTTP route
-yet; Phase 2 adds one). Covers full, delta with a baseline, delta downgraded, an
+yet; adds one). Covers full, delta with a baseline, delta downgraded, an
 override against a related scope, the routine's defaults reaching the chunk, the graph
-pin, and the promote — the acceptance list the plan's Phase 1 owes."""
+pin, and the promote — the acceptance list the plan's owes."""
 
 from __future__ import annotations
 
@@ -89,9 +89,9 @@ def test_full_mode_mints_ingests_and_promotes(tmp_path: Path) -> None:
 
 
 def test_the_minted_chunk_carries_a_resolvable_run_context(tmp_path: Path) -> None:
-    """The run's own identity row (blizzard#393's ``work_item_runs``) lands in the same
+    """The run's own identity row (``work_item_runs``) lands in the same
     act, so garden delivery's own read of the chunk it will later deliver against
-    resolves rather than reading `None` (blizzard#392/#393 reconciliation)."""
+    resolves rather than reading `None`."""
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 

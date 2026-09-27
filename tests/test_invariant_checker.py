@@ -88,7 +88,7 @@ def test_a_closed_lease_with_an_ambiguous_generation_is_a_violation(tmp_path: Pa
 
 
 def test_a_closed_lease_whose_generation_was_marked_identity_failed_is_not_a_violation(tmp_path: Path) -> None:
-    """The other legal close-out of a provisional generation (D1/D2): REAP's own
+    """The other legal close-out of a provisional generation: REAP's own
     ``record_identity_failed`` before ``Attempt.fail`` — not a leak."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
@@ -298,7 +298,7 @@ def test_gapped_outbound_seq_is_a_violation(tmp_path: Path) -> None:
 
 
 def test_a_pruned_acked_outbound_seq_below_the_pending_floor_is_not_a_violation(tmp_path: Path) -> None:
-    """Retention (issue #520) prunes an acked outbound row below the lowest
+    """Retention prunes an acked outbound row below the lowest
     still-pending seq — the ordinary case after a prune, not a lost record."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
@@ -317,7 +317,7 @@ def test_a_pruned_acked_outbound_seq_below_the_pending_floor_is_not_a_violation(
 
 
 def test_a_hole_at_or_above_the_pending_floor_in_outbound_seq_is_still_a_violation(tmp_path: Path) -> None:
-    """The rescoped check (issue #520) still catches a real hole at or above the
+    """The rescoped check still catches a real hole at or above the
     pending floor — a seq that never arrived there is the lost-record case the check exists
     for, whatever retention has already pruned further back."""
     engine = _runner_engine(tmp_path)
@@ -338,7 +338,7 @@ def test_a_hole_at_or_above_the_pending_floor_in_outbound_seq_is_still_a_violati
 
 
 def test_gapped_transcript_outbound_seq_is_a_violation(tmp_path: Path) -> None:
-    """The transcript lane's own gapless-seq check — never `outbound_buffer`'s (D3)."""
+    """The transcript lane's own gapless-seq check — never `outbound_buffer`'s."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         for seq in (1, 2, 4):  # 3 is missing — a hole in the FIFO buffer
@@ -354,7 +354,7 @@ def test_gapped_transcript_outbound_seq_is_a_violation(tmp_path: Path) -> None:
 
 
 def test_an_acked_and_pruned_transcript_seq_between_two_retained_rows_is_not_a_violation(tmp_path: Path) -> None:
-    """review F2: an acked non-final row prunes outright, so a healthy drain routinely
+    """An acked non-final row prunes outright, so a healthy drain routinely
     leaves an older retained final marker beside a newer surviving row with a gap between
     — seq 2 here, acked and deleted. The ordinary case, not a lost record."""
     engine = _runner_engine(tmp_path)
@@ -380,7 +380,7 @@ def test_an_acked_and_pruned_transcript_seq_between_two_retained_rows_is_not_a_v
 
 
 def test_a_pending_gap_among_only_unacked_transcript_rows_is_still_a_violation(tmp_path: Path) -> None:
-    """The rescoped check (review F2) still catches a real hole in the pending window — an
+    """The rescoped check still catches a real hole in the pending window — an
     unacked seq that never arrived is exactly the lost-record case the check exists for,
     whether or not an older acked row happens to sit further back."""
     engine = _runner_engine(tmp_path)
@@ -420,7 +420,7 @@ def _segment_row(**overrides: object) -> dict:
         "shipped_bytes": 0,
         "shipped_turns": 0,
         # The source seam's own "never ran" sentinel (`""`) — a real spawn always has SOME
-        # normalizer_version to declare, never `None` (issue #246).
+        # normalizer_version to declare, never `None`.
         "normalizer_version": "",
         "harness_version": None,
         "truncated_reason": None,
@@ -554,7 +554,7 @@ def test_distinct_generation_or_kind_usage_rows_are_not_a_violation(tmp_path: Pa
 
 
 def test_a_closed_leases_open_invocation_boundary_is_a_violation(tmp_path: Path) -> None:
-    """blizzard#437 D11 (``bzh:open-facts-declare-closure``): once a lease's own closure fact
+    """(``bzh:open-facts-declare-closure``): once a lease's own closure fact
     is durable, every boundary it opened must be closed too — a still-open one here means
     ``Attempt.close``, the one funnel every closure path shares, was bypassed."""
     engine = _runner_engine(tmp_path)
@@ -637,7 +637,7 @@ def test_an_open_leases_open_invocation_boundary_is_not_a_violation(tmp_path: Pa
 def test_a_single_worker_starting_boundary_per_generation_is_not_a_violation(tmp_path: Path) -> None:
     """A ``spawn`` boundary at generation 1 and a ``resume`` boundary at generation 2 are each
     the sole worker-starting boundary of their own generation — the exclusivity invariant is
-    scoped per generation, not per lease (blizzard#437 Phase 4)."""
+    scoped per generation, not per lease."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(
@@ -662,7 +662,7 @@ def test_a_single_worker_starting_boundary_per_generation_is_not_a_violation(tmp
 def test_two_worker_starting_boundaries_at_one_generation_is_a_violation(tmp_path: Path) -> None:
     """A ``resume`` boundary landing at the same generation an already-open ``nudge``
     boundary owns would corrupt ``_worker_boundary``'s try-in-order lookup silently — the
-    checker names it instead (blizzard#437 Phase 4)."""
+    checker names it instead."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(
@@ -687,7 +687,7 @@ def test_two_worker_starting_boundaries_at_one_generation_is_a_violation(tmp_pat
 
 def test_duplicate_nudge_fact_for_one_lease_epoch_is_a_violation(tmp_path: Path) -> None:
     """`record_nudge_fired` is an insert never an upsert, gated in code not by a DB
-    constraint (issue #113); two rows for the same ``(lease, epoch)`` mean that guard
+    constraint; two rows for the same ``(lease, epoch)`` mean that guard
     was bypassed."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
@@ -785,7 +785,7 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
 
 def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_path: Path) -> None:
     """``hub:merge-queue-single-state`` — a whole-chunk ``delivery.landed`` fact paired
-    with a non-terminal newest transition reads as both landed and mid-flight (issue #63);
+    with a non-terminal newest transition reads as both landed and mid-flight;
     defense-in-depth, since a real store never writes this shape."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
@@ -839,7 +839,7 @@ def test_merged_into_post_merge_node_is_not_a_violation(tmp_path: Path) -> None:
 
 def test_two_open_pause_parks_on_one_lease_is_a_violation(tmp_path: Path) -> None:
     """``runner:one-open-pause-park-per-lease`` — PULL's park guard is the only thing
-    keeping a standing pause to a single open park (issue #46, plan §7)."""
+    keeping a standing pause to a single open park (plan §7)."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         for _ in range(2):  # the same standing pause parked twice — the dropped-guard shape
@@ -907,7 +907,7 @@ def _seed_migration(
     """A chunk pinned to (pin_graph, pin_default_model) with one migration targeting
     to_graph (#90). ``release_route=False`` seeds a torn write where the migration fact
     landed but the route release did not. ``landed_executor`` seeds a ``graph_nodes``
-    row for the landing node; a ``"hub"`` landing (issue #111) and a ``"restart"``
+    row for the landing node; a ``"hub"`` landing and a ``"restart"``
     ``source`` (#371) are exempt from the route-released check."""
     # `chunks.model` is retained-and-unread since #144; the re-pin the invariant checks
     # lands in `default_model`, so that is what a seeded pin has to carry.
@@ -982,7 +982,7 @@ def test_a_migration_without_its_model_repin_is_a_violation(tmp_path: Path) -> N
 
 
 def test_a_migration_whose_repin_survives_a_later_default_model_edit_is_not_a_violation(tmp_path: Path) -> None:
-    """Issue #144 — the check is **membership**, not equality against ``[model_after]``:
+    """The check is **membership**, not equality against ``[model_after]``:
     an operator may add a fallback entry to ``default_model`` after the re-pin without
     re-triggering the check."""
     engine = _hub_engine(tmp_path)
@@ -1017,7 +1017,7 @@ def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) ->
 
 def test_a_hub_landing_migration_retains_its_route_and_is_not_a_violation(tmp_path: Path) -> None:
     """``hub:migration-route-released`` exempts a migration landing on a hub-executed
-    node (issue #111): it deliberately retains the route, so no violation even with no
+    node: it deliberately retains the route, so no violation even with no
     ``route_released``."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
@@ -1149,7 +1149,7 @@ def test_a_pending_intent_against_a_non_terminal_ref_is_not_a_violation(tmp_path
 
 def test_a_landed_refs_pending_close_intent_is_not_a_violation(tmp_path: Path) -> None:
     """The legal history: ``_enqueue_close_intents`` fired for the landed chunk's still-open
-    ref, so it carries a ``close_intents`` row (blizzard#383)."""
+    ref, so it carries a ``close_intents`` row."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
@@ -1215,7 +1215,7 @@ def test_a_non_landed_refs_missing_intent_is_not_a_violation(tmp_path: Path) -> 
 def test_a_landed_ref_with_no_close_intent_and_no_terminal_outcome_is_a_violation(tmp_path: Path) -> None:
     """The exact bug this check exists to catch: a landing fact written directly to the
     store, bypassing ``chunk_rows.enqueue_close_intents`` — simulating a future landing-fact
-    writer that forgot the call (blizzard#383, F3)."""
+    writer that forgot the call."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
@@ -1239,7 +1239,7 @@ def test_a_hand_completed_refs_missing_intent_is_a_violation(tmp_path: Path) -> 
 
 
 def test_a_grouped_chunks_missing_intent_is_not_a_violation(tmp_path: Path) -> None:
-    """An ephemeral (grouped-away) chunk enqueues nothing by design (issue #364); it owes
+    """An ephemeral (grouped-away) chunk enqueues nothing by design; it owes
     no coverage either."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:

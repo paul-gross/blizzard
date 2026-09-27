@@ -21,10 +21,10 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * List Asks
  *
- * Every ask still awaiting an answer — ``GET /api/asks?open=true`` (issue #51).
+ * Every ask still awaiting an answer — ``GET /api/asks?open=true``.
  *
  * The one **human-web-lane** route on this otherwise worker-hook router, so it carries
- * ``require_human_api`` (issue #95). An ask reads open while its ``question_id`` carries
+ * ``require_human_api``. An ask reads open while its ``question_id`` carries
  * no answer fact. No closed-ask history is kept, so ``open=false`` is refused.
  */
 export const listAsksApiAsksGet = <ThrowOnError extends boolean = false>(options?: Options<ListAsksApiAsksGetData, ThrowOnError>): RequestResult<ListAsksApiAsksGetResponses, ListAsksApiAsksGetErrors, ThrowOnError> => (options?.client ?? client).get<ListAsksApiAsksGetResponses, ListAsksApiAsksGetErrors, ThrowOnError>({ url: '/api/asks', ...options });
@@ -42,7 +42,7 @@ export const loginApiAuthLoginGet = <ThrowOnError extends boolean = false>(optio
 /**
  * Logout
  *
- * Clear the runner's own session cookie (issue #129). Public, like the bounce it complements:
+ * Clear the runner's own session cookie. Public, like the bounce it complements:
  * logging out cannot itself require a live session, and clearing an absent cookie is a harmless no-op.
  * The session is a **stateless** signed cookie, so there is nothing server-side to revoke — deleting
  * it *is* the logout. If the hub session is still live, the next visit silently re-authenticates
@@ -53,7 +53,7 @@ export const logoutApiAuthLogoutPost = <ThrowOnError extends boolean = false>(op
 /**
  * Read Session
  *
- * The own-identity read (issue #129). Public and self-resolving: it reports the identity a request
+ * The own-identity read. Public and self-resolving: it reports the identity a request
  * *would* resolve to rather than gating on one, so it never ``401``s. Under a ``none``-mode hub the
  * surface is authless; under oauth it carries the signed-in username, or ``None`` when none rode
  * along.
@@ -63,7 +63,7 @@ export const readSessionApiAuthSessionGet = <ThrowOnError extends boolean = fals
 /**
  * Get Chunk
  *
- * Forward a chunk's detail read to the hub — the whole aggregate (issue #314), including
+ * Forward a chunk's detail read to the hub — the whole aggregate, including
  * transition history, artifacts, and the open escalation.
  */
 export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkApiChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}', ...options });
@@ -72,7 +72,7 @@ export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false
  * Pause Chunk
  *
  * Forward a chunk pause to the hub — interrupts the active worker, force-stopping it only if
- * it hasn't wound down within its grace period, and keeps the claim (issue #46). ``409`` when the
+ * it hasn't wound down within its grace period, and keeps the claim. ``409`` when the
  * chunk is not in a pausable state.
  */
 export const pauseChunkApiChunksChunkIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseChunkApiChunksChunkIdPausePostData, ThrowOnError>): RequestResult<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pause', ...options });
@@ -131,14 +131,14 @@ export const endTakeoverApiChunksChunkIdTakeoversTakeoverIdPatch = <ThrowOnError
  * List Transcript Segments
  *
  * The chunk's segment index, straight off the local ledger — metadata and byte counts
- * only, never turns (D6). A chunk this runner never held a lease for returns ``[]``.
+ * only, never turns. A chunk this runner never held a lease for returns ``[]``.
  */
 export const listTranscriptSegmentsApiChunksChunkIdTranscriptsGet = <ThrowOnError extends boolean = false>(options: Options<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetData, ThrowOnError>): RequestResult<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors, ThrowOnError> => (options.client ?? client).get<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/transcripts', ...options });
 
 /**
  * Get Transcript Segment
  *
- * One segment's turns, local-only (D1) — 404 iff absent; 503 iff its owner is unavailable.
+ * One segment's turns, local-only — 404 iff absent; 503 iff its owner is unavailable.
  */
 export const getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet = <ThrowOnError extends boolean = false>(options: Options<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetData, ThrowOnError>): RequestResult<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/transcripts/{segment_id}', ...options });
 
@@ -214,7 +214,7 @@ export const heartbeatApiHeartbeatPost = <ThrowOnError extends boolean = false>(
 /**
  * List Leases
  *
- * Active leases, then recently-closed ones, derived at read time (issue #28/#29).
+ * Active leases, then recently-closed ones, derived at read time.
  */
 export const listLeasesApiLeasesGet = <ThrowOnError extends boolean = false>(options?: Options<ListLeasesApiLeasesGetData, ThrowOnError>): RequestResult<ListLeasesApiLeasesGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListLeasesApiLeasesGetResponses, unknown, ThrowOnError>({ url: '/api/leases', ...options });
 
@@ -277,7 +277,7 @@ export const listArtifactsApiLeasesLeaseIdArtifactsGet = <ThrowOnError extends b
  * ``404`` when nothing matches. A supplied ``node`` settles scope to node on its own — neither
  * a graph declaration nor a system artifact has a producing node — so pairing it with
  * ``scope=graph``/``scope=system`` is ``400``. More than one candidate — several upstream
- * nodes (issue #169), or a name colliding across scopes — is ``409`` naming them.
+ * nodes, or a name colliding across scopes — is ``409`` naming them.
  */
 export const getArtifactApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends boolean = false>(options: Options<GetArtifactApiLeasesLeaseIdArtifactsNameGetData, ThrowOnError>): RequestResult<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError> => (options.client ?? client).get<GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/artifacts/{name}', ...options });
 
@@ -286,7 +286,7 @@ export const getArtifactApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends
  *
  * Record a worker's ask against its lease, minting the question id.
  *
- * Token-authorized like every other worker verb (issue #291): activeness alone would admit
+ * Token-authorized like every other worker verb: activeness alone would admit
  * an open takeover's closed reference lease too, so the presented token is the only
  * credential that actually gates this route.
  */
@@ -303,7 +303,7 @@ export const recordAskApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean =
  * List Staged Attachments
  *
  * The lease's currently staged submissions — newest content per ``name``, not yet
- * published into any envelope (issue #169).
+ * published into any envelope.
  */
 export const listStagedAttachmentsApiLeasesLeaseIdAttachmentsGet = <ThrowOnError extends boolean = false>(options: Options<ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetData, ThrowOnError>): RequestResult<ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses, ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors, ThrowOnError> => (options.client ?? client).get<ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses, ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/attachments', ...options });
 
@@ -416,7 +416,7 @@ export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?:
  * Get Runner
  *
  * The runner's machine-local summary: identity, pause states, capacities, hub
- * connectivity, last tick (issue #51).
+ * connectivity, last tick.
  *
  * Derived entirely from local store facts plus the injected clock — no hub call, so it
  * is truthful with the hub unreachable. An unwired service answers 503.
@@ -426,7 +426,7 @@ export const getRunnerApiRunnerGet = <ThrowOnError extends boolean = false>(opti
 /**
  * Patch Runner
  *
- * Set this runner's own pause brake — it starts no new workers (issue #45).
+ * Set this runner's own pause brake — it starts no new workers.
  *
  * Independent of the hub's brake: it works with the hub unreachable, and neither reads nor
  * writes the hub's flag. Every spawn site honors it, and escalation at an exhausted budget is
@@ -479,7 +479,7 @@ export const listOpenTakeoversApiTakeoversGet = <ThrowOnError extends boolean = 
 /**
  * Clear Workspace Prompt
  *
- * Drop the runtime override so the runner's configured prompt resolves again (issue #344).
+ * Drop the runtime override so the runner's configured prompt resolves again.
  *
  * Distinct from overriding with empty text, which is itself a standing override; the response
  * carries whatever the config now resolves to, effective on subsequent spawns.
@@ -489,14 +489,14 @@ export const clearWorkspacePromptApiWorkspacePromptDelete = <ThrowOnError extend
 /**
  * Read Workspace Prompt
  *
- * The effective spawn preamble prompt: the runtime override if set, else static config (issue #17).
+ * The effective spawn preamble prompt: the runtime override if set, else static config.
  */
 export const readWorkspacePromptApiWorkspacePromptGet = <ThrowOnError extends boolean = false>(options?: Options<ReadWorkspacePromptApiWorkspacePromptGetData, ThrowOnError>): RequestResult<ReadWorkspacePromptApiWorkspacePromptGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadWorkspacePromptApiWorkspacePromptGetResponses, unknown, ThrowOnError>({ url: '/api/workspace-prompt', ...options });
 
 /**
  * Replace Workspace Prompt
  *
- * Replace the runtime workspace-prompt override — effective on subsequent spawns (issue #17).
+ * Replace the runtime workspace-prompt override — effective on subsequent spawns.
  */
 export const replaceWorkspacePromptApiWorkspacePromptPut = <ThrowOnError extends boolean = false>(options: Options<ReplaceWorkspacePromptApiWorkspacePromptPutData, ThrowOnError>): RequestResult<ReplaceWorkspacePromptApiWorkspacePromptPutResponses, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ThrowOnError> => (options.client ?? client).put<ReplaceWorkspacePromptApiWorkspacePromptPutResponses, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ThrowOnError>({
     url: '/api/workspace-prompt',

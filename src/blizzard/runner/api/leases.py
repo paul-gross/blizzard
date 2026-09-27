@@ -1,4 +1,4 @@
-"""The runner-local lease list — ``GET /api/leases`` (issue #28; widened issue #29).
+"""The runner-local lease list — ``GET /api/leases``.
 
 Active leases plus recently-closed ones, answered entirely from the local sqlite store and
 the process probe. **Hub-free** by design: no hub call, no forge call, no title, and
@@ -40,6 +40,6 @@ def _view(activity: LeaseActivity) -> LeaseView:
 
 @router.get("/leases", response_model=LeaseListResponse)
 def list_leases(request: Request) -> LeaseListResponse:
-    """Active leases, then recently-closed ones, derived at read time (issue #28/#29)."""
+    """Active leases, then recently-closed ones, derived at read time."""
     service = RunnerWiring.of(request).leases()
     return LeaseListResponse(items=[_view(activity) for activity in service.list_recent()])

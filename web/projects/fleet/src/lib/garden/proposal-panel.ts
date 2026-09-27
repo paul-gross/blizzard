@@ -77,7 +77,7 @@ export type ProposalClosureVm =
       readonly workItem: ProposalWorkItemVm | null;
     };
 
-/** Who authored a proposal (blizzard#631) — `routine-run` names the routine that
+/** Who authored a proposal — `routine-run` names the routine that
  * raised it; `operator` names the authoring identity, plus the routine when one was
  * named, since an operator proposal may cite none at all. */
 export type ProposalOriginVm =
@@ -148,7 +148,7 @@ export class FleetProposalPanel {
 
   /** The case header's origin fragment — the routine name for a `routine-run`
    * proposal, or `operator · <createdBy>` with the routine named alongside when an
-   * operator proposal cites one (blizzard#631). */
+   * operator proposal cites one. */
   protected originLabel(origin: ProposalOriginVm): string {
     if (origin.kind === 'routine-run') return origin.routineName;
     return origin.routineName === null ? `operator · ${origin.createdBy}` : `operator · ${origin.createdBy} · ${origin.routineName}`;

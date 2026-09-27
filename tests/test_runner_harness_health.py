@@ -1,7 +1,7 @@
-"""The harness-health evaluator's pure policy (blizzard#438) — one case per cause, the
+"""The harness-health evaluator's pure policy — one case per cause, the
 priority ordering across simultaneous failures, and the explicit non-failure decisions the
 plan calls out: a never-run selftest, a binding declaring no version range at all, and a
-corpus-free binding's own admitted-but-unclassifiable carve-out (blizzard#606, D4)."""
+corpus-free binding's own admitted-but-unclassifiable carve-out."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def test_incompatible_version_is_unavailable() -> None:
 
 
 def test_a_non_admitted_version_is_incompatible_regardless_of_classification() -> None:
-    """D2: membership is checked before classification — a `version_admitted=False` version
+    """Membership is checked before classification — a `version_admitted=False` version
     is `incompatible_version` even when its (irrelevant, possibly stray) corpus entry would
     otherwise classify `supported`."""
     result = evaluate_harness_health(
@@ -70,7 +70,7 @@ def test_a_non_admitted_version_is_incompatible_regardless_of_classification() -
 def test_unknown_version_is_unavailable() -> None:
     """An admitted version the corpus cannot classify at all (no manifest, or a malformed
     or unrecognized one) — distinct from a non-admitted version, which is
-    `incompatible_version` instead (D2)."""
+    `incompatible_version` instead."""
     result = evaluate_harness_health(_evidence(version_classification=None))
     assert result.available is False
     assert result.cause is HarnessHealthCause.UNKNOWN_VERSION
@@ -122,7 +122,7 @@ def test_never_run_selftest_is_not_a_failure() -> None:
 
 
 def test_a_corpus_free_binding_admitted_with_no_classification_is_available() -> None:
-    """D4: a binding declaring `corpus_backed=False` (Claude Code, blizzard#606) is never
+    """A binding declaring `corpus_backed=False` (Claude Code) is never
     taken unavailable over a missing classification — only over admission itself."""
     result = evaluate_harness_health(
         _evidence(harness_id="claude_code", corpus_backed=False, version_classification=None)
@@ -132,7 +132,7 @@ def test_a_corpus_free_binding_admitted_with_no_classification_is_available() ->
 
 
 def test_a_corpus_free_binding_with_nothing_observed_is_still_unknown_version() -> None:
-    """D4: `version_admitted=None` still withholds availability even with no corpus behind
+    """`version_admitted=None` still withholds availability even with no corpus behind
     the binding — the corpus-free carve-out only ever excuses a missing classification, never
     a version that was never observed or couldn't be normalized at all."""
     result = evaluate_harness_health(
@@ -150,7 +150,7 @@ def test_a_corpus_free_binding_with_nothing_observed_is_still_unknown_version() 
 def test_a_binding_declaring_no_version_range_has_no_version_cause() -> None:
     """`version_declared=False` skips both version checks entirely — an inconsistent
     `version_classification` (here, `BLOCKING`) is never consulted. No binding declares
-    this today (blizzard#606), but the evaluator still supports one that might."""
+    this today, but the evaluator still supports one that might."""
     result = evaluate_harness_health(
         _evidence(
             version_declared=False,

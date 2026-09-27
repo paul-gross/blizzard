@@ -1,5 +1,5 @@
 """The runner event broker — its typed ``publish_*`` wrappers and event-type vocabulary over
-the kind-agnostic core (D1, blizzard#317) shared with the hub. The history/replay/live-fanout
+the kind-agnostic core shared with the hub. The history/replay/live-fanout
 machinery — id minting, the bounded ring, per-connection queues — lives in
 :mod:`blizzard.foundation.events.broker`; this module owns only what is runner-specific: the
 event-type names, their payload shapes, and the ``publish_*`` helpers each mutation seam

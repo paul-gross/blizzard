@@ -1,4 +1,4 @@
-"""Concurrent allocation of the ``work_item_sequence`` counter (issue #357).
+"""Concurrent allocation of the ``work_item_sequence`` counter.
 
 ``WorkItemStore.allocate_ref`` is optimistic-insert-then-increment, not one locking
 statement like ``chunk_rows.next_route_seq`` — a brand-new source has no row to lock.

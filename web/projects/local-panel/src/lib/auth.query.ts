@@ -7,7 +7,7 @@ import { runnerSessionKey } from './query-keys';
 
 const logoutInFlightSignal = signal(false);
 
-/** Whether `POST /api/auth/logout` is currently in flight (issue #312) — set for
+/** Whether `POST /api/auth/logout` is currently in flight — set for
  * the duration of {@link injectRunnerLogoutMutation}'s call, the panel's only
  * logout driver. The session-recovery seam (`session-recovery.ts`) suspends on
  * this: a `401` arriving mid-logout is the deliberate session clear, not an
@@ -15,12 +15,12 @@ const logoutInFlightSignal = signal(false);
 export const runnerLogoutInFlight = logoutInFlightSignal.asReadonly();
 
 /**
- * `GET /api/auth/session` (issue #129) — the panel's own-identity read behind its
+ * `GET /api/auth/session` — the panel's own-identity read behind its
  * username/logout control. Self-resolving and never `401` (the runner reports the
  * identity a request *would* resolve to), so the query never errors on "not signed
  * in": under a `none`-mode hub it answers `auth_enabled: false` (authless surface —
  * hide the control), under oauth it carries the signed-in hub `username` (or `null`
- * when no session rode along). No `refetchInterval` (D7, blizzard#317 Phase 4): the
+ * when no session rode along). No `refetchInterval`: the
  * poll this used to carry stood in for a session-loss signal; the runner's own auth
  * dependency (`require_human_api`) resolves once when the stream connects and is
  * never re-checked per frame, so an in-place expiry surfaces through whichever
@@ -61,7 +61,7 @@ export function signedInUsername(session: runnerApi.RunnerAuthSessionView | unde
 }
 
 /**
- * `POST /api/auth/logout` (issue #129) — clears the runner's own session cookie, then
+ * `POST /api/auth/logout` — clears the runner's own session cookie, then
  * invalidates the session read so the control drops the username. The runner session
  * is a stateless signed cookie, so this is the whole logout; SSO stays honest — the
  * caller reloads so the served shell's gate decides the next visit (a still-live hub

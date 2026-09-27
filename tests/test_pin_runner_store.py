@@ -1,4 +1,4 @@
-"""Runner-store decisions that had only a comment defending them (issue #270).
+"""Runner-store decisions that had only a comment defending them.
 
 Each test below pins one store-level decision whose reversion no other test caught."""
 
@@ -30,7 +30,7 @@ def _store(tmp_path):  # type: ignore[no-untyped-def]
 
 class _FakeRunnerStoreErrors(RunnerStoreErrorFactory):
     """A fake collaborator that records every wrap without ever touching the real
-    logger its base class carries (issue #413) — proves the store's driver-error wrap
+    logger its base class carries — proves the store's driver-error wrap
     is substitutable by injection."""
 
     def __init__(self) -> None:
@@ -44,7 +44,7 @@ class _FakeRunnerStoreErrors(RunnerStoreErrorFactory):
 @pytest.mark.unit
 def test_the_driver_error_wrap_is_substitutable_by_injection(tmp_path: Path) -> None:
     """``_wrap`` is an injected ``RunnerStoreErrorFactory``, not a module-level logger
-    (issue #413) — a fake factory observes the wrap without reaching into the module."""
+    — a fake factory observes the wrap without reaching into the module."""
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")  # unmigrated: every query is a driver fault
     errors = _FakeRunnerStoreErrors()
     store = SqlAlchemyRunnerStore(engine, errors)
@@ -219,7 +219,7 @@ def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_
 def test_a_migrated_outbound_seq_is_never_reissued_after_a_prune(tmp_path: Path) -> None:
     """``outbound_buffer`` carries the same ``sqlite_autoincrement`` fix as its sibling
     ``transcript_outbound_buffer`` — now load-bearing for it too, since retention
-    (issue #520) prunes it as well. Production migrates
+    prunes it as well. Production migrates
     (`bzh:gating-tier-pins-production-paths`), so the revision's own copy is pinned here."""
     config = runner_runtime.init_environment(tmp_path)
     engine = create_engine_from_url(config.db_url)

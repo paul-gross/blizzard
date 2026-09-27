@@ -25,14 +25,14 @@ class GraphParseError(ValueError):
 # The reserved terminal a choice may point at instead of a node name.
 RESERVED_TERMINAL = "done"
 
-# The cross-graph target prefix (issue #90): a ``to: graph:<name>`` choice re-pins the
+# The cross-graph target prefix: a ``to: graph:<name>`` choice re-pins the
 # chunk rather than transitioning it (``bzh:migration-not-transition``).
 GRAPH_TARGET_PREFIX = "graph:"
 
 
 @dataclass(frozen=True)
 class ChoiceTarget:
-    """What a choice's ``to:`` value points at (issue #90) — pure syntax.
+    """What a choice's ``to:`` value points at — pure syntax.
 
     ``node`` a same-graph node or the reserved terminal, ``graph`` a well-formed
     ``graph:<name>``; neither set is :attr:`malformed`."""
@@ -54,11 +54,11 @@ class ChoiceTarget:
         return self.node is None and self.graph is None
 
 
-# ``session: resume:<name>`` (issues #115, #144) — resume ``<name>``'s most-recent
+# ``session: resume:<name>`` — resume ``<name>``'s most-recent
 # session rather than the chunk's most-recent overall.
 SESSION_RESUME_TARGET_PREFIX = "resume:"
 
-# ``session: fresh:<name>`` (issue #144) — mint a session and make it ``<name>``'s new
+# ``session: fresh:<name>`` — mint a session and make it ``<name>``'s new
 # head, which a later ``resume:<name>`` member continues.
 SESSION_FRESH_TARGET_PREFIX = "fresh:"
 
@@ -68,7 +68,7 @@ SESSION_LEGAL_FORMS = "`fresh`, `resume`, `resume:<node>`, `fresh:<session>`, or
 
 @dataclass(frozen=True)
 class SessionRef:
-    """What an authored ``session:`` value names (issues #115, #144) — pure syntax.
+    """What an authored ``session:`` value names — pure syntax.
 
     ``source`` is the ``<name>`` of a ``resume:``/``fresh:`` form, carried verbatim and
     ``None`` for a bare form; under :attr:`malformed` no field may be relied on."""
@@ -169,7 +169,7 @@ class ChoiceDoc:
     prompt_addendum: str | None = None
     target_graph: str | None = None
     model: str | None = None
-    # Gated on green checks (issue #114): unroutable while any of its node's is red.
+    # Gated on green checks: unroutable while any of its node's is red.
     requires_checks: bool = False
 
     @classmethod
@@ -237,7 +237,7 @@ class RunStepDoc:
 
 @dataclass(frozen=True)
 class ProducesSpec:
-    """One ``produces:`` entry, kind-carrying (D1, issue #143).
+    """One ``produces:`` entry, kind-carrying.
 
     Authored either as a bare string (``kind`` defaults to :attr:`ArtifactKind.ASSET`)
     or as a mapping ``{name, kind}``; both forms normalize to this one type."""
@@ -294,15 +294,15 @@ class NodeDoc(NodeShape[RunStepDoc]):
     # The pending-poll cadence (#66), in seconds — ``None`` accepts the executor default.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
-    # See :class:`SessionRef` (issues #115, #144), whose fields these carry.
+    # See :class:`SessionRef`, whose fields these carry.
     session_source: str | None = None
     session_malformed: bool = False
-    # Where ``checks:`` run (issue #114) — ``None`` runs them at the binding workdir's root.
+    # Where ``checks:`` run — ``None`` runs them at the binding workdir's root.
     checks_cwd: str | None = None
-    # The per-check timeout (issue #114), in seconds; a timeout is a red check.
+    # The per-check timeout, in seconds; a timeout is a red check.
     checks_timeout: int | None = None
     # Whether this node's completion may carry proposed work items — legal only on a
-    # worker-judged runner node (D4); ``False`` is the default, off.
+    # worker-judged runner node; ``False`` is the default, off.
     proposes_work_items: bool = False
 
     @classmethod
@@ -355,7 +355,7 @@ class NodeDoc(NodeShape[RunStepDoc]):
 
 @dataclass(frozen=True)
 class RotatePolicy:
-    """One declared session's rotation bounds (issue #144).
+    """One declared session's rotation bounds.
 
     Every threshold is optional; a head breaching *any* declared one is not resumed.
     ``max_invocations`` counts **harness invocations, not node-steps**."""
@@ -374,13 +374,13 @@ class RotatePolicy:
         )
 
 
-# Every key this hub's session parser reads by name (issue #351).
+# Every key this hub's session parser reads by name.
 SESSION_KNOWN_KEYS = frozenset({"model", "effort", "rotate", "compaction_window", "harnesses"})
 
 
 @dataclass(frozen=True)
 class SessionDecl:
-    """One graph-level named session declaration (issue #144).
+    """One graph-level named session declaration.
 
     Carries workflow *policy* only (``bzh:app-agnostic-graphs``); ``model``, ``effort``,
     ``compaction_window``, and ``harnesses`` (its own acceptable set) are opaque to the hub."""
@@ -435,7 +435,7 @@ class GraphDoc:
     name: str
     entry: str
     nodes: list[NodeDoc]
-    # The graph-level named-session declarations (issue #144), keyed by name — a top-level
+    # The graph-level named-session declarations, keyed by name — a top-level
     # sibling of ``nodes:``, empty for every graph that declares none.
     sessions: dict[str, SessionDecl] = field(default_factory=dict)
     # The graph-scoped `artifacts:` map, name -> baked content — a top-level sibling of
@@ -497,7 +497,7 @@ class Choice:
     choice_id: str
     name: str
     description: str
-    # Gated on green checks (issue #114) — see ``ChoiceDoc.requires_checks``.
+    # Gated on green checks — see ``ChoiceDoc.requires_checks``.
     requires_checks: bool = False
 
 
@@ -505,8 +505,8 @@ class Choice:
 class Edge:
     """A directed, choice-keyed connection out of one node.
 
-    ``target_graph`` is ``to_node_name``'s parsed name when the edge is cross-graph
-    (issue #90); ``model`` overrides the chunk's model when the migration re-pins it."""
+    ``target_graph`` is ``to_node_name``'s parsed name when the edge is cross-graph;
+    ``model`` overrides the chunk's model when the migration re-pins it."""
 
     from_node_id: str
     choice_id: str
@@ -551,7 +551,7 @@ class Node(NodeShape[RunStep]):
     poll_timeout_seconds: int | None = None
     # A validated graph never carries a malformed session, so no malformed flag here.
     session_source: str | None = None
-    # See ``NodeDoc.checks_cwd`` / ``NodeDoc.checks_timeout`` (issue #114).
+    # See ``NodeDoc.checks_cwd`` / ``NodeDoc.checks_timeout``.
     checks_cwd: str | None = None
     checks_timeout: int | None = None
     # See ``NodeDoc.proposes_work_items``.
@@ -576,7 +576,7 @@ class Graph:
     nodes: list[Node]
     edges: list[Edge]
     created_at: datetime
-    # The graph-level named-session declarations (issue #144), in authored order.
+    # The graph-level named-session declarations, in authored order.
     sessions: list[SessionDecl] = field(default_factory=list)
     # The graph-scoped `artifacts:` declarations, in authored order.
     artifacts: list[GraphArtifact] = field(default_factory=list)
@@ -626,7 +626,7 @@ class GraphSummary:
 class Mint:
     """One minted graph, ordered by when it was minted. Holds only a
     :class:`GraphSummary` — the ``graph_id``/``name``/``created_at`` fields this reads
-    — never a fully reified :class:`Graph` (issue #421)."""
+    — never a fully reified :class:`Graph`."""
 
     graph: GraphSummary
 
@@ -653,7 +653,7 @@ class Mint:
 
 @dataclass(frozen=True)
 class Mints:
-    """Every mint of every name, with the retired ones out of contention (issue #101)."""
+    """Every mint of every name, with the retired ones out of contention."""
 
     mints: list[Mint]
     retired_ids: Collection[str]
@@ -685,7 +685,7 @@ class Mints:
 
 @dataclass(frozen=True)
 class FollowLatest:
-    """Whether a chunk pinned to a graph follows the newest mint of its name (issue #164).
+    """Whether a chunk pinned to a graph follows the newest mint of its name.
 
     ``hub_default`` carries no default, so omitting it raises — pinned by
     tests/test_pin_hub_domain.py::test_follow_latest_requires_hub_default_explicitly"""
@@ -721,13 +721,13 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
     def get_enabled_by_name(self, name: str) -> Graph | None:
         """The newest non-retired graph with ``name`` — the default-graph pin lookup.
 
-        Excludes every retired ``graph_id`` (issue #101), so a name whose every mint is
+        Excludes every retired ``graph_id``, so a name whose every mint is
         retired resolves to ``None``."""
         ...
 
     def any_minted(self, name: str) -> bool:
-        """Whether any graph of ``name`` has ever been minted, retired or not (blizzard#524
-        D6) — a cheap existence probe, in place of a full listing, to check membership by
+        """Whether any graph of ``name`` has ever been minted, retired or not
+        — a cheap existence probe, in place of a full listing, to check membership by
         name."""
         ...
 
@@ -735,12 +735,12 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         """The newest-minted graph of ``name``'s source YAML, ``None`` if never minted.
 
         Newest-*minted*, not newest-enabled: retirement does not change what was minted,
-        so it is not consulted here (issue #146).
+        so it is not consulted here.
         """
         ...
 
     def is_retired(self, graph_id: str) -> bool:
-        """Whether ``graph_id``'s newest lifecycle fact reads retired (issue #101).
+        """Whether ``graph_id``'s newest lifecycle fact reads retired.
 
         ``False`` for a ``graph_id`` with no lifecycle fact at all — every freshly
         minted graph starts enabled.
@@ -748,7 +748,7 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         ...
 
     def retired_graph_ids(self) -> set[str]:
-        """Every ``graph_id`` whose newest lifecycle fact reads retired (issue #101).
+        """Every ``graph_id`` whose newest lifecycle fact reads retired.
 
         The set :class:`Mints` excludes from candidacy — the bulk counterpart to
         :meth:`is_retired`.
@@ -756,7 +756,7 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         ...
 
     def follow_latest(self, graph_id: str) -> bool | None:
-        """This graph's own follow-latest policy — the stored tri-state (issue #164).
+        """This graph's own follow-latest policy — the stored tri-state.
 
         ``None`` — the value for a graph with no policy fact — inherits the hub-level
         setting (:class:`FollowLatest`). Newest-fact-wins.
@@ -795,14 +795,14 @@ class IWriteGraphRepository(IReadGraphRepository, Protocol):
         ...
 
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
-        """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins (issue #101).
+        """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins.
 
         Never touches the ``graphs`` row itself — it stays insert-only and immutable.
         """
         ...
 
     def record_policy(self, graph_id: str, *, follow_latest: bool | None, at: datetime, by: str) -> None:
-        """Append a follow-latest policy fact — newest-fact-wins (issue #164).
+        """Append a follow-latest policy fact — newest-fact-wins.
 
         ``follow_latest=None`` is a real, recordable value — "revert to inheriting",
         not "leave unchanged". Never touches the ``graphs`` row.

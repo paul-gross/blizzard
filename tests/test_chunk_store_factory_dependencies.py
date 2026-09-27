@@ -1,6 +1,6 @@
 """``build_chunk_stores``/``build_services`` expose the new chunk-dependencies seam on
-both the write (``ChunkStores``) and read-only (``ChunkReadStores``) bundles (issue #456,
-component tier) — the read bundle typed to the read Protocol so
+both the write (``ChunkStores``) and read-only (``ChunkReadStores``) bundles (component
+tier) — the read bundle typed to the read Protocol so
 ``bzh:controller-read-only`` holds at type-check time; this asserts the runtime half:
 both bundles carry the field, and it is the same underlying adapter instance."""
 

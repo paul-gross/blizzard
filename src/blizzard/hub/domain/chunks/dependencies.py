@@ -1,5 +1,5 @@
 """The chunk-dependencies repository seam — the declared dependent-on-prerequisite
-edges between chunks (issue #456)."""
+edges between chunks."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from blizzard.hub.domain.work import DependencyEdge
 @dataclass(frozen=True)
 class FoldTarget:
     """One folded chunk's own release/mint split for a single fold's dependency-edge
-    rewrite (D1, D3, issue #460)."""
+    rewrite."""
 
     chunk_id: str
     release: list[str]
@@ -23,7 +23,7 @@ class FoldTarget:
 class IReadChunkDependenciesRepository(Protocol):
     """Read-only chunk-dependencies access. Answers three questions and no more: the
     fleet's standing edges, the standing edge for one ordered pair, and one chunk's own
-    standing edges in either role (issue #462)."""
+    standing edges in either role."""
 
     def list_standing_edges(self) -> list[DependencyEdge]:
         """Every currently-unreleased edge across the fleet."""
@@ -36,8 +36,8 @@ class IReadChunkDependenciesRepository(Protocol):
         ...
 
     def standing_edges_for(self, chunk_id: str) -> list[DependencyEdge]:
-        """Every standing edge naming ``chunk_id``, as dependent or as prerequisite alike
-        (D2, issue #462), bounded by ``chunk_id``'s own edge count rather than the
+        """Every standing edge naming ``chunk_id``, as dependent or as prerequisite alike,
+        bounded by ``chunk_id``'s own edge count rather than the
         fleet's. Same order as :meth:`list_standing_edges`."""
         ...
 
@@ -66,9 +66,9 @@ class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protoc
         by: str,
         at: datetime,
     ) -> dict[str, int]:
-        """Fold every target's dependency edges per its own release/mint split (D1, D3,
-        issue #460), atomically with recording each target's own ``chunk.grouped`` row —
+        """Fold every target's dependency edges per its own release/mint split,
+        atomically with recording each target's own ``chunk.grouped`` row —
         one transaction across the whole fold, so no target's write can commit ahead of
-        another's (D4). The split and the resulting set's cycle check are already done.
+        another's. The split and the resulting set's cycle check are already done.
         Returns each target chunk id's freshly-inserted ``chunk_grouped.id``."""
         ...

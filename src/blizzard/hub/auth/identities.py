@@ -1,5 +1,5 @@
-"""The identity-link repository seam — read/write Protocols (issue #91,
-``bzh:repository-split``).
+"""The identity-link repository seam — read/write Protocols
+(``bzh:repository-split``).
 
 The subject mapping is authoritative: a provider rename refreshes the stored handle
 rather than minting a second user.
@@ -27,7 +27,7 @@ class IReadIdentityRepository(Protocol):
     def distinct_provider_names(self) -> set[str]:
         """Every ``provider_name`` any stored identity references — the boot-time
         immutability check's read: a name here absent from ``[[auth.oauth.provider]]``
-        means a rename would silently orphan those identities (issue #92)."""
+        means a rename would silently orphan those identities."""
         ...
 
 
@@ -37,7 +37,7 @@ class IWriteIdentityRepository(IReadIdentityRepository, Protocol):
     def link(self, identity: Identity) -> None: ...
 
     def update_handle(self, provider_name: str, subject: str, *, handle: str) -> None:
-        """Refresh a linked identity's stored ``handle`` in place (issue #92) — a
+        """Refresh a linked identity's stored ``handle`` in place — a
         provider-side handle rename never re-mints a user; "subject mapping wins on
         every later login" (the epic's own phrasing) applies to the handle too."""
         ...

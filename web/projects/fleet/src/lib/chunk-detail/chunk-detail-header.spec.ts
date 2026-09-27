@@ -59,9 +59,9 @@ describe('ChunkDetailHeader', () => {
     const idLink = el.querySelector<HTMLAnchorElement>('[data-testid="detail-id"]');
     expect(idLink?.textContent?.trim()).toBe(ISSUE_DETAIL.chunk_id);
     // At narrow widths the id truncates with an ellipsis (styles), so the full id
-    // stays recoverable through the title attribute rather than the rendered text (issue #138).
+    // stays recoverable through the title attribute rather than the rendered text.
     expect(idLink?.getAttribute('title')).toBe(ISSUE_DETAIL.chunk_id);
-    // The chunk longname links out to its dedicated page (issue #205).
+    // The chunk longname links out to its dedicated page.
     expect(idLink?.getAttribute('href')).toBe(`/board/chunk/${ISSUE_DETAIL.chunk_id}`);
     const pointer = el.querySelector<HTMLAnchorElement>('a[data-testid="detail-pointer"]');
     expect(pointer?.textContent?.trim()).toBe('widget#42');
@@ -106,7 +106,7 @@ describe('ChunkDetailHeader', () => {
     expect(closed).toBe(true);
   });
 
-  // --- The "Claimed by" chip (issue #42) --------------------------------
+  // --- The "Claimed by" chip --------------------------------
 
   it('shows no claimed-by chip for a chunk with no live route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
@@ -143,7 +143,7 @@ describe('ChunkDetailHeader', () => {
     expect(el.querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
   });
 
-  // --- Pause / Resume (issue #46) -------------------------------------------
+  // --- Pause / Resume -------------------------------------------
 
   it('shows Pause — not Resume — for a running chunk carrying no pause fact', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);

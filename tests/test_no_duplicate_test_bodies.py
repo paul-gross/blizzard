@@ -1,7 +1,7 @@
 """No two tests carry the same body under different names (unit tier).
 
 A case whose body matches a sibling's asserts only what the sibling already asserts,
-so its own name is a claim nothing observes — the vacuous-duplicate shape issue #275
+so its own name is a claim nothing observes — the vacuous-duplicate shape
 swept for. A deliberate cross-tier re-run is declared below.
 """
 

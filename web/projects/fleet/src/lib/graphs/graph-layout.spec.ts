@@ -215,7 +215,7 @@ describe('layoutGraph', () => {
 
   describe('migration targets', () => {
     /** Mirrors `default-delivery`'s `triage` node — one node, an edge to `done`, and
-     * several edges to `graph:<name>` (issue #90's cross-graph migration): the shape
+     * several edges to `graph:<name>` (cross-graph migration): the shape
      * that used to fall back to `{ ok: false }` before `resolveEdges` learned the
      * `graph:` prefix. */
     const TRIAGE_LIKE: GraphView = {

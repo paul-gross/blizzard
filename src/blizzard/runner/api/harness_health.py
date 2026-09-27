@@ -1,4 +1,4 @@
-"""The runner-local harness-health diagnostics — ``GET /api/harness-health`` (blizzard#438).
+"""The runner-local harness-health diagnostics — ``GET /api/harness-health``.
 
 Every configured harness binding's computed availability, its withholding cause when
 unavailable, and every declared degradation regardless — the same evaluation its

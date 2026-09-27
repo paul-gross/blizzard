@@ -18,20 +18,20 @@ class ProducesReconciler:
     envelope: NodeEnvelope
 
     def missing(self, git_artifacts: list[SubmittedArtifact], attached_names: Iterable[str]) -> list[ProducesEntry]:
-        """Every spec this attempt does not yet cover (issue #143), in declaration order.
+        """Every spec this attempt does not yet cover, in declaration order.
 
         Evaluated by the shared :class:`Coverage` predicate, so this and the upstream
         backstop cannot drift apart. Only names, not content: `Coverage.unmet` reads
         `.name`/`.attached`/`.kind` off each artifact and never `.content` — so an attached
         name's dummy artifact carries an empty string rather than fetching content this
-        check provably never uses (Phase 3 hoist)."""
+        check provably never uses."""
         attached = [
             SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content="", attached=True) for name in attached_names
         ]
         return Coverage(git_artifacts + attached).unmet(self.envelope.node.produces)
 
     def nudge_message(self, missing: list[ProducesEntry]) -> str:
-        """The nudge resume's message (issues #113, #143): one line per unmet spec, naming
+        """The nudge resume's message: one line per unmet spec, naming
         the kind-appropriate declaration verb. Same inert ``#`` framing as the resume messages.
         """
         lines = ["# This node's `produces:` still needs an explicit submission:"]

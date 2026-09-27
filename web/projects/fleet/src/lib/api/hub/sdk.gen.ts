@@ -21,7 +21,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * List Activity
  *
- * The activity backfill (issue #213) — the three already-bounded per-source activity reads merged,
+ * The activity backfill — the three already-bounded per-source activity reads merged,
  * sorted newest-first, and capped.
  *
  * ``since`` defaults to 24h before the server's current time. A tz-naive ``since`` is coerced to
@@ -68,7 +68,7 @@ export const countsBySkillApiAnalyticsCountsSkillsGet = <ThrowOnError extends bo
 /**
  * Durations By Graph
  *
- * The same rollup grouped by the graph the step happened in (D2) — the transition's
+ * The same rollup grouped by the graph the step happened in — the transition's
  * own ``graph_id``, never the chunk's current pin.
  */
 export const durationsByGraphApiAnalyticsDurationsGraphsGet = <ThrowOnError extends boolean = false>(options?: Options<DurationsByGraphApiAnalyticsDurationsGraphsGetData, ThrowOnError>): RequestResult<DurationsByGraphApiAnalyticsDurationsGraphsGetResponses, DurationsByGraphApiAnalyticsDurationsGraphsGetErrors, ThrowOnError> => (options?.client ?? client).get<DurationsByGraphApiAnalyticsDurationsGraphsGetResponses, DurationsByGraphApiAnalyticsDurationsGraphsGetErrors, ThrowOnError>({ url: '/api/analytics/durations/graphs', ...options });
@@ -76,8 +76,8 @@ export const durationsByGraphApiAnalyticsDurationsGraphsGet = <ThrowOnError exte
 /**
  * Durations By Node
  *
- * Completed-step duration rollups grouped by node (D2) — see
- * ``AnalyticsDurationView`` for the wall-clock semantics (D3).
+ * Completed-step duration rollups grouped by node — see
+ * ``AnalyticsDurationView`` for the wall-clock semantics.
  */
 export const durationsByNodeApiAnalyticsDurationsNodesGet = <ThrowOnError extends boolean = false>(options?: Options<DurationsByNodeApiAnalyticsDurationsNodesGetData, ThrowOnError>): RequestResult<DurationsByNodeApiAnalyticsDurationsNodesGetResponses, DurationsByNodeApiAnalyticsDurationsNodesGetErrors, ThrowOnError> => (options?.client ?? client).get<DurationsByNodeApiAnalyticsDurationsNodesGetResponses, DurationsByNodeApiAnalyticsDurationsNodesGetErrors, ThrowOnError>({ url: '/api/analytics/durations/nodes', ...options });
 
@@ -103,7 +103,7 @@ export const streamEventsApiAnalyticsEventsNdjsonGet = <ThrowOnError extends boo
 /**
  * Outcomes By Node
  *
- * Judged-choice distribution and attempt-failure counts grouped by node (D4/D5) —
+ * Judged-choice distribution and attempt-failure counts grouped by node —
  * a judged failure edge and a retry-consuming attempt failure reported separately,
  * never blended into one rate. A delivery kick-back (``chunk_bounces``) counts as
  * neither.
@@ -129,7 +129,7 @@ export const reDeriveApiAnalyticsReDerivePost = <ThrowOnError extends boolean = 
 /**
  * Spend By Chunk
  *
- * A bounded, keyset-paginated page of per-chunk spend rollups (D8) — unbounded in a
+ * A bounded, keyset-paginated page of per-chunk spend rollups — unbounded in a
  * wide window, unlike the per-node/per-graph groupings, so this takes a cursor rather
  * than a single envelope.
  */
@@ -148,14 +148,14 @@ export const streamChunkSpendApiAnalyticsSpendChunksNdjsonGet = <ThrowOnError ex
  *
  * The same rollup grouped by each usage fact's chunk's *current* graph pin — a
  * chunk that migrated attributes every usage fact it ever recorded to where it lives
- * today (D6).
+ * today.
  */
 export const spendByGraphApiAnalyticsSpendGraphsGet = <ThrowOnError extends boolean = false>(options?: Options<SpendByGraphApiAnalyticsSpendGraphsGetData, ThrowOnError>): RequestResult<SpendByGraphApiAnalyticsSpendGraphsGetResponses, SpendByGraphApiAnalyticsSpendGraphsGetErrors, ThrowOnError> => (options?.client ?? client).get<SpendByGraphApiAnalyticsSpendGraphsGetResponses, SpendByGraphApiAnalyticsSpendGraphsGetErrors, ThrowOnError>({ url: '/api/analytics/spend/graphs', ...options });
 
 /**
  * Spend By Node
  *
- * Usage/cost rollups grouped by node (D6) — the same lower-bound + PARTIAL contract
+ * Usage/cost rollups grouped by node — the same lower-bound + PARTIAL contract
  * ``GET /api/spend`` publishes.
  */
 export const spendByNodeApiAnalyticsSpendNodesGet = <ThrowOnError extends boolean = false>(options?: Options<SpendByNodeApiAnalyticsSpendNodesGetData, ThrowOnError>): RequestResult<SpendByNodeApiAnalyticsSpendNodesGetResponses, SpendByNodeApiAnalyticsSpendNodesGetErrors, ThrowOnError> => (options?.client ?? client).get<SpendByNodeApiAnalyticsSpendNodesGetResponses, SpendByNodeApiAnalyticsSpendNodesGetErrors, ThrowOnError>({ url: '/api/analytics/spend/nodes', ...options });
@@ -168,7 +168,7 @@ export const authorizeApiAuthAuthorizeGet = <ThrowOnError extends boolean = fals
 /**
  * Cli Token
  *
- * Redeem a ``client=cli`` authorize code for a hub session token (issue #96).
+ * Redeem a ``client=cli`` authorize code for a hub session token.
  *
  * Public plane — there is no session yet; this route is what mints one. One
  * undifferentiated 400 covers every failure, telling a caller nothing about which.
@@ -200,8 +200,8 @@ export const listProvidersApiAuthProvidersGet = <ThrowOnError extends boolean = 
 /**
  * Rotate Signing Key
  *
- * Mint a fresh current signing key, demoting the old current to previous (issue
- * #95). Human-plane, gated on ``user:manage`` and closed to a runner bearer token.
+ * Mint a fresh current signing key, demoting the old current to previous.
+ * Human-plane, gated on ``user:manage`` and closed to a runner bearer token.
  */
 export const rotateSigningKeyApiAuthRotateSigningKeyPost = <ThrowOnError extends boolean = false>(options?: Options<RotateSigningKeyApiAuthRotateSigningKeyPostData, ThrowOnError>): RequestResult<RotateSigningKeyApiAuthRotateSigningKeyPostResponses, unknown, ThrowOnError> => (options?.client ?? client).post<RotateSigningKeyApiAuthRotateSigningKeyPostResponses, unknown, ThrowOnError>({ url: '/api/auth/rotate-signing-key', ...options });
 
@@ -218,8 +218,8 @@ export const callbackApiAuthNameCallbackGet = <ThrowOnError extends boolean = fa
 /**
  * Get Backlog
  *
- * The hub-ordered ``not_ready`` list, read-only and keyset-paginated (blizzard#526
- * D3/D4/D7) — an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``.
+ * The hub-ordered ``not_ready`` list, read-only and keyset-paginated
+ * — an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``.
  */
 export const getBacklogApiBacklogGet = <ThrowOnError extends boolean = false>(options?: Options<GetBacklogApiBacklogGetData, ThrowOnError>): RequestResult<GetBacklogApiBacklogGetResponses, GetBacklogApiBacklogGetErrors, ThrowOnError> => (options?.client ?? client).get<GetBacklogApiBacklogGetResponses, GetBacklogApiBacklogGetErrors, ThrowOnError>({ url: '/api/backlog', ...options });
 
@@ -265,7 +265,7 @@ export const repositionBacklogApiBacklogPositionPost = <ThrowOnError extends boo
  * The fleet chunk list — derived status per chunk, bounded and keyset-paginated.
  *
  * Only the page's own rows render, but live-holder and blocked-marking derivation still
- * see the whole fleet (D6 below) — a pointer this page renders can be held live by a
+ * see the whole fleet — a pointer this page renders can be held live by a
  * chunk outside it, same for a dependent's prerequisite.
  */
 export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(options?: Options<ListChunksApiChunksGetData, ThrowOnError>): RequestResult<ListChunksApiChunksGetResponses, ListChunksApiChunksGetErrors, ThrowOnError> => (options?.client ?? client).get<ListChunksApiChunksGetResponses, ListChunksApiChunksGetErrors, ThrowOnError>({ url: '/api/chunks', ...options });
@@ -275,7 +275,7 @@ export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(opt
  *
  * Ingest by source-native token; 422 on a token no configured source
  * claims; 409 on a pointer held by a live chunk; 503 if every graph named after the
- * packaged default has been retired (issue #101 — the operator's brake, not a code
+ * packaged default has been retired (the operator's brake, not a code
  * bug: re-enable one or mint a new one).
  */
 export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(options: Options<IngestChunkApiChunksPostData, ThrowOnError>): RequestResult<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError> => (options.client ?? client).post<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError>({
@@ -291,9 +291,9 @@ export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(o
  * Delete Chunk
  *
  * Delete an unacquired CHUNK, withdrawing every open ``hub:``-source item it holds
- * in the same write (issue #364). 404 for an unknown chunk or one a race deletes
+ * in the same write. 404 for an unknown chunk or one a race deletes
  * between resolving it and this write; 409 for one held, terminal, or a standing
- * prerequisite for another chunk (issue #460), naming the dependents in that case.
+ * prerequisite for another chunk, naming the dependents in that case.
  * Irreversible: CHUNK is gone from every read the instant this returns.
  */
 export const deleteChunkApiChunksChunkIdDelete = <ThrowOnError extends boolean = false>(options: Options<DeleteChunkApiChunksChunkIdDeleteData, ThrowOnError>): RequestResult<DeleteChunkApiChunksChunkIdDeleteResponses, DeleteChunkApiChunksChunkIdDeleteErrors, ThrowOnError> => (options.client ?? client).delete<DeleteChunkApiChunksChunkIdDeleteResponses, DeleteChunkApiChunksChunkIdDeleteErrors, ThrowOnError>({
@@ -315,7 +315,7 @@ export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false
 /**
  * Patch Chunk
  *
- * Apply the body's fields in one all-or-nothing edit (issue #124).
+ * Apply the body's fields in one all-or-nothing edit.
  *
  * 404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a
  * refused edit.
@@ -332,7 +332,7 @@ export const patchChunkApiChunksChunkIdPatch = <ThrowOnError extends boolean = f
 /**
  * Complete Chunk
  *
- * Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).
+ * Manually complete CHUNK, from any non-``done`` status, including ``stopped``.
  * Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route
  * and held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:
  * completing an already-``done`` chunk is a harmless no-op. 404 only when the chunk is
@@ -350,7 +350,7 @@ export const completeChunkApiChunksChunkIdCompletePost = <ThrowOnError extends b
 /**
  * Declare Dependency
  *
- * Declare that CHUNK depends on ``prerequisite_chunk_id`` (issue #456).
+ * Declare that CHUNK depends on ``prerequisite_chunk_id``.
  *
  * Idempotent: an already-standing pair is reported back before the prerequisite is even resolved, so one since gone
  * ephemeral cannot turn a refusal. 404 for an unknown dependent, or one a race deletes between resolving it and this
@@ -368,8 +368,8 @@ export const declareDependencyApiChunksChunkIdDependenciesPost = <ThrowOnError e
 /**
  * Release Dependency
  *
- * Release CHUNK's standing dependency on ``prerequisite_chunk_id`` (issue
- * #456) — recorded, never deleted. Admitted whenever the edge stands, whatever the
+ * Release CHUNK's standing dependency on ``prerequisite_chunk_id``
+ * — recorded, never deleted. Admitted whenever the edge stands, whatever the
  * prerequisite's own state. 404 for an unknown dependent; 409 when no edge stands.
  */
 export const releaseDependencyApiChunksChunkIdDependenciesReleasePost = <ThrowOnError extends boolean = false>(options: Options<ReleaseDependencyApiChunksChunkIdDependenciesReleasePostData, ThrowOnError>): RequestResult<ReleaseDependencyApiChunksChunkIdDependenciesReleasePostResponses, ReleaseDependencyApiChunksChunkIdDependenciesReleasePostErrors, ThrowOnError> => (options.client ?? client).post<ReleaseDependencyApiChunksChunkIdDependenciesReleasePostResponses, ReleaseDependencyApiChunksChunkIdDependenciesReleasePostErrors, ThrowOnError>({
@@ -410,9 +410,9 @@ export const recordGardenDeliveryApiChunksChunkIdGardenDeliveryPost = <ThrowOnEr
  * Group Chunks
  *
  * Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``
- * participants alike (issue #141); 409 names the first chunk a runner holds, or one
+ * participants alike; 409 names the first chunk a runner holds, or one
  * already finished. The survivor also absorbs each folded chunk's standing dependency
- * edges (issue #460); 409 refuses a fold that would close a cycle.
+ * edges; 409 refuses a fold that would close a cycle.
  */
 export const groupChunksApiChunksChunkIdGroupPost = <ThrowOnError extends boolean = false>(options: Options<GroupChunksApiChunksChunkIdGroupPostData, ThrowOnError>): RequestResult<GroupChunksApiChunksChunkIdGroupPostResponses, GroupChunksApiChunksChunkIdGroupPostErrors, ThrowOnError> => (options.client ?? client).post<GroupChunksApiChunksChunkIdGroupPostResponses, GroupChunksApiChunksChunkIdGroupPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/group',
@@ -443,7 +443,7 @@ export const recordHubMarkerApiChunksChunkIdHubMarkersPost = <ThrowOnError exten
 /**
  * Pause Chunk
  *
- * Set a chunk's operator pause brake — the claim is kept, unlike detach (issue #46).
+ * Set a chunk's operator pause brake — the claim is kept, unlike detach.
  */
 export const pauseChunkApiChunksChunkIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseChunkApiChunksChunkIdPausePostData, ThrowOnError>): RequestResult<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseChunkApiChunksChunkIdPausePostResponses, PauseChunkApiChunksChunkIdPausePostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/pause',
@@ -501,7 +501,7 @@ export const restartChunkApiChunksChunkIdRestartPost = <ThrowOnError extends boo
 /**
  * Resume Chunk
  *
- * Clear a chunk's operator pause brake — idempotent, never refused (issue #46).
+ * Clear a chunk's operator pause brake — idempotent, never refused.
  */
 export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boolean = false>(options: Options<ResumeChunkApiChunksChunkIdResumePostData, ThrowOnError>): RequestResult<ResumeChunkApiChunksChunkIdResumePostResponses, ResumeChunkApiChunksChunkIdResumePostErrors, ThrowOnError> => (options.client ?? client).post<ResumeChunkApiChunksChunkIdResumePostResponses, ResumeChunkApiChunksChunkIdResumePostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/resume',
@@ -515,17 +515,17 @@ export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boole
 /**
  * Record Review Findings Delivery
  *
- * The `record-findings` node's own route (blizzard#582) — validates the chunk's
+ * The `record-findings` node's own route — validates the chunk's
  * newest `review-finding-delta` artifact and, on success, materializes its `deferred`
  * entries in one transaction. A malformed delta or an unresolvable node is an
- * ``invalid`` outcome at a 200, never an error response. Idempotent per chunk (D6).
+ * ``invalid`` outcome at a 200, never an error response. Idempotent per chunk.
  */
 export const recordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPost = <ThrowOnError extends boolean = false>(options: Options<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostData, ThrowOnError>): RequestResult<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses, RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors, ThrowOnError> => (options.client ?? client).post<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses, RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/review-findings-delivery', ...options });
 
 /**
  * Stop Chunk
  *
- * Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
+ * Terminally abandon CHUNK — the operator's last-resort verb.
  *
  * Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
  * re-derives ``ready``, releases any live route, and supersedes any open escalation. 409
@@ -543,7 +543,7 @@ export const stopChunkApiChunksChunkIdStopPost = <ThrowOnError extends boolean =
 /**
  * List Transcript Segments
  *
- * The chunk's segment index (D12) — metadata and byte counts only, never turns.
+ * The chunk's segment index — metadata and byte counts only, never turns.
  */
 export const listTranscriptSegmentsApiChunksChunkIdTranscriptsGet = <ThrowOnError extends boolean = false>(options: Options<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetData, ThrowOnError>): RequestResult<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors, ThrowOnError> => (options.client ?? client).get<ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetResponses, ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/transcripts', ...options });
 
@@ -551,7 +551,7 @@ export const listTranscriptSegmentsApiChunksChunkIdTranscriptsGet = <ThrowOnErro
  * Get Transcript Segment
  *
  * One segment's decompressed turns, concatenated across its stored records in
- * turn-range order — the lazy per-segment content read (D12).
+ * turn-range order — the lazy per-segment content read.
  */
 export const getTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGet = <ThrowOnError extends boolean = false>(options: Options<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetData, ThrowOnError>): RequestResult<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetResponses, GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/transcripts/{segment_id}', ...options });
 
@@ -577,7 +577,7 @@ export const listDecisionsApiDecisionsGet = <ThrowOnError extends boolean = fals
  * Resolve an open decision, first-write-wins CAS.
  *
  * ``resolved_by`` is taken from the authenticated session identity, never the request
- * body's ``resolved_by`` field — a spoofed value there is silently ignored (issue #91).
+ * body's ``resolved_by`` field — a spoofed value there is silently ignored.
  */
 export const resolveDecisionApiDecisionsDecisionIdResolutionsPost = <ThrowOnError extends boolean = false>(options: Options<ResolveDecisionApiDecisionsDecisionIdResolutionsPostData, ThrowOnError>): RequestResult<ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors, ThrowOnError> => (options.client ?? client).post<ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors, ThrowOnError>({
     url: '/api/decisions/{decision_id}/resolutions',
@@ -591,7 +591,7 @@ export const resolveDecisionApiDecisionsDecisionIdResolutionsPost = <ThrowOnErro
 /**
  * List Events
  *
- * The ``event_log`` unified with open escalations (issue #125), most-severe-newest first, bounded.
+ * The ``event_log`` unified with open escalations, most-severe-newest first, bounded.
  *
  * The ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;
  * the open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the
@@ -602,9 +602,9 @@ export const listEventsApiEventsGet = <ThrowOnError extends boolean = false>(opt
 /**
  * List Findings
  *
- * The findings bucket, widened to every routine and every scope (blizzard#486),
- * bounded and keyset-paginated (blizzard#526 D1/D5) — live only, unless `include_gone`
- * (D3), which also surfaces every exited finding, not just a merely `gone` one.
+ * The findings bucket, widened to every routine and every scope,
+ * bounded and keyset-paginated — live only, unless `include_gone`,
+ * which also surfaces every exited finding, not just a merely `gone` one.
  * `routine` and `scope` are both optional, independently:
  *
  * - both named — one routine's findings under one scope
@@ -612,7 +612,7 @@ export const listEventsApiEventsGet = <ThrowOnError extends boolean = false>(opt
  * - `routine` absent, `scope` named — every routine's findings under one scope
  * - both absent — every finding across every routine and every scope
  *
- * `source` further narrows to `"routine"` or `"review"` (blizzard#582); absent reads
+ * `source` further narrows to `"routine"` or `"review"`; absent reads
  * both. All share `list_page`'s own total `finding_id` order.
  */
 export const listFindingsApiFindingsGet = <ThrowOnError extends boolean = false>(options?: Options<ListFindingsApiFindingsGetData, ThrowOnError>): RequestResult<ListFindingsApiFindingsGetResponses, ListFindingsApiFindingsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListFindingsApiFindingsGetResponses, ListFindingsApiFindingsGetErrors, ThrowOnError>({ url: '/api/findings', ...options });
@@ -713,7 +713,7 @@ export const wontFixFindingsApiFindingsWontFixPost = <ThrowOnError extends boole
 /**
  * Get Finding
  *
- * One finding's whole record, plus its whole fact chain oldest-first (blizzard#487);
+ * One finding's whole record, plus its whole fact chain oldest-first;
  * 404 on an unknown id.
  */
 export const getFindingApiFindingsFindingIdGet = <ThrowOnError extends boolean = false>(options: Options<GetFindingApiFindingsFindingIdGetData, ThrowOnError>): RequestResult<GetFindingApiFindingsFindingIdGetResponses, GetFindingApiFindingsFindingIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetFindingApiFindingsFindingIdGetResponses, GetFindingApiFindingsFindingIdGetErrors, ThrowOnError>({ url: '/api/findings/{finding_id}', ...options });
@@ -721,7 +721,7 @@ export const getFindingApiFindingsFindingIdGet = <ThrowOnError extends boolean =
 /**
  * Get Chunk Statuses
  *
- * The runner tick's slim batch status read (blizzard#521) — repeatable ``chunk_id``;
+ * The runner tick's slim batch status read — repeatable ``chunk_id``;
  * an unknown or ephemeral id is omitted, never a 404.
  */
 export const getChunkStatusesApiFleetChunkStatusesGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkStatusesApiFleetChunkStatusesGetData, ThrowOnError>): RequestResult<GetChunkStatusesApiFleetChunkStatusesGetResponses, GetChunkStatusesApiFleetChunkStatusesGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkStatusesApiFleetChunkStatusesGetResponses, GetChunkStatusesApiFleetChunkStatusesGetErrors, ThrowOnError>({ url: '/api/fleet/chunk-statuses', ...options });
@@ -736,7 +736,7 @@ export const getChunkApiFleetChunksChunkIdGet = <ThrowOnError extends boolean = 
 /**
  * Get Chunk Analytics Counts Agent Types
  *
- * A worker's own routine-run read of ``GET /api/analytics/counts/agent-types`` (blizzard#545).
+ * A worker's own routine-run read of ``GET /api/analytics/counts/agent-types``.
  */
 export const getChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetData, ThrowOnError>): RequestResult<GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetResponses, GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetResponses, GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/analytics/counts/agent-types', ...options });
 
@@ -745,35 +745,35 @@ export const getChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCoun
  *
  * A worker's own routine-run read of ``GET /api/analytics/counts/files`` — the same
  * rows, over the window it names, gated on the chunk carrying a run context rather than
- * on operator credentials (blizzard#545).
+ * on operator credentials.
  */
 export const getChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetData, ThrowOnError>): RequestResult<GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses, GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetResponses, GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/analytics/counts/files', ...options });
 
 /**
  * Get Chunk Analytics Counts Nodes
  *
- * A worker's own routine-run read of ``GET /api/analytics/counts/nodes`` (blizzard#545).
+ * A worker's own routine-run read of ``GET /api/analytics/counts/nodes``.
  */
 export const getChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetData, ThrowOnError>): RequestResult<GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetResponses, GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetResponses, GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/analytics/counts/nodes', ...options });
 
 /**
  * Get Chunk Analytics Counts Skills
  *
- * A worker's own routine-run read of ``GET /api/analytics/counts/skills`` (blizzard#545).
+ * A worker's own routine-run read of ``GET /api/analytics/counts/skills``.
  */
 export const getChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetData, ThrowOnError>): RequestResult<GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetResponses, GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetResponses, GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/analytics/counts/skills', ...options });
 
 /**
  * Get Chunk Analytics Spend Graphs
  *
- * A worker's own routine-run read of ``GET /api/analytics/spend/graphs`` (blizzard#545).
+ * A worker's own routine-run read of ``GET /api/analytics/spend/graphs``.
  */
 export const getChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetData, ThrowOnError>): RequestResult<GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetResponses, GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetResponses, GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/analytics/spend/graphs', ...options });
 
 /**
  * Get Chunk Analytics Spend Nodes
  *
- * A worker's own routine-run read of ``GET /api/analytics/spend/nodes`` (blizzard#545).
+ * A worker's own routine-run read of ``GET /api/analytics/spend/nodes``.
  */
 export const getChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetData, ThrowOnError>): RequestResult<GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponses, GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponses, GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/analytics/spend/nodes', ...options });
 
@@ -848,8 +848,8 @@ export const getChunkFindingApiFleetChunksChunkIdFindingsFindingIdGet = <ThrowOn
 /**
  * Get Garden Findings
  *
- * A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583
- * D2), widened to every review-sourced finding on the same scope (blizzard#582 D3) — the
+ * A worker's own routine's live-plus-`delivered` finding bucket, widened to every
+ * review-sourced finding on the same scope — the
  * chunk's own run context derives the routine and the scope; no caller-supplied flag can
  * name another. 404 both for an unknown chunk and for one carrying no run context (not a
  * routine run): a chunk with nothing to read is refused rather than an empty bucket.
@@ -896,7 +896,7 @@ export const reportLeaseApiFleetChunksChunkIdLeasesPost = <ThrowOnError extends 
 /**
  * Pause Chunk
  *
- * Pause the chunk with a runner's own bearer token (issue #185) — the same transition as the
+ * Pause the chunk with a runner's own bearer token — the same transition as the
  * operator route, ``by`` defaulting to ``operator``.
  */
 export const pauseChunkApiFleetChunksChunkIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseChunkApiFleetChunksChunkIdPausePostData, ThrowOnError>): RequestResult<PauseChunkApiFleetChunksChunkIdPausePostResponses, PauseChunkApiFleetChunksChunkIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseChunkApiFleetChunksChunkIdPausePostResponses, PauseChunkApiFleetChunksChunkIdPausePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/pause', ...options });
@@ -913,7 +913,7 @@ export const fleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGet = <Th
 /**
  * Resume Chunk
  *
- * Resume the chunk with a runner's own bearer token (issue #185). Takes no body, so the
+ * Resume the chunk with a runner's own bearer token. Takes no body, so the
  * resume is always recorded as ``operator``.
  */
 export const resumeChunkApiFleetChunksChunkIdResumePost = <ThrowOnError extends boolean = false>(options: Options<ResumeChunkApiFleetChunksChunkIdResumePostData, ThrowOnError>): RequestResult<ResumeChunkApiFleetChunksChunkIdResumePostResponses, ResumeChunkApiFleetChunksChunkIdResumePostErrors, ThrowOnError> => (options.client ?? client).post<ResumeChunkApiFleetChunksChunkIdResumePostResponses, ResumeChunkApiFleetChunksChunkIdResumePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/resume', ...options });
@@ -930,7 +930,7 @@ export const rekeyRouteTokenApiFleetChunksChunkIdRouteTokenPost = <ThrowOnError 
 /**
  * Get Lease Transcript Segments
  *
- * A runner's read-back of its own shipped segments (D2/D3, issue #249) — every
+ * A runner's read-back of its own shipped segments — every
  * accepted record across every spawn generation under a lease's ``(chunk_id, node_id,
  * epoch)``, confined against the ``runner_id`` already on those rows regardless of
  * ``runner_auth_mode`` — this route's own always-raising ownership check, not the
@@ -972,7 +972,7 @@ export const getQuestionApiFleetQuestionsQuestionIdGet = <ThrowOnError extends b
  * Peek Queue
  *
  * The runner's FILL read — the whole ready-queue order: a filling runner needs every
- * ready chunk in one read. Kept as-is for a previous-minor caller (D7, blizzard#433);
+ * ready chunk in one read. Kept as-is for a previous-minor caller;
  * ``POST /queue/peek`` below is the matched counterpart.
  */
 export const peekQueueApiFleetQueuePeekGet = <ThrowOnError extends boolean = false>(options?: Options<PeekQueueApiFleetQueuePeekGetData, ThrowOnError>): RequestResult<PeekQueueApiFleetQueuePeekGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<PeekQueueApiFleetQueuePeekGetResponses, unknown, ThrowOnError>({ url: '/api/fleet/queue/peek', ...options });
@@ -999,9 +999,8 @@ export const peekMatchedQueueApiFleetQueuePeekPost = <ThrowOnError extends boole
  * Claim Route
  *
  * Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,
- * already terminal ({done, stopped}, issue #118), standing on an unmet prerequisite
- * (blizzard#458), or incompatible with the runner's stored capabilities (blizzard#433
- * D9), else the first node envelope.
+ * already terminal ({done, stopped}), standing on an unmet prerequisite,
+ * or incompatible with the runner's stored capabilities, else the first node envelope.
  */
 export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = false>(options: Options<ClaimRouteApiFleetRoutesPostData, ThrowOnError>): RequestResult<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError> => (options.client ?? client).post<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError>({
     url: '/api/fleet/routes',
@@ -1017,7 +1016,7 @@ export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = fals
  *
  * Register a runner — runner id + workspace binding; idempotent upsert.
  *
- * Runner-auth is checked at the router level (issue #86a); the ``subscriptions`` roster
+ * Runner-auth is checked at the router level; the ``subscriptions`` roster
  * rides the same authenticated write. The hub never rejects a registration over its
  * roster — it doubles as the heartbeat every tick.
  */
@@ -1047,7 +1046,7 @@ export const heartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPost = <ThrowOnErro
 /**
  * Get Scopes
  *
- * Every scope, newest first, each marked retired or not (blizzard#582 D2) — the
+ * Every scope, newest first, each marked retired or not — the
  * deployment's scope vocabulary, read by `blizzard runner scope list` so a review's
  * deferred findings can name an existing slug without a hub-interpreted default.
  */
@@ -1056,7 +1055,7 @@ export const getScopesApiFleetScopesGet = <ThrowOnError extends boolean = false>
 /**
  * Fleet Summary
  *
- * The fleet-pulse counts (issue #76), read with a runner's own bearer token. Fleet-router-only:
+ * The fleet-pulse counts, read with a runner's own bearer token. Fleet-router-only:
  * this read has no anonymous counterpart.
  */
 export const fleetSummaryApiFleetSummaryGet = <ThrowOnError extends boolean = false>(options?: Options<FleetSummaryApiFleetSummaryGetData, ThrowOnError>): RequestResult<FleetSummaryApiFleetSummaryGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<FleetSummaryApiFleetSummaryGetResponses, unknown, ThrowOnError>({ url: '/api/fleet/summary', ...options });
@@ -1080,7 +1079,7 @@ export const getSystemArtifactRouteApiFleetSystemArtifactsNameGet = <ThrowOnErro
  * Ingest Transcript Segments
  *
  * Land the runner's batched transcript records — the transcript lane's own
- * store-and-forward push (D7), distinct from the fact lane at ``POST /api/fleet/events``.
+ * store-and-forward push, distinct from the fact lane at ``POST /api/fleet/events``.
  */
 export const ingestTranscriptSegmentsApiFleetTranscriptsPost = <ThrowOnError extends boolean = false>(options: Options<IngestTranscriptSegmentsApiFleetTranscriptsPostData, ThrowOnError>): RequestResult<IngestTranscriptSegmentsApiFleetTranscriptsPostResponses, IngestTranscriptSegmentsApiFleetTranscriptsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestTranscriptSegmentsApiFleetTranscriptsPostResponses, IngestTranscriptSegmentsApiFleetTranscriptsPostErrors, ThrowOnError>({
     url: '/api/fleet/transcripts',
@@ -1094,15 +1093,15 @@ export const ingestTranscriptSegmentsApiFleetTranscriptsPost = <ThrowOnError ext
 /**
  * List Garden Proposals
  *
- * Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526
- * D3/D4). `origin` narrows to `routine-run` or `operator` proposals (blizzard#631).
+ * Every garden proposal, newest first, bounded and keyset-paginated.
+ * `origin` narrows to `routine-run` or `operator` proposals.
  */
 export const listGardenProposalsApiGardenProposalsGet = <ThrowOnError extends boolean = false>(options?: Options<ListGardenProposalsApiGardenProposalsGetData, ThrowOnError>): RequestResult<ListGardenProposalsApiGardenProposalsGetResponses, ListGardenProposalsApiGardenProposalsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListGardenProposalsApiGardenProposalsGetResponses, ListGardenProposalsApiGardenProposalsGetErrors, ThrowOnError>({ url: '/api/garden-proposals', ...options });
 
 /**
  * Create Garden Proposal
  *
- * Mint an operator-authored proposal (blizzard#631), naming `routine` when the
+ * Mint an operator-authored proposal, naming `routine` when the
  * caller names one, else none. 422 for a blank title/class/body, an unknown routine,
  * or an unknown, non-live, or duplicate finding id — the whole call is refused, nothing
  * is linked.
@@ -1126,7 +1125,7 @@ export const getGardenProposalApiGardenProposalsProposalIdGet = <ThrowOnError ex
 /**
  * Edit Garden Proposal
  *
- * Replace the given fields of PROPOSAL_ID in place, all-or-nothing (blizzard#631)
+ * Replace the given fields of PROPOSAL_ID in place, all-or-nothing
  * — works on either origin while open. 404 unknown proposal, 409 already closed,
  * 422 a blank title/class/body or an edit naming no field.
  */
@@ -1161,7 +1160,7 @@ export const acceptGardenProposalApiGardenProposalsProposalIdAcceptPost = <Throw
 /**
  * Attach Garden Proposal Findings
  *
- * Link the given finding ids to PROPOSAL_ID (blizzard#631) — works on either origin
+ * Link the given finding ids to PROPOSAL_ID — works on either origin
  * while open. 404 unknown proposal, 409 already closed, 422 an unknown, non-live, or
  * duplicate finding id, or one already linked to this proposal — the whole call is
  * refused, nothing is linked.
@@ -1178,7 +1177,7 @@ export const attachGardenProposalFindingsApiGardenProposalsProposalIdAttachPost 
 /**
  * Detach Garden Proposal Findings
  *
- * Unlink the given finding ids from PROPOSAL_ID (blizzard#631) — works on either
+ * Unlink the given finding ids from PROPOSAL_ID — works on either
  * origin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or
  * one not linked to this proposal.
  */
@@ -1213,7 +1212,7 @@ export const passGardenProposalApiGardenProposalsProposalIdPassPost = <ThrowOnEr
  *
  * Every minted graph, newest first, newest non-retired per name marked ``effective``.
  *
- * Reads the listing-shape projection (issue #421) — nothing here touches nodes,
+ * Reads the listing-shape projection — nothing here touches nodes,
  * edges, sessions or artifacts.
  */
 export const listGraphsApiGraphsGet = <ThrowOnError extends boolean = false>(options?: Options<ListGraphsApiGraphsGetData, ThrowOnError>): RequestResult<ListGraphsApiGraphsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListGraphsApiGraphsGetResponses, unknown, ThrowOnError>({ url: '/api/graphs', ...options });
@@ -1237,7 +1236,7 @@ export const mintGraphApiGraphsPost = <ThrowOnError extends boolean = false>(opt
  *
  * Reconcile the packaged graph set against the store, minting only what changed.
  *
- * Idempotent, so it is safe to run unconditionally (issue #146). Registered above
+ * Idempotent, so it is safe to run unconditionally. Registered above
  * ``/graphs/{graph_id}`` so ``sync`` is not matched as a graph id. Always ``200``: a
  * graph that fails to load is a ``failed`` report row, and ``ok`` carries the verdict.
  */
@@ -1253,8 +1252,8 @@ export const getGraphApiGraphsGraphIdGet = <ThrowOnError extends boolean = false
 /**
  * Enable Graph
  *
- * Re-enable a retired graph — restores normal newest-per-name derivation
- * (issue #101). Idempotent on an already-enabled graph; 404 on an unknown id.
+ * Re-enable a retired graph — restores normal newest-per-name derivation.
+ * Idempotent on an already-enabled graph; 404 on an unknown id.
  */
 export const enableGraphApiGraphsGraphIdEnablePost = <ThrowOnError extends boolean = false>(options: Options<EnableGraphApiGraphsGraphIdEnablePostData, ThrowOnError>): RequestResult<EnableGraphApiGraphsGraphIdEnablePostResponses, EnableGraphApiGraphsGraphIdEnablePostErrors, ThrowOnError> => (options.client ?? client).post<EnableGraphApiGraphsGraphIdEnablePostResponses, EnableGraphApiGraphsGraphIdEnablePostErrors, ThrowOnError>({
     url: '/api/graphs/{graph_id}/enable',
@@ -1268,7 +1267,7 @@ export const enableGraphApiGraphsGraphIdEnablePost = <ThrowOnError extends boole
 /**
  * Set Graph Follow Latest
  *
- * Set this graph's follow-latest policy — ``true``/``false``/``null`` (issue #164).
+ * Set this graph's follow-latest policy — ``true``/``false``/``null``.
  *
  * Appends a policy fact rather than mutating the immutable ``graphs`` row; explicit
  * ``null`` reverts to inheriting the hub default and is itself an appended fact. Scoped
@@ -1287,7 +1286,7 @@ export const setGraphFollowLatestApiGraphsGraphIdFollowLatestPost = <ThrowOnErro
  * Retire Graph
  *
  * Retire a graph — excludes it from name resolution; the claim on any chunk
- * already pinned to it runs on untouched (issue #101). 404 on an unknown id.
+ * already pinned to it runs on untouched. 404 on an unknown id.
  */
 export const retireGraphApiGraphsGraphIdRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireGraphApiGraphsGraphIdRetirePostData, ThrowOnError>): RequestResult<RetireGraphApiGraphsGraphIdRetirePostResponses, RetireGraphApiGraphsGraphIdRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireGraphApiGraphsGraphIdRetirePostResponses, RetireGraphApiGraphsGraphIdRetirePostErrors, ThrowOnError>({
     url: '/api/graphs/{graph_id}/retire',
@@ -1338,7 +1337,7 @@ export const askQuestionApiQuestionsPost = <ThrowOnError extends boolean = false
  * Answer a question first-write-wins; 409 carries the winning answer.
  *
  * ``answered_by`` is taken from the authenticated session identity, never the request
- * body's ``answered_by`` field — a spoofed value there is silently ignored (issue #91).
+ * body's ``answered_by`` field — a spoofed value there is silently ignored.
  */
 export const answerQuestionApiQuestionsQuestionIdAnswersPost = <ThrowOnError extends boolean = false>(options: Options<AnswerQuestionApiQuestionsQuestionIdAnswersPostData, ThrowOnError>): RequestResult<AnswerQuestionApiQuestionsQuestionIdAnswersPostResponses, AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors, ThrowOnError> => (options.client ?? client).post<AnswerQuestionApiQuestionsQuestionIdAnswersPostResponses, AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors, ThrowOnError>({
     url: '/api/questions/{question_id}/answers',
@@ -1352,7 +1351,7 @@ export const answerQuestionApiQuestionsQuestionIdAnswersPost = <ThrowOnError ext
 /**
  * Get Queue
  *
- * The hub-ordered ready queue, read-only and keyset-paginated (blizzard#526 D3/D4/D7)
+ * The hub-ordered ready queue, read-only and keyset-paginated
  * — honours reorder/replace + grouping.
  */
 export const getQueueApiQueueGet = <ThrowOnError extends boolean = false>(options?: Options<GetQueueApiQueueGetData, ThrowOnError>): RequestResult<GetQueueApiQueueGetResponses, GetQueueApiQueueGetErrors, ThrowOnError> => (options?.client ?? client).get<GetQueueApiQueueGetResponses, GetQueueApiQueueGetErrors, ThrowOnError>({ url: '/api/queue', ...options });
@@ -1378,7 +1377,7 @@ export const replaceQueueApiQueuePut = <ThrowOnError extends boolean = false>(op
 /**
  * Reposition Queue
  *
- * Single-chunk fractional reorder (issue #137).
+ * Single-chunk fractional reorder.
  *
  * Resolves both ids against the current ready set: ``409`` names either one if it is
  * not ready, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves the chunk to
@@ -1424,9 +1423,9 @@ export const createRoutineApiRoutinesPost = <ThrowOnError extends boolean = fals
 /**
  * Routine Proposal Counts
  *
- * Garden-proposal counts (blizzard#547) per origin, routine, and class over
+ * Garden-proposal counts per origin, routine, and class over
  * `[since, until)`, split into open/passed/accepted-with-item/accepted-without-item —
- * `created` is their sum (blizzard#631). `routine` narrows to one routine's rows of
+ * `created` is their sum. `routine` narrows to one routine's rows of
  * both origins when given; 404 on an unknown one. `origin` narrows to one origin. 422
  * on a malformed instant or `until <= since`.
  */
@@ -1437,7 +1436,7 @@ export const routineProposalCountsApiRoutinesProposalCountsGet = <ThrowOnError e
  *
  * `routine`'s finding inflow-against-outflow over `[since, until)`: per
  * `period_days`-wide period, findings created and per-kind exit counts, the outflow/
- * withdrawn roll-ups (D2), and the D5 age cut against `introduced_boundary`. 404 on an
+ * withdrawn roll-ups, and the age cut against `introduced_boundary`. 404 on an
  * unknown routine name; 422 on a malformed instant, a non-positive `period_days`, a
  * non-positive span, or a span/`period_days` pair bucketing past `_TrendWindow._MAX_PERIODS`.
  */
@@ -1469,7 +1468,7 @@ export const editRoutineApiRoutinesRoutineIdPatch = <ThrowOnError extends boolea
 /**
  * Routine Baselines
  *
- * Every scope `routine_id` has swept (D5) — see
+ * Every scope `routine_id` has swept — see
  * `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means.
  * 404 on an unknown routine id.
  */
@@ -1506,13 +1505,13 @@ export const retireRoutineApiRoutinesRoutineIdRetirePost = <ThrowOnError extends
 /**
  * Run Routine
  *
- * Mint, ingest, and promote a hub work item from the routine, in one act
- * (blizzard#392). 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
+ * Mint, ingest, and promote a hub work item from the routine, in one act.
+ * 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
  * ``mode``, or an effective scope no scope row holds or outside the routine's own
- * related set (blizzard#399 D1, D4 — never minted); 503 on a retired routine
+ * related set (never minted); 503 on a retired routine
  * (checked first, before the mode or scope is even parsed), a retired effective
  * scope, or a graph name with no
- * enabled mint (D5, mirroring ``POST /work-sources/{source}/items``'s own
+ * enabled mint (mirroring ``POST /work-sources/{source}/items``'s own
  * retired-default-graph shape); 409 on an out-of-band ingest already holding the
  * allocated ref's pointer.
  */
@@ -1528,17 +1527,17 @@ export const runRoutineApiRoutinesRoutineIdRunPost = <ThrowOnError extends boole
 /**
  * List Routine Scopes
  *
- * Every scope slug linked to `routine_id`, sorted (blizzard#488) — its own default
- * scope is always among them (D8). 404 on an unknown routine id.
+ * Every scope slug linked to `routine_id`, sorted — its own default
+ * scope is always among them. 404 on an unknown routine id.
  */
 export const listRoutineScopesApiRoutinesRoutineIdScopesGet = <ThrowOnError extends boolean = false>(options: Options<ListRoutineScopesApiRoutinesRoutineIdScopesGetData, ThrowOnError>): RequestResult<ListRoutineScopesApiRoutinesRoutineIdScopesGetResponses, ListRoutineScopesApiRoutinesRoutineIdScopesGetErrors, ThrowOnError> => (options.client ?? client).get<ListRoutineScopesApiRoutinesRoutineIdScopesGetResponses, ListRoutineScopesApiRoutinesRoutineIdScopesGetErrors, ThrowOnError>({ url: '/api/routines/{routine_id}/scopes', ...options });
 
 /**
  * Unlink Routine Scope
  *
- * Unlink `scope_slug` from `routine_id`'s own set (blizzard#488); idempotent. 404
+ * Unlink `scope_slug` from `routine_id`'s own set; idempotent. 404
  * on an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed
- * scope slug, or on naming the routine's own default scope (D8) — always a member of
+ * scope slug, or on naming the routine's own default scope — always a member of
  * its own set.
  */
 export const unlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDelete = <ThrowOnError extends boolean = false>(options: Options<UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteData, ThrowOnError>): RequestResult<UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteResponses, UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteErrors, ThrowOnError> => (options.client ?? client).delete<UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteResponses, UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteErrors, ThrowOnError>({ url: '/api/routines/{routine_id}/scopes/{scope_slug}', ...options });
@@ -1546,7 +1545,7 @@ export const unlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDelete = <Thro
 /**
  * Link Routine Scope
  *
- * Link `scope_slug` into `routine_id`'s own set (blizzard#488); idempotent. 404 on
+ * Link `scope_slug` into `routine_id`'s own set; idempotent. 404 on
  * an unknown routine id or a well-formed but unknown scope slug; 422 on a malformed
  * scope slug.
  */
@@ -1555,9 +1554,9 @@ export const linkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPut = <ThrowOnEr
 /**
  * Routine Sweeps
  *
- * ``routine_id``'s per-scope last-swept table (D2, D3, D4) — the routine's declared
+ * ``routine_id``'s per-scope last-swept table — the routine's declared
  * set, retired scopes filtered out unless already swept while linked — and its
- * measurement series (D2, D5) over ``[since, until)``. 404 on an unknown id; 422 on a
+ * measurement series over ``[since, until)``. 404 on an unknown id; 422 on a
  * malformed instant or a non-positive span.
  */
 export const routineSweepsApiRoutinesRoutineIdSweepsGet = <ThrowOnError extends boolean = false>(options: Options<RoutineSweepsApiRoutinesRoutineIdSweepsGetData, ThrowOnError>): RequestResult<RoutineSweepsApiRoutinesRoutineIdSweepsGetResponses, RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors, ThrowOnError> => (options.client ?? client).get<RoutineSweepsApiRoutinesRoutineIdSweepsGetResponses, RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors, ThrowOnError>({ url: '/api/routines/{routine_id}/sweeps', ...options });
@@ -1646,7 +1645,7 @@ export const listScopesApiScopesGet = <ThrowOnError extends boolean = false>(opt
 /**
  * Create Scope
  *
- * Mint a scope, or no-op onto the existing one of the same slug (D4); 422 on a
+ * Mint a scope, or no-op onto the existing one of the same slug; 422 on a
  * malformed slug, naming the rejected value.
  */
 export const createScopeApiScopesPost = <ThrowOnError extends boolean = false>(options: Options<CreateScopeApiScopesPostData, ThrowOnError>): RequestResult<CreateScopeApiScopesPostResponses, CreateScopeApiScopesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateScopeApiScopesPostResponses, CreateScopeApiScopesPostErrors, ThrowOnError>({
@@ -1683,7 +1682,7 @@ export const editScopeApiScopesSlugPatch = <ThrowOnError extends boolean = false
 /**
  * Enable Scope
  *
- * Re-enable a retired scope (D3); idempotent, 404 on an unknown slug.
+ * Re-enable a retired scope; idempotent, 404 on an unknown slug.
  */
 export const enableScopeApiScopesSlugEnablePost = <ThrowOnError extends boolean = false>(options: Options<EnableScopeApiScopesSlugEnablePostData, ThrowOnError>): RequestResult<EnableScopeApiScopesSlugEnablePostResponses, EnableScopeApiScopesSlugEnablePostErrors, ThrowOnError> => (options.client ?? client).post<EnableScopeApiScopesSlugEnablePostResponses, EnableScopeApiScopesSlugEnablePostErrors, ThrowOnError>({
     url: '/api/scopes/{slug}/enable',
@@ -1697,7 +1696,7 @@ export const enableScopeApiScopesSlugEnablePost = <ThrowOnError extends boolean 
 /**
  * Retire Scope
  *
- * Retire a scope — a reversible brake (D3); 404 on an unknown slug.
+ * Retire a scope — a reversible brake; 404 on an unknown slug.
  */
 export const retireScopeApiScopesSlugRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireScopeApiScopesSlugRetirePostData, ThrowOnError>): RequestResult<RetireScopeApiScopesSlugRetirePostResponses, RetireScopeApiScopesSlugRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireScopeApiScopesSlugRetirePostResponses, RetireScopeApiScopesSlugRetirePostErrors, ThrowOnError>({
     url: '/api/scopes/{slug}/retire',
@@ -1739,7 +1738,7 @@ export const listUsersApiUsersGet = <ThrowOnError extends boolean = false>(optio
  * any change touching ``superuser``, which is bootstrap-only; and granting or revoking
  * ``admin`` as anyone but a ``superuser``. A no-op change is accepted and records
  * nothing. A real one records a ``user_role_changed`` fact and takes effect on the
- * subject's next request, with no re-login (issue #91).
+ * subject's next request, with no re-login.
  */
 export const assignRoleApiUsersUserIdRolePost = <ThrowOnError extends boolean = false>(options: Options<AssignRoleApiUsersUserIdRolePostData, ThrowOnError>): RequestResult<AssignRoleApiUsersUserIdRolePostResponses, AssignRoleApiUsersUserIdRolePostErrors, ThrowOnError> => (options.client ?? client).post<AssignRoleApiUsersUserIdRolePostResponses, AssignRoleApiUsersUserIdRolePostErrors, ThrowOnError>({
     url: '/api/users/{user_id}/role',
@@ -1761,7 +1760,7 @@ export const listWorkSourcesApiWorkSourcesGet = <ThrowOnError extends boolean = 
 /**
  * List Work Items
  *
- * Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 per D4.
+ * Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 from the source's editor gate.
  */
 export const listWorkItemsApiWorkSourcesSourceItemsGet = <ThrowOnError extends boolean = false>(options: Options<ListWorkItemsApiWorkSourcesSourceItemsGetData, ThrowOnError>): RequestResult<ListWorkItemsApiWorkSourcesSourceItemsGetResponses, ListWorkItemsApiWorkSourcesSourceItemsGetErrors, ThrowOnError> => (options.client ?? client).get<ListWorkItemsApiWorkSourcesSourceItemsGetResponses, ListWorkItemsApiWorkSourcesSourceItemsGetErrors, ThrowOnError>({ url: '/api/work-sources/{source}/items', ...options });
 
@@ -1769,7 +1768,7 @@ export const listWorkItemsApiWorkSourcesSourceItemsGet = <ThrowOnError extends b
  * Create Work Item
  *
  * Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
- * resting ``not_ready`` chunk in the same transaction (blizzard#359). 404/409 per D4,
+ * resting ``not_ready`` chunk in the same transaction. 404/409 from the source's editor gate,
  * 422 for a blank title or body, 409 if an out-of-band ingest already holds the
  * allocated ref's pointer, 503 if every graph named after the packaged default has
  * been retired (the operator's brake, mirroring ``POST /chunks``).
@@ -1786,11 +1785,11 @@ export const createWorkItemApiWorkSourcesSourceItemsPost = <ThrowOnError extends
 /**
  * Withdraw Work Item
  *
- * Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref
- * (D9), or a chunk a race deletes between resolving it and this write; 409 for a known
- * source with no editor (D4), an item already closed, or one an *acquired* live chunk
- * holds (D5, D10) — an unacquired holder deletes instead unless it is now a standing
- * prerequisite for another chunk (issue #460), also 409.
+ * Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref,
+ * or a chunk a race deletes between resolving it and this write; 409 for a known
+ * source with no editor, an item already closed, or one an *acquired* live chunk
+ * holds — an unacquired holder deletes instead unless it is now a standing
+ * prerequisite for another chunk, also 409.
  */
 export const withdrawWorkItemApiWorkSourcesSourceItemsRefDelete = <ThrowOnError extends boolean = false>(options: Options<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteData, ThrowOnError>): RequestResult<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses, WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors, ThrowOnError> => (options.client ?? client).delete<WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteResponses, WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors, ThrowOnError>({ url: '/api/work-sources/{source}/items/{ref}', ...options });
 
@@ -1798,7 +1797,7 @@ export const withdrawWorkItemApiWorkSourcesSourceItemsRefDelete = <ThrowOnError 
  * Get Work Item
  *
  * One item at SOURCE by REF, open or closed. 404 for an unknown source, an
- * unallocated ref (D9), or a known source with no editor answered as 409 (D4).
+ * unallocated ref, or a known source with no editor answered as 409.
  */
 export const getWorkItemApiWorkSourcesSourceItemsRefGet = <ThrowOnError extends boolean = false>(options: Options<GetWorkItemApiWorkSourcesSourceItemsRefGetData, ThrowOnError>): RequestResult<GetWorkItemApiWorkSourcesSourceItemsRefGetResponses, GetWorkItemApiWorkSourcesSourceItemsRefGetErrors, ThrowOnError> => (options.client ?? client).get<GetWorkItemApiWorkSourcesSourceItemsRefGetResponses, GetWorkItemApiWorkSourcesSourceItemsRefGetErrors, ThrowOnError>({ url: '/api/work-sources/{source}/items/{ref}', ...options });
 
@@ -1806,8 +1805,8 @@ export const getWorkItemApiWorkSourcesSourceItemsRefGet = <ThrowOnError extends 
  * Patch Work Item
  *
  * Replace the given fields in place, all-or-nothing. 404 for an unknown source or
- * an unallocated ref (D9); 409 for a known source with no editor (D4) or an item that
- * already carries a closure (D5); 422 for a blank title or body.
+ * an unallocated ref; 409 for a known source with no editor or an item that
+ * already carries a closure; 422 for a blank title or body.
  */
 export const patchWorkItemApiWorkSourcesSourceItemsRefPatch = <ThrowOnError extends boolean = false>(options: Options<PatchWorkItemApiWorkSourcesSourceItemsRefPatchData, ThrowOnError>): RequestResult<PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses, PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses, PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors, ThrowOnError>({
     url: '/api/work-sources/{source}/items/{ref}',

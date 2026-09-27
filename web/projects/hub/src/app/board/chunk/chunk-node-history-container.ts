@@ -20,7 +20,7 @@ import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
 /**
  * The Node history tab's own container (`bzh:frontend-container-presentational`), the
  * same split as {@link ChunkTranscriptsContainer} — owns the transcript-index query the
- * per-step transcript panel needs (blizzard#248 D8: no new endpoint; the same read the
+ * per-step transcript panel needs (no new endpoint; the same read the
  * Transcripts tab already mounts), forwarding resolved state to the presentational
  * {@link ChunkNodeHistoryTab}, which injects nothing. `ChunkPage` mounts this only inside
  * its `@case ('node-history')` branch, keeping the query lazy the same way.
@@ -66,7 +66,7 @@ export class ChunkNodeHistoryContainer {
     return sortArtifacts(filterArtifactsByStep(this.detail().artifacts ?? [], selection.nodeId, selection.epoch));
   });
 
-  /** Every transcript step (D5's own groups), the same derivation the Transcripts tab
+  /** Every transcript step, the same derivation the Transcripts tab
    * reads over the same index — {@link selectedStepSegments} and the seam resolution
    * below both read this rather than re-deriving it. */
   private readonly steps = computed<readonly TranscriptStep[]>(() => {

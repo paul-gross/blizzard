@@ -37,7 +37,7 @@ class IProcessProbe(Protocol):
         ...
 
     def kill_group(self, pgid: int) -> None:
-        """Best-effort SIGKILL to an entire owned process group (D3) — the group a two-phase
+        """Best-effort SIGKILL to an entire owned process group — the group a two-phase
         spawn recorded, never one inferred from a bare pid. Never raises if already gone."""
         ...
 
@@ -63,7 +63,7 @@ class LinuxProcessProbe:
         return current is not None and current == process_start_time
 
     def group_alive(self, pgid: int) -> bool:
-        # `pgid` is the leader's own pid (D3): reap it first, or an exited-but-unreaped
+        # `pgid` is the leader's own pid: reap it first, or an exited-but-unreaped
         # leader is a zombie `killpg`'s probe below still reaches as "alive".
         with contextlib.suppress(ChildProcessError):
             os.waitpid(pgid, os.WNOHANG)
@@ -109,7 +109,7 @@ def owned_process_alive(
 def kill_owned_process(
     process: IProcessProbe, *, pid: int | None, process_start_time: str | None, pgid: int | None
 ) -> None:
-    """Best-effort teardown of an owned worker process (D3): by recorded pgid when durable,
+    """Best-effort teardown of an owned worker process: by recorded pgid when durable,
     else by bare pid, gated on :func:`owned_process_alive`."""
     if pid is None or process_start_time is None:
         return

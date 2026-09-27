@@ -1,5 +1,4 @@
-"""Reading a worker's presented lease token off a request (issue #113;
-issue #127).
+"""Reading a worker's presented lease token off a request.
 
 The one place the two accepted forms are decoded — the dedicated ``X-Blizzard-Lease-Token``
 header, falling back to a standard ``Authorization: Bearer`` — so every edge authorizes off

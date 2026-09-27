@@ -4,7 +4,7 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 (``bzh:facts-not-status``): every write appends a row; nothing here derives status.
 Timestamps arrive already stamped (``bzh:injected-clock``).
 
-D6: ``finalize_delivery`` stays one transaction on one connection, unchanged by the seam
+``finalize_delivery`` stays one transaction on one connection, unchanged by the seam
 carve — the shared row helpers below are plain function calls inside that same
 ``with self._store.write(...)`` block, never a second connection."""
 
@@ -57,7 +57,7 @@ class ChunkDeliveryStore:
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every pending, non-ephemeral intent's own backoff history in one flat, outer-
-        joined, already-aggregated read (blizzard#524 D7) — never one query per intent.
+        joined, already-aggregated read — never one query per intent.
         ``close_intent_is_due`` applies the domain's own due rule to each row."""
         ephemeral = select(s.chunk_grouped.c.chunk_id).union(select(s.chunk_deleted.c.chunk_id))
         attempts = (
@@ -82,7 +82,7 @@ class ChunkDeliveryStore:
                 .select_from(s.close_intents.outerjoin(attempts, attempts.c.intent_id == s.close_intents.c.id))
                 .where(s.close_intents.c.retired_at.is_(None))
                 .where(s.close_intents.c.chunk_id.not_in(ephemeral))
-                .order_by(s.close_intents.c.id)  # D2's explicit total order (`bzh:sql-portable`)
+                .order_by(s.close_intents.c.id)  # An explicit total order (`bzh:sql-portable`)
             ).all()
         now = self._clock.now()
         return [
@@ -98,8 +98,8 @@ class ChunkDeliveryStore:
             )
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:
-        """Every not-yet-judged proposal of a delivered, non-ephemeral chunk (blizzard#524
-        D6) — all four exclusions (delivered, ephemeral, judged, struck) pushed into SQL as
+        """Every not-yet-judged proposal of a delivered, non-ephemeral chunk — all four
+        exclusions (delivered, ephemeral, judged, struck) pushed into SQL as
         subqueries the engine plans once, rather than re-fetching and re-filtering every
         proposal ever written, payload included, on every pass. A read transaction: this
         writes nothing."""
@@ -187,8 +187,8 @@ class ChunkDeliveryStore:
         replay finishes an interrupted retirement. A ``failed`` outcome instead appends a
         ``close_intent_attempts`` row for its matching intent, same transaction, on
         *every* call — never gated by ``wrote``, since the backoff ledger is its own
-        append-only fact, not idempotency-guarded like the outcome row above (blizzard#524
-        D7). See ``blizzard-context/architecture/crash-correctness/hub.md``."""
+        append-only fact, not idempotency-guarded like the outcome row above.
+        See ``blizzard-context/architecture/crash-correctness/hub.md``."""
         with self._store.write("record_work_item_closure") as conn:
             already = conn.execute(
                 select(s.work_item_closures.c.id).where(

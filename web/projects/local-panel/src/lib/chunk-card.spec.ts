@@ -52,7 +52,7 @@ async function render(workItemsResponse: (method: string, path: string) => unkno
 
 /**
  * `ChunkCard`'s own concern is the per-row {@link injectChunkTitleQuery} enrichment
- * read (issue #28, decision 1) — everything else the old card carried (markup, the
+ * read (decision 1) — everything else the old card carried (markup, the
  * status pill, click/Enter/Space selection) is `ChunkCardView`'s, plain-input covered
  * in `chunk-card-view.spec.ts` with no query stub required.
  */

@@ -1,4 +1,4 @@
-"""Transcript invocation boundaries (blizzard#437 D6/D11, component tier).
+"""Transcript invocation boundaries (component tier).
 
 A real FILL/RESUME/ADVANCE tick against a tmp store, proving each of the four fleet-driven
 invocations — spawn, resume, judge, nudge — opens its own durable boundary before it
@@ -166,7 +166,7 @@ def test_nudge_opens_a_nudge_boundary_not_a_resume_boundary(tmp_path: Path) -> N
     nudge_boundary = ctx.stores.invocation_boundaries.boundary("lease_r", 2, "nudge")
     assert nudge_boundary is not None
     assert nudge_boundary.start_position == tail.token
-    # D5: the nudge's own wake must not also open a plain `resume` boundary at that generation.
+    # The nudge's own wake must not also open a plain `resume` boundary at that generation.
     assert ctx.stores.invocation_boundaries.boundary("lease_r", 2, "resume") is None
 
 
@@ -243,7 +243,7 @@ def test_a_resumed_existing_session_spawn_opens_a_resume_boundary_from_its_own_t
 ) -> None:
     """`Spawner.spawn`'s own ``resume_from`` branch (`enter_node`'s resume, not a fresh mint)
     opens a `resume` boundary reading that session's own tail, never the fresh-spawn
-    sentinel (blizzard#437 F1)."""
+    sentinel."""
     store = _store(tmp_path)
     tail = TranscriptPosition(token='{"main": 777, "sidecars": {}}')
     transcript_source = FakeTranscriptSource(tail_positions_by_session={"sess-prior": tail})
@@ -275,7 +275,7 @@ def test_a_resumed_existing_session_spawn_opens_a_resume_boundary_from_its_own_t
     assert boundary is not None
     assert boundary.start_position == tail.token
     assert boundary.start_unreadable is False
-    # Never ALSO a `spawn` boundary at the same generation (D5's exclusivity).
+    # Never ALSO a `spawn` boundary at the same generation.
     assert ctx.stores.invocation_boundaries.boundary(lease.lease_id, 1, "spawn") is None
 
 
@@ -320,7 +320,7 @@ def test_a_stranded_nudge_boundary_blocks_a_later_unrelated_wakes_own_resume_bou
 ) -> None:
     """A nudge boundary can open and then strand (its own `_wake` never ran) — a LATER,
     unrelated wake reaching the same lease must self-determine a boundary is already open at
-    that generation, never opening a second `resume` one (blizzard#437 F6)."""
+    that generation, never opening a second `resume` one."""
     store = _store(tmp_path)
     _seed_exited_lease(store)  # generation 1's own spawn; node defaults to "nd_review"
     # The stranded nudge: its own boundary opened at generation 2, but its `_wake` never ran.

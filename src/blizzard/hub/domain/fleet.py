@@ -15,7 +15,7 @@ class Route:
     """The locator fact born complete at the claim.
 
     A chunk may hold several environments, each one ``environment_id`` under the same
-    claim. ``route_id`` (issue #213) is ``None`` until the underlying row exists."""
+    claim. ``route_id`` is ``None`` until the underlying row exists."""
 
     chunk_id: str
     runner_id: str

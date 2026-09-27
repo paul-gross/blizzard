@@ -48,7 +48,7 @@ from blizzard.hub.domain.work import (
 from blizzard.wire.completion import ChecksGate, CompletionSubmission, SubmittedArtifact, WorkItemProposal
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 
-# The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the whole
+# The cross-graph migration crash window (``bzh:crash-point-registry``): the whole
 # migration is committed but its response is not; the replayed completion re-derives it.
 _CP_MIGRATE_AFTER_RECORD = crashpoint(
     "migrate.after-record.before-response",
@@ -60,7 +60,7 @@ _CP_MIGRATE_AFTER_RECORD = crashpoint(
 @dataclass(frozen=True)
 class ApplyResult:
     """:meth:`ApplyService.apply`'s own return — the wire :class:`ApplyResponse` plus the
-    identity of the durable fact this call itself just wrote (issue #213). At most one of
+    identity of the durable fact this call itself just wrote. At most one of
     the two is ever set, and only on a genuinely fresh write. Not a wire type."""
 
     response: ApplyResponse
@@ -94,7 +94,7 @@ class ApplyResult:
     @classmethod
     def escalated(cls, target_graph_name: str | None) -> ApplyResult:
         """An unresolved cross-graph target's park — ``FAILURE`` would requeue and supersede the
-        escalation this answers (issue #110)."""
+        escalation this answers."""
         return cls(
             response=ApplyResponse(
                 outcome=ApplyOutcome.PARKED_AT_GATE,
@@ -134,15 +134,15 @@ class ApplyResult:
 
     @classmethod
     def migrated_replay(cls) -> ApplyResult:
-        """A lost-ack re-flush of a **runner-landing** migration that already landed (issue #90).
+        """A lost-ack re-flush of a **runner-landing** migration that already landed.
         Carries no node/graph detail: the migration re-pinned the graph, so the natural-key probe
         alone (not a graph lookup) resolves the replay. No fresh fact, so no ``migration_id``."""
         return cls(response=ApplyResponse(outcome=ApplyOutcome.MIGRATED, detail="chunk already migrated (replay)"))
 
     @classmethod
     def hub_node_taken_replay(cls) -> ApplyResult:
-        """A lost-ack re-flush of a completion whose migration landed on a **hub-executed** node
-        (issue #111). Distinct from :meth:`migrated_replay` because a hub landing **retained** the
+        """A lost-ack re-flush of a completion whose migration landed on a **hub-executed** node.
+        Distinct from :meth:`migrated_replay` because a hub landing **retained** the
         route, which a ``MIGRATED`` reply would release (pinned by tests/test_migration_apply.py)."""
         return cls(
             response=ApplyResponse(
@@ -211,12 +211,12 @@ class ApplyService:
         if facts is None:
             return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
 
-        # Probed by natural key ahead of the graph lookup and the route-token check (issues
-        # #90, #108): a migration re-pins the graph and releases the route a replay presents.
+        # Probed by natural key ahead of the graph lookup and the route-token check:
+        # a migration re-pins the graph and releases the route a replay presents.
         if self._movement.accepted_migration(
             chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
         ):
-            # A **hub-landing** migration (issue #111) retained the route, so its replay must
+            # A **hub-landing** migration retained the route, so its replay must
             # return ``HUB_NODE_TAKEN`` rather than ``MIGRATED``.
             replayed = next(
                 (
@@ -252,7 +252,7 @@ class ApplyService:
         if replayed is not None:
             return self._respond(chunk, graph, from_node, submission, to_node_id=replayed, is_fresh_apply=False)
 
-        # Proposed-work-item policy refusal (D6) — unconditional, ordered ahead of every
+        # Proposed-work-item policy refusal — unconditional, ordered ahead of every
         # dispatch fork below, so none of them carries a proposal past a node that never declared the policy.
         policy_rejection = ProposalPolicy(from_node, submission.proposals).rejection()
         if policy_rejection is not None:
@@ -279,26 +279,26 @@ class ApplyService:
         edge = graph.edge_for_choice(from_node.node_id, submission.choice)
         if edge is None:
             return ApplyResult.failure(f"node {from_node.name} has no choice `{submission.choice}`")
-        # A cross-graph edge (issue #90) migrates the chunk rather than transitioning it.
+        # A cross-graph edge migrates the chunk rather than transitioning it.
         if edge.target_graph is not None:
             return self._apply_migration(chunk, from_node, submission, edge, target_graph)
         to_node_id = Destination.of(graph, edge).node_id
         if to_node_id is None:
             return ApplyResult.failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
 
-        # Produces-artifact backstop (issue #113) — ordered after every other rejection, so
+        # Produces-artifact backstop — ordered after every other rejection, so
         # it runs only on a submission genuinely about to be recorded.
         produces_rejection = Produces(from_node, submission.artifacts).rejection(mode=produces_mode)
         if produces_rejection is not None:
             return ApplyResult.failure(produces_rejection)
 
-        # Checks gate backstop (issue #114) — the same shared predicate `ChecksGate.violated`
+        # Checks gate backstop — the same shared predicate `ChecksGate.violated`
         # both gates run, so the two cannot drift (`test_checks_gate_agreement.py`).
         selected = next((c for c in from_node.choices if c.name == submission.choice), None)
         if selected is not None and ChecksGate(selected.requires_checks, submission.check_results).violated:
             return ApplyResult.failure(f"choice `{submission.choice}` requires green checks but a check is red")
 
-        # The transition-time consult (issue #124) — ordered after every rejection above and
+        # The transition-time consult — ordered after every rejection above and
         # before ``record_transition``, so a firing intent writes no transition row of its own.
         migrated = self._consult_intended_migration(
             chunk, from_node, submission, edge, intended_target_graph, follow_latest_graph
@@ -343,7 +343,7 @@ class ApplyService:
         follow_latest_graph: Graph | None = None,
     ) -> ApplyResult:
         """Advance a chunk past a resolved gate — the resolving transition. Its artifacts
-        and proposals already landed at submission time (D2), so every dispatch fork
+        and proposals already landed at submission time, so every dispatch fork
         below — the authored cross-graph edge, the migration consult, and the plain
         transition alike — carries none of either."""
         assert submission.decision_id is not None  # the caller dispatches only when set
@@ -369,7 +369,7 @@ class ApplyService:
         edge = graph.edge_for_choice(gate_node.node_id, submission.choice)
         if edge is None:
             return ApplyResult.failure(f"gate `{gate_node.name}` has no choice `{submission.choice}`")
-        # A resolved choice may itself target another graph (issue #90) — threading
+        # A resolved choice may itself target another graph — threading
         # ``decision_id`` through is what keeps the gate's decision from staying live.
         if edge.target_graph is not None:
             return self._apply_migration(chunk, gate_node, submission, edge, target_graph, artifacts=[], proposals=[])
@@ -377,8 +377,8 @@ class ApplyService:
         if to_node_id is None:
             return ApplyResult.failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
 
-        # The transition-time consult (issue #124) — see the sibling call in ``apply``; the
-        # override keeps the decision's already-landed proposals off the migration lane too (D2).
+        # The transition-time consult — see the sibling call in ``apply``; the
+        # override keeps the decision's already-landed proposals off the migration lane too.
         migrated = self._consult_intended_migration(
             chunk, gate_node, submission, edge, intended_target_graph, follow_latest_graph, proposals=[]
         )
@@ -396,7 +396,7 @@ class ApplyService:
             runner_id=submission.runner_id,
             at=self._clock.now(),
             artifacts=[],  # the decision's artifacts already landed
-            proposals=[],  # ...and so, for the same reason, are its proposals (D2)
+            proposals=[],  # ...and so, for the same reason, are its proposals
             decision_id=submission.decision_id,
         )
         return self._respond(
@@ -421,11 +421,11 @@ class ApplyService:
         artifacts: list[SubmittedArtifact] | None = None,
         proposals: list[WorkItemProposal] | None = None,
     ) -> ApplyResult:
-        """Take a cross-graph migration edge (issue #90) — re-pin + re-queue, or escalate.
+        """Take a cross-graph migration edge — re-pin + re-queue, or escalate.
 
         With ``target_graph`` set it records the migration and lands via
         :meth:`_land_migration`. Unresolved, it escalates to ``needs_human`` and answers
-        ``PARKED_AT_GATE`` — ``FAILURE`` would requeue and supersede it (issue #110)."""
+        ``PARKED_AT_GATE`` — ``FAILURE`` would requeue and supersede it."""
         if target_graph is None:
             facts = self._facts.load_facts(chunk.chunk_id)
             already = facts is not None and any(e.epoch == submission.epoch for e in facts.escalations)
@@ -472,11 +472,11 @@ class ApplyService:
         *,
         proposals: list[WorkItemProposal] | None = None,
     ) -> ApplyResult | None:
-        """The transition-time consult (issue #124) — the shared helper both transition sites
+        """The transition-time consult — the shared helper both transition sites
         call once their destination resolves, before their own ``record_transition``. ``forced``
         fires unconditionally on the intent's own named node; ``auto`` fires only on a
         destination-name match; anything else falls through. ``proposals`` defaults to the
-        submission's own list, overridden to ``[]`` by the gate-resolution caller (D2)."""
+        submission's own list, overridden to ``[]`` by the gate-resolution caller."""
         submitted_proposals = submission.proposals if proposals is None else proposals
         intent = chunk.intended_migration
         if intent is None:
@@ -522,7 +522,7 @@ class ApplyService:
         *,
         proposals: list[WorkItemProposal] | None = None,
     ) -> ApplyResult | None:
-        """The standing follow-latest policy's own consult (issue #164), reached only when
+        """The standing follow-latest policy's own consult, reached only when
         the chunk carries **no** explicit intent. A transition to the reserved terminal is
         the load-bearing no-op: it names no node, so it would land on the target's
         **entry** and restart the workflow (tests/test_follow_latest_policy.py). ``proposals``
@@ -562,8 +562,8 @@ class ApplyService:
     ) -> ApplyResult:
         """The landing tail shared by every migration path. Records the migration atomically
         (fact + re-pin + artifacts + proposals + route release/retain + intent clear), then
-        governs by the landed node's executor as a transition into it would (issue #111).
-        ``migration_id`` is the fresh fact this call wrote (issue #213)."""
+        governs by the landed node's executor as a transition into it would.
+        ``migration_id`` is the fresh fact this call wrote."""
         landed_node = target_graph.node_by_id(landed_node_id)
         lands_on_hub = landed_node is not None and landed_node.executor is Executor.HUB
         migration_id = self._movement.record_migration(
@@ -605,7 +605,7 @@ class ApplyService:
         edge: Edge | None = None,
         transition_id: str | None = None,
     ) -> ApplyResult:
-        """``transition_id`` (issue #213) is the caller's own freshly-recorded
+        """``transition_id`` is the caller's own freshly-recorded
         ``transitions.transition_id`` on a fresh apply, or ``None`` on a replay
         (``is_fresh_apply=False``); every branch below carries it straight through."""
         if to_node_id == RESERVED_TERMINAL:

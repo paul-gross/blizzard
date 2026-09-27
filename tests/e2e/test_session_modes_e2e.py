@@ -1,8 +1,8 @@
-"""Node ``session:`` modes end to end — the `test_session_modes_e2e` scenario of the standing e2e smoke — issues #115, #144.
+"""Node ``session:`` modes end to end — the `test_session_modes_e2e` scenario of the standing e2e smoke.
 
 Proves a node's authored ``session:`` mode governs which harness session a node-entry
 spawn continues across a graph transition, on the real forge + hub + runner rails. The
-scenarios below cover ``resume:<node>`` and, for issue #144, a named pool.
+scenarios below cover ``resume:<node>`` and a named pool.
 """
 
 from __future__ import annotations
@@ -259,7 +259,7 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
     )
 
 
-# Named session pools end to end (issue #144). The session-model check is argv-only,
+# Named session pools end to end. The session-model check is argv-only,
 # a known gap the verifiability matrix records.
 
 
@@ -360,7 +360,7 @@ def test_a_named_pool_threads_one_session_across_nodes_and_reasserts_its_model(t
     assert review_sessions[0] == build_sessions[0], f"review did not continue build's head: {by_node}"
     assert review_sessions[1] == build_sessions[1], f"review did not continue the NEW head: {by_node}"
 
-    # The pool never forked: one head at a time across the whole traversal (D2).
+    # The pool never forked: one head at a time across the whole traversal.
     pool_order = [session for node in ("build", "review") for session in by_node.get(node, [])]
     assert set(pool_order) == set(build_sessions), f"a session appeared outside the pool's heads: {by_node}"
 
@@ -374,5 +374,5 @@ def test_a_named_pool_threads_one_session_across_nodes_and_reasserts_its_model(t
         assert all(i["model"] == "sonnet" for i in mints), f"the basic pool did not mint on sonnet: {mints}"
         assert resumes, f"session {head} recorded no resume — the contract would pass vacuously"
         assert all(i["model"] == mints[0]["model"] for i in resumes), f"a resume changed the session model: {resumes}"
-        # Effort IS reasserted on every turn — it is not session-sticky (the D5 probe).
+        # Effort IS reasserted on every turn — it is not session-sticky.
         assert all(i["effort"] == "medium" for i in invocations), f"effort was not reasserted: {invocations}"

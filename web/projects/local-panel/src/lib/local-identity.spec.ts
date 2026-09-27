@@ -62,7 +62,7 @@ describe('LocalIdentity', () => {
 
   it('drops its own button and goes presentational in the label shape, for inside a menu', async () => {
     // A `role="menu"` may own only menu items, so the block's actionable half
-    // moves out to a real menu item the panel declares (issue #161); what is left
+    // moves out to a real menu item the panel declares; what is left
     // here must be non-focusable and out of the accessibility tree.
     const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
     stub = s;
@@ -88,7 +88,7 @@ describe('LocalIdentity', () => {
     // The header's one *content-dependent* width. Without these the block's
     // min-content is the whole rendered name, so a long one pushes the trailing
     // cluster — profile menu included — off a viewport-locked shell at any width
-    // above the narrow breakpoint (issue #163). jsdom does no flex layout, so
+    // above the narrow breakpoint. jsdom does no flex layout, so
     // this pins the declarations that make truncation possible; the widths
     // themselves are proven in a browser.
     const { fixture, stub: s } = await render({ auth_enabled: true, username: 'christopher-mcallister' });

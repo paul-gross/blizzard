@@ -452,7 +452,7 @@ describe('Mobile chunk drill-down', () => {
 
   it('states a terminal chunk\'s status once, not doubled with the unresolvable node sentinel', async () => {
     // A finished chunk's newest transition targets the graph's terminal `done`
-    // sentinel, which `current_node_name` cannot resolve (blizzard#203) — the
+    // sentinel, which `current_node_name` cannot resolve — the
     // header used to fall back to rendering the literal id "done" beside a
     // status that also reads "done".
     stub.restore();
@@ -505,7 +505,7 @@ describe('Mobile chunk drill-down', () => {
     await settle(harness.fixture);
 
     // Fire the edit the facts pane exposes for a not-ready chunk, through the
-    // same handler its output is bound to. The graph edit since issue #144 — the model
+    // same handler its output is bound to. The graph edit — the model
     // edit that stood beside it went with `Chunk.model`.
     (page as unknown as { onEditGraph(e: { chunkId: string; graphId: string }): void }).onEditGraph({
       chunkId: CHUNK_ID,
@@ -517,7 +517,7 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('chunk is not ready');
   });
 
-  // --- Answering from a phone (issue #165) ----------------------------------
+  // --- Answering from a phone ----------------------------------
   //
   // The mobile board exists so an ask can be answered from a phone, which makes this
   // the surface most likely to *lose* a first-write-wins race — and the one where a
@@ -612,7 +612,7 @@ describe('Mobile chunk drill-down', () => {
     );
   });
 
-  // --- The Transcripts tab (blizzard#248 Phase 2) ---------------------------
+  // --- The Transcripts tab ---------------------------
 
   it('shows the Transcripts tab option and switches to it, fetching the segment index', async () => {
     stub.restore();
@@ -634,7 +634,7 @@ describe('Mobile chunk drill-down', () => {
     el = harness.fixture.nativeElement as HTMLElement;
 
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
-    // Non-vacuous (review:F4): with a real `TransitionView` fixture the derivation
+    // Non-vacuous: with a real `TransitionView` fixture the derivation
     // groups one step from `DETAIL.history` even though the index carries no segments
     // yet, so this renders the tab body, not the `transcripts-empty` alternative.
     expect(el.querySelector('[data-testid="chunk-transcripts-tab"]')).not.toBeNull();
@@ -659,7 +659,7 @@ describe('Mobile chunk drill-down', () => {
   it('still renders the Transcripts tab’s content on a held deep link, without the tab option in the strip', async () => {
     // A deep link `?tab=transcripts` bypasses the tab strip entirely (the `@switch`
     // renders off the URL, not off which options are visible) — the backend's own 403
-    // is what actually gates a viewer-role identity, not this client-side hide (D9).
+    // is what actually gates a viewer-role identity, not this client-side hide.
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [] };

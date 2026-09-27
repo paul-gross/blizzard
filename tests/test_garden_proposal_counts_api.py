@@ -1,4 +1,4 @@
-"""``GET /api/routines/proposal-counts`` (blizzard#547, component tier) — garden-proposal
+"""``GET /api/routines/proposal-counts`` (component tier) — garden-proposal
 counts per routine and class over a window, split into open/passed/accepted-with-item/
 accepted-without-item. Seeded straight through ``GardenProposalStore``/
 ``insert_garden_proposal_closure_row`` so each proposal's ``created_at`` and closure are

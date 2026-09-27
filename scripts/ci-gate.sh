@@ -3,9 +3,10 @@
 #
 # Runs exactly the checks the `pr` GitHub Actions workflow runs, in one command,
 # so an agent or human can reproduce the gate before pushing:
-#   ruff format --check · ruff check · pyright · structural gate (ast-grep scan +
-#   test) · pytest (unit + component) · OpenAPI spec drift · eslint · vitest ·
-#   web structural gate · bundle composition · generated-client drift
+#   ruff format --check · ruff check · pyright · process-reference prose lint ·
+#   structural gate (ast-grep scan + test) · pytest (unit + component) · OpenAPI
+#   spec drift · eslint · vitest · web structural gate · bundle composition ·
+#   generated-client drift
 #
 # Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps run live
 # against the Angular workspace at $WEB_DIR, guarded only so a checkout without
@@ -26,6 +27,10 @@ uv run ruff check .
 
 step "pyright"
 uv run pyright
+
+# --- Process-reference prose lint (bzh:comment-locality) ---------------------
+step "process-reference prose lint: vale --output=line ."
+vale --output=line .
 
 # --- Structural gate (contracts/ast-grep/) -----------------------------------
 step "structural gate (blizzard:structural-gate): ast-grep scan"

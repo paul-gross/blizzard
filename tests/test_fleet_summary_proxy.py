@@ -1,4 +1,4 @@
-"""The runner-local fleet-summary pass-through proxy — ``GET /api/fleet-summary`` (issue #76).
+"""The runner-local fleet-summary pass-through proxy — ``GET /api/fleet-summary``.
 
 Proves the runner's half of the forward: it uses the loop's own bearer credential, a
 hub outage surfaces as a distinct error rather than empty counts, and an unwired runner
@@ -107,7 +107,7 @@ def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_proxy_unreachable_hub_line_logs_at_error(tmp_path: Path) -> None:
-    """This route's own forward keeps today's ``error`` severity (issue #374) — only the
+    """This route's own forward keeps today's ``error`` severity — only the
     dashboard's tolerated fleet-summary call lowers it (``test_dashboard_route.py``)."""
 
     def handler(request: httpx.Request) -> httpx.Response:

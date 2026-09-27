@@ -55,7 +55,7 @@ def test_export_captures_stdout_through_a_file_never_a_pipe(monkeypatch: pytest.
 
 @pytest.mark.unit
 def test_export_env_excludes_the_hub_token_and_an_unlisted_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`opencode export` is a plugin-capable third-party CLI (blizzard#437 F7) — it gets the
+    """`opencode export` is a plugin-capable third-party CLI — it gets the
     same allowlisted env every other harness-binary launch does, never a full `os.environ`
     copy carrying the runner daemon's own hub credential."""
     monkeypatch.setenv("BZ_HUB_TOKEN", "super-secret-token")

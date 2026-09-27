@@ -1,4 +1,4 @@
-"""per-session spawn-preamble fingerprints (issue #149): one row per spawn holding the sha256 of the
+"""per-session spawn-preamble fingerprints: one row per spawn holding the sha256 of the
 two standing preamble layers, so a resume sends a layer only when it moved. Digests, not prose.
 
 Revision ID: 20260727_1000_runner_session_preamble_facts

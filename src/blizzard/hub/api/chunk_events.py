@@ -1,4 +1,4 @@
-"""The single seam every mutating chunk route publishes a ``chunk-changed`` frame through (issue #212),
+"""The single seam every mutating chunk route publishes a ``chunk-changed`` frame through,
 so every emit site enriches the frame the same way."""
 
 from __future__ import annotations

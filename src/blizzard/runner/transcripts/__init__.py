@@ -1,4 +1,4 @@
-"""The transcript read path — the panel's read model over an agent's session (issue #29).
+"""The transcript read path — the panel's read model over an agent's session.
 
 A screaming-architecture top package (``bzh:screaming-architecture``) named for the
 domain concept, not the filesystem it reads from. File and record knowledge is

@@ -20,7 +20,7 @@ class QueuePeekEntry(BaseModel):
     graph_id: str
     position: int
     work_refs: list[WorkRefModel] = []
-    # The chunk's blocked marking (issue #457) — see BlockedView.
+    # The chunk's blocked marking — see BlockedView.
     blocked: BlockedView | None = None
 
 
@@ -41,7 +41,7 @@ class QueuePeekRequest(BaseModel):
 
 
 class QueuePageView(BaseModel):
-    """``GET /api/queue``'s own bounded page (blizzard#526 D3/D4): ``next_cursor`` is
+    """``GET /api/queue``'s own bounded page: ``next_cursor`` is
     ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local."""
 
     entries: list[QueuePeekEntry] = []
@@ -58,7 +58,7 @@ class QueueReplaceRequest(BaseModel):
 
 
 class QueuePositionRequest(BaseModel):
-    """Single-chunk fractional reposition — ``POST /api/queue/position`` (issue #137).
+    """Single-chunk fractional reposition — ``POST /api/queue/position``.
 
     ``after_chunk_id=null`` moves ``chunk_id`` to the top, otherwise immediately after
     the named chunk. Both must be ready (``409``); a self-anchor is ``422``."""
@@ -74,7 +74,7 @@ class BacklogPeekEntry(BaseModel):
     graph_id: str
     position: int
     work_refs: list[WorkRefModel] = []
-    # The chunk's blocked marking (issue #457) — see BlockedView.
+    # The chunk's blocked marking — see BlockedView.
     blocked: BlockedView | None = None
 
 
@@ -85,7 +85,7 @@ class BacklogPeekResponse(BaseModel):
 
 
 class BacklogPageView(BaseModel):
-    """``GET /api/backlog``'s own bounded page (blizzard#526 D3/D4): ``next_cursor``
+    """``GET /api/backlog``'s own bounded page: ``next_cursor``
     is ``None`` on the last page; ``position`` is each entry's whole-order index, not page-local."""
 
     entries: list[BacklogPeekEntry] = []

@@ -1,13 +1,13 @@
 import { compactRef } from '../compact-ref';
 import type { LoggedEvent } from '../sse/fleet-live';
 
-/** A `chunk-changed` frame shaped into the Activity feed's two-line block (issue #212). */
+/** A `chunk-changed` frame shaped into the Activity feed's two-line block. */
 export interface ChunkChangeSummary {
   /** Line 1 — the chunk shortname and its transition, e.g. `C-1RJ1 review → failed → build`. */
   readonly transition: string;
   /** Line 2 — the runner shortname, e.g. `runner-local`, when the frame names one.
    * Falls back to the deleting actor (`data.by`) when the frame carries no runner and
-   * its `cause` is `'deleted'` (D7a, issue #364): an unacquired chunk has no runner to
+   * its `cause` is `'deleted'` (D7a): an unacquired chunk has no runner to
    * name, but who deleted it is still worth the same line. Omitted on every other
    * unclaimed transition (a promote, a stop past the point the route released) — `by`
    * rides only the `deleted` cause today ({@link ChunkChanged.by}'s own docstring). */
@@ -19,8 +19,8 @@ export interface ChunkChangeSummary {
  *
  * `transition` joins the chunk ref, the previous node, the status, and the next node
  * with the panel's existing `→` vocabulary — each absent segment (and its adjacent
- * arrow) is dropped rather than rendered as placeholder junk (issue #212 AC 5, widened
- * to `status` by issue #213 Phase 4 — a backfilled row can structurally carry no
+ * arrow) is dropped rather than rendered as placeholder junk (AC 5, widened
+ * to `status` — a backfilled row can structurally carry no
  * status yet, `hub/domain/work.py`'s `ActivityRow`), so a frame carrying neither node
  * degrades to exactly today's `C-1NWW → running`, and a frame carrying a node but no
  * status renders e.g. `C-1RJ1 review → build` rather than `C-1RJ1 review → — →
@@ -32,7 +32,7 @@ export interface ChunkChangeSummary {
  * part of the rendered row.
  *
  * `runner` prefers `runner_id` when the frame names one; failing that, a `deleted`-cause
- * frame's `by` fills the same line (D7a, issue #364) — Delete's actor, not a runner, but
+ * frame's `by` fills the same line (D7a) — Delete's actor, not a runner, but
  * the same "who did this" line 2 the block already renders for a claimed transition.
  * Every other unclaimed transition still omits line 2 entirely, unchanged from before.
  */

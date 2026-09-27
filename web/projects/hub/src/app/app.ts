@@ -30,8 +30,8 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
  * counterparts), and the routed content.
  *
  * The window is a full-width titlebar ({@link BoardHeader} — the brand, the live
- * fleet counts, the hub connection, and the profile menu ({@link AppNavMenu},
- * issue #132) projected into its `[header-trailing]` slot) over a tab strip
+ * fleet counts, the hub connection, and the profile menu ({@link AppNavMenu})
+ * projected into its `[header-trailing]` slot) over a tab strip
  * ({@link AppNav} — routes only, since #132 moved `Log out` and the viewport
  * override up into the header's menu), with the active route rendered below via
  * `<router-outlet>` — desktop mode. In mobile mode
@@ -39,8 +39,8 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
  * persistent {@link MobileTabBar} renders below the routed content (mock screen C,
  * `../docs/designs/mobile/core-flows.html`) — the fork happens once, here, at the
  * app root, the same "pick it once" rule the route table already follows for the
- * `board` route itself (`app.routes.ts`). The shared {@link AppShell} (`fleet`,
- * issue #325) is what enforces this ordering by construction — header above nav
+ * `board` route itself (`app.routes.ts`). The shared {@link AppShell} (`fleet`)
+ * is what enforces this ordering by construction — header above nav
  * above routed content — the same slot order the runner app root composes its
  * own header/nav/content into, so the two apps cannot drift apart.
  *
@@ -51,7 +51,7 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
  *   routed page, so navigating between tabs never restarts the stream or drops the
  *   query cache.
  *
- * Session-aware UI (issue #93): {@link authState} gates what renders at the very
+ * Session-aware UI: {@link authState} gates what renders at the very
  * top, above the mobile/desktop fork — `/api/me` (`injectMeQuery`) is the one read
  * that decides it:
  *
@@ -71,7 +71,7 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
  *   behavior, no login page, admin nav hidden (below).
  *
  * The SSE spine only starts once `ready` (a `pending`/unauthenticated stream would
- * just 401/403 immediately; `guest`, since issue #210, is `ready` and reads the
+ * just 401/403 immediately; `guest` is `ready` and reads the
  * stream like any other board reader), and its {@link FleetLiveUpdates.authFailed}
  * channel — a session that expired mid-stream — routes back to `/login` the same way
  * the interceptor does, within the one reconnect cycle that surfaces it.
@@ -104,12 +104,12 @@ export class App {
    */
   private readonly demoConfig = readDemoConfig(globalThis.location?.search ?? '');
 
-  /** The fleet's spend-today read (issue #60) — `since` is local start-of-day,
+  /** The fleet's spend-today read — `since` is local start-of-day,
    * recomputed each time the query re-derives its key (a day rollover moves the
    * window forward, same as any other calendar-relative read). */
   protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso());
 
-  /** The fleet's spend-yesterday read (issue #183) — `[startOfPreviousLocalDayIso(),
+  /** The fleet's spend-yesterday read — `[startOfPreviousLocalDayIso(),
    * startOfLocalDayIso())`, both derived from the one local-day boundary helper so
    * the window rolls over with today by construction and never includes today's
    * own spend. A second, independent `injectHubFleetSpendQuery` entry — distinct
@@ -128,7 +128,7 @@ export class App {
   /** The resolved identity, or `null` while pending/unauthenticated. */
   protected readonly me = computed(() => this.meQuery.data() ?? null);
 
-  /** The top-level session gate (issue #93) — see the class docstring. */
+  /** The top-level session gate — see the class docstring. */
   protected readonly authState = computed<'loading' | 'unauthenticated' | 'lobby' | 'ready'>(() => {
     if (this.meQuery.isPending()) return 'loading';
     const me = this.me();
@@ -196,7 +196,7 @@ export class App {
       if (this.authState() === 'unauthenticated' && !this.onLoginRoute()) redirectToLogin(this.router);
     });
 
-    // The SSE spine's explicit auth-failure channel (issue #93) — a session that
+    // The SSE spine's explicit auth-failure channel — a session that
     // expired mid-stream routes back to `/login`, the same seam the 401 interceptor
     // uses, within the one reconnect cycle that surfaced it.
     effect(() => {

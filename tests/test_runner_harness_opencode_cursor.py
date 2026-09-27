@@ -1,7 +1,7 @@
 """``harness/internal/opencode_cursor.py::MessagePartCursor.admit`` — unit tier, hermetic:
-identity-based admission and D1's own pruning bound. Phase 3's acceptance criterion named the
-D1 token bound as unit-tested, but no such test existed until review F5; this file is that
-test, plus F23's pairing proof against the pinned compaction corpus."""
+identity-based admission and its own pruning bound. This acceptance criterion named the
+token bound as unit-tested, but no such test existed until review; this file is that
+test, plus its own pairing proof against the pinned compaction corpus."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-# The oldest committed corpus inside the admitted range (blizzard#438) — stays correct as corpora are added.
+# The oldest committed corpus inside the admitted range — stays correct as corpora are added.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = (
     repo_root() / "src" / "blizzard" / "runner" / "harness" / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
@@ -38,14 +38,14 @@ def _compaction_record(message_id: str, part_id: str) -> CursorRecord:
     return CursorRecord.of(message_id, part_id, {"id": part_id, "type": "compaction"})
 
 
-# --- D1: never prune on absence alone ---
+# --- never prune on absence alone ---
 
 
 @pytest.mark.unit
 def test_admit_never_prunes_a_mark_on_absence_alone() -> None:
     """A stale identity the current tick's export simply omits, with no compaction evidence
     anywhere in it, must stay marked — every export is the WHOLE session, so an absence with
-    no compaction proof is indistinguishable from a transient read race (D1)."""
+    no compaction proof is indistinguishable from a transient read race."""
     cursor = MessagePartCursor.start()
     cursor = cursor.admit([_text_record("m1", "p1", "hello")]).cursor
 
@@ -68,12 +68,12 @@ def test_admit_never_prunes_an_identity_the_export_still_carries() -> None:
     assert MessagePartIdentity("m1", "p1") in identities
 
 
-# --- D1: prune only on real compaction evidence ---
+# --- prune only on real compaction evidence ---
 
 
 @pytest.mark.unit
 def test_admit_prunes_a_mark_the_export_no_longer_carries_once_compaction_proves_it() -> None:
-    """The one case D1 allows: an identity absent from this tick's export, on a tick whose
+    """The one case allows: an identity absent from this tick's export, on a tick whose
     export also carries a `compaction` part — real evidence retained history was pruned, not
     a guess from the mark's own age or the cursor's size."""
     cursor = MessagePartCursor.start()
@@ -104,12 +104,12 @@ def test_admit_prunes_only_once_the_first_compaction_tick_arrives() -> None:
     assert MessagePartIdentity("m2", "p2") not in identities
 
 
-# --- D1: the resulting token is a bounded budget across a long, compacting session ---
+# --- the resulting token is a bounded budget across a long, compacting session ---
 
 
 @pytest.mark.unit
 def test_the_cursor_token_stays_bounded_across_a_long_session_with_periodic_compactions() -> None:
-    """ "the resulting token size as a budget" (D1): a session growing through many
+    """ "the resulting token size as a budget": a session growing through many
     compaction cycles must not grow its token with the total message count ever admitted —
     proportional to one retained window, not the session's whole lifetime."""
     cursor = MessagePartCursor.start()
@@ -127,7 +127,7 @@ def test_the_cursor_token_stays_bounded_across_a_long_session_with_periodic_comp
     assert token_bytes < 8 * 1024, f"cursor token grew to {token_bytes} bytes across {cycles} compaction cycles"
 
 
-# --- F23: pinned against the real corpus, not a hand-built fixture ---
+# --- pinned against the real corpus, not a hand-built fixture ---
 
 
 @pytest.mark.unit

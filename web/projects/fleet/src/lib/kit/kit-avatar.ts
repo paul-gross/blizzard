@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 /**
- * The standard profile-avatar glyph (issue #132) — a plain circle carrying a
+ * The standard profile-avatar glyph — a plain circle carrying a
  * generic person/"guest user" silhouette, no real identity or image (out of
  * scope for #132). {@link KitMenu}'s `[trigger]` projection slot is this
  * icon's one intended use — both the hub's `AppNavMenu` and the runner's

@@ -1,5 +1,4 @@
-"""The token-usage, context-sample, and external-subscription-usage repository seam
-(blizzard#410)."""
+"""The token-usage, context-sample, and external-subscription-usage repository seam."""
 
 from __future__ import annotations
 
@@ -33,7 +32,7 @@ class ContextSampleState:
 
 @dataclass(frozen=True)
 class ExternalUsageAttemptSummary:
-    """This ``slug``'s own newest sampling attempt (blizzard#504) — what the probe, ``runner
+    """This ``slug``'s own newest sampling attempt — what the probe, ``runner
     status``, and ``GET /api/subscriptions`` all show. ``miss_reason`` is a
     :class:`~blizzard.runner.subscriptions.subscription_sampler.SampleMissReason` value or
     ``None`` on success; ``renewal`` is the renewal outcome recorded with it, or ``None``."""
@@ -47,7 +46,7 @@ class ExternalUsageAttemptSummary:
 
 @dataclass(frozen=True)
 class UsageTotals:
-    """A summed window of usage facts (issue #58). ``cost_partial`` carries the
+    """A summed window of usage facts. ``cost_partial`` carries the
     lower-bound contract on ``cost_usd``: a caller must check it before treating
     ``cost_usd`` as exact."""
 
@@ -63,7 +62,7 @@ class IReadUsageRepository(Protocol):
     """Read-only usage/context-sample queries (held by read-path edges)."""
 
     def usage_since(self, at: datetime) -> UsageTotals:
-        """Sum every local usage fact recorded at or after ``at`` (issue #58) — see
+        """Sum every local usage fact recorded at or after ``at`` — see
         :class:`UsageTotals` for the lower-bound + PARTIAL contract on ``cost_usd``."""
         ...
 
@@ -83,21 +82,21 @@ class IReadUsageRepository(Protocol):
         ...
 
     def last_external_usage_attempt_at(self, slug: str) -> datetime | None:
-        """``max(sampled_at)`` across this ``slug``'s own rows, or ``None`` (issue #218). A
+        """``max(sampled_at)`` across this ``slug``'s own rows, or ``None``. A
         NULL-``payload`` attempt counts like a successful one, so one subscription's
         failed sample never masks its own windows."""
         ...
 
     def latest_external_usage_windows(self, slug: str) -> tuple[ExternalSubscriptionUsageWindow, ...]:
         """This ``slug``'s own newest sampled snapshot's windows, decoded from the stored
-        payload — empty when never sampled, or when the newest attempt recorded none
-        (blizzard#594 D4). The usage-limit reset-time fallback's own read: no
+        payload — empty when never sampled, or when the newest attempt recorded none.
+        The usage-limit reset-time fallback's own read: no
         harness-to-subscription mapping, just the newest windows this slug reported."""
         ...
 
     def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
-        """This ``slug``'s own newest attempt row, or ``None`` when never attempted
-        (blizzard#504) — the runner-local diagnostics' read."""
+        """This ``slug``'s own newest attempt row, or ``None`` when never attempted —
+        the runner-local diagnostics' read."""
         ...
 
 
@@ -115,8 +114,8 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         sample: UsageSample,
         recorded_at: datetime,
     ) -> int | None:
-        """Idempotently record one usage fact **and** buffer its outbound report, atomically
-        (issue #58); return the buffered report's seq. Keyed on ``(lease_id, generation,
+        """Idempotently record one usage fact **and** buffer its outbound report, atomically;
+        return the buffered report's seq. Keyed on ``(lease_id, generation,
         sample.kind)``: a resume within the same lease is a genuinely new row; an exact replay
         writes nothing, buffers nothing, returns ``None``. The cost stored and reported is this
         invocation's own share of ``sample.cost_usd``, and is absent when no reading was possible."""
@@ -152,15 +151,15 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         renewal: str | None = None,
     ) -> int | None:
         """Append one declared subscription's sampling attempt and, when it carries a report,
-        buffer that report — atomically (issue #218), returning the buffered seq or ``None``.
-        ``slug`` (blizzard#436) is the cadence's join key. ``miss_reason`` (blizzard#504) is a
+        buffer that report — atomically, returning the buffered seq or ``None``.
+        ``slug`` is the cadence's join key. ``miss_reason`` is a
         ``SampleMissReason`` value on a miss, ``None`` on success; ``renewal`` is this attempt's
         own renewal outcome, ``None`` when this slug has no renewer or none was due."""
         ...
 
     def prune_external_usage_samples(self, *, now: datetime) -> int:
         """Compact external-usage-sample attempts older than the store's own retention
-        window (issue #520), keeping each slug's newest attempt regardless of age —
+        window, keeping each slug's newest attempt regardless of age —
         ``max(sampled_at)`` per slug is unchanged, so
         :meth:`~IReadUsageRepository.last_external_usage_attempt_at` answers identically
         before and after. Returns the number of rows pruned."""

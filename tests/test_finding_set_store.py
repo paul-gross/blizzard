@@ -1,7 +1,7 @@
-"""``FindingSetStore`` — the finding-set repository (blizzard#390, component tier).
+"""``FindingSetStore`` — the finding-set repository (component tier).
 
 Migrated-to-head sqlite-on-disk. Proves three sets from one run (one chunk) are
-distinguished by their artifacts (D6) — one row per delivered list."""
+distinguished by their artifacts — one row per delivered list."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def test_get_unknown_id_is_none(tmp_path: Path) -> None:
 
 def test_three_sets_from_one_run_are_distinguished_by_their_artifacts(tmp_path: Path) -> None:
     """A fanned-out graph's three delivered lists mint three sets, all naming the same
-    run (chunk_id), kept apart by their distinct artifact_id (D6)."""
+    run (chunk_id), kept apart by their distinct artifact_id."""
     store, _ = _store(tmp_path)
 
     store.create(
@@ -111,7 +111,7 @@ def test_three_sets_from_one_run_are_distinguished_by_their_artifacts(tmp_path: 
 
 
 def test_a_second_set_on_the_same_artifact_is_refused(tmp_path: Path) -> None:
-    """One set per delivered list (D6) — the unique FK on `artifact_id` is the backstop."""
+    """One set per delivered list — the unique FK on `artifact_id` is the backstop."""
     store, _ = _store(tmp_path)
     store.create(
         "fins_1",
@@ -136,7 +136,7 @@ def test_a_second_set_on_the_same_artifact_is_refused(tmp_path: Path) -> None:
 
 
 def test_newest_for_routine_scope_orders_by_finding_set_id_descending(tmp_path: Path) -> None:
-    """The baseline read (blizzard#392) — `fins_<ULID>` is monotonic in mint instant, so
+    """The baseline read — `fins_<ULID>` is monotonic in mint instant, so
     the lexically-newest id is the newest set, with no timestamp column to sort by."""
     store, _ = _store(tmp_path)
     store.create(
@@ -186,7 +186,7 @@ def test_newest_for_routine_scope_ignores_a_different_routine_or_scope(tmp_path:
 
 
 def test_newest_by_scope_for_routine_returns_one_entry_per_scope(tmp_path: Path) -> None:
-    """The routine-baselines batched read (blizzard#399 D5) — one row per scope, the
+    """The routine-baselines batched read — one row per scope, the
     newest by `finding_set_id`."""
     store, engine = _store(tmp_path)
     with engine.begin() as conn:

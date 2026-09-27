@@ -1,7 +1,7 @@
 """Node-envelope assembly over already-loaded domain objects (``bzh:domain-core``, ``bzh:domain-takes-objects``).
 
 The **pre-prompt** is the node's base prompt, the inlined arrival addendum of the edge the chunk took to
-reach the node, and a generated required-artifacts table (issue #143). The **judgement prompt** is the
+reach the node, and a generated required-artifacts table. The **judgement prompt** is the
 node's authored prose only. Node-scope artifacts resolve **latest-by-epoch per
 ``{node_name}.{name}``**; the graph mint's baked-in declarations ride alongside as authored."""
 
@@ -88,7 +88,7 @@ class Arrival:
 @dataclass(frozen=True)
 class EffectiveSession:
     """A node's session facets resolved **declaration > chunk default**, merged *field by field*
-    (issue #144; pinned by
+    (pinned by
     tests/test_envelope.py::test_a_declaration_outranks_the_chunk_default_field_by_field)."""
 
     name: str | None
@@ -123,7 +123,7 @@ class EffectiveSession:
 @dataclass(frozen=True)
 class Envelope:
     """The envelope ``node`` is worked from. ``graph`` carries no default, so omitting it is a
-    ``TypeError`` (issue #144; pinned by
+    ``TypeError`` (pinned by
     tests/test_pin_hub_domain.py::test_envelope_requires_graph_explicitly)."""
 
     chunk: Chunk
@@ -132,7 +132,7 @@ class Envelope:
     artifacts: list[ArtifactRow]
     epoch: int
     arrival_addendum: str | None = None
-    # This visit was forced by an operator restart (issue #370), which overrides the node's
+    # This visit was forced by an operator restart, which overrides the node's
     # declared session mode below — derived from the durable fact, so a re-read still says so.
     entered_by_restart: bool = False
 
@@ -148,7 +148,7 @@ class Envelope:
 
     @property
     def required_artifacts(self) -> str:
-        """The generated table appended to the pre-prompt (issue #143): one line per ``produces:``
+        """The generated table appended to the pre-prompt: one line per ``produces:``
         entry naming its kind and the fleet-protocol verb that declares it, or ``""``. Never
         authored app or toolchain knowledge (``bzh:app-agnostic-graphs``); ``#``-prefixed so a
         harness reading the prompt as a program sees a legal no-op."""

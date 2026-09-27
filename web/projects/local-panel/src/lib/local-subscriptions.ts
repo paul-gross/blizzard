@@ -6,13 +6,13 @@ import { injectRunnerDashboardQuery } from './status.query';
 
 /**
  * The subscriptions panel **container** — every declared provider subscription's own
- * newest sampling attempt (blizzard#504): whether it sampled successfully, and when not,
+ * newest sampling attempt: whether it sampled successfully, and when not,
  * the closed-set reason distinguishing a lapsed credential ("log in again") from an
  * unreachable endpoint or an unparseable response. Owns the shared dashboard query's
  * `subscriptions` section, the resolved async-state triad, and the ticking clock
  * {@link SubscriptionRow.sampledAgo} is derived from; the presentational
  * {@link LocalSubscriptionsView} owns the row template (`bzh:frontend-container-presentational`).
- * Read-only, like every other rail on this panel — renewal (blizzard#504) is driven by
+ * Read-only, like every other rail on this panel — renewal is driven by
  * the runner's own loop, never by an operator action here; this rail only shows its
  * newest recorded outcome.
  */
@@ -42,7 +42,7 @@ export class LocalSubscriptions {
   }
 
   /** "ok", "never sampled", or "miss: <reason>" — the operator-facing distinguishable
-   * condition (blizzard#504), mirroring the probe CLI's own translation. */
+   * condition, mirroring the probe CLI's own translation. */
   private conditionLabel(ok: boolean | null, missReason: string | null): string {
     if (ok === null) return 'never sampled';
     if (ok) return 'ok';

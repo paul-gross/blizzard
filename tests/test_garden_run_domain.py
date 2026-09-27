@@ -398,7 +398,7 @@ def test_run_delta_splits_add_observed_and_gone_into_three_groups() -> None:
 
 
 def test_an_add_op_with_no_matching_fact_degrades_to_an_unmatched_finding_id() -> None:
-    """A set delivered before `finding_facts.finding_set_id` existed (Phase 1) carries
+    """A set delivered before `finding_facts.finding_set_id` existed carries
     no add ids at all — the add still renders from the artifact, linked to nothing."""
     artifact = _delta_artifact(
         [{"op": "add", "class": "stale-docstring", "locus": "a.py:1", "summary": "s", "introduced": None}]

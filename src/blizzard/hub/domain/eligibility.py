@@ -36,7 +36,7 @@ class EligibilityCheck:
 
     @property
     def _available_capabilities(self) -> list[RunnerCapability]:
-        """Capabilities health has withdrawn from selection (blizzard#438) satisfy no
+        """Capabilities health has withdrawn from selection satisfy no
         lineage — a runner's own diagnostics still see them; a claim or peek never does."""
         return [capability for capability in self.capabilities if capability.available]
 

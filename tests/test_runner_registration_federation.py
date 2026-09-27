@@ -1,4 +1,4 @@
-"""Runner registration's optional ``url``/``redirect_uris`` extension (issue #95).
+"""Runner registration's optional ``url``/``redirect_uris`` extension.
 
 Federation identity rides the same authenticated write as every other registration
 field: an unauthenticated attempt to set or change it is rejected exactly like an
@@ -67,7 +67,7 @@ def test_unauthenticated_registration_with_redirect_uris_is_rejected_under_enfor
 
 
 def test_registration_persists_the_capability_snapshot(tmp_path: Path) -> None:
-    """blizzard#433 — a request naming a harness/tier snapshot stores it whole."""
+    """A request naming a harness/tier snapshot stores it whole."""
     hub = build_hub(tmp_path)
     capabilities = [
         {
@@ -91,7 +91,7 @@ def test_registration_persists_the_capability_snapshot(tmp_path: Path) -> None:
 
 
 def test_registration_without_capabilities_leaves_it_empty(tmp_path: Path) -> None:
-    """A request predating blizzard#433 (or a harness-less runner) parses unchanged."""
+    """A request predating capability snapshots (or a harness-less runner) parses unchanged."""
     hub = build_hub(tmp_path)
     resp = _register(hub)
     assert resp.status_code == 201, resp.text

@@ -1,4 +1,4 @@
-"""``POST /api/fleet/chunks/{id}/pause`` and ``.../resume`` (issue #185).
+"""``POST /api/fleet/chunks/{id}/pause`` and ``.../resume``.
 
 Delegates onto the same ``pause_chunk``/``resume_chunk`` the board's own route calls
 (``canon:one-owner``). The domain refusal is exercised by ``test_chunks_api.py``; this

@@ -1,5 +1,5 @@
 """``POST /api/questions/{id}/answers`` and the deprecated singular ``.../answer``
-alias (issue #104), component tier.
+alias, component tier.
 
 Pins the pluralized successor's first-write-wins CAS behavior (201 winner / 409 loser)
 and proves the singular alias answers byte-identically, carrying ``Deprecation``/``Link``
@@ -92,7 +92,7 @@ def test_answers_first_write_wins(tmp_path: Path) -> None:
     second = hub.client.post("/api/questions/qn_1/answers", json={"answer": "graphql", "answered_by": "bob"})
     assert second.status_code == 409, second.text
     assert second.json()["won"] is False
-    # `answered_by` in the body is a spoof attempt — issue #91 overwrites it with the
+    # `answered_by` in the body is a spoof attempt — overwrites it with the
     # resolved session identity, `"operator"` under the default `auth.mode = "none"`.
     assert second.json()["answered_by"] == "operator"
 

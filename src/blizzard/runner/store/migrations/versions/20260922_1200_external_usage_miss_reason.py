@@ -1,5 +1,5 @@
-"""Add the sampler-miss reason and renewal-outcome columns to external_usage_samples
-(blizzard#504) — both nullable, unpopulated on every historical row.
+"""Add the sampler-miss reason and renewal-outcome columns to external_usage_samples —
+both nullable, unpopulated on every historical row.
 
 Revision ID: 20260922_1200_external_usage_miss_reason
 Revises: 20260921_1600_overload_facts

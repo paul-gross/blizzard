@@ -17,7 +17,7 @@ from tests.support import make_graph
 pytestmark = pytest.mark.unit
 
 
-# SessionRef (issue #115) — the pure `session:` syntax parser.
+# SessionRef — the pure `session:` syntax parser.
 
 
 def test_session_ref_bare_resume_is_resume_with_no_source() -> None:
@@ -82,7 +82,7 @@ def test_mints_effective_ties_on_created_at_break_by_graph_id_descending() -> No
     assert result == {"gr_a": False, "gr_b": True}
 
 
-# retired_ids (issue #101) — a retired graph_id is never an effective candidate.
+# retired_ids — a retired graph_id is never an effective candidate.
 
 
 def test_mints_effective_skips_a_retired_newest_and_falls_back_to_the_prior_version() -> None:
@@ -118,7 +118,7 @@ def test_mints_effective_retired_ids_is_independent_per_name() -> None:
 
 
 def test_mints_effective_requires_retired_ids_explicitly() -> None:
-    """``retired_ids`` carries no default (issue #101 lockstep note): a caller that
+    """``retired_ids`` carries no default: a caller that
     forgets it gets a ``TypeError``, never a silent fall-back to the pre-#101
     every-graph-is-a-candidate behavior."""
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -128,7 +128,7 @@ def test_mints_effective_requires_retired_ids_explicitly() -> None:
         Mints.of([only])  # type: ignore[call-arg]
 
 
-# Mint.newer_than — the newest-wins order, named rather than open-coded (issue #164)
+# Mint.newer_than — the newest-wins order, named rather than open-coded
 
 _T0 = datetime(2026, 5, 1, tzinfo=UTC)
 

@@ -1,7 +1,7 @@
 /* The username is the one content-dependent width in the header, so it is
    the one thing that must be able to give way: without a zero floor and an
    ellipsis it sets a max-content that pushes everything after it — the
-   profile menu included — off a viewport-locked shell (issue #163). */
+   profile menu included — off a viewport-locked shell. */
 :host {
   display: flex;
   align-items: center;

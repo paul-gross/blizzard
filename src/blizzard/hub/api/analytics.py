@@ -1,8 +1,8 @@
-"""Analytics operator-plane routes: a forced re-derive (blizzard#254 D7), the read-only
-events/counts surfaces (blizzard#255) over the derived projection, and the operational
-datasets (blizzard#256) over facts the hub already holds. Reads gate on
+"""Analytics operator-plane routes: a forced re-derive, the read-only
+events/counts surfaces over the derived projection, and the operational
+datasets over facts the hub already holds. Reads gate on
 :data:`~blizzard.auth_core.TRANSCRIPT_READ`; ``/re-derive`` alone on the mutating
-:data:`~blizzard.auth_core.ANALYTICS_ADMIN`, per-route (blizzard#255 D2). Operator-plane,
+:data:`~blizzard.auth_core.ANALYTICS_ADMIN`, per-route. Operator-plane,
 never ``/api/fleet/...``."""
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ def re_derive(request: ReDeriveRequest, services: Annotated[HubServices, Depends
     return ReDeriveResponse(derived=len(to_derive), remaining=len(candidates) - len(to_derive))
 
 
-# --- read-only events/counts (blizzard#255) --------------------------------------
+# --- read-only events/counts --------------------------------------
 
 # A count omits the query param for a field its own scope already pins, and the one that
 # would select a single group rather than narrow the count; each route states which.
@@ -105,7 +105,7 @@ class NormalizedScope:
 @dataclass(frozen=True)
 class ScopeFilters:
     """The filter block every analytics route exposes — which work the read covers and
-    over which window (blizzard#256 D7). A route wanting the derived-event projection's
+    over which window. A route wanting the derived-event projection's
     own ``extractor_version`` composes :class:`EventScopeFilters` on top. Mints only
     :meth:`normalized`, not either family's own domain-criteria type."""
 
@@ -137,7 +137,7 @@ def operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
     """The operational routes' own reading of :meth:`ScopeFilters.normalized` — minted
     here, not on :class:`ScopeFilters` itself, so the shared type stays shared rather
     than carrying one family's domain-criteria type as though every consumer used it.
-    Shared with the fleet router's own analytics reads (blizzard#545), not this
+    Shared with the fleet router's own analytics reads, not this
     module's alone."""
     n = scope.normalized()
     return OperationalCriteria(graph_id=n.graph_id, source=n.source, since=n.since, until=n.until)
@@ -145,8 +145,8 @@ def operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
 
 @dataclass(frozen=True)
 class EventScopeFilters:
-    """:class:`ScopeFilters` plus ``extractor_version`` and four provenance dimensions
-    (blizzard#256 D7, blizzard#439 D6) — meaningless outside the derived-event
+    """:class:`ScopeFilters` plus ``extractor_version`` and four provenance dimensions —
+    meaningless outside the derived-event
     projection. Takes its nine query params flat, not nested behind
     ``Depends(ScopeFilters.of)``, reproducing the pre-split param order byte-for-byte."""
 
@@ -185,7 +185,7 @@ class EventScopeFilters:
         """A route passes exactly the narrowing filters it exposes; one it does not
         offer goes unnamed here, rather than named as an explicit ``None``. Built off
         :meth:`ScopeFilters.normalized`'s own conversion rather than re-deriving it —
-        the D7 split's byte-identical-spec constraint binds the parameter declarations,
+        the ScopeFilters/EventScopeFilters split's byte-identical-spec constraint binds the parameter declarations,
         not this conversion."""
         scope = self.scope.normalized()
         return EventQueryCriteria(
@@ -278,7 +278,7 @@ def _events_response(page: EventPage) -> AnalyticsEventsResponse:
 
 
 def counts_response(rows: list[CountRow]) -> AnalyticsCountsResponse:
-    """Shared with the fleet router's own analytics reads (blizzard#545), not this
+    """Shared with the fleet router's own analytics reads, not this
     module's alone."""
     return AnalyticsCountsResponse(counts=[AnalyticsCountView(key=row.key, count=row.count) for row in rows])
 
@@ -376,7 +376,7 @@ def counts_by_node(
     return counts_response(services.analytics_events.counts_by_node(criteria))
 
 
-# --- operational datasets: durations, spend, outcomes (blizzard#256 D8) -----------
+# --- operational datasets: durations, spend, outcomes -----------
 
 
 def _durations_response(stats: list[DurationStats]) -> AnalyticsDurationsResponse:
@@ -396,8 +396,8 @@ def _durations_response(stats: list[DurationStats]) -> AnalyticsDurationsRespons
 def durations_by_node(
     services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
-    """Completed-step duration rollups grouped by node (D2) — see
-    ``AnalyticsDurationView`` for the wall-clock semantics (D3)."""
+    """Completed-step duration rollups grouped by node — see
+    ``AnalyticsDurationView`` for the wall-clock semantics."""
     return _durations_response(services.operational_analytics.durations_by_node(operational_criteria(scope)))
 
 
@@ -407,13 +407,13 @@ def durations_by_node(
 def durations_by_graph(
     services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
-    """The same rollup grouped by the graph the step happened in (D2) — the transition's
+    """The same rollup grouped by the graph the step happened in — the transition's
     own ``graph_id``, never the chunk's current pin."""
     return _durations_response(services.operational_analytics.durations_by_graph(operational_criteria(scope)))
 
 
 def spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
-    """Shared with the fleet router's own analytics reads (blizzard#545), not this
+    """Shared with the fleet router's own analytics reads, not this
     module's alone."""
     return AnalyticsSpendResponse(
         spend=[
@@ -436,7 +436,7 @@ def spend_response(stats: list[SpendStats]) -> AnalyticsSpendResponse:
 def spend_by_node(
     services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
 ) -> AnalyticsSpendResponse:
-    """Usage/cost rollups grouped by node (D6) — the same lower-bound + PARTIAL contract
+    """Usage/cost rollups grouped by node — the same lower-bound + PARTIAL contract
     ``GET /api/spend`` publishes."""
     return spend_response(services.operational_analytics.spend_by_node(operational_criteria(scope)))
 
@@ -447,7 +447,7 @@ def spend_by_graph(
 ) -> AnalyticsSpendResponse:
     """The same rollup grouped by each usage fact's chunk's *current* graph pin — a
     chunk that migrated attributes every usage fact it ever recorded to where it lives
-    today (D6)."""
+    today."""
     return spend_response(services.operational_analytics.spend_by_graph(operational_criteria(scope)))
 
 
@@ -492,7 +492,7 @@ def spend_by_chunk(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> AnalyticsChunkSpendResponse:
-    """A bounded, keyset-paginated page of per-chunk spend rollups (D8) — unbounded in a
+    """A bounded, keyset-paginated page of per-chunk spend rollups — unbounded in a
     wide window, unlike the per-node/per-graph groupings, so this takes a cursor rather
     than a single envelope."""
     try:
@@ -536,7 +536,7 @@ def _outcomes_response(stats: list[OutcomeStats]) -> AnalyticsOutcomesResponse:
 def outcomes_by_node(
     services: Annotated[HubServices, Depends(get_services)], scope: Annotated[ScopeFilters, Depends(ScopeFilters.of)]
 ) -> AnalyticsOutcomesResponse:
-    """Judged-choice distribution and attempt-failure counts grouped by node (D4/D5) —
+    """Judged-choice distribution and attempt-failure counts grouped by node —
     a judged failure edge and a retry-consuming attempt failure reported separately,
     never blended into one rate. A delivery kick-back (``chunk_bounces``) counts as
     neither."""

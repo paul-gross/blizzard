@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, booleanAttribute, input, output } from '@angular/core';
 
 /**
- * One selectable row inside an inline radio field (blizzard#399 D6) — the
+ * One selectable row inside an inline radio field — the
  * label-plus-`<input type="radio">` chrome a native radiogroup needs, with only the
  * label's own content (`<ng-content>`) left to the caller. The radio element itself is
  * templated here, not projected: a projected `<input>` is invisible to

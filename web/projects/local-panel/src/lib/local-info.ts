@@ -15,8 +15,7 @@ import { injectRunnerDashboardQuery } from './status.query';
  * (ready/running/waiting/needs) — a fleet-level pulse. Those counts *are* a
  * hub read, so unlike the rest of this panel they arrive through the same
  * dashboard read's `fleet_summary` section — the runner's own `GET
- * /api/fleet-summary` pass-through (issue #76), folded in by Phase 1 (issue
- * #311): the hub API allows no cross-origin browser read, so the runner
+ * /api/fleet-summary` pass-through: the hub API allows no cross-origin browser read, so the runner
  * forwards it. `fleet_summary` is `null` exactly when that forward fails (hub
  * unreachable or unwired) — a **200** carrying a null slot, not a failed
  * request, so the strip's degraded/last-known state can no longer be read off
@@ -40,7 +39,7 @@ export class LocalInfo {
   });
 
   /**
-   * The fleet strip's own latch (issue #311): under the composed read, a hub
+   * The fleet strip's own latch: under the composed read, a hub
    * outage is a successful `/api/dashboard` read carrying `fleet_summary: null`
    * — TanStack sees no error and retains nothing special about the prior
    * counts, so without this the strip would blank instead of degrading. This
@@ -69,7 +68,7 @@ export class LocalInfo {
    * projected content), the same degraded-blank behavior as before. */
   protected readonly triadState = computed(() => asyncState(this.query, false));
 
-  /** Ticks once a second (issue #178) so `lastFlushLabel`/`lastTickLabel` advance
+  /** Ticks once a second so `lastFlushLabel`/`lastTickLabel` advance
    * between polls instead of sitting frozen at whatever age the last read carried —
    * both elapsed-time-derived off `status.query.ts`'s backstop; see
    * `RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS` (`polling.ts`) for that anchor's own bound. */

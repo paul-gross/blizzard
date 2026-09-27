@@ -1,4 +1,4 @@
-"""Per-IP throttling for the provider-login authorize/callback routes (issue #92).
+"""Per-IP throttling for the provider-login authorize/callback routes.
 
 A small in-memory token bucket keyed by client IP, driven entirely off the injected
 clock (``bzh:injected-clock``) — deterministic under test. Rate-limiting is a liveness

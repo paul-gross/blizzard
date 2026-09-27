@@ -1,5 +1,5 @@
 """chunk default model/effort — additive and nullable, with no backfill, since NULL is
-exactly "expresses no preference"; ``chunks.model`` is retained and unread (issue #144)
+exactly "expresses no preference"; ``chunks.model`` is retained and unread
 
 Revision ID: 20260728_1410_hub_chunk_defaults
 Revises: 20260728_1400_hub_graph_sessions

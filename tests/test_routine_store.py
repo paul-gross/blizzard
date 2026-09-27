@@ -1,4 +1,4 @@
-"""``RoutineStore`` — the routine repository (blizzard#389, component tier).
+"""``RoutineStore`` — the routine repository (component tier).
 
 Migrated-to-head sqlite-on-disk — the ``tests/test_work_item_store.py`` shape."""
 
@@ -172,7 +172,7 @@ def test_retired_ids_reflects_only_the_newest_fact_per_routine(tmp_path: Path) -
     assert store.retired_ids() == {"rtn_a"}
 
 
-# --- RoutineScopeStore (the routine_scopes join, blizzard#488) --------------------
+# --- RoutineScopeStore (the routine_scopes join) --------------------
 
 
 def _routine_scope_store(tmp_path: Path) -> RoutineScopeStore:
@@ -251,9 +251,9 @@ def test_list_routines_for_an_unlinked_scope_is_empty(tmp_path: Path) -> None:
 
 
 def test_unlinking_a_pair_leaves_its_findings_readable(tmp_path: Path) -> None:
-    """AC6 (blizzard#488): a finding recorded under a `(routine, scope)` pair stays
+    """AC6: a finding recorded under a `(routine, scope)` pair stays
     readable through `FindingStore.list_for` after that pair is unlinked — no finding
-    read joins through `routine_scopes` (D1, D2)."""
+    read joins through `routine_scopes`."""
     routine_store, engine = _store_and_engine(tmp_path)
     routine_store.create(_routine())
     scope_store = RoutineScopeStore(hub_store_connections(engine))

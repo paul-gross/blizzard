@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the chunk-dependencies seam (package-private, issue #456).
+"""SQLAlchemy adapter for the chunk-dependencies seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). One row per
 edge, shape owned by ``hub/store/schema.py``: declaring after a release mints a fresh
@@ -117,7 +117,7 @@ class ChunkDependenciesStore:
         at: datetime,
     ) -> dict[str, int]:
         """Record every target's ``chunk.grouped`` row and rewrite its own release/mint
-        edges, all targets in one transaction (D1, D4, issue #460) so no target's row can
+        edges, all targets in one transaction so no target's row can
         commit ahead of another's. ``mint`` never revives a released row, always a fresh
         insert. Returns each target chunk id's freshly-inserted ``chunk_grouped.id``."""
         grouped_ids: dict[str, int] = {}
@@ -175,7 +175,7 @@ def _edge(row) -> DependencyEdge:  # type: ignore[no-untyped-def]
 
 def release_outgoing_edges_conn(conn: Connection, chunk_id: str, *, by: str, at: datetime) -> None:
     """Release every standing edge naming ``chunk_id`` as the dependent, on a
-    caller-supplied ``conn`` (issue #460) — folded into the delete transaction so a
+    caller-supplied ``conn`` — folded into the delete transaction so a
     deleted dependent's own edges never survive it, mirroring
     :func:`~blizzard.hub.store.internal.chunk_rows.record_deleted_row`'s shared-connection
     shape."""

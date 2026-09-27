@@ -115,7 +115,7 @@ class SpendCeiling(Step):
 
     def run(self) -> None:
         """Engage the local pause brake once this runner's rolling-window spend reaches
-        ``cost.runner_ceiling_usd``; absent, there is no ceiling (issue #61). Runs **first** in
+        ``cost.runner_ceiling_usd``; absent, there is no ceiling. Runs **first** in
         the tick so a crossing is visible to every later step in the same pass, engages exactly
         once, and never lifts — only a conscious clear does (tests/test_runner_paused.py)."""
         ctx = self.ctx
@@ -175,7 +175,7 @@ class Reap(Step):
                 continue
             if lease.pid is None or lease.session_id is None:
                 if lease.pid is not None:
-                    # A durably-provisional generation (D1/D2): close it unidentified before
+                    # A durably-provisional generation: close it unidentified before
                     # failing the attempt, so REAP doesn't leave the generation ambiguously open.
                     ctx.stores.liveness.record_identity_failed(lease.lease_id, at=now)
                 _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
@@ -210,7 +210,7 @@ class ResumeIntents:
     (#12) and the startup crash-orphan scan (#13). Store-only: no context, no hub.
 
     Spans leases, asks (parked) and outbound (pending submission), so it holds the
-    :class:`~blizzard.runner.stores.RunnerStores` bundle (D4)."""
+    :class:`~blizzard.runner.stores.RunnerStores` bundle."""
 
     stores: RunnerStores
 
@@ -240,12 +240,12 @@ class ResumeIntents:
         """Active, session-bearing leases that are neither parked, mid-submission, nor
         mid-elicitation — an unspawned one is REAP's residue, with nothing to resume.
 
-        The elicitation exclusion (D6) matters on both callers: a graceful
+        The elicitation exclusion matters on both callers: a graceful
         restart-resume would otherwise wake a second process on the same session, and an
         ungraceful crash-orphan scan would otherwise leave the pre-resume elicitation's stale
         record to be misread as the resumed generation's own verdict — neither path may
         re-mint or resume a lease whose elicitation is in flight. A backing-off lease is
-        excluded the same way (blizzard#595): its own ``resume_after`` is already durable,
+        excluded the same way: its own ``resume_after`` is already durable,
         and either restart path re-marking it would wake it early, skipping the wait."""
         parked = self.stores.asks.parked_lease_ids()
         pending = self.stores.outbound.pending_submission_lease_ids()
@@ -376,9 +376,9 @@ class Pull(Step):
 
     def _reconcile_leases(self) -> None:
         """Reconcile every active lease against the hub's view of its chunk — abandon it if the hub
-        no longer routes it here, park it if the operator paused it (issue #46), preempt it if a
+        no longer routes it here, park it if the operator paused it, preempt it if a
         restart moved the chunk out from under it (#370). All three share **one** ``ctx.chunk_views.get``
-        per lease — a per-tick cache primed at tick start (blizzard#521), not a fresh hub round trip
+        per lease — a per-tick cache primed at tick start, not a fresh hub round trip
         each time — and a transport failure reads as none of them. The pause branch keys on the
         pause *fact*, which an ask-park masks."""
         ctx = self.ctx
@@ -388,14 +388,14 @@ class Pull(Step):
             try:
                 view = ctx.chunk_views.get(lease.chunk_id)
             except ChunkNotFoundError:
-                # Terminal, not retryable (blizzard#9). Ordered before the HubClientError arm
+                # Terminal, not retryable. Ordered before the HubClientError arm
                 # because it subclasses it, or the 404 would be swallowed as "hub unreachable".
                 Attempt(ctx, lease).abandon(via="pull")
                 continue
             except HubClientError:
                 continue  # hub unreachable — last-known directive holds; keep working
             if view.status == ChunkStatus.STOPPED:
-                # Honor the terminal fact directly (issue #118), rather than waiting on the
+                # Honor the terminal fact directly, rather than waiting on the
                 # route check below to observe the release.
                 Attempt(ctx, lease).abandon(via="pull")
             elif view.route_runner_id != ctx.config.runner_id:
@@ -411,7 +411,7 @@ class Pull(Step):
     def _reconcile_escalations(self) -> None:
         """Close a local escalation on every arm that supersedes one (domain:
         escalation.md#Supersession) — one ``ctx.chunk_views.get`` each, the same per-tick cache
-        read ``_reconcile_leases`` above makes (blizzard#521). An escalated lease is already
+        read ``_reconcile_leases`` above makes. An escalated lease is already
         closed, so ``_reconcile_leases`` above never sees it; the fourth arm, this runner's own
         next lease mint, never reaches this read either, filtered out of ``open_escalations()`` by
         ``LIVE_ESCALATION`` before it gets here. The remaining three collapse into one condition —
@@ -447,10 +447,10 @@ class Pull(Step):
                 )
 
     def _reconcile_takeovers(self) -> None:
-        """Close an open takeover whose chunk the hub has ended (issue #291) — one
+        """Close an open takeover whose chunk the hub has ended — one
         ``ctx.chunk_views.get`` each, the same per-tick cache read the other two reconcile
-        sweeps make (blizzard#521). The takeover fact now authorizes the resumed session's
-        worker verbs (D1), so a chunk the hub ends mid-takeover must not leave that
+        sweeps make. The takeover fact now authorizes the resumed session's
+        worker verbs, so a chunk the hub ends mid-takeover must not leave that
         authorization standing forever; this is the second, no-person-drives closer alongside
         the CLI's own end-PATCH. The mark is what keeps the read hub-free (``bzh:facts-not-status``)."""
         ctx = self.ctx
@@ -493,12 +493,12 @@ class Fill(Step):
         # read from the registry, never by building a snapshot that probes every binary.
         if ctx.harnesses.known_harnesses:
             # A capability-asserting runner peeks per attempt, not once per fill
-            # (blizzard#433 D10) — D8's single-entry response leaves no cache to reuse.
+            # — the single-entry peek response leaves no cache to reuse.
             for _ in range(max(slots, 0)):
                 if not ReadyQueue.peeked(ctx).claim_one():
                     break
         else:
-            queue = ReadyQueue.peeked(ctx)  # one hub peek for the whole fill (blizzard#459) — legacy path only
+            queue = ReadyQueue.peeked(ctx)  # one hub peek for the whole fill — legacy path only
             for _ in range(max(slots, 0)):
                 if not queue.claim_one():
                     break
@@ -538,7 +538,7 @@ class Advance(Step):
                 continue
             if lease.lease_id in backing_off:
                 # No-ops until `resume_after` passes, then wakes the same lease/epoch/session
-                # in place (blizzard#595) — checked before liveness since an overloaded worker
+                # in place — checked before liveness since an overloaded worker
                 # generation has already exited; a judge's own process is gone too.
                 DormantSession(ctx, lease).on_overload_backoff(backing_off[lease.lease_id])
                 continue
@@ -557,9 +557,9 @@ class Advance(Step):
 
     def _advance_exited_worker(self, lease: LeaseRecord) -> None:
         """Collect an in-flight elicitation, else park on an open ask, else launch the verdict
-        elicitation (blizzard#443).
+        elicitation.
 
-        The in-flight check runs BEFORE the ask pre-check (D3): once a launch is durable, this
+        The in-flight check runs BEFORE the ask pre-check: once a launch is durable, this
         lease's every later pass is a collect, not a fresh judge — and collecting must not be
         pre-empted by an ask the worker raised *during its live turns, before it exited* (the
         ordinary ask-and-exit shape below). An ask raised *during the elicitation itself* is a
@@ -578,7 +578,7 @@ class Advance(Step):
                 judgement.collect(elicitation)
             return
         # A usage-limited generation is classified ahead of the ask pre-check and judging
-        # alike (blizzard#594): the exit is neither an ask nor a verdict to judge, it is the
+        # alike: the exit is neither an ask nor a verdict to judge, it is the
         # harness itself reporting it could not run at all.
         generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
         output = self.ctx.worker_files.read_stdout(lease.lease_id, generation)
@@ -589,8 +589,8 @@ class Advance(Step):
             engage_and_park_worker(self.ctx, lease, limit)
             return
         # A provider-overloaded generation is classified right alongside the usage limit
-        # (blizzard#595) — the two are mutually exclusive exit reasons for the one exit,
-        # both read from the same `output`/`lines` pair read once above (F4).
+        # — the two are mutually exclusive exit reasons for the one exit,
+        # both read from the same `output`/`lines` pair read once above.
         overload = classify_worker_overload(self.ctx, lease, output, lines)
         if overload is not None:
             if record_worker_overload(self.ctx, lease, overload, generation=generation):
@@ -613,9 +613,9 @@ class Advance(Step):
 
 class Retention(Step):
     """Prune every append-only observation/report lane every tick, so none grows without
-    bound (issue #520) — each lane's own retention contract lives at its own method (the
+    bound — each lane's own retention contract lives at its own method (the
     store's `IWriteOutboundRepository.prune_outbound` and its siblings, or the filesystem
-    sweep of `WorkerStdoutFiles.sweep`, issue #58), each its own isolated prune."""
+    sweep of `WorkerStdoutFiles.sweep`), each its own isolated prune."""
 
     def run(self) -> None:
         """One prune per lane, each isolated (mirrors ExternalUsageSample's own per-item
@@ -761,7 +761,7 @@ def _renewal_outcome_value(outcome: RenewalOutcome) -> str | None:
 
 
 class ExternalUsageSample(Step):
-    """Every declared subscription's own rate-limit utilization (issue #218), each on
+    """Every declared subscription's own rate-limit utilization, each on
     its own per-slug cadence — last in the tick."""
 
     def run(self) -> None:
@@ -788,7 +788,7 @@ class ExternalUsageSample(Step):
             # and unsampled: no attempt row, since there is no sampler to have failed.
             return
         # Renewal, if this provider binds one, runs before the sample on this same cadence
-        # gate, never its own (D5); a failed or not-due renewal never stops the sample.
+        # gate, never its own; a failed or not-due renewal never stops the sample.
         renewal = self._renewal_value(resolved)
         # A miss is still an attempt worth recording: this slug's cadence advances, its
         # last-good windows stay untouched, and the reason feeds the runner-local diagnostics.
@@ -835,7 +835,7 @@ class ExternalUsageSample(Step):
     def _renewal_value(resolved: ResolvedSubscription) -> str | None:
         """Asks this slug's renewer, if it has one, and reduces its outcome to the single
         string the attempt row's ``renewal`` column carries — ``None`` for both "no
-        renewer" and "not due", since neither is a renewal outcome worth showing (D6);
+        renewer" and "not due", since neither is a renewal outcome worth showing;
         never raises, so a broken renewer never stops the sample that follows it."""
         if resolved.renewer is None:
             return None
@@ -848,7 +848,7 @@ class ExternalUsageSample(Step):
 
     @staticmethod
     def _miss_payload(resolved: ResolvedSubscription, result: SampleMiss, *, missed_at: datetime) -> dict[str, object]:
-        """The stable JSON shape for a sampler miss (blizzard#504 D7) — exactly ``{slug,
+        """The stable JSON shape for a sampler miss — exactly ``{slug,
         name, missed_at, reason}``, the reason only: never a token, a refresh token, or a
         path crosses on a miss."""
         return {

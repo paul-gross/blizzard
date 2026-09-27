@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { UsersTable, asyncState, injectAssignRoleMutation, injectMeQuery, injectUsersQuery, KitAsyncState } from 'fleet';
 
 /**
- * The `/admin` route (issue #94) — the real admin page replacing #93's stub: a
+ * The `/admin` route — the real admin page replacing #93's stub: a
  * container reading `injectUsersQuery()` (`GET /api/users`) and `injectMeQuery()`
  * (the signed-in actor's own identity, for `isSelf`/`isSuperuser` gating in
  * {@link UsersTable} — `isSuperuser` reads `me().role`, not a permission: `superuser`
@@ -21,7 +21,7 @@ import { UsersTable, asyncState, injectAssignRoleMutation, injectMeQuery, inject
  *
  * A role change the hub refuses (`RoleAssignmentRefused`, 403 — self-change,
  * `superuser` grant/revoke, or an `admin` actor touching the `admin` tier) is
- * this page's own error state (`assignRoleError()`, issue #209): the mutation
+ * this page's own error state (`assignRoleError()`): the mutation
  * already rejects on a non-2xx response (`assign-role.mutation.ts`), so
  * without reading `assignRoleMutation.error()` here a refusal would fail
  * silently — the table keeps whatever the `<select>` was last set to, reading

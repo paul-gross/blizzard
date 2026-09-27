@@ -1,4 +1,4 @@
-"""``HarnessHealthCache`` (blizzard#438) — the composition-root-owned cache that recomputes
+"""``HarnessHealthCache`` — the composition-root-owned cache that recomputes
 a harness's health at its own bounded refresh window, on an observed version change, or
 when a new selftest result lands, and never merely because a peek asked."""
 
@@ -157,7 +157,7 @@ def test_a_new_selftest_result_forces_an_immediate_recompute() -> None:
 def test_a_raw_admitted_version_normalizes_and_classifies_against_the_real_corpus() -> None:
     """``refresh`` threads a probe's raw, unnormalized observed version — here prefixed the
     way a real binary's ``--version`` output can be — through the shared normalizer before
-    the corpus/membership check, against opencode's own committed corpus (blizzard#438)."""
+    the corpus/membership check, against opencode's own committed corpus."""
     clock = FixedClock(_NOW)
     probe = _FakeProbe(supported=ADMITTED_OPENCODE_RANGE)
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)
@@ -176,7 +176,7 @@ def test_a_raw_admitted_version_normalizes_and_classifies_against_the_real_corpu
 def test_a_version_above_every_committed_corpus_still_resolves_against_the_real_corpus() -> None:
     """A version above every committed corpus, but inside the admitted range, still resolves
     to a reference corpus rather than reading `unknown_version` — the reference-corpus
-    resolution `classify_offline` performs (blizzard#438)."""
+    resolution `classify_offline` performs."""
     clock = FixedClock(_NOW)
     probe = _FakeProbe(supported=ADMITTED_OPENCODE_RANGE)
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)
@@ -189,7 +189,7 @@ def test_a_version_above_every_committed_corpus_still_resolves_against_the_real_
 
 
 def test_a_raw_version_outside_the_admitted_range_is_incompatible() -> None:
-    """A version genuinely outside the admitted range is `incompatible_version` (D2), reached
+    """A version genuinely outside the admitted range is `incompatible_version`, reached
     through the real evaluation path — `HarnessHealthCache.refresh` (capability_snapshot.py)
     into `evaluate_harness_health` (health.py) — never a synthetic evidence construction.
     No corpus entry exists for this version at all; the sibling test below pins the harder
@@ -208,7 +208,7 @@ def test_a_raw_version_outside_the_admitted_range_is_incompatible() -> None:
 def test_a_non_admitted_version_with_a_real_corpus_entry_still_reads_incompatible(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Membership is checked before any corpus lookup (D2): a real fixture manifest that would
+    """Membership is checked before any corpus lookup: a real fixture manifest that would
     classify `supported` on its own still reads `INCOMPATIBLE_VERSION` once non-admitted."""
     stray_version = "1.18.24"
     manifest_dir = tmp_path / "opencode" / stray_version
@@ -243,7 +243,7 @@ def test_a_non_admitted_version_with_a_real_corpus_entry_still_reads_incompatibl
 def test_an_admitted_version_with_no_corpus_manifest_is_unknown_not_incompatible() -> None:
     """A version this fake probe declares admitted, but with no manifest anywhere under the
     real committed corpus root, is `unknown_version` — distinct from a genuinely non-admitted
-    version above, reached through the same real evaluation path (blizzard#438, D2)."""
+    version above, reached through the same real evaluation path."""
     clock = FixedClock(_NOW)
     unclassifiable_version = "9.9.9"
     probe = _FakeProbe(supported=SpecifierSet(f"=={unclassifiable_version}"))
@@ -257,7 +257,7 @@ def test_an_admitted_version_with_no_corpus_manifest_is_unknown_not_incompatible
 
 
 def test_a_corpus_free_probe_admits_by_membership_alone() -> None:
-    """A probe declaring `classifies_offline() -> False` (blizzard#606) is available on
+    """A probe declaring `classifies_offline() -> False` is available on
     membership alone — `refresh` never consults `classify_offline` for it, so an admitted
     version with no corpus behind it still reads available, not `unknown_version`."""
     clock = FixedClock(_NOW)
@@ -273,7 +273,7 @@ def test_a_corpus_free_probe_admits_by_membership_alone() -> None:
 
 def test_a_corpus_free_probe_with_nothing_observed_is_still_unknown_version() -> None:
     """The corpus-free carve-out only excuses a missing classification — it never excuses
-    a version that was never observed or couldn't be normalized (D4)."""
+    a version that was never observed or couldn't be normalized."""
     clock = FixedClock(_NOW)
     probe = _FakeProbe(supported=SpecifierSet(">=2.1,<3.0"), corpus_backed=False)
     cache = _cache(probe, _FakeSelftestResults(), clock=clock)

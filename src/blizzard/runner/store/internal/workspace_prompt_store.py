@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the runtime workspace-prompt override seam (package-private,
-blizzard#410)."""
+"""SQLAlchemy adapter for the runtime workspace-prompt override seam (package-private)."""
 
 from __future__ import annotations
 

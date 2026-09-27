@@ -1,4 +1,4 @@
-"""``POST``/``PATCH /chunks/{id}/takeovers`` (issue #52).
+"""``POST``/``PATCH /chunks/{id}/takeovers``.
 
 Exercised over a real store via TestClient: the route's shape, its 409/503/404 forms,
 and the store-derivation it delegates to (:class:`TakeoverService`, pinned at the
@@ -101,7 +101,7 @@ def test_open_over_a_parked_chunk_returns_the_interactive_command(tmp_path: Path
     assert body["workdir"] == "/ws/e1"
     assert body["harness_id"] == "claude_code"
     assert body["takeover_id"]
-    # The bounded takeover env rides the response (issue #258) — BLIZZARD_* identity
+    # The bounded takeover env rides the response — BLIZZARD_* identity
     # plus PATH/HOME, never the daemon's full child env or the printable command.
     assert body["env"]["BLIZZARD_CHUNK_ID"] == "ch_1"
     assert body["env"]["BLIZZARD_LEASE_ID"] == "lease_1"
@@ -189,8 +189,8 @@ def test_end_marks_the_takeover_closed(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_end_with_no_open_takeover_on_the_chunk_succeeds_idempotently(tmp_path: Path) -> None:
-    """Ending a takeover already ended — or never opened — is the desired state (issue
-    #291): it succeeds rather than 404ing, which is what lets the CLI's own ``finally``
+    """Ending a takeover already ended — or never opened — is the desired state:
+    it succeeds rather than 404ing, which is what lets the CLI's own ``finally``
     exit cleanly after ``Pull`` closes the takeover first."""
     app, _store = _app_with_takeover(tmp_path)
 
@@ -219,7 +219,7 @@ def test_end_with_a_different_takeover_open_on_the_chunk_is_404(tmp_path: Path) 
 
 @pytest.mark.component
 def test_end_already_ended_by_someone_else_succeeds_idempotently(tmp_path: Path) -> None:
-    """The exact race D3 fixes: something else (``Pull``, or a retried end-PATCH) already
+    """The exact race this fixes: something else (``Pull``, or a retried end-PATCH) already
     closed this same takeover — ending it again is a no-op, not a 404."""
     app, store = _app_with_takeover(tmp_path)
     _seed_lease(store)

@@ -18,8 +18,8 @@ import { injectChildRouteParam } from '../route-state';
  * The `/gardening/scopes` sub-tab (`plans/garden/user-interface.md` §Declaring and
  * running a routine) — the scope list, beside a `<router-outlet>` holding whichever
  * scope the URL names (`gardening-scope-detail.ts`). Split off
- * `gardening-routines-page.ts`'s combined routines-and-scopes surface
- * (blizzard#399/#397); routines and scopes are unrelated concepts that only used to
+ * `gardening-routines-page.ts`'s combined routines-and-scopes surface;
+ * routines and scopes are unrelated concepts that only used to
  * share a tab.
  *
  * The list is the parent route and the detail its child, so picking a row swaps only

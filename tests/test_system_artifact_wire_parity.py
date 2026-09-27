@@ -1,4 +1,4 @@
-"""Docs-as-contract guard (D5, blizzard#391 Phase 2) — every published garden system
+"""Docs-as-contract guard — every published garden system
 artifact carries a machine-checkable pin to the wire models it documents: a `### ModelName`
 heading immediately followed by a fenced ```json block whose keys are exactly that model's
 field aliases, and which parses into the model without error. Renaming, adding, or removing a
@@ -64,7 +64,7 @@ def _model_field_aliases(model: type[BaseModel]) -> set[str]:
 
 @pytest.mark.parametrize("doc", _all_documents(), ids=lambda p: p.name)
 def test_document_carries_at_least_one_guard_pair(doc: Path) -> None:
-    """A document with no `### Model` / ```json pair at all would silently let D5 lapse
+    """A document with no `### Model` / ```json pair at all would silently let this guard lapse
     for its whole file rather than failing loudly."""
     assert _guard_pairs(doc), f"{doc} carries no '### Model' + ```json guard pair"
 
@@ -103,8 +103,8 @@ def test_finding_op_members_are_introspected_off_the_union_not_named_by_hand() -
 
 
 def test_review_finding_entry_members_are_introspected_off_the_union_not_named_by_hand() -> None:
-    """The ``ReviewFindingEntry`` counterpart to the assertion above (blizzard#582
-    review:F8, disposition-discriminated like ``FindingOp``)."""
+    """The ``ReviewFindingEntry`` counterpart to the assertion above
+    (disposition-discriminated like ``FindingOp``)."""
     assert _union_members(finding.ReviewFindingEntry) == {
         "DeferredReviewFindingEntry": finding.DeferredReviewFindingEntry,
         "FixedReviewFindingEntry": finding.FixedReviewFindingEntry,

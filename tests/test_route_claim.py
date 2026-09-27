@@ -53,8 +53,8 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
 
 
 def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path) -> None:
-    """``ChunkSummary.environment_count`` counts the live route's environments (issue
-    #69) — never the full ``environment_ids`` list. A grouped chunk counts all its envs;
+    """``ChunkSummary.environment_count`` counts the live route's environments
+    — never the full ``environment_ids`` list. A grouped chunk counts all its envs;
     an unrouted chunk is 0."""
     hub = build_hub(tmp_path)
     grouped = _ingest(hub, ref="7")
@@ -94,7 +94,7 @@ nodes:
 
 
 def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
-    """A terminal chunk holds no claim (issue #140), so its ``runner_id``/
+    """A terminal chunk holds no claim, so its ``runner_id``/
     ``environment_count`` read unrouted even while its route facts still show a route —
     proven through a real completion, not a hand-written transition row."""
     hub = build_hub(tmp_path)
@@ -180,7 +180,7 @@ def test_two_claims_on_different_chunks_mint_different_tokens(tmp_path: Path) ->
 
 
 def test_completion_carrying_the_claims_route_token_is_accepted(tmp_path: Path) -> None:
-    """Present-only in this phase (issue #84a, Phase 5): the hub does not yet reject on
+    """Present-only in this phase (issue #84a): the hub does not yet reject on
     a missing/mismatched token, but a completion carrying the claim's own token is
     accepted exactly as one without it — no behavior regression from adding the field."""
     hub = build_hub(tmp_path)
@@ -231,7 +231,7 @@ def test_envelope_reread_is_idempotent(tmp_path: Path) -> None:
     assert reread["epoch"] == claimed["epoch"]
 
 
-# --- The hub denies a claim from a registry-paused runner outright (issue #44) ---
+# --- The hub denies a claim from a registry-paused runner outright ---
 # Distinct from the 409 race loss above: this claim never enters the race at all.
 
 
@@ -284,7 +284,7 @@ def test_claim_denied_the_instant_the_pause_lands_mid_tick(tmp_path: Path) -> No
 
 
 def test_claim_allowed_while_only_locally_paused(tmp_path: Path) -> None:
-    """Local pause (issue #43) is the runner's own restraint — the hub never denies on it."""
+    """Local pause is the runner's own restraint — the hub never denies on it."""
     hub = build_hub(tmp_path)
     chunk_id = _ingest(hub)
     _register(hub, "r1")
@@ -337,7 +337,7 @@ def test_in_flight_submission_unaffected_while_hub_paused(tmp_path: Path) -> Non
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 
-# --- The hub refuses a claim on an already-terminal chunk outright (issue #118) ---
+# --- The hub refuses a claim on an already-terminal chunk outright ---
 # The peek-then-claim race `hub stop` opens; the hub re-derives status under the lock.
 
 

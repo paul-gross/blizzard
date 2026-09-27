@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the requeue repository seam (package-private, blizzard#410)."""
+"""SQLAlchemy adapter for the requeue repository seam (package-private)."""
 
 from __future__ import annotations
 

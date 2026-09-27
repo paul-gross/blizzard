@@ -1,5 +1,5 @@
 """``IReadChunkEventsRepository.activity_facts_since`` / ``IReadRunnerRegistry.list_pause_facts_since``
-(component tier) — the activity feed's bounded per-source reads (issue #213, AC4).
+(component tier) — the activity feed's bounded per-source reads (AC4).
 
 One case per ``ChunkChangeCause`` member mapped to a fact table, plus the ``since``
 window and the per-source ``limit`` bound, against a real store."""
@@ -332,7 +332,7 @@ def test_deleted_reads_off_chunk_deleted(tmp_path: Path) -> None:
 
 
 def test_deleted_chunk_shows_only_its_own_deletion_row(tmp_path: Path) -> None:
-    """D6: ``activity_facts_since`` excludes a deleted chunk's history from every OTHER
+    """``activity_facts_since`` excludes a deleted chunk's history from every OTHER
     block — only the ``chunk_deleted`` row itself survives the filter."""
     store, engine = _store(tmp_path)
     store.queue.record_promote("ch_1", at=_at(1))
@@ -345,7 +345,7 @@ def test_deleted_chunk_shows_only_its_own_deletion_row(tmp_path: Path) -> None:
 
 
 def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path: Path) -> None:
-    """D6: grouping's own feed behavior is unchanged — only a *deleted* chunk's history
+    """Grouping's own feed behavior is unchanged — only a *deleted* chunk's history
     drops away, a *grouped* one's still shows."""
     store, engine = _store(tmp_path)
     _seed_second_chunk(engine, "ch_2")
@@ -420,7 +420,7 @@ def test_runner_pause_resolves_through_the_runner_registry(tmp_path: Path) -> No
 
 
 def test_registered_and_heartbeat_kinds_are_never_sourced(tmp_path: Path) -> None:
-    """Pause family only (issue #213) — ``registered``/``heartbeat`` carry no fact table."""
+    """Pause family only — ``registered``/``heartbeat`` carry no fact table."""
     store = _registry_store(tmp_path)
     store.upsert_registration("runner-a", workspace_id="ws-a", env_capacity=None, at=_T0)
     store.touch_last_seen("runner-a", at=_at(1))

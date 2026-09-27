@@ -1,5 +1,5 @@
 """The store-backed jti replay cache — single-txn insert under the ``jti`` primary key
-gives the single-use guarantee outright (issue #95, decision D4)."""
+gives the single-use guarantee outright."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def test_a_replayed_jti_is_refused(tmp_path: Path) -> None:
 
 
 def test_a_replay_from_a_second_process_over_the_same_store_is_still_refused(tmp_path: Path) -> None:
-    """Survives a restart within the token's window (D4's own point): two independent
+    """Survives a restart within the token's window: two independent
     repository instances over the same on-disk store still share the single-use
     guarantee — it lives in the store, not in either process's memory."""
     first_process = _repository(tmp_path)

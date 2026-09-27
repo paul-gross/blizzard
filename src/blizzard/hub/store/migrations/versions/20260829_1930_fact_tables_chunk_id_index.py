@@ -1,4 +1,4 @@
-"""chunk_id indexes on the per-chunk fact tables (blizzard#421); ``delivery_pr_opened`` is
+"""chunk_id indexes on the per-chunk fact tables; ``delivery_pr_opened`` is
 excluded, already covered by its own unique constraint.
 
 Revision ID: 20260829_1930_fact_tables_chunk_id_index

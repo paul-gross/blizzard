@@ -3,7 +3,7 @@
 A mint takes a YAML definition and answers with a :class:`GraphView` — the full reified
 definition — or **422** with a :class:`GraphValidationReport`. The list surface serves a
 :class:`GraphSummaryView` per minted graph, newest first, with the newest non-retired graph of
-each ``name`` marked ``effective``; the lifecycle verbs return an updated view (issue #101)."""
+each ``name`` marked ``effective``; the lifecycle verbs return an updated view."""
 
 from __future__ import annotations
 
@@ -20,13 +20,13 @@ class GraphMintRequest(BaseModel):
 
 
 class GraphLifecycleRequest(BaseModel):
-    """Retire or re-enable a graph — records who flipped it (issue #101)."""
+    """Retire or re-enable a graph — records who flipped it."""
 
     by: str = "operator"
 
 
 class GraphPolicyRequest(BaseModel):
-    """Set a graph's follow-latest policy — the tri-state (issue #164).
+    """Set a graph's follow-latest policy — the tri-state.
 
     ``follow_latest`` is required and carries no default: ``true``/``false`` override the
     hub-level setting for this mint's chunks, explicit ``null`` reverts to inheriting it."""
@@ -44,7 +44,7 @@ class GraphValidationReport(BaseModel):
 
 
 class ProducesEntry(BaseModel):
-    """One node's ``produces:`` expectation, kind-carrying (D1, issue #143)."""
+    """One node's ``produces:`` expectation, kind-carrying."""
 
     name: str
     kind: ArtifactKind = ArtifactKind.ASSET
@@ -56,7 +56,7 @@ class GraphChoiceView(BaseModel):
     choice_id: str
     name: str
     description: str
-    # Whether this choice is gated on green checks (issue #114); the default keeps a
+    # Whether this choice is gated on green checks; the default keeps a
     # regenerated client additive.
     requires_checks: bool = False
 
@@ -71,7 +71,7 @@ class GraphEdgeView(BaseModel):
 
 
 class RotatePolicyView(BaseModel):
-    """One declared session's rotation bounds (issue #144).
+    """One declared session's rotation bounds.
 
     Every threshold is independently optional; ``max_invocations`` counts **harness
     invocations**, not node-steps, one of which burns several."""
@@ -82,7 +82,7 @@ class RotatePolicyView(BaseModel):
 
 
 class GraphSessionView(BaseModel):
-    """One graph-level named session declaration (issue #144).
+    """One graph-level named session declaration.
 
     ``model`` is a preference list resolved left-to-right at mint; the hub interprets none
     of it, ``effort``, ``compaction_window``, or ``harnesses`` (its own acceptable set)."""
@@ -102,7 +102,7 @@ class GraphNodeView(BaseModel):
     name: str
     executor: Executor
     session: SessionMode
-    # The session reference target (issues #115, #144): ``None`` for a bare reference,
+    # The session reference target (#144): ``None`` for a bare reference,
     # otherwise the declared session or node name it targets. Read with ``session``.
     session_source: str | None = None
     judged_by: JudgedBy
@@ -110,7 +110,7 @@ class GraphNodeView(BaseModel):
     retries_exhausted: str | None = None
     prompt: str | None = None
     checks: list[str] = []
-    # Where this node's checks run, and the per-check timeout (issue #114).
+    # Where this node's checks run, and the per-check timeout.
     checks_cwd: str | None = None
     checks_timeout: int | None = None
     produces: list[ProducesEntry] = []
@@ -122,7 +122,7 @@ class GraphNodeView(BaseModel):
 class GraphView(BaseModel):
     """A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.
 
-    ``enabled`` and ``retired`` are one lifecycle fact (issue #101), saying nothing about
+    ``enabled`` and ``retired`` are one lifecycle fact, saying nothing about
     whether this mint is newest. ``follow_latest`` is the **stored** tri-state (#164)."""
 
     graph_id: str
@@ -131,7 +131,7 @@ class GraphView(BaseModel):
     enabled: bool
     retired: bool = False
     follow_latest: bool | None = None
-    # The graph-level named-session declarations (issue #144), in authored order.
+    # The graph-level named-session declarations, in authored order.
     sessions: list[GraphSessionView] = []
     # The graph-scoped `artifacts:` declarations' names, in authored order — never their content.
     artifacts: list[str] = []
@@ -141,7 +141,7 @@ class GraphView(BaseModel):
 
 
 class GraphSyncEntry(BaseModel):
-    """One packaged graph's reconciliation outcome (issue #146).
+    """One packaged graph's reconciliation outcome.
 
     ``status`` is ``minted``, ``up-to-date``, or ``failed``; ``graph_id`` is present only on
     ``minted``, and ``detail`` says why a graph minted or what went wrong."""
@@ -153,7 +153,7 @@ class GraphSyncEntry(BaseModel):
 
 
 class GraphSyncResponse(BaseModel):
-    """``POST /graphs/sync``'s report — one entry per packaged graph (issue #146).
+    """``POST /graphs/sync``'s report — one entry per packaged graph.
 
     ``ok`` is false iff any entry failed, so a caller gates on the field rather than
     re-deriving it. Always ``200``: a per-graph failure is data, not a transport error."""
@@ -165,7 +165,7 @@ class GraphSyncResponse(BaseModel):
 class GraphSummaryView(BaseModel):
     """One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
 
-    ``effective`` marks the newest **non-retired** graph of this ``name`` (issue #101), while
+    ``effective`` marks the newest **non-retired** graph of this ``name``, while
     ``retired`` is this graph's own state: a non-retired non-effective graph is superseded."""
 
     graph_id: str

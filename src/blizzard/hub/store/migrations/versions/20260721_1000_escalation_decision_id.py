@@ -1,5 +1,5 @@
 """escalations.decision_id — nullable, so an escalation resolving no decision reads back
-as ``None`` (issue #110)
+as ``None``
 
 Revision ID: 20260721_1000_hub_escalation_decision_id
 Revises: 20260720_1000_hub_chunk_intended_migration

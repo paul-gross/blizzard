@@ -1,4 +1,4 @@
-"""The packaged workspace-prompt samples, and the loader that reads them (issue #344).
+"""The packaged workspace-prompt samples, and the loader that reads them.
 
 Packaged data is one directory per sample, each holding its own ``workspace-prompt.md`` — the
 spawn preamble's layer 2, shipped so a deployment names one instead of authoring the layer from
@@ -50,11 +50,11 @@ PACKAGED = PackagedWorkspacePrompts(Path(__file__).resolve().parent / "prompts" 
 
 
 class IReadWorkspacePromptRepository(Protocol):
-    """Read-only runtime workspace-prompt override queries (blizzard#410) — distinct from
+    """Read-only runtime workspace-prompt override queries — distinct from
     :class:`PackagedWorkspacePrompts` above, the static samples this override wins over."""
 
     def workspace_prompt_override(self, workspace_id: str) -> str | None:
-        """The runtime workspace-prompt override for this workspace, or ``None`` (issue #17).
+        """The runtime workspace-prompt override for this workspace, or ``None``.
 
         ``None`` means never overridden — the caller falls back to the static config
         prompt. A present row (even an empty string) is a deliberate override that wins
@@ -66,7 +66,7 @@ class IWriteWorkspacePromptRepository(IReadWorkspacePromptRepository, Protocol):
     """Read-write runtime workspace-prompt override store — held only by the domain."""
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
-        """Set the runtime workspace-prompt override (upsert) — read at spawn (issue #17)."""
+        """Set the runtime workspace-prompt override (upsert) — read at spawn."""
         ...
 
     def clear_workspace_prompt(self, workspace_id: str) -> bool:
@@ -78,18 +78,17 @@ class IWriteWorkspacePromptRepository(IReadWorkspacePromptRepository, Protocol):
 
 
 class WorkspacePromptService:
-    """Composition-root-wired: the workspace-prompt store and the clock (D4, blizzard#412)."""
+    """Composition-root-wired: the workspace-prompt store and the clock."""
 
     def __init__(self, store: IWriteWorkspacePromptRepository, clock: IClock) -> None:
         self._store = store
         self._clock = clock
 
     def replace(self, workspace_id: str, *, prompt: str) -> None:
-        """Replace the runtime workspace-prompt override — effective on subsequent spawns
-        (issue #17)."""
+        """Replace the runtime workspace-prompt override — effective on subsequent spawns."""
         self._store.set_workspace_prompt(workspace_id, prompt=prompt, at=self._clock.now())
 
     def clear(self, workspace_id: str) -> None:
         """Drop the runtime workspace-prompt override so the runner's configured prompt
-        resolves again (issue #344)."""
+        resolves again."""
         self._store.clear_workspace_prompt(workspace_id)

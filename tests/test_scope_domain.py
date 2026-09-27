@@ -1,4 +1,4 @@
-"""Scope domain objects and services (unit tier, blizzard#389): ``ScopeSlug.parse``'s
+"""Scope domain objects and services (unit tier): ``ScopeSlug.parse``'s
 validation, ``ScopeRegistry``'s mint-on-name and edit, and ``ScopeLifecycle``'s
 retire/enable brake — each isolated from a store behind a fake repository
 (``bzh:domain-core``, the ``tests/test_graph_lifecycle_service.py`` shape)."""

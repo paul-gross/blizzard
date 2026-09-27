@@ -83,8 +83,8 @@ function withRequestedPosition(order: readonly string[], move: RepositionVars): 
 })
 export class BoardPage {
   /** The board's last operator-action failure — a promote or a reorder — or `null`.
-   * Reset at the start of every new attempt (issue #42's "report, don't swallow",
-   * the same convention `ChunkDetail`'s own `actionError` follows). */
+   * Reset at the start of every new attempt (the "report, don't swallow" convention,
+   * the same one `ChunkDetail`'s own `actionError` follows). */
   protected readonly actionError = signal<string | null>(null);
 
   private readonly chunksQuery = injectHubChunksQuery();
@@ -98,14 +98,14 @@ export class BoardPage {
   private readonly selection = injectChunkUrlSelection();
   private readonly meQuery = injectMeQuery();
 
-  /** Whether the current identity may promote a backlog chunk (`chunk:control` —
-   * issue #210). Withholds the board card's Promote control when `false`; `null`/pending
+  /** Whether the current identity may promote a backlog chunk (`chunk:control`).
+   * Withholds the board card's Promote control when `false`; `null`/pending
    * resolves to `false` (hidden until confirmed), the same convention `RunnerPanel`'s
    * `canPause` set. */
   protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
 
   /** Whether the current identity may reorder the ready queue or backlog
-   * (`queue:reorder` — issue #210). Withholds their drag-and-drop when `false`
+   * (`queue:reorder`). Withholds their drag-and-drop when `false`
    * — a read-only board must not *arm* a drag it would then refuse.
    * Declared before {@link backlogQuery} (field initialization order), since
    * that query's `enabled` gate reads it directly. */
@@ -255,7 +255,7 @@ export class BoardPage {
 
   /**
    * The board card the operator opened, or `null` when nothing is selected —
-   * read from the URL (issue #162), never from local state.
+   * read from the URL, never from local state.
    *
    * Held to the live fleet list, which `GET /api/chunks` returns whole: a
    * `chunk` param naming a chunk that no longer exists (or one that has not

@@ -200,7 +200,7 @@ describe('GardeningRoutineDetail', () => {
     const strategy = el.querySelector('[data-testid="gardening-routine-strategy"]');
     expect(strategy?.textContent).toContain('Survey the repo.');
     // The Run trigger is this pane's only interactive control — nothing inside the
-    // strategy/trend/measurement/last-swept blocks themselves edits anything (D1).
+    // strategy/trend/measurement/last-swept blocks themselves edits anything.
     expect(el.querySelectorAll('button, input, textarea, select, [contenteditable]')).toHaveLength(1);
   });
 

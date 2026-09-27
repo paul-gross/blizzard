@@ -31,8 +31,8 @@ def chromium_available() -> bool:
         return False
 
 
-# The two viewport sizes a browser e2e scenario sizes its page against (issue #171's
-# web:shell-sweep — see blizzard-context:/verification/blizzard.md).
+# The two viewport sizes a browser e2e scenario sizes its page against
+# (web:shell-sweep — see blizzard-context:/verification/blizzard.md).
 _WIDE_VIEWPORT: ViewportSize = {"width": 1400, "height": 900}
 _NARROW_VIEWPORT: ViewportSize = {"width": 390, "height": 844}
 
@@ -45,5 +45,5 @@ def wide_viewport() -> ViewportSize:
 
 @pytest.fixture(scope="session")
 def narrow_viewport() -> ViewportSize:
-    """A ~390px phone-width `Page` viewport — the narrow end of the tier rule (issue #171)."""
+    """A ~390px phone-width `Page` viewport — the narrow end of the tier rule."""
     return _NARROW_VIEWPORT.copy()

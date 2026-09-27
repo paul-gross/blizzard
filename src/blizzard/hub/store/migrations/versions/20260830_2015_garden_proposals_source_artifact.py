@@ -1,5 +1,5 @@
 """garden_proposals.source_artifact_id, garden_proposals.ref — a delivered proposal's
-idempotence key (blizzard#393). Both nullable, no backfill, no `ForeignKey` (SQLite
+idempotence key. Both nullable, no backfill, no `ForeignKey` (SQLite
 cannot ALTER-add a constrained column).
 
 Revision ID: 20260830_2015_garden_proposals_source_artifact

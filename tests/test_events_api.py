@@ -1,4 +1,4 @@
-"""``GET /api/events`` — the operational event feed read (issue #125, Phase 1).
+"""``GET /api/events`` — the operational event feed read.
 
 Proves AC#2 and AC#5: the read returns ``event_log`` unified with every open escalation,
 newest-and-most-severe first, honouring the ``severity``/``runner_id``/``chunk_id``/
@@ -102,12 +102,12 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     # detail round-trips.
     assert next(e for e in feed if e["kind"] == "attempt-failed")["detail"] == {"via": "advance"}
     # The projected escalation names its chunk — and, naming no runner, serves
-    # `runner_id: null` rather than `""` (issue #155).
+    # `runner_id: null` rather than `""`.
     projected = next(e for e in feed if e["kind"] == "needs-human")
     assert projected["chunk_id"] == "ch_c"
     assert projected["runner_id"] is None
     # A real, hub-authored event_log row reads back the same way — a null runner, not
-    # the retired `'hub'` sentinel — and a `runner_id=hub` filter matches nothing (D2).
+    # the retired `'hub'` sentinel — and a `runner_id=hub` filter matches nothing.
     hub_authored = next(e for e in feed if e["kind"] == "work-item-closed")
     assert hub_authored["runner_id"] is None
     assert _events(hub, runner_id="hub") == []

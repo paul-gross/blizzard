@@ -1,4 +1,4 @@
-"""The operator requeue — ``blizzard runner requeue <chunk-id>`` (issue #53).
+"""The operator requeue — ``blizzard runner requeue <chunk-id>``.
 
 The explicit hand-back after a human worked a needs_human chunk interactively. Appends the
 clearing fact only (``bzh:crash-correctness`` — fact first, never a spawn from the edge);
@@ -42,8 +42,7 @@ class IReadRequeueRepository(Protocol):
     """Read-only requeue queries (held by read-path edges)."""
 
     def pending_requeue_chunk_ids(self) -> set[str]:
-        """Every chunk id carrying a requeue mark not yet consumed by a later lease mint
-        (issue #53).
+        """Every chunk id carrying a requeue mark not yet consumed by a later lease mint.
 
         The mark is consumed by the next lease mint for the chunk, whose ``created_at``
         lands at or after the requeue."""
@@ -54,7 +53,7 @@ class IWriteRequeueRepository(IReadRequeueRepository, Protocol):
     """Read-write requeue store — held only by the domain."""
 
     def record_requeue(self, *, chunk_id: str, at: datetime) -> None:
-        """Append the clearing fact for a chunk's local needs_human hold (issue #53).
+        """Append the clearing fact for a chunk's local needs_human hold.
 
         Recorded before anything else runs (``bzh:crash-correctness``): the fact alone is
         durable the instant this returns, and is read back via
@@ -75,7 +74,7 @@ class ChunkNotRequeueable(RequeueError):
 
 
 class RequeueService:
-    """Composition-root-wired: the requeue store and the clock (issue #53)."""
+    """Composition-root-wired: the requeue store and the clock."""
 
     def __init__(self, store: IWriteRequeueRepository, clock: IClock) -> None:
         self._store = store
