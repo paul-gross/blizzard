@@ -5,6 +5,10 @@ envelope — every finding per axis, blocking and should-fix alike.
 
 Answer every blocking finding by fixing or refuting. The work returns to review for another pass.
 
+Commit repairs as their own commits, apart from any other work: the gates that re-visit — verify, then review — scope
+themselves to the delta since the tip they last judged, and a clean delta reads faster. Whether a repair needs
+re-verifying is theirs to decide, never yours.
+
 ## Fixing versus refuting
 
 Refute a finding when it is factually wrong, rests on a false premise, or demands work the change's scale does not
