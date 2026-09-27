@@ -1,5 +1,6 @@
 """The fast tiers' repository-file reads must be reproducible in mutants/."""
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -28,3 +29,18 @@ def test_mutmut_copy_parents_exist_without_copying_repo_roots(tmp_path: Path) ->
     assert (tmp_path / "mutants/web/projects/fleet/src/lib/chunk-detail").is_dir()
     assert not (tmp_path / "mutants/web/angular.json").exists()
     assert not (tmp_path / "mutants/web/node_modules").exists()
+
+
+def test_subprocess_rejects_an_unlisted_repo_executable() -> None:
+    unlisted = repo_root() / "src/blizzard/static/README.md"
+    with pytest.raises(AssertionError, match="Unlisted repo-file read"):
+        subprocess.run([str(unlisted)], check=False)
+    result = subprocess.run([str(repo_root() / "scripts/image-tags.sh"), "v1.2.3"], capture_output=True, text=True)
+    assert result.returncode == 0
+
+
+def test_python_script_outside_source_and_tests_needs_the_copy_inventory() -> None:
+    script = Path("scripts/prose_spans.py")
+    with pytest.raises(AssertionError, match="Unlisted repo-file read"):
+        check_repo_read(repo_root() / script, copied_repo_files() - {script})
+    assert (repo_root() / script).read_text()
