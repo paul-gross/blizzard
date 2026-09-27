@@ -139,14 +139,14 @@ def test_a_miss_with_no_sample_renders_a_miss_only_lapsed_row() -> None:
     assert views[0].condition == CREDENTIAL_LAPSED_CONDITION
 
 
-def test_a_miss_newer_than_the_sample_supersedes_it_as_a_lapsed_row() -> None:
+def test_a_miss_newer_than_the_sample_sets_lapsed_over_the_surviving_sample() -> None:
     sample = _record("openai", _NOW - timedelta(minutes=10))
     miss = _miss("openai", _NOW - timedelta(minutes=1))
     views = PerSubscriptionUsageView.every(_registration(records=(sample,), misses=(miss,)), now=_NOW)
 
     assert len(views) == 1
-    assert views[0].sampled_at is None
-    assert views[0].windows == ()
+    assert views[0].sampled_at == sample.sampled_at
+    assert views[0].windows == sample.windows
     assert views[0].condition == CREDENTIAL_LAPSED_CONDITION
 
 
