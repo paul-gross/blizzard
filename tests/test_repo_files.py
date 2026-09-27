@@ -76,6 +76,13 @@ def test_subprocess_checks_bare_repo_file_names(monkeypatch: pytest.MonkeyPatch)
     assert result.returncode == 0
 
 
+def test_long_non_path_argument_does_not_prevent_process_start() -> None:
+    result = subprocess.run(["/bin/true", "x" * 300], cwd=repo_root(), capture_output=True)
+    assert result.returncode == 0
+    with pytest.raises(AssertionError, match="Unlisted repo-file read"):
+        subprocess.run(["cat", "x" * 300, "uv.lock"], cwd=repo_root(), capture_output=True)
+
+
 def test_combined_shell_flags_check_repo_file_arguments() -> None:
     with pytest.raises(AssertionError, match="Unlisted repo-file read"):
         subprocess.run(["bash", "-lc", "cat uv.lock"], cwd=repo_root(), capture_output=True)

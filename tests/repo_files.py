@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import shlex
 import sys
@@ -126,7 +127,14 @@ def install_repo_read_guard() -> None:
                         if isinstance(candidate, (str, bytes, Path)):
                             path = Path(os.fsdecode(candidate))
                             target = working_dir / path
-                            if (path.is_absolute() and not target.is_dir()) or target.is_file():
+                            try:
+                                is_repo_operand = (path.is_absolute() and not target.is_dir()) or target.is_file()
+                            except OSError as exc:
+                                # A long prompt is an argument, not a filesystem operand.
+                                if exc.errno != errno.ENAMETOOLONG:
+                                    raise
+                                continue
+                            if is_repo_operand:
                                 check_repo_read(target, copied)
                 return
             frame = frame.f_back
