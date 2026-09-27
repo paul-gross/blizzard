@@ -10,7 +10,10 @@ from blizzard.runner.app import create_app_for_export
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.internal.harness_registry import build_production_harness_registry
+from blizzard.runner.harness.internal.harness_registry import (
+    build_production_harness_health_probes,
+    build_production_harness_registry,
+)
 from blizzard.runner.harness.internal.opencode_price_cache import FileOpenCodePriceCatalog
 from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.process_launch import _SPAWN_EXECUTOR
@@ -20,6 +23,7 @@ from blizzard.runner.harness.registry import (
     UnavailableHarnessError,
     UnknownHarnessError,
 )
+from blizzard.runner.loop.capability_snapshot import default_harness_id
 from tests.runner_fakes import FakeHarness, FakeTranscriptSource
 
 
@@ -131,3 +135,43 @@ def test_production_registry_injects_its_own_executor_not_the_module_default(tmp
 
     launcher = vars(registry.adapter(CLAUDE_CODE_HARNESS_ID))["_launcher"]
     assert vars(launcher)["_executor"] is not _SPAWN_EXECUTOR
+
+
+@pytest.mark.unit
+def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_opencode(tmp_path: Path) -> None:
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", claude_code_enabled=False)
+    registry = build_production_harness_registry(config)
+
+    assert default_harness_id(registry) == OPENCODE_HARNESS_ID
+    registry.adapter(OPENCODE_HARNESS_ID)
+    # A session recorded under the disabled harness resolves through the unknown-owner path.
+    with pytest.raises(UnknownHarnessError):
+        registry.adapter(CLAUDE_CODE_HARNESS_ID)
+
+
+@pytest.mark.unit
+def test_production_registry_omits_a_disabled_opencode(tmp_path: Path) -> None:
+    registry = build_production_harness_registry(
+        RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_enabled=False)
+    )
+
+    assert default_harness_id(registry) == CLAUDE_CODE_HARNESS_ID
+    with pytest.raises(UnknownHarnessError):
+        registry.adapter(OPENCODE_HARNESS_ID)
+
+
+@pytest.mark.unit
+def test_production_registry_defaults_to_claude_code_with_both_enabled(tmp_path: Path) -> None:
+    assert default_harness_id(build_production_harness_registry(RunnerConfig(root=tmp_path, db_url="sqlite://"))) == (
+        CLAUDE_CODE_HARNESS_ID
+    )
+
+
+@pytest.mark.unit
+def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> None:
+    base = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    assert list(build_production_harness_health_probes(base)) == [CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID]
+    no_claude = RunnerConfig(root=tmp_path, db_url="sqlite://", claude_code_enabled=False)
+    assert list(build_production_harness_health_probes(no_claude)) == [OPENCODE_HARNESS_ID]
+    no_opencode = RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_enabled=False)
+    assert list(build_production_harness_health_probes(no_opencode)) == [CLAUDE_CODE_HARNESS_ID]

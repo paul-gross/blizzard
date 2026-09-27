@@ -473,6 +473,8 @@ class RunnerConfig:
     max_environments: int = DEFAULT_MAX_ENVIRONMENTS
     workspace_envs: tuple[str, ...] = DEFAULT_ENV_POOL  # the provider's static env pool
     harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod
+    #: `[claude_code].enabled` — false leaves Claude Code unbound, unprobed, and unadvertised.
+    claude_code_enabled: bool = True
     harness_permission_mode: str | None = None  # `claude -p --permission-mode` (headless); None omits it
     worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)
     #: Override for the Claude Code health probe's own credential file; `None` is its own default.
@@ -554,6 +556,8 @@ class RunnerConfig:
     effort_aliases: tuple[tuple[str, str], ...] = ()
     #: OpenCode's own binary path, independent of `harness_binary` (still Claude Code's).
     opencode_binary: str = DEFAULT_OPENCODE_BINARY
+    #: `[opencode].enabled` — false leaves OpenCode unbound, unprobed, and unadvertised.
+    opencode_enabled: bool = True
     #: OpenCode's tier -> `provider/model` mapping; an unmapped tier skips this binding.
     opencode_model_aliases: tuple[tuple[str, str], ...] = ()
     #: OpenCode's effort -> `--variant` mapping; unmapped drops to `None` and logs once.
@@ -813,7 +817,6 @@ class RunnerConfig:
             "# Released folders remain for inspection until the cap needs room; oldest\n"
             "# unheld folders are evicted first. Reacquisition resets all repo worktrees.\n"
             "# A commented [[workspace_repo]] example is at the end of this file.\n"
-            f'harness_binary = "{self.harness_binary}"\n'
             f'harness_permission_mode = "{self.harness_permission_mode or ""}"\n'
             f"worker_settings_path = {settings}\n"
             + (
@@ -945,6 +948,10 @@ class RunnerConfig:
             + f'hub_role_default = "{self.auth_hub_role_default}"\n'
             + "\n[auth.users]\n"
             + "".join(f'{username} = "{role}"\n' for username, role in self.auth_users)
+            + "\n# The Claude Code binding: `enabled = false` leaves it unbound and unadvertised.\n"
+            + "[claude_code]\n"
+            + f"enabled = {'true' if self.claude_code_enabled else 'false'}\n"
+            + f'binary = "{self.harness_binary}"\n'
             + "\n# Model and effort tier aliases — how THIS runner's harness resolves the\n"
             + "# harness-agnostic names a graph's `sessions:` declaration (or a chunk default) uses.\n"
             + "# The Claude Code adapter ships built-in defaults for the three standard tiers\n"
@@ -961,6 +968,7 @@ class RunnerConfig:
             + "# satisfy a session demanding it; a multi-harness selection skips it rather than\n"
             + "# spawn it under a model it cannot provide.\n"
             + "[opencode]\n"
+            + f"enabled = {'true' if self.opencode_enabled else 'false'}\n"
             + f'binary = "{self.opencode_binary}"\n'
             + f"worker_config_path = {json.dumps(self.opencode_worker_config_path or '')}\n"
             + (
@@ -1004,6 +1012,13 @@ class RunnerConfig:
         # actually happens, from this config's own resolved fields.
         subscriptions = SubscriptionDeclaration.declared(raw.get("subscription", []))
         opencode = Table.of(raw.get("opencode"))
+        claude_code = Table.of(raw.get("claude_code"))
+        if "harness_binary" in raw and "binary" in claude_code.body:
+            raise ConfigError("set Claude Code's binary once: 'harness_binary' or '[claude_code].binary', not both")
+        claude_code_enabled = claude_code.boolean("enabled", True)
+        opencode_enabled = opencode.boolean("enabled", True)
+        if not claude_code_enabled and not opencode_enabled:
+            raise ConfigError("'[claude_code].enabled' and '[opencode].enabled' are both false; enable at least one")
         provider = raw.get("workspace_provider", "winter")
         if provider not in ("basic", "winter"):
             raise ConfigError(f"workspace_provider must be 'basic' or 'winter', got {provider!r}")
@@ -1026,7 +1041,8 @@ class RunnerConfig:
             workspace_repos=repos,
             max_environments=cap,
             workspace_envs=Table.of(raw).listed("workspace_envs", DEFAULT_ENV_POOL),
-            harness_binary=str(raw.get("harness_binary", DEFAULT_HARNESS_BINARY)),
+            harness_binary=str(raw.get("harness_binary", claude_code.body.get("binary", DEFAULT_HARNESS_BINARY))),
+            claude_code_enabled=claude_code_enabled,
             harness_permission_mode=(str(raw["harness_permission_mode"]) or None)
             if raw.get("harness_permission_mode")
             else None,
@@ -1068,6 +1084,7 @@ class RunnerConfig:
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
             worker_stdout_retention_days=worker_stdout.retention_days,
             opencode_binary=opencode.word("binary") or DEFAULT_OPENCODE_BINARY,
+            opencode_enabled=opencode_enabled,
             opencode_auth_path=opencode.word("auth_path"),
             opencode_model_aliases=Table.of(opencode.body.get("models")).pairs("aliases"),
             opencode_effort_aliases=Table.of(opencode.body.get("effort")).pairs("aliases"),

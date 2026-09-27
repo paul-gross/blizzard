@@ -1805,3 +1805,76 @@ def test_a_singular_subscription_table_raises_instead_of_silently_reading_as_zer
     )
     with pytest.raises(ConfigError, match="\\[\\[subscription\\]\\]"):
         RunnerConfig.load(root)
+
+
+def _write_runner_config(root: Path, body: str) -> None:
+    root.mkdir(exist_ok=True)
+    (root / "blizzard-runner.toml").write_text('db_url = "sqlite://"\n' + body)
+
+
+@pytest.mark.unit
+def test_runner_harness_enabled_flags_default_true(tmp_path: Path) -> None:
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    assert config.claude_code_enabled is True
+    assert config.opencode_enabled is True
+    _write_runner_config(tmp_path / "runner", "")
+    loaded = RunnerConfig.load(tmp_path / "runner")
+    assert (loaded.claude_code_enabled, loaded.opencode_enabled) == (True, True)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("claude_code_enabled", "opencode_enabled"), [(False, True), (True, False), (True, True)])
+def test_runner_harness_enabled_flags_round_trip_through_the_scaffold(
+    tmp_path: Path, claude_code_enabled: bool, opencode_enabled: bool
+) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    scaffold = dataclasses.replace(
+        RunnerConfig.scaffold(root), claude_code_enabled=claude_code_enabled, opencode_enabled=opencode_enabled
+    )
+    scaffold.config_path.write_text(scaffold.to_toml())
+    loaded = RunnerConfig.load(root)
+    assert loaded.claude_code_enabled is claude_code_enabled
+    assert loaded.opencode_enabled is opencode_enabled
+    assert loaded.harness_binary == scaffold.harness_binary
+
+
+@pytest.mark.unit
+def test_runner_scaffold_honors_the_harness_binary_env_and_round_trips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BZ_HARNESS_BINARY", "/opt/mock-claude-code")
+    root = tmp_path / "runner"
+    root.mkdir()
+    scaffold = RunnerConfig.scaffold(root)
+    text = scaffold.to_toml()
+    assert "\nharness_binary =" not in text
+    assert '[claude_code]\nenabled = true\nbinary = "/opt/mock-claude-code"\n' in text
+    scaffold.config_path.write_text(text)
+    assert RunnerConfig.load(root).harness_binary == "/opt/mock-claude-code"
+
+
+@pytest.mark.unit
+def test_runner_both_harnesses_disabled_is_a_config_error(tmp_path: Path) -> None:
+    _write_runner_config(tmp_path, "[claude_code]\nenabled = false\n[opencode]\nenabled = false\n")
+    with pytest.raises(ConfigError, match=r"\[claude_code\]\.enabled.*\[opencode\]\.enabled"):
+        RunnerConfig.load(tmp_path)
+
+
+@pytest.mark.unit
+def test_runner_legacy_harness_binary_with_claude_code_binary_is_a_config_error(tmp_path: Path) -> None:
+    _write_runner_config(tmp_path, 'harness_binary = "/a/claude"\n[claude_code]\nbinary = "/b/claude"\n')
+    with pytest.raises(ConfigError, match="harness_binary"):
+        RunnerConfig.load(tmp_path)
+
+
+@pytest.mark.unit
+def test_runner_claude_code_binary_is_honored_without_the_legacy_key(tmp_path: Path) -> None:
+    _write_runner_config(tmp_path, '[claude_code]\nbinary = "/opt/claude"\n')
+    assert RunnerConfig.load(tmp_path).harness_binary == "/opt/claude"
+
+
+@pytest.mark.unit
+def test_runner_legacy_harness_binary_alone_is_still_honored(tmp_path: Path) -> None:
+    _write_runner_config(tmp_path, 'harness_binary = "/opt/legacy-claude"\n')
+    assert RunnerConfig.load(tmp_path).harness_binary == "/opt/legacy-claude"

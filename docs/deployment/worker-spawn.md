@@ -2,27 +2,34 @@
 
 ## Harness identity
 
-Every session is recorded and read under a harness id. A runner build binds two: `claude_code`, built once at startup
-from `[worker]`'s `harness_binary` (and its sibling knobs below) in `blizzard-runner.toml`, and `opencode`, built from
-its own `[opencode]` table ("OpenCode configuration" below) — each the same binary every spawn, judge, and resume child
-for that harness runs. Claude Code's own admitted-version range is currently `>=2.1,<3.0`, checked by membership alone
-with pre-releases excluded, and backed by no compatibility corpus — unlike OpenCode's own range below, an admitted
-Claude Code version is never run through an offline classification, so nothing about it can read `unknown_version` once
-observed. Which one a fresh mint actually spawns under is a per-`sessions:` entry declaration
-(`harnesses:`/`default_harnesses`, "Acceptable harness set" below), never a runner-wide switch, so a deployment that
-never names `opencode` anywhere never spawns it under that binding. Binding a harness does carry one small, bounded cost
-regardless of whether anything ever spawns under it: each bound binary's version is probed and cached for the
-fleet-registration push and the claim peek, refreshed at most once every ten minutes (long enough that an idle runner
-pays it a few times an hour, not every ~30s tick; short enough that an in-place binary upgrade is noticed well within an
-operator's own deploy window) — never once per tick, and never for a binary that isn't on `PATH` at all. A recorded
-session's owner resolves against this runner's own bindings: **unknown** means the session was recorded under a harness
-id this runner build doesn't ship at all — the remedy is to run a runner version that binds that id, on the runner
-holding the chunk, never to substitute another harness. **unavailable** means the id is bound but this runner can't
-supply the specific capability being asked of it — resuming or judging versus reading its transcript. Both `claude_code`
-and `opencode` bind every capability the registry knows to ask for today, so this never fires for either; the loop's own
-usage-recording and session-rotation call sites still treat an `unavailable` binding as their ordinary "no fallback
-transcript" outcome, never a crash, for whichever future capability gap reintroduces one. Either shows up as an
-`owner-unresolvable` event, which [observability.md](./observability.md) owns reading and resolving.
+Every session is recorded and read under a harness id. A runner build binds up to two: `claude_code`, built once at
+startup from the `[claude_code]` table (and the top-level sibling knobs below) in `blizzard-runner.toml`, and
+`opencode`, built from its own `[opencode]` table ("OpenCode configuration" below) — each the same binary every spawn,
+judge, and resume child for that harness runs. Each table takes `enabled` (default `true`) and `binary` (default the
+bare name, `claude` or `opencode`, resolved on `PATH`; a full path is honored). The legacy top-level `harness_binary` is
+still accepted as Claude Code's binary, but not together with `[claude_code].binary` — setting both, or disabling both
+harnesses, fails config load. A disabled harness is not bound, never health- or version-probed, and never advertised to
+the hub, so no chunk is claimed for it; a session recorded under it resolves as **unknown** (below). The runner's
+default harness is the first enabled one, `claude_code` then `opencode`, and a chunk with no harness set runs under the
+claiming runner's default — on an OpenCode-only runner, that is `opencode`. Claude Code's own admitted-version range is
+currently `>=2.1,<3.0`, checked by membership alone with pre-releases excluded, and backed by no compatibility corpus —
+unlike OpenCode's own range below, an admitted Claude Code version is never run through an offline classification, so
+nothing about it can read `unknown_version` once observed. Which one a fresh mint actually spawns under is a
+per-`sessions:` entry declaration (`harnesses:`/`default_harnesses`, "Acceptable harness set" below), never a
+runner-wide switch, so a deployment that never names `opencode` anywhere never spawns it under that binding. Binding a
+harness does carry one small, bounded cost regardless of whether anything ever spawns under it: each bound binary's
+version is probed and cached for the fleet-registration push and the claim peek, refreshed at most once every ten
+minutes (long enough that an idle runner pays it a few times an hour, not every ~30s tick; short enough that an in-place
+binary upgrade is noticed well within an operator's own deploy window) — never once per tick, and never for a binary
+that isn't on `PATH` at all. A recorded session's owner resolves against this runner's own bindings: **unknown** means
+the session was recorded under a harness id this runner build doesn't ship at all — the remedy is to run a runner
+version that binds that id, on the runner holding the chunk, never to substitute another harness. **unavailable** means
+the id is bound but this runner can't supply the specific capability being asked of it — resuming or judging versus
+reading its transcript. Both `claude_code` and `opencode` bind every capability the registry knows to ask for today, so
+this never fires for either; the loop's own usage-recording and session-rotation call sites still treat an `unavailable`
+binding as their ordinary "no fallback transcript" outcome, never a crash, for whichever future capability gap
+reintroduces one. Either shows up as an `owner-unresolvable` event, which [observability.md](./observability.md) owns
+reading and resolving.
 
 OpenCode's own plugin channel — a soft heartbeat nudge after every tool call, and forwarding the lease's identity into
 tool subprocesses through `shell.env` — is classified `degraded` on every OpenCode version the runner admits today: the

@@ -28,7 +28,7 @@ _LAUNCH_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1, thread_
 
 
 def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
-    """Build every configured harness binding once for one graph, over one shared probe/
+    """Build every enabled harness binding once for one graph, over one shared probe/
     launcher pair — the launcher's `_LAUNCH_EXECUTOR` is module-level and shared
     across every call, never rebuilt per call: a deferred-disarm child's `PR_SET_PDEATHSIG`
     parent is the thread that forked it, so a throwaway executor's teardown can kill a
@@ -41,34 +41,38 @@ def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
     # Built and injected here (`bzh:dependency-injection`), not `ProcessLauncher`'s own
     # module-level default — this composition root is the one place that belongs.
     launcher = ProcessLauncher(process, executor=_LAUNCH_EXECUTOR)
-    worker_env = config.worker_env
-    adapter = ClaudeCodeAdapter(
-        binary=config.harness_binary,
-        settings_path=config.worker_settings_path,
-        permission_mode=config.harness_permission_mode,
-        worker_env=worker_env,
-        model_aliases=config.model_aliases,
-        effort_aliases=config.effort_aliases,
-        transcript_source=transcript_source,
-        process=process,
-        launcher=launcher,
-    )
-    return HarnessRegistry(
-        {
-            CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=transcript_source),
-            OPENCODE_HARNESS_ID: build_opencode_binding(config, process=process, launcher=launcher),
-        }
-    )
+    # Insertion order is claude_code then opencode: the first binding is the runner's default harness.
+    bindings: dict[str, HarnessBinding] = {}
+    if config.claude_code_enabled:
+        adapter = ClaudeCodeAdapter(
+            binary=config.harness_binary,
+            settings_path=config.worker_settings_path,
+            permission_mode=config.harness_permission_mode,
+            worker_env=config.worker_env,
+            model_aliases=config.model_aliases,
+            effort_aliases=config.effort_aliases,
+            transcript_source=transcript_source,
+            process=process,
+            launcher=launcher,
+        )
+        bindings[CLAUDE_CODE_HARNESS_ID] = HarnessBinding(adapter=adapter, transcript_source=transcript_source)
+    if config.opencode_enabled:
+        bindings[OPENCODE_HARNESS_ID] = build_opencode_binding(config, process=process, launcher=launcher)
+    return HarnessRegistry(bindings)
 
 
 def build_production_harness_health_probes(config: RunnerConfig) -> dict[str, IHarnessHealthProbe]:
-    """Every configured harness binding's own :class:`~blizzard.runner.harness.adapter.
+    """Every enabled harness binding's own :class:`~blizzard.runner.harness.adapter.
     IHarnessHealthProbe`, this module's own approved wiring site for the
     health-probe seam, symmetric with :func:`build_production_harness_registry`'s own
     adapter construction — the composition root reaches both only through this module."""
-    return {
-        CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(
+    probes: dict[str, IHarnessHealthProbe] = {}
+    if config.claude_code_enabled:
+        probes[CLAUDE_CODE_HARNESS_ID] = ClaudeCodeHealthProbe(
             binary=config.harness_binary, credentials_path=config.claude_code_credentials_path
-        ),
-        OPENCODE_HARNESS_ID: OpenCodeHealthProbe(binary=config.opencode_binary, auth_path=config.opencode_auth_path),
-    }
+        )
+    if config.opencode_enabled:
+        probes[OPENCODE_HARNESS_ID] = OpenCodeHealthProbe(
+            binary=config.opencode_binary, auth_path=config.opencode_auth_path
+        )
+    return probes
