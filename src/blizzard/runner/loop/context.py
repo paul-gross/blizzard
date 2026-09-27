@@ -33,6 +33,7 @@ from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
+from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.stores import RunnerStores
@@ -162,6 +163,8 @@ class LoopContext:
     config: LoopConfig
     worker_files: WorkerStdoutFiles
     elicitation_files: ElicitationFiles
+    #: The per-lease scratch directory (`BLIZZARD_TMPDIR`), removed at lease closure.
+    worker_scratch: WorkerScratchDirs
     usage: UsageRecorder
     sessions: SessionResolver
     #: The fresh-mint owner selector over the acceptable harness set; a resume never reaches it.

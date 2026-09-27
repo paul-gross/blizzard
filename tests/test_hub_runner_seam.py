@@ -23,6 +23,7 @@ from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.session import HarnessSelector
 from blizzard.runner.loop.steps import Pull
+from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from tests.runner_fakes import (
     FakeHarness,
@@ -143,6 +144,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
         worker_files=WorkerStdoutFiles("", store),
         elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
+        worker_scratch=WorkerScratchDirs(""),
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
         harness_selector=HarnessSelector(harnesses=_harnesses),
@@ -234,6 +236,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
         worker_files=WorkerStdoutFiles("", store),
         elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
+        worker_scratch=WorkerScratchDirs(""),
         usage=make_usage_recorder(store, hub.clock),
         sessions=make_session_resolver(store),
         harness_selector=HarnessSelector(harnesses=_harnesses),

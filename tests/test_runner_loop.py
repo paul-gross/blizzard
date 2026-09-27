@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shlex
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -54,6 +55,7 @@ from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, Sess
 from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
+from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import lease_spawns
@@ -1733,6 +1735,74 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
     assert len(review_mints) == 1
 
 
+@pytest.mark.unit
+def test_node_transition_removes_the_prior_leases_scratch_directory_and_creates_a_fresh_one(
+    tmp_path,
+):  # type: ignore[no-untyped-def]
+    """`Attempt.close`'s removal, reached through the ordinary `transitioned` closure a node
+    entry drives: the entered lease keeps the claim and route, but gets its own directory."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
+    )
+    scratch = WorkerScratchDirs(str(tmp_path / "worker-tmp"))
+    scratch.ensure("lease_1")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        worker_scratch=scratch,
+    )
+
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it
+    Pull(ctx).run()
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.node_name == "review" and lease.epoch == 2
+    assert not os.path.exists(scratch.path("lease_1"))  # the prior epoch's own lease closed `transitioned`
+    assert os.path.isdir(scratch.path(lease.lease_id))  # the entered node-step's lease got its own
+
+
+@pytest.mark.unit
+def test_resumed_preamble_reuses_the_same_scratch_directory_a_fresh_spawn_got(tmp_path):  # type: ignore[no-untyped-def]
+    """`Spawner.preamble` (the resume/judge path) and `Spawner._worker_preamble` (fresh spawn)
+    derive the same directory from the lease id alone — stable across a resumed invocation,
+    which inherits none of the original spawn env."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    scratch = WorkerScratchDirs(str(tmp_path / "worker-tmp"))
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        worker_scratch=scratch,
+    )
+
+    Spawner(ctx).spawn(
+        "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+    )
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    fresh_tmpdir = harness.spawns[-1][1].tmpdir
+    assert fresh_tmpdir == scratch.path(lease.lease_id)
+
+    resumed = Spawner(ctx).preamble(lease, store.bindings_for_chunk("ch_1"))
+
+    assert resumed.tmpdir == fresh_tmpdir
+
+
 # NODE-ENTRY RESUME: session modes across a build -> review -> build cycle
 # — component tier, real store, doubles only at the hub/harness/provider/probe seams.
 
@@ -2677,6 +2747,51 @@ def test_reap_orphan_requeues(tmp_path):  # type: ignore[no-untyped-def]
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.lease_id != "lease_1"  # a fresh lease replaced the orphan
     assert lease.pid == 202
+
+
+@pytest.mark.unit
+def test_reap_orphan_requeue_removes_the_failed_leases_scratch_directory_and_creates_a_fresh_one(
+    tmp_path,
+):  # type: ignore[no-untyped-def]
+    """`Attempt.close`'s removal, reached through REAP's own orphan-requeue path: the closed
+    lease's scratch directory is gone, and the fresh lease `requeue` spawns gets its own."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-b", pid=202, process_start_time="start-202", pgid=202), verdict="pass"
+    )
+    scratch = WorkerScratchDirs(str(tmp_path / "worker-tmp"))
+    scratch.ensure("lease_1")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        worker_scratch=scratch,
+    )
+
+    Reap(ctx).run()
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.lease_id != "lease_1"
+    assert not os.path.exists(scratch.path("lease_1"))  # the closed, orphaned lease's directory is gone
+    assert os.path.isdir(scratch.path(lease.lease_id))  # the requeued fresh lease got its own
 
 
 @pytest.mark.unit

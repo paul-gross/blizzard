@@ -8,6 +8,9 @@ prompt**, the operator's local law — additive, and the more specific where bot
 **machine-local facts table** naming this spawn's runner, chunk, lease, and environment(s), also exported as
 `BLIZZARD_ENV_IDS` and `BLIZZARD_ENV_WORKDIRS`.
 
+Stage drafts, notes, and pulled assets under `$BLIZZARD_TMPDIR` — private to this lease, removed when it ends — never
+at a fixed `/tmp` path or inside a repository working tree.
+
 ## Your session is headless
 
 Ending your turn ends the process, and every background shell you started dies with it. Nothing wakes a fleet worker

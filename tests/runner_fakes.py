@@ -52,6 +52,7 @@ from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubCli
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
+from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.runtime import migration_runner
@@ -1193,6 +1194,7 @@ def make_context(
     subscriptions: tuple[ResolvedSubscription, ...] = (),
     chunk_views: IChunkViews | None = None,
     harness_versions: HarnessVersionCache | None = None,
+    worker_scratch: WorkerScratchDirs | None = None,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes.
 
@@ -1234,6 +1236,7 @@ def make_context(
         config=resolved_config,
         worker_files=_files,
         elicitation_files=_elicitation_files,
+        worker_scratch=worker_scratch if worker_scratch is not None else WorkerScratchDirs(""),
         usage=UsageRecorder(
             leases=store,
             usage=store,

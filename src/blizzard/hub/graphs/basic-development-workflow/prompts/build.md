@@ -20,10 +20,6 @@ Finished work is commits on one branch, `feat/<slug>` — a short kebab-case slu
 every repo changed. Before the first commit, put each touched repo on the feature branch so no push from this
 environment can reach the base branch; how you arrange that is the workspace's business, the outcome is mandatory.
 
-Keep drafts and notes outside every repo working tree and outside the spawn workspace directory — both are unswept git
-worktrees. Use a temp per-chunk directory named with `$BLIZZARD_CHUNK_ID`, preferring a workspace-declared scratch
-location if one exists.
-
 ## Verify it by hand
 
 Before pushing, exercise the change by hand against a running application — a green build or type-check is not a

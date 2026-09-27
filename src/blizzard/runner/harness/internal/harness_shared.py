@@ -124,6 +124,8 @@ def build_identity_env(
     env["BLIZZARD_RUNNER_URL"] = preamble.local_api_url
     env["BLIZZARD_LEASE_TOKEN"] = preamble.lease_token
     env.setdefault("BLIZZARD_RUNNER_ASK_CMD", "blizzard runner ask")
+    if preamble.tmpdir:
+        env["BLIZZARD_TMPDIR"] = preamble.tmpdir
     if elicitation:
         env["BLIZZARD_ELICITATION"] = "1"
     return env

@@ -28,11 +28,6 @@ item, and the same branch name is used in every repo the change touches. Before 
 on that feature branch and arranged so a push from this environment reaches the feature branch and not the base branch
 it started on.
 
-Drafts and working notes go somewhere disposable — outside every repository working tree and outside the workspace
-directory the fleet spawned you in, since both are git working trees and nothing sweeps a loose file from either. A
-per-chunk directory under the machine's temporary space named with `$BLIZZARD_CHUNK_ID` satisfies that, unless this
-workspace declares a scratch location of its own, which is preferred.
-
 Harness work is validated by reading the change back as the agent who will receive it: does the rule say what it means,
 does the routing to it land, and does the instruction survive being followed literally?
 

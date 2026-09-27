@@ -23,11 +23,6 @@ carries beyond the base branch, and run `blizzard runner artifact list` for what
 Commits you cannot account for are never reset, discarded, or force-pushed over — ask
 `blizzard runner ask "<question>"` instead of proceeding past them.
 
-Drafts and working notes go somewhere disposable — outside every repository working tree and outside the workspace
-directory the fleet spawned you in, since both are git working trees and nothing sweeps a loose file from either. A
-per-chunk directory under the machine's temporary space named with `$BLIZZARD_CHUNK_ID` satisfies that, unless this
-workspace declares a scratch location of its own, which is preferred.
-
 ## Push and declare the commits
 
 Push the branch to each repo's origin. For every repo you touched, you MUST then run

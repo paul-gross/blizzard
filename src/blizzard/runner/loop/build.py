@@ -46,6 +46,7 @@ from blizzard.runner.loop.transcript_backfill import (
     TranscriptReshipReport,
 )
 from blizzard.runner.loop.usage import UsageRecorder
+from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerStores
@@ -97,7 +98,12 @@ class LoopWiring:
         return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt(), broker)
 
     def context(
-        self, hub: IHubClient, *, engine: Engine | None = None, health_cache: HarnessHealthCache | None = None
+        self,
+        hub: IHubClient,
+        *,
+        engine: Engine | None = None,
+        health_cache: HarnessHealthCache | None = None,
+        sweep_worker_scratch: bool = False,
     ) -> LoopContext:
         """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``,
         and the returned context's own ``usage_http_client`` — closed the same way,
@@ -109,7 +115,11 @@ class LoopWiring:
         ``health_cache`` is the same exception ``engine`` is: ``host`` passes
         the one instance it also gave the served app (``HostedApp.harness_health``), so a
         dashboard read and the loop's own registered availability read one shared, single
-        source of truth rather than two independently-refreshing caches that can disagree."""
+        source of truth rather than two independently-refreshing caches that can disagree.
+        ``sweep_worker_scratch`` runs the per-lease scratch directory's one-shot orphan sweep —
+        ``True`` only from :class:`PeriodicDriver`'s own daemon-start build, ahead of its first
+        tick, when no spawn can race it; every other caller (``tick_once`` and siblings, a build
+        wired only to inspect it) leaves it off."""
         config = self.config
         if engine is None:
             engine = create_engine_from_url(config.db_url)
@@ -156,6 +166,15 @@ class LoopWiring:
         # so it is always created, unlike `worker_stdout_dir`'s empty-disables convention.
         elicitation_output_dir = config.root / "elicitation-output"
         elicitation_output_dir.mkdir(parents=True, exist_ok=True)
+        # The per-lease scratch directory (`BLIZZARD_TMPDIR`), created once here so a worker's
+        # staging target always exists by the time a spawn/resume/judge opens it.
+        worker_scratch_dir = config.root / "worker-tmp"
+        worker_scratch_dir.mkdir(parents=True, exist_ok=True)
+        _worker_scratch = WorkerScratchDirs(str(worker_scratch_dir))
+        if sweep_worker_scratch:
+            # A one-shot crash reconciliation — sweeping any orphan a crash left between a
+            # directory's `ensure` and its owning lease's row landing.
+            _worker_scratch.sweep_orphans(lease.lease_id for lease in stores.lease_record.list_active_leases())
         loop_config = LoopConfig(
             runner_id=config.runner_id,
             workspace_id=config.workspace_id,
@@ -205,6 +224,7 @@ class LoopWiring:
             config=loop_config,
             worker_files=_worker_files,
             elicitation_files=_elicitation_files,
+            worker_scratch=_worker_scratch,
             usage=UsageRecorder(
                 leases=stores.liveness,
                 usage=stores.usage,
@@ -357,7 +377,12 @@ class PeriodicDriver:
         engine = create_engine_from_url(config.db_url)
         ctx: LoopContext | None = None
         try:
-            ctx = self._wiring.context(HttpHubClient(self._client), engine=engine, health_cache=self._harness_health)
+            ctx = self._wiring.context(
+                HttpHubClient(self._client),
+                engine=engine,
+                health_cache=self._harness_health,
+                sweep_worker_scratch=True,
+            )
             _log.info("reconciliation loop started", runner_id=config.runner_id, interval=self._interval)
             while not self._stop.is_set():
                 try:
