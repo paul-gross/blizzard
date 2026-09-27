@@ -1797,10 +1797,10 @@
    "total": 616
   },
   "blizzard/hub/config.py": {
-   "comments": 45,
+   "comments": 46,
    "docstrings": 46,
    "over_cap": 12,
-   "total": 581
+   "total": 582
   },
   "blizzard/hub/delivery/__init__.py": {
    "comments": 0,
