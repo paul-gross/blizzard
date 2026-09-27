@@ -147,7 +147,7 @@ class FleetRequest:
 def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None) -> None:
     """The lease-transcript read route's own ownership gate — **always**
     raises on a mismatch, unlike :meth:`FleetRequest.assert_owns`, which ``runner_auth_mode``
-    leaves inert by default. ``owning_runner_id=None`` is Decision 1's "hub holds nothing"
+    leaves inert by default. ``owning_runner_id=None`` is the "hub holds nothing"
     branch, not a refusal — left for the caller to fall back on."""
     if owning_runner_id is not None and owning_runner_id != principal.runner_id:
         # The owning runner's id stays out of the response — logged server-side instead,
@@ -412,7 +412,7 @@ class AnalyticsWindow:
     instants (``bzh:utc-instants``). No graph, source, or event-shape filter: those stay
     the operator plane's own. Builds the operator plane's own filter types with only the
     window populated, so a fleet route renders through the identical criteria and
-    response-shaping helpers the operator route does (Decision 1)."""
+    response-shaping helpers the operator route does."""
 
     since: datetime
     until: datetime | None

@@ -11,8 +11,8 @@ import { hubFindingKey, hubFindingsBucketKey, hubFindingsKey } from '../query-ke
 
 /**
  * Every id in `findingIds()`, read live through its own `GET
- * /api/findings/{finding_id}` — Decision 3's own "evidence is read live, one finding
- * at a time": a garden proposal carries finding *ids* only
+ * /api/findings/{finding_id}` — evidence is read live, one finding
+ * at a time: a garden proposal carries finding *ids* only
  * (`GardenProposalView.findings`), so the docket detail's evidence table reads each
  * one live rather than trusting a copy the proposal itself might carry
  * (`blizzard-product:/delivered/garden/user-interface.md` §The docket). One `injectQuery`

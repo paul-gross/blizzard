@@ -999,7 +999,7 @@ def test_transcript_segments_content_digest_resumes_after_an_interrupted_first_p
 _SCHEMA_METADATA = {"hub": hub_schema.metadata, "runner": runner_schema.metadata}
 
 # chunks.model carries a migration-only server_default with no schema.py counterpart —
-# pre-existing drift this change does not own (bzh:frozen-revisions plan, Decision 4).
+# pre-existing drift this change does not own (bzh:frozen-revisions plan).
 _SERVER_DEFAULT_EXEMPTIONS: dict[str, set[str]] = {"chunks": {"model"}}
 
 

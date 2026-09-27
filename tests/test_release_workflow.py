@@ -1,6 +1,6 @@
 """``.github/workflows/release.yml``'s ``release`` job — two static properties a tag
-cut can't rehearse locally: the image build-push step runs before `gh release create`
-(decision 5), and the job's `permissions:` block declares both `contents: write` and
+cut can't rehearse locally: the image build-push step runs before `gh release create`,
+and the job's `permissions:` block declares both `contents: write` and
 `packages: write` (a job-level block replaces the workflow-level one rather than
 merging). A pure YAML parse — no docker/GHCR credentials needed.
 """
@@ -41,7 +41,7 @@ def test_image_build_push_step_precedes_the_release_publish_step() -> None:
     build_push_idx = _step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))
     publish_idx = _step_index(steps, lambda s: "gh release create" in str(s.get("run", "")))
     assert build_push_idx < publish_idx, (
-        "the image build-push step must run before `gh release create` (decision 5) — "
+        "the image build-push step must run before `gh release create` — "
         "a failed image build must never leave a published Release advertising an "
         "image that does not exist"
     )

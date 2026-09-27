@@ -1,6 +1,6 @@
 """``transcripts/service.py`` — home selection for a lease's transcript.
 
-Every branch of Decision 1's resolution table, driven against a real store (for
+Every branch of the home-selection resolution table, driven against a real store (for
 ``lease``/``active_lease``) with fake local and archived repositories standing in for the
 filesystem and the hub — so this file's job is the *resolution*, never the transport or
 the normalization, both pinned elsewhere."""

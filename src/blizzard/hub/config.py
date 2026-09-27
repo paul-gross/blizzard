@@ -388,8 +388,8 @@ class HubConfig:
     annotation_interval_seconds: int = 120
     #: Instance-level forge-write posture for closing — false declines every
     #: configured source's closer (never the built-in hub source's, which writes no forge)
-    #: so a non-canonical hub can't close real items; true (the default) is unconditional.
-    #: True by default so a non-canonical hub must opt out explicitly against live forge writes.
+    #: so a non-canonical hub can't close real items; true (the default) is unconditional, so a
+    #: non-canonical hub must opt out explicitly against live forge writes.
     close_forge_writes_enabled: bool = True
     auth: AuthConfig = field(default_factory=AuthConfig)
     #: Transcript ingest cap overrides; every field None = the domain defaults.

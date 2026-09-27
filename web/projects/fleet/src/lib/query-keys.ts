@@ -50,7 +50,7 @@ export function hubGardenProposalKey(proposalId: string | null): readonly unknow
 }
 
 /** The docket detail's live evidence read — every finding named in `findingIds`,
- * fanned out and joined through `GET /api/findings/{finding_id}` (Decision 3). The
+ * fanned out and joined through `GET /api/findings/{finding_id}`. The
  * whole id list rides the key, so a different selected proposal is its own cache
  * entry. */
 export function hubFindingsKey(findingIds: readonly string[]): readonly unknown[] {

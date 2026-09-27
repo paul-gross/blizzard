@@ -4,11 +4,11 @@ import { errorMessage, injectAcceptGardenProposalMutation } from 'fleet';
 import { GardeningProposalAcceptDialogView, type AcceptSubmission } from './gardening-proposal-accept-dialog-view';
 
 /**
- * The garden proposal docket's Accept dialog container (Decisions 5, 6,
- * 7) — `blizzard hub garden-proposal accept <id> [--reason] [--body-file] [--no-work-
+ * The garden proposal docket's Accept dialog container —
+ * `blizzard hub garden-proposal accept <id> [--reason] [--body-file] [--no-work-
  * item]`'s own UI, submitted through `injectAcceptGardenProposalMutation`
  * (`bzh:generated-client`). Minting is the default and submits in one click;
- * declining to mint is the more effortful path (Decision 5), gated in the view on its
+ * declining to mint is the more effortful path, gated in the view on its
  * own required reason. Closure is terminal, so a 409 (a raced second close) surfaces
  * through this container's own `submitError`.
  *
