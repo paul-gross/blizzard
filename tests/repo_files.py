@@ -104,11 +104,21 @@ def install_repo_read_guard() -> None:
                         isinstance(executable, (str, bytes))
                         and Path(os.fsdecode(executable)).name in {"sh", "bash", "dash"}
                         and isinstance(argv, (list, tuple))
-                        and len(argv) >= 3
-                        and argv[1] == "-c"
-                        and isinstance(argv[2], (str, bytes))
                     ):
-                        candidates.extend(shlex.split(os.fsdecode(argv[2])))
+                        for index, option in enumerate(argv[1:-1], start=1):
+                            if not isinstance(option, (str, bytes)):
+                                continue
+                            flags = os.fsdecode(option)
+                            if (
+                                flags.startswith("-")
+                                and not flags.startswith("--")
+                                and flags[1:].isalpha()
+                                and "c" in flags
+                            ):
+                                script = argv[index + 1]
+                                if isinstance(script, (str, bytes)):
+                                    candidates.extend(shlex.split(os.fsdecode(script)))
+                                break
                     for candidate in candidates:
                         if isinstance(candidate, (str, bytes, Path)):
                             path = Path(os.fsdecode(candidate))
