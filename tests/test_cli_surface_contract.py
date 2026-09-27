@@ -10,16 +10,16 @@ recording, so the two can only diverge when the rendered surface itself changes.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 from blizzard.tools.cli_surface import ROOTS, build
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-_CONTRACTS_DIR = Path(__file__).resolve().parents[1] / "contracts" / "cli"
+_CONTRACTS_DIR = repo_root() / "contracts" / "cli"
 
 
 def _committed(name: str) -> dict[str, Any]:

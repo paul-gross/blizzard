@@ -7,18 +7,17 @@ so a lineage cannot be moved without the move being stated.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.hub.domain.graph import SessionRef
 from blizzard.hub.domain.graph_validation import Validator
 from blizzard.hub.graphs import GraphFile
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-_GRAPHS_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "hub" / "graphs"
+_GRAPHS_ROOT = repo_root() / "src" / "blizzard" / "hub" / "graphs"
 _PACKAGED = ("advanced-development-workflow", "default", "basic-development-workflow")
 
 

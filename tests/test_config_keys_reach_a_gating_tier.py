@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import ast
 import re
-from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_ROOT = Path(__file__).resolve().parents[1]
+_ROOT = repo_root()
 
 #: Test roots the merge gate does not run — `mise run gate` is unit + component only.
 _NON_GATING = {"e2e", "journey", "crash", "service"}

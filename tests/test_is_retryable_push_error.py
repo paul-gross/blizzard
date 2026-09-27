@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "is-retryable-push-error.sh"
+_SCRIPT = repo_root() / "scripts" / "is-retryable-push-error.sh"
 
 
 def _run(log: str) -> subprocess.CompletedProcess[str]:

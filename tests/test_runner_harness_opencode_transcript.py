@@ -6,7 +6,6 @@ linking, and ``read_raw_lines``'s round trip through ``OpenCodeAdapter.sum_trans
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -23,9 +22,10 @@ from blizzard.runner.harness.internal.opencode_shapes import parse_session_expor
 from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
+from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe
 
-_PACKAGE_ROOT = Path(__file__).resolve().parent.parent / "src" / "blizzard" / "runner" / "harness"
+_PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 # The oldest committed corpus inside the admitted range (blizzard#438) — stays correct as corpora are added.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION

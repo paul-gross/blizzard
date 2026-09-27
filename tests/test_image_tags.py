@@ -7,13 +7,14 @@ buried in ``.github/workflows/release.yml``.
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "image-tags.sh"
+_SCRIPT = repo_root() / "scripts" / "image-tags.sh"
 
 
 def _run(tag: str) -> subprocess.CompletedProcess[str]:

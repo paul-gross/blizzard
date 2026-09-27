@@ -12,9 +12,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = repo_root()
 
 #: Every tick-reached module whose `subprocess.run` calls must each carry `timeout=`.
 _GUARDED_MODULES = (

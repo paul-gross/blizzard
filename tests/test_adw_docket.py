@@ -14,12 +14,11 @@ import pytest
 import yaml as yaml_lib
 
 from blizzard.hub.graphs import PACKAGED
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-_GRAPH_DIR = (
-    Path(__file__).resolve().parents[1] / "src" / "blizzard" / "hub" / "graphs" / "advanced-development-workflow"
-)
+_GRAPH_DIR = repo_root() / "src" / "blizzard" / "hub" / "graphs" / "advanced-development-workflow"
 _PROMPTS_DIR = _GRAPH_DIR / "prompts"
 _RETRIEVAL_COMMAND = "blizzard runner artifact get docket --scope graph"
 

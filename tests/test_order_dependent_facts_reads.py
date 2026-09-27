@@ -12,9 +12,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = repo_root()
 _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 _DOMAIN_DIRS = [_SRC_DIR / "hub" / "domain", _SRC_DIR / "runner" / "domain"]
 _STORE_INTERNAL_DIRS = [_SRC_DIR / "hub" / "store" / "internal", _SRC_DIR / "runner" / "store" / "internal"]

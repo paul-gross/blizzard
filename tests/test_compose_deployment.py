@@ -7,14 +7,15 @@ through the proxy, and surviving a restart is ``blizzard:compose-smoke``
 from __future__ import annotations
 
 import tomllib
-from pathlib import Path
 
 import pytest
 import yaml
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = repo_root()
 _DOCKER_DIR = _REPO_ROOT / "packaging" / "docker"
 
 

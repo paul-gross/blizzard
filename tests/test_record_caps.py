@@ -17,10 +17,11 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.transcripts.caps import TRANSCRIPT_RECORD_MAX_BYTES
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-_DEPLOYMENT_DOC = Path(__file__).resolve().parents[1] / "docs" / "deployment" / "transcripts.md"
+_DEPLOYMENT_DOC = repo_root() / "docs" / "deployment" / "transcripts.md"
 
 
 def test_runner_record_cap_stays_below_the_hub_backstop() -> None:

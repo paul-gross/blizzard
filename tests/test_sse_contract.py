@@ -22,10 +22,11 @@ from blizzard.runner.events.broker import EventBroker as _RunnerEventBroker
 from blizzard.wire.sse import SSE_FRAME_MODELS as _HUB_SSE_FRAME_MODELS
 from blizzard.wire.sse import SseFramePayload
 from blizzard.wire.sse_runner import RUNNER_SSE_FRAME_MODELS as _RUNNER_SSE_FRAME_MODELS
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.component
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = repo_root()
 _CONTRACTS_DIR = _REPO_ROOT / "contracts" / "sse"
 
 #: Mirrors the shared core's own keepalive comment literal (``foundation/events/stream.py``)
