@@ -278,6 +278,8 @@ def test_get_runners_renders_the_landed_sample_on_its_subscription(tmp_path: Pat
                 }
             ],
             "condition": None,
+            "miss_reason": None,
+            "missed_at": None,
         }
     }
 
@@ -429,7 +431,15 @@ def test_malformed_usage_windows_are_omitted_and_a_later_valid_empty_sample_rend
     assert healthy.status_code == 200, healthy.text
     assert healthy.json()["applied"] == [2]
     assert hub.client.get("/api/runners").json()["runners"][0]["subscriptions"] == [
-        {"slug": "anthropic", "name": "Anthropic", "sampled_at": empty_at.isoformat(), "windows": [], "condition": None}
+        {
+            "slug": "anthropic",
+            "name": "Anthropic",
+            "sampled_at": empty_at.isoformat(),
+            "windows": [],
+            "condition": None,
+            "miss_reason": None,
+            "missed_at": None,
+        }
     ]
 
 
@@ -768,7 +778,15 @@ def test_get_runners_renders_a_lapsed_credential_as_a_miss_only_condition_row(tm
 
     detail = hub.client.get("/api/runners/r1").json()
     assert detail["subscriptions"] == [
-        {"slug": "openai", "name": "OpenAI", "sampled_at": None, "windows": [], "condition": "credential_lapsed"}
+        {
+            "slug": "openai",
+            "name": "OpenAI",
+            "sampled_at": None,
+            "windows": [],
+            "condition": "credential_lapsed",
+            "miss_reason": "credential_lapsed",
+            "missed_at": missed_at.isoformat(),
+        }
     ]
 
 

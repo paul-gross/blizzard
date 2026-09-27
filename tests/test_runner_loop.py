@@ -47,7 +47,7 @@ from blizzard.runner.loop.capability_snapshot import (
     HarnessHealthCache,
     HarnessVersionCache,
 )
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.produces import ProducesReconciler
 from blizzard.runner.loop.session import HarnessSelection, HarnessSelector, SessionResolver, SkippedHarness
@@ -64,12 +64,13 @@ from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
 from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.queue import QueuePeekEntry
-from blizzard.wire.runner import RunnerCapability
+from blizzard.wire.runner import RunnerCapability, RunnerSubscriptionDeclaration
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
     FakeProvider,
+    FakeSubscriptionSampler,
     FakeWorktreeGit,
     SqlAlchemyRunnerStore,
     TieredFakeHarness,
@@ -3629,6 +3630,49 @@ def test_pull_sends_a_deterministic_single_binding_capability_snapshot(tmp_path)
                 tiers=["blizzard:frontier", "blizzard:advanced", "blizzard:basic"],
                 default=True,
             ),
+        )
+    ]
+
+
+@pytest.mark.unit
+def test_pull_sends_every_declared_subscription_including_a_sampler_less_one(tmp_path):  # type: ignore[no-untyped-def]
+    """blizzard#636 D7 — the roster the runner pushes carries every declaration in
+    ``ctx.subscriptions``, including one whose provider binds no sampler (declared,
+    unsampled)."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        subscriptions=(
+            ResolvedSubscription(
+                slug="anthropic",
+                name="Anthropic",
+                provider="anthropic",
+                sample_interval_seconds=300,
+                sampler=FakeSubscriptionSampler(),
+                renewer=None,
+            ),
+            ResolvedSubscription(
+                slug="probe",
+                name="Probe",
+                provider="none-such",
+                sample_interval_seconds=300,
+                sampler=None,
+                renewer=None,
+            ),
+        ),
+    )
+
+    Pull(ctx).run()
+
+    assert hub.registered_subscriptions == [
+        (
+            RunnerSubscriptionDeclaration(slug="anthropic", name="Anthropic", provider="anthropic"),
+            RunnerSubscriptionDeclaration(slug="probe", name="Probe", provider="none-such"),
         )
     ]
 

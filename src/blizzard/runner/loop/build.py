@@ -141,6 +141,7 @@ class LoopWiring:
             ResolvedSubscription(
                 slug=declaration.slug,
                 name=declaration.name,
+                provider=declaration.provider,
                 sample_interval_seconds=declaration.sample_interval_seconds,
                 sampler=select_sampler(declaration, clock=_clock, http_client=usage_http_client),
                 renewer=select_renewer(declaration, clock=_clock, subprocess=one_shot_subprocess),

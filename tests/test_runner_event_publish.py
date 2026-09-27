@@ -786,6 +786,7 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
     resolved = ResolvedSubscription(
         slug="anthropic",
         name="Anthropic",
+        provider="anthropic",
         sample_interval_seconds=300,
         sampler=FakeSubscriptionSampler(snapshot=snapshot),
         renewer=None,
@@ -819,6 +820,7 @@ def test_external_usage_miss_publishes_fact_changed(tmp_path: Path) -> None:
     resolved = ResolvedSubscription(
         slug="openai",
         name="OpenAI",
+        provider="openai",
         sample_interval_seconds=300,
         sampler=FakeSubscriptionSampler(miss_reason=SampleMissReason.CREDENTIAL_LAPSED),
         renewer=None,

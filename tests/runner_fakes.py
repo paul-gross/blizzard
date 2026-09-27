@@ -113,7 +113,7 @@ from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekRequest, QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyResponse
-from blizzard.wire.runner import RunnerCapability
+from blizzard.wire.runner import RunnerCapability, RunnerSubscriptionDeclaration
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
 
 
@@ -383,6 +383,8 @@ class FakeHub:
         self.registered_redirect_uris: list[tuple[str, ...]] = []  # redirect_uris per register call (issue #95)
         # capabilities per register call (blizzard#433)
         self.registered_capabilities: list[tuple[RunnerCapability, ...]] = []
+        # subscriptions per register call (blizzard#636)
+        self.registered_subscriptions: list[tuple[RunnerSubscriptionDeclaration, ...]] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         # chunk ids `get_envelope` 404s for (blizzard#9); `chunk_statuses` never raises for
@@ -515,6 +517,7 @@ class FakeHub:
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
+        subscriptions: tuple[RunnerSubscriptionDeclaration, ...] = (),
     ) -> None:
         if self.down:
             raise HubClientError("fake hub is down")
@@ -523,6 +526,7 @@ class FakeHub:
         self.registered_urls.append(url)
         self.registered_redirect_uris.append(redirect_uris)
         self.registered_capabilities.append(capabilities)
+        self.registered_subscriptions.append(subscriptions)
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
         if self.down:

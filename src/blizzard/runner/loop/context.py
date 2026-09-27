@@ -118,12 +118,13 @@ class LoopConfig:
 @dataclass(frozen=True)
 class ResolvedSubscription:
     """One declared subscription with its resolved sampler and renewer bindings (blizzard#436,
-    blizzard#504) — the loop step's own view, carrying only what it reads. ``sampler`` is
-    ``None`` for a provider with no binding (declared but unsampled); ``renewer`` is ``None``
-    for Anthropic or any unknown provider (D2), keeping today's read-only behaviour exactly."""
+    blizzard#504, blizzard#636) — the loop step's own view. ``sampler``/``renewer`` are
+    ``None`` for an unbound or unknown provider (D2); ``provider`` rides along because the
+    registration push reads it, though no view reaches it yet."""
 
     slug: str
     name: str
+    provider: str
     sample_interval_seconds: int
     sampler: ISubscriptionSampler | None
     renewer: ICredentialRenewer | None

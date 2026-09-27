@@ -27,7 +27,7 @@ from blizzard.wire.route import (
     RouteClaimTerminalDenial,
     RouteTokenRekeyResponse,
 )
-from blizzard.wire.runner import RunnerCapability
+from blizzard.wire.runner import RunnerCapability, RunnerSubscriptionDeclaration
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
 
 
@@ -142,11 +142,12 @@ class IHubClient(IChunkStatusReader, Protocol):
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
+        subscriptions: tuple[RunnerSubscriptionDeclaration, ...] = (),
     ) -> None:
         """``POST /api/fleet/runners`` — register into the fleet registry. Idempotent
-        upsert, and the runner-level liveness heartbeat, called before the paused read so
-        the runner is registered by the time it reads its state back. Every optional
-        field, ``capabilities`` included, is unconditionally overwritten each call."""
+        upsert and the liveness heartbeat, called before the paused read. Every optional
+        field, ``subscriptions`` (blizzard#636) included, is unconditionally overwritten
+        each call; ``subscriptions`` is always a list, never omitted (D7)."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
