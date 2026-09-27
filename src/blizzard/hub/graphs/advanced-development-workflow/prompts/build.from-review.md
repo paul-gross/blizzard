@@ -5,9 +5,8 @@ envelope — every finding per axis, blocking and should-fix alike.
 
 Answer every blocking finding by fixing or refuting. The work returns to review for another pass.
 
-Commit repairs as their own commits, apart from any other work: the gates that re-visit — verify, then review — scope
-themselves to the delta since the tip they last judged, and a clean delta reads faster. Whether a repair needs
-re-verifying is theirs to decide, never yours.
+Do not rebase or merge the base branch while repairing: verify and review re-visit by diffing from the tip they last
+judged, and base motion folded into that delta buries the repair in it. Integration is `pre-push`'s.
 
 ## Fixing versus refuting
 

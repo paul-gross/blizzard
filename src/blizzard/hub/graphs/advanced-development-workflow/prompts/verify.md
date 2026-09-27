@@ -12,10 +12,14 @@ A published `verification-report` means this change has been here before: read t
 established stands for everything unchanged since; this visit re-verifies what moved:
 
 - Diff each repo from the recorded tip to its current tip. A report naming no tip scopes this visit to the whole change.
-- For each declared method the prior report ran, decide whether the delta touches behavior that method covers. Re-run
-  the ones it does; a method whose covered behavior the delta leaves untouched is not re-run.
-- A delta touching nothing any declared method covers — prose, comments, a docstring, a rename with no behavior behind
-  it — needs no re-verification. That is a legitimate outcome: record it and pass.
+  A rebase or a base merge since the recorded tip makes that diff mostly the base branch's motion: scope by the change's
+  own commits instead — `git range-diff` across a rebase, `git show --remerge-diff` on a merge, the `pre-push-summary`
+  or `resolve-report` naming what integration touched.
+- A method the prior report did not pass is always re-run. For each other declared method, decide whether the delta
+  touches behavior it covers — whether or not the prior visit ran it — and run the ones it does.
+- When the prior report holds no standing failure, a delta touching nothing any declared method covers — prose,
+  comments, a docstring, a rename with no behavior behind it — needs no re-verification. That is a legitimate outcome:
+  record it and pass.
 
 The scoping decision is this gate's alone. `build` never decides whether its fix needs checking, and a delta whose reach
 you cannot settle is re-verified in full. A first visit has nothing to scope: verify the whole change.
