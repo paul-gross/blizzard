@@ -125,18 +125,12 @@ markers = [
 [tool.mutmut]
 # If a fast-tier test reads a new non-Python repo file, add its path here.
 # tests/repo_files.py guards reads (including during collection); Python files
-# in src/ and tests/ are already copied by mutmut. The top-level directories
-# scaffold parents: mutmut's copy2 of individual files does not create them.
-# They are copy mechanics, not permission for tests to read arbitrary files.
+# in src/ and tests/ are already copied by mutmut. Before the first mutmut run,
+# run `uv run python -m tests.repo_files` to create destination parent dirs;
+# mutmut's native copy2 does not create parents for individual files.
 also_copy = [
     "pyproject.toml",
-    ".github",
-    "contracts",
     "openapi",
-    "packaging",
-    "scripts",
-    "docs",
-    "web",
     ".github/workflows/push.yml",
     ".github/workflows/release.yml",
     "contracts/cli",
@@ -148,6 +142,9 @@ also_copy = [
     "scripts/is-retryable-push-error.sh",
     "scripts/release-notes.sh",
     "scripts/restated-invariants.json",
+    # These test-loaded Python scripts live outside mutmut's src/ and tests/ copies.
+    "scripts/prose_spans.py",
+    "scripts/restated_invariants.py",
     "docs/deployment/transcripts.md",
     "docs/deployment/chunk-operations/takeover.md",
     "docs/deployment/work-sources.md",

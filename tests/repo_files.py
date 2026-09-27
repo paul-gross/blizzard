@@ -17,16 +17,18 @@ def copied_repo_files() -> frozenset[Path]:
     """Expand mutmut's native copy list into paths relative to this checkout."""
     root = repo_root()
     config = tomllib.loads((root / "pyproject.toml").read_text())
-    # Root-level directories are required by mutmut's copy2 parent handling;
-    # only the explicitly listed files and narrow fixture families permit reads.
-    entries = [
-        entry
-        for entry in config["tool"]["mutmut"]["also_copy"]
-        if (root / entry).is_file() or "/" in entry or entry == "openapi"
-    ]
+    entries = config["tool"]["mutmut"]["also_copy"]
     return frozenset(
         path.relative_to(root) for entry in entries for path in (root / entry).rglob("*") if path.is_file()
     ) | frozenset(Path(entry) for entry in entries if (root / entry).is_file())
+
+
+def prepare_mutant_tree(destination: Path) -> None:
+    """Create parents needed by mutmut's native also_copy before its first run."""
+    root = repo_root()
+    config = tomllib.loads((root / "pyproject.toml").read_text())
+    for entry in config["tool"]["mutmut"]["also_copy"]:
+        (destination / entry).parent.mkdir(parents=True, exist_ok=True)
 
 
 def check_repo_read(path: str | bytes | Path, copied: frozenset[Path] | None = None) -> None:
@@ -76,3 +78,7 @@ def install_repo_read_guard() -> None:
             frame = frame.f_back
 
     sys.addaudithook(audit)
+
+
+if __name__ == "__main__":
+    prepare_mutant_tree(repo_root() / "mutants")
