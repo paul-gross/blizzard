@@ -157,8 +157,8 @@ export function formatSeenAgo(lastSeenAt: string, online: boolean, now: number =
 
 /**
  * "refreshed 30s ago" / "refreshed 10m ago" / "refreshed 2h ago" — a declared
- * subscription's last-good-sample age label (blizzard#636 D9), sharing
- * {@link formatSeenAgo}'s s/m/h derivation rather than a second copy. The caller
+ * subscription's last-good-sample age label, sharing {@link formatSeenAgo}'s s/m/h
+ * derivation rather than a second copy. The caller
  * passes an already-computed `deltaMs` (e.g. from {@link ageMs}) — the freshness
  * tier and this label read the same age, so they can never disagree.
  */

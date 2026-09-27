@@ -118,9 +118,9 @@ class LoopConfig:
 @dataclass(frozen=True)
 class ResolvedSubscription:
     """One declared subscription with its resolved sampler and renewer bindings (blizzard#436,
-    blizzard#504, blizzard#636) — the loop step's own view. ``sampler``/``renewer`` are
-    ``None`` for an unbound or unknown provider (D2); ``provider`` rides along because the
-    registration push reads it, though no view reaches it yet."""
+    blizzard#504) — the loop step's own view. ``sampler``/``renewer`` are ``None`` for an
+    unbound or unknown provider; ``provider`` rides along because the registration push
+    reads it, though no view reaches it yet."""
 
     slug: str
     name: str

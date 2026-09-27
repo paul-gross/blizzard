@@ -869,9 +869,9 @@ def register_runner(
 ) -> RunnerRegistrationResponse:
     """Register a runner — runner id + workspace binding; idempotent upsert.
 
-    Runner-auth is checked at the router level (issue #86a); blizzard#636's
-    ``subscriptions`` roster rides the same authenticated write. The hub never rejects a
-    registration over its roster (D6) — it doubles as the heartbeat every tick."""
+    Runner-auth is checked at the router level (issue #86a); the ``subscriptions`` roster
+    rides the same authenticated write. The hub never rejects a registration over its
+    roster — it doubles as the heartbeat every tick."""
     fleet.assert_owns(request.runner_id)
     capabilities = tuple(
         RunnerCapability(

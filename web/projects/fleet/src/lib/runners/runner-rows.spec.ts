@@ -52,7 +52,7 @@ describe('windowElapsedPct', () => {
   });
 });
 
-describe('classifySubscriptionFreshness (blizzard#636 D8)', () => {
+describe('classifySubscriptionFreshness', () => {
   it('reads fresh at exactly 15m', () => {
     expect(classifySubscriptionFreshness(FRESHNESS_AGING_AFTER_MS)).toBe('fresh');
   });
@@ -75,7 +75,7 @@ class TestHost {
   readonly rows = injectRunnerRows().rows;
 }
 
-describe('injectRunnerRows subscription freshness fold (blizzard#636 D8)', () => {
+describe('injectRunnerRows subscription freshness fold', () => {
   const SAMPLED_AT = '2026-07-16T11:44:00.000Z';
 
   let stub: RequestClientStub;

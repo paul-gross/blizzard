@@ -174,7 +174,7 @@ describe('formatSeenAgo (bzh:utc-instants)', () => {
   });
 });
 
-describe('formatRefreshedAgo (blizzard#636 D9)', () => {
+describe('formatRefreshedAgo', () => {
   it('shares formatSeenAgo\'s s/m/h derivation', () => {
     expect(formatRefreshedAgo(5_000)).toBe('refreshed 5s ago');
     expect(formatRefreshedAgo(30 * 60_000)).toBe('refreshed 30m ago');

@@ -3636,9 +3636,8 @@ def test_pull_sends_a_deterministic_single_binding_capability_snapshot(tmp_path)
 
 @pytest.mark.unit
 def test_pull_sends_every_declared_subscription_including_a_sampler_less_one(tmp_path):  # type: ignore[no-untyped-def]
-    """blizzard#636 D7 — the roster the runner pushes carries every declaration in
-    ``ctx.subscriptions``, including one whose provider binds no sampler (declared,
-    unsampled)."""
+    """The roster the runner pushes carries every declaration in ``ctx.subscriptions``,
+    including one whose provider binds no sampler (declared, unsampled)."""
     store = _store(tmp_path)
     hub = FakeHub()
     ctx = make_context(

@@ -1149,8 +1149,8 @@ runner_registrations = Table(
     Column("redirect_uris", Text, nullable=True),
     # The runner's reported capability snapshot, JSON `list[dict]`, one per harness binding.
     Column("capabilities", Text, nullable=True),
-    # The runner's declared subscription roster (blizzard#636), JSON `list[dict]` — unlike
-    # `capabilities`, `NULL` (no roster reported) is kept distinct from `[]` (declared none).
+    # The runner's declared subscription roster, JSON `list[dict]` — unlike `capabilities`,
+    # `NULL` (no roster reported) is kept distinct from `[]` (declared none).
     Column("subscriptions", Text, nullable=True),
 )
 

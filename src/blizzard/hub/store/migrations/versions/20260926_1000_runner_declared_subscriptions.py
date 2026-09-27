@@ -1,4 +1,4 @@
-"""Declared subscription roster — one nullable, un-backfilled column (blizzard#636).
+"""Declared subscription roster — one nullable, un-backfilled column.
 
 Revision ID: 20260926_1000_hub_runner_declared_subscriptions
 Revises: 20260926_1000_operator_garden_proposals

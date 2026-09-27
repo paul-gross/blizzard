@@ -7173,7 +7173,7 @@
         "type": "object"
       },
       "RunnerSubscriptionDeclaration": {
-        "description": "One provider subscription the runner declares at registration (blizzard#636) \u2014 the\njoin key everything else keys off. ``provider`` is stored but reaches no view; nothing\nreads it there yet.",
+        "description": "One provider subscription the runner declares at registration \u2014 the join key\neverything else keys off. ``provider`` is stored but reaches no view; nothing reads\nit there yet.",
         "properties": {
           "name": {
             "title": "Name",
@@ -15252,7 +15252,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level (issue #86a); blizzard#636's\n``subscriptions`` roster rides the same authenticated write. The hub never rejects a\nregistration over its roster (D6) \u2014 it doubles as the heartbeat every tick.",
+        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level (issue #86a); the ``subscriptions`` roster\nrides the same authenticated write. The hub never rejects a registration over its\nroster \u2014 it doubles as the heartbeat every tick.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {

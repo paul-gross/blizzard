@@ -162,8 +162,8 @@ class RunnerRegistryStore:
             if capabilities
             else None
         )
-        # Unlike `capabilities`, an empty roster is kept distinct from an absent one
-        # (D1): `None` means the runner reported no roster, `[]` means it declared none.
+        # Unlike `capabilities`, an empty roster is kept distinct from an absent one:
+        # `None` means the runner reported no roster, `[]` means it declared none.
         subscriptions_json = (
             json.dumps([{"slug": d.slug, "name": d.name, "provider": d.provider} for d in subscriptions])
             if subscriptions is not None
@@ -469,7 +469,7 @@ class RunnerRegistryStore:
             for c in (json.loads(row.capabilities) if row.capabilities else [])
         )
         # `NULL` (no roster reported) stays `None`; `"[]"` (an empty declared roster)
-        # decodes to `()`, not `None` — the absent/empty distinction D1 keeps.
+        # decodes to `()`, not `None` — the absent/empty distinction is kept.
         declared_subscriptions = (
             tuple(
                 DeclaredSubscription(slug=d["slug"], name=d["name"], provider=d["provider"])

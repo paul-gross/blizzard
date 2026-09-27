@@ -146,8 +146,8 @@ class IHubClient(IChunkStatusReader, Protocol):
     ) -> None:
         """``POST /api/fleet/runners`` — register into the fleet registry. Idempotent
         upsert and the liveness heartbeat, called before the paused read. Every optional
-        field, ``subscriptions`` (blizzard#636) included, is unconditionally overwritten
-        each call; ``subscriptions`` is always a list, never omitted (D7)."""
+        field, ``subscriptions`` included, is unconditionally overwritten each call;
+        ``subscriptions`` is always a list, never omitted."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

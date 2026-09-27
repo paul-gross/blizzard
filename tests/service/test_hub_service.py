@@ -415,8 +415,8 @@ def test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_w
 
 
 def test_a_declared_roster_shows_a_never_sampled_member_over_the_wire(tmp_path: Path) -> None:
-    """blizzard#636 D4 — a declared slug is a member whatever the age of its sample,
-    including one that has never sampled or missed at all."""
+    """A declared slug is a member whatever the age of its sample, including one that
+    has never sampled or missed at all."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
         _forge(bin_dir, origins, forge_port),
@@ -444,7 +444,7 @@ def test_a_declared_roster_shows_a_never_sampled_member_over_the_wire(tmp_path: 
 
 
 def test_reregistering_a_declared_roster_without_a_slug_removes_it_over_the_wire(tmp_path: Path) -> None:
-    """blizzard#636 D4 — a slug dropped from the re-declared roster is no longer a member."""
+    """A slug dropped from the re-declared roster is no longer a member."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
         _forge(bin_dir, origins, forge_port),
@@ -462,8 +462,8 @@ def test_reregistering_a_declared_roster_without_a_slug_removes_it_over_the_wire
 
 
 def test_a_registration_without_a_roster_keeps_the_legacy_path_over_the_wire(tmp_path: Path) -> None:
-    """blizzard#636 D5 — a registration that never declares a roster reads exactly as it
-    did before this change: a never-sampled slug is not a member at all."""
+    """A registration that never declares a roster reads exactly as the rosterless
+    fallback always has: a never-sampled slug is not a member at all."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (
         _forge(bin_dir, origins, forge_port),

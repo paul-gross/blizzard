@@ -1017,9 +1017,9 @@ export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = fals
  *
  * Register a runner — runner id + workspace binding; idempotent upsert.
  *
- * Runner-auth is checked at the router level (issue #86a); blizzard#636's
- * ``subscriptions`` roster rides the same authenticated write. The hub never rejects a
- * registration over its roster (D6) — it doubles as the heartbeat every tick.
+ * Runner-auth is checked at the router level (issue #86a); the ``subscriptions`` roster
+ * rides the same authenticated write. The hub never rejects a registration over its
+ * roster — it doubles as the heartbeat every tick.
  */
 export const registerRunnerApiFleetRunnersPost = <ThrowOnError extends boolean = false>(options: Options<RegisterRunnerApiFleetRunnersPostData, ThrowOnError>): RequestResult<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError> => (options.client ?? client).post<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError>({
     url: '/api/fleet/runners',

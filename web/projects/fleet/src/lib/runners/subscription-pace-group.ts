@@ -10,7 +10,7 @@ import type { SubscriptionPace } from './runner-rows';
  * one bar list. A sample with no folded {@link SubscriptionPace.paceBars} renders no
  * fabricated zero-utilization bar.
  *
- * Render precedence per group (blizzard#636 D11), in order: a lapsed credential shows
+ * Render precedence per group, in order: a lapsed credential shows
  * its notice in place of the bars, even over a surviving last-good sample; otherwise a
  * sample shows its bars, or "no usage windows" for one with zero; otherwise the group
  * reads "no sample yet", naming the newest miss reason when there is one. The refreshed

@@ -28,9 +28,9 @@ export interface PaceBar {
   readonly elapsedPct: number;
 }
 
-/** The board's own age tiers for a declared subscription's last good sample
- * (blizzard#636 D8) — `bzh:frontend-formatters`: one classifier, read by the fold
- * below and by nothing else (not the template, the CSS, or the mobile view). */
+/** The board's own age tiers for a declared subscription's last good sample —
+ * `bzh:frontend-formatters`: one classifier, read by the fold below and by nothing
+ * else (not the template, the CSS, or the mobile view). */
 export type SubscriptionFreshness = 'fresh' | 'aging' | 'stale';
 
 /** `sampledAt` at or under this age is `'fresh'`. */
@@ -39,10 +39,9 @@ export const FRESHNESS_AGING_AFTER_MS = 15 * 60_000;
  * `'aging'`; past it, `'stale'`. */
 export const FRESHNESS_STALE_AFTER_MS = 60 * 60_000;
 
-/** Maps an exact age in ms to its display tier (blizzard#636 D8) — boundaries are
- * measured on the exact `ageMs`, never on the rounded "refreshed … ago" label, so a
- * sample at precisely 15m0s reads `'fresh'` even though its label already rounds to
- * `15m`. */
+/** Maps an exact age in ms to its display tier — boundaries are measured on the exact
+ * `ageMs`, never on the rounded "refreshed … ago" label, so a sample at precisely
+ * 15m0s reads `'fresh'` even though its label already rounds to `15m`. */
 export function classifySubscriptionFreshness(sampleAgeMs: number): SubscriptionFreshness {
   if (sampleAgeMs <= FRESHNESS_AGING_AFTER_MS) return 'fresh';
   if (sampleAgeMs <= FRESHNESS_STALE_AFTER_MS) return 'aging';
@@ -60,8 +59,8 @@ export interface SubscriptionPace {
    * (blizzard#504 D7); `null` otherwise. */
   readonly condition: string | null;
   /** The last good sample's raw instant, or `null` when the slug has never been
-   * sampled (blizzard#636) — presence, not `paceBars.length`, is what tells a
-   * zero-window sample apart from no sample at all. */
+   * sampled — presence, not `paceBars.length`, is what tells a zero-window sample
+   * apart from no sample at all. */
   readonly sampledAt: string | null;
   /** "refreshed 5m ago" against {@link sampledAt}, or `null` alongside it. */
   readonly refreshedLabel: string | null;

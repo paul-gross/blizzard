@@ -47,7 +47,7 @@ The capability-matched fleet peek sits on the additive side of that same window 
 calls it and keeps reading the unfiltered order; and a registration's `capabilities` field defaults empty like every
 other optional field on that model, so a previous-minor runner parses and registers exactly as it always has.
 
-A registration's `subscriptions` field (blizzard#636) is additive the same way: it defaults to `None`, so a
+A registration's `subscriptions` field is additive the same way: it defaults to `None`, so a
 previous-minor runner that has never heard of a declared roster simply omits it, and the hub falls back to its
 pre-existing age-gated membership rule for that runner rather than rejecting the registration or defaulting the roster
 to empty.

@@ -101,7 +101,7 @@ describe('SubscriptionPaceGroup', () => {
     expect(lapsed?.textContent?.trim()).toBe('credential lapsed — log in again on this runner');
   });
 
-  it('renders the lapsed notice in place of the bars even over a surviving last-good sample (blizzard#636 D4/D11)', async () => {
+  it('renders the lapsed notice in place of the bars even over a surviving last-good sample', async () => {
     const el = await render([
       pace({
         slug: 'anthropic-default',

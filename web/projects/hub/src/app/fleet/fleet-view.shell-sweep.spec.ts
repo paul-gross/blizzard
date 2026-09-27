@@ -9,7 +9,7 @@ import { FleetView } from './fleet-view';
  * never by a standalone component test (`design/hover-tint.shell-sweep.spec.ts`'s own
  * precedent) — read the sheet's real text server-side and inject it as a `<style>`
  * element, so the aging/stale `var(--amber)`/`var(--red)` colours this file's own
- * D8/D9 case asserts actually resolve. */
+ * tier-colour assertions actually resolve. */
 async function loadDesignTokens(): Promise<void> {
   const css = await commands.readFile('projects/fleet/src/lib/design/tokens.css');
   const styleEl = document.createElement('style');
@@ -99,8 +99,8 @@ const ROWS: readonly RunnerRow[] = [
     locally_paused: false,
     used: 0,
     claims: [],
-    // blizzard#636 D8/D9/D11 — the aging/stale tier colours and a long-miss-reason
-    // "no sample yet" row, the shapes the mobile shell sweep must also prove.
+    // The aging/stale tier colours and a long-miss-reason "no sample yet" row, the
+    // shapes the mobile shell sweep must also prove.
     subscriptionPaces: [
       {
         slug: 'aging',
@@ -200,9 +200,8 @@ describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
       expect(report.textContent?.trim()).toBe('NO USAGE WINDOWS REPORTED');
       expect(report.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
 
-      // blizzard#636 D8/D9/D11 — the aging/stale tier colours are genuinely computed
-      // and distinguishable, and a long miss reason on a never-sampled row still fits
-      // inside its card.
+      // The aging/stale tier colours are genuinely computed and distinguishable, and
+      // a long miss reason on a never-sampled row still fits inside its card.
       const agingCard = root.querySelector<HTMLElement>('[data-runner="rn_freshness"]')!;
       const aging = agingCard.querySelector<HTMLElement>(
         '[data-subscription-slug="aging"] [data-testid="subscription-pace-group-refreshed"]',

@@ -25,9 +25,9 @@ class RunnerCapability(BaseModel):
 
 
 class RunnerSubscriptionDeclaration(BaseModel):
-    """One provider subscription the runner declares at registration (blizzard#636) — the
-    join key everything else keys off. ``provider`` is stored but reaches no view; nothing
-    reads it there yet."""
+    """One provider subscription the runner declares at registration — the join key
+    everything else keys off. ``provider`` is stored but reaches no view; nothing reads
+    it there yet."""
 
     slug: str
     name: str
@@ -51,7 +51,7 @@ class RunnerRegistrationRequest(BaseModel):
     redirect_uris: list[str] = []
     #: The runner's capability snapshot — every harness/tier it can execute right now.
     capabilities: list[RunnerCapability] = []
-    #: The declared subscription roster (blizzard#636) — ``None`` for no roster, ``[]`` for none declared.
+    #: The declared subscription roster — ``None`` for no roster, ``[]`` for none declared.
     subscriptions: list[RunnerSubscriptionDeclaration] | None = None
 
 
@@ -95,9 +95,9 @@ class SubscriptionUsageView(BaseModel):
     windows: list[ExternalSubscriptionUsageWindowView]
     #: ``"credential_lapsed"`` when the newest reported miss outranks the newest sample (D7); ``None`` otherwise.
     condition: str | None = None
-    #: The newest reported miss's own reason (blizzard#636); ``None`` when there is none.
+    #: The newest reported miss's own reason; ``None`` when there is none.
     miss_reason: str | None = None
-    #: The newest reported miss's own instant (blizzard#636); ``None`` alongside ``miss_reason``.
+    #: The newest reported miss's own instant; ``None`` alongside ``miss_reason``.
     missed_at: str | None = None
 
 
@@ -120,7 +120,7 @@ class RunnerView(BaseModel):
     locally_paused_reason: str | None = None
     # The configured environment-pool size — ``None`` when none was reported, never zero.
     env_capacity: int | None = None
-    # One member per declared subscription (blizzard#636); the age-gated fallback (D4) without a roster.
+    # One member per declared subscription; the age-gated fallback without a roster.
     subscriptions: list[SubscriptionUsageView] = []
     # The runner's reported capability snapshot — every harness/tier it can execute right now.
     capabilities: list[RunnerCapability] = []

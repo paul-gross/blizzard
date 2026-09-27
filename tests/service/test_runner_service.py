@@ -439,8 +439,8 @@ def _escalation_closure_reason(config: RunnerConfig, chunk_id: str) -> str | Non
 
 
 def test_a_real_runners_registration_carries_every_declared_subscription(tmp_path: Path) -> None:
-    """blizzard#636 D7 — the mock hub's view lists every slug the real runner declared,
-    including one whose provider binds no sampler."""
+    """The mock hub's view lists every slug the real runner declared, including one whose
+    provider binds no sampler."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     fenced = _tick_env()

@@ -9,7 +9,7 @@ import { RunnerPanelView } from './runner-view';
  * never by a standalone component test (`design/hover-tint.shell-sweep.spec.ts`'s own
  * precedent) — read the sheet's real text server-side and inject it as a `<style>`
  * element, so the aging/stale `var(--amber)`/`var(--red)` colours this file's own
- * D8/D9 case asserts actually resolve. */
+ * tier-colour assertions actually resolve. */
 async function loadDesignTokens(): Promise<void> {
   const css = await commands.readFile('projects/fleet/src/lib/design/tokens.css');
   const styleEl = document.createElement('style');
@@ -198,9 +198,9 @@ const LAPSED_ROW: RunnerRow = {
   ],
 };
 
-// blizzard#636 D8/D9/D11 — a runner declaring three slugs at each age tier plus a
-// never-sampled one with a long miss reason, the shape the aging/stale colour and
-// no-sample-yet claims are falsifiable against.
+// A runner declaring three slugs at each age tier plus a never-sampled one with a long
+// miss reason, the shape the aging/stale colour and no-sample-yet claims are
+// falsifiable against.
 const FRESHNESS_ROW: RunnerRow = {
   runner_id: 'rn_freshness',
   workspace_id: 'ws_a',
@@ -443,7 +443,7 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
     }
   });
 
-  it('computes distinguishable aging/stale colours and keeps a long miss reason inside the card at ~390px (blizzard#636 D8/D9/D11)', async () => {
+  it('computes distinguishable aging/stale colours and keeps a long miss reason inside the card at ~390px', async () => {
     await loadDesignTokens();
     const fixture = await render([FRESHNESS_ROW]);
     const root = fixture.nativeElement as HTMLElement;

@@ -383,7 +383,7 @@ class FakeHub:
         self.registered_redirect_uris: list[tuple[str, ...]] = []  # redirect_uris per register call (issue #95)
         # capabilities per register call (blizzard#433)
         self.registered_capabilities: list[tuple[RunnerCapability, ...]] = []
-        # subscriptions per register call (blizzard#636)
+        # subscriptions per register call
         self.registered_subscriptions: list[tuple[RunnerSubscriptionDeclaration, ...]] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False

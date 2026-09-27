@@ -4591,9 +4591,9 @@ export type RunnerRegistrationResponse = {
 /**
  * RunnerSubscriptionDeclaration
  *
- * One provider subscription the runner declares at registration (blizzard#636) — the
- * join key everything else keys off. ``provider`` is stored but reaches no view; nothing
- * reads it there yet.
+ * One provider subscription the runner declares at registration — the join key
+ * everything else keys off. ``provider`` is stored but reaches no view; nothing reads
+ * it there yet.
  */
 export type RunnerSubscriptionDeclaration = {
     /**
