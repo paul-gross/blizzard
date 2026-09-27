@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import sys
 import tomllib
 from pathlib import Path
@@ -66,9 +67,12 @@ def install_repo_read_guard() -> None:
             if not isinstance(args[0], (str, bytes, Path)):
                 return
             mode = args[1]
-            # os.open with a relative path can be relative to a dir_fd, not the cwd.
+            # A direct os.open from a test resolves against cwd; a bare name opened
+            # by a library may instead be relative to an unreported dir_fd.
             if not isinstance(mode, str) and not Path(os.fsdecode(args[0])).is_absolute():
-                return
+                caller = Path(sys._getframe(1).f_globals.get("__file__", "")).resolve()
+                if "/" not in os.fsdecode(args[0]) and not caller.is_relative_to(tests):
+                    return
             if not isinstance(mode, str) and isinstance(args[2], int) and args[2] & os.O_ACCMODE != os.O_RDONLY:
                 return
             if isinstance(mode, str) and not any(flag in mode for flag in ("r", "+")):
@@ -86,6 +90,15 @@ def install_repo_read_guard() -> None:
                         Path(os.fsdecode(cwd)).resolve() if isinstance(cwd, (str, bytes, os.PathLike)) else Path.cwd()
                     )
                     candidates = [executable, *(argv if isinstance(argv, (list, tuple)) else ())]
+                    if (
+                        isinstance(executable, (str, bytes))
+                        and Path(os.fsdecode(executable)).name in {"sh", "bash", "dash"}
+                        and isinstance(argv, (list, tuple))
+                        and len(argv) >= 3
+                        and argv[1] == "-c"
+                        and isinstance(argv[2], (str, bytes))
+                    ):
+                        candidates.extend(shlex.split(os.fsdecode(argv[2])))
                     for candidate in candidates:
                         if isinstance(candidate, (str, bytes, Path)):
                             path = Path(os.fsdecode(candidate))

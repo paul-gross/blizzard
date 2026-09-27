@@ -1,5 +1,6 @@
 """The fast tiers' repository-file reads must be reproducible in mutants/."""
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -44,3 +45,19 @@ def test_python_script_outside_source_and_tests_needs_the_copy_inventory() -> No
     with pytest.raises(AssertionError, match="Unlisted repo-file read"):
         check_repo_read(repo_root() / script, copied_repo_files() - {script})
     assert (repo_root() / script).read_text()
+
+
+def test_relative_os_open_checks_the_copy_inventory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(repo_root())
+    with pytest.raises(AssertionError, match="Unlisted repo-file read"):
+        os.open("src/blizzard/static/README.md", os.O_RDONLY)
+    fd = os.open("openapi/hub.openapi.json", os.O_RDONLY)
+    os.close(fd)
+
+
+def test_shell_command_checks_repo_file_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(repo_root())
+    with pytest.raises(AssertionError, match="Unlisted repo-file read"):
+        subprocess.run("cat src/blizzard/static/README.md", shell=True, check=False)
+    result = subprocess.run("cat openapi/hub.openapi.json", shell=True, check=False, capture_output=True)
+    assert result.returncode == 0
