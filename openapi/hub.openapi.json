@@ -3971,6 +3971,108 @@
         "title": "GardenProposalCountsView",
         "type": "object"
       },
+      "GardenProposalCreateRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/garden-proposals` (blizzard#631) \u2014 mints an operator-authored proposal.\n`routine` is optional; when given it must name an existing routine. `findings` may\nbe empty.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "routine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "class",
+          "title",
+          "body"
+        ],
+        "title": "GardenProposalCreateRequest",
+        "type": "object"
+      },
+      "GardenProposalEditRequest": {
+        "additionalProperties": false,
+        "description": "`PATCH /api/garden-proposals/{proposal_id}` (blizzard#631 D2) \u2014 all-or-nothing\nover the given fields; a field absent from the request is left unchanged. Carries no\n`routine`: a proposal's routine is fixed at create.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "GardenProposalEditRequest",
+        "type": "object"
+      },
+      "GardenProposalFindingsRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/garden-proposals/{proposal_id}/attach` and `.../detach` (blizzard#631)\n\u2014 the finding ids to link or unlink.",
+        "properties": {
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "findings"
+        ],
+        "title": "GardenProposalFindingsRequest",
+        "type": "object"
+      },
       "GardenProposalItemOutcome": {
         "description": "Whether an accepted proposal minted a work item \u2014 recorded positively rather than\ninferred from an absent link, so a declined mint reads as a decision, not a gap.",
         "enum": [
@@ -15444,6 +15546,46 @@
         "tags": [
           "garden-proposals"
         ]
+      },
+      "post": {
+        "description": "Mint an operator-authored proposal (blizzard#631), naming `routine` when the\ncaller names one, else none. 422 for a blank title/class/body, an unknown routine,\nor an unknown, non-live, or duplicate finding id \u2014 the whole call is refused, nothing\nis linked.",
+        "operationId": "create_garden_proposal_api_garden_proposals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Garden Proposal",
+        "tags": [
+          "garden-proposals"
+        ]
       }
     },
     "/api/garden-proposals/{proposal_id}": {
@@ -15484,6 +15626,57 @@
           }
         },
         "summary": "Get Garden Proposal",
+        "tags": [
+          "garden-proposals"
+        ]
+      },
+      "patch": {
+        "description": "Replace the given fields of PROPOSAL_ID in place, all-or-nothing (blizzard#631\nD2) \u2014 works on either origin while open. 404 unknown proposal, 409 already closed,\n422 a blank title/class/body or an edit naming no field.",
+        "operationId": "edit_garden_proposal_api_garden_proposals__proposal_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Garden Proposal",
         "tags": [
           "garden-proposals"
         ]
@@ -15537,6 +15730,112 @@
           }
         },
         "summary": "Accept Garden Proposal",
+        "tags": [
+          "garden-proposals"
+        ]
+      }
+    },
+    "/api/garden-proposals/{proposal_id}/attach": {
+      "post": {
+        "description": "Link the given finding ids to PROPOSAL_ID (blizzard#631) \u2014 works on either origin\nwhile open. 404 unknown proposal, 409 already closed, 422 an unknown, non-live, or\nduplicate finding id, or one already linked to this proposal \u2014 the whole call is\nrefused, nothing is linked.",
+        "operationId": "attach_garden_proposal_findings_api_garden_proposals__proposal_id__attach_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalFindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Garden Proposal Findings",
+        "tags": [
+          "garden-proposals"
+        ]
+      }
+    },
+    "/api/garden-proposals/{proposal_id}/detach": {
+      "post": {
+        "description": "Unlink the given finding ids from PROPOSAL_ID (blizzard#631) \u2014 works on either\norigin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or\none not linked to this proposal.",
+        "operationId": "detach_garden_proposal_findings_api_garden_proposals__proposal_id__detach_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalFindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detach Garden Proposal Findings",
         "tags": [
           "garden-proposals"
         ]

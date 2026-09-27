@@ -2091,6 +2091,265 @@
           "path": "hub garden-proposal accept",
           "short_help": "Accept PROPOSAL_ID."
         },
+        "attach": {
+          "help": "Link FINDING_IDS to PROPOSAL_ID. Works on either origin while open; refused with\n409 once it carries a closure.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "proposal_id",
+              "opts": [
+                "proposal_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "finding_ids",
+              "opts": [
+                "finding_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub garden-proposal attach",
+          "short_help": "Link FINDING_IDS to PROPOSAL_ID."
+        },
+        "create": {
+          "help": "Author a fresh operator garden proposal, naming zero or more findings.\n\n--body-file may be '-' to read the body from stdin. Carries no scope: a linked\nfinding keeps its own.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "title",
+              "opts": [
+                "--title"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "class_",
+              "opts": [
+                "--class"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "body_file",
+              "opts": [
+                "--body-file"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "routine",
+              "opts": [
+                "--routine"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "findings",
+              "opts": [
+                "--finding"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub garden-proposal create",
+          "short_help": "Author a fresh operator garden proposal, naming zero or more findings."
+        },
+        "detach": {
+          "help": "Unlink FINDING_IDS from PROPOSAL_ID. Works on either origin while open; refused\nwith 409 once it carries a closure.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "proposal_id",
+              "opts": [
+                "proposal_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "finding_ids",
+              "opts": [
+                "finding_ids"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub garden-proposal detach",
+          "short_help": "Unlink FINDING_IDS from PROPOSAL_ID."
+        },
+        "edit": {
+          "help": "Edit PROPOSAL_ID in place \u2014 only the given fields change. Works on either origin\nwhile open; refused with 409 once it carries a closure.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "proposal_id",
+              "opts": [
+                "proposal_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "title",
+              "opts": [
+                "--title"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "class_",
+              "opts": [
+                "--class"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "body_file",
+              "opts": [
+                "--body-file"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub garden-proposal edit",
+          "short_help": "Edit PROPOSAL_ID in place \u2014 only the given fields change."
+        },
         "list": {
           "help": "List every garden proposal, newest first.",
           "params": [

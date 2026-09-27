@@ -1,5 +1,6 @@
 """``blizzard hub garden-proposal`` — blizzard#390: read verbs over garden proposals,
-plus blizzard#395's two closing verbs, ``pass`` and ``accept``."""
+blizzard#395's two closing verbs (``pass``/``accept``), and blizzard#631's four
+operator-authoring verbs (``create``/``edit``/``attach``/``detach``)."""
 
 from __future__ import annotations
 
@@ -64,9 +65,7 @@ def garden_proposal_group() -> None:
 
 
 @garden_proposal_group.command("list", cls=FleetCommand)
-@click.option(
-    "--origin", type=click.Choice(["routine-run", "operator"]), default=None, help="Narrow to one origin."
-)
+@click.option("--origin", type=click.Choice(["routine-run", "operator"]), default=None, help="Narrow to one origin.")
 def garden_proposal_list(cli: CliContext, origin: str | None) -> None:
     """List every garden proposal, newest first."""
     params = {"origin": origin} if origin is not None else None
@@ -148,3 +147,84 @@ def garden_proposal_accept(
     )
     body = resp.json()
     cli.show(body, GardenProposalDetail(body))
+
+
+@garden_proposal_group.command("create", cls=FleetCommand)
+@click.option("--title", required=True, help="The proposal's title.")
+@click.option("--class", "class_", required=True, help="The deployment's own taxonomy class.")
+@click.option("--body-file", "body_file", required=True, help="Path to the proposal's body, or '-' for stdin.")
+@click.option("--routine", default=None, help="An existing routine to name (optional).")
+@click.option("--finding", "findings", multiple=True, help="A finding id to link (repeatable).")
+def garden_proposal_create(
+    cli: CliContext, title: str, class_: str, body_file: str, routine: str | None, findings: tuple[str, ...]
+) -> None:
+    """Author a fresh operator garden proposal, naming zero or more findings.
+
+    --body-file may be '-' to read the body from stdin. Carries no scope: a linked
+    finding keeps its own."""
+    body = read_body_file(body_file)
+    json_body: dict[str, object] = {"title": title, "class": class_, "body": body, "findings": list(findings)}
+    if routine is not None:
+        json_body["routine"] = routine
+    resp = cli.post("/api/garden-proposals", "POST /garden-proposals", json_body=json_body)
+    body_json = resp.json()
+    cli.show(body_json, GardenProposalDetail(body_json))
+
+
+@garden_proposal_group.command("edit", cls=FleetCommand)
+@click.argument("proposal_id")
+@click.option("--title", default=None, help="Replace the title.")
+@click.option("--class", "class_", default=None, help="Replace the class.")
+@click.option("--body-file", "body_file", default=None, help="Replace the body from a path, or '-' for stdin.")
+def garden_proposal_edit(
+    cli: CliContext, proposal_id: str, title: str | None, class_: str | None, body_file: str | None
+) -> None:
+    """Edit PROPOSAL_ID in place — only the given fields change. Works on either origin
+    while open; refused with 409 once it carries a closure."""
+    json_body: dict[str, object] = {}
+    if title is not None:
+        json_body["title"] = title
+    if class_ is not None:
+        json_body["class"] = class_
+    if body_file is not None:
+        json_body["body"] = read_body_file(body_file)
+    resp = cli.patch(
+        f"/api/garden-proposals/{proposal_id}",
+        "PATCH /garden-proposals/{id}",
+        json_body=json_body,
+        on_status={404: f"unknown garden proposal {proposal_id}", 409: _already_closed_fallback(proposal_id)},
+    )
+    body_json = resp.json()
+    cli.show(body_json, GardenProposalDetail(body_json))
+
+
+@garden_proposal_group.command("attach", cls=FleetCommand)
+@click.argument("proposal_id")
+@click.argument("finding_ids", nargs=-1, required=True)
+def garden_proposal_attach(cli: CliContext, proposal_id: str, finding_ids: tuple[str, ...]) -> None:
+    """Link FINDING_IDS to PROPOSAL_ID. Works on either origin while open; refused with
+    409 once it carries a closure."""
+    resp = cli.post(
+        f"/api/garden-proposals/{proposal_id}/attach",
+        "POST /garden-proposals/{id}/attach",
+        json_body={"findings": list(finding_ids)},
+        on_status={404: f"unknown garden proposal {proposal_id}", 409: _already_closed_fallback(proposal_id)},
+    )
+    body_json = resp.json()
+    cli.show(body_json, GardenProposalDetail(body_json))
+
+
+@garden_proposal_group.command("detach", cls=FleetCommand)
+@click.argument("proposal_id")
+@click.argument("finding_ids", nargs=-1, required=True)
+def garden_proposal_detach(cli: CliContext, proposal_id: str, finding_ids: tuple[str, ...]) -> None:
+    """Unlink FINDING_IDS from PROPOSAL_ID. Works on either origin while open; refused
+    with 409 once it carries a closure."""
+    resp = cli.post(
+        f"/api/garden-proposals/{proposal_id}/detach",
+        "POST /garden-proposals/{id}/detach",
+        json_body={"findings": list(finding_ids)},
+        on_status={404: f"unknown garden proposal {proposal_id}", 409: _already_closed_fallback(proposal_id)},
+    )
+    body_json = resp.json()
+    cli.show(body_json, GardenProposalDetail(body_json))

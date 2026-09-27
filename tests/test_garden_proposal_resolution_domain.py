@@ -121,11 +121,18 @@ class _FakeProposals:
     def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
         raise NotImplementedError
 
-    def list_page(self, *, cursor: str | None = None, limit: int) -> GardenProposalPage:
+    def list_page(
+        self, *, cursor: str | None = None, limit: int, origin: GardenProposalOrigin | None = None
+    ) -> GardenProposalPage:
         raise NotImplementedError
 
     def counts_by_class(
-        self, *, since: datetime, until: datetime, routine_name: str | None = None
+        self,
+        *,
+        since: datetime,
+        until: datetime,
+        routine_name: str | None = None,
+        origin: GardenProposalOrigin | None = None,
     ) -> list[GardenProposalCounts]:
         raise NotImplementedError
 

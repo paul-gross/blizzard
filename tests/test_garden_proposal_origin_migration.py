@@ -87,15 +87,14 @@ def test_upgrade_refuses_a_routine_run_row_with_no_routine_name(tmp_path: Path) 
     runner.upgrade("head")
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
 
-    with pytest.raises(IntegrityError):
-        with engine.begin() as conn:
-            conn.execute(
-                sa.text(
-                    "INSERT INTO garden_proposals (proposal_id, routine_name, class, title, body, created_at,"
-                    " origin, created_by) VALUES ('gprop_c', NULL, 'idea', 't', 'b', :at, 'routine-run', NULL)"
-                ),
-                {"at": _T0},
-            )
+    with pytest.raises(IntegrityError), engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                "INSERT INTO garden_proposals (proposal_id, routine_name, class, title, body, created_at,"
+                " origin, created_by) VALUES ('gprop_c', NULL, 'idea', 't', 'b', :at, 'routine-run', NULL)"
+            ),
+            {"at": _T0},
+        )
 
 
 def test_upgrade_refuses_an_operator_row_with_no_created_by(tmp_path: Path) -> None:
@@ -103,15 +102,14 @@ def test_upgrade_refuses_an_operator_row_with_no_created_by(tmp_path: Path) -> N
     runner.upgrade("head")
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
 
-    with pytest.raises(IntegrityError):
-        with engine.begin() as conn:
-            conn.execute(
-                sa.text(
-                    "INSERT INTO garden_proposals (proposal_id, routine_name, class, title, body, created_at,"
-                    " origin, created_by) VALUES ('gprop_d', NULL, 'idea', 't', 'b', :at, 'operator', NULL)"
-                ),
-                {"at": _T0},
-            )
+    with pytest.raises(IntegrityError), engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                "INSERT INTO garden_proposals (proposal_id, routine_name, class, title, body, created_at,"
+                " origin, created_by) VALUES ('gprop_d', NULL, 'idea', 't', 'b', :at, 'operator', NULL)"
+            ),
+            {"at": _T0},
+        )
 
 
 def test_downgrade_restores_the_old_shape_and_coalesces_a_null_routine_name(tmp_path: Path) -> None:

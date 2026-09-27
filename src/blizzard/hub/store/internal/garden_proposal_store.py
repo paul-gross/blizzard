@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, func, insert, or_, select
+from sqlalchemy import Select, and_, delete, func, insert, or_, select, update
 
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.garden_proposal_closure import (
@@ -112,6 +112,57 @@ class GardenProposalStore:
             created_at=at,
             findings=list(findings),
         )
+
+    def _open_check(self, conn: Any, proposal_id: str) -> bool:
+        """Whether `proposal_id` already carries a closure — called on the same `conn` a
+        caller's own write uses, so the check and the mutation share one transaction
+        (blizzard#631 D3): a closure racing in between either lands first (seen here) or
+        after (blocked by the writer's own isolation), never in the read-then-write gap."""
+        already = conn.execute(
+            select(garden_proposal_closures.c.id).where(garden_proposal_closures.c.proposal_id == proposal_id)
+        ).first()
+        return already is not None
+
+    def edit(self, proposal_id: str, *, title: str, class_: str, body: str) -> GardenProposal | None:
+        with self._store.write("edit") as conn:
+            if self._open_check(conn, proposal_id):
+                return None
+            conn.execute(
+                update(garden_proposals)
+                .where(garden_proposals.c.proposal_id == proposal_id)
+                .values(title=title, class_=class_, body=body)
+            )
+            row = conn.execute(select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)).one()
+            findings = self._findings(conn, proposal_id)
+        return self._of(row, findings)
+
+    def attach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
+        with self._store.write("attach") as conn:
+            if self._open_check(conn, proposal_id):
+                return None
+            if finding_ids:
+                conn.execute(
+                    insert(garden_proposal_findings),
+                    [{"proposal_id": proposal_id, "finding_id": finding_id} for finding_id in finding_ids],
+                )
+            row = conn.execute(select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)).one()
+            findings = self._findings(conn, proposal_id)
+        return self._of(row, findings)
+
+    def detach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
+        with self._store.write("detach") as conn:
+            if self._open_check(conn, proposal_id):
+                return None
+            if finding_ids:
+                conn.execute(
+                    delete(garden_proposal_findings).where(
+                        garden_proposal_findings.c.proposal_id == proposal_id,
+                        garden_proposal_findings.c.finding_id.in_(finding_ids),
+                    )
+                )
+            row = conn.execute(select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)).one()
+            findings = self._findings(conn, proposal_id)
+        return self._of(row, findings)
 
     def get(self, proposal_id: str) -> GardenProposal | None:
         with self._store.read("get") as conn:

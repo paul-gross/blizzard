@@ -13,19 +13,62 @@ from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import GARDEN_PROPOSAL_PREFIX, Id
+from blizzard.hub.domain.edit import UNSET, UnsetType
 from blizzard.hub.domain.findings import Finding
 
 if TYPE_CHECKING:
     # Deferred to break the cycle: `garden_proposal_closure.py` itself imports
     # `GardenProposal` from this module.
     from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure, IReadGardenProposalClosureRepository
+    from blizzard.hub.domain.routines import Routine
 
 
 class DuplicateProposalFindingError(ValueError):
-    """The same finding named more than once in one proposal's `findings`."""
+    """The same finding named more than once in one proposal's `findings`, or in one
+    `attach`/`detach` call (blizzard#631 D5)."""
 
     def __init__(self, finding_id: str) -> None:
         super().__init__(f"finding {finding_id!r} named more than once")
+
+
+class GardenProposalFindingNotLiveError(ValueError):
+    """`create`/`attach` named a finding that is not live (blizzard#631 D5) — the whole
+    call is refused, nothing links."""
+
+    def __init__(self, finding_id: str) -> None:
+        super().__init__(f"finding {finding_id!r} is not live")
+        self.finding_id = finding_id
+
+
+class GardenProposalFindingAlreadyLinkedError(ValueError):
+    """`attach` named a finding already linked to *this* proposal (blizzard#631 D5) —
+    re-linking a finding already linked to *another* proposal, open or closed, is
+    allowed."""
+
+    def __init__(self, proposal_id: str, finding_id: str) -> None:
+        super().__init__(f"finding {finding_id!r} is already linked to proposal {proposal_id}")
+        self.proposal_id = proposal_id
+        self.finding_id = finding_id
+
+
+class GardenProposalFindingNotLinkedError(ValueError):
+    """`detach` named a finding not linked to this proposal (blizzard#631 D5)."""
+
+    def __init__(self, proposal_id: str, finding_id: str) -> None:
+        super().__init__(f"finding {finding_id!r} is not linked to proposal {proposal_id}")
+        self.proposal_id = proposal_id
+        self.finding_id = finding_id
+
+
+class GardenProposalNotOpen(Exception):
+    """An `edit`, `attach`, or `detach` targeted a proposal that already carries a
+    closure — closure is terminal (blizzard#631 D3). Mirrors
+    `garden_proposal_closure.GardenProposalAlreadyClosed` in spirit, but is raised from
+    here without importing it, which would cycle back through `GardenProposal`."""
+
+    def __init__(self, proposal_id: str) -> None:
+        super().__init__(f"garden proposal {proposal_id} already carries a closure")
+        self.proposal_id = proposal_id
 
 
 class GardenProposalOrigin(StrEnum):
@@ -143,12 +186,44 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         matching every caller predating operator authorship (blizzard#631)."""
         ...
 
+    def edit(self, proposal_id: str, *, title: str, class_: str, body: str) -> GardenProposal | None:
+        """Replace `title`/`class_`/`body` in place (blizzard#631 D2, last-write-wins, no
+        edit-history table); `None` when `proposal_id` already carries a closure, checked
+        in the same write transaction as the update (D3)."""
+        ...
+
+    def attach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
+        """Link `finding_ids` to `proposal_id` (blizzard#631); `None` when already closed,
+        checked with the insert in one transaction (D3). `finding_ids` may be empty."""
+        ...
+
+    def detach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
+        """Unlink `finding_ids` from `proposal_id` (blizzard#631); `None` when already
+        closed, checked with the delete in one transaction (D3). `finding_ids` may be
+        empty."""
+        ...
+
+
+@dataclass(frozen=True)
+class GardenProposalEdit:
+    """The fields a single all-or-nothing garden-proposal edit request supplies
+    (blizzard#631 D2), the same sentinel shape
+    :class:`~blizzard.hub.domain.work_items.WorkItemEdit` carries: a field absent from
+    `edit` is left unchanged, distinct from an explicit clear (title/class_/body never
+    accept `None` — they are never cleared, only replaced)."""
+
+    title: str | UnsetType = field(default=UNSET)
+    class_: str | UnsetType = field(default=UNSET)
+    body: str | UnsetType = field(default=UNSET)
+
 
 class GardenProposalAuthoring:
-    """Create a garden proposal from loaded findings (`bzh:domain-takes-objects`),
-    rejecting only a duplicate-naming `findings` list (D7, blizzard#390) — an empty
-    one is accepted. Mints a `routine-run`-origin proposal; delivery's own materialization
-    writes its own `routine-run` rows directly and never calls this (blizzard#631 D1)."""
+    """Create, edit, attach to, or detach from a garden proposal, from already-loaded
+    objects (`bzh:domain-takes-objects`) — the domain seam that mints and mutates
+    proposals outside delivery. `create` mints a `routine-run`-origin proposal;
+    delivery's own materialization writes its own `routine-run` rows directly and never
+    calls this (blizzard#631 D1). `create_operator`/`edit`/`attach`/`detach` are the
+    operator-facing verbs (blizzard#631)."""
 
     def __init__(self, *, proposals: IWriteGardenProposalRepository, clock: IClock) -> None:
         self._proposals = proposals
@@ -157,12 +232,7 @@ class GardenProposalAuthoring:
     def create(
         self, *, routine_name: str, class_: str, title: str, body: str, findings: Sequence[Finding]
     ) -> GardenProposal:
-        finding_ids = [f.finding_id for f in findings]
-        seen: set[str] = set()
-        for finding_id in finding_ids:
-            if finding_id in seen:
-                raise DuplicateProposalFindingError(finding_id)
-            seen.add(finding_id)
+        finding_ids = self._checked_finding_ids(findings, require_live=False)
         return self._proposals.create(
             Id.mint(GARDEN_PROPOSAL_PREFIX, self._clock).value,
             origin=GardenProposalOrigin.ROUTINE_RUN,
@@ -174,6 +244,90 @@ class GardenProposalAuthoring:
             findings=finding_ids,
             at=self._clock.now(),
         )
+
+    def create_operator(
+        self,
+        *,
+        created_by: str,
+        routine: Routine | None,
+        class_: str,
+        title: str,
+        body: str,
+        findings: Sequence[Finding],
+    ) -> GardenProposal:
+        """Mint an operator-authored proposal (blizzard#631 D1), naming `routine.name`
+        when the caller resolved one, else none — `routine`'s own existence is the
+        caller's own resolution, not checked here. Every named finding must be live and
+        named at most once (D5); the whole call is refused otherwise, nothing is
+        linked."""
+        finding_ids = self._checked_finding_ids(findings, require_live=True)
+        return self._proposals.create(
+            Id.mint(GARDEN_PROPOSAL_PREFIX, self._clock).value,
+            origin=GardenProposalOrigin.OPERATOR,
+            routine_name=routine.name if routine is not None else None,
+            created_by=created_by,
+            class_=class_,
+            title=title,
+            body=body,
+            findings=finding_ids,
+            at=self._clock.now(),
+        )
+
+    def edit(self, proposal: GardenProposal, edit: GardenProposalEdit) -> GardenProposal:
+        """Apply `edit`'s given fields to `proposal` in place (D2). Raises
+        :class:`GardenProposalNotOpen` when `proposal` already carries a closure,
+        re-checked by the store's own closed-then-write guard against a close racing in
+        between (D3) — works on either origin while open."""
+        title = proposal.title if edit.title is UNSET else edit.title
+        class_ = proposal.class_ if edit.class_ is UNSET else edit.class_
+        body = proposal.body if edit.body is UNSET else edit.body
+        updated = self._proposals.edit(proposal.proposal_id, title=title, class_=class_, body=body)
+        if updated is None:
+            raise GardenProposalNotOpen(proposal.proposal_id)
+        return updated
+
+    def attach(self, proposal: GardenProposal, findings: Sequence[Finding]) -> GardenProposal:
+        """Link `findings` to `proposal` (blizzard#631). Every named finding must be
+        live, named at most once, and not already linked to `proposal` (D5) — re-linking
+        a finding already linked to *another* proposal is allowed. Raises
+        :class:`GardenProposalNotOpen` when `proposal` already carries a closure (D3)."""
+        finding_ids = self._checked_finding_ids(findings, require_live=True)
+        for finding_id in finding_ids:
+            if finding_id in proposal.findings:
+                raise GardenProposalFindingAlreadyLinkedError(proposal.proposal_id, finding_id)
+        updated = self._proposals.attach(proposal.proposal_id, finding_ids)
+        if updated is None:
+            raise GardenProposalNotOpen(proposal.proposal_id)
+        return updated
+
+    def detach(self, proposal: GardenProposal, finding_ids: Sequence[str]) -> GardenProposal:
+        """Unlink `finding_ids` from `proposal` (blizzard#631). Every named id must be
+        named at most once and currently linked to `proposal` (D5); liveness is not
+        required. Raises :class:`GardenProposalNotOpen` when `proposal` already carries a
+        closure (D3)."""
+        seen: set[str] = set()
+        for finding_id in finding_ids:
+            if finding_id in seen:
+                raise DuplicateProposalFindingError(finding_id)
+            seen.add(finding_id)
+            if finding_id not in proposal.findings:
+                raise GardenProposalFindingNotLinkedError(proposal.proposal_id, finding_id)
+        updated = self._proposals.detach(proposal.proposal_id, list(finding_ids))
+        if updated is None:
+            raise GardenProposalNotOpen(proposal.proposal_id)
+        return updated
+
+    def _checked_finding_ids(self, findings: Sequence[Finding], *, require_live: bool) -> list[str]:
+        finding_ids: list[str] = []
+        seen: set[str] = set()
+        for finding in findings:
+            if finding.finding_id in seen:
+                raise DuplicateProposalFindingError(finding.finding_id)
+            seen.add(finding.finding_id)
+            if require_live and not finding.live:
+                raise GardenProposalFindingNotLiveError(finding.finding_id)
+            finding_ids.append(finding.finding_id)
+        return finding_ids
 
 
 class RoutineProposalState(StrEnum):
