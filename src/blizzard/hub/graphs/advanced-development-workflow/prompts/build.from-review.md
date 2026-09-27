@@ -5,6 +5,9 @@ envelope — every finding per axis, blocking and should-fix alike.
 
 Answer every blocking finding by fixing or refuting. The work returns to review for another pass.
 
+Do not rebase or merge the base branch while repairing: verify and review re-visit by diffing from the tip they last
+judged, and base motion folded into that delta buries the repair in it. Integration is `pre-push`'s.
+
 ## Fixing versus refuting
 
 Refute a finding when it is factually wrong, rests on a false premise, or demands work the change's scale does not
