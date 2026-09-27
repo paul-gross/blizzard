@@ -5495,10 +5495,10 @@
    "total": 0
   },
   "conftest.py": {
-   "comments": 6,
+   "comments": 7,
    "docstrings": 24,
    "over_cap": 2,
-   "total": 120
+   "total": 124
   },
   "crash/__init__.py": {
    "comments": 0,
@@ -5751,6 +5751,12 @@
    "docstrings": 25,
    "over_cap": 1,
    "total": 40
+  },
+  "repo_files.py": {
+   "comments": 6,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 146
   },
   "runner_event_census.py": {
    "comments": 20,
@@ -6014,13 +6020,13 @@
    "comments": 4,
    "docstrings": 20,
    "over_cap": 1,
-   "total": 90
+   "total": 89
   },
   "test_analytics_dialect_corpus_guard.py": {
    "comments": 1,
    "docstrings": 12,
    "over_cap": 0,
-   "total": 80
+   "total": 81
   },
   "test_analytics_durations_api.py": {
    "comments": 24,
@@ -6188,7 +6194,7 @@
    "comments": 0,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 62
+   "total": 64
   },
   "test_checks_gate_agreement.py": {
    "comments": 5,
@@ -6440,7 +6446,7 @@
    "comments": 9,
    "docstrings": 5,
    "over_cap": 1,
-   "total": 137
+   "total": 138
   },
   "test_cli_context.py": {
    "comments": 8,
@@ -6476,7 +6482,7 @@
    "comments": 12,
    "docstrings": 6,
    "over_cap": 3,
-   "total": 98
+   "total": 100
   },
   "test_close_intents_enqueue.py": {
    "comments": 2,
@@ -6524,7 +6530,7 @@
    "comments": 0,
    "docstrings": 11,
    "over_cap": 0,
-   "total": 146
+   "total": 147
   },
   "test_config.py": {
    "comments": 73,
@@ -6536,13 +6542,13 @@
    "comments": 3,
    "docstrings": 5,
    "over_cap": 1,
-   "total": 57
+   "total": 58
   },
   "test_container_image.py": {
    "comments": 0,
    "docstrings": 11,
    "over_cap": 0,
-   "total": 111
+   "total": 112
   },
   "test_crash_registry.py": {
    "comments": 5,
@@ -7394,7 +7400,7 @@
    "comments": 7,
    "docstrings": 5,
    "over_cap": 0,
-   "total": 62
+   "total": 63
   },
   "test_in_flight_elicitations_migration.py": {
    "comments": 1,
@@ -7454,7 +7460,7 @@
    "comments": 0,
    "docstrings": 0,
    "over_cap": 0,
-   "total": 46
+   "total": 47
   },
   "test_land_common.py": {
    "comments": 18,
@@ -7472,7 +7478,7 @@
    "comments": 14,
    "docstrings": 53,
    "over_cap": 6,
-   "total": 520
+   "total": 522
   },
   "test_lease_auth.py": {
    "comments": 0,
@@ -7534,6 +7540,12 @@
    "over_cap": 1,
    "total": 503
   },
+  "test_mutation_scope.py": {
+   "comments": 10,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 337
+  },
   "test_no_duplicate_test_bodies.py": {
    "comments": 2,
    "docstrings": 10,
@@ -7544,7 +7556,7 @@
    "comments": 0,
    "docstrings": 20,
    "over_cap": 2,
-   "total": 101
+   "total": 103
   },
   "test_openapi_export.py": {
    "comments": 0,
@@ -7556,7 +7568,7 @@
    "comments": 0,
    "docstrings": 10,
    "over_cap": 0,
-   "total": 97
+   "total": 99
   },
   "test_outbound_drain.py": {
    "comments": 13,
@@ -7580,7 +7592,7 @@
    "comments": 18,
    "docstrings": 18,
    "over_cap": 1,
-   "total": 158
+   "total": 157
   },
   "test_packaged_prompt_session_claims.py": {
    "comments": 0,
@@ -7766,7 +7778,7 @@
    "comments": 0,
    "docstrings": 18,
    "over_cap": 0,
-   "total": 75
+   "total": 76
   },
   "test_registry_external_usage.py": {
    "comments": 3,
@@ -7778,13 +7790,19 @@
    "comments": 0,
    "docstrings": 5,
    "over_cap": 0,
-   "total": 100
+   "total": 101
   },
   "test_release_workflow.py": {
    "comments": 2,
    "docstrings": 20,
    "over_cap": 0,
    "total": 115
+  },
+  "test_repo_files.py": {
+   "comments": 1,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 98
   },
   "test_repo_ref.py": {
    "comments": 7,
@@ -7796,7 +7814,7 @@
    "comments": 45,
    "docstrings": 13,
    "over_cap": 1,
-   "total": 636
+   "total": 638
   },
   "test_resume_judgement_takeover_harness_isolation.py": {
    "comments": 38,
@@ -8216,31 +8234,31 @@
    "comments": 4,
    "docstrings": 14,
    "over_cap": 3,
-   "total": 87
+   "total": 88
   },
   "test_runner_harness_offline_compatibility.py": {
    "comments": 7,
    "docstrings": 22,
    "over_cap": 2,
-   "total": 174
+   "total": 175
   },
   "test_runner_harness_opencode_adapter.py": {
    "comments": 70,
    "docstrings": 48,
    "over_cap": 0,
-   "total": 1526
+   "total": 1520
   },
   "test_runner_harness_opencode_compatibility.py": {
    "comments": 12,
    "docstrings": 6,
    "over_cap": 1,
-   "total": 1151
+   "total": 1152
   },
   "test_runner_harness_opencode_cursor.py": {
    "comments": 7,
    "docstrings": 20,
    "over_cap": 0,
-   "total": 154
+   "total": 147
   },
   "test_runner_harness_opencode_diagnostic.py": {
    "comments": 2,
@@ -8672,7 +8690,7 @@
    "comments": 4,
    "docstrings": 9,
    "over_cap": 1,
-   "total": 59
+   "total": 61
   },
   "test_selftest_results_migration.py": {
    "comments": 1,
@@ -8696,13 +8714,13 @@
    "comments": 11,
    "docstrings": 17,
    "over_cap": 1,
-   "total": 135
+   "total": 137
   },
   "test_sse_contract.py": {
    "comments": 2,
    "docstrings": 19,
    "over_cap": 1,
-   "total": 157
+   "total": 158
   },
   "test_sse_lifecycle.py": {
    "comments": 1,
@@ -8786,13 +8804,13 @@
    "comments": 6,
    "docstrings": 13,
    "over_cap": 0,
-   "total": 130
+   "total": 132
   },
   "test_tick_subprocess_timeouts.py": {
    "comments": 1,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 50
+   "total": 52
   },
   "test_transcript_backfill.py": {
    "comments": 25,
@@ -8942,13 +8960,13 @@
    "comments": 0,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 30
+   "total": 31
   },
   "test_wire_timestamps.py": {
    "comments": 1,
    "docstrings": 7,
    "over_cap": 0,
-   "total": 58
+   "total": 59
   },
   "test_work_closure.py": {
    "comments": 30,

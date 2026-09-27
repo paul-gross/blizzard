@@ -75,6 +75,10 @@ run = "./scripts/ci-gate.sh"
 description = "The one build entrypoint: build both Angular apps into the embed dir, build the wheel, and verify it embeds the assets and installs+runs node-free"
 run = "./scripts/build-wheel.sh"
 
+[tasks.mutation]
+description = "blizzard:mutation — scoped, resumable mutation testing (mutmut) over src/blizzard: mutates only the scope's source, runs only the fast-tier tests import analysis selects for it, and writes mutants/report.json. `mise run mutation <scope> [--budget SECONDS]`; scopes: hub-daemon, runner-daemon, shared-spine, cli-surface. Runs in its own project environment, never .venv."
+run = "UV_PROJECT_ENVIRONMENT=.mutation-env uv run --group mutation python scripts/mutation.py"
+
 [tasks.image-smoke]
 description = "blizzard:image-smoke — build the hub container image and boot it on an empty data volume: non-root uid, git + psycopg present, store at head before serving, GET /api/health and /api/ready live. Local-only, needs a reachable docker daemon."
 run = "./scripts/image-smoke.sh"

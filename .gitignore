@@ -5,9 +5,13 @@ __pycache__/
 dist/
 build/
 .venv/
+.mutation-env/
 *.whl
 .pytest_cache/
 .ruff_cache/
+
+# mise run mutation's working tree and report (blizzard:mutation).
+mutants/
 
 # Runtime data directories a `blizzard {hub,runner} init` scaffolds.
 data/
