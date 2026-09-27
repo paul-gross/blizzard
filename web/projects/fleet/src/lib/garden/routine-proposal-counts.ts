@@ -3,14 +3,16 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
 
-/** One class's garden-proposal counts over the panel's window (blizzard#547) —
- * `GardenProposalCountsRowView`'s own five counts, already scoped to the one
- * selected routine by the query's own `routine` filter, so no `routineName` rides
- * the row (`RoutinePanelVm.lastSwept`'s own reason for not repeating what every row
- * already shares). `proposalClass` renames the wire's `class`, `FindingListRowVm`'s
- * own `findingClass` rename, so a template never confuses it with the DOM `class`
- * attribute. */
+/** One origin/class pair's garden-proposal counts over the panel's window
+ * (blizzard#547), already scoped to the one selected routine by the query's own
+ * `routine` filter, so no `routineName` rides the row (`RoutinePanelVm.lastSwept`'s
+ * own reason for not repeating what every row already shares). `origin` splits a
+ * routine's own rows from an operator-authored proposal naming the same routine
+ * (blizzard#631), since one class can appear under both. `proposalClass` renames the
+ * wire's `class`, `FindingListRowVm`'s own `findingClass` rename, so a template never
+ * confuses it with the DOM `class` attribute. */
 export interface ProposalCountsRowVm {
+  readonly origin: 'routine-run' | 'operator';
   readonly proposalClass: string;
   readonly created: number;
   readonly open: number;

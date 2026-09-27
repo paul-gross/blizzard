@@ -29,6 +29,7 @@ class _FakeResponse:
 def _proposal_view(**overrides: object) -> dict[str, object]:
     body: dict[str, object] = {
         "proposal_id": "gprop_1",
+        "origin": "routine-run",
         "routine_name": "nightly",
         "class": "fix-the-source",
         "title": "Author a docstring standard",

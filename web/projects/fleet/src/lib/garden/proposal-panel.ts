@@ -77,12 +77,19 @@ export type ProposalClosureVm =
       readonly workItem: ProposalWorkItemVm | null;
     };
 
+/** Who authored a proposal (blizzard#631) — `routine-run` names the routine that
+ * raised it; `operator` names the authoring identity, plus the routine when one was
+ * named, since an operator proposal may cite none at all. */
+export type ProposalOriginVm =
+  | { readonly kind: 'routine-run'; readonly routineName: string }
+  | { readonly kind: 'operator'; readonly createdBy: string; readonly routineName: string | null };
+
 /** The selected proposal's whole panel view model — plain data, no query or wire
  * type, `RoutinePanelVm`'s own shape. `closure` is `null` while the proposal is
  * still waiting. */
 export interface ProposalPanelVm {
   readonly proposalId: string;
-  readonly routineName: string;
+  readonly origin: ProposalOriginVm;
   readonly proposalClass: string;
   readonly title: string;
   readonly body: string;
@@ -138,6 +145,14 @@ export class FleetProposalPanel {
 
   protected readonly compactRef = compactRef;
   protected readonly actions = PROPOSAL_EVIDENCE_ACTIONS;
+
+  /** The case header's origin fragment — the routine name for a `routine-run`
+   * proposal, or `operator · <createdBy>` with the routine named alongside when an
+   * operator proposal cites one (blizzard#631). */
+  protected originLabel(origin: ProposalOriginVm): string {
+    if (origin.kind === 'routine-run') return origin.routineName;
+    return origin.routineName === null ? `operator · ${origin.createdBy}` : `operator · ${origin.createdBy} · ${origin.routineName}`;
+  }
 
   /** Whether the row has already exited, classified off `state` through the shared
    * predicate — the same one `finding-panel.ts` gates its own verbs on, so the two

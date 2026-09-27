@@ -19,6 +19,7 @@ from blizzard.hub.domain.garden_proposals import (
     DuplicateProposalFindingError,
     GardenProposal,
     GardenProposalAuthoring,
+    GardenProposalOrigin,
     IWriteGardenProposalRepository,
     OpenGardenProposalReader,
     RoutineProposalState,
@@ -50,23 +51,29 @@ def _finding(finding_id: str) -> Finding:
 
 @dataclass
 class _FakeGardenProposalRepo:
-    created: list[tuple[str, str, str, str, str, list[str], datetime]] = field(default_factory=list)
+    created: list[tuple[str, GardenProposalOrigin, str | None, str | None, str, str, str, list[str], datetime]] = (
+        field(default_factory=list)
+    )
 
     def create(
         self,
         proposal_id: str,
         *,
-        routine_name: str,
+        origin: GardenProposalOrigin = GardenProposalOrigin.ROUTINE_RUN,
+        routine_name: str | None,
+        created_by: str | None = None,
         class_: str,
         title: str,
         body: str,
         findings: list[str],
         at: datetime,
     ) -> GardenProposal:
-        self.created.append((proposal_id, routine_name, class_, title, body, findings, at))
+        self.created.append((proposal_id, origin, routine_name, created_by, class_, title, body, findings, at))
         return GardenProposal(
             proposal_id=proposal_id,
+            origin=origin,
             routine_name=routine_name,
+            created_by=created_by,
             class_=class_,
             title=title,
             body=body,
@@ -89,7 +96,9 @@ def test_create_accepts_an_empty_findings_list() -> None:
     proposal = authoring.create(routine_name="nightly", class_="fix-the-source", title="t", body="b", findings=[])
 
     assert proposal.findings == []
-    assert repo.created == [(proposal.proposal_id, "nightly", "fix-the-source", "t", "b", [], _T0)]
+    assert repo.created == [
+        (proposal.proposal_id, GardenProposalOrigin.ROUTINE_RUN, "nightly", None, "fix-the-source", "t", "b", [], _T0)
+    ]
 
 
 def test_create_mints_a_gprop_id_and_delegates_with_the_clock_instant() -> None:
@@ -105,7 +114,19 @@ def test_create_mints_a_gprop_id_and_delegates_with_the_clock_instant() -> None:
     )
 
     assert proposal.proposal_id.startswith("gprop_")
-    assert repo.created == [(proposal.proposal_id, "nightly", "fix-the-source", "t", "b", ["fin_1", "fin_2"], _T0)]
+    assert repo.created == [
+        (
+            proposal.proposal_id,
+            GardenProposalOrigin.ROUTINE_RUN,
+            "nightly",
+            None,
+            "fix-the-source",
+            "t",
+            "b",
+            ["fin_1", "fin_2"],
+            _T0,
+        )
+    ]
 
 
 def test_create_rejects_the_same_finding_named_twice() -> None:
@@ -127,6 +148,7 @@ def test_create_rejects_the_same_finding_named_twice() -> None:
 def _proposal(proposal_id: str) -> GardenProposal:
     return GardenProposal(
         proposal_id=proposal_id,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="t",

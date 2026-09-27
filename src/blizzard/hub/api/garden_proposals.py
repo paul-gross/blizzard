@@ -24,7 +24,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalPassReasonRequired,
 )
 from blizzard.hub.domain.garden_proposal_resolution import resolve_proposal_findings
-from blizzard.hub.domain.garden_proposals import GardenProposal
+from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalOrigin
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
@@ -61,7 +61,9 @@ def garden_proposal_view(proposal: GardenProposal, closure: GardenProposalClosur
     return GardenProposalView.model_validate(
         {
             "proposal_id": proposal.proposal_id,
+            "origin": proposal.origin,
             "routine_name": proposal.routine_name,
+            "created_by": proposal.created_by,
             "class": proposal.class_,
             "title": proposal.title,
             "body": proposal.body,
@@ -84,10 +86,12 @@ def list_garden_proposals(
     services: Annotated[HubServices, Depends(get_services)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    origin: Annotated[GardenProposalOrigin | None, Query()] = None,
 ) -> GardenProposalsPageView:
-    """Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526 D3/D4)."""
+    """Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526
+    D3/D4). `origin` narrows to `routine-run` or `operator` proposals (blizzard#631 D6)."""
     try:
-        page = services.garden_proposals.list_page(cursor=cursor, limit=limit)
+        page = services.garden_proposals.list_page(cursor=cursor, limit=limit, origin=origin)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     closures = services.garden_proposal_closures.get_many([p.proposal_id for p in page.proposals])

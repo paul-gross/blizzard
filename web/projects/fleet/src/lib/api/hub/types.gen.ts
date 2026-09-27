@@ -2355,9 +2355,14 @@ export type GardenProposalAcceptResponse = {
      */
     created_at: string;
     /**
+     * Created By
+     */
+    created_by?: string | null;
+    /**
      * Findings
      */
     findings: Array<string>;
+    origin: GardenProposalOrigin;
     /**
      * Proposal Id
      */
@@ -2365,7 +2370,7 @@ export type GardenProposalAcceptResponse = {
     /**
      * Routine Name
      */
-    routine_name: string;
+    routine_name: string | null;
     /**
      * Title
      */
@@ -2414,7 +2419,9 @@ export type GardenProposalClosureView = {
 /**
  * GardenProposalCountsRowView
  *
- * One routine/class pair's garden-proposal counts over the requested window.
+ * One origin/routine/class triple's garden-proposal counts over the requested
+ * window (blizzard#631 D6). `routine_name` is nullable for an operator-authored row
+ * naming no routine.
  */
 export type GardenProposalCountsRowView = {
     /**
@@ -2437,6 +2444,7 @@ export type GardenProposalCountsRowView = {
      * Open
      */
     open: number;
+    origin: GardenProposalOrigin;
     /**
      * Passed
      */
@@ -2444,16 +2452,18 @@ export type GardenProposalCountsRowView = {
     /**
      * Routine Name
      */
-    routine_name: string;
+    routine_name: string | null;
 };
 
 /**
  * GardenProposalCountsView
  *
  * `GET /api/routines/proposal-counts`'s own response — `routine` echoes the
- * optional filter, `None` when unfiltered.
+ * optional routine filter, `origin` the optional origin filter, each `None` when
+ * unfiltered.
  */
 export type GardenProposalCountsView = {
+    origin?: GardenProposalOrigin | null;
     /**
      * Routine
      */
@@ -2481,6 +2491,14 @@ export type GardenProposalCountsView = {
 export type GardenProposalItemOutcome = 'minted' | 'declined';
 
 /**
+ * GardenProposalOrigin
+ *
+ * Who authored a garden proposal (blizzard#631 D1) — a mint-time fact, stored on
+ * the row itself and never inferred from a null `routine_name`.
+ */
+export type GardenProposalOrigin = 'routine-run' | 'operator';
+
+/**
  * GardenProposalPassRequest
  *
  * `POST /api/garden-proposals/{proposal_id}/pass` — passing wants a reason more
@@ -2497,6 +2515,8 @@ export type GardenProposalPassRequest = {
  * GardenProposalView
  *
  * A garden proposal, its closure carried alongside it once one exists.
+ * `routine_name` is nullable — an operator-authored proposal (blizzard#631) may name
+ * no routine; `created_by` is set only for one.
  */
 export type GardenProposalView = {
     /**
@@ -2513,9 +2533,14 @@ export type GardenProposalView = {
      */
     created_at: string;
     /**
+     * Created By
+     */
+    created_by?: string | null;
+    /**
      * Findings
      */
     findings: Array<string>;
+    origin: GardenProposalOrigin;
     /**
      * Proposal Id
      */
@@ -2523,7 +2548,7 @@ export type GardenProposalView = {
     /**
      * Routine Name
      */
-    routine_name: string;
+    routine_name: string | null;
     /**
      * Title
      */
@@ -9021,6 +9046,10 @@ export type ListGardenProposalsApiGardenProposalsGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Origin
+         */
+        origin?: GardenProposalOrigin | null;
     };
     url: '/api/garden-proposals';
 };
@@ -9598,6 +9627,10 @@ export type RoutineProposalCountsApiRoutinesProposalCountsGetData = {
          * Routine
          */
         routine?: string | null;
+        /**
+         * Origin
+         */
+        origin?: GardenProposalOrigin | null;
     };
     url: '/api/routines/proposal-counts';
 };

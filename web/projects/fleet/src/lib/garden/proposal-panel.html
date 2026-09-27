@@ -13,7 +13,7 @@
           <p class="pp-meta">
             <span [title]="panel.proposalId">{{ compactRef(panel.proposalId) }}</span>
             · <span>{{ panel.proposalClass }}</span>
-            · <span>{{ panel.routineName }}</span>
+            · <span>{{ originLabel(panel.origin) }}</span>
             · <span><fleet-when [iso]="panel.createdAt" /></span>
           </p>
         </header>

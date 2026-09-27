@@ -33,6 +33,7 @@ export type {
   ProposalEvidenceVerb,
   ProposalEvidenceTriage,
   ProposalClosureVm,
+  ProposalOriginVm,
   ProposalPanelVm,
 } from './proposal-panel';
 export { injectHubRoutineBaselinesQuery } from './routine-baselines.query';

@@ -19,7 +19,9 @@ class GardenProposalListing(Listing):
     empty = "no garden proposals"
 
     def line(self, row: Any) -> str:
-        return f"{row['proposal_id']}  class={row['class']}  {row['title']}"
+        origin = row["origin"]
+        who = f"created_by={row['created_by']}" if origin == "operator" else f"routine={row['routine_name']}"
+        return f"{row['proposal_id']}  class={row['class']}  origin={origin}  {who}  {row['title']}"
 
 
 def _closure_lines(closure: dict[str, Any] | None) -> Iterator[str]:
@@ -42,7 +44,10 @@ class GardenProposalDetail:
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        yield f"{body['proposal_id']}  routine={body['routine_name']}  class={body['class']}"
+        origin = body["origin"]
+        yield f"{body['proposal_id']}  origin={origin}  routine={body['routine_name']}  class={body['class']}"
+        if origin == "operator":
+            yield f"  created_by={body['created_by']}"
         yield f"  {body['title']}"
         yield f"  {body['body']}"
         if body["findings"]:
@@ -59,9 +64,13 @@ def garden_proposal_group() -> None:
 
 
 @garden_proposal_group.command("list", cls=FleetCommand)
-def garden_proposal_list(cli: CliContext) -> None:
+@click.option(
+    "--origin", type=click.Choice(["routine-run", "operator"]), default=None, help="Narrow to one origin."
+)
+def garden_proposal_list(cli: CliContext, origin: str | None) -> None:
     """List every garden proposal, newest first."""
-    rows = cli.get_all("/api/garden-proposals", "GET /garden-proposals", key="proposals")
+    params = {"origin": origin} if origin is not None else None
+    rows = cli.get_all("/api/garden-proposals", "GET /garden-proposals", key="proposals", params=params)
     cli.show(rows, GardenProposalListing(rows))
 
 

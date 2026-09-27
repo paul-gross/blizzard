@@ -26,7 +26,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     _compose_minted_body,
     classify_proposal_count_bucket,
 )
-from blizzard.hub.domain.garden_proposals import GardenProposal
+from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalOrigin
 from blizzard.hub.domain.work_items import WorkItemEditService
 
 pytestmark = pytest.mark.unit
@@ -37,6 +37,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 def _proposal(proposal_id: str = "gprop_1") -> GardenProposal:
     return GardenProposal(
         proposal_id=proposal_id,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="Author a docstring standard",

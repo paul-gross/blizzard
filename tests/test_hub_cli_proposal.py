@@ -35,6 +35,7 @@ def test_garden_proposal_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -
                 "proposals": [
                     {
                         "proposal_id": "gprop_1",
+                        "origin": "routine-run",
                         "routine_name": "nightly",
                         "class": "fix-the-source",
                         "title": "Author a docstring standard",
@@ -61,6 +62,7 @@ def test_garden_proposal_list_drains_every_page(monkeypatch: pytest.MonkeyPatch)
         "proposals": [
             {
                 "proposal_id": "gprop_1",
+                "origin": "routine-run",
                 "routine_name": "nightly",
                 "class": "fix-the-source",
                 "title": "Author a docstring standard",
@@ -75,6 +77,7 @@ def test_garden_proposal_list_drains_every_page(monkeypatch: pytest.MonkeyPatch)
         "proposals": [
             {
                 "proposal_id": "gprop_2",
+                "origin": "routine-run",
                 "routine_name": "nightly",
                 "class": "fix-the-source",
                 "title": "Author a second standard",
@@ -106,6 +109,7 @@ def test_garden_proposal_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch
             200,
             {
                 "proposal_id": "gprop_1",
+                "origin": "routine-run",
                 "routine_name": "nightly",
                 "class": "fix-the-source",
                 "title": "Author a docstring standard",
@@ -130,6 +134,7 @@ def test_garden_proposal_show_omits_the_findings_line_when_there_are_none(monkey
             200,
             {
                 "proposal_id": "gprop_1",
+                "origin": "routine-run",
                 "routine_name": "nightly",
                 "class": "fix-the-source",
                 "title": "Author a docstring standard",

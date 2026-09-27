@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 
 
 class GardenProposalCandidate(BaseModel):
@@ -40,12 +41,16 @@ class GardenProposalClosureView(BaseModel):
 
 
 class GardenProposalView(BaseModel):
-    """A garden proposal, its closure carried alongside it once one exists."""
+    """A garden proposal, its closure carried alongside it once one exists.
+    `routine_name` is nullable — an operator-authored proposal (blizzard#631) may name
+    no routine; `created_by` is set only for one."""
 
     model_config = ConfigDict(populate_by_name=True)
 
     proposal_id: str
-    routine_name: str
+    origin: GardenProposalOrigin
+    routine_name: str | None
+    created_by: str | None = None
     class_: str = Field(alias="class")
     title: str
     body: str

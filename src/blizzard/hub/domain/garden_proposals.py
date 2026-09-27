@@ -28,14 +28,24 @@ class DuplicateProposalFindingError(ValueError):
         super().__init__(f"finding {finding_id!r} named more than once")
 
 
+class GardenProposalOrigin(StrEnum):
+    """Who authored a garden proposal (blizzard#631 D1) — a mint-time fact, stored on
+    the row itself and never inferred from a null `routine_name`."""
+
+    ROUTINE_RUN = "routine-run"
+    OPERATOR = "operator"
+
+
 @dataclass(frozen=True)
 class GardenProposal:
     proposal_id: str
-    routine_name: str
+    origin: GardenProposalOrigin
+    routine_name: str | None
     class_: str
     title: str
     body: str
     created_at: datetime
+    created_by: str | None = None  # set only for `GardenProposalOrigin.OPERATOR` (D1)
     findings: list[str] = field(default_factory=list)  # the finding ids this proposal answers (D7)
 
 
@@ -44,12 +54,13 @@ class GardenProposal:
 
 @dataclass(frozen=True)
 class GardenProposalCounts:
-    """One routine/class pair's garden-proposal counts over a window (blizzard#547):
-    `open`, `passed`, `accepted_with_item`, `accepted_without_item` — each a
-    closure-state bucket. `created` is always their sum, derived rather than stored, so
-    it can never disagree with the four it sums."""
+    """One origin/routine/class triple's garden-proposal counts over a window
+    (blizzard#547, blizzard#631 D6): `open`, `passed`, `accepted_with_item`,
+    `accepted_without_item` — each a closure-state bucket. `created` is always their
+    sum, derived rather than stored, so it can never disagree with the four it sums."""
 
-    routine_name: str
+    origin: GardenProposalOrigin
+    routine_name: str | None
     class_: str
     open: int
     passed: int
@@ -77,26 +88,37 @@ class IReadGardenProposalRepository(Protocol):
 
     def list_all(self) -> list[GardenProposal]: ...
 
-    def list_page(self, *, cursor: str | None = None, limit: int) -> GardenProposalPage:
+    def list_page(
+        self, *, cursor: str | None = None, limit: int, origin: GardenProposalOrigin | None = None
+    ) -> GardenProposalPage:
         """`list_all`'s bounded sibling, ordered ``(created_at desc, proposal_id desc)``
         (blizzard#526 D4). ``cursor`` is a prior :attr:`GardenProposalPage.next_cursor`;
-        any other raises :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
+        any other raises :class:`~blizzard.hub.domain.pagination.MalformedCursor`.
+        ``origin`` narrows to one origin when given, applied in SQL inside the keyset
+        window (blizzard#631 D6)."""
         ...
 
     def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
         """Every proposal `routine_name` has raised, newest first — `list_all`'s
         routine-narrowed sibling (mirrors `IReadFindingRepository.list_for_routine`). A
         proposal carries no scope column, so unlike a finding bucket this is never
-        narrowed further."""
+        narrowed further. Includes an `operator`-origin proposal that names
+        `routine_name` (blizzard#631 D7)."""
         ...
 
     def counts_by_class(
-        self, *, since: datetime, until: datetime, routine_name: str | None = None
+        self,
+        *,
+        since: datetime,
+        until: datetime,
+        routine_name: str | None = None,
+        origin: GardenProposalOrigin | None = None,
     ) -> list[GardenProposalCounts]:
-        """Garden-proposal counts (blizzard#547) grouped by routine and class, over
-        `[since, until)` on `created_at` — current closure state, not closure time.
-        `routine_name` narrows to one routine when given, else every routine. Rows
-        ordered `(routine_name, class_)`."""
+        """Garden-proposal counts (blizzard#547) grouped by `(origin, routine_name,
+        class_)`, over `[since, until)` on `created_at` — current closure state, not
+        closure time (blizzard#631 D6). `routine_name` narrows to one routine's rows of
+        both origins when given, else every routine; `origin` narrows to one origin,
+        applied in SQL. Rows ordered `(origin, routine_name, class_)`."""
         ...
 
 
@@ -107,7 +129,9 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         self,
         proposal_id: str,
         *,
-        routine_name: str,
+        origin: GardenProposalOrigin = GardenProposalOrigin.ROUTINE_RUN,
+        routine_name: str | None,
+        created_by: str | None = None,
         class_: str,
         title: str,
         body: str,
@@ -115,14 +139,16 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         at: datetime,
     ) -> GardenProposal:
         """Insert the proposal row and its `garden_proposal_findings` link rows (D7), in
-        one transaction. `findings` may be empty."""
+        one transaction. `findings` may be empty. `origin` defaults to `routine-run`,
+        matching every caller predating operator authorship (blizzard#631)."""
         ...
 
 
 class GardenProposalAuthoring:
     """Create a garden proposal from loaded findings (`bzh:domain-takes-objects`),
     rejecting only a duplicate-naming `findings` list (D7, blizzard#390) — an empty
-    one is accepted."""
+    one is accepted. Mints a `routine-run`-origin proposal; delivery's own materialization
+    writes its own `routine-run` rows directly and never calls this (blizzard#631 D1)."""
 
     def __init__(self, *, proposals: IWriteGardenProposalRepository, clock: IClock) -> None:
         self._proposals = proposals
@@ -139,7 +165,9 @@ class GardenProposalAuthoring:
             seen.add(finding_id)
         return self._proposals.create(
             Id.mint(GARDEN_PROPOSAL_PREFIX, self._clock).value,
+            origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name=routine_name,
+            created_by=None,
             class_=class_,
             title=title,
             body=body,

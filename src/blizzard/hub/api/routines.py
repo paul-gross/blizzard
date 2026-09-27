@@ -22,7 +22,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.garden_proposals import GardenProposalCounts
+from blizzard.hub.domain.garden_proposals import GardenProposalCounts, GardenProposalOrigin
 from blizzard.hub.domain.garden_sweeps import GardenSweeps
 from blizzard.hub.domain.garden_trend import Trend
 from blizzard.hub.domain.ingest import IngestConflict
@@ -238,6 +238,7 @@ def _proposal_counts_row_view(counts: GardenProposalCounts) -> GardenProposalCou
     # `model_validate`, the `garden_runs.py` `_set_delta_view` shape.
     return GardenProposalCountsRowView.model_validate(
         {
+            "origin": counts.origin,
             "routine_name": counts.routine_name,
             "class": counts.class_,
             "open": counts.open,
@@ -257,21 +258,26 @@ def routine_proposal_counts(
     since: Annotated[str, Query()],
     until: Annotated[str, Query()],
     routine: Annotated[str | None, Query()] = None,
+    origin: Annotated[GardenProposalOrigin | None, Query()] = None,
 ) -> GardenProposalCountsView:
-    """Garden-proposal counts (blizzard#547) per routine and class over `[since,
-    until)`, split into open/passed/accepted-with-item/accepted-without-item —
-    `created` is their sum. `routine` narrows to one routine by name when given; 404 on
-    an unknown one. 422 on a malformed instant or `until <= since`."""
+    """Garden-proposal counts (blizzard#547) per origin, routine, and class over
+    `[since, until)`, split into open/passed/accepted-with-item/accepted-without-item —
+    `created` is their sum (blizzard#631 D6). `routine` narrows to one routine's rows of
+    both origins when given; 404 on an unknown one. `origin` narrows to one origin. 422
+    on a malformed instant or `until <= since`."""
     parsed_since = _parse_instant(since, field="since")
     parsed_until = _parse_instant(until, field="until")
     _require_until_after_since(parsed_since, parsed_until)
     if routine is not None and services.routines.get_by_name(routine) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
-    rows = services.garden_proposals.counts_by_class(since=parsed_since, until=parsed_until, routine_name=routine)
+    rows = services.garden_proposals.counts_by_class(
+        since=parsed_since, until=parsed_until, routine_name=routine, origin=origin
+    )
     return GardenProposalCountsView(
         since=iso_utc(parsed_since),
         until=iso_utc(parsed_until),
         routine=routine,
+        origin=origin,
         rows=[_proposal_counts_row_view(c) for c in rows],
     )
 

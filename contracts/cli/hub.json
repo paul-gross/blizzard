@@ -2097,6 +2097,17 @@
             {
               "hidden": false,
               "kind": "option",
+              "name": "origin",
+              "opts": [
+                "--origin"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
               "name": "as_json",
               "opts": [
                 "--json"
@@ -3513,6 +3524,17 @@
               "required": true,
               "secondary_opts": [],
               "type": "datetime"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "origin",
+              "opts": [
+                "--origin"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
             },
             {
               "hidden": false,

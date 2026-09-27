@@ -24,7 +24,12 @@ from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalItemOutcome,
 )
 from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
-from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalCounts, GardenProposalPage
+from blizzard.hub.domain.garden_proposals import (
+    GardenProposal,
+    GardenProposalCounts,
+    GardenProposalOrigin,
+    GardenProposalPage,
+)
 from blizzard.hub.domain.work import Chunk, WorkRef
 
 pytestmark = pytest.mark.unit
@@ -55,6 +60,7 @@ def _finding(finding_id: str, *, state: str = "live") -> Finding:
 def _proposal(proposal_id: str = "gprop_1", *, findings: list[str] | None = None) -> GardenProposal:
     return GardenProposal(
         proposal_id=proposal_id,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="t",

@@ -296,8 +296,24 @@ describe('gardening panels shell sweep (web:shell-sweep)', () => {
 });
 
 const PROPOSAL_COUNTS_ROWS: readonly ProposalCountsRowVm[] = [
-  { proposalClass: 'stale-docstring', created: 6, open: 2, passed: 1, acceptedWithItem: 3, acceptedWithoutItem: 0 },
-  { proposalClass: 'dead-code', created: 3, open: 0, passed: 2, acceptedWithItem: 0, acceptedWithoutItem: 1 },
+  {
+    origin: 'routine-run',
+    proposalClass: 'stale-docstring',
+    created: 6,
+    open: 2,
+    passed: 1,
+    acceptedWithItem: 3,
+    acceptedWithoutItem: 0,
+  },
+  {
+    origin: 'routine-run',
+    proposalClass: 'dead-code',
+    created: 3,
+    open: 0,
+    passed: 2,
+    acceptedWithItem: 0,
+    acceptedWithoutItem: 1,
+  },
 ];
 
 /**

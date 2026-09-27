@@ -72,6 +72,7 @@ const PROPOSAL_COUNTS = {
   routine: 'nightly',
   rows: [
     {
+      origin: 'routine-run',
       routine_name: 'nightly',
       class: 'stale-docstring',
       open: 2,

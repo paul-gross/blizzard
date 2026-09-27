@@ -6,13 +6,18 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
+
 
 class GardenProposalCountsRowView(BaseModel):
-    """One routine/class pair's garden-proposal counts over the requested window."""
+    """One origin/routine/class triple's garden-proposal counts over the requested
+    window (blizzard#631 D6). `routine_name` is nullable for an operator-authored row
+    naming no routine."""
 
     model_config = ConfigDict(populate_by_name=True)
 
-    routine_name: str
+    origin: GardenProposalOrigin
+    routine_name: str | None
     class_: str = Field(alias="class")
     open: int
     passed: int
@@ -23,9 +28,11 @@ class GardenProposalCountsRowView(BaseModel):
 
 class GardenProposalCountsView(BaseModel):
     """`GET /api/routines/proposal-counts`'s own response — `routine` echoes the
-    optional filter, `None` when unfiltered."""
+    optional routine filter, `origin` the optional origin filter, each `None` when
+    unfiltered."""
 
     since: str
     until: str
     routine: str | None
+    origin: GardenProposalOrigin | None = None
     rows: list[GardenProposalCountsRowView]

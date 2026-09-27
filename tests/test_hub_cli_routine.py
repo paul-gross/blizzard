@@ -866,6 +866,7 @@ _PROPOSAL_COUNTS_BODY = {
     "routine": "nightly",
     "rows": [
         {
+            "origin": "routine-run",
             "routine_name": "nightly",
             "class": "lint",
             "open": 1,

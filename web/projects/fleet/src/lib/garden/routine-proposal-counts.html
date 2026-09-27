@@ -8,6 +8,7 @@
     <table class="rpc-table" data-testid="gardening-routine-proposal-counts-table">
       <thead>
         <tr>
+          <th>origin</th>
           <th>class</th>
           <th>created</th>
           <th>open</th>
@@ -17,8 +18,9 @@
         </tr>
       </thead>
       <tbody>
-        @for (row of rows(); track row.proposalClass) {
-          <tr [attr.data-testid]="'gardening-routine-proposal-counts-' + row.proposalClass">
+        @for (row of rows(); track row.origin + ':' + row.proposalClass) {
+          <tr [attr.data-testid]="'gardening-routine-proposal-counts-' + row.origin + '-' + row.proposalClass">
+            <td>{{ row.origin }}</td>
             <td>{{ row.proposalClass }}</td>
             <td>{{ row.created }}</td>
             <td>{{ row.open }}</td>
