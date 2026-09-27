@@ -97,12 +97,22 @@ def test_group_alive_leaves_a_still_running_leader_untouched() -> None:
 @pytest.mark.unit
 def test_interrupt_group_signals_a_real_process_group() -> None:
     """``interrupt_group`` reaches a real throwaway process group: a child with no SIGINT
-    handler dies on it, exactly the graceful-shutdown drain's own signal (issue #12)."""
+    handler dies on it, exactly the graceful-shutdown drain's own signal (issue #12).
+
+    Retried under a deadline rather than fired once: immediately after ``Popen`` returns,
+    the child may not have finished ``setsid()`` yet (``start_new_session`` makes pgid ==
+    pid only once that lands), so a single ``killpg`` can race a not-yet-grouped child and
+    silently miss under a busy host. Retrying until the child actually dies keeps the
+    assertion — killed by SIGINT — exact without depending on that race's timing.
+    """
     probe = LinuxProcessProbe()
     proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
     try:
-        probe.interrupt_group(proc.pid)  # `start_new_session` makes pgid == pid
-        proc.wait(timeout=5)
+        deadline = time.monotonic() + 5
+        while proc.poll() is None and time.monotonic() < deadline:
+            probe.interrupt_group(proc.pid)  # `start_new_session` makes pgid == pid
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                proc.wait(timeout=0.1)
         assert proc.returncode == -2  # killed by SIGINT
     finally:
         with contextlib.suppress(ProcessLookupError, PermissionError):
