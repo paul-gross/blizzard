@@ -5,6 +5,7 @@ under both dialects and stays on the portable expression surface (blizzard#256, 
 from __future__ import annotations
 
 import ast
+import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -84,6 +85,11 @@ def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:
         assert not [e for e in visitors.iterate(stmt) if isinstance(e, TextClause)], name
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="reads store_module.__file__'s own source; under mutmut that file also carries every "
+    "generated mutant body, which this sweep would wrongly hold to the same pattern",
+)
 def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> None:
     """Every ``_stmt`` builder has a compile-test entry, even a shared piece never itself
     the direct ``.execute()`` argument, and every actual call site is built by one of
