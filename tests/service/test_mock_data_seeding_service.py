@@ -234,10 +234,9 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
 
 
 def test_create_runner_seeds_a_declared_roster_that_reads_back_through_the_real_hub(tmp_path: Path) -> None:
-    """blizzard#636 Phase 2: a roster declaring a fresh slug, a 2h-old slug and a
-    never-sampled slug with a miss, plus one sample row for an undeclared slug, reads
-    back through the real hub's ``GET /api/runners/{id}`` with no restart — one member
-    per declared slug, the undeclared slug absent."""
+    """A declared roster (fresh slug, 2h-old slug, never-sampled slug with a miss) plus an
+    undeclared slug's own sample reads back through the real hub's ``GET /api/runners/{id}``
+    with no restart: one member per declared slug, the undeclared slug absent."""
     bin_dir = _require_mock_data_binary()
     hub_dir = tmp_path / "hub"
     port = _free_port()
