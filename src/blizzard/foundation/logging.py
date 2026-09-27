@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import TextIO, cast
 
 import structlog
 
@@ -14,6 +15,24 @@ _configured = False
 #: Override the renderer regardless of TTY. ``json`` / ``console`` (case-insensitive);
 #: anything else falls through to TTY detection.
 ENV_LOG_FORMAT = "BZ_LOG_FORMAT"
+
+
+class _LiveStderr:
+    """A file-like proxy that resolves ``sys.stderr`` on every write.
+
+    ``PrintLoggerFactory(file=sys.stderr)`` binds whatever stream ``sys.stderr`` is at
+    configure time, and ``cache_logger_on_first_use`` keeps that binding for the rest of
+    the process. Under pytest capture that stream is per-test, so a logger configured
+    once and reused across tests can end up writing to an earlier test's already-closed
+    stream. Resolving ``sys.stderr`` at write time instead means every write goes to
+    whichever stream currently holds that name.
+    """
+
+    def write(self, message: str) -> None:
+        sys.stderr.write(message)
+
+    def flush(self) -> None:
+        sys.stderr.flush()
 
 
 class LogFormat:
@@ -49,7 +68,7 @@ class LogFormat:
                 *self.exception_processors(),
                 self.renderer(),
             ],
-            logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+            logger_factory=structlog.PrintLoggerFactory(file=cast(TextIO, _LiveStderr())),
             cache_logger_on_first_use=True,
         )
 
@@ -67,7 +86,11 @@ class Json(LogFormat):
 
 class Console(LogFormat):
     def renderer(self) -> structlog.types.Processor:
-        return structlog.dev.ConsoleRenderer()
+        """``exception_formatter`` is pinned to ``plain_traceback`` explicitly: structlog
+        otherwise picks it from whatever of rich / better-exceptions happens to be
+        installed, so the same config renders differently depending on the
+        environment."""
+        return structlog.dev.ConsoleRenderer(exception_formatter=structlog.dev.plain_traceback)
 
     def exception_processors(self) -> list[structlog.types.Processor]:
         """None: ``ConsoleRenderer`` renders ``exc_info`` itself, and formatting it first
