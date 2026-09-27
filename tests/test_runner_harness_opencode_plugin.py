@@ -1,5 +1,5 @@
-"""The runner-owned OpenCode plugin scaffold (execution spec, "Runner-owned plugin", phase
-4) — content shape (unit) and its degrade-only effect on the adapter's parsed turn outcome
+"""The runner-owned OpenCode plugin scaffold (execution spec, "Runner-owned plugin")
+— content shape (unit) and its degrade-only effect on the adapter's parsed turn outcome
 (component). Its JS/TS *behavior* is proven structurally, not by running a JS engine (this
 repo's toolchain pins no node/bun): the generated source's shape — one ``try``/``catch`` per
 hook body — is the checkable surface, like ``config.py``'s scaffold is tested as text."""

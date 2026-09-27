@@ -539,7 +539,7 @@ def test_route_token_omitted_is_rejected_under_enforce_over_the_wire(tmp_path: P
             assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
 
 
-# --- Produces-artifact authorization over the wire (phase 5) ---
+# --- Produces-artifact authorization over the wire ---
 # The real hub's `produces_mode` backstop, driven by mock-runner `/_drive/complete`.
 
 

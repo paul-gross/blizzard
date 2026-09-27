@@ -439,7 +439,7 @@ def test_a_very_large_interval_never_resamples_and_every_other_step_behaves_iden
     assert sampler_b.sample_calls == 1  # the very first, never-attempted-before sample only
 
 
-# AC 6 (phase 2) — several declared subscriptions, sampled independently.
+# AC 6 — several declared subscriptions, sampled independently.
 # --------------------------------------------------------------------------- #
 
 

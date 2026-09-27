@@ -10,7 +10,7 @@ import { GardeningFindingDetail } from './gardening-finding-detail';
 import { GardeningFindingsPage } from './gardening-findings-page';
 
 /**
- * The findings tab's own filter row (phase 2 of 2): widened to every
+ * The findings tab's own filter row: widened to every
  * routine and every scope, the four chip rows (routine, scope, class, state) now
  * carry a leading "All" option apiece, and a row from a widened bucket carries its
  * own routine/scope alongside the class and ref (`finding-list.css`'s `.fl-routine`/

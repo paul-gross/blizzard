@@ -1,4 +1,4 @@
-"""The mixed-harness lineage boundary, end to end (`bzh:e2e-node-sessions` phase 5).
+"""The mixed-harness lineage boundary, end to end (`bzh:e2e-node-sessions`).
 
 One graph — `build` (the runner's own configured default, Claude Code, no `session`
 declared) hands off to `opencode-review` (a graph-level named session pinned
@@ -9,7 +9,7 @@ restart follows `test_runner_federation_e2e.py`'s subprocess shape instead).
 
 The runner daemon is restarted twice, both CLEAN operator-style restarts (SIGTERM,
 relaunch unarmed) — no crash point armed, since that recovery proof already belongs to
-`tests/crash/test_kill9_sweep.py`'s OpenCode-lineage sweep (`bzh:crash-sweep` phase 4):
+`tests/crash/test_kill9_sweep.py`'s OpenCode-lineage sweep (`bzh:crash-sweep`):
 
 1. Right at the lineage boundary — after the hub records the transition from `build`
    into `opencode-review`, before the runner's own next tick would otherwise discover it

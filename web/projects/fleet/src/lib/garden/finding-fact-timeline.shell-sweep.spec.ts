@@ -6,7 +6,7 @@ import { page } from 'vitest/browser';
 import { FleetFindingPanel, type FindingPanelVm } from './finding-panel';
 
 /**
- * The finding fact timeline (phase 1 of 2, the tooled half of
+ * The finding fact timeline (the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method) — a real,
  * headless-Chromium proof that a long, genuinely unbroken note wraps
  * (`overflow-wrap: anywhere`) inside its row rather than forcing the row wider than

@@ -1,5 +1,5 @@
 """Produces-artifact authorization (unit tier) — ``Produces``, node + artifacts
-only (phase 5).
+only.
 
 A pure value over a :class:`Node` plus the submission's own artifact list
 (``bzh:domain-takes-objects``): no store, no HTTP, no clock.

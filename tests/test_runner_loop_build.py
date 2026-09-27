@@ -128,7 +128,7 @@ def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tm
     sampler's own default credentials path and reaching the real Anthropic endpoint
     . The sampler is a separate seam from the harness adapter —
     selected from the config's resolved (declared-or-synthesized) subscription list, not
-    threaded through ``ClaudeCodeAdapter`` anymore, and keyed by slug (phase 2) since a
+    threaded through ``ClaudeCodeAdapter`` anymore, and keyed by slug since a
     runner may declare several. The legacy table's own ``external_usage_sample_interval_seconds``
     reaches that same synthesized declaration's ``sample_interval_seconds`` — the cadence
     the tick's per-slug gate reads (``ExternalUsageSample``), not a runner-wide setting."""

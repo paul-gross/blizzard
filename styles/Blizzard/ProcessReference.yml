@@ -9,7 +9,7 @@ tokens:
   - '\bPRs?\s+#\d+'
   - '\breview:[A-Z]\d+'
   - '\b[DF]\d+'
-  - '\bPhases?\s+\d+'
+  - '\b[Pp]hases?\s+\d+'
   - '\bchange\s+[A-Z]\b'
   - '\b[A-Z]\([ivxlcdm]+\)'
   - '\bhub:\d+'

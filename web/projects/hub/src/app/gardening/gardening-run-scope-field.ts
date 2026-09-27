@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { KitOption, KitPanel, type ScopeView } from 'fleet';
 
 /** The run dialog's own scope-field state — the chosen scope's slug, `''` for nothing
- * selected yet (phase 1: the field offers only the routine's own related
+ * selected yet (the field offers only the routine's own related
  * set, so there is no longer a slug the operator can mint here). */
 export type ScopeSelection = string;
 

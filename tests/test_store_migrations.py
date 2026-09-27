@@ -582,7 +582,7 @@ def test_external_usage_samples_miss_reason_and_renewal_columns_survive_migratio
 
 
 def test_external_usage_samples_slug_backfills_the_legacy_anthropic_slug(tmp_path: Path) -> None:
-    """``external_usage_samples.slug`` (phase 2) backfills a pre-existing row
+    """``external_usage_samples.slug`` backfills a pre-existing row
     to the legacy Anthropic slug, and downgrading past it drops the column again."""
     config = runner_runtime.init_environment(tmp_path)  # upgrades to head
     runner = runner_runtime.migration_runner(config)
@@ -669,7 +669,7 @@ def test_usage_facts_reported_cost_backfills_every_historical_row_from_its_cost(
 
 
 def test_runner_external_usage_slug_widens_the_primary_key_and_backfills_the_legacy_row(tmp_path: Path) -> None:
-    """``runner_external_usage``'s join key (phase 3) backfills a pre-existing
+    """``runner_external_usage``'s join key backfills a pre-existing
     row to the legacy slug/name, widens the primary key to ``(runner_id, slug)``, and
     downgrading past it restores the single-column key."""
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
@@ -1093,9 +1093,9 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     # runner tree — instance 7 (drop-and-recreate: environment_id added, forge dropped)
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("environment_id",)),
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("forge",), "removed"),
-    # runner tree — subscription-sampling's per-slug join key (phase 2)
+    # runner tree — subscription-sampling's per-slug join key
     ("runner", "20260801_1500_runner_external_usage_samples", "external_usage_samples", ("slug",)),
-    # hub tree — subscription-sampling's per-slug join key (phase 3)
+    # hub tree — subscription-sampling's per-slug join key
     (
         "hub",
         "20260801_1600_hub_runner_external_usage",

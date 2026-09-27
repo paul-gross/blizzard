@@ -1,4 +1,4 @@
-"""Named session pools, resolution, and the lease stamps (phase 5).
+"""Named session pools, resolution, and the lease stamps.
 
 Component tier over a **real store**, doubles only at the hub/harness/provider/probe
 seams — each phase's assertion reads back the *previous* phase's actually-recorded
@@ -469,7 +469,7 @@ def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
         )
 
 
-# Rotation (phase 6): a head is resumed only while every readable declared
+# Rotation: a head is resumed only while every readable declared
 # threshold is under bound AND its stamped model matches; an unreadable signal is not a breach.
 
 

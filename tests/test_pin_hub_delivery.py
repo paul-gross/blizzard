@@ -1,5 +1,5 @@
 """Pinning tests for hub-delivery decisions that were previously defended only by prose
-(phase 2, ``bzh:mutation-review-selection``).
+(``bzh:mutation-review-selection``).
 
 Each test here converts one comment-defended decision into an assertion that fails if the
 decision is reverted. Grouped by the module whose decision they pin.

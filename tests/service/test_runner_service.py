@@ -691,7 +691,7 @@ def _worker_credential(config: RunnerConfig, lease_id: str) -> dict[str, str]:
 
 
 def _graph_artifact_chunk_spec(work_ref: str) -> dict:
-    """``mock_hub_chunk_spec`` plus one graph-scoped declaration — the phase 2b seed
+    """``mock_hub_chunk_spec`` plus one graph-scoped declaration — the seed
     lever a real runner mints and pins into its own store before the node even starts."""
     spec = mock_hub_chunk_spec(work_ref)
     spec["graph_artifacts"] = [{"name": "docket", "kind": "asset", "content": "the docket text"}]

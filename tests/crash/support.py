@@ -492,7 +492,7 @@ def graph_yaml(landed_file: str) -> str:
 
 
 #: The graph-level named session an OpenCode-lineage ``build`` node resumes
-#: (``bzh:crash-sweep`` phase 4) — constrained to ``harnesses: [opencode]`` so the
+#: (``bzh:crash-sweep``) — constrained to ``harnesses: [opencode]`` so the
 #: fresh mint that opens it is a real OpenCode dispatch, not a default Claude Code one.
 OPENCODE_SESSION_NAME = "crash-sweep-opencode"
 
@@ -862,7 +862,7 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         # mock binary is a real, logged-in provider CLI.
         claude_code_credentials_path=claude_credentials,
         # Independent of `harness_binary` (still Claude Code's) — without this, no crash-tier
-        # scenario can spawn an OpenCode worker at all (bzh:crash-sweep phase 4).
+        # scenario can spawn an OpenCode worker at all (bzh:crash-sweep).
         opencode_binary=str(bin_dir / "mock-opencode"),
         opencode_auth_path=opencode_auth,
         # Unset on purpose: the external-usage sampler's first soft-failure check (a

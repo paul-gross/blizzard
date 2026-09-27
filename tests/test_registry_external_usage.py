@@ -1,5 +1,5 @@
 """:meth:`PerSubscriptionUsageView.every` — the read-side per-subscription staleness
-gate (phase 3).
+gate.
 
 Unit tier: the pure domain derivation in isolation, then its rendering through
 ``hub/api/runners.py``'s single ``runner_view`` — no store, no HTTP."""
@@ -62,7 +62,7 @@ def test_never_sampled_renders_none() -> None:
 
 
 def test_a_stale_or_failed_subscription_does_not_blank_a_healthy_sibling() -> None:
-    """One dead sampler must not blank a healthy one (phase 3) — the plan's
+    """One dead sampler must not blank a healthy one — the plan's
     explicit staleness-is-per-subscription acceptance bar."""
     healthy = _record("anthropic", _NOW - timedelta(minutes=1))
     stale = _record("openai", _NOW - timedelta(minutes=16))

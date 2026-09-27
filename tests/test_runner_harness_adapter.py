@@ -941,7 +941,7 @@ def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path
 
 
 # --------------------------------------------------------------------------- #
-# Usage extraction (epic #57, phase 1 of #58): parse_usage, sum_transcript_usage
+# Usage extraction (epic #57, #58): parse_usage, sum_transcript_usage
 
 _USAGE_ENVELOPE = json.dumps(
     {

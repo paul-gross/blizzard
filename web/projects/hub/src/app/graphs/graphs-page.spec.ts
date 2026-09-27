@@ -10,8 +10,8 @@ import { vi } from 'vitest';
 import { GraphsPage } from './graphs-page';
 
 /**
- * Exercises `GraphsPage`'s route-param plumbing (the master/detail contract phase
- * 3 requires): `/graphs` shows the list with a placeholder, `/graphs/:graphId`
+ * Exercises `GraphsPage`'s route-param plumbing (the master/detail contract
+ * requires): `/graphs` shows the list with a placeholder, `/graphs/:graphId`
  * mounts the detail beside it, refresh-safe by construction since the param
  * alone (not component state) drives which version is shown. Mounting the page
  * directly (not through a router-outlet) needs a stubbed `ActivatedRoute` whose
