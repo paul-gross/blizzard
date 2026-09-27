@@ -258,7 +258,12 @@ def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
         ),
         GardenProposalCounts(
             origin=GardenProposalOrigin.ROUTINE_RUN,
-            routine_name="nightly", class_="wontfix", open=1, passed=0, accepted_with_item=0, accepted_without_item=0
+            routine_name="nightly",
+            class_="wontfix",
+            open=1,
+            passed=0,
+            accepted_with_item=0,
+            accepted_without_item=0,
         ),
         GardenProposalCounts(
             origin=GardenProposalOrigin.ROUTINE_RUN,
@@ -289,7 +294,12 @@ def test_counts_by_class_since_is_inclusive_and_until_is_exclusive(tmp_path: Pat
     assert rows == [
         GardenProposalCounts(
             origin=GardenProposalOrigin.ROUTINE_RUN,
-            routine_name="nightly", class_="c", open=1, passed=0, accepted_with_item=0, accepted_without_item=0
+            routine_name="nightly",
+            class_="c",
+            open=1,
+            passed=0,
+            accepted_with_item=0,
+            accepted_without_item=0,
         )
     ]
 
@@ -311,7 +321,12 @@ def test_counts_by_class_splits_minted_and_declined_accepts(tmp_path: Path) -> N
     assert rows == [
         GardenProposalCounts(
             origin=GardenProposalOrigin.ROUTINE_RUN,
-            routine_name="nightly", class_="c", open=1, passed=1, accepted_with_item=1, accepted_without_item=1
+            routine_name="nightly",
+            class_="c",
+            open=1,
+            passed=1,
+            accepted_with_item=1,
+            accepted_without_item=1,
         )
     ]
     assert rows[0].created == 4
@@ -337,7 +352,12 @@ def test_counts_by_class_routine_name_filter_narrows_to_one_routine(tmp_path: Pa
     assert rows == [
         GardenProposalCounts(
             origin=GardenProposalOrigin.ROUTINE_RUN,
-            routine_name="nightly", class_="c", open=1, passed=0, accepted_with_item=0, accepted_without_item=0
+            routine_name="nightly",
+            class_="c",
+            open=1,
+            passed=0,
+            accepted_with_item=0,
+            accepted_without_item=0,
         )
     ]
 
