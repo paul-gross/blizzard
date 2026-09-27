@@ -15,7 +15,7 @@ established stands for everything unchanged since; this visit re-verifies what m
   A rebase or a base merge since the recorded tip makes that diff mostly the base branch's motion: scope by the change's
   own commits instead — `git range-diff` across a rebase, `git show --remerge-diff` on a merge, the `pre-push-summary`
   or `resolve-report` naming what integration touched.
-- A method the prior report did not pass is always re-run. For each other declared method, decide whether the delta
+- A method the prior report records as failed is always re-run. For each other declared method, decide whether the delta
   touches behavior it covers — whether or not the prior visit ran it — and run the ones it does.
 - When the prior report holds no standing failure, a delta touching nothing any declared method covers — prose,
   comments, a docstring, a rename with no behavior behind it — needs no re-verification. That is a legitimate outcome:
@@ -42,5 +42,7 @@ Submit the node's `verification-report` asset before you declare done: run
 passed, anything you could not close, and always:
 
 - **the tip verified**, per repo — `<repo> <branch> <sha>`, the full sha, so the next visit can diff from it;
+- **the standing result of every declared method** — passed or failed, and on a re-visit whether this visit re-ran it or
+  carried it forward from the prior report, so each report stands on its own for the next visit and for `pre-push`;
 - **the scoping decision**, on a re-visit — the delta you diffed, which methods you re-ran, which you did not and why,
   or that nothing needed re-verifying.
