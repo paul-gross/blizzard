@@ -6,7 +6,6 @@ test, plus F23's pairing proof against the pinned compaction corpus."""
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -20,20 +19,14 @@ from blizzard.runner.harness.internal.opencode_cursor import (
 )
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.internal.opencode_shapes import parse_session_export
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
 # The oldest committed corpus inside the admitted range (blizzard#438) — stays correct as corpora are added.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = (
-    Path(__file__).resolve().parents[1]
-    / "src"
-    / "blizzard"
-    / "runner"
-    / "harness"
-    / "contracts"
-    / "opencode"
-    / _AN_ADMITTED_OPENCODE_VERSION
+    repo_root() / "src" / "blizzard" / "runner" / "harness" / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 )
 
 

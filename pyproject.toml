@@ -122,6 +122,49 @@ markers = [
     "journey: the capstone MVP acceptance-journey rehearsal — real host daemons, a mid-run reboot, and the human loop, end to end; skipped without BLIZZARD_JOURNEY=1",
 ]
 
+[tool.mutmut]
+# If a fast-tier test reads a new non-Python repo file, add its path here.
+# tests/repo_files.py guards reads (including during collection); Python files
+# in src/ and tests/ are already copied by mutmut. Before the first mutmut run,
+# run `uv run python -m tests.repo_files` to create destination parent dirs;
+# mutmut's native copy2 does not create parents for individual files.
+also_copy = [
+    "pyproject.toml",
+    "openapi",
+    ".github/workflows/push.yml",
+    ".github/workflows/release.yml",
+    "contracts/cli",
+    "contracts/sse",
+    "packaging/docker",
+    "packaging/systemd",
+    "scripts/check-version-tag.sh",
+    "scripts/image-tags.sh",
+    "scripts/is-retryable-push-error.sh",
+    "scripts/release-notes.sh",
+    "scripts/restated-invariants.json",
+    # These test-loaded Python scripts live outside mutmut's src/ and tests/ copies.
+    "scripts/prose_spans.py",
+    "scripts/restated_invariants.py",
+    "docs/deployment/transcripts.md",
+    "docs/deployment/chunk-operations/takeover.md",
+    "docs/deployment/work-sources.md",
+    "docs/deployment/human-auth.md",
+    "docs/deployment/control-verbs.md",
+    "docs/deployment/opencode-compatibility.md",
+    "docs/deployment/worker-spawn.md",
+    "docs/deployment/findings-and-proposals.md",
+    "web/projects/fleet/src/lib/chunk-detail/chunk-escalation.ts",
+    "web/angular.json",
+    "src/blizzard/hub/system_artifacts/garden/finding-format.md",
+    "src/blizzard/hub/system_artifacts/garden/proposal-format.md",
+    "src/blizzard/hub/system_artifacts/review/finding-format.md",
+    "src/blizzard/runner/harness/prompts/samples/winter/workspace-prompt.md",
+    "README.md",
+    "mise.toml",
+    "src/blizzard/hub/graphs",
+    "src/blizzard/runner/harness/contracts",
+]
+
 [tool.pyright]
 include = ["src", "tests"]
 pythonVersion = "3.12"

@@ -7,13 +7,14 @@ release workflow itself; ``--from-stdin`` is what this test drives.
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "release-notes.sh"
+_SCRIPT = repo_root() / "scripts" / "release-notes.sh"
 
 
 def _run(commit_lines: list[str]) -> str:

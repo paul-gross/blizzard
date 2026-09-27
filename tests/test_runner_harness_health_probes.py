@@ -16,10 +16,11 @@ from blizzard.runner.harness.internal.claude_code_health import ADMITTED_CLAUDE_
 from blizzard.runner.harness.internal.offline_compatibility import DEFAULT_CORPUS_ROOT, admitted_corpus_versions
 from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.component
 
-_PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
+_PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 # Keyed off the admitted range's own committed corpus (blizzard#438) — there is exactly
 # one committed corpus today, but this stays correct once a second one lands.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]

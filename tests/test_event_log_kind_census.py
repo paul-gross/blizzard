@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import itertools
 import re
-from pathlib import Path
 from typing import cast, get_args
 
 import pytest
@@ -11,10 +10,11 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.hub.domain.work import SEVERITY_RANK
 from tests.event_log_kind_census import EVENT_LOG_KIND_CENSUS as CENSUS
 from tests.event_log_kind_census import Projected, Recorded
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = repo_root()
 _OPERATIONS_MD = _REPO_ROOT.parent / "blizzard-context" / "domain" / "operations.md"
 
 

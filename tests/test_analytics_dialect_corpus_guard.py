@@ -14,10 +14,11 @@ import pytest
 from blizzard.hub.domain.analytics.dialects import DIALECTS
 from blizzard.runner.harness.internal.claude_code_normalizer import NORMALIZER_VERSION as _CLAUDE_CODE_VERSION
 from blizzard.runner.harness.internal.opencode_normalizer import NORMALIZER_VERSION as _OPENCODE_VERSION
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-_PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
+_PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 
 #: Every dialect with a pinned compatibility corpus — Claude Code has none (D5).
 _CORPUS_DIRS: dict[str, Path] = {

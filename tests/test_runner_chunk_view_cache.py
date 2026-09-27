@@ -9,7 +9,6 @@ from __future__ import annotations
 import ast
 import json
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 
@@ -24,6 +23,7 @@ from blizzard.wire.chunk import ChunkStatusView, ChunkUsageTotalView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED
+from tests.repo_files import repo_root
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -263,7 +263,7 @@ def test_no_module_under_runner_loop_imports_chunk_detail() -> None:
     """The migration's own acceptance criterion (blizzard#521): every one of the nine
     per-chunk reads now goes through ``IChunkViews``/``ChunkStatusView``, never the full
     ``ChunkDetail`` aggregate."""
-    loop_dir = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "loop"
+    loop_dir = repo_root() / "src" / "blizzard" / "runner" / "loop"
     offenders = []
     for path in sorted(loop_dir.rglob("*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))

@@ -15,9 +15,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_SPECS = sorted((Path(__file__).resolve().parents[1] / "openapi").glob("*.openapi.json"))
+_SPECS = sorted((repo_root() / "openapi").glob("*.openapi.json"))
 
 _FORBIDDEN = {
     "client-surface claim": re.compile(r"\bboards?\b|\bthe UI\b|\bfrontend\b|\bdocks?\b|\bkiosk\b", re.IGNORECASE),

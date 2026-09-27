@@ -13,9 +13,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = repo_root()
 _SCRIPT = _REPO_ROOT / "scripts" / "check-version-tag.sh"
 
 

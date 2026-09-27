@@ -7,14 +7,14 @@ merging). A pure YAML parse — no docker/GHCR credentials needed.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import yaml
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = repo_root()
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 

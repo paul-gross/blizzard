@@ -16,10 +16,11 @@ from sqlalchemy import DateTime
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.store import schema as runner_schema
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = repo_root()
 _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 # The one legitimate owner of a raw `.isoformat()` call — iso_utc's own implementation.
 _EXCLUDED_FILES = {_SRC_DIR / "foundation" / "store" / "utc.py"}

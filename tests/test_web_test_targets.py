@@ -8,13 +8,14 @@ sweep at once — the pair the sweep exists to keep apart (issue #275).
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
+from tests.repo_files import repo_root
+
 pytestmark = pytest.mark.unit
 
-_ANGULAR = Path(__file__).resolve().parents[1] / "web" / "angular.json"
+_ANGULAR = repo_root() / "web" / "angular.json"
 _SHELL_SWEEP_GLOB = "**/*.shell-sweep.spec.ts"
 
 

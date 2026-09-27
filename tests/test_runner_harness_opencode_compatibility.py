@@ -76,10 +76,11 @@ from blizzard.runner.harness.internal.opencode_shapes import (
     parse_worker_config,
 )
 from blizzard.runner.harness.internal.opencode_transcript import TranscriptExportSample, inspect_transcript
+from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-_PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "blizzard" / "runner" / "harness"
+_PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 # Keyed off the admitted range's own committed corpus (blizzard#438) — there is exactly
 # one committed corpus today, but this stays correct once a second one lands.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]

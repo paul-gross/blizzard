@@ -17,6 +17,7 @@ from click.testing import CliRunner, Result
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.analytics import _DATASETS
+from tests.repo_files import repo_root
 from tests.support import HubHarness
 from tests.test_analytics_events_api import _cookie, _seeded_hub
 from tests.test_analytics_spend_api import _mint_chunk, _push_usage
@@ -26,7 +27,7 @@ pytestmark = pytest.mark.component
 
 _HUB_URL = "http://hub.local:8421"
 
-with open("openapi/hub.openapi.json") as _f:
+with (repo_root() / "openapi/hub.openapi.json").open() as _f:
     _OPENAPI = json.load(_f)
 
 #: The two flags every summary dataset can legally take that no route ever declares as

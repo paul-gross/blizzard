@@ -20,6 +20,10 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli.sessions.internal import session_file
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
+from tests.repo_files import install_repo_read_guard
+
+# Install before test-module imports so collection-time reads are covered too.
+install_repo_read_guard()
 
 #: The six verification tiers declared in ``pyproject.toml``'s ``markers`` list.
 _TIER_MARKERS = frozenset({"unit", "component", "service", "e2e", "crash_sweep", "journey"})
