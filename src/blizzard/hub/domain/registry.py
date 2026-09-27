@@ -226,7 +226,7 @@ class PerSubscriptionUsageView:
         **union** of sample and miss rows per slug: a non-stale sample or a newest lapsed
         miss outranking it (or an absent sample) admits the slug; a dead or stale
         subscription with only silent (non-lapsed) misses is simply absent. Once admitted,
-        a surviving non-stale sample's fields are never blanked, lapsed or not."""
+        a surviving sample's fields are never blanked, stale or lapsed or not."""
         views: list[PerSubscriptionUsageView] = []
         for slug in sorted(set(samples) | set(misses)):
             sample = samples.get(slug)
@@ -235,8 +235,7 @@ class PerSubscriptionUsageView:
             fresh_sample = sample is not None and not _usage_stale(sample.sampled_at, now=now)
             if not lapsed and not fresh_sample:
                 continue
-            if fresh_sample:
-                assert sample is not None  # narrowed by `fresh_sample`
+            if sample is not None:
                 views.append(
                     cls(
                         slug=slug,
@@ -249,7 +248,7 @@ class PerSubscriptionUsageView:
                     )
                 )
             else:
-                assert miss is not None  # narrowed by `lapsed`
+                assert miss is not None  # narrowed by `lapsed` — `sample is None` forced the `not fresh_sample` skip
                 views.append(
                     cls(
                         slug=slug,

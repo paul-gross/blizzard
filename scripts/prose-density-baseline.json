@@ -2247,10 +2247,10 @@
    "total": 422
   },
   "blizzard/hub/domain/registry.py": {
-   "comments": 21,
+   "comments": 20,
    "docstrings": 121,
    "over_cap": 5,
-   "total": 486
+   "total": 485
   },
   "blizzard/hub/domain/restart.py": {
    "comments": 8,
@@ -7740,9 +7740,9 @@
   },
   "test_registry_external_usage.py": {
    "comments": 3,
-   "docstrings": 15,
+   "docstrings": 18,
    "over_cap": 0,
-   "total": 271
+   "total": 285
   },
   "test_release_notes.py": {
    "comments": 0,
