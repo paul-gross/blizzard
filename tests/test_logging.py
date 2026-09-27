@@ -7,14 +7,15 @@ scaffold owns is the *selection* rule, so that is what is asserted here.
 
 from __future__ import annotations
 
+import io
 import json
 import sys
-from typing import Any
+from typing import Any, TextIO, cast
 
 import pytest
 import structlog
 
-from blizzard.foundation.logging import ENV_LOG_FORMAT, Console, Json, LogFormat
+from blizzard.foundation.logging import ENV_LOG_FORMAT, Console, Json, LogFormat, _LiveStderr
 
 
 @pytest.mark.unit
@@ -88,3 +89,22 @@ def test_apply_installs_the_formats_exception_processors(monkeypatch: pytest.Mon
     processors = installed["processors"]
     assert isinstance(processors[-1], structlog.processors.JSONRenderer)
     assert structlog.processors.format_exc_info in processors[:-1]
+
+
+@pytest.mark.unit
+def test_a_cached_logger_survives_a_replaced_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ``PrintLogger`` built from ``_LiveStderr`` must not raise or lose a message when
+    ``sys.stderr`` is replaced after the logger was built — pytest capture does exactly
+    this between tests."""
+    logger = structlog.PrintLoggerFactory(file=cast(TextIO, _LiveStderr()))()
+
+    closed = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", closed)
+    closed.close()
+
+    live = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", live)
+
+    logger.msg("still alive")
+
+    assert live.getvalue() == "still alive\n"
