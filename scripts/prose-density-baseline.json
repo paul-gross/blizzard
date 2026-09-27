@@ -1126,9 +1126,9 @@
   },
   "blizzard/foundation/logging.py": {
    "comments": 2,
-   "docstrings": 16,
+   "docstrings": 22,
    "over_cap": 1,
-   "total": 90
+   "total": 106
   },
   "blizzard/foundation/node_steps.py": {
    "comments": 0,
@@ -7500,9 +7500,9 @@
   },
   "test_logging.py": {
    "comments": 1,
-   "docstrings": 12,
+   "docstrings": 15,
    "over_cap": 0,
-   "total": 90
+   "total": 110
   },
   "test_marker_auth.py": {
    "comments": 3,
