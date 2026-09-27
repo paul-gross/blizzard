@@ -42,7 +42,8 @@ Submit the node's `verification-report` asset before you declare done: run
 passed, anything you could not close, and always:
 
 - **the tip verified**, per repo — `<repo> <branch> <sha>`, the full sha, so the next visit can diff from it;
-- **the standing result of every declared method** — passed or failed, and on a re-visit whether this visit re-ran it or
-  carried it forward from the prior report, so each report stands on its own for the next visit and for `pre-push`;
+- **the standing result of every declared method** — passed, failed, or not run and why, and on a re-visit whether this
+  visit re-ran it or carried it forward from the prior report, so each report stands on its own for the next visit and
+  for `pre-push`;
 - **the scoping decision**, on a re-visit — the delta you diffed, which methods you re-ran, which you did not and why,
   or that nothing needed re-verifying.
