@@ -55,15 +55,15 @@
           >
           <!-- The judgement that closed the node, in a column of its own so the
                verdicts read down the timeline aligned, then where it routed the
-               chunk — the fail loop's "→ build" consequence, dimmed. A migration
-               (issue #90) reads its verdict as the choice that hopped graphs and
+               chunk — the fail loop's "→ build" consequence, dimmed. A graph
+               migration reads its verdict as the choice that hopped graphs and
                routes to the target graph's landing node. -->
           <span class="jg">
             <span class="verdict" data-testid="history-choice">{{ row.verdict ?? '·' }}</span>
             <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
           </span>
           <span class="ts" data-testid="history-when" [attr.title]="row.whenTitle || null">{{ row.when }}</span>
-          <!-- That node-step's own usage (issue #60) — every invocation recorded at
+          <!-- That node-step's own usage — every invocation recorded at
                this step's (node, epoch) summed inline, so a review-fail cycle visibly
                shows what each lap cost. Absent when no usage fact landed for it yet. -->
           @if (usageForStep(row); as u) {

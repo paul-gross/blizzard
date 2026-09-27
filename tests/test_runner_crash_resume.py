@@ -1,4 +1,4 @@
-"""Runner crash-resume — the ungraceful-restart re-attach (issue #13, unit tier).
+"""Runner crash-resume — the ungraceful-restart re-attach (unit tier).
 
 :func:`mark_crash_resume_intents` marks an in-flight lease for same-lease resume iff its
 worker's process is gone, its current spawn recorded no session-end, and its heartbeat
@@ -171,7 +171,7 @@ def test_marks_crash_after_an_earlier_session_ended(tmp_path):  # type: ignore[n
 
 @pytest.mark.unit
 def test_marks_worker_respawned_just_before_the_crash_with_no_beat_of_its_own(tmp_path):  # type: ignore[no-untyped-def]
-    """Issue #150: a lease resumed after its last heartbeat and killed before its fresh
+    """A lease resumed after its last heartbeat and killed before its fresh
     worker's first tool call still resumes — the spawn fact, not the stale heartbeat,
     describes the running process."""
     store = _store(tmp_path)
@@ -304,7 +304,7 @@ def test_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[no-untype
 
 @pytest.mark.unit
 def test_skips_a_lease_with_an_in_flight_elicitation(tmp_path):  # type: ignore[no-untyped-def]
-    """D6 (blizzard#443 review, F5) on the ungraceful crash-recovery path too: a lease whose
+    """On the ungraceful crash-recovery path too: a lease whose
     exited worker's verdict elicitation is already in flight is not this scan's to mark — a
     crash-orphan resume here would leave the elicitation's own stale record misread as the
     resumed generation's verdict once it later collects."""

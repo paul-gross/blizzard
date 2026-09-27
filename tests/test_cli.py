@@ -36,7 +36,7 @@ def test_root_lists_hub_and_runner() -> None:
 
 
 def test_hub_lists_its_verbs() -> None:
-    # The operator verbs are grouped by noun (issue #104).
+    # The operator verbs are grouped by noun.
     result = CliRunner().invoke(blizzard, ["hub", "--help"])
     assert result.exit_code == 0
     for verb in ("init", "migrate", "host", "status", "chunk", "runner", "graph", "queue", "decision", "question"):
@@ -44,7 +44,7 @@ def test_hub_lists_its_verbs() -> None:
 
 
 def test_hub_removed_flat_verbs_are_unknown() -> None:
-    """Flat verbs removed in issue #105 no longer name a command in `--help` (matched by
+    """Flat verbs removed no longer name a command in `--help` (matched by
     each line's own first token, not a substring), and invoking one fails with click's
     unknown-command error rather than silently delegating."""
     result = CliRunner().invoke(blizzard, ["hub", "--help"])
@@ -78,7 +78,7 @@ def test_hub_init_and_migrate(tmp_path: Path) -> None:
 
 
 def test_hub_migrate_rejects_a_leftover_pm_source_block(tmp_path: Path) -> None:
-    """`migrate` — not just `host` — must reject the pre-rename key (issue #55): the
+    """`migrate` — not just `host` — must reject the pre-rename key: the
     dogfooding deploy runs `migrate` before `systemctl restart`, so a `host`-only guard
     would pass migrate, take the hub down at restart, and the runner with it."""
     root = tmp_path / "hub"
@@ -98,7 +98,7 @@ def test_hub_migrate_rejects_a_leftover_pm_source_block(tmp_path: Path) -> None:
 
 
 def test_hub_migrate_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None:
-    """issue #234: `cp -r <live-store>/* <copy>/ && blizzard hub migrate --dir <copy>`
+    """`cp -r <live-store>/* <copy>/ && blizzard hub migrate --dir <copy>`
     must refuse rather than silently migrate the live store — an absolute db_url is
     written in directly to model an unpatched-era init or an explicit override."""
     runner = CliRunner()
@@ -217,7 +217,7 @@ def test_runner_init(tmp_path: Path) -> None:
     assert (tmp_path / "runner" / "blizzard-runner.toml").exists()
 
 
-# The runtime-dir env fallback (issue #39): --dir > $BZ_<daemon>_DIR > cwd. Parametrized
+# The runtime-dir env fallback: --dir > $BZ_<daemon>_DIR > cwd. Parametrized
 # over both daemons — a fallback wired on one but not the other is the drift worth catching.
 _DAEMONS = [("hub", "BZ_HUB_DIR", "blizzard-hub.toml"), ("runner", "BZ_RUNNER_DIR", "blizzard-runner.toml")]
 
@@ -277,7 +277,7 @@ def test_dir_help_names_the_env_fallback(daemon: str, env_var: str, config_name:
     assert f"${env_var}" in result.output
 
 
-# `host` accepting a positional DIRECTORY like `init` does (issue #3): the config-load
+# `host` accepting a positional DIRECTORY like `init` does: the config-load
 # guard fails fast, before serving, naming the resolved directory — proof with nothing started.
 @pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
 def test_host_accepts_positional_directory(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
@@ -336,7 +336,7 @@ def test_hub_host_help_shows_directory_argument() -> None:
 
 
 def test_runner_status_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> None:
-    # `status` is a pure client of the local API (issue #51), same as `pause`/`start` —
+    # `status` is a pure client of the local API, same as `pause`/`start` —
     # no socket, no store fallback, a clean error naming the missing daemon.
     root = tmp_path / "runner"
     assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
@@ -409,7 +409,7 @@ def test_an_ambiguous_liveness_answer_fails_closed(reply: bytes | None, expected
 
 
 def test_runner_transcript_backfill_refuses_while_the_lane_is_off(tmp_path: Path) -> None:
-    # `[transcripts] ship` is false in a scaffolded config (issue #246, D5), and a backfill
+    # `[transcripts] ship` is false in a scaffolded config, and a backfill
     # into a lane the operator has switched off would ship content they never enabled.
     root = tmp_path / "runner"
     assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
@@ -487,7 +487,7 @@ def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_p
 
 
 def test_runner_takeover_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> None:
-    # `takeover` is a pure client of the local API too (issue #52) — no socket, no store
+    # `takeover` is a pure client of the local API too — no socket, no store
     # fallback, a clean error naming the missing daemon.
     root = tmp_path / "runner"
     assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
@@ -499,7 +499,7 @@ def test_runner_takeover_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -
 
 
 def test_hub_host_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None:
-    """`host` applies the same --dir isolation guard as `migrate` (issue #234) — it
+    """`host` applies the same --dir isolation guard as `migrate` — it
     fails before ever announcing "serving", let alone binding a socket."""
     runner = CliRunner()
     live = tmp_path / "live"
@@ -544,7 +544,7 @@ def test_hub_host_reports_an_unset_work_source_token_env_as_a_clean_error(
 
 
 def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_path: Path) -> None:
-    """A configured-but-missing ``runner_prompt_file`` (issue #103) fails at boot as a
+    """A configured-but-missing ``runner_prompt_file`` fails at boot as a
     clean CLI error: ``PeriodicDriver`` resolves it before any socket binds, rather than
     silently killing the reconciliation loop while uvicorn keeps serving."""
     runner = CliRunner()

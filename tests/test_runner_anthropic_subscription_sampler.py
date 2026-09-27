@@ -1,4 +1,4 @@
-"""``AnthropicSubscriptionSampler.sample`` (issue #218).
+"""``AnthropicSubscriptionSampler.sample``.
 
 Driven with an injected ``httpx.Client`` (an ``httpx.MockTransport``-backed fake) and an injected
 ``FixedClock`` — no real credential file location, no real network. Every failure path returns

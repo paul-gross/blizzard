@@ -1,7 +1,7 @@
 """Reason onto local_pause_facts.
 
-One guarded, nullable column — un-backfilled, so NULL declares unknown, never a value
-(blizzard#594). The reason previously reached only the hub's own outbound report; this
+One guarded, nullable column — un-backfilled, so NULL declares unknown, never a value.
+The reason previously reached only the hub's own outbound report; this
 lets the runner's own status wire read it back.
 Revision ID: 20260921_1000_local_pause_reason
 Revises: 20260920_0300_usage_harness_provenance

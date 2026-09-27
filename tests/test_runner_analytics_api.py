@@ -1,5 +1,5 @@
 """``GET /api/leases/{id}/analytics/...`` — the lease-scoped, hub-proxying reads of the
-six counts/spend summaries (blizzard#545, component tier). Authorization mirrors
+six counts/spend summaries (component tier). Authorization mirrors
 ``tests/test_runner_garden_findings_api.py``'s own shape: the hub is never consulted for
 an unauthorized caller. The proxy forwards the window params unvalidated and returns the
 hub body verbatim, including a non-routine chunk's own 404."""

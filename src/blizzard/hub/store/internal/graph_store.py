@@ -3,7 +3,7 @@
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Graphs are
 immutable: :meth:`mint` is insert-only, with no update path. ``enabled``/``retired`` is
 not a column but is derived from the append-only ``graph_lifecycle_facts`` table,
-newest-fact-wins per ``graph_id`` (issue #101)."""
+newest-fact-wins per ``graph_id``."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ class TextColumn(ListColumn[str]):
 
 @dataclass(frozen=True)
 class ProducesColumn(ListColumn[ProducesSpec]):
-    """The ``graph_nodes.produces`` column (D1, issue #143).
+    """The ``graph_nodes.produces`` column.
 
     Two encodings share it: the ``{name, kind}`` mapping this writes, and a bare string
     normalized to an ``ASSET`` entry — read-side back-compat, so no migration is owed."""
@@ -297,7 +297,7 @@ class GraphStore:
     def get_enabled_by_name(self, name: str) -> Graph | None:
         with self._store.read("get_enabled_by_name") as conn:
             # Tie-break on graph_id descending — ULIDs sort lexically by creation —
-            # then walked newest-first, skipping every retired graph_id (issue #101).
+            # then walked newest-first, skipping every retired graph_id.
             rows = conn.execute(
                 select(graphs)
                 .where(graphs.c.name == name)
@@ -343,7 +343,7 @@ class GraphStore:
         return {graph_id for graph_id, retired in newest.items() if retired}
 
     def get_many(self, graph_ids: Sequence[str]) -> dict[str, Graph]:
-        """``get``'s batched sibling (D11, blizzard#433 Phase 3) — every requested id's
+        """``get``'s batched sibling — every requested id's
         whole :class:`Graph`, keyed by graph id, read as one batched-``IN`` query per
         table rather than :meth:`_reify`'s own five-query fan-out repeated per graph."""
         if not graph_ids:
@@ -493,7 +493,7 @@ class GraphStore:
         return bool(row.retired) if row is not None else False
 
     def retired_graph_ids(self) -> set[str]:
-        """Every ``graph_id`` whose newest lifecycle fact reads retired (issue #101)."""
+        """Every ``graph_id`` whose newest lifecycle fact reads retired."""
         with self._store.read("retired_graph_ids") as conn:
             rows = conn.execute(
                 select(graph_lifecycle_facts.c.graph_id, graph_lifecycle_facts.c.retired).order_by(
@@ -506,13 +506,13 @@ class GraphStore:
         return {graph_id for graph_id, retired in newest.items() if retired}
 
     def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
-        """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins (issue #101)."""
+        """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins."""
         with self._store.write("record_lifecycle") as conn:
             conn.execute(insert(graph_lifecycle_facts).values(graph_id=graph_id, retired=retired, set_at=at, set_by=by))
 
     def follow_latest(self, graph_id: str) -> bool | None:
         """Newest ``graph_policy_facts`` row for ``graph_id`` wins; no row reads ``None``
-        (inherit the hub setting) — issue #164.
+        (inherit the hub setting).
 
         Ordered by ``id``, not ``set_at``: two facts inside one clock tick must still
         resolve newest-write-wins. A present ``None`` is a deliberate revert-to-inherit."""
@@ -528,7 +528,7 @@ class GraphStore:
         return bool(row.follow_latest)
 
     def record_policy(self, graph_id: str, *, follow_latest: bool | None, at: datetime, by: str) -> None:
-        """Append a follow-latest policy fact — newest-fact-wins (issue #164)."""
+        """Append a follow-latest policy fact — newest-fact-wins."""
         with self._store.write("record_policy") as conn:
             conn.execute(
                 insert(graph_policy_facts).values(graph_id=graph_id, follow_latest=follow_latest, set_at=at, set_by=by)

@@ -1,8 +1,8 @@
-"""The analytics outcomes route (blizzard#256, Phase 4, component tier): the
-TRANSCRIPT_READ auth triad, the three cases D4 separates — a judged failure edge, an
-attempt that recorded no transition, and a delivery kick-back (bounce) — D5's two
-positional base cases, a no-movement failure resolving via the epoch's own graph, and
-the shared filter vocabulary (D7)."""
+"""The analytics outcomes route (component tier): the
+TRANSCRIPT_READ auth triad, the three cases kept separate — a judged failure edge, an
+attempt that recorded no transition, and a delivery kick-back (bounce) — the
+migration-derived base case's two positional variants, a no-movement failure resolving
+via the epoch's own graph, and the shared filter vocabulary."""
 
 from __future__ import annotations
 
@@ -170,7 +170,7 @@ def test_every_route_refuses_a_runner_principal(tmp_path: Path, path: str) -> No
     assert resp.status_code == 403
 
 
-# --- D4: the three cases, kept separate -----------------------------------------------
+# --- The three cases, kept separate -----------------------------------------------
 
 
 def test_a_judged_failure_edge_counts_as_a_choice_not_an_attempt_failure(tmp_path: Path) -> None:
@@ -186,9 +186,9 @@ def test_a_judged_failure_edge_counts_as_a_choice_not_an_attempt_failure(tmp_pat
 
 
 def test_an_attempt_with_no_transition_counts_as_an_attempt_failure(tmp_path: Path) -> None:
-    """Also D5's second base case: no prior movement, so the node resolves to the
-    pinned graph's entry. Epoch 2's lease is epoch 1's positive end-of-attempt evidence
-    (review round 1 F1); epoch 2 itself, still the newest, counts as none."""
+    """Also the second no-movement base case: no prior movement, so the node resolves to
+    the pinned graph's entry. Epoch 2's lease is epoch 1's positive end-of-attempt
+    evidence; epoch 2 itself, still the newest, counts as none."""
     hub, token, _graph_id, nodes, _og, _on = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)  # a crash/reap — never completed
@@ -200,7 +200,7 @@ def test_an_attempt_with_no_transition_counts_as_an_attempt_failure(tmp_path: Pa
 
 
 def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
-    """F1 (review round 4): the bounced epoch must be superseded by a strictly newer
+    """The bounced epoch must be superseded by a strictly newer
     lease, or the unrelated in-flight guard excludes it first and this test can never
     detect the bounce-exclusion guard being deleted."""
     hub, token, _graph_id, _nodes, _og, _on = _seeded_hub(tmp_path)
@@ -276,7 +276,7 @@ def test_the_bounce_exclusion_reaches_the_kick_backs_own_epoch_and_no_further(tm
     assert outcomes[nodes["resolve"]]["choice_counts"] == {"resolved": 1}  # ...and no wider
 
 
-# --- D5: the migration-derived base case -----------------------------------------------
+# --- The migration-derived base case -----------------------------------------------
 
 
 def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_node(tmp_path: Path) -> None:
@@ -298,7 +298,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
         source=MigrationSource.AUTHORED_EDGE,
     )
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed node — never completed
-    report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over (review round 1 F1)
+    report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over
 
     resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
 
@@ -310,7 +310,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
 
 def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(tmp_path: Path) -> None:
     """``landed_node_id`` null means "target entry" — must resolve via the migration's
-    own ``to_graph_id`` rather than crash on a raw ``None`` (review round 1 F7)."""
+    own ``to_graph_id`` rather than crash on a raw ``None``."""
     hub, token, graph_id, nodes, other_graph_id, other_nodes = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
@@ -329,7 +329,7 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
         source=MigrationSource.AUTHORED_EDGE,
     )
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed (entry) node
-    report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over (review round 1 F1)
+    report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over
 
     resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
 
@@ -368,12 +368,13 @@ def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tm
     assert other_nodes["triage"] not in outcomes  # never graph B's, the current pin
 
 
-# --- the shared filter vocabulary (D7) -----------------------------------------------
+# --- the shared filter vocabulary -----------------------------------------------
 
 
 def test_outcomes_honor_the_graph_id_filter_on_a_derived_attempt_failure(tmp_path: Path) -> None:
-    """`graph_id` applies to D5's own DERIVED graph too — a no-movement failure has no
-    transition of its own to filter by, only the graph D5 resolves it to."""
+    """`graph_id` applies to the DERIVED graph a no-movement base case resolves to as
+    well — a no-movement failure has no transition of its own to filter by, only the
+    graph it resolves to."""
     hub, token, graph_id, nodes, other_graph_id, _on = _seeded_hub(tmp_path)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)  # a crash/reap — never completed
@@ -387,7 +388,7 @@ def test_outcomes_honor_the_graph_id_filter_on_a_derived_attempt_failure(tmp_pat
 
 
 def test_outcomes_honor_the_source_filter_on_both_halves(tmp_path: Path) -> None:
-    """F12 (review round 4): `source` applies to both the judged-choice half (a
+    """`source` applies to both the judged-choice half (a
     completion) and the attempt-failure half (a no-movement crash) — durations/spend
     each carry a dedicated `source` test, outcomes did not."""
     hub, token, _graph_id, nodes, _og, _on = _seeded_hub(

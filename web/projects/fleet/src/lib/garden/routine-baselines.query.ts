@@ -5,7 +5,7 @@ import { hubRoutineBaselinesKey } from '../query-keys';
 
 /**
  * Hub `GET /api/routines/{routine_id}/baselines` read — every scope a routine has
- * swept (D5); absence means never swept.
+ * swept; absence means never swept.
  *
  * Reactive over the selected routine id, exactly like {@link injectHubChunkDetailQuery}:
  * pass an accessor — the query re-keys as the selection changes and disables itself

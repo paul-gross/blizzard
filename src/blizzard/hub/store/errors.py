@@ -1,4 +1,4 @@
-"""The injected error-wrapping seam for ``hub/store/internal/`` (blizzard#413).
+"""The injected error-wrapping seam for ``hub/store/internal/``.
 
 Shaped after ``blizzard.hub.auth.errors``: a driver exception is translated into the
 domain :class:`HubStoreError` at the one site it is caught, logged once at ERROR
@@ -67,8 +67,8 @@ class HubStoreConnections:
     @contextmanager
     def write(self, operation: str, *, expect: tuple[type[BaseException], ...] = ()) -> Iterator[Connection]:
         """Like :meth:`read`, over a transaction. ``expect`` names an exception a
-        caller already catches and recovers from locally (a first-write-wins race,
-        D3) — passed through unwrapped rather than treated as a driver fault."""
+        caller already catches and recovers from locally (a first-write-wins race)
+        — passed through unwrapped rather than treated as a driver fault."""
         try:
             with self._engine.begin() as conn:
                 yield conn

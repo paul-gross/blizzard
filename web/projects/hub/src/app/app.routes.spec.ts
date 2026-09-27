@@ -44,7 +44,7 @@ describe('the board route (route-table mobile/desktop fork)', () => {
     // ViewportService's override persists to localStorage — cleared so a prior
     // test's override never bleeds into the next one.
     localStorage.clear();
-    // The app root's session gate (issue #93) needs `/api/me` to resolve before it
+    // The app root's session gate needs `/api/me` to resolve before it
     // renders `<router-outlet>` at all — stub the full-permission operator identity
     // (`auth.mode = "none"`'s shape) so these route-fork assertions, which predate
     // auth, keep exercising exactly what they did before.

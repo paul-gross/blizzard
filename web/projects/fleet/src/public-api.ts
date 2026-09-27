@@ -6,7 +6,7 @@
  * app compose them. The two generated clients are re-exported under namespaces because
  * the hub and runner SDKs share operation names (e.g. `healthApiHealthGet`).
  *
- * This barrel (issue #82) is deliberately thin: every feature directory under `lib/`
+ * This barrel is deliberately thin: every feature directory under `lib/`
  * owns its own `index.ts` sub-barrel — including the domain view types it re-exports
  * from the generated hub client — and is re-exported here one line each, so two
  * features landing in parallel touch different sub-barrels instead of colliding on

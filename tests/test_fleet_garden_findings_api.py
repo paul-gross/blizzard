@@ -1,5 +1,5 @@
 """``GET /api/fleet/chunks/{chunk_id}/garden/findings`` — the worker-scoped fleet read
-of a routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583 D2, component
+of a routine's live-plus-`delivered` finding bucket (component
 tier). Derives the routine and scope from the chunk's own ``RunContext`` rather than a
 caller-supplied flag, reuses ``findings.py``'s own ``finding_view`` projection, and
 refuses — rather than answering an empty bucket for — an unknown chunk or one with no
@@ -124,7 +124,7 @@ def test_returns_the_scoped_live_bucket_via_the_shared_projection(tmp_path: Path
 
 
 def test_excludes_an_exited_finding_and_takes_no_include_gone_flag(tmp_path: Path) -> None:
-    """D6: the live bucket only, with no ``include_gone`` lever at all."""
+    """The live bucket only, with no ``include_gone`` lever at all."""
     hub = build_hub(tmp_path)
     chunk_id = _seed_chunk(hub)
     _seed_finding(hub, "fin_1")
@@ -142,7 +142,7 @@ def test_excludes_an_exited_finding_and_takes_no_include_gone_flag(tmp_path: Pat
 
 
 def test_includes_a_delivered_finding_alongside_live_ones(tmp_path: Path) -> None:
-    """blizzard#583 D2: a `delivered` finding rides in this bucket so the owning
+    """A `delivered` finding rides in this bucket so the owning
     routine's own run can re-check it — unlike every other exited state, which stays
     out (the prior test)."""
     hub = build_hub(tmp_path)
@@ -159,7 +159,7 @@ def test_includes_a_delivered_finding_alongside_live_ones(tmp_path: Path) -> Non
 
 
 def test_includes_a_review_sourced_finding_on_the_same_scope(tmp_path: Path) -> None:
-    """blizzard#582 D3: the bucket is a union of the routine's own findings and every
+    """The bucket is a union of the routine's own findings and every
     review-sourced finding recorded on this run's scope."""
     hub = build_hub(tmp_path)
     chunk_id = _seed_chunk(hub)

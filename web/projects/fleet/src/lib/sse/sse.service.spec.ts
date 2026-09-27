@@ -11,8 +11,8 @@ import {
   withLastEventId,
 } from './sse.service';
 
-/** Minimal transport stand-in — jsdom ships no `EventSource`, and reconnect (plus, since
- * issue #93, the auth-failure channel) must be driven deterministically. */
+/** Minimal transport stand-in — jsdom ships no `EventSource`, and reconnect (plus
+ * the auth-failure channel) must be driven deterministically. */
 class FakeEventSource {
   static readonly instances: FakeEventSource[] = [];
   readyState = 0; // CONNECTING
@@ -91,7 +91,7 @@ describe('SseService', () => {
 
       first.hardError();
       expect(handle.status()).toBe('reconnecting');
-      // A drop is detected here, but `reopens` waits for the confirmed reopen (D1).
+      // A drop is detected here, but `reopens` waits for the confirmed reopen.
       expect(handle.reopens()).toBe(0);
       expect(first.closed).toBe(true);
 

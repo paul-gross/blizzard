@@ -25,7 +25,7 @@ const ALL_CLASSES = 'all';
 
 /** Every real class chip's value carries this prefix, so it can never collide with
  * {@link ALL_CLASSES} no matter what a deployment names a class (`class` is opaque,
- * deployment-chosen vocabulary — Decision 2) — a class literally named `all` is a
+ * deployment-chosen vocabulary) — a class literally named `all` is a
  * real possibility, not a contrived one, and `KitChips` tracks and selects by
  * `value` alone. The class chip's `testid` carries its own `-item-` guard against the
  * same collision, one prefix protecting each of the two identifiers `KitChips` reads
@@ -44,8 +44,8 @@ const ALL_ROUTINES = 'all';
 /**
  * The `/gardening/proposals` sub-tab
  * (`blizzard-product:/delivered/garden/user-interface.md` §The docket) — the proposal
- * docket, filtered client-side by waiting state, by class, and by routine (Decision
- * 1: `GET /api/garden-proposals` declares no query parameters), beside a
+ * docket, filtered client-side by waiting state, by class, and by routine (`GET
+ * /api/garden-proposals` declares no query parameters), beside a
  * `<router-outlet>` holding whichever proposal the URL names
  * (`gardening-proposal-detail.ts`).
  *
@@ -55,7 +55,7 @@ const ALL_ROUTINES = 'all';
  *
  * A container: it injects the one list read and derives the rows the
  * presentational {@link FleetProposalList} renders. The class and routine chips
- * both come from the fetched data (Decision 2: `class` is the deployment's own
+ * both come from the fetched data (`class` is the deployment's own
  * opaque vocabulary, never a hardcoded list; `routine_name` likewise, though it is
  * blizzard's own vocabulary rather than the deployment's).
  *
@@ -114,7 +114,7 @@ export class GardeningProposalsPage {
   private readonly classFilter = computed<string | null>(() => this.url.read('class'));
 
   /** Every class present in the fetched data, alphabetized, each with an "All
-   * classes" chip ahead of them — never a hardcoded vocabulary (Decision 2). */
+   * classes" chip ahead of them — never a hardcoded vocabulary. */
   protected readonly classChips = computed<readonly KitChipOption[]>(() => {
     const classes = Array.from(new Set(this.proposals().map((p) => p.class))).sort((a, b) => a.localeCompare(b));
     return [
@@ -150,7 +150,7 @@ export class GardeningProposalsPage {
 
   /** Every routine present in the fetched data, alphabetized, each with an "All
    * routines" chip ahead of them — never a hardcoded vocabulary, mirroring
-   * {@link classChips}. A routine-less operator-authored proposal (blizzard#631)
+   * {@link classChips}. A routine-less operator-authored proposal
    * contributes no chip of its own: `null` names no routine to filter by. */
   protected readonly routineChips = computed<readonly KitChipOption[]>(() => {
     const names = this.proposals()

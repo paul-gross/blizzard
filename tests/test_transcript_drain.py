@@ -1,4 +1,4 @@
-"""The transcript lane's drain (component tier, issue #246) — break-on-error, ack-on-capped,
+"""The transcript lane's drain (component tier) — break-on-error, ack-on-capped,
 ack-on-already-applied, and the per-run bound."""
 
 from __future__ import annotations
@@ -125,7 +125,7 @@ def _enqueue_delta(ctx, segment_id: str, *, cursor: str) -> int:  # type: ignore
 
 
 def test_drain_run_pumps_then_flushes_a_real_pump_output_to_the_hub_with_shipping_on() -> None:
-    """review F9: no other case drives the real composition (pump then flush, ON) — a
+    """No other case drives the real composition (pump then flush, ON) — a
     mutation probe confirmed a no-op pump left the whole suite green. Asserts the hub
     received the pump's own turns, not a hand-built stand-in."""
     hub = FakeHub()
@@ -185,7 +185,7 @@ def test_drain_run_pumps_then_flushes_a_real_pump_output_to_the_hub_with_shippin
 
 
 def test_drain_renders_a_final_marker_from_the_ledger_row_not_a_hand_built_payload() -> None:
-    """review F8: the store buffers only a minimal marker row — the wire-shaped record
+    """The store buffers only a minimal marker row — the wire-shaped record
     renders here, straight from the segment's own frozen ledger row, not a second
     independently-built copy."""
     hub = FakeHub()
@@ -279,7 +279,7 @@ def test_drain_renders_a_final_marker_as_truncated_from_a_record_truncation_alon
 
 
 def test_drain_renders_a_final_marker_on_the_sentinel_version_when_no_pump_ever_ran() -> None:
-    """review F8: a segment that closes with no pump read ever having run still carries its
+    """A segment that closes with no pump read ever having run still carries its
     normalizer-version sentinel on the ledger row (``bzh``'s "never ran" convention) —
     the drain's rendering must surface exactly that, not a null or a crash."""
     hub = FakeHub()
@@ -330,7 +330,7 @@ def test_drain_stops_on_a_transport_failure_and_retries_the_backlog_next_tick() 
 
 
 def test_drain_acks_a_hub_capped_record_rather_than_wedging_the_fifo() -> None:
-    """review F8: a cap rejection (blizzard#247's oversized/over-budget/over-rate reject) is
+    """A cap rejection (oversized/over-budget/over-rate reject) is
     not idempotency — the drain must still ack it and move on, never retry it forever."""
     hub = FakeHub()
     ctx = _ctx(hub)
@@ -346,7 +346,7 @@ def test_drain_acks_a_hub_capped_record_rather_than_wedging_the_fifo() -> None:
 
 
 def test_drain_surfaces_a_hub_cap_rejection_never_silently() -> None:
-    """review F6: never silent — the segment's own field records it and the fact lane
+    """Never silent — the segment's own field records it and the fact lane
     carries a warning event, the same two-channel pattern the pump's own paths use."""
     hub = FakeHub()
     ctx = _ctx(hub)
@@ -412,8 +412,8 @@ def test_drain_acks_an_already_applied_record_without_redelivering() -> None:
 
 
 def test_drain_bounds_its_own_per_run_record_count() -> None:
-    """review F4: an unbounded drain would clear an entire backlog in one tick. Enforced
-    entirely by the query's own clause (review F17), no redundant loop-level guard."""
+    """An unbounded drain would clear an entire backlog in one tick. Enforced
+    entirely by the query's own clause, no redundant loop-level guard."""
     hub = FakeHub()
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
@@ -565,7 +565,7 @@ def test_drain_bounds_its_own_per_run_wall_clock() -> None:
 
 
 def test_drain_never_queries_pending_once_the_pump_alone_exhausts_the_deadline() -> None:
-    """Even capped at its own share of the budget (F9), the pump can still exhaust the
+    """Even capped at its own share of the budget, the pump can still exhaust the
     RUN's own deadline outright — the flush must check the deadline before its own (up
     to 50-row) query, not just inside its loop after already paying for it."""
     hub = FakeHub()
@@ -616,7 +616,7 @@ def test_drain_caps_the_pumps_own_deadline_to_a_fraction_of_the_run_budget() -> 
 
 
 class _RaisingTranscriptSource:
-    """review F4: a `turns_since` that always raises — the isolation case no scripted
+    """A `turns_since` that always raises — the isolation case no scripted
     :class:`FakeTranscriptSource` batch can trigger."""
 
     def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  # type: ignore[no-untyped-def]
@@ -690,7 +690,7 @@ def test_drain_run_survives_a_raising_pump_and_recovers_next_run() -> None:
 
 class _RaisingOpenSegmentsStore:
     """Wraps a real store, but makes `open_transcript_segments` raise — the failure
-    OUTSIDE `TranscriptPump`'s own per-segment loop (review round 6 F2's second half),
+    OUTSIDE `TranscriptPump`'s own per-segment loop,
     which no per-segment try/except can isolate."""
 
     def __init__(self, inner):  # type: ignore[no-untyped-def]

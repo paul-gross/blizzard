@@ -64,10 +64,10 @@ def finding_group() -> None:
     "source",
     type=click.Choice(["routine", "review"]),
     default=None,
-    help="Narrow to routine- or review-sourced findings (blizzard#582); absent reads both.",
+    help="Narrow to routine- or review-sourced findings; absent reads both.",
 )
 @click.option(
-    "--include-gone", is_flag=True, default=False, help="Also show every exited finding, not just a live one (D3)."
+    "--include-gone", is_flag=True, default=False, help="Also show every exited finding, not just a live one."
 )
 def finding_list(cli: CliContext, routine: str | None, scope: str, source: str | None, include_gone: bool) -> None:
     """List findings under SCOPE — live only, unless --include-gone, which also

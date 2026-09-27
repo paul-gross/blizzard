@@ -48,7 +48,7 @@ export const routes: Routes = [
     loadComponent: () => import('./fleet/fleet-page').then((m) => m.FleetPage),
   },
   { path: 'fleet', redirectTo: 'board' },
-  // The gardening tab (blizzard#397) — a top-level peer of board/graphs/events, not a
+  // The gardening tab — a top-level peer of board/graphs/events, not a
   // panel inside any of them. Five deep-linkable children, one per noun the garden
   // machinery itself has: scopes, routines, runs, findings, proposals — every one of
   // them unrelated to its neighbors, so every one of them gets its own tab and its
@@ -152,11 +152,11 @@ export const routes: Routes = [
       },
     ],
   },
-  // The login surface (issue #93) — public, reached directly or via the 401
+  // The login surface — public, reached directly or via the 401
   // interceptor. Rendered outside the app shell (`App`'s own `authState` branch),
   // so it carries no header/nav chrome of its own.
   { path: 'login', loadComponent: () => import('./login/login-page').then((m) => m.LoginPage) },
-  // A deliberate stub (issue #93's scope note) — the admin page itself is #94's; this
+  // A deliberate stub — the admin page itself is #94's; this
   // phase only needs a route the gated nav entry can point at.
   { path: 'admin', loadComponent: () => import('./admin/admin-page').then((m) => m.AdminPage) },
 ];

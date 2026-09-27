@@ -14,7 +14,7 @@
     }
   </div>
   <div class="spacer"></div>
-  <!-- The fleet-wide spend-since reads (issue #60; yesterday added issue #183) —
+  <!-- The fleet-wide spend-since reads —
        each cell withholds itself until its own read resolves, independently, so
        neither ever shows a misleading $0.00; the combined figure (formatCost)
        marks an estimated amount with a leading `~` and a cost-absent lower bound
@@ -37,7 +37,7 @@
        flex row so this component can size it as one unit — view encapsulation
        puts the *consumer's* attribute on projected nodes, so a rule here
        could never reach them, and an unmanaged trailing cell is exactly how
-       the profile menu used to get clipped (issue #163). -->
+       the profile menu used to get clipped. -->
   <div class="trailing">
     <ng-content select="[header-trailing]" />
   </div>

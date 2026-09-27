@@ -1,4 +1,4 @@
-"""OAuth provider login — the real hub against the real stub IdP (service tier, issue #92).
+"""OAuth provider login — the real hub against the real stub IdP (service tier).
 
 A running hub (``auth.mode = "oauth"``) whose ``authorize`` 302s to the real stub IdP
 subprocess, whose ``callback`` exchanges the stub's code, ending in a resolving session
@@ -36,7 +36,7 @@ def _oauth_hub(
     """A real ``blizzard hub host`` subprocess, ``auth.mode = "oauth"`` with one or more
     configured providers — mirrors ``tests/e2e/test_acceptance_loop.py``'s own ``_hub``,
     minus the work-source wiring this scenario does not need (login/`` /api/me`` alone).
-    ``superuser`` (issue #94) sets ``auth.superuser`` so the bootstrap lifecycle runs at
+    ``superuser`` sets ``auth.superuser`` so the bootstrap lifecycle runs at
     this real boot, same as any other deployment."""
     env = {**os.environ, _SECRET_ENV: _SECRET}
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
@@ -215,7 +215,7 @@ def test_refused_callback_lever_surfaces_as_a_login_failure(tmp_path: Path) -> N
 
 
 def test_named_superuser_email_lands_superuser_on_first_verified_login(tmp_path: Path) -> None:
-    """Issue #94's bootstrap-claim AC, over the real wire: a fresh store with
+    """The bootstrap-claim path, over the real wire: a fresh store with
     ``auth.superuser`` set pre-provisions an unclaimed intent, and the first verified
     login for that exact email lands the freshly-minted user as ``superuser``."""
     bin_dir = require_stub_idp()

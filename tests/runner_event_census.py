@@ -1,7 +1,7 @@
-"""The write-protocol census (D5, blizzard#317 Phase 3) — every write-only member
+"""The write-protocol census — every write-only member
 :class:`~blizzard.runner.stores.IWriteRunnerStore` requires, whether declared on
 its own class body or on a concept Protocol it inherits (e.g.
-:class:`~blizzard.runner.domain.leases.IWriteLeaseRecordRepository`, blizzard#410), mapped to
+:class:`~blizzard.runner.domain.leases.IWriteLeaseRecordRepository`), mapped to
 either the event kind its mutation publishes (:class:`Published`) or a stated reason it
 publishes nothing (:class:`Silent`). Exhaustiveness is carried by
 ``tests/test_runner_write_protocol_census.py``, this module's only reader — which is also
@@ -38,7 +38,7 @@ class Silent:
 
 Disposition = Published | Silent
 
-#: The elapsed-time-derived samplers' and beats' shared reason (D7) — staleness bound is
+#: The elapsed-time-derived samplers' and beats' shared reason — staleness bound is
 #: `polling.ts`'s own to state (`bzh:one-prose-home`), not restated here.
 _ELAPSED_TIME_DERIVED = (
     "elapsed-time-derived state (D7): eventing it would restore the request rate this "
@@ -58,14 +58,14 @@ _INTERNAL_BOOKKEEPING = (
     "internal bookkeeping with no client-facing read surface; no kind in the vocabulary represents it."
 )
 
-#: The three retention prunes' shared reason (issue #520) — see
+#: The three retention prunes' shared reason — see
 #: `IWriteOutboundRepository.prune_outbound` and its siblings for the retention contract.
 _RETENTION_PRUNE = (
     "Retention.run (runner/loop/steps.py) — a prune changes no client-facing read's answer "
     "(issue #520), so there is nothing for a kind to announce."
 )
 
-#: The full census over ``IWriteRunnerStore``'s own-declared members (D5) — keyed by the
+#: The full census over ``IWriteRunnerStore``'s own-declared members — keyed by the
 #: method names ``tests/test_runner_write_protocol_census.py`` introspects at runtime.
 WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     # --- lease lifecycle ---------------------------------------------------
@@ -233,7 +233,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "OutboundDrain._ack_run (runner/loop/drain.py) — every seq in one delivered generic-"
         "kind run, re-announced the same as `ack_outbound`'s own single-seq case (issue #522).",
     ),
-    # --- liveness/usage/context — the elapsed-time-derived samplers (D7) ------------
+    # --- liveness/usage/context — the elapsed-time-derived samplers ------------
     "record_daemon_liveness": Silent(_ELAPSED_TIME_DERIVED + " (the daemon's own tick beat)"),
     "record_heartbeat": Silent(_ELAPSED_TIME_DERIVED + " (a worker's tool-call beat, named explicitly in D7)"),
     "prune_outbound": Silent(_RETENTION_PRUNE),

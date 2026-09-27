@@ -1,8 +1,8 @@
-"""Transcript segment wire bodies (blizzard#247, ``epic:transcripts``) — the first wire
+"""Transcript segment wire bodies (``epic:transcripts``) — the first wire
 projection of #245's normalized turn model onto shipped, hub-stored content.
 
-A record is one shipped **turn-range slice** of a segment (D1); ``seq`` is the lane's
-high-water sequence (D7), ``(segment_id, turn_range_start)`` the re-offer dedupe key (D8)."""
+A record is one shipped **turn-range slice** of a segment; ``seq`` is the lane's
+high-water sequence, ``(segment_id, turn_range_start)`` the re-offer dedupe key."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class ToolCallSegmentView(BaseModel):
     # Optional so a row missing this field still validates.
     input_truncated: bool = False
     #: This turn carries ONLY a result for the call `tool_use_id` names, shipped in an earlier
-    #: window (blizzard#338) — a patch onto that earlier call, not new content of its own.
+    #: window — a patch onto that earlier call, not new content of its own.
     output_patch: bool = False
 
 
@@ -38,15 +38,15 @@ class SidechainSegmentView(BaseModel):
     link: str
     turns: list[TurnSegmentView]
     #: The call that spawned this conversation, when it shipped in an earlier window than the
-    #: conversation did (blizzard#338) — an id, never an index, which a lease read renumbers.
+    #: conversation did — an id, never an index, which a lease read renumbers.
     parent_tool_use_id: str | None = None
 
 
 class TurnSegmentView(BaseModel):
-    """One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),
+    """One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted,
     stable across a segment's batches — EXCEPT under ``sidechain.turns``, where it restarts at 0 within
     that one sidechain, and on a lease transcript read, where it numbers only the turns that read
-    returned and slides with the recency window (blizzard#248 D1). ``kind`` is closed."""
+    returned and slides with the recency window. ``kind`` is closed."""
 
     index: int
     #: Closed to :data:`TurnKind` — an out-of-vocabulary kind is a hard failure, never a
@@ -64,7 +64,7 @@ SidechainSegmentView.model_rebuild()
 
 
 class TranscriptSegmentRecord(BaseModel):
-    """One shipped turn-range slice of a segment (D1). ``final=True`` marks the one record
+    """One shipped turn-range slice of a segment. ``final=True`` marks the one record
     that closes the segment out. ``record_truncated`` is the runner's own declaration that
     THIS record lost content it would otherwise carry — shrunk, an incomplete source read,
     or (only when neither closes the gap) ``turns`` emptied — distinct from ``rejected``."""
@@ -82,7 +82,7 @@ class TranscriptSegmentRecord(BaseModel):
     harness_id: str | None = None
     normalizer_version: str
     harness_version: str | None
-    # Optional for previous-minor runners, exactly as harness_id is (blizzard#439 D3).
+    # Optional for previous-minor runners, exactly as harness_id is.
     model: str | None = None
     effort: str | None = None
     record_truncated: bool = False
@@ -94,7 +94,7 @@ class TranscriptSegmentRecord(BaseModel):
 class TranscriptSegmentBatch(BaseModel):
     """A runner's push of one-or-more buffered transcript records, ordered by ``seq`` —
     the transcript lane's own store-and-forward batch, distinct from the fact lane's
-    ``RunnerFactBatch`` (D7)."""
+    ``RunnerFactBatch``."""
 
     runner_id: str
     records: list[TranscriptSegmentRecord]
@@ -103,7 +103,7 @@ class TranscriptSegmentBatch(BaseModel):
 class TranscriptSegmentAck(BaseModel):
     """The hub's per-batch acknowledgement against the transcript lane's high-water mark.
 
-    ``capped`` is D6's cap-rejection class — acknowledged, content-dropped, and the
+    ``capped`` is the cap-rejection class — acknowledged, content-dropped, and the
     high-water advances past it, a durable decision that must not re-adjudicate on replay."""
 
     runner_id: str
@@ -114,8 +114,8 @@ class TranscriptSegmentAck(BaseModel):
 
 
 class TranscriptSegmentIndexEntry(BaseModel):
-    """One segment's metadata row (D12) — byte counts and completion state, never turn
-    content. ``truncated`` is true iff any record was cap-rejected (D5) OR the runner
+    """One segment's metadata row — byte counts and completion state, never turn
+    content. ``truncated`` is true iff any record was cap-rejected OR the runner
     itself declared ``record_truncated`` on one, so a consumer can tell an incomplete
     segment from a short one without fetching it."""
 
@@ -135,7 +135,7 @@ class TranscriptSegmentIndexEntry(BaseModel):
 
 
 class TranscriptSegmentIndexView(BaseModel):
-    """The per-chunk segment discovery read (D12) — unreachable content, only what a
+    """The per-chunk segment discovery read — unreachable content, only what a
     caller needs to then ask for one segment's turns."""
 
     chunk_id: str
@@ -144,7 +144,7 @@ class TranscriptSegmentIndexView(BaseModel):
 
 class TranscriptSegmentContentView(BaseModel):
     """One segment's decompressed turns, concatenated across its stored records in
-    turn-range order — the lazy per-segment content read (D12)."""
+    turn-range order — the lazy per-segment content read."""
 
     segment_id: str
     final: bool
@@ -154,9 +154,9 @@ class TranscriptSegmentContentView(BaseModel):
 
 class LeaseTranscriptView(BaseModel):
     """A lease's transcript, concatenated across every segment stored under its
-    ``(chunk_id, node_id, epoch)`` — every spawn generation, not one (D2). The fleet-plane
+    ``(chunk_id, node_id, epoch)`` — every spawn generation, not one. The fleet-plane
     counterpart to the per-segment content read: a runner's read-back of its own shipped
-    segments (D3, issue #249). No ``final``: a segment's own closes only *that* segment."""
+    segments. No ``final``: a segment's own closes only *that* segment."""
 
     chunk_id: str
     node_id: str

@@ -7,10 +7,10 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 import { runnerTranscriptKey } from './query-keys';
 import { injectTranscriptQuery } from './transcript.query';
 
-// Typed against the generated wire shape (`review:F5`) — an untyped literal here would
+// Typed against the generated wire shape — an untyped literal here would
 // keep passing `toEqual` even after the server's turn shape moves on, the way the
-// retired `tool_name`/`tool_input`/`tool_output` fields did after blizzard#248 D1 widened
-// the runner's transcript wire to `TurnSegmentView`.
+// retired `tool_name`/`tool_input`/`tool_output` fields did after the runner's
+// transcript wire widened to `TurnSegmentView`.
 const TRANSCRIPT: runnerApi.TranscriptResponse = {
   lease_id: 'L-903',
   session_id: 'sess-77',

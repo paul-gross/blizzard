@@ -1,8 +1,8 @@
-"""The runner panel's live SSE update — `test_runner_panel_live_e2e` (blizzard#317 Phase 5).
+"""The runner panel's live SSE update — `test_runner_panel_live_e2e`.
 
 A real Chromium over the runner's own panel, against a **real** `blizzard-runner host`
-subprocess ticking its live loop (D2), proving a real mutation reaches the panel with
-no reload, inside the 1-minute poll backstop (D7) a pass could not otherwise satisfy.
+subprocess ticking its live loop, proving a real mutation reaches the panel with
+no reload, inside the 1-minute poll backstop a pass could not otherwise satisfy.
 Setup needs match `tests/e2e/test_acceptance_loop.py`'s module docstring."""
 
 from __future__ import annotations
@@ -132,13 +132,13 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
                     expect(page.get_by_test_id("agent-row")).to_have_count(0)
 
                     # NOW promote — FILL mints a real lease-changed(created) frame the
-                    # panel's 1-minute backstop (D7) cannot explain, not a fixture shortcut.
+                    # panel's 1-minute backstop cannot explain, not a fixture shortcut.
                     assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
                     expect(page.get_by_test_id("lease-count")).to_have_text("1 live")
                     expect(page.get_by_test_id("agent-row")).to_have_count(1)
 
                     # build -> review -> deliver -> done under the same tick; this wait's own
-                    # timeout equals the D7 backstop, so unlike "1 live" it alone doesn't prove SSE.
+                    # timeout equals the same backstop, so unlike "1 live" it alone doesn't prove SSE.
                     expect(page.get_by_test_id("lease-count")).to_have_text("0 live", timeout=60_000)
                     expect(page.get_by_test_id("agent-row")).to_have_count(0)
                 finally:

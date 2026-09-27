@@ -15,8 +15,8 @@ import { KitMenu } from '../kit';
  * shells duplicated.
  *
  * The menu's contents arrive as a {@link TemplateRef} rather than as projected
- * content, the contract {@link KitMenu} carries since the CDK-menu rebuild
- * (issue #161): a `CdkMenu` panel wrapped around an `<ng-content>` slot cannot
+ * content, the contract {@link KitMenu} carries since the CDK-menu rebuild:
+ * a `CdkMenu` panel wrapped around an `<ng-content>` slot cannot
  * see the items projected into it, so the panel is declared in the consumer's
  * own view and passed here.
  *

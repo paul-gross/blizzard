@@ -1,4 +1,4 @@
-"""RunnerEnrollmentService (unit tier) — mint/rotate a runner's bearer token (issue #86a).
+"""RunnerEnrollmentService (unit tier) — mint/rotate a runner's bearer token.
 
 A fake registry stands in for the store — only ``set_token_hash`` is meaningfully
 implemented; anything else raises loudly if called (``bzh:domain-core``)."""

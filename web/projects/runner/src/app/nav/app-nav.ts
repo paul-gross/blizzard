@@ -4,9 +4,9 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 import { KitTab, KitTabStrip } from 'fleet';
 
 /**
- * The runner's top-level tab strip (issue #313) — `Board` and `Events`, one
+ * The runner's top-level tab strip — `Board` and `Events`, one
  * `routerLink` each, wearing the same {@link KitTabStrip}/{@link KitTab}
- * chrome the hub's own `app-nav.ts` wears (blizzard#203) — one tab
+ * chrome the hub's own `app-nav.ts` wears — one tab
  * treatment, not two. `queryParamsHandling="preserve"` carries the board's
  * `?chunk=` selection (the shared `injectChunkUrlSelection`) across a
  * Board → Events → Board round trip rather than dropping it on navigation.

@@ -1,5 +1,5 @@
 """``derive_blocked_markings`` (unit tier) — the blocked-marking derivation beside a
-chunk's status (issue #457).
+chunk's status.
 
 Pure: no store, no service, standing edges and a status-by-chunk-id mapping in, a
 dependent-chunk-id -> prerequisite-chunk-id mapping out."""
@@ -57,14 +57,14 @@ def test_released_edge_absent_from_standing_edges_clears_the_marking() -> None:
 
 def test_prerequisite_absent_from_statuses_still_blocks() -> None:
     """A standing edge onto an id the status map carries nothing for — a never-resolved or
-    since-deleted prerequisite (D3) — is treated exactly as unmet, the conservative read."""
+    since-deleted prerequisite — is treated exactly as unmet, the conservative read."""
     edges = [_edge("dep_1", "chk_a", "chk_ghost")]
 
     assert derive_blocked_markings(edges, {}) == {"chk_a": "chk_ghost"}
 
 
 def test_earliest_declared_unmet_prerequisite_is_named_and_only_it() -> None:
-    """Several unmet prerequisites on the same dependent: the earliest-declared wins (D4),
+    """Several unmet prerequisites on the same dependent: the earliest-declared wins,
     trusting ``standing_edges``'s own input order rather than re-deriving one."""
     edges = [
         _edge("dep_1", "chk_a", "chk_first", declared_at=_T0),
@@ -115,7 +115,7 @@ def test_a_met_earlier_edge_falls_through_to_a_later_unmet_one() -> None:
 
 def test_a_blocked_prerequisite_is_named_without_walking_its_own_chain() -> None:
     """chk_a depends on chk_b, chk_b itself depends on chk_c: chk_a is marked blocked on
-    chk_b only — one hop, no transitive walk to chk_c (D1/D4 scope boundary)."""
+    chk_b only — one hop, no transitive walk to chk_c."""
     edges = [
         _edge("dep_1", "chk_a", "chk_b"),
         _edge("dep_2", "chk_b", "chk_c"),
@@ -146,7 +146,7 @@ def test_a_pre_claim_dependent_derives_a_marking(dependent_status: ChunkStatus) 
     ],
 )
 def test_a_dependent_past_the_pre_claim_window_derives_no_marking(dependent_status: ChunkStatus) -> None:
-    """Review round 1 F1: the marking answers why a chunk cannot yet be claimed. Once a
+    """The marking answers why a chunk cannot yet be claimed. Once a
     dependent is claimed, running, human-gated, paused, or terminal, that question no
     longer applies even though its edge — declared while it was still pre-claim — persists
     unreleased."""
@@ -159,14 +159,14 @@ def test_a_dependent_past_the_pre_claim_window_derives_no_marking(dependent_stat
 def test_a_dependent_absent_from_statuses_still_derives_a_marking() -> None:
     """A dependent the status map carries nothing for reads the way its default
     ``not_ready`` would — eligible, not excluded — the same conservative-by-default shape
-    D3 already gives the prerequisite side."""
+    the derivation already gives the prerequisite side."""
     edges = [_edge("dep_1", "chk_a", "chk_b")]
 
     assert derive_blocked_markings(edges, {"chk_b": ChunkStatus.NOT_READY}) == {"chk_a": "chk_b"}
 
 
 def test_a_stopped_prerequisite_still_blocks() -> None:
-    """Only ``done`` clears an edge (D6/the product plan's "done means done") — a stopped
+    """Only ``done`` clears an edge (the product plan's "done means done") — a stopped
     prerequisite, itself terminal, still leaves its dependent blocked. Pins the derivation's
     exact predicate against a plausible future widening to ``TERMINAL_STATUSES``, which
     would wrongly also treat ``stopped`` as satisfying."""
@@ -178,8 +178,8 @@ def test_a_stopped_prerequisite_still_blocks() -> None:
 
 class TestDeriveChunkNeighborhood:
     """``derive_chunk_neighborhood`` (unit tier) — the one-hop-each-way sibling of
-    ``derive_blocked_markings`` (D3, issue #462): every standing edge naming a chunk in
-    either role, with per-edge satisfaction (D4), for a chunk at any status."""
+    ``derive_blocked_markings``: every standing edge naming a chunk in
+    either role, with per-edge satisfaction, for a chunk at any status."""
 
     def test_a_chunk_with_no_edges_has_two_empty_lists(self) -> None:
         assert derive_chunk_neighborhood("chk_a", [], {}) == ChunkNeighborhood(prerequisites=[], dependents=[])
@@ -205,7 +205,7 @@ class TestDeriveChunkNeighborhood:
         ]
 
     def test_a_dependent_edge_is_satisfied_exactly_when_the_subject_itself_is_done(self) -> None:
-        """D4: a dependent edge's satisfaction reads the *subject* chunk's own status, not
+        """A dependent edge's satisfaction reads the *subject* chunk's own status, not
         the dependent neighbor's — the subject is the prerequisite in that relationship."""
         edges = [_edge("dep_1", "chk_dependent", "chk_a")]
         statuses = {"chk_a": ChunkStatus.DONE, "chk_dependent": ChunkStatus.READY}
@@ -219,7 +219,7 @@ class TestDeriveChunkNeighborhood:
 
     def test_a_neighbor_absent_from_statuses_is_drawn_unsatisfied_with_a_null_status(self) -> None:
         """A neighbor whose facts do not resolve — the residual race deletion's 409 refusal
-        leaves (D4) — is still drawn, never a silently dropped edge."""
+        leaves — is still drawn, never a silently dropped edge."""
         edges = [_edge("dep_1", "chk_a", "chk_ghost")]
 
         neighborhood = derive_chunk_neighborhood("chk_a", edges, {})
@@ -242,7 +242,7 @@ class TestDeriveChunkNeighborhood:
 
     def test_no_transitive_walk_past_one_hop(self) -> None:
         """chk_a's prerequisite is chk_b, chk_b's own prerequisite is chk_c: chk_a's
-        neighborhood names chk_b only, unaffected by chk_c (D1/D4 scope boundary)."""
+        neighborhood names chk_b only, unaffected by chk_c."""
         edges = [
             _edge("dep_1", "chk_a", "chk_b"),
             _edge("dep_2", "chk_b", "chk_c"),

@@ -1,7 +1,7 @@
-"""The archived-transcript read seam — a closed lease's hub-stored segments (blizzard#249, D4).
+"""The archived-transcript read seam — a closed lease's hub-stored segments.
 
 Never raises on a transport failure — reaches the caller as a value instead (``bzh:repository-split``).
-:data:`ArchivedTranscriptStatus`'s four outcomes drive Decision 1: only ``"found"`` is
+:data:`ArchivedTranscriptStatus`'s four outcomes drive the fallback: only ``"found"`` is
 hub-sourced, ``"empty"``/``"refused"`` fall back to local, and ``"unreachable"`` becomes
 the wire's hub-unreachable state only when local can't answer either."""
 
@@ -31,6 +31,6 @@ class IReadArchivedTranscriptRepository(Protocol):
 
     def read_turns(self, *, chunk_id: str, node_id: str, epoch: int) -> ArchivedTranscript:
         """The lease's hub-stored transcript, folded across every spawn generation under
-        this ``(chunk_id, node_id, epoch)`` (D2) — never raises; a transport failure, a
+        this ``(chunk_id, node_id, epoch)`` — never raises; a transport failure, a
         malformed body, or an unexpected status all resolve to ``status="unreachable"``."""
         ...

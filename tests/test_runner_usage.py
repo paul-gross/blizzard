@@ -1,4 +1,4 @@
-"""Runner usage telemetry — recording, buffering, and cleanup (epic #57, issue #58).
+"""Runner usage telemetry — recording, buffering, and cleanup (epic #57).
 
 ADVANCE records one append-only usage fact per attempt invocation and buffers each
 fact's outbound report on the same store-and-forward rails as ``lease.minted``. When
@@ -92,7 +92,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
         session=SessionReference(harness_id, session),
         spawned_at=_NOW,
     )
-    # The generation-1 spawn's own worker-starting boundary (blizzard#437 Phase 4) — the
+    # The generation-1 spawn's own worker-starting boundary — the
     # range-read fallback needs one to recover past its own stdout envelope at all.
     store.record_boundary_open(
         lease_id=lease,
@@ -233,7 +233,7 @@ _SIGINT_ENVELOPE = json.dumps(
 
 @pytest.mark.unit
 def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_envelope(tmp_path):  # type: ignore[no-untyped-def]
-    """The drain's own SIGINT (issue #12) leaves this envelope on stdout — through the REAL
+    """The drain's own SIGINT leaves this envelope on stdout — through the REAL
     adapter, `record_worker` still reads its real cost, not the NULL-cost fallback."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -480,7 +480,7 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    # Generation 2's own resume boundary (blizzard#437 Phase 4) — its recovery range's start.
+    # Generation 2's own resume boundary — its recovery range's start.
     store.record_boundary_open(
         lease_id="lease_1",
         chunk_id="ch_1",
@@ -666,7 +666,7 @@ def test_usage_replay_after_crash_is_idempotent(tmp_path):  # type: ignore[no-un
 @pytest.mark.unit
 def test_ask_and_exit_records_the_worker_usage_before_parking(tmp_path):  # type: ignore[no-untyped-def]
     """A worker that asked-and-exited burned its spawn tokens: ADVANCE parks the chunk
-    and also records that spawn usage (issue #58); no judgement ran, so no judge fact."""
+    and also records that spawn usage; no judgement ran, so no judge fact."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_ask(
@@ -862,7 +862,7 @@ def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path
 @pytest.mark.unit
 def test_release_all_leaves_every_lease_stdout_file_in_place(tmp_path):  # type: ignore[no-untyped-def]
     """Tenure-end release no longer removes any lease's per-generation stdout file
-    (issue #58) — only the periodic age-based sweep prunes it now
+    — only the periodic age-based sweep prunes it now
     (`tests/test_runner_retention_step.py`)."""
     store = _store(tmp_path)
     _seed_running_lease(store, lease="lease_1", epoch=1)
@@ -899,7 +899,7 @@ def test_release_all_leaves_every_lease_stdout_file_in_place(tmp_path):  # type:
 
 @pytest.mark.unit
 def test_release_all_is_a_noop_when_no_stdout_dir_configured(tmp_path):  # type: ignore[no-untyped-def]
-    """No ``worker_stdout_dir`` (Phase 1's default) — release still runs cleanly."""
+    """No ``worker_stdout_dir`` (the default) — release still runs cleanly."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     ctx = make_context(
@@ -915,7 +915,7 @@ def test_release_all_is_a_noop_when_no_stdout_dir_configured(tmp_path):  # type:
     assert store.held_environment_ids() == []
 
 
-# Crash-detected resume records the crashed generation's own usage (blizzard#437 F12) —
+# Crash-detected resume records the crashed generation's own usage —
 # without their own `record_worker` call, `on_unpause`/`_restart` never record it at all.
 
 

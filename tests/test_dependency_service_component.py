@@ -1,4 +1,4 @@
-"""``DependencyService`` over the real hub store (issue #456, component tier).
+"""``DependencyService`` over the real hub store (component tier).
 
 The unit tier (``tests/test_dependency_service.py``) proves the service consults nothing
 about the prerequisite beyond its id, against a fake. This file drives the same verb over
@@ -85,7 +85,7 @@ def test_a_second_release_of_the_same_pair_is_refused_and_the_first_release_stan
 def test_declaring_against_a_dependent_deleted_after_resolution_is_refused(tmp_path: Path) -> None:
     """The interleaving the shared claim lock produces: a delete lands between the
     caller's resolve and this declare's hold of the lock, so ``load_facts`` reads ``None``
-    — refuse, rather than fall back to a synthetic status (issue #456)."""
+    — refuse, rather than fall back to a synthetic status."""
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
@@ -103,7 +103,7 @@ def test_declaring_against_a_dependent_deleted_after_resolution_is_refused(tmp_p
 def test_declaring_against_a_prerequisite_deleted_after_resolution_is_refused(tmp_path: Path) -> None:
     """The prerequisite's own half of the round-2 window: a resolved-live ``Chunk``
     goes stale when a delete lands before this declare's hold of the lock, so the
-    service must re-derive its ephemerality itself, under the lock (issue #456)."""
+    service must re-derive its ephemerality itself, under the lock."""
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)

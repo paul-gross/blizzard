@@ -24,8 +24,8 @@ async function loadDesignTokens(): Promise<void> {
 }
 
 /**
- * The gardening runs tab's own half of `web:shell-sweep` (blizzard#401
- * Phase 3) — a real, headless-Chromium proof of the two classes of layout/style claim
+ * The gardening runs tab's own half of `web:shell-sweep` — a real,
+ * headless-Chromium proof of the two classes of layout/style claim
  * jsdom cannot make: {@link FleetRunList}'s escalated row's own body must carry a
  * genuinely different computed `background-color` from a normal row's (not merely a
  * different class name jsdom would accept without evaluating it against the
@@ -317,7 +317,7 @@ const PROPOSAL_COUNTS_ROWS: readonly ProposalCountsRowVm[] = [
 ];
 
 /**
- * The routine detail's garden-proposal counts table (blizzard#547) — reachable from
+ * The routine detail's garden-proposal counts table — reachable from
  * the hub's mobile bottom tab bar's Gardening tab, same as everything else in this
  * file (`bzh:narrow-viewport-tier-rule`). Its own real CSS layout claim jsdom cannot
  * make: the table stays inside its own column at a phone width rather than forcing a

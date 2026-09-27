@@ -1,5 +1,5 @@
 """``scripts/check-version-tag.sh`` — the pyproject.toml <-> release-tag version
-agreement guard (issue #190). Drives the real script against a scratch repo
+agreement guard. Drives the real script against a scratch repo
 root carrying its own ``pyproject.toml`` (the script ``cd``s to its own repo
 root, so a tmp_path copy with a synthetic ``pyproject.toml`` isolates it from
 this repo's real version).

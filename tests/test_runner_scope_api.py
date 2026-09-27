@@ -1,5 +1,5 @@
-"""``GET /api/leases/{id}/scopes`` — the lease-scoped, hub-proxying route (blizzard#582
-D2, component tier). Authorization mirrors ``tests/test_runner_garden_findings_api.py``'s
+"""``GET /api/leases/{id}/scopes`` — the lease-scoped, hub-proxying route
+(component tier). Authorization mirrors ``tests/test_runner_garden_findings_api.py``'s
 own shape: the hub is never consulted for an unauthorized caller. The read names no
 chunk — a scope is global, not per-run."""
 

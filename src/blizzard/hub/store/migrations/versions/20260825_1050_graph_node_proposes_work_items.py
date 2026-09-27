@@ -1,5 +1,5 @@
 """graph node proposes_work_items — the node-level policy legalizing proposed work items
-on its completion (D4). Nullable, no backfill.
+on its completion. Nullable, no backfill.
 
 Revision ID: 20260825_1050_graph_node_proposes_work_items
 Revises: 20260825_1000_chunk_deleted

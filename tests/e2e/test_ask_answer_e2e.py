@@ -235,7 +235,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
 
         with _runner_api(config):
-            # Phase 1: the worker asks and the chunk parks — derived waiting_on_human.
+            # The worker asks and the chunk parks — derived waiting_on_human.
             status = _tick_until(config, hub, chunk_id, fenced, {"waiting_on_human", "done", "needs_human"}, 90.0)
             assert status == "waiting_on_human", f"chunk did not park (last status {status!r})"
 
@@ -275,12 +275,12 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
             )
             assert answered.returncode == 0, f"hub question answer failed:\n{answered.stderr}"
 
-            # Phase 2: the runner resumes the dormant session with the answer and lands.
+            # The runner resumes the dormant session with the answer and lands.
             status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 120.0)
             assert status == "done", f"chunk did not reach done after the answer (last status {status!r})"
 
         # `delivered` derives from the real runner's `answer.delivered` fact on resume
-        # (issue #165) — the one tier where that fact isn't hand-pushed.
+        # — the one tier where that fact isn't hand-pushed.
         closed = hub.get(f"/api/fleet/questions/{question_id}").json()
         assert closed["answered"] is True
         assert closed["delivered"] is True, f"the resume-with-answer left no delivery fact: {closed}"

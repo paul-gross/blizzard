@@ -1,4 +1,4 @@
-"""Runner-local role resolution precedence, keyed by hub username (issue #95)."""
+"""Runner-local role resolution precedence, keyed by hub username."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def test_mirror_reproduces_the_hub_role() -> None:
 
 
 def test_mirror_reproduces_a_hub_pending_role() -> None:
-    """A hub identity still `pending` (no role granted yet, issue #210) mirrors to the
+    """A hub identity still `pending` (no role granted yet) mirrors to the
     runner as `pending` too — the fixed-cap floor and the mirror default both accept
     every :class:`Role` member, `pending` included, with no special-casing needed."""
     config = _config(auth_hub_role_default="mirror")

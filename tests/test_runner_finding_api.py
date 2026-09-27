@@ -1,5 +1,5 @@
 """``GET /api/leases/{id}/findings`` and its ``/{finding_id}`` sibling — the lease-scoped,
-hub-proxying routes (blizzard#397 Phase 2, component tier). Authorization mirrors
+hub-proxying routes (component tier). Authorization mirrors
 ``tests/test_runner_garden_findings_api.py``'s own shape: the hub is never consulted for
 an unauthorized caller. Neither verb accepts a flag naming another chunk, routine, or
 scope."""

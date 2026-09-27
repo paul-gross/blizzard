@@ -1,4 +1,4 @@
-"""Cross-graph migration through the apply path + edge caller (issue #90, Phase 4).
+"""Cross-graph migration through the apply path + edge caller.
 
 A completion whose choice targets another graph records a migration (re-pin + route
 release + MIGRATED); a subsequent claim builds the target graph's landing-node envelope;
@@ -59,7 +59,7 @@ nodes:
 """
 
 # A target graph whose landing node (name-matching the source's `build`) is hub-executed
-# (issue #111): `success` routes onward to a runner node, not straight to `done`.
+# `success` routes onward to a runner node, not straight to `done`.
 _HUB_TARGET_YAML = """
 name: triage
 entry: build
@@ -91,7 +91,7 @@ nodes:
 """
 
 # A gate-source graph whose human gate's resolved choice is itself the cross-graph
-# migration (issue #90 M1): the resolving migration must close the gate's decision.
+# migration (M1): the resolving migration must close the gate's decision.
 _GATE_SRC_YAML = """
 name: default-delivery
 entry: build
@@ -122,7 +122,7 @@ nodes:
 """
 
 # Like ``_GATE_SRC_YAML`` but ``approve`` targets ``graph:ghost``, an unminted graph, so
-# the migration escalates — the gate's decision must still close (issue #110).
+# the migration escalates — the gate's decision must still close.
 _GATE_SRC_GHOST_YAML = _GATE_SRC_YAML.replace("to: graph:triage", "to: graph:ghost")
 
 
@@ -161,7 +161,7 @@ def _migrate(hub, chunk_id: str, node_id: str, *, epoch: int = 1) -> httpx.Respo
 def _setup_under_enforce(hub, *, target_name: str, mint_target: bool) -> tuple[str, str, str]:  # type: ignore[no-untyped-def]
     """Like ``_setup``, but claims through ``/api/fleet/routes`` and returns the
     plaintext route token too — for driving migration replay under
-    ``route_token_mode=enforce`` (issue #108)."""
+    ``route_token_mode=enforce``."""
     assert (
         hub.client.post("/api/graphs", json={"definition_yaml": _SRC_YAML.format(target=target_name)}).status_code
         == 201
@@ -183,7 +183,7 @@ def _setup_under_enforce(hub, *, target_name: str, mint_target: bool) -> tuple[s
 def _migrate_with_token(  # type: ignore[no-untyped-def]
     hub, chunk_id: str, node_id: str, *, epoch: int = 1, route_token: str
 ) -> httpx.Response:
-    """Like ``_migrate``, but carries a ``route_token`` (issue #108) — for driving the
+    """Like ``_migrate``, but carries a ``route_token`` — for driving the
     completion under ``route_token_mode=enforce``."""
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
@@ -212,7 +212,7 @@ def test_a_cross_graph_choice_migrates_repins_and_re_queues_at_the_landing_node(
     assert detail["graph_id"] == triage_id  # re-pinned to the target graph
     assert detail["status"] == "ready"  # re-queued, claimable — not done/delivering
     assert detail["current_node_name"] == "build"  # name-match landing on triage's build
-    # Issue #144 retargeted the re-pin onto `default_model`: the authored choice `model:`
+    # Retargeted the re-pin onto `default_model`: the authored choice `model:`
     # is still a single string, landing as the list's one entry.
     assert detail["default_model"] == ["claude-sonnet-5"]  # per-choice model re-pin
     # The triage node's reasoning asset carried across (MUST-FIX 1).
@@ -230,7 +230,7 @@ def test_a_cross_graph_choice_migrates_repins_and_re_queues_at_the_landing_node(
 def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retains_the_route(
     tmp_path: Path,
 ) -> None:
-    """A migration whose landing node is hub-executed (issue #111) must not release the
+    """A migration whose landing node is hub-executed must not release the
     route the way a runner-landing migration does — releasing it would leave the landed
     hub node's `run:` steps never driven (no holding runner left to poll `hub-advance`)."""
     hub = build_hub(tmp_path)
@@ -285,7 +285,7 @@ def test_an_unresolvable_cross_graph_target_escalates_to_needs_human(tmp_path: P
 
 def test_a_retired_cross_graph_target_escalates_to_needs_human_exactly_like_an_absent_one(tmp_path: Path) -> None:
     """Retiring `triage`'s only minted version leaves the name with zero non-retired
-    candidates, resolving to ``None`` exactly like an unminted name (issue #101)."""
+    candidates, resolving to ``None`` exactly like an unminted name."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True)
     target_graph_id = hub.client.get("/api/graphs").json()
@@ -318,7 +318,7 @@ def test_a_replayed_migration_completion_is_idempotent(tmp_path: Path) -> None:
 
 def test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken(tmp_path: Path) -> None:
     """A hub-landing migration's lost-ack replay must return ``hub_node_taken``, not
-    ``migrated`` (issue #111) — releasing the retained route here would strand the
+    ``migrated`` — releasing the retained route here would strand the
     landed hub node with nothing to drive it."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_HUB_TARGET_YAML)
@@ -337,7 +337,7 @@ def test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken(tmp_
 
 def test_fresh_migration_publishes_queue_changed(tmp_path: Path) -> None:
     """A fresh cross-graph migration re-queues the chunk under the target graph — like
-    every other re-admit path, that must publish ``queue-changed`` (issue #107)."""
+    every other re-admit path, that must publish ``queue-changed``."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True)
     since = hub.events.latest_id()
@@ -351,7 +351,7 @@ def test_fresh_migration_publishes_queue_changed(tmp_path: Path) -> None:
 
 def test_replayed_migration_does_not_publish_queue_changed(tmp_path: Path) -> None:
     """A replayed migration completion (lost ack) is idempotent and re-pins nothing — it
-    must not publish a second ``queue-changed`` (issue #107)."""
+    must not publish a second ``queue-changed``."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True)
     first = _migrate(hub, chunk_id, node_id)
@@ -366,9 +366,9 @@ def test_replayed_migration_does_not_publish_queue_changed(tmp_path: Path) -> No
 
 
 def test_a_hub_landing_migration_does_not_publish_queue_changed(tmp_path: Path) -> None:
-    """A migration landing on a hub node (issue #111) retains the route and returns
+    """A migration landing on a hub node retains the route and returns
     ``HUB_NODE_TAKEN`` rather than re-queuing — the ``MIGRATED``-keyed guard must not
-    fire here (issue #107)."""
+    fire here."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_HUB_TARGET_YAML)
     since = hub.events.latest_id()
@@ -382,7 +382,7 @@ def test_a_hub_landing_migration_does_not_publish_queue_changed(tmp_path: Path) 
 
 def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> None:
     """A human gate whose resolved choice migrates cross-graph must close its decision
-    (issue #90 M1) — a migration writes no ``transitions`` row, so without threading the
+    (M1) — a migration writes no ``transitions`` row, so without threading the
     ``decision_id`` the resolved decision would stay ``transitioned=False`` forever."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GATE_SRC_YAML}).status_code == 201
@@ -434,8 +434,8 @@ def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> 
 
 
 def test_a_human_gate_resolved_migration_to_an_unresolvable_target_closes_its_decision(tmp_path: Path) -> None:
-    """A human gate whose resolved choice migrates to an unresolvable target (issue
-    #110) must still close its decision — this branch writes neither a transition nor a
+    """A human gate whose resolved choice migrates to an unresolvable target
+    must still close its decision — this branch writes neither a transition nor a
     migration fact, so the decision_id must thread onto the escalation instead."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GATE_SRC_GHOST_YAML}).status_code == 201

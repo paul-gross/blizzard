@@ -1,5 +1,4 @@
-"""The single-use ``state`` repository seam (issue #92, decision D5,
-``bzh:repository-split``).
+"""The single-use ``state`` repository seam (``bzh:repository-split``).
 
 One :class:`~blizzard.hub.auth.models.AuthStateEntry` is written per redirect, and
 :meth:`IWriteAuthStateRepository.consume` reads-and-deletes it in one call, so a

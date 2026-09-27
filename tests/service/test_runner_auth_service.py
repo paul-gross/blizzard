@@ -1,4 +1,4 @@
-"""Runner presents its bearer token on every hub call — service tier (issue #86b).
+"""Runner presents its bearer token on every hub call — service tier.
 
 Every outbound ``httpx.Client`` and the work-items proxy fold in the same
 ``Authorization: Bearer`` header, assertable against a real mock-hub subprocess via
@@ -82,7 +82,7 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
             finally:
                 runner_client.close()
         # Assert the payload too, not just status: a capture-only check passed green
-        # while the mock hub 404'd the forwarded call (issue #55).
+        # while the mock hub 404'd the forwarded call.
         assert proxied.status_code == 200, f"the proxy forward failed upstream: {proxied.status_code} {proxied.text}"
         proxied_items = proxied.json()["items"]
         assert [i["ref"] for i in proxied_items] == [_WORK_REF_URL], (

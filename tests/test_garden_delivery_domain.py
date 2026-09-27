@@ -1,4 +1,4 @@
-"""``garden_delivery`` (unit tier, blizzard#393 Phase 2) — the delivery node's own check:
+"""``garden_delivery`` (unit tier) — the delivery node's own check:
 each artifact parses and matches its wire shape, every finding id named is well-formed
 and live on the run's routine, a transformation stays inside the run's declared scope,
 a cited commit is well-formed and (when addressable) resolves, and a `gone` fact
@@ -596,8 +596,8 @@ def test_validate_delivery_rejects_one_artifact_naming_a_ref_twice() -> None:
 
 
 def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> None:
-    # A finding recorded `gone` must still be present in `known_findings` (D3's
-    # reversibility) — an `observed` targeting it is accepted, not rejected as unknown.
+    # A finding recorded `gone` must still be present in `known_findings`
+    # (reversibility) — an `observed` targeting it is accepted, not rejected as unknown.
     delta = FindingDelta(scope="runner", findings=[ObservedFindingOp(id=_FIN1)])
 
     result = validate_delivery(
@@ -612,7 +612,7 @@ def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> N
 
 def test_validate_delivery_accepts_an_observed_op_reviving_a_delivered_finding() -> None:
     """`delivered`'s own revival mirror — an `observed` targeting a `delivered` finding
-    is accepted like the `gone`-revival case above, since D1 excludes `delivered` from
+    is accepted like the `gone`-revival case above, since `delivered` is excluded from
     `EXIT_KINDS`: not yet a person's word, still addressable."""
     delta = FindingDelta(scope="runner", findings=[ObservedFindingOp(id=_FIN1)])
 
@@ -627,7 +627,7 @@ def test_validate_delivery_accepts_an_observed_op_reviving_a_delivered_finding()
 
 
 def test_validate_delivery_collects_delivered_findings_by_actor() -> None:
-    """blizzard#583 D3: a `delivered` finding is a valid delta target (D1 — `delivered`
+    """A `delivered` finding is a valid delta target (`delivered`
     is outside `EXIT_KINDS`) and its closer's actor rides on the result for
     materialization to settle a later `gone` op with."""
     delta = FindingDelta(scope="runner", findings=[GoneFindingOp(id=_FIN1, note="no longer reproduces")])
@@ -660,7 +660,7 @@ def test_validate_delivery_collects_an_actor_less_delivered_finding_too() -> Non
 
 
 def test_validate_delivery_rejects_an_op_naming_an_exited_finding() -> None:
-    """A human-exited finding is dropped from `live_findings` (blizzard#394 D3) — unlike
+    """A human-exited finding is dropped from `live_findings` — unlike
     `gone`, an exit is not addressable by a later run's delta op."""
     delta = FindingDelta(scope="runner", findings=[ObservedFindingOp(id=_FIN1)])
 

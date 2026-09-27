@@ -1,4 +1,4 @@
-"""Selects the sampler binding for one declared provider subscription (blizzard#436).
+"""Selects the sampler binding for one declared provider subscription.
 
 A ``provider -> binding`` map, confined to ``internal/`` (``bzh:dependency-inversion``) so
 the seam root stays free of both ``httpx`` and any one provider's binding. A provider with

@@ -1,4 +1,4 @@
-"""The harness transcript source seam (blizzard#245) — harness-agnostic value shapes and a Protocol.
+"""The harness transcript source seam — harness-agnostic value shapes and a Protocol.
 
 :class:`NormalizedTurn` is the turn vocabulary a source produces; a tool call's input stays structured
 data, never a ``json.dumps`` string. :class:`TranscriptPosition` is **opaque to blizzard**, and
@@ -15,7 +15,7 @@ from typing import Any, Literal, Protocol
 import structlog
 
 #: The normalized turn vocabulary — :data:`~blizzard.runner.transcripts.repository.TurnKind`
-#: carries every one of these, plus its own ``"sidechain"`` (blizzard#248 D2).
+#: carries every one of these, plus its own ``"sidechain"``.
 NormalizedTurnKind = Literal["env", "asst", "tool", "thinking"]
 
 #: How a sidechain's attachment to its spawning tool call resolved — an open, harness-native label.
@@ -56,7 +56,7 @@ class ToolCall:
 
 @dataclass(frozen=True)
 class LateToolOutput:
-    """A tool result whose own ``tool_use`` fell outside this read window (blizzard#338), so no
+    """A tool result whose own ``tool_use`` fell outside this read window, so no
     turn here can carry it. Named by ``tool_use_id`` alone — the only handle that survives the
     window boundary — for a consumer to merge onto the call it already holds."""
 
@@ -112,7 +112,7 @@ class TranscriptBatch:
     sidechain_truncated: bool
     normalizer_version: str
     harness_version: str | None
-    #: Results whose own call fell outside this window (blizzard#338); defaulted empty, so a
+    #: Results whose own call fell outside this window; defaulted empty, so a
     #: source that resolves every result in-window constructs exactly as before.
     late_tool_outputs: list[LateToolOutput] = field(default_factory=list)
     #: Agent-id -> spawning ``tool_use_id`` pairs this window revealed — the handle a LATER

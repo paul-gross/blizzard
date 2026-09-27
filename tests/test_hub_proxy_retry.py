@@ -1,4 +1,4 @@
-"""``HubProxy.forward``'s bounded-backoff retry over a hub restart (blizzard#467).
+"""``HubProxy.forward``'s bounded-backoff retry over a hub restart.
 
 Unit-tier: ``HubProxy`` is built directly (no app, no store), its ``client`` a real
 ``httpx.Client`` over ``httpx.MockTransport`` so every response is scripted with no
@@ -106,7 +106,7 @@ def test_a_persistent_gateway_status_exhausts_and_raises_the_upstream_status_and
 
 @pytest.mark.unit
 def test_a_post_is_never_retried_on_any_status(tmp_path: Path) -> None:
-    """``pause``/``resume`` are the only non-``GET`` forwards (D3) — a gateway status on one
+    """``pause``/``resume`` are the only non-``GET`` forwards — a gateway status on one
     of them raises on the first response, exactly as an unretried call always did."""
     calls: list[str] = []
 
@@ -127,7 +127,7 @@ def test_a_post_is_never_retried_on_any_status(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_a_non_gateway_status_on_a_get_raises_on_the_first_response(tmp_path: Path) -> None:
     """A `404`/`409`/`403` — anything outside the retryable gateway set — is never slowed
-    by a retry it cannot benefit from (D6)."""
+    by a retry it cannot benefit from."""
     calls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -147,7 +147,7 @@ def test_a_non_gateway_status_on_a_get_raises_on_the_first_response(tmp_path: Pa
 @pytest.mark.unit
 def test_a_recovered_forward_logs_once_below_error_distinct_from_a_failed_one(tmp_path: Path) -> None:
     """A forward that recovers logs exactly once, below ``ERROR``, under its own event name
-    — an attempt that will be retried logs nothing (D7)."""
+    — an attempt that will be retried logs nothing."""
     calls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -230,7 +230,7 @@ def test_a_retry_is_not_scheduled_when_its_backoff_would_overrun_the_budget(
 def test_a_caller_supplied_timeout_caps_every_attempt_and_the_whole_forward(tmp_path: Path) -> None:
     """A caller-narrower-than-``_HUB_TIMEOUT`` budget (the dashboard's 3s) caps every
     attempt at that budget, not the module's 15s per-attempt bound, and the forward still
-    exhausts and raises rather than retrying forever (D4)."""
+    exhausts and raises rather than retrying forever."""
     seen_timeouts: list[float] = []
 
     def handler(request: httpx.Request) -> httpx.Response:

@@ -1,5 +1,5 @@
 """Produces-artifact authorization (unit tier) — ``Produces``, node + artifacts
-only (issue #113 phase 5).
+only.
 
 A pure value over a :class:`Node` plus the submission's own artifact list
 (``bzh:domain-takes-objects``): no store, no HTTP, no clock.
@@ -71,8 +71,8 @@ def test_a_missing_name_is_rejected_under_enforce() -> None:
 
 def test_a_fallback_only_name_attached_false_is_rejected_under_enforce() -> None:
     """A name present but only as the judgement-assessment fallback (``attached=False``)
-    still counts as lacking an explicit attachment — the exact criterion this check owes
-    issue #113 criterion 6."""
+    still counts as lacking an explicit attachment — criterion 6 of the exact criteria
+    this check owes."""
     node = _node(produces=["notes"])
     artifacts = [_artifact("notes", attached=False)]
 

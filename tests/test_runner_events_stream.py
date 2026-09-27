@@ -1,5 +1,5 @@
-"""The runner SSE endpoint — ``GET /api/events/stream`` serves a live ``text/event-stream``
-(blizzard#317 Phase 2), mirroring the hub's own ``tests/test_events_stream.py``. It is an
+"""The runner SSE endpoint — ``GET /api/events/stream`` serves a live ``text/event-stream``,
+mirroring the hub's own ``tests/test_events_stream.py``. It is an
 infinite live fan-out, unreadable through Starlette's buffering ``TestClient``, so these
 tests call the route handler directly; the shared machinery itself is covered generically
 in ``tests/test_foundation_events.py``."""
@@ -43,7 +43,7 @@ async def test_stream_endpoint_returns_an_sse_response() -> None:
 
 
 async def test_stream_endpoint_degrades_cleanly_with_no_broker() -> None:
-    """D2, blizzard#317: every composer with no stream to feed (``blizzard runner
+    """Every composer with no stream to feed (``blizzard runner
     tick``, the store-free/export app) leaves ``app.state.events`` absent — the route
     still opens cleanly rather than 500ing."""
     response = await events_stream(_FakeRequest(None))  # type: ignore[arg-type]

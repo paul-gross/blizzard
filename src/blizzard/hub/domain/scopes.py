@@ -1,8 +1,8 @@
 """Scope domain model — an operator-authored slug the hub stores and hands back, never
-resolves (issue #389).
+resolves.
 
 Minted the moment its slug is first named, by ``scope create`` or a routine naming an
-unseen default (D4, :class:`ScopeRegistry.ensure`). Retire/enable is a reversible,
+unseen default (:class:`ScopeRegistry.ensure`). Retire/enable is a reversible,
 append-only, newest-fact-wins brake, exactly like a graph's (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
@@ -52,14 +52,14 @@ class IReadScopeRepository(Protocol):
     def list_all(self) -> list[Scope]: ...
 
     def is_retired(self, slug: str) -> bool:
-        """Whether ``slug``'s newest lifecycle fact reads retired (issue #389).
+        """Whether ``slug``'s newest lifecycle fact reads retired.
 
         ``False`` for a slug with no lifecycle fact at all — every freshly minted scope
         starts enabled."""
         ...
 
     def retired_slugs(self) -> set[str]:
-        """Every slug whose newest lifecycle fact reads retired (issue #389) — the bulk
+        """Every slug whose newest lifecycle fact reads retired — the bulk
         counterpart to :meth:`is_retired`, mirroring
         ``IReadGraphRepository.retired_graph_ids``."""
         ...
@@ -70,23 +70,23 @@ class IWriteScopeRepository(IReadScopeRepository, Protocol):
 
     def ensure(self, slug: str, *, description: str, at: datetime) -> Scope:
         """Mint ``slug`` if unseen; otherwise read back the existing row unchanged
-        (D4, D5) — first-write-wins CAS, never overwriting a stored description."""
+        — first-write-wins CAS, never overwriting a stored description."""
         ...
 
     def edit_description(self, slug: str, *, description: str) -> Scope:
-        """Change an existing scope's description in place (D3) — the row itself is a
+        """Change an existing scope's description in place — the row itself is a
         mutable entity, not a fact."""
         ...
 
     def record_lifecycle(self, slug: str, *, retired: bool, at: datetime, by: str) -> None:
-        """Append a ``scope.retired``/``scope.enabled`` fact — newest-fact-wins (D3).
+        """Append a ``scope.retired``/``scope.enabled`` fact — newest-fact-wins.
 
         Never touches the ``scopes`` row itself."""
         ...
 
 
 class ScopeRegistry:
-    """Mint-on-name and edit-description over the scope repository (D4, issue #389)."""
+    """Mint-on-name and edit-description over the scope repository."""
 
     def __init__(self, *, scopes: IWriteScopeRepository, clock: IClock) -> None:
         self._scopes = scopes
@@ -103,7 +103,7 @@ class ScopeRegistry:
 
 
 class ScopeLifecycle:
-    """Set or clear a scope's retired brake without touching its row (D3, issue #389)."""
+    """Set or clear a scope's retired brake without touching its row."""
 
     def __init__(self, *, scopes: IWriteScopeRepository, clock: IClock) -> None:
         self._scopes = scopes

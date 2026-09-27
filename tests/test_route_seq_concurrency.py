@@ -1,4 +1,4 @@
-"""Concurrent allocation of the route-event ``seq`` counter (issue #41).
+"""Concurrent allocation of the route-event ``seq`` counter.
 
 ``chunk_rows.next_route_seq`` is read-then-insert, not atomic; two concurrent writers
 must not compute the same next value. Proves the allocator's statement locks the chunk

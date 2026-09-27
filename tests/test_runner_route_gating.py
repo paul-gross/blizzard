@@ -1,4 +1,4 @@
-"""The exhaustive three-lane gating guard for the runner's API seam (issue #95).
+"""The exhaustive three-lane gating guard for the runner's API seam.
 
 Every mounted ``/api/*`` route is either human-web-lane (session-gated: an
 unauthenticated TCP request under an oauth-mode hub gets a ``401``) or open (never

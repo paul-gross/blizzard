@@ -1,7 +1,7 @@
 """A routine's finding trend — a read over a window's `finding_facts`, folded into
 fixed-length periods with per-kind exit counts, the outflow/withdrawn roll-ups, and the
-D5 introduced-age cut (blizzard#394). Periods are cut in Python, not SQL (D6,
-`bzh:sql-portable`); the read never writes, and every count derives at read time
+introduced-age cut. Periods are cut in Python, not SQL (`bzh:sql-portable`);
+the read never writes, and every count derives at read time
 (`bzh:facts-not-status`)."""
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ TREND_FACT_KINDS = frozenset({"add", "reopened"}) | EXIT_KINDS
 @dataclass(frozen=True)
 class TrendFact:
     """One `finding_facts` row inside the window, joined to its own finding's
-    `introduced_at` (D5) — the shape `facts_for_trend` returns."""
+    `introduced_at` — the shape `facts_for_trend` returns."""
 
     kind: str
     recorded_at: datetime
@@ -30,7 +30,7 @@ class TrendFact:
 @dataclass(frozen=True)
 class TrendPeriod:
     """One fixed-length slice of the window: findings created, exits per kind, the two
-    roll-ups (D2) — `outflow` is `resolved` + `gone-confirmed`, `withdrawn` is the other
+    roll-ups — `outflow` is `resolved` + `gone-confirmed`, `withdrawn` is the other
     three — and `reopened`, an exited finding's own undo, counted on its own so a
     resolve-reopen-resolve cycle reads as one creation, two exits, one reopen."""
 
@@ -45,7 +45,7 @@ class TrendPeriod:
 
 @dataclass(frozen=True)
 class TrendAgeCut:
-    """The D5 cut over the window's created findings, against a caller-supplied
+    """The cut over the window's created findings, against a caller-supplied
     `boundary` — `unattributed` is reported, never folded into `recent` or `older`."""
 
     boundary: datetime
@@ -66,8 +66,8 @@ class Trend:
 
 class IReadGardenTrendRepository(Protocol):
     def facts_for_trend(self, routine_name: str, *, since: datetime, until: datetime) -> list[TrendFact]:
-        """Every `add`/exit-kind fact for `routine_name` recorded in `[since, until)`
-        (D6), each joined to its own finding's `introduced_at` (D5)."""
+        """Every `add`/exit-kind fact for `routine_name` recorded in `[since, until)`,
+        each joined to its own finding's `introduced_at`."""
         ...
 
 
@@ -92,7 +92,7 @@ def compute_trend(
     introduced_boundary: datetime,
 ) -> Trend:
     """Fold `facts` (already windowed at the store) into `period_days`-wide periods
-    (D6) and the D5 age cut over the window's own `add` facts — one pass over `facts`,
+    and the age cut over the window's own `add` facts — one pass over `facts`,
     each bucketed by its own period index rather than rescanned per period per kind."""
     bounds = _periods(since, until, period_days)
     step = timedelta(days=period_days)

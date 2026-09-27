@@ -57,7 +57,7 @@
 }
 /* Matches `fleet-kit-prose-block`'s own `.who` label style (`kit-prose-block.css`)
  * so "Timeline" reads like the "Summary"/"Note" labels beside it, rather than the
- * browser's UA-default `<h4>` (review:F11). */
+ * browser's UA-default `<h4>`. */
 .fp-timeline h4 {
   margin: 0 0 4px;
   font-size: var(--fs-label);
@@ -72,12 +72,12 @@
 .fp-work-item a {
   color: var(--amber-hi);
 }
-/* The severity pill (blizzard#582) — `white-space: nowrap` so its short label never
+/* The severity pill — `white-space: nowrap` so its short label never
    breaks mid-pill inside the fact grid's `<dd>`. */
 .fp-severity {
   white-space: nowrap;
 }
-/* The raising chunk's own ref (blizzard#582) — `run-delta.css`'s own `.rd-ref`
+/* The raising chunk's own ref — `run-delta.css`'s own `.rd-ref`
    shape, reused here for the same "board chunk" link. */
 .fp-raised-by {
   color: var(--amber-hi);

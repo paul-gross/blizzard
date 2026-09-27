@@ -86,7 +86,7 @@ describe('AgentRow', () => {
   });
 
   it('carries a heartbeat freshness bar fed by last_heartbeat_at', async () => {
-    // Past the bar's sampling-interval anchor (blizzard#334 D4) so it is
+    // Past the bar's sampling-interval anchor so it is
     // genuinely draining rather than reading 100% inside that grace.
     const el = await render(lease({ last_heartbeat_at: '2026-07-16T11:58:55.000Z' })); // -65s from REF
 

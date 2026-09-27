@@ -4,13 +4,13 @@ import { KitAsyncState, mergeLateLinks, TranscriptViewer, type runnerApi } from 
 import { injectTranscriptQuery } from './transcript.query';
 
 /**
- * The right pane's content (issue #29 slice C) — one lease's parsed transcript, driven
+ * The right pane's content — one lease's parsed transcript, driven
  * by {@link injectTranscriptQuery}. Standalone, `OnPush`, self-contained: `local-panel.ts`
  * only ever passes it {@link leaseId} and never branches on the read itself — every
  * degraded/empty case below is this component's own concern. Turn rendering itself is
- * `fleet`'s shared {@link TranscriptViewer} (blizzard#248 D3/D4) — this component is now
+ * `fleet`'s shared {@link TranscriptViewer} — this component is now
  * only the container: it owns the query and maps it onto one of the states below, the
- * pattern the hub's Transcripts tab (blizzard#248 Phase 2) reuses rather than reinvents.
+ * pattern the hub's Transcripts tab reuses rather than reinvents.
  *
  * Nine read states, kept visually and testably distinct (`data-testid` per row)
  * so an operator, or a test, can never mistake one for another — each is a real
@@ -22,13 +22,13 @@ import { injectTranscriptQuery } from './transcript.query';
  * - **`reason: "spawning"`** — the lease exists but has no `session_id` yet
  *   (the agent hasn't started). Lease-keyed URLs make this expressible instead
  *   of collapsing into a 404.
- * - **hub-unreachable** (`hub_unreachable: true`, blizzard#249 D1) — a closed
+ * - **hub-unreachable** (`hub_unreachable: true`) — a closed
  *   lease whose hub could not be asked *and* whose local file cannot answer
  *   either. Checked ahead of the `reason` switch below, whatever `reason` the
  *   failed local read carried, because "the hub could not be asked" must never
  *   read as the routine `not_found` case (visible-degrade precedent:
  *   `local-info.ts`, not `chunk-title.query.ts`). **Not** the same as a closed
- *   lease whose hub is unreachable but whose *local* file still answers — D1
+ *   lease whose hub is unreachable but whose *local* file still answers — this
  *   folds that case into a quiet local fallback (the service leaves
  *   `hub_unreachable` `false`), so it renders as plain turns below, same as
  *   any other local read.
@@ -46,7 +46,7 @@ import { injectTranscriptQuery } from './transcript.query';
  *   onto it when they apply: a truncation banner when the server capped the read
  *   (truncation must be visible, never silent), and an archived badge
  *   (`transcript-archived-badge`) when `provenance: "archived"` — the turns came from
- *   the hub's archive rather than the live local file (blizzard#249 D1).
+ *   the hub's archive rather than the live local file.
  *
  * `spawning`/`not_found` are deliberately **not** colored as errors: training an
  * operator to see red for a normal lifecycle state teaches them to ignore red.
@@ -62,7 +62,7 @@ import { injectTranscriptQuery } from './transcript.query';
   styleUrl: './transcript-panel.css',
 })
 export class TranscriptPanel {
-  /** The selected lease's id, or `null` when nothing is selected (issue #29 C1). */
+  /** The selected lease's id, or `null` when nothing is selected. */
   readonly leaseId = input<string | null>(null);
 
   protected readonly transcriptQuery = injectTranscriptQuery(this.leaseId);
@@ -70,7 +70,7 @@ export class TranscriptPanel {
   protected readonly transcript = computed<runnerApi.TranscriptResponse | undefined>(() => this.transcriptQuery.data());
 
   /** This panel reads a transcript WHOLE (cold), so it has no late links of its own to fold —
-   * but a closed lease's transcript is served from the hub (blizzard#249), which does. Applied
+   * but a closed lease's transcript is served from the hub, which does. Applied
    * unconditionally: a no-op on the local read, correct on the resolved one. */
   protected readonly mergedTurns = computed(() => mergeLateLinks(this.transcript()?.turns ?? []));
 }

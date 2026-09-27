@@ -12,7 +12,7 @@ from blizzard.runner.config import LEGACY_ANTHROPIC_SLUG, ConfigError, RunnerCon
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
 from blizzard.runner.subscriptions.subscription_sampler import SampleMiss, SampleMissReason
 
-# Operator-facing text per closed-set miss reason (blizzard#504) — what to do about it, not the machine word.
+# Operator-facing text per closed-set miss reason — what to do about it, not the machine word.
 _MISS_REASON_TEXT: dict[SampleMissReason, str] = {
     SampleMissReason.CREDENTIAL_LAPSED: "credential lapsed: log in again",
     SampleMissReason.CREDENTIAL_UNREADABLE: "credential unreadable",
@@ -23,7 +23,7 @@ _MISS_REASON_TEXT: dict[SampleMissReason, str] = {
 
 @click.group("external-usage")
 def external_usage_group() -> None:
-    """Diagnostics for the runner's own external-subscription usage sampling (issue #218)."""
+    """Diagnostics for the runner's own external-subscription usage sampling."""
 
 
 @external_usage_group.command("probe")

@@ -49,7 +49,7 @@ def test_list_runners_derives_online_and_paused(tmp_path: Path) -> None:
     assert len(runners) == 1
     assert runners[0]["runner_id"] == "runner-a"
     assert runners[0]["online"] is True  # just seen, at the fixed clock now
-    # Two brakes, reported apart (issue #43): neither is on for a fresh runner.
+    # Two brakes, reported apart: neither is on for a fresh runner.
     assert runners[0]["hub_paused"] is False
     assert runners[0]["locally_paused"] is False
     assert_all_timestamps_utc(resp.json())  # bzh:utc-instants — registered_at, last_seen_at
@@ -109,7 +109,7 @@ def test_registry_changes_emit_runner_changed_events(tmp_path: Path) -> None:
     assert all("runner-a" in e["data"] for e in events)
 
 
-# --- Environment-pool capacity, reported on registration (issue #69) ---
+# --- Environment-pool capacity, reported on registration ---
 # Re-registration is the heartbeat: a changed pool converges, an absent one nulls.
 
 
@@ -152,7 +152,7 @@ def test_env_capacity_resets_to_null_when_a_newer_reregister_omits_it(tmp_path: 
     assert hub.client.get("/api/fleet/runners/runner-a").json()["env_capacity"] is None
 
 
-# --- The runner's own brake, reported up (issue #43) ---
+# --- The runner's own brake, reported up ---
 # The hub never sets this one — it arrives as a fact through the outbound buffer.
 
 
@@ -200,7 +200,7 @@ def test_a_reported_local_resume_clears_only_the_local_brake(tmp_path: Path) -> 
 
 
 def test_a_ceiling_pause_reason_rides_the_report_and_lands_on_the_view(tmp_path: Path) -> None:
-    """A spend-ceiling escalation's cause (issue #61) round-trips runner -> hub and is
+    """A spend-ceiling escalation's cause round-trips runner -> hub and is
     distinguishable from a manual pause: `by` names "runner-ceiling" and `reason` carries
     the composed ceiling+spend string, exactly the payload `check_spend_ceiling` composes."""
     hub = build_hub(tmp_path)
@@ -295,7 +295,7 @@ def test_a_local_pause_from_an_unregistered_runner_is_kept(tmp_path: Path) -> No
     assert hub.client.get("/api/fleet/runners/runner-late").json()["locally_paused"] is True
 
 
-# --- `list_runners`'s query count as fleet size grows (D4) ---
+# --- `list_runners`'s query count as fleet size grows ---
 
 
 def _seed_runner_with_every_fact_family(hub: HubHarness, runner_id: str) -> None:
@@ -350,7 +350,7 @@ def _seed_runner_with_every_fact_family(hub: HubHarness, runner_id: str) -> None
 
 def test_list_runners_query_count_does_not_grow_with_runner_count(tmp_path: Path) -> None:
     """`list_runners`'s four per-runner fact families now read in one batched query per
-    family (D4) — a fleet of many runners, each carrying a hub pause, a local pause with
+    family — a fleet of many runners, each carrying a hub pause, a local pause with
     a reason, an external-usage sample, and a miss, must not cost more queries than a
     fleet of few."""
     (tmp_path / "few").mkdir()

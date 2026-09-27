@@ -1,5 +1,5 @@
 """The durable selftest-result repository and its wiring into ``SelfTestService``
-(blizzard#438) — round-tripping a recorded run, latest-wins-per-harness, and a fresh
+— round-tripping a recorded run, latest-wins-per-harness, and a fresh
 read through the same store seeing a completed run's outcome (the "survives a
 restart" property, without an actual process restart)."""
 

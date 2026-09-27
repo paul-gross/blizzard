@@ -16,7 +16,7 @@ import { Observable, Subject } from 'rxjs';
  * the types it wants via {@link SseConnectOptions.events} and reads them off
  * {@link SseHandle.events}. Unnamed frames still surface on {@link SseHandle.messages}.
  *
- * Now that auth has arrived (issue #93), the default factory is the **fetch-based**
+ * Now that auth has arrived, the default factory is the **fetch-based**
  * transport ({@link fetchEventSourceFactory}) rather than native `EventSource`:
  * `EventSource` sends no cookie-auth-aware status to script (it exposes no response
  * code at all), so a session expiring mid-stream would otherwise read as an
@@ -81,7 +81,7 @@ function parseSseFrame(raw: string): ParsedFrame {
 }
 
 /**
- * The fetch-based `EventSource` counterpart (issue #93): reads the stream as a raw
+ * The fetch-based `EventSource` counterpart: reads the stream as a raw
  * `fetch` response body so a `401` (an expired/absent session — `EventSource` cannot
  * see this at all) is detectable and reported via {@link FleetEventSource.onautherror}
  * rather than folded into the generic {@link FleetEventSource.onerror} a transient
@@ -225,7 +225,7 @@ export interface SseHandle<T> {
   readonly messages: Observable<T>;
   /** Parsed **named** frames (the type the caller subscribed to), in arrival order. */
   readonly events: Observable<SseEvent<T>>;
-  /** `true` once the stream closed on a `401` (issue #93) — a session that expired
+  /** `true` once the stream closed on a `401` — a session that expired
    * mid-stream, distinct from a transient drop (which keeps retrying instead). Set
    * at most once; no further reconnect is scheduled once this flips. A consumer
    * (the app root) watches this to route to `/login` within the one reconnect cycle
@@ -276,7 +276,7 @@ export class SseService {
 
       es.onopen = () => {
         // A confirmed reopen — not the drop that preceded it — is what `reopens`
-        // counts (D1): the point a live view's whole-tree re-GET can trust the
+        // counts: the point a live view's whole-tree re-GET can trust the
         // stream is actually back, rather than firing while it is still down.
         if (attempt > 0) reopens.update((n) => n + 1);
         attempt = 0;

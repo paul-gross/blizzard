@@ -2,7 +2,7 @@
 
 Heartbeat and spawn facts — REAP's staleness baseline. :meth:`LeaseLivenessStore.record_spawn`
 also opens/carries-forward the lease's transcript segment in the SAME transaction — a
-cross-concept write D1 keeps inside this one ``store/internal/`` package."""
+cross-concept write kept inside this one ``store/internal/`` package."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def _open_transcript_segment(
     """Open this generation's transcript segment, carrying a resumed session's cursor
     forward and finalizing its predecessor — shared by :meth:`~LeaseLivenessStore.record_spawn`
     and :meth:`~LeaseLivenessStore.record_identified_spawn`. Every start path is a segment
-    boundary (issue #246, D1), stamped here so a future write can't miss it."""
+    boundary, stamped here so a future write can't miss it."""
     context_row = conn.execute(
         select(
             leases.c.chunk_id,
@@ -251,7 +251,7 @@ class LeaseLivenessStore:
                     process_start_time=process_start_time,
                     session_id=session.session_id,
                     harness_id=session.harness_id,
-                    # `pgid` defaults `None` (D3): an unknowing caller must not leave a
+                    # `pgid` defaults `None`: an unknowing caller must not leave a
                     # PRIOR generation's stale group standing rather than reading "unknown".
                     pgid=pgid,
                 )

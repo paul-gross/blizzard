@@ -1,6 +1,6 @@
 """workspace prompt override table (runner store tree)
 
-The override only (issue #17) — the static source stays in config — one row per workspace.
+The override only — the static source stays in config — one row per workspace.
 Revision ID: 20260715_1633_runner_workspace_prompt
 Revises: 20260714_1656_runner_resume_intents
 """

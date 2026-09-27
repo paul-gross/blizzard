@@ -64,7 +64,7 @@
   --master-list-col: 320px;
 
   /*
-   * Overlay opacities (issue #78) — the discrete black washes used for panel
+   * Overlay opacities — the discrete black washes used for panel
    * headers, table heads, pressed/inset surfaces, and the engraved-label text
    * shadow. Named by their opacity so a component picks the wash it already
    * used, verbatim; no existing token value changes here, only these five new

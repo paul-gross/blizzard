@@ -35,7 +35,7 @@ from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.loop")
 
-# Checks-at-exit (issue #114): result rows are durable before the marker, so a crash between
+# Checks-at-exit: result rows are durable before the marker, so a crash between
 # them leaves `checks_ran` unset and recovery safely re-runs (latest-wins).
 _CP_CHECKS_AFTER_RESULTS = crashpoint(
     "checks.after-results.before-marker",
@@ -47,22 +47,22 @@ _CP_CHECKS_AFTER_MARKER = crashpoint(
 )
 
 # Verify -> elicit verdict -> buffer completion. Verify is read-only, so it needs no crash
-# point of its own (`bzh:crash-correctness` exemption). Usage recording (issue #58) sits
+# point of its own (`bzh:crash-correctness` exemption). Usage recording sits
 # between the verdict and the buffer: a crash there finds this attempt's usage facts already
 # durable, or neither — never a double-count.
 _CP_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdict parsed; completion not buffered")
 _CP_AFTER_USAGE = crashpoint("advance.after-usage.before-buffer", "usage facts recorded; completion not buffered")
 
-# Elicit LAUNCH (blizzard#443, D1) — mint-before-spawn's own shape: the in-flight record is
+# Elicit LAUNCH — mint-before-spawn's own shape: the in-flight record is
 # durable BEFORE the process starts, so an orphaned Popen can never happen; only an
 # un-armable record-with-no-process gap exists, absorbed the same way SPAWN's is. Reached on
-# every ordinary judgement, so `advance.*` is the honest family (D2).
+# every ordinary judgement, so `advance.*` is the honest family.
 _CP_ELICIT_AFTER_RECORD = crashpoint(
     "advance.after-elicit-record.before-launch", "in-flight elicitation record durable; the process has not launched"
 )
 _CP_ELICIT_AFTER_LAUNCH = crashpoint("advance.after-elicit-launch", "elicitation launched; pid recorded")
 
-# Resume-once (issues #113, #422): the durable `(lease, epoch)` fact is recorded BEFORE the
+# Resume-once: the durable `(lease, epoch)` fact is recorded BEFORE the
 # resume it guards, so "at most one resume" holds across a crash at either point.
 _CP_NUDGE_AFTER_FIRED_FACT = crashpoint(
     "nudge.after-fired-fact.before-resume",
@@ -72,7 +72,7 @@ _CP_NUDGE_AFTER_FIRED_FACT = crashpoint(
 _CP_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion buffered; not yet flushed")
 
 #: A lost elicitation's relaunch/abandon bound, measured from the FIRST launch for a
-#: `(lease, epoch)` and never reset by a relaunch (D5) — short, since a model turn that has
+#: `(lease, epoch)` and never reset by a relaunch — short, since a model turn that has
 #: not written a byte in this long is presumed crash-looping, not merely slow.
 ELICITATION_STALENESS_THRESHOLD = timedelta(minutes=15)
 
@@ -128,9 +128,9 @@ class Judgement:
         """Confirm the commits, then buffer a human's decision, resume a premature exit, or
         launch the verdict elicitation — the produces reconcile sits below the human gate and
         the local spawn brake alike, since `DormantSession.resume_on_unmet_produces` is itself
-        a spawn (issue #422).
+        a spawn.
 
-        Launching is this method's final act (blizzard#443): the elicitation is detached, so
+        Launching is this method's final act: the elicitation is detached, so
         no path through here waits on a model turn — a later reconciliation pass collects the
         verdict via :meth:`collect`."""
         lease = self.lease
@@ -145,12 +145,12 @@ class Judgement:
             return
 
         produces = ProducesReconciler(self.envelope)
-        # Names only — this check never reads content (Phase 3 hoist); `_judged` below
+        # Names only — this check never reads content; `_judged` below
         # still fetches the full `attachments_for_lease` where content is genuinely needed.
         attached_names = self.ctx.stores.attachments.attachment_names_for_lease(lease.lease_id)
         missing = produces.missing(artifacts, attached_names)
         if missing and not self.ctx.stores.checks.nudge_fired(lease.lease_id, lease.epoch):
-            # Resume-once (issues #113, #422): an exit with `produces:` unmet is resumed, not
+            # Resume-once: an exit with `produces:` unmet is resumed, not
             # judged — no verdict elicited, no attempt failed, and no `checks:` run.
             _log.warning(
                 "resuming premature exit for unattached produces names",
@@ -162,7 +162,7 @@ class Judgement:
             self.ctx.stores.checks.record_nudge_fired(
                 lease_id=lease.lease_id, epoch=lease.epoch, at=self.ctx.clock.now()
             )
-            # The nudge's own boundary (D5/D6), riding `record_nudge_fired`'s own
+            # The nudge's own boundary, riding `record_nudge_fired`'s own
             # pre-resume transaction — no new window, so no new crash point brackets it.
             if lease.session is not None:
                 workdir = self.bindings[0].workdir if self.bindings else None
@@ -186,17 +186,17 @@ class Judgement:
 
     def collect(self, elicitation: ElicitationRecord) -> None:
         """Poll this lease's in-flight elicitation; once its process has exited, read its
-        reply back and continue exactly where a launch's own reply would have (blizzard#443).
+        reply back and continue exactly where a launch's own reply would have.
 
         A still-live process is bounded by staleness alone — a hung process that never exits
         must still fail, not wait forever. An **exited** process is classified for a usage
-        limit ahead of the staleness bound (blizzard#594, D2): an elicitation observed only
+        limit ahead of the staleness bound: an elicitation observed only
         long after it exited — a delayed tick, a runner outage — must still pause rather than
         fail, exactly the shape `_elicitation_stale`'s own bound would otherwise catch first.
         Exited, not limited, and nothing usable at all — empty, or a partial write with no
         result envelope at all, the shape a `kill -9` mid-write leaves — is a **lost**
         elicitation, not a verdict-less reply: that relaunches under the staleness bound
-        rather than consuming a retry (D5).
+        rather than consuming a retry.
 
         The record is cleared, and its output files swept, only AFTER the collected reply
         is fully processed: a crash mid-processing leaves the record standing,
@@ -213,15 +213,14 @@ class Judgement:
                     relaunch_count=elicitation.relaunch_count,
                 )
                 # `Attempt.fail` kills the (possibly still-running) process and clears this
-                # record itself (D7) — no separate write of our own precedes it.
+                # record itself — no separate write of our own precedes it.
                 Attempt(self.ctx, lease).fail(reason=FAILED, via="advance")
             return
         output = self.ctx.elicitation_files.read(elicitation.output_path)
         session = lease.session
-        # Classified ahead of both the staleness bound and the lost-output check
-        # (blizzard#594): a usage-limited harness typically writes its own signal to the
-        # session transcript, not this elicitation's captured stdout, so neither an empty
-        # `output` nor a long-unobserved exit may fall through to failing or relaunching —
+        # Classified ahead of both the staleness bound and the lost-output check: a usage-limited harness
+        # typically writes its own signal to the session transcript, not this elicitation's captured stdout,
+        # so neither an empty `output` nor a long-unobserved exit may fall through to failing or relaunching —
         # exactly what a usage-limit pause exists to avoid.
         if session is not None:
             generation = self.ctx.stores.liveness.lease_generation(lease.lease_id)
@@ -231,8 +230,8 @@ class Judgement:
                 engage_and_park_judge(self.ctx, lease, limit)
                 return
             # A provider-overloaded elicitation is classified right alongside the usage
-            # limit (blizzard#595) — the two are mutually exclusive exit reasons for the
-            # one exit, both read from the same `output`/`lines` pair read once above (F4),
+            # limit — the two are mutually exclusive exit reasons for the
+            # one exit, both read from the same `output`/`lines` pair read once above,
             # same as the worker's own classification order in steps.py.
             overload = classify_judge_overload(self.ctx, lease, output, lines)
             if overload is not None:
@@ -275,10 +274,10 @@ class Judgement:
     def _lost(self, elicitation: ElicitationRecord) -> None:
         """The elicitation's process exited without writing anything usable. Relaunch —
         `collect` has already checked staleness unconditionally above, so reaching here means
-        this attempt is still under the bound (D5).
+        this attempt is still under the bound.
 
-        The local-pause brake gates the relaunch exactly as it gates a fresh launch (issue
-        #45): a paused runner defers rather than spawning, the record untouched, mirroring
+        The local-pause brake gates the relaunch exactly as it gates a fresh launch: a paused
+        runner defers rather than spawning, the record untouched, mirroring
         `Reap`'s own "a pause is not a drain" treatment of a stale worker — the bound is
         re-checked against a fresh `now` on the first pass after the brake clears, so a long
         pause does not by itself cause an immediate abandon, but does not buy the attempt
@@ -295,9 +294,9 @@ class Judgement:
         self._relaunch(elicitation)
 
     def _relaunch(self, elicitation: ElicitationRecord) -> None:
-        """Re-launch a lost elicitation into a fresh output file (D4 — never a second document
+        """Re-launch a lost elicitation into a fresh output file (never a second document
         appended to the lost attempt's own file) and record-before-launch as the first launch
-        does (D1) — the narrow gap between the two is a self-healing accepted loss (no window
+        does — the narrow gap between the two is a self-healing accepted loss (no window
         entry: a restart mid-relaunch reads the still-unset pid as not-running and relaunches
         again), not a `bzh:crash-point-registry` window."""
         lease = self.lease
@@ -308,7 +307,7 @@ class Judgement:
         self._elicit(output_path)
 
     def checks(self) -> list[CheckResultRecord]:
-        """Run the node's ``checks:`` at worker exit, or read the results back (issue #114).
+        """Run the node's ``checks:`` at worker exit, or read the results back.
 
         Rows are recorded before the marker, which is what makes them exactly-once across a
         crash. The re-run key is ``(lease, epoch)``, so a retry re-runs against the rebuilt tree."""
@@ -356,12 +355,12 @@ class Judgement:
         return results
 
     def _launch(self) -> None:
-        """Launch the detached verdict elicitation and return (blizzard#443) — a re-minted
+        """Launch the detached verdict elicitation and return — a re-minted
         lease identity, since the worker is gone and invalidating its token orphans nothing.
 
-        Checks run before the launch (issue #114), against the tree the worker just left —
+        Checks run before the launch, against the tree the worker just left —
         the same tree its judgement and the gate are rendered on. The in-flight record is
-        durable BEFORE the process starts (D1), mirroring `Spawner.spawn`'s mint-before-spawn:
+        durable BEFORE the process starts, mirroring `Spawner.spawn`'s mint-before-spawn:
         a crash in the gap leaves a record with no process, which REAP's generic staleness
         treatment absorbs the same way an orphaned lease mint is absorbed today."""
         lease = self.lease
@@ -369,7 +368,7 @@ class Judgement:
         self.ctx.stores.elicitations.record_elicitation_launch(
             lease.lease_id, lease.epoch, output_path=output_path, at=self.ctx.clock.now()
         )
-        # The judgement's own boundary (D6), riding `record_elicitation_launch`'s own
+        # The judgement's own boundary, riding `record_elicitation_launch`'s own
         # pre-launch write. Keyed by the CURRENT generation — a judgement mints no new one.
         if lease.session is not None:
             workdir = self.bindings[0].workdir if self.bindings else None
@@ -391,9 +390,9 @@ class Judgement:
 
     def _elicit(self, output_path: str) -> None:
         """Render the judgement prompt against this attempt's own checks and launch it into
-        ``output_path`` (blizzard#443) — the shared half of a fresh launch and a lost
+        ``output_path`` — the shared half of a fresh launch and a lost
         answer's relaunch, including reasserting the stamped effort/compaction-
-        window the same way on both: neither is session-sticky (issue #144, blizzard#343), so
+        window the same way on both: neither is session-sticky, so
         a resume that omits them drops the declared value back to the ambient default."""
         lease = self.lease
         checks = self.checks()
@@ -426,20 +425,20 @@ class Judgement:
                 pgid=handle.pgid,
             )
         except Exception:
-            # F1: a plain raise here never disarms the trampoline on its own — kill it
+            # A plain raise here never disarms the trampoline on its own — kill it
             # explicitly instead (`Spawner.spawn`'s own guard around its own durable write).
             self.ctx.process.kill_group(handle.pgid)
             raise
-        # F1: disarm only now this record is durable — `collect` can re-adopt it past here.
+        # Disarm only now this record is durable — `collect` can re-adopt it past here.
         handle.confirm_durable()
 
     def _judged(self, output: str) -> None:
         """Continue from a collected reply — usage, verdict, the checks gate, the completion —
-        in the same order the once-synchronous elicitation left them in (D3). Reached only
+        in the same order the once-synchronous elicitation left them in. Reached only
         from :meth:`collect`, which already resolved this exact session's owner as its own
         guard, so the resolution below can never be reached with an unresolvable one."""
         lease = self.lease
-        # Record this attempt's harness usage (issue #58) *before* the verdict is parsed, so a
+        # Record this attempt's harness usage *before* the verdict is parsed, so a
         # verdict-less fail does not discard the spend the attempt genuinely burned.
         self.ctx.usage.record_attempt(lease, self.bindings, judge_output=output)
 
@@ -477,7 +476,7 @@ class Judgement:
         self._buffer_completion(choice, checks, artifacts)
 
     def _gate_broken(self, choice: str, checks: list[CheckResultRecord]) -> bool:
-        """The checks gate (issue #114), evaluated BEFORE the nudge so it judges the exact
+        """The checks gate, evaluated BEFORE the nudge so it judges the exact
         checks the worker was shown — gate and worker can never diverge on "the tree"."""
         selected = next((c for c in self.envelope.node.choices if c.name == choice), None)
         if selected is None or not ChecksGate(selected.requires_checks, checks).violated:

@@ -1,4 +1,4 @@
-"""The kind-agnostic SSE stream-response machinery (D1) — cursor resolution, the
+"""The kind-agnostic SSE stream-response machinery — cursor resolution, the
 replay-then-live handoff, keepalive, and disconnect/shutdown handling. A daemon's own
 route binds :class:`Stream` to its own broker and reserved comment; both production
 routes idle at the one shared keepalive cadence, ``DEFAULT_KEEPALIVE_SECONDS``. A

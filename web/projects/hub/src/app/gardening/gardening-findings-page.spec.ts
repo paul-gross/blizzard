@@ -64,7 +64,7 @@ const FINDING_GONE_CONFIRMED = findingFixture({
   note: 'confirmed gone',
 });
 /** A second routine/scope, distinct from the other three fixtures' `nightly`/
- * `blizzard` — the disambiguation markup (blizzard#486) only means something once a
+ * `blizzard` — the disambiguation markup only means something once a
  * bucket genuinely mixes rows from more than one of each. */
 const FINDING_OTHER_ROUTINE = findingFixture({
   finding_id: 'fnd_20',

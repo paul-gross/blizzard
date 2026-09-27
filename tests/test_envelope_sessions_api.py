@@ -1,4 +1,4 @@
-"""The effective session declaration on the envelope, over HTTP (component tier, issue #144).
+"""The effective session declaration on the envelope, over HTTP (component tier).
 
 :mod:`tests.test_envelope` unit-tests the precedence resolution itself; this file proves
 the fields survive a real mint, a real chunk edit, and the ``GET /chunks/{id}/envelope``
@@ -138,7 +138,7 @@ def test_the_declaration_outranks_the_chunk_default_field_by_field(tmp_path: Pat
 
 def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Path) -> None:
     """A node on the bare `fresh`/`resume` vocabulary belongs to no pool but still
-    inherits the chunk's defaults (issue #144)."""
+    inherits the chunk's defaults."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER], promote=False)
     _mint_and_pin(hub, chunk_id, _NO_SESSIONS_YAML)

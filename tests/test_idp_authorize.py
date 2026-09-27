@@ -1,5 +1,5 @@
 """``GET /api/auth/authorize`` / ``GET /api/auth/jwks.json`` / ``POST
-/api/auth/rotate-signing-key`` — the hub-as-IdP surface (component tier, issue #95).
+/api/auth/rotate-signing-key`` — the hub-as-IdP surface (component tier).
 """
 
 from __future__ import annotations
@@ -156,7 +156,7 @@ def test_authorize_with_no_session_and_multiple_providers_bounces_to_the_login_c
         follow_redirects=False,
     )
     # Two providers: no single dance to auto-run, so the browser is handed to the
-    # board's /login page carrying the pending authorize request (issue #128).
+    # board's /login page carrying the pending authorize request.
     assert resp.status_code in (302, 307)
     location = resp.headers["location"]
     assert location.startswith("/login?return_to=")
@@ -174,7 +174,7 @@ def test_authorize_with_no_session_and_no_providers_refuses(tmp_path: Path) -> N
         follow_redirects=False,
     )
     # Zero configured providers: nothing to authenticate against, so the refusal stays
-    # an actionable error rather than a chooser bounce (issue #128).
+    # an actionable error rather than a chooser bounce.
     assert resp.status_code == 501
 
 

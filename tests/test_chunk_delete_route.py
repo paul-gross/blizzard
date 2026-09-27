@@ -1,4 +1,4 @@
-"""The ``DELETE /chunks/{id}`` route over the HTTP surface (issue #364, Phase 2). Proves
+"""The ``DELETE /chunks/{id}`` route over the HTTP surface. Proves
 the controller wires ``DeleteService`` correctly end to end: 202/404/409, the chunk gone
 from every read, its open hub item(s) withdrawn in the same write, and both
 ``chunk-changed``/``queue-changed`` published — the response shape and the degraded
@@ -29,7 +29,7 @@ def _claim(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
 
 
 def _delete_chunk(hub, chunk_id: str, *, by: str | None = None):  # type: ignore[no-untyped-def]
-    """``DELETE /api/chunks/{id}`` with its (issue #364) JSON body — ``httpx``'s own
+    """``DELETE /api/chunks/{id}`` with its JSON body — ``httpx``'s own
     ``delete()`` refuses a ``json`` keyword, so this goes through ``request`` instead,
     the way ``CliContext.send`` itself now has to for the same reason."""
     body = {"by": by} if by is not None else {}
@@ -186,7 +186,7 @@ def test_delete_refuses_a_chunk_that_is_a_standing_prerequisite(tmp_path: Path) 
 def test_every_other_mutating_chunk_route_frame_is_unchanged_by_the_widened_degraded_branch(
     tmp_path: Path,
 ) -> None:
-    """Widening the degraded branch (D7) to forward ``cause``/``prev_status``/``by``
+    """Widening the degraded branch to forward ``cause``/``prev_status``/``by``
     changes nothing for a route whose chunk still reads back — a stop's frame still
     carries the same enriched shape it always has."""
     hub = build_hub(tmp_path)

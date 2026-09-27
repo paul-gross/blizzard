@@ -1,5 +1,5 @@
-"""Proposed-work-item authorization — the hub-side gate on a completion's ``proposals``
-(D6). Unlike ``produces_auth``'s warn/enforce backstop, this refusal is unconditional: a
+"""Proposed-work-item authorization — the hub-side gate on a completion's ``proposals``.
+Unlike ``produces_auth``'s warn/enforce backstop, this refusal is unconditional: a
 node declaring no ``proposes_work_items`` policy and submitting no proposals is
 untouched, so there is nothing to migrate and no warn tier to earn."""
 

@@ -1,9 +1,9 @@
-"""SQLAlchemy adapter for the scope repository seam (package-private, issue #389).
+"""SQLAlchemy adapter for the scope repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). ``ensure`` is a
 first-write-wins CAS over the slug primary key, the ``ChunkQuestionsStore.answer_question`` shape
-(D5) rather than ``WorkItemStore.allocate_ref``'s increment-on-conflict. Retired derives
-from the append-only ``scope_lifecycle_facts`` table, newest-fact-wins per slug (D3)."""
+rather than ``WorkItemStore.allocate_ref``'s increment-on-conflict. Retired derives
+from the append-only ``scope_lifecycle_facts`` table, newest-fact-wins per slug."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class ScopeStore:
     def ensure(self, slug: str, *, description: str, at: datetime) -> Scope:
         """Insert ``slug`` in its own transaction; a racing second mint gets
         ``IntegrityError`` on the shared primary key and reads back the winner instead —
-        never overwriting the description the winner minted (D4, D5)."""
+        never overwriting the description the winner minted."""
         try:
             with self._store.write("ensure", expect=(IntegrityError,)) as conn:
                 conn.execute(insert(scopes).values(slug=slug, description=description, created_at=at))
@@ -82,7 +82,7 @@ class ScopeStore:
         return {slug for slug, retired in newest.items() if retired}
 
     def record_lifecycle(self, slug: str, *, retired: bool, at: datetime, by: str) -> None:
-        """Append a ``scope.retired``/``scope.enabled`` fact — newest-fact-wins (D3)."""
+        """Append a ``scope.retired``/``scope.enabled`` fact — newest-fact-wins."""
         with self._store.write("record_lifecycle") as conn:
             conn.execute(insert(scope_lifecycle_facts).values(slug=slug, retired=retired, set_at=at, set_by=by))
 

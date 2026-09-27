@@ -1,4 +1,4 @@
-"""The write-half work-source seam's editor capability — full item CRUD (blizzard#358).
+"""The write-half work-source seam's editor capability — full item CRUD.
 
 A sibling Protocol to ``IWorkAnnotator``/``IWorkCloser``: "this source serves browsable
 items" is a *presence* question the registry answers. Only the built-in ``hub`` source
@@ -39,7 +39,7 @@ class IWorkEditor(Protocol):
         self, *, title: str, body: str, author: WorkItemAuthor, stated_priority: WorkItemPriority | None, graph: Graph
     ) -> CreatedWorkItem:
         """Allocate a fresh item at this source, open, and mint its resting chunk pinned
-        to ``graph`` in the same transaction (blizzard#359). Raises
+        to ``graph`` in the same transaction. Raises
         :class:`~blizzard.hub.domain.ingest.IngestConflict` on an out-of-band pre-empt."""
         ...
 

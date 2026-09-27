@@ -1,5 +1,5 @@
 """The harness package's public entry point for scaffolding OpenCode's runtime-root files
-(execution spec, "Runner-owned plugin", D7).
+(execution spec, "Runner-owned plugin").
 
 ``Runtime.init`` is not a composition root, so it may not reach into ``harness/internal/``
 directly (``bzh:dependency-injection``); it calls this harness-neutral surface instead,

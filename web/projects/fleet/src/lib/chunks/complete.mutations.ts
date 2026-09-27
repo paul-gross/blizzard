@@ -5,8 +5,8 @@ import { completeChunkApiChunksChunkIdCompletePost } from '../api/hub';
 import { chunkCompleteMutationKey } from '../mutation-keys';
 import { hubChunkKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
-/** Manually complete a chunk — the board's counterpart of `blizzard hub chunk done`
- * (issue #294). Reachable from any non-`done` status, including `stopped`: unlike Stop,
+/** Manually complete a chunk — the board's counterpart of `blizzard hub chunk done`.
+ * Reachable from any non-`done` status, including `stopped`: unlike Stop,
  * there is no un-complete verb. */
 export interface CompleteVars {
   readonly chunkId: string;

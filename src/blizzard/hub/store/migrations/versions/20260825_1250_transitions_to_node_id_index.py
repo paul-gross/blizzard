@@ -1,5 +1,5 @@
 """transitions.to_node_id index — the delivery-materialization sweep's own candidate
-read (blizzard#366, hub store tree).
+read (hub store tree).
 
 Every sweep pass scans ``transitions`` for ``to_node_id == RESERVED_TERMINAL``,
 unindexed.

@@ -1,8 +1,7 @@
 """The Anthropic (Claude Code) subscription-sampler binding (``bzh:pluggable-seams``).
 
 Implements :class:`~blizzard.runner.subscriptions.subscription_sampler.ISubscriptionSampler`
-against Claude Code's own OAuth usage endpoint, independent of the coding-harness adapter
-(blizzard#436)."""
+against Claude Code's own OAuth usage endpoint, independent of the coding-harness adapter."""
 
 from __future__ import annotations
 
@@ -26,7 +25,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
 
 _log = get_logger("blizzard.runner.harness")
 
-# The subscription-usage seam (issue #218) — the API host and the shared credential file
+# The subscription-usage seam — the API host and the shared credential file
 # the harness's own login writes. Both overridable via the constructor.
 DEFAULT_USAGE_API_BASE = "https://api.anthropic.com"
 DEFAULT_CREDENTIALS_PATH = str(Path.home() / ".claude" / ".credentials.json")
@@ -35,7 +34,7 @@ _USAGE_PATH = "/api/oauth/usage"
 _USAGE_OAUTH_BETA_HEADER = "oauth-2025-04-20"
 _USAGE_TIMEOUT_SECONDS = 5.0
 
-# The label and fixed length each source-body key maps to (issue #218), so no caller has
+# The label and fixed length each source-body key maps to, so no caller has
 # to hardcode the window -> seconds mapping itself.
 _USAGE_WINDOW_SPECS: tuple[tuple[str, str, int], ...] = (
     ("five_hour", "5h", 18_000),

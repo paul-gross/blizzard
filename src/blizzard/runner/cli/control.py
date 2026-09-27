@@ -12,7 +12,7 @@ import click
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 
-# The operator's TCP door onto the local API (issue #43) — the override for when the socket is not
+# The operator's TCP door onto the local API — the override for when the socket is not
 # the right address. `BZ_*` is the operator's config namespace, distinct from the worker's
 # spawn-injected `BLIZZARD_*` one, which `worker_call` owns.
 ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
@@ -45,7 +45,7 @@ def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str 
 class SessionLabel:
     """A parked session's identity as a trailing clause — ``"  session=code (opus, high)"``.
 
-    Empty when the escalation carries none of the three (issue #144), so a bare line reads as
+    Empty when the escalation carries none of the three, so a bare line reads as
     "not recorded" rather than inventing one."""
 
     escalation: dict
@@ -77,8 +77,8 @@ class SessionLabel:
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 def status(directory: str, runner_url: str | None) -> None:
-    """The machine-local view: capacities, held environments, open asks, escalations, open takeovers
-    (issue #51). Every section is this runner's own local read, so the view renders fully with the
+    """The machine-local view: capacities, held environments, open asks, escalations, open takeovers.
+    Every section is this runner's own local read, so the view renders fully with the
     hub unreachable; hub reachability is itself reported, not assumed."""
     with RunnerDaemon.reach("status", directory, runner_url) as daemon:
         view = daemon.get("/api/runner").json()
@@ -107,7 +107,7 @@ def status(directory: str, runner_url: str | None) -> None:
     for lease in leases:
         click.echo(f"  {lease['lease_id']}  {lease['state']:<12} chunk={lease['chunk_id']} node={lease['node_name']}")
 
-    # `GET /api/environments` carries the full configured pool (issue #106); this section
+    # `GET /api/environments` carries the full configured pool; this section
     # is the *held*-environments view, so unused pool slots (chunk_id null) are filtered out.
     envs = [env for env in envs_resp.json().get("items", []) if env.get("chunk_id") is not None]
     click.echo(f"\nheld environments ({len(envs)}):")
@@ -165,7 +165,7 @@ def status(directory: str, runner_url: str | None) -> None:
 )
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 def pause(directory: str, runner_url: str | None, by: str) -> None:
-    """Declarative control: pause this runner — it starts no new workers (issue #45). This runner's
+    """Declarative control: pause this runner — it starts no new workers. This runner's
     **own** brake, a pure client of its local API, so it works with the hub unreachable: a stalled
     worker is not killed, and an exhausted retry budget does not escalate, until it is cleared. No
     retry is consumed, and a live worker is left alone — this is not a drain. Distinct from the hub's
@@ -190,7 +190,7 @@ def pause(directory: str, runner_url: str | None, by: str) -> None:
 )
 @click.option("--by", "by", default="operator", help="Who is starting it (recorded on the fact).")
 def start(directory: str, runner_url: str | None, by: str) -> None:
-    """Declarative control: clear this runner's own pause brake — it resumes spawning (issue #45).
+    """Declarative control: clear this runner's own pause brake — it resumes spawning.
 
     The counterpart to ``blizzard runner pause``, and local in the same way. It clears only
     the local brake: a runner also paused at the hub stays paused until ``blizzard hub
@@ -216,7 +216,7 @@ def start(directory: str, runner_url: str | None, by: str) -> None:
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None) -> None:
-    """Take over a parked chunk: exec the interactive resume command in this terminal (issue #52). The
+    """Take over a parked chunk: exec the interactive resume command in this terminal. The
     takeover fact is recorded before anything else runs, so no loop step can respawn or judge the
     session while it is open; the lease token travels only in the response body and the exec, never
     printed. ``--force`` supersedes a live worker attempt instead of refusing. An interrupted session
@@ -229,7 +229,7 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
         view = resp.json()
         click.echo(f"taking over chunk {chunk_id} in {view['workdir']}: {view['command']}")
         try:
-            # The takeover env (issue #258), layered over the terminal env: the forwarded
+            # The takeover env, layered over the terminal env: the forwarded
             # vars deliberately WIN over the terminal's own, and carry the lease token.
             child_env = {**os.environ, **view.get("env", {})}
             exit_code = subprocess.call(view["command"], shell=True, cwd=view["workdir"], env=child_env)
@@ -256,7 +256,7 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 def requeue(chunk_id: str, directory: str, runner_url: str | None) -> None:
-    """Hand a needs_human chunk back to the fleet: a fresh attempt at its current node (issue #53).
+    """Hand a needs_human chunk back to the fleet: a fresh attempt at its current node.
     Clears the chunk's local needs_human hold; a fresh attempt spawns at the current node on the
     fleet's next pass. The route is never released and the chunk never re-enters the hub's queue.
     Refused ``409`` while its takeover is still open, or while it is not parked needs_human."""
@@ -285,7 +285,7 @@ def requeue(chunk_id: str, directory: str, runner_url: str | None) -> None:
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 def selftest(coding_harness: str, directory: str, runner_url: str | None) -> None:
-    """Adapter-drift canary before an unattended period (issue #54): exercises CODING_HARNESS against a
+    """Adapter-drift canary before an unattended period: exercises CODING_HARNESS against a
     throwaway scratch repo — spawn with a pre-assigned session id, a trivial edit+commit, verdict
     elicitation, an automated follow-up resume, and resume-command composition — touching no chunk,
     lease, environment, or hub. Posts the run, polls it, prints each check, exits non-zero on failure."""

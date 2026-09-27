@@ -9,9 +9,10 @@ file is the in-repo operator reference for running it.
 
 [`.github/workflows/gate.yml`](../.github/workflows/gate.yml) is the reusable (`workflow_call`) merge gate, called by
 every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gate` ast-grep scan
-(`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, and the `web/` frontend checks (eslint, vitest,
-structural gate, generated-client drift). Every gate check is seams-mocked and token-free, needing no real forge, no
-tokens, and no network beyond package installs.
+(`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, the `web/` frontend checks (eslint, vitest,
+structural gate, generated-client drift), and the process-reference prose lint (`gate / process-reference lint`,
+`styles/Blizzard/ProcessReference.yml` against `.vale.ini`). Every gate check is seams-mocked and token-free, needing no
+real forge, no tokens, and no network beyond package installs.
 
 `mise run gate` ([`scripts/ci-gate.sh`](../scripts/ci-gate.sh)) reproduces the whole merge gate in one command before
 pushing. The gate's exact individual commands:
@@ -21,6 +22,7 @@ uv sync
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright
+vale --output=line .
 uv run ast-grep scan --error=unused-suppression .
 uv run pytest -n auto
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- openapi/

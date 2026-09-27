@@ -1,5 +1,5 @@
 """SSO federation jti replay cache — the store-backed single-use guard a hub-signed JWT's
-`jti` is checked against (runner store tree, issue #95, D4)
+`jti` is checked against (runner store tree)
 
 Revision ID: 20260721_1500_runner_jwt_jti_seen
 Revises: 20260719_1100_runner_nudge_facts

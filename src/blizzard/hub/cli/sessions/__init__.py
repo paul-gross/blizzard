@@ -1,4 +1,4 @@
-"""``blizzard hub login``'s local session-token store (issue #96) — CLI-client state, not
+"""``blizzard hub login``'s local session-token store — CLI-client state, not
 hub daemon state: session bearers keyed by hub base URL under the user config dir,
 owner-only (``0600``; parent dir ``0700``)."""
 

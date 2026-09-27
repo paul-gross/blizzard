@@ -12,19 +12,19 @@ import { TranscriptSegmentView } from './transcript-segment-view';
 import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
 
 /**
- * The chunk detail page's Transcripts tab (blizzard#248 Phase 2, moved into `fleet` by
- * runner-node-grouped-transcripts Phase 4 so both the hub and runner apps mount the same
+ * The chunk detail page's Transcripts tab (moved into `fleet` by
+ * runner-node-grouped-transcripts so both the hub and runner apps mount the same
  * component) — a nav of node-history steps, each holding its segments, beside a
  * lazily-fetched segment viewer. Mirrors `ChunkArtifactsTab`'s nav-beside-viewer shape
- * and, like it, is presentational (`bzh:frontend-container-presentational`, `review:F1`):
- * the two queries behind this tab (D8: the index on open, one segment's turns only once
+ * and, like it, is presentational (`bzh:frontend-container-presentational`):
+ * the two queries behind this tab (the index on open, one segment's turns only once
  * opened) live on {@link ChunkTranscriptsContainer}, which passes their resolved state
  * down as inputs — nothing about a chunk's transcripts is in `detail()`'s own payload
- * (D8, pinned at `test_chunk_detail_carries_no_transcript_field`).
+ * (pinned at `test_chunk_detail_carries_no_transcript_field`).
  *
  * {@link indexState}/{@link segmentState} are that container's own `asyncState()` folds over
  * its two queries (`bzh:frontend-empty-state-gated`); {@link isForbidden} is carried
- * separately since a 403 on the index read is its own honest state (D9), not a generic error.
+ * separately since a 403 on the index read is its own honest state, not a generic error.
  *
  * The open segment's seam buttons, truncated/turn-cap banners, and turn list all render
  * through {@link TranscriptSegmentView} — the same shared body the node history tab's
@@ -52,13 +52,13 @@ export class ChunkTranscriptsTab {
   /** `asyncState()` over the index query — never `'empty'`; "no segments yet" is this component's own {@link steps}-derived state. */
   readonly indexState = input.required<KitAsyncStateValue>();
 
-  /** Whether the index read came back 403 (D9), checked ahead of {@link indexState}'s generic `'error'` (its own honest state). */
+  /** Whether the index read came back 403, checked ahead of {@link indexState}'s generic `'error'` (its own honest state). */
   readonly isForbidden = input(false);
 
   /** The `?segment` URL param — the open segment, or `null`. */
   readonly segmentId = input<string | null>(null);
 
-  /** The `?sidechain` URL param, raw (`review:F3`) — a dot-joined `SidechainPath` (`fleet`'s `transcript-sidechain-path.ts`), or `null`. */
+  /** The `?sidechain` URL param, raw — a dot-joined `SidechainPath` (`fleet`'s `transcript-sidechain-path.ts`), or `null`. */
   readonly sidechainPath = input<string | null>(null);
 
   /** Opt-in phone drill-down presentation. An unselected tab is a segment list;
@@ -75,7 +75,7 @@ export class ChunkTranscriptsTab {
   /** Emitted with a segment id when the operator picks it, or `null` to close one. */
   readonly pickSegment = output<string | null>();
 
-  /** Emitted with an encoded `SidechainPath` (`review:F3`) when the operator opens a sidechain standalone, or `null` to return. */
+  /** Emitted with an encoded `SidechainPath` when the operator opens a sidechain standalone, or `null` to return. */
   readonly pickSidechain = output<string | null>();
 
   protected readonly hasSelection = computed(() => this.segmentId() !== null);
@@ -90,8 +90,8 @@ export class ChunkTranscriptsTab {
     }),
   );
 
-  /** The open segment's resume-seam links (blizzard#248 D6) — the pure derivation itself
-   * lives beside {@link deriveTranscriptSteps} (`review:F11`), tested there without a
+  /** The open segment's resume-seam links — the pure derivation itself
+   * lives beside {@link deriveTranscriptSteps}, tested there without a
    * mounted fixture; this component only resolves it against its own {@link steps}. */
   private readonly seams = computed(() => resolveSegmentSeams(this.steps(), this.segmentId()));
 
@@ -99,7 +99,7 @@ export class ChunkTranscriptsTab {
 
   protected readonly continuesIn = computed<TranscriptSegmentIndexEntry | null>(() => this.seams().continuesIn);
 
-  /** The open segment's own index entry (blizzard#441) — carries the recorded
+  /** The open segment's own index entry — carries the recorded
    * `harness_id` {@link TranscriptSegmentView} renders; `null` while
    * nothing is open or the id names none of {@link steps}' own segments. */
   protected readonly openSegmentEntry = computed<TranscriptSegmentIndexEntry | null>(() => {
@@ -114,7 +114,7 @@ export class ChunkTranscriptsTab {
 
   protected readonly harnessName = harnessName;
 
-  /** {@link segmentData}'s turns with every late link folded onto its call (blizzard#338).
+  /** {@link segmentData}'s turns with every late link folded onto its call.
    * Derived ONCE, shared between {@link TranscriptSegmentView} (which caps and renders
    * it) and the standalone path resolver below: merging fewer turns than the path is
    * resolved against would open the wrong sidechain. */
@@ -123,7 +123,7 @@ export class ChunkTranscriptsTab {
   /** {@link sidechainPath}, parsed — `[]` when none is open. */
   private readonly parsedSidechainPath = computed(() => parseSidechainPath(this.sidechainPath()));
 
-  /** The sidechain opened standalone (D7, `review:F3`), or `null` — walks
+  /** The sidechain opened standalone, or `null` — walks
    * {@link parsedSidechainPath} down through every nesting level it names, not just a
    * single top-level index: a nested sidechain's own turns index independently from 0. */
   protected readonly standaloneSidechain = computed(() =>
@@ -131,12 +131,12 @@ export class ChunkTranscriptsTab {
   );
 
   /** A top-level "open standalone" click — the event's path is already the full address
-   * from the segment's top-level turns (`review:F3`). */
+   * from the segment's top-level turns. */
   protected onTopLevelOpenStandalone(event: SidechainOpenEvent): void {
     this.pickSidechain.emit(encodeSidechainPath(event.path));
   }
 
-  /** An "open standalone" click from *within* the standalone view (`review:F3`; this
+  /** An "open standalone" click from *within* the standalone view (this
    * binding didn't exist before, so these controls were dead) — its path is relative to
    * the already-open sidechain's own turns, so the full address prepends
    * {@link parsedSidechainPath} in front. */

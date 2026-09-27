@@ -1,5 +1,5 @@
-"""work_items.routine_name/scope_slug/run_mode — a routine run's own indexed values
-(blizzard#392), nullable. ``scope_slug`` carries no ``ForeignKey`` (SQLite cannot drop one).
+"""work_items.routine_name/scope_slug/run_mode — a routine run's own indexed
+values, nullable. ``scope_slug`` carries no ``ForeignKey`` (SQLite cannot drop one).
 
 Revision ID: 20260831_0900_work_items_routine_run
 Revises: 20260830_2015_garden_proposals_source_artifact

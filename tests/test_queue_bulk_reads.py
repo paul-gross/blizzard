@@ -1,8 +1,8 @@
 """``GET /api/queue`` and ``GET /api/backlog`` — the ordered-list read paths (component
 tier).
 
-Proves each peek derives the whole fleet's statuses, and each entry's blocked marking (issue
-#457), with bulk reads only, so its query count is unchanged as the fleet grows and never
+Proves each peek derives the whole fleet's statuses, and each entry's blocked marking,
+with bulk reads only, so its query count is unchanged as the fleet grows and never
 reaches per-chunk ``load_facts`` at all."""
 
 from __future__ import annotations

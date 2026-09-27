@@ -2,8 +2,8 @@
 
 Every seam is optional — the OpenAPI exporter and the unit tier build a store-free app — so a
 route asks for what it needs and is refused with a ``503`` naming it, never served on nothing.
-No accessor here resolves a write-capable store or bundle (``bzh:controller-read-only``,
-blizzard#412): :meth:`RunnerWiring.read_stores` is the one many-concept read, and every
+No accessor here resolves a write-capable store or bundle (``bzh:controller-read-only``):
+:meth:`RunnerWiring.read_stores` is the one many-concept read, and every
 mutation resolves its own single-concept service instead."""
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ class RunnerWiring:
 
     def worker_lease(self, lease_id: str) -> LeaseRecord:
         """The lease a worker verb may act against: the active lease, or — when the ordinary
-        active lease is gone — the one an open takeover names (issue #291). An open takeover
+        active lease is gone — the one an open takeover names. An open takeover
         is a second, independent source of worker-verb authorization, not a re-mint: the
         resolved record's id, node and epoch are unchanged from whatever they already were."""
         stores = self.read_stores()
@@ -122,7 +122,7 @@ class RunnerWiring:
         return registry if registry is not None else self._refuse("harness registry")
 
     def harness_health(self) -> HarnessHealthCache:
-        """The runner's own health cache (blizzard#438) — always wired, like
+        """The runner's own health cache — always wired, like
         :meth:`selftests`; its own ``selftest_results`` is what degrades on a store-free
         composition, not this accessor."""
         cache: HarnessHealthCache | None = getattr(self.state, "harness_health", None)
@@ -149,7 +149,7 @@ class RunnerWiring:
         return service if service is not None else self._refuse("workspace prompt service")
 
     def events(self) -> IRunnerEventPublisher | None:
-        """The publish seam (D2/D4, blizzard#317) — see :mod:`~blizzard.runner.events.publisher`
+        """The publish seam — see :mod:`~blizzard.runner.events.publisher`
         for why this is typed against the Protocol, not the concrete broker a composition root
         wires. ``None`` on a composer with no stream to feed — never refused: a mutating route
         publishes when one is wired and is a no-op otherwise, the stream route's own shape."""

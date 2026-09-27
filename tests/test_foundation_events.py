@@ -1,4 +1,4 @@
-"""The shared SSE core (D1, blizzard#317) — the kind-agnostic broker, the stream-response
+"""The shared SSE core — the kind-agnostic broker, the stream-response
 machinery, and the early-shutdown server wrapper both daemons bind. Domain vocabulary and
 framing text are exercised through each daemon's own broker/route instead (e.g.
 ``tests/test_events.py``, ``tests/test_events_stream.py``)."""
@@ -144,7 +144,7 @@ async def test_stream_delivers_live_events_past_a_cursor_that_outruns_a_fresh_br
 
 
 async def test_stream_replays_a_fresh_brokers_buffered_tail_past_a_stale_cursor() -> None:
-    """The replay half of the same clamp (round 6's F1): the live-delivery test above
+    """The replay half of the same clamp: the live-delivery test above
     never publishes before connecting, so it can't catch a stale cursor reaching
     ``replay_since`` unresolved, which silently empties the tail."""
     broker = EventBroker()  # a fresh broker, already holding buffered events before connect
@@ -159,7 +159,7 @@ async def test_stream_replays_a_fresh_brokers_buffered_tail_past_a_stale_cursor(
 
 
 async def test_stream_emits_a_keepalive_on_an_idle_connection_at_the_injected_interval() -> None:
-    """The keepalive interval is an injected value (D1) — bounding it well below the
+    """The keepalive interval is an injected value — bounding it well below the
     production default (15s) lets this observe an emission without waiting it out."""
     broker = EventBroker()
     stream = Stream(broker, _ConnectedRequest(), Cursor(0), _RESERVED_COMMENT, keepalive_seconds=0.05)  # type: ignore[arg-type]

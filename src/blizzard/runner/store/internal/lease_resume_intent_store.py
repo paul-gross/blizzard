@@ -1,6 +1,6 @@
 """SQLAlchemy adapter for the lease resume-intent repository seam (package-private).
 
-The restart resume-intent mark and its clear — issue #12/#13."""
+The restart resume-intent mark and its clear."""
 
 from __future__ import annotations
 

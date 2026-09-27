@@ -1,7 +1,7 @@
 import type { Router } from '@angular/router';
 
 /** `sessionStorage` key the original route is stashed under before a 401 or an
- * auth-failed SSE stream routes to `/login` (issue #93) — read once by the login
+ * auth-failed SSE stream routes to `/login` — read once by the login
  * page to build each provider link's `return_to`, so completing the dance lands back
  * where the app was interrupted rather than always on the board. `sessionStorage`
  * (not `localStorage`): the return location is this tab's navigation state, not a
@@ -16,7 +16,7 @@ const RETURN_URL_KEY = 'fleet.auth.return-to';
  * channel (`../sse/fleet-live.ts`) route through, so "an unauthenticated hub response
  * means log in again" is decided in exactly one place *for the hub app* — the runner
  * webapp makes the same decision independently, for its own surface, in `local-panel`'s
- * `session-recovery.ts` (issue #312). */
+ * `session-recovery.ts`. */
 export function redirectToLogin(router: Router): void {
   const current = router.url;
   if (!current.startsWith('/login')) {
@@ -34,8 +34,8 @@ export function consumeReturnUrl(): string {
   return sessionStorage.getItem(RETURN_URL_KEY) ?? '/';
 }
 
-/** Validates a URL-borne `return_to` for the hub-as-IdP multi-provider bounce (issue
- * #128): the hub's authorize endpoint redirects an unauthenticated browser here as
+/** Validates a URL-borne `return_to` for the hub-as-IdP multi-provider bounce: the
+ * hub's authorize endpoint redirects an unauthenticated browser here as
  * `/login?return_to=/api/auth/authorize?…`, and the login page resumes that pending
  * request by threading `return_to` through each provider button. Returns the value only
  * when it is a same-origin `/api/auth/authorize` request — never a cross-origin or

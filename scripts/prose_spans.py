@@ -1,4 +1,4 @@
-"""Prose-span extraction and site attribution for `.py`, `.ts`, `.md` (issue #273).
+"""Prose-span extraction and site attribution for `.py`, `.ts`, `.md`.
 
 The one place that knows how to find prose in a file and what to call the site it
 found. Consumed by ``scripts/restated_invariants.py``; not refactored onto

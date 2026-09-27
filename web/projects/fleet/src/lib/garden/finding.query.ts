@@ -11,8 +11,8 @@ import { hubFindingKey, hubFindingsBucketKey, hubFindingsKey } from '../query-ke
 
 /**
  * Every id in `findingIds()`, read live through its own `GET
- * /api/findings/{finding_id}` — Decision 3's own "evidence is read live, one finding
- * at a time": a garden proposal carries finding *ids* only
+ * /api/findings/{finding_id}` — evidence is read live, one finding
+ * at a time: a garden proposal carries finding *ids* only
  * (`GardenProposalView.findings`), so the docket detail's evidence table reads each
  * one live rather than trusting a copy the proposal itself might carry
  * (`blizzard-product:/delivered/garden/user-interface.md` §The docket). One `injectQuery`
@@ -63,7 +63,7 @@ export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
  * Stays disabled while `findingId()` is null — the caller's own "nothing selected"
  * rest state is branched before this read is consulted, `bzh:frontend-empty-state-gated`.
  *
- * Resolves `FindingDetailView` (blizzard#487) — `GET /api/findings/{finding_id}`'s
+ * Resolves `FindingDetailView` — `GET /api/findings/{finding_id}`'s
  * actual response, a superset of `FindingView` that adds the finding's whole
  * append-only fact chain (`facts`, oldest-first). {@link injectHubFindingsQuery}'s
  * fan-out keeps reading plain `FindingView` off the list endpoint; only the
@@ -97,8 +97,8 @@ export function injectHubFindingQuery(findingId: () => string | null) {
  * string `"null"`); a named half rides as-is. Always reads with `include_gone: true` — a gone
  * finding still belongs on the triage surface until a person confirms it (that's what
  * `confirm-gone` records), so the bucket can't afford to have the server drop it
- * before a person has weighed in. The read is keyset-paginated on the hub
- * (blizzard#526); {@link drainPages} follows `next_cursor` to exhaustion so the
+ * before a person has weighed in. The read is keyset-paginated on the hub;
+ * {@link drainPages} follows `next_cursor` to exhaustion so the
  * bucket still resolves whole.
  */
 export function injectHubFindingsBucketQuery(routine: () => string | null, scope: () => string | null) {

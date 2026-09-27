@@ -1,5 +1,5 @@
 """``GET /api/auth/providers``, ``/{name}/authorize``, ``/{name}/callback``,
-``POST /api/auth/logout`` (component tier, issue #92).
+``POST /api/auth/logout`` (component tier).
 
 Driven against the in-repo fake :class:`FakeOAuthProvider` — no network; the real HTTP
 dance against the stub IdP is ``tests/service/``'s job."""

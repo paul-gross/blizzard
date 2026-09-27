@@ -1,9 +1,9 @@
-"""A live runner learns its chunk was detached (issue #38).
+"""A live runner learns its chunk was detached.
 
 ``_reconcile_leases``, folded into PULL, asks the hub per active lease whether this
 runner still holds the chunk's route, abandoning (kill, release, close) any it no
 longer holds. The predicate is **route-only**, not status-based, except ``stopped``
-(issue #118 backstop), checked ahead of route identity."""
+(backstop), checked ahead of route identity."""
 
 from __future__ import annotations
 
@@ -157,7 +157,7 @@ def test_pull_abandons_a_chunk_reassigned_to_another_runner(tmp_path):  # type: 
 
 @pytest.mark.unit
 def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_this_runner(tmp_path):  # type: ignore[no-untyped-def]
-    """The must-fix-1 backstop (issue #118): the hub still routes the chunk to this
+    """The must-fix-1 backstop: the hub still routes the chunk to this
     runner, but it derives ``stopped`` — the status branch catches it directly, honoring
     the terminal fact rather than depending on the route release having landed."""
     store = _store(tmp_path)
@@ -177,7 +177,7 @@ def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_thi
 
 @pytest.mark.unit
 def test_pull_reconcile_leases_closes_a_stopped_chunks_open_invocation_boundary(tmp_path):  # type: ignore[no-untyped-def]
-    """The hub-terminal closure claim (blizzard#437 D11), proven through the actual funnel a
+    """The hub-terminal closure claim, proven through the actual funnel a
     `STOPPED` chunk drives — never just a direct ``Attempt.abandon`` call standing in for it."""
     store = _store(tmp_path)
     _seed_running_lease(store)
@@ -317,7 +317,7 @@ def test_pull_abandons_before_it_flushes(tmp_path):  # type: ignore[no-untyped-d
     assert store.active_lease("lease_1") is None
 
 
-# REAP races ahead of PULL's own detach sweep (blizzard#38 slice 5)
+# REAP races ahead of PULL's own detach sweep
 
 
 @pytest.mark.unit
@@ -336,7 +336,7 @@ def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path):  # type
     Reap(ctx).run()
 
     # No escalation.recorded — the whole point. The abandon surfaces an *info*
-    # ``attempt-abandoned`` operational event (issue #125), which is not an escalation.
+    # ``attempt-abandoned`` operational event, which is not an escalation.
     pending = store.pending_outbound()
     assert [f.kind for f in pending] == [EVENT_RECORDED]
     assert ESCALATION_RECORDED not in [f.kind for f in pending]
@@ -362,7 +362,7 @@ def test_reap_still_escalates_an_exhausted_lease_that_is_still_ours(tmp_path):  
     Reap(ctx).run()
 
     # The genuine escalation still posts — alongside its critical ``worker-lost``
-    # operational event, enqueued atomically with the same closure (issue #125).
+    # operational event, enqueued atomically with the same closure.
     pending = store.pending_outbound()
     kinds = [f.kind for f in pending]
     assert ESCALATION_RECORDED in kinds
@@ -401,7 +401,7 @@ def test_tick_releases_a_detached_chunk_and_the_next_tick_does_not_reclaim_it(tm
     assert store.active_lease("lease_1") is None
 
 
-# A chunk unknown at the hub (404) is terminal, not a transport failure (blizzard#9):
+# A chunk unknown at the hub (404) is terminal, not a transport failure:
 # `ChunkNotFoundError` flows through the same abandon path as a genuine detach.
 
 
@@ -436,7 +436,7 @@ def test_pull_group_kills_a_still_live_detached_worker(tmp_path):  # type: ignor
     the liveness re-check gates the kill, it does not disable it."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_spawn(  # this generation's own group is durable (D3)
+    store.record_spawn(  # this generation's own group is durable
         "lease_1",
         pid=100,
         process_start_time="start-100",
@@ -463,7 +463,7 @@ def test_pull_group_kills_a_dead_leader_whose_descendant_still_holds_the_group(t
     kill entirely and leak that descendant forever; the group must still be killed."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_spawn(  # this generation's own group is durable (D3)
+    store.record_spawn(  # this generation's own group is durable
         "lease_1",
         pid=100,
         process_start_time="start-100",
@@ -486,7 +486,7 @@ def test_pull_group_kills_a_dead_leader_whose_descendant_still_holds_the_group(t
 
 @pytest.mark.unit
 def test_pull_skips_the_kill_when_the_recorded_pid_was_reused_by_another_process(tmp_path):  # type: ignore[no-untyped-def]
-    """The pid/pgid-reuse hazard F13 closes: a LIVE pid whose start time no longer matches
+    """The pid/pgid-reuse hazard closes: a LIVE pid whose start time no longer matches
     the recorded one is not this lease's worker any more — the OS gave that pid to an
     unrelated process, and a bare `killpg` with no re-check would hit it instead."""
     store = _store(tmp_path)
@@ -584,7 +584,7 @@ def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path
 
     Reap(ctx).run()
 
-    # No escalation — abandoned as an *info* ``attempt-abandoned`` event (issue #125).
+    # No escalation — abandoned as an *info* ``attempt-abandoned`` event.
     pending = store.pending_outbound()
     assert [f.kind for f in pending] == [EVENT_RECORDED]
     assert ESCALATION_RECORDED not in [f.kind for f in pending]
@@ -598,7 +598,7 @@ def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path
 def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
     """The requeue path's own 404 guard: REAP's ``Attempt.fail`` closes the exhausted
     attempt and calls ``_requeue`` before PULL's sweep runs, so no active lease is left
-    for that sweep to abandon — left generic, the env would hold forever (issue #9)."""
+    for that sweep to abandon — left generic, the env would hold forever."""
     store = _store(tmp_path)
     _seed_orphan_lease(store, retries_max=2)  # under budget — requeues rather than escalates
     hub = FakeHub()
@@ -618,7 +618,7 @@ def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_pat
 def test_fill_releases_an_interrupted_claim_binding_when_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
     """The interrupted-claim reconciler's own 404 guard: a binding left by a crash in
     FILL's bind->claim->spawn window is released the same way ``_advance_held_chunk``
-    releases a held-but-leaseless chunk (blizzard#9), not re-asked about forever."""
+    releases a held-but-leaseless chunk, not re-asked about forever."""
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
@@ -637,7 +637,7 @@ def test_fill_releases_an_interrupted_claim_binding_when_chunk_unknown_at_the_hu
 def test_tick_releases_a_chunk_unknown_at_the_hub_and_the_next_tick_does_not_reclaim_it(tmp_path):  # type: ignore[no-untyped-def]
     """The full-tick seam, mirroring ``test_tick_releases_a_detached_chunk_and_the_next_
     tick_does_not_reclaim_it``: a 404'ing chunk is reaped and released in one tick, and
-    stays released — the runner does not loop on the 404 forever (blizzard#9)."""
+    stays released — the runner does not loop on the 404 forever."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()

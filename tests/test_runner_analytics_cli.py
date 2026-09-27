@@ -1,4 +1,4 @@
-"""``blizzard runner analytics ...`` (unit tier, blizzard#545), mirroring
+"""``blizzard runner analytics...`` (unit tier), mirroring
 ``tests/test_runner_garden_findings_cli.py``'s shape: ``httpx`` stubbed, no live socket.
 The route itself (authorization, hub forward, 403/404/503) is the component tier's
 ``tests/test_runner_analytics_api.py``.
@@ -22,7 +22,7 @@ from blizzard.runner.cli import runner as runner_group
 @contextlib.contextmanager
 def _local_timezone(tz: str) -> Iterator[None]:
     """Pins the wall-clock zone ``--since``/``--until`` are read against — the same
-    fixture ``tests/test_cli_analytics_events.py`` uses for the operator CLI's own D6
+    fixture ``tests/test_cli_analytics_events.py`` uses for the operator CLI's own
     conversion, since the conversion is genuinely machine-local otherwise."""
     original = os.environ.get("TZ")
     os.environ["TZ"] = tz

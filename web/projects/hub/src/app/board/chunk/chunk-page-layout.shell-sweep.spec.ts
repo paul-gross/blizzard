@@ -12,7 +12,7 @@ import { ChunkPage } from './chunk-page';
 /**
  * The chunk detail page's General tab two-column arrangement half of
  * `web:shell-sweep` (`blizzard-context:/verification/blizzard.md`
- * bzh:web-shell-sweep, blizzard#203) — a real, headless-Chromium proof of the
+ * bzh:web-shell-sweep) — a real, headless-Chromium proof of the
  * `@media (min-width: 720px)` grid `chunk-general-tab.ts` declares: jsdom
  * parses that query without ever evaluating it, so `web:unit-test` cannot see
  * the two-column split or its collapse.
@@ -89,7 +89,7 @@ const ESTIMATE_DETAIL: hubApi.ChunkDetail = {
 
 /**
  * A `needs_human` chunk carrying both the runner-composed wrapped takeover command
- * (blizzard#251) and its raw `cd <workdir> && <harness resume>` fallback — realistically
+ * and its raw `cd <workdir> && <harness resume>` fallback — realistically
  * long strings shaped the way they actually arrive: an absolute runtime dir plus a
  * `blizzard runner takeover` invocation, and an absolute worktree path plus a
  * `claude --resume <uuid>` invocation. The fallback renders inside a collapsed
@@ -339,8 +339,8 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#2
 });
 
 /**
- * The Transcripts tab's own narrow-viewport case (blizzard#248 Phase 3,
- * `bzh:narrow-viewport-tier-rule`) — its nav-beside-viewer split collapses to the
+ * The Transcripts tab's own narrow-viewport case
+ * (`bzh:narrow-viewport-tier-rule`) — its nav-beside-viewer split collapses to the
  * stacked layout below `@media (min-width: 720px)` (`chunk-transcripts-tab.ts`), the
  * same query jsdom parses without evaluating, so a real headless-Chromium proof is
  * needed the same way the General tab's own two-column split needed one above.
@@ -425,9 +425,9 @@ describe('chunk page Transcripts tab layout shell sweep (web:shell-sweep, blizza
  * mounts `ChunkTranscriptsTab` standalone via `TestBed.createComponent`, which never
  * assembles `ChunkTranscriptsContainer`'s own box into the chain, so it could not have
  * caught either round-2 regression: the styleless container breaking the flex/height
- * chain down to `.tx-view`'s scroll container (F1), and the tab's own four top-level
+ * chain down to `.tx-view`'s scroll container, and the tab's own four top-level
  * `KitAsyncState` states centering on the browser viewport for want of a positioned
- * ancestor (F2). Driven through a real router the way `chunk-page.spec.ts` drives it, so
+ * ancestor. Driven through a real router the way `chunk-page.spec.ts` drives it, so
  * the container is genuinely mounted, not stood in for.
  */
 /**
@@ -488,7 +488,7 @@ function mountInAppShell(root: HTMLElement): void {
 }
 
 /** A tail-heavy segment: enough turns, each long enough, to overflow any viewport this
- * sweep uses — the load-bearing fixture for F1's "a long segment is unreachable" claim. */
+ * sweep uses — the load-bearing fixture for the "a long segment is unreachable" claim. */
 function overflowingTurns(): unknown[] {
   return Array.from({ length: 60 }, (_, i) => ({
     index: i,

@@ -1,5 +1,5 @@
 /*
- * The loose formatting/display modules grouped into one sub-barrel (issue #82) —
+ * The loose formatting/display modules grouped into one sub-barrel —
  * `compactRef`, cost/token formatting, board lane/tone folds, and time formatting.
  * The implementation files stay at `lib/` root (no consumer import-path churn); this
  * barrel is purely the public re-export surface, one line per module.

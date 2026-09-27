@@ -1,4 +1,4 @@
-"""Pinning tests for runner-loop decisions that were defended only by prose (issue #270).
+"""Pinning tests for runner-loop decisions that were defended only by prose.
 
 Each test here fences one decision a long comment used to argue for: the comment now
 names the test, and reverting the decision fails the named assertion below.
@@ -84,7 +84,7 @@ def test_default_retries_max_is_two() -> None:
     assert DEFAULT_RETRIES_MAX == 2
 
 
-# RESUME keys on the pause FACT, never the derived status (issue #46).
+# RESUME keys on the pause FACT, never the derived status.
 # --------------------------------------------------------------------------- #
 
 
@@ -123,7 +123,7 @@ def test_resume_parks_a_paused_chunk_whose_derived_status_hides_the_pause(tmp_pa
     assert provider.released == []
 
 
-# The checks re-run marker is keyed (lease, epoch) — never (chunk, node) (issue #114).
+# The checks re-run marker is keyed (lease, epoch) — never (chunk, node).
 # --------------------------------------------------------------------------- #
 
 
@@ -178,7 +178,7 @@ def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_p
     assert [(r.command, r.passed) for r in results] == [("mise run lint", True)]
 
 
-# The nudge-fired guard fact lands BEFORE the resume it guards runs (issues #113, #422).
+# The nudge-fired guard fact lands BEFORE the resume it guards runs.
 # --------------------------------------------------------------------------- #
 
 
@@ -280,14 +280,14 @@ def test_loop_wiring_uses_the_injected_prompts_and_never_re_derives_them(tmp_pat
     assert (ctx.config.workspace_prompt, ctx.config.runner_prompt) == ("ws prose", "runner prose")
 
 
-# The external-subscription-usage sample is the tick's LAST step (issue #218).
+# The external-subscription-usage sample is the tick's LAST step.
 # --------------------------------------------------------------------------- #
 
 
 class _ClaimObservingSampler:
     """Records how many route claims the hub had taken by the time the sampler ran
-    (blizzard#436) — a scriptable :class:`ISubscriptionSampler`, since the sample no
-    longer rides on the coding-harness adapter (issue #218)."""
+     — a scriptable :class:`ISubscriptionSampler`, since the sample no
+    longer rides on the coding-harness adapter."""
 
     def __init__(self, *, hub: FakeHub) -> None:
         self._hub = hub

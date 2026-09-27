@@ -1,4 +1,4 @@
-"""Operator-authored garden proposals (blizzard#631): `garden_proposals` gains
+"""Operator-authored garden proposals: `garden_proposals` gains
 `origin` and `created_by`; `routine_name` becomes nullable. Existing rows backfill to
 `origin='routine-run'`.
 

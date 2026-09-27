@@ -6,7 +6,7 @@ import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
 
 /**
- * The open-questions rail's presentational half (issue #80) — the ask list
+ * The open-questions rail's presentational half — the ask list
  * and the click-to-open row. Renders exactly the questions it is handed;
  * injects no query.
  *

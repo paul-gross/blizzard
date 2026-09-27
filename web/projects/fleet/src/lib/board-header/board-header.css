@@ -13,8 +13,8 @@
   background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
   /* The header is its own query container, not a viewport-media consumer:
      the hub board and the runner's local panel mount it at different
-     widths, so each must collapse by the width *it* actually has (issue
-     #163). Named so the container rules below can't be captured by some
+     widths, so each must collapse by the width *it* actually has. Named
+     so the container rules below can't be captured by some
      future nested container. */
   container-name: board-header;
   container-type: inline-size;
@@ -46,7 +46,7 @@
    trailing content can't itself give way (the hub's menu-only cluster)
    would then take a real, if small, share of it — with no overflow:
    hidden of its own, that share spills past the header's own right edge
-   into genuine page-level horizontal scroll (issue #171's shell sweep
+   into genuine page-level horizontal scroll (a shell sweep
    caught this a few px wide, right above this strip's own 1150px
    breakpoint). The lopsided factor makes the strip absorb a shrinking
    header almost entirely by itself while it still has any width left to
@@ -129,7 +129,7 @@
 }
 
 /*
- * Tiered collapse (issue #163). Below the wide breakpoint the per-lane
+ * Tiered collapse. Below the wide breakpoint the per-lane
  * count cells go — the board's own lane columns still carry those headings,
  * so nothing is lost — and below the narrow one the spend cell and the whole
  * brand *text* block follow, leaving the brand mark, the connection cell,
@@ -148,8 +148,7 @@
     display: none;
   }
   /* Yesterday's cell — a comparison figure — drops one tier earlier than
-     today's own, the same tier the per-lane stat strip yields at (issue
-     #183; a judgment call, flagged here so review can overrule it cheaply). */
+     today's own, the same tier the per-lane stat strip yields at. */
   .spend-yesterday {
     display: none;
   }

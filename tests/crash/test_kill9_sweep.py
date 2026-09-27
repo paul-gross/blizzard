@@ -93,17 +93,17 @@ _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
 # hub's synchronous executor; each is swept by its own dedicated test below.
 _HUBNODE_PENDING_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.after-poll.")]
 _HUBNODE_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.") and p not in _HUBNODE_PENDING_POINTS]
-# `migrate.*` fires inside the HUB on a cross-graph judgement choice (issue #90). Swept by
+# `migrate.*` fires inside the HUB on a cross-graph judgement choice. Swept by
 # `test_kill9_at_migrate_crash_point`.
 _MIGRATE_POINTS = [p for p in _ALL_POINTS if p.startswith("migrate.")]
-# `attach.*` fires on the RUNNER's out-of-band attach endpoint (issue #113). Swept by
+# `attach.*` fires on the RUNNER's out-of-band attach endpoint. Swept by
 # `test_kill9_at_attach_crash_point`.
 _ATTACH_POINTS = [p for p in _ALL_POINTS if p.startswith("attach.")]
 # `declare-commit.*` fires on the RUNNER's out-of-band declare endpoint, `attach.*`'s
-# sibling (issue #143). Swept by `test_kill9_at_declare_commit_crash_point`.
+# sibling. Swept by `test_kill9_at_declare_commit_crash_point`.
 _DECLARE_COMMIT_POINTS = [p for p in _ALL_POINTS if p.startswith("declare-commit.")]
-# `nudge.*` fires in the RUNNER's ADVANCE step for an unattached `produces:` name (issue
-# #113 Phase 4). Swept by `test_kill9_at_nudge_crash_point`.
+# `nudge.*` fires in the RUNNER's ADVANCE step for an unattached `produces:` name. Swept by
+# `test_kill9_at_nudge_crash_point`.
 _NUDGE_POINTS = [p for p in _ALL_POINTS if p.startswith("nudge.")]
 # `checks.*` fires in the RUNNER's ADVANCE step for a node's `checks:` command (#114).
 # Swept by `test_kill9_at_checks_crash_point`.
@@ -112,10 +112,10 @@ _CHECKS_POINTS = [p for p in _ALL_POINTS if p.startswith("checks.")]
 # (#370). Swept by `test_kill9_at_preempt_crash_point`.
 _PREEMPT_POINTS = [p for p in _ALL_POINTS if p.startswith("preempt.")]
 # `close.*` fires inside the HUB — the close-intent outbox's own enqueue-then-drain
-# windows (blizzard#383). Swept by `test_kill9_at_close_crash_point`.
+# windows. Swept by `test_kill9_at_close_crash_point`.
 _CLOSE_POINTS = [p for p in _ALL_POINTS if p.startswith("close.")]
 # `usagelimit.*` fires in the RUNNER's own ADVANCE step, once it classifies an exited worker
-# or judge generation as usage-limited (blizzard#594). Swept by
+# or judge generation as usage-limited. Swept by
 # `test_kill9_at_usage_limit_crash_point`.
 _USAGE_LIMIT_POINTS = [p for p in _ALL_POINTS if p.startswith("usagelimit.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
@@ -127,16 +127,16 @@ _CI_SUBSET = (
     "pull.after-flush",
     "fill.after-bind.before-claim",
     "spawn.after-lease-mint.before-spawn",
-    # The two-phase spawn's three windows (D1/D2): recovery-critical enough to earn their own CI coverage.
+    # The two-phase spawn's three windows: recovery-critical enough to earn their own CI coverage.
     "spawn.after-launch.before-provisional-record",
     "spawn.after-provisional-record.before-identity",
     "spawn.after-identity.before-session-record",
     "advance.after-buffer.before-flush",
     "flush.after-submit.before-ack",
-    # `claim.*` (issue #84b) is a boundary family within `_GENERIC_POINTS`; a family's lone
+    # `claim.*` is a boundary family within `_GENERIC_POINTS`; a family's lone
     # member is its own CI representative.
     "claim.after-persist.before-response",
-    # `transcript.*` (D3, issue #246): reachable here with no dedicated scenario — every
+    # `transcript.*`: reachable here with no dedicated scenario — every
     # lease closure enqueues a final marker regardless of `[transcripts] ship`.
     "transcript.after-submit.before-ack",
 )
@@ -145,7 +145,7 @@ _CI_SUBSET = (
 # (each resume case restarts the runner twice).
 _RESUME_CI_SUBSET = ("resume.after-kill.before-reattach",)
 
-# The abandon CI subset, bounding wall time at one case for a two-member family (blizzard#280):
+# The abandon CI subset, bounding wall time at one case for a two-member family:
 # `after-release.before-closure` is the strictly-later state of this same scenario, so the earlier
 # window is the wider arm. The full sweep runs both; only CI drops one.
 _ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
@@ -182,11 +182,11 @@ _CHECKS_CI_SUBSET = ("checks.after-results.before-marker",)
 # The preempt CI subset (#370): the family's lone member is its own CI representative.
 _PREEMPT_CI_SUBSET = ("preempt.after-kill.before-closure",)
 
-# The close CI subset (blizzard#383): the recovery-critical member — the drain's own
+# The close CI subset: the recovery-critical member — the drain's own
 # after-close, before-record window — is its own CI representative.
 _CLOSE_CI_SUBSET = ("close.after-close.before-record",)
 
-# The usage-limit CI subset (blizzard#594): the worker-side window is the family's
+# The usage-limit CI subset: the worker-side window is the family's
 # recovery-critical member — the brake is durable, the park is not yet.
 _USAGE_LIMIT_CI_SUBSET = ("usagelimit.worker-after-brake.before-park",)
 
@@ -245,7 +245,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
 
 
-# --- The OpenCode-lineage windows (D5) — already-declared harness-neutral points a
+# --- The OpenCode-lineage windows — already-declared harness-neutral points a
 # Claude-Code-shaped graph never reaches under an OpenCode lineage, not a new family. ---
 
 # Derived by prefix filter against `_ALL_POINTS`, like every sibling family above, so a
@@ -276,7 +276,7 @@ _RESUME_POINT_NAMES_BY_HAND = frozenset(
 
 
 def test_opencode_named_points_are_swept_under_both_harnesses(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Each window this phase closes under OpenCode is armed once per harness (D5). The
+    """Each window this phase closes under OpenCode is armed once per harness. The
     expected set is re-derived off the registry, never read back off the two tuples
     under test, so narrowing either fails loudly instead of passing by construction."""
     monkeypatch.delenv("BLIZZARD_CRASH_SWEEP_CI", raising=False)
@@ -311,7 +311,7 @@ def test_opencode_named_points_are_swept_under_both_harnesses(monkeypatch: pytes
 def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str, after_recovery: bool) -> None:
     """``when`` is prose only, for the assertion message — ``after_recovery`` is each call
     site's own explicit signal, never inferred from it. The raw, un-reconciled snapshot the
-    instant a kill lands passes ``False``: ``ActiveLeaseProcessIsLive`` (D3) does not hold
+    instant a kill lands passes ``False``: ``ActiveLeaseProcessIsLive`` does not hold
     there by construction. A checkpoint reached only once REAP/RESUME reconciled it passes
     ``True``, so that check is asked for there."""
     runner_db = RunnerConfig.load(runner_dir).db_url
@@ -336,7 +336,7 @@ def _ingest_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> s
     return chunk_id
 
 
-# `claim.*` fires inside the HUB (issue #84b) — the one `_GENERIC_POINTS` family that
+# `claim.*` fires inside the HUB — the one `_GENERIC_POINTS` family that
 # arms the hub rather than the runner; `test_kill9_at_crash_point` reads this to pick.
 _HUB_SIDE_GENERIC_PREFIXES = ("claim.",)
 
@@ -501,8 +501,8 @@ def _ingest_intended_migrate_chunk(hub: httpx.Client, forge: httpx.Client, lande
 def test_kill9_at_migrate_crash_point_for_an_intended_migration(
     crash_env: CrashEnv, tmp_path: Path, point: str
 ) -> None:
-    """A ``kill -9`` right after an **intended** migration is recorded still recovers
-    (issue #124) — the intent is durably cleared in the same transaction as the migration
+    """A ``kill -9`` right after an **intended** migration is recorded still recovers —
+    the intent is durably cleared in the same transaction as the migration
     fact, so recovery never re-fires it, and the target's build + deliver lands once."""
     landed_file = f"LANDED-INTENDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -569,7 +569,7 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
 
 
 def _ingest_migrate_hub_chunk(hub: httpx.Client, forge: httpx.Client, title: str) -> tuple[str, str]:
-    """Mint the hub-landing migrate target + source graphs (issue #111), file a fresh
+    """Mint the hub-landing migrate target + source graphs, file a fresh
     issue, ingest + promote a chunk pinned to the source. Returns (chunk_id, target_graph_id)."""
     target = hub.post("/api/graphs", json={"definition_yaml": migrate_hub_target_yaml()})
     assert target.status_code == 201, target.text
@@ -589,7 +589,7 @@ def _ingest_migrate_hub_chunk(hub: httpx.Client, forge: httpx.Client, title: str
 @pytest.mark.parametrize("point", _MIGRATE_SWEEP)
 def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` at the migrate window when the migration lands on a **hub** node
-    (issue #111) still recovers — the retained route and derived ``delivering`` state
+    still recovers — the retained route and derived ``delivering`` state
     let the holding runner's ADVANCE poll carry the chunk to ``done`` without wedging."""
     title = f"HUB-MIGRATE-{point.replace('.', '_')}"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -656,8 +656,7 @@ _ATTACH_NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
 @pytest.mark.parametrize("point", _ATTACH_SWEEP)
 def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` right after the runner records a worker attachment keeps it, with
-    full provenance readable against the same store after the ungraceful death (issue
-    #113 criterion 3)."""
+    full provenance readable against the same store after the ungraceful death."""
     runner_dir = tmp_path / "runner"
     # Nothing listens on ``hub_port`` — the attach path never calls the hub; the loop's hub
     # polls just fail and are swallowed, and the local API serves regardless.
@@ -767,8 +766,7 @@ _DECLARE_COMMIT_NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
 @pytest.mark.parametrize("point", _DECLARE_COMMIT_SWEEP)
 def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` right after the runner records a worker git-commit declaration keeps
-    it, with full provenance readable against the same store after the ungraceful death
-    (issue #143)."""
+    it, with full provenance readable against the same store after the ungraceful death."""
     runner_dir = tmp_path / "runner"
     # Materialize the env's worktrees directly (this scenario seeds its lease + binding,
     # skipping FILL's acquire), via the same winter-CLI seam the daemon uses.
@@ -917,7 +915,7 @@ def _ingest_nudge_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str
 @pytest.mark.parametrize("point", _NUDGE_SWEEP)
 def test_kill9_at_nudge_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` at a `nudge.*` window recovers with the nudge fired at most once
-    and the chunk still landing exactly once (issue #113, Phase 4)."""
+    and the chunk still landing exactly once."""
     landed_file = f"NUDGE-LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -975,7 +973,7 @@ def _ingest_checks_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: st
 @pytest.mark.parametrize("point", _CHECKS_SWEEP)
 def test_kill9_at_checks_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` at a `checks.*` window recovers with the chunk still landing exactly
-    once and ``runner:checks-recorded-when-marked`` green (issue #114)."""
+    once and ``runner:checks-recorded-when-marked`` green."""
     landed_file = f"CHECKS-LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1016,7 +1014,7 @@ def test_kill9_at_checks_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 def _pre_declare_graph_yaml(landed_file: str, pushed_marker: Path, go_marker: Path) -> str:
     """:func:`graph_yaml`'s ``build -> deliver`` shape, with
     :func:`tests.crash.support.pre_declare_build_script` in place of :func:`build_script` — the
-    pre-declaration-window scenario's build node (``bzh:crash-sweep`` D2, case 2)."""
+    pre-declaration-window scenario's build node (``bzh:crash-sweep`` case 2)."""
     import yaml
 
     graph = {
@@ -1075,7 +1073,7 @@ def _ingest_pre_declare_chunk(
 def test_kill9_runner_daemon_after_session_end(crash_env: CrashEnv, tmp_path: Path) -> None:
     """External ``kill -9`` of the runner daemon strictly AFTER the worker's commit is
     declared and its ``SessionEnd`` is durable — the exit-is-done recovery path
-    (``_crash_orphaned``'s ``ended`` skip), pinned deterministically (``bzh:crash-sweep`` D2)."""
+    (``_crash_orphaned``'s ``ended`` skip), pinned deterministically (``bzh:crash-sweep``)."""
     landed_file = "LANDED-runner-after-session-end.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1137,8 +1135,8 @@ def test_kill9_runner_daemon_after_session_end(crash_env: CrashEnv, tmp_path: Pa
 
 def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_path: Path) -> None:
     """External ``kill -9`` of the runner daemon precisely BEFORE the worker declares its
-    commit — issue #284's pre-declaration race, pinned deterministically — must never land
-    ``done`` with an empty delivery. D1's empty-delivery refusal is what this proves."""
+    commit — the pre-declaration race, pinned deterministically — must never land
+    ``done`` with an empty delivery. The land step's empty-delivery refusal is what this proves."""
     landed_file = "LANDED-runner-pre-declare.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -1160,7 +1158,7 @@ def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_pat
         lease_id, _epoch, _session_id, worker_pid = _lease_for_chunk(runner_dir, chunk_id)
 
         # Fence: wait for the push, strictly before the declare — an in-test fence
-        # (``bzh:crash-sweep`` D2 property 3), not a race against the worker's pace.
+        # (``bzh:crash-sweep`` property 3), not a race against the worker's pace.
         _await_marker(pushed_marker)
         # Property 2: the pre-declaration window is provably open at the kill instant.
         assert not _git_commit_declared(runner_dir, lease_id), "the commit was already declared before the kill"
@@ -1169,7 +1167,7 @@ def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_pat
         runner_proc.wait(timeout=10)
 
         # Release the fence: the orphaned worker's declare now fails against a dead
-        # runner and it exits — issue #284's race, pinned rather than timed.
+        # runner and it exits — the race, pinned rather than timed.
         go_marker.write_text("go\n")
         _wait_pid_gone(worker_pid)
 
@@ -1185,7 +1183,7 @@ def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_pat
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         if status == "done":
-            # D1's refusal worked through a retried build, not a silent empty delivery — against
+            # The land step's refusal worked through a retried build, not a silent empty delivery — against
             # the unmodified LAND_STEP this assertion fails: `done` with `commits == []`.
             assert len(commits) == 1, f"landed `done` with an empty delivery: {landed_file} is on main {len(commits)}x"
         else:
@@ -1197,7 +1195,7 @@ def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_pat
         terminate(hub_proc)
 
 
-# --- Graceful restart-resume (issue #12) — re-attach to an in-flight session in place ---
+# --- Graceful restart-resume — re-attach to an in-flight session in place ---
 
 
 def _hanging_graph_yaml(landed_file: str) -> str:
@@ -1258,7 +1256,7 @@ def _ingest_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
 
 
 def _sigint_drain_graph_yaml(landed_file: str) -> str:
-    """:func:`_hanging_graph_yaml`'s twin (issue #12): the build node's whole script runs
+    """:func:`_hanging_graph_yaml`'s twin: the build node's whole script runs
     behind :func:`~tests.crash.support.sigint_trap_hang_script`'s SIGINT trap, so a graceful
     shutdown's own signal lands on a script that answers it with a real envelope no matter
     which statement it catches the script mid."""
@@ -1410,7 +1408,7 @@ def _wait_pid_gone(pid: int, *, timeout: float = 30.0) -> None:
 
 def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeout: float = 30.0) -> None:
     """Block until the mid-flight build worker has committed **and durably declared** its
-    git commit (issue #143, Phase 4) — the declaration, not the bare commit, is the durable
+    git commit — the declaration, not the bare commit, is the durable
     in-flight fact a resume relies on to submit and land."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -1431,7 +1429,7 @@ def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeo
 
 
 def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: Path) -> None:
-    """A graceful runner restart re-attaches to its in-flight session in place (issue #12) —
+    """A graceful runner restart re-attaches to its in-flight session in place —
     same lease/epoch/session, only the pid rewritten, no retry consumed, the chunk lands
     once, and the drain-interrupted generation records a real (non-NULL) usage cost."""
     landed_file = "LANDED-restart-resume.md"
@@ -1493,7 +1491,7 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
         terminate(hub_proc)
 
 
-# --- Ungraceful restart-resume (issue #13) — crash mid-work, no graceful marker ---
+# --- Ungraceful restart-resume — crash mid-work, no graceful marker ---
 
 
 def _session_ends(runner_dir: Path) -> set[str]:
@@ -1506,7 +1504,7 @@ def _session_ends(runner_dir: Path) -> set[str]:
 
 def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: Path) -> None:
     """An involuntary ``kill -9`` mid-build (no graceful marker) still re-attaches the session
-    (issue #13) — startup crash-recovery finds the killed-mid-work lease itself and routes it
+    — startup crash-recovery finds the killed-mid-work lease itself and routes it
     to the same RESUME the graceful path uses, landing the chunk exactly once."""
     landed_file = "LANDED-crash-resume.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -1623,12 +1621,12 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         terminate(hub_proc)
 
 
-# --- The same generic/resume windows, reached under an OpenCode lineage (D5) ---------------
+# --- The same generic/resume windows, reached under an OpenCode lineage ---------------
 
 
 def _ingest_opencode_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
     """:func:`_ingest_chunk`'s twin, minting :func:`opencode_graph_yaml` instead of
-    :func:`graph_yaml` — an OpenCode-lineage ``build`` node (D5) opens the SAME
+    :func:`graph_yaml` — an OpenCode-lineage ``build`` node opens the SAME
     harness-neutral ``spawn.*``/``advance.*`` windows under that lineage."""
     minted = hub.post("/api/graphs", json={"definition_yaml": opencode_graph_yaml(landed_file)})
     assert minted.status_code == 201, minted.text
@@ -1662,7 +1660,7 @@ def _lease_harness_ids_for_chunk(runner_dir: Path, chunk_id: str) -> set[str | N
 
 @pytest.mark.parametrize("point", _OPENCODE_GENERIC_SWEEP)
 def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """:func:`test_kill9_at_crash_point`'s twin under an OpenCode lineage (D5) — the same
+    """:func:`test_kill9_at_crash_point`'s twin under an OpenCode lineage — the same
     ``spawn.*``/``advance.*`` windows a Claude-Code graph never reaches under OpenCode,
     armed here against :func:`opencode_graph_yaml`'s ``build`` node instead."""
     landed_file = f"LANDED-OPENCODE-{point.replace('.', '_')}.md"
@@ -1717,7 +1715,7 @@ def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path
 
 
 def _opencode_hanging_graph_yaml(landed_file: str) -> str:
-    """:func:`_hanging_graph_yaml`'s twin under an OpenCode lineage (D5): the same
+    """:func:`_hanging_graph_yaml`'s twin under an OpenCode lineage: the same
     commit-then-``hang()`` ``build -> deliver`` shape, with ``build`` resuming
     :data:`OPENCODE_SESSION_NAME` so the session a restart re-attaches is OpenCode's own —
     what opens the `resume.wake.*`/`resume.after-*` windows under that lineage instead of
@@ -1776,7 +1774,7 @@ def _ingest_opencode_hanging_chunk(hub: httpx.Client, forge: httpx.Client, lande
 
 @pytest.mark.parametrize("point", _OPENCODE_RESUME_SWEEP)
 def test_kill9_at_resume_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """:func:`test_kill9_at_resume_crash_point`'s twin under an OpenCode lineage (D5) — a
+    """:func:`test_kill9_at_resume_crash_point`'s twin under an OpenCode lineage — a
     kill at a resume boundary still re-attaches exactly once, converging under the same
     lease/epoch/session and the same (OpenCode) harness."""
     landed_file = f"LANDED-OPENCODE-resume-{point.replace('.', '_')}.md"
@@ -1841,7 +1839,7 @@ def test_kill9_at_resume_crash_point_under_opencode(crash_env: CrashEnv, tmp_pat
         terminate(hub_proc)
 
 
-# --- Live detach recovery (blizzard#38) — the abandon crash point ---
+# --- Live detach recovery — the abandon crash point ---
 
 
 def _hang_once_build_script(landed_file: str, marker: Path) -> str:
@@ -1985,7 +1983,7 @@ def _wait_for_cleared_resume_intents(runner_dir: Path, *, timeout: float = 30.0)
 def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` anywhere inside the abandon — before its release, or after it and before
     the closure — recovers through restart-resume's path, not REAP's: the lease closes
-    ``released``, and the chunk is re-claimable and lands exactly once (blizzard#38, #280)."""
+    ``released``, and the chunk is re-claimable and lands exactly once."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     marker = tmp_path / "hang-once.marker"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -2057,7 +2055,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         terminate(hub_proc)
 
 
-# --- Operator chunk pause (issue #46) — the pause-park crash point ---
+# --- Operator chunk pause — the pause-park crash point ---
 
 
 def _open_pause_parks(runner_dir: Path) -> set[str]:
@@ -2071,7 +2069,7 @@ def _open_pause_parks(runner_dir: Path) -> set[str]:
 @pytest.mark.parametrize("point", _PAUSE_SWEEP)
 def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` between a paused worker's interrupt and its durable park still keeps the
-    claim (issue #46) — recovery parks the chunk rather than abandoning it, and the resumed
+    claim — recovery parks the chunk rather than abandoning it, and the resumed
     session lands exactly once under the same lease, no retry consumed."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -2146,7 +2144,7 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
         terminate(hub_proc)
 
 
-# --- Usage-limit pause (blizzard#594) — the usagelimit.* crash points ---
+# --- Usage-limit pause — the usagelimit.* crash points ---
 
 
 def _ingest_usage_limited_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
@@ -2185,7 +2183,7 @@ def _ingest_usage_limited_judge_chunk(hub: httpx.Client, forge: httpx.Client, la
 @pytest.mark.parametrize("point", _USAGE_LIMIT_SWEEP)
 def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` between the usage-limit brake engaging and its durable park still keeps
-    the claim (blizzard#594) — recovery re-parks the lease rather than abandoning it, and an
+    the claim — recovery re-parks the lease rather than abandoning it, and an
     operator ``start`` resumes the same lease in place, no retry consumed. Unlike the operator
     pause-park scenario, nothing external triggers this: the runner discovers the limit itself
     from the exited generation's own transcript, with no hub-side pause API call at all. Swept
@@ -2586,8 +2584,8 @@ _LAND_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_default"
 
 def _two_repo_build_script(landed_file: str) -> str:
     """A build node that commits ``landed_file`` in BOTH fixture repos' worktrees, then
-    pushes and declares each through the real `blizzard runner artifact commit` verb (issue
-    #143, Phase 4). So the chunk submits a ``git_commit`` pointer for ``toy-api`` AND
+    pushes and declares each through the real `blizzard runner artifact commit` verb.
+    So the chunk submits a ``git_commit`` pointer for ``toy-api`` AND
     ``toy-web`` — a genuine 2-repo land for the deliver script to loop over."""
     return (
         "import subprocess, pathlib\n"
@@ -3039,7 +3037,7 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         terminate(hub_proc)
 
 
-# --- The close-intent outbox (blizzard#383) — no forge: driven entirely through the ---
+# --- The close-intent outbox — no forge: driven entirely through the ---
 # --- built-in `hub` work source, whose landing marker and whose closer are both local ---
 
 
@@ -3080,7 +3078,7 @@ def _close_intent_graph_yaml() -> str:
 
 def _ingest_close_intent_chunk(hub: httpx.Client) -> tuple[str, str]:
     """Mint the close-intent graph as the packaged default's own name, then create a
-    hub-owned work item (issue #360/#359) — no forge issue, no configured work source at
+    hub-owned work item — no forge issue, no configured work source at
     all. Returns ``(chunk_id, ref)``."""
     minted = hub.post("/api/graphs", json={"definition_yaml": _close_intent_graph_yaml()})
     assert minted.status_code == 201, minted.text
@@ -3095,7 +3093,7 @@ def _ingest_close_intent_chunk(hub: httpx.Client) -> tuple[str, str]:
 
 def _wait_item_delivered(hub: httpx.Client, ref: str, *, timeout: float) -> dict | None:
     """Poll the hub-owned item until its closure is durable — the drain sweep's own
-    cadence, not a request/response round trip (D3: unconditional, no config knob to
+    cadence, not a request/response round trip (unconditional, no config knob to
     shorten). Returns the last-read item, or ``None`` if it never answered."""
     deadline = time.monotonic() + timeout
     item = None
@@ -3111,7 +3109,7 @@ def _wait_item_delivered(hub: httpx.Client, ref: str, *, timeout: float) -> dict
 
 @pytest.mark.parametrize("point", _CLOSE_SWEEP)
 def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` inside the close-intent outbox's own windows (blizzard#383) still
+    """A ``kill -9`` inside the close-intent outbox's own windows still
     converges: the pending intent survives the crash and the item closes exactly once,
     driven entirely through the built-in ``hub`` work source — no forge involved."""
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"

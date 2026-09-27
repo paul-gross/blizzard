@@ -1,5 +1,5 @@
-"""The runner-owned OpenCode permission/plugin document (D7) — permission-only until phase 4
-adds the plugin's heartbeat and ``shell.env`` jobs."""
+"""The runner-owned OpenCode permission/plugin document — permission-only; the plugin's
+own heartbeat and ``shell.env`` jobs are added separately."""
 
 from __future__ import annotations
 

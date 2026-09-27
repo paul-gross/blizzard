@@ -1,4 +1,4 @@
-"""The provider-overload classification value (blizzard#595).
+"""The provider-overload classification value.
 
 A single fact an adapter translates from its own harness's raw exit signal, never a
 decision (``bzh:deterministic-shell``): the loop is what backs a lease off from it, the

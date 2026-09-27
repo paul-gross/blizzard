@@ -6,7 +6,7 @@ import type { BoardCard } from './board-card';
 import { BoardCardComponent } from './board-card';
 
 /**
- * The blocked marking's adjacency to the card's status (issue #461) — a real layout
+ * The blocked marking's adjacency to the card's status — a real layout
  * claim jsdom cannot make: it never actually lays out `board-card.css`'s flex row, so
  * `web:unit-test` cannot see the marking overlap the status, wrap away from it, or push
  * past the card's own edge. The marking renders inside the status row, immediately after

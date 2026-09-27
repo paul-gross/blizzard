@@ -1,7 +1,7 @@
 """The identity domain's value objects — ``User``, ``Identity``, ``Session``,
-``ResolvedIdentity`` (issue #91).
+``ResolvedIdentity``.
 
-``Role``/``Permission`` are imported from :mod:`blizzard.auth_core` (decision D3);
+``Role``/``Permission`` are imported from :mod:`blizzard.auth_core`;
 this module's only job is the hub-local *identity* shapes they attach to."""
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ class Identity:
 class Session:
     """A resolved session row — ``id_hash`` is the sha256 hex digest of the plaintext
     session id; the plaintext itself is never stored (mirrors
-    ``runner_registrations.token_hash``, issue #86a)."""
+    ``runner_registrations.token_hash``)."""
 
     id_hash: str
     user_id: str
@@ -50,7 +50,7 @@ class Session:
 
 @dataclass(frozen=True)
 class ProviderIdentity:
-    """What a provider conformer resolves a code exchange to (issue #92). Lives here,
+    """What a provider conformer resolves a code exchange to. Lives here,
     not under ``hub/auth/oauth/``, so the dependency arrow points from the adapter
     subpackage into the domain, never the reverse (``bzh:dependency-inversion``)."""
 
@@ -62,7 +62,7 @@ class ProviderIdentity:
 
 @dataclass(frozen=True)
 class AuthStateEntry:
-    """A single-use ``state`` row (decision D5) — the anti-CSRF/replay token round-tripped
+    """A single-use ``state`` row — the anti-CSRF/replay token round-tripped
     through a provider redirect. ``provider_name`` cross-checks the callback's own
     ``{name}`` path segment, so a state minted for one provider cannot be replayed
     against another's callback."""
@@ -74,13 +74,13 @@ class AuthStateEntry:
     code_challenge: str | None
     created_at: datetime
     expires_at: datetime
-    #: The user this row mints a session for (issue #96) — ``kind="cli_login"`` rows only.
+    #: The user this row mints a session for — ``kind="cli_login"`` rows only.
     user_id: str | None = None
 
 
 @dataclass(frozen=True)
 class AuthFact:
-    """One append-only row in ``auth_facts`` (issue #92) — the non-chunk-scoped
+    """One append-only row in ``auth_facts`` — the non-chunk-scoped
     security/audit event log (``bzh:facts-not-status``). ``actor`` is who/what triggered
     the event (a client IP for an unauthenticated failure); ``subject`` is what it concerns
     (a provider name); ``detail`` is free-form structured context."""
@@ -95,7 +95,7 @@ class AuthFact:
 @dataclass(frozen=True)
 class SuperuserBootstrap:
     """The singleton row tracking the currently configured ``auth.superuser`` bootstrap
-    target (issue #94; see ``hub/auth/bootstrap.py``). ``claimed_user_id`` is ``None``
+    target (see ``hub/auth/bootstrap.py``). ``claimed_user_id`` is ``None``
     while no verified user has matched ``email`` yet."""
 
     email: str

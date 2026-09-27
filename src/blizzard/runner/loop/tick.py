@@ -32,10 +32,10 @@ _log = get_logger("blizzard.runner.loop")
 def tick(ctx: LoopContext) -> None:
     """Run one reconciliation pass. Idempotent; safe to call on startup and per-timer."""
     _log.debug("tick start", runner_id=ctx.config.runner_id)
-    # Stamp liveness first (issue #13), so a pass that dies mid-step still leaves the beat
+    # Stamp liveness first, so a pass that dies mid-step still leaves the beat
     # proving the daemon reached it — the reference the next startup's scan ages against.
     ctx.stores.pause.record_daemon_liveness(runner_id=ctx.config.runner_id, alive_at=ctx.clock.now())
-    # This tick's own memoized chunk-status cache (blizzard#521) — every step below shares
+    # This tick's own memoized chunk-status cache — every step below shares
     # it via the rebound `ctx`, so a chunk read at more than one site this tick costs the
     # hub at most one round-trip. Primed with the ids every reconcile sweep below is about
     # to read anyway, so the common case pays for its reads once, up front.
@@ -50,24 +50,24 @@ def tick(ctx: LoopContext) -> None:
         capabilities=TickCapabilities(ctx.harnesses, ctx.harness_versions, ctx.harness_health),
     )
     ctx.chunk_views.prime(_primed_chunk_ids(ctx))
-    # The spend-ceiling kill-switch (issue #61b) — first, so it brakes the same tick it fires in.
+    # The spend-ceiling kill-switch — first, so it brakes the same tick it fires in.
     SpendCeiling(ctx).run()
     Reap(ctx).run()  # startup recovery IS reap running early
     Resume(ctx).run()  # before ADVANCE — else a killed-mid-work worker reads as done
     Pull(ctx).run()
     Fill(ctx).run()
     Advance(ctx).run()
-    # After every fact-lane-draining step (D3, issue #246) — bounded (the real bound
+    # After every fact-lane-draining step — bounded (the real bound
     # is `transcript_drain.py`'s own, see there), so it delays nothing fleet-truth-bearing.
     TranscriptDrain(ctx).run()
-    # Not load-bearing: each prune preserves what this tick's other readers see (issue
-    # #520) — placed here only so a fact just enqueued isn't pruned the same tick it lands.
+    # Not load-bearing: each prune preserves what this tick's other readers see
+    # — placed here only so a fact just enqueued isn't pruned the same tick it lands.
     Retention(ctx).run()
     # Observation only, so its position is not load-bearing: it gates nothing and nothing
     # reads its samples. Placed after ADVANCE so a lease that finished this tick is already
     # closed and not sampled one last time on its way out.
     ContextSample(ctx).run()
-    # Last (issue #218) — its own docstring reserves this position; still safe to run
+    # Last — its own docstring reserves this position; still safe to run
     # before or after TranscriptDrain, since either's fact-lane enqueue waits for PULL anyway.
     ExternalUsageSample(ctx).run()
     _log.debug("tick end", runner_id=ctx.config.runner_id)

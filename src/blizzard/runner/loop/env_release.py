@@ -18,14 +18,14 @@ class EnvironmentRelease:
     environments: IWriteEnvironmentRepository
     clock: IClock
     provider: IWorkspaceProvider
-    #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
+    #: The SSE publish seam, typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on a loop-only caller, a no-op there.
     events: IRunnerEventPublisher | None = None
 
     def release_chunk(self, chunk_id: str) -> None:
         """Release every environment held at the chunk's tenure end.
 
-        A released lease's worker stdout/stderr is left in place (issue #58) — only
+        A released lease's worker stdout/stderr is left in place — only
         `Retention`'s own age-based sweep prunes it, on a much longer clock."""
         now = self.clock.now()
         for binding in self.environments.bindings_for_chunk(chunk_id):

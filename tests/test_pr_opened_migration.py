@@ -1,4 +1,4 @@
-"""The pr-opened-idempotent revision's ``pr.opened`` de-duplication + unique constraint (issue #10).
+"""The pr-opened-idempotent revision's ``pr.opened`` de-duplication + unique constraint.
 
 Exercises the migration on a store carrying two ``delivery_pr_opened`` rows for the
 same (chunk, repo). Seeded with literal ``sa.Table`` shapes rather than importing

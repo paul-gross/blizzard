@@ -48,7 +48,7 @@ class _RunWindow:
     until: datetime
 
     #: The span cap (`GET /routines/trend`'s own `_MAX_PERIODS` shape) — a run list is
-    #: bounded by window, not paged, but the window still needs a floor (D5).
+    #: bounded by window, not paged, but the window still needs a floor.
     _MAX_SPAN_DAYS = 366
 
     @classmethod

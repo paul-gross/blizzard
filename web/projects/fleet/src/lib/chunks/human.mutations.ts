@@ -20,7 +20,7 @@ export interface AnswerVars {
 }
 
 /**
- * Read a losing answer's 409 body — the winning {@link AnswerResult} (issue #165).
+ * Read a losing answer's 409 body — the winning {@link AnswerResult}.
  *
  * The hub's first-write-wins arbitration answers a beaten writer with the *winning row*,
  * not an error message: `{won: false, answer, answered_by, …}` and no `detail` field at
@@ -47,7 +47,7 @@ export interface AnswerFailure {
 }
 
 /**
- * Fold an answer mutation's `onError` into the channel it belongs on (issue #165).
+ * Fold an answer mutation's `onError` into the channel it belongs on.
  *
  * The one owner of both the branch and the sentence, because **two** surfaces answer a
  * question — the desktop dock and the mobile chunk page — and a board that got only half
@@ -70,7 +70,7 @@ export function readAnswerFailure(error: unknown): AnswerFailure {
  * a **lost** race (the 409 {@link readAnswerFailure} folds) changed the server state just
  * as much as a won one — someone else's answer landed — so the board must re-read to show
  * the question as answered with the winner's trail rather than sitting on the stale open
- * row (issue #165).
+ * row.
  */
 export function injectAnswerQuestionMutation() {
   const queryClient = inject(QueryClient);

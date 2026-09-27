@@ -1,4 +1,4 @@
-"""Transition graph-provenance (issue #90, Phase 1) — the read + hydration foundation.
+"""Transition graph-provenance — the read + hydration foundation.
 
 Unit tier: :meth:`ChunkHistoryView.transitions` resolves each transition's node names
 against *its own* graph, so a two-graph history never degrades an old-graph step to raw ``nd_`` ids.

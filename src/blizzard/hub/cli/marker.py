@@ -1,4 +1,4 @@
-"""``blizzard hub record-marker`` — issue #65: record a marker artifact mid-run."""
+"""``blizzard hub record-marker`` — record a marker artifact mid-run."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ def record_marker(name: str, content: str) -> None:
     """A hub command node's ``run:`` script: record a marker artifact mid-run (#65).
 
     The injected ``BZ_HUB_MARKER_CALLBACK_URL`` already carries this run's chunk, node,
-    and epoch. Idempotent per marker NAME; authorized by ``BZ_HUB_MARKER_TOKEN``
-    (issue #230), whose absence is named rather than posted unauthenticated."""
+    and epoch. Idempotent per marker NAME; authorized by ``BZ_HUB_MARKER_TOKEN``,
+    whose absence is named rather than posted unauthenticated."""
     callback_url = os.environ.get(ENV_MARKER_CALLBACK_URL)
     if not callback_url:
         raise click.ClickException(f"record-marker: no {ENV_MARKER_CALLBACK_URL} in the environment")

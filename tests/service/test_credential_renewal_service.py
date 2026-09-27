@@ -1,5 +1,5 @@
 """Service-tier proof for the OpenAI credential renewer against a real ``mock-codex app-server``
-process (``bzh:external-cli-fake-is-service-tier``, blizzard#504 Phase 2): the renewer, on the
+process (``bzh:external-cli-fake-is-service-tier``): the renewer, on the
 real :class:`SubprocessOneShotProcess` seam, races a second independent ``mock-codex
 app-server`` invocation — the vendor's own CLI refreshing the same login by hand — for one
 ``auth.json``. Neither writer leaves the file unparseable and the final file holds a rotated
@@ -141,7 +141,7 @@ def test_a_concurrent_vendor_style_writer_never_corrupts_the_file_and_the_rotate
     digests = {entry["content_digest"] for entry in entries}
     assert len(digests) == 2
     # Every write matches a mock-codex pid in the side log, with the final file's digest
-    # equal to the last logged write (the plan's exact Phase 2 acceptance wording).
+    # equal to the last logged write (the plan's exact acceptance wording).
     assert all("pid" in entry for entry in entries)
     last_logged = max(entries, key=lambda entry: entry["at"])
     assert last_logged["content_digest"] == hashlib.sha256(final_bytes).hexdigest()[:16]

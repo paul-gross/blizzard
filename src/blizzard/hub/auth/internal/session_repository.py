@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the session repository seam (package-private, issue #91).
+"""SQLAlchemy adapter for the session repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the domain
 sees only :class:`~blizzard.hub.auth.models.Session`.

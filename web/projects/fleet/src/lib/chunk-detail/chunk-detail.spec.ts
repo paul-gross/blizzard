@@ -56,7 +56,7 @@ const GATE_DETAIL: ChunkDetailModel = {
 };
 
 // A chunk carrying an open pause fact while its derived status reads waiting_on_human —
-// the overlap PAUSED's position below the human-gated states creates (issue #46).
+// the overlap PAUSED's position below the human-gated states creates.
 const PAUSED_ASKING_DETAIL: ChunkDetailModel = {
   ...GATE_DETAIL,
   chunk_id: 'ch_paused',
@@ -64,7 +64,7 @@ const PAUSED_ASKING_DETAIL: ChunkDetailModel = {
   decision: undefined,
 };
 
-// A chunk parked on an open question — the answer-race surface (issue #165).
+// A chunk parked on an open question — the answer-race surface.
 const ASK_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_ask',
   graph_id: 'gr_1',
@@ -97,7 +97,7 @@ const ASK_ANSWERED_DETAIL: ChunkDetailModel = {
   ],
 };
 
-// A not_ready chunk — the one window issue #27's graph edit is open.
+// A not_ready chunk — the one window the graph edit is open.
 const NOT_READY_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_ready',
   graph_id: 'gr_default',
@@ -109,7 +109,7 @@ const NOT_READY_DETAIL: ChunkDetailModel = {
   artifacts: [],
 };
 
-// An unacquired chunk Delete reaches (D8, issue #364) — distinct from
+// An unacquired chunk Delete reaches — distinct from
 // NOT_READY_DETAIL so the graph-edit and delete specs don't share a fixture
 // (and so a test can tell their client calls apart by chunk id).
 const DELETABLE_DETAIL: ChunkDetailModel = {
@@ -148,16 +148,16 @@ describe('ChunkDetail container', () => {
   // Mutated per-test to drive the detach mutation's response (200/404/409); the stub
   // closure below reads it live, so a test can set it after the fixture is mounted.
   let detachResponse: unknown = {};
-  // The same, for the pause/resume verbs (issue #46).
+  // The same, for the pause/resume verbs.
   let pauseResponse: unknown = {};
-  // The same, for the complete verb (issue #294).
+  // The same, for the complete verb.
   let completeResponse: unknown = {};
-  // The same, for the delete verb (D8, issue #364).
+  // The same, for the delete verb.
   let deleteResponse: unknown = {};
-  // The same, for the graph edit (issue #27) — it collapses onto the one
-  // `PATCH /api/chunks/{id}` call (issue #104), so one variable drives it.
+  // The same, for the graph edit — it collapses onto the one
+  // `PATCH /api/chunks/{id}` call, so one variable drives it.
   let editPatchResponse: unknown = {};
-  // The same, for the answer verb (issue #165) — 201 winner vs. 409 loser.
+  // The same, for the answer verb — 201 winner vs. 409 loser.
   let answerResponse: unknown = {};
   // The same, for the resolve-decision verb — defaults to a canned success body below.
   let resolveResponse: unknown | null = null;
@@ -307,7 +307,7 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('[data-testid="issue-message"]')?.textContent).toContain('seen it too');
   });
 
-  // --- Detach (issue #42) ---------------------------------------------
+  // --- Detach ---------------------------------------------
 
   it('fires the detach client call for a routed chunk once the operator confirms', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
@@ -354,7 +354,7 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
   });
 
-  // --- Complete (issue #294) -------------------------------------------
+  // --- Complete -------------------------------------------
 
   it('fires the complete client call for a chunk once the operator confirms', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
@@ -383,7 +383,7 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown chunk');
   });
 
-  // --- Delete (D8, issue #364) ------------------------------------------
+  // --- Delete ------------------------------------------
 
   it('fires the delete client call for an unacquired chunk once the operator confirms', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
@@ -430,7 +430,7 @@ describe('ChunkDetail container', () => {
     expect(dismissed).toBe(false);
   });
 
-  // --- Answering a question, and losing the race for it (issue #165) ---------
+  // --- Answering a question, and losing the race for it ---------
 
   /** Type an answer into the dock and submit it. */
   async function answerFrom(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>): Promise<HTMLElement> {
@@ -531,7 +531,7 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already paused');
   });
 
-  // --- Pause / Resume (issue #46) --------------------------------------------
+  // --- Pause / Resume --------------------------------------------
 
   it('fires the pause client call for a running chunk once the operator confirms', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
@@ -729,8 +729,8 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
   });
 
-  // --- Graph edit (issue #27; the model edit beside it retired with `Chunk.model`,
-  // issue #144) -------------------------------------------------------------
+  // --- Graph edit (the model edit beside it retired with `Chunk.model`)
+  // -------------------------------------------------------------
 
   it('fires the graph edit client call for a not_ready chunk', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);

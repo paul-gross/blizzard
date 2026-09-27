@@ -1,4 +1,4 @@
-"""``blizzard runner requeue`` — ``POST /chunks/{id}/requeues`` (issue #53).
+"""``blizzard runner requeue`` — ``POST /chunks/{id}/requeues``.
 
 Appends the fact that clears a chunk's local needs_human hold and returns immediately.
 Read-only over its wiring (``bzh:controller-read-only``)."""

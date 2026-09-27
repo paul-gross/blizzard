@@ -1,4 +1,4 @@
-"""``GardenProposalAuthoring`` and ``OpenGardenProposalReader`` (unit tier, blizzard#390):
+"""``GardenProposalAuthoring`` and ``OpenGardenProposalReader`` (unit tier):
 create over a fake repository — an empty ``findings`` list is accepted, a
 duplicate-naming one is refused, and a clean one mints a `gprop_` id and delegates with
 the clock's instant (``bzh:domain-core``, the ``tests/test_scope_domain.py`` shape).
@@ -66,7 +66,7 @@ class _FakeGardenProposalRepo:
     attached: list[tuple[str, list[str]]] = field(default_factory=list)
     detached: list[tuple[str, list[str]]] = field(default_factory=list)
     #: Proposal ids `edit`/`attach`/`detach` treat as already closed, mirroring the
-    #: store's own closed-then-write guard returning `None` (D3).
+    #: store's own closed-then-write guard returning `None`.
     closed_ids: set[str] = field(default_factory=set)
 
     def create(

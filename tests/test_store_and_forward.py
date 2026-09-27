@@ -130,7 +130,7 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
 
 def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) -> None:
     """The other buffered hub fact: escalation.recorded lands via /events, dedup and
-    all, carrying ``wrapped_takeover_command`` (issue #251) through the round trip."""
+    all, carrying ``wrapped_takeover_command`` through the round trip."""
     hub = build_hub(tmp_path)
     chunk_id, _ = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
@@ -176,7 +176,7 @@ def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) ->
 
 def test_escalation_fact_without_wrapped_takeover_reads_back_empty(tmp_path: Path) -> None:
     """An older runner that never learned to compose ``wrapped_takeover_command``
-    (issue #251) omits it; the field reads back empty while ``takeover_command`` lands."""
+    omits it; the field reads back empty while ``takeover_command`` lands."""
     hub = build_hub(tmp_path)
     chunk_id, _ = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)

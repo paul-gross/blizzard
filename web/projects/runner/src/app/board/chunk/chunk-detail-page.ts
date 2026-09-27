@@ -49,7 +49,7 @@ import { ChunkNodeHistoryTab } from './chunk-node-history-tab';
  * `injectChunkTitleQuery` the board's list rows use, since this section
  * renders a real error state rather than silently dropping one). The
  * Transcripts tab owns its own two queries entirely — {@link ChunkTranscriptsContainer},
- * mounted with this runner's own `runnerClient` (D5), the same shared component the
+ * mounted with this runner's own `runnerClient`, the same shared component the
  * hub mounts with its own client. The chunk id rides the URL's path (`:chunkId`).
  * `?tab=`, `?artifact=`, `?step=`, `?segment=`, and `?sidechain=` are independent params
  * on the same URL: every write through {@link injectChunkDetailSelection} merges rather
@@ -95,7 +95,7 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
 export class ChunkDetailPage {
   private readonly route = inject(ActivatedRoute);
 
-  /** The plane seam {@link ChunkTranscriptsContainer} crosses (D5) — exposed as an
+  /** The plane seam {@link ChunkTranscriptsContainer} crosses — exposed as an
    * instance field so the template can bind it; a plain module import is not itself a
    * template expression. */
   protected readonly runnerClient = runnerClient;

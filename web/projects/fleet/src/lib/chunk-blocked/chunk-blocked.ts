@@ -5,16 +5,16 @@ import { compactRef } from '../compact-ref';
 import { KitBadge } from '../kit/kit-badge';
 
 /**
- * The blocked marking (issue #461) — a chunk's `BlockedView`, rendered beside
+ * The blocked marking — a chunk's `BlockedView`, rendered beside
  * its unchanged status wherever a chunk is listed: the board card, the dock
  * header, and the routed chunk page header. One component rather than three
- * copies (D1): the three sites share no status component today, so this is
+ * copies: the three sites share no status component today, so this is
  * the shared piece, its chrome from {@link KitBadge} on the existing
- * `waiting` tone (D2 — blocked is not a status and never widens `Tone`).
+ * `waiting` tone (blocked is not a status and never widens `Tone`).
  *
- * Two render modes, matched to what each site can already do (D3), decided by
+ * Two render modes, matched to what each site can already do, decided by
  * {@link asLink} — a decision independent of {@link linkBase}, which only ever
- * carries the route's path segments (round 3 F6): `false` (the default) is the
+ * carries the route's path segments (round 3): `false` (the default) is the
  * button that emits {@link selectChunk} with the prerequisite id — the board
  * card and the dock header both already select a chunk into the dock this way,
  * one hop rather than a navigation. `true` renders a `routerLink` under
@@ -40,7 +40,7 @@ export class ChunkBlocked {
 
   /** Whether to render a `routerLink` under {@link linkBase} instead of the
    * one-hop dock-select button — set only by a caller with no dock to select
-   * into (`ChunkPageHeader`, round 3 F6: this was previously encoded by
+   * into (`ChunkPageHeader`, round 3: this was previously encoded by
    * `linkBase` being non-null, overloading a name every other caller in this
    * suite uses to mean only the route address). */
   readonly asLink = input(false);

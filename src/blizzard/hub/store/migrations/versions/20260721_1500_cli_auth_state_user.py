@@ -1,5 +1,5 @@
 """auth_state.user_id — the CLI code-exchange's owning user, nullable and with no
-`ForeignKey` (SQLite cannot drop an FK column) (hub store tree, issue #96)
+`ForeignKey` (SQLite cannot drop an FK column) (hub store tree)
 
 Revision ID: 20260721_1500_hub_cli_auth_state_user
 Revises: 20260721_1400_hub_runner_redirect_uris

@@ -2,7 +2,7 @@
 
 For a configured, credentialed binding a work item's contents are **never stored**: the
 pointer is the durable referent, the item is fetched fresh from the forge. The built-in
-``hub`` source (issue #357) is the one exception — its own store *is* the item's system
+``hub`` source is the one exception — its own store *is* the item's system
 of record, so its "fetch" is a read of durable state, not a forge round-trip; every other
 binding still keeps the pass-through contract this docstring describes. A binding also
 owns parsing its own ingest-token form, its label, and its browser addresses
@@ -25,7 +25,7 @@ from blizzard.hub.work_sources.editor import IWorkEditor
 
 @dataclass(frozen=True)
 class AuthorView:
-    """A work item's author, resolved legible for display (blizzard#362) — a login for
+    """A work item's author, resolved legible for display — a login for
     a human author, or the runner/chunk/node lineage for a fleet-authored one. ``kind``
     mirrors :class:`~blizzard.hub.domain.work.WorkItemAuthorKind`'s value."""
 
@@ -38,7 +38,7 @@ class AuthorView:
 
 
 def resolve_author_view(author: WorkItemAuthor, users: IReadUserRepository | Mapping[str, User]) -> AuthorView:
-    """A ``WorkItemAuthor`` resolved legible for display (blizzard#362) — the one place a
+    """A ``WorkItemAuthor`` resolved legible for display — the one place a
     ``user_id`` is ever resolved to a login, shared by every pass-through read and
     listing view alike, one lookup at a time or replayed over a pre-resolved batch."""
     if author.kind is WorkItemAuthorKind.USER:
@@ -54,7 +54,7 @@ def resolve_author_view(author: WorkItemAuthor, users: IReadUserRepository | Map
 @dataclass(frozen=True)
 class WorkItem:
     """A pass-through work item — title, body, and comment bodies, vendor-native, plus
-    the display-resolved author and stated priority (blizzard#362), present only when
+    the display-resolved author and stated priority, present only when
     the binding has them to give — the built-in ``hub`` source alone fills them today."""
 
     body: str
@@ -126,7 +126,7 @@ class IWorkSourceRegistry(Protocol):
 
     def closer(self, name: str) -> IWorkCloser | None:
         """The binding declared under ``name``'s close half, unconditional for every
-        configured source (blizzard#383) — ``None`` only when ``name`` names no source
+        configured source — ``None`` only when ``name`` names no source
         at all, which a pending intent can still outlive if its source is later removed
         from config."""
         ...

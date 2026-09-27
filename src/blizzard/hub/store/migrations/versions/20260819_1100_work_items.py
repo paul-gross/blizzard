@@ -1,5 +1,5 @@
-"""work_items — hub-owned work items and their per-source ref sequence (issue #357,
-hub store tree). Two new tables, ``checkfirst`` so a fresh ``base -> head`` and an
+"""work_items — hub-owned work items and their per-source ref sequence (hub store
+tree). Two new tables, ``checkfirst`` so a fresh ``base -> head`` and an
 upgrade converge.
 
 Revision ID: 20260819_1100_work_items

@@ -55,8 +55,8 @@ export interface SubscriptionPace {
   readonly slug: string;
   readonly name: string;
   readonly paceBars: readonly PaceBar[];
-  /** `'credential_lapsed'` when the newest reported miss outranks the newest sample
-   * (blizzard#504 D7); `null` otherwise. */
+  /** `'credential_lapsed'` when the newest reported miss outranks the newest sample;
+   * `null` otherwise. */
   readonly condition: string | null;
   /** The last good sample's raw instant, or `null` when the slug has never been
    * sampled — presence, not `paceBars.length`, is what tells a zero-window sample

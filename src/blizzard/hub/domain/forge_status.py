@@ -1,4 +1,4 @@
-"""The forge-status projection — a periodic, best-effort sweep (issue #179).
+"""The forge-status projection — a periodic, best-effort sweep.
 
 The hub is truth; the forge carries a one-way reflection of it as labels: only diffs
 between a live chunk's derived status and the forge's statelessly-discovered markers are

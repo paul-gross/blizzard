@@ -13,8 +13,8 @@ class IReadChunkUsageRepository(Protocol):
 
     def usage_total_since(self, since: datetime, *, until: datetime | None = None) -> UsageTotal:
         """The usage/cost total across every chunk's facts recorded at or after ``since``
-        — and, when ``until`` is given, strictly before it (issue #60, issue #183,
-        blizzard#517). ``since`` is inclusive and ``until`` exclusive, so adjacent windows
+        — and, when ``until`` is given, strictly before it.
+        ``since`` is inclusive and ``until`` exclusive, so adjacent windows
         sharing a boundary instant neither double-count nor drop a fact at it. Omitting
         ``until`` is the original open-ended tail. Follows the lower-bound + PARTIAL cost
         contract in ``UsageTotal.of_grouped_sums``."""

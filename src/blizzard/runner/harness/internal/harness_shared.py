@@ -30,7 +30,7 @@ CHOICE_CLOSE = "</Choice>"
 # Bounds `observe_version`'s probe: a wedged binary costs one skipped read, not a hang.
 VERSION_PROBE_TIMEOUT_SECONDS = 5
 
-# Strips a leading `opencode`/"version"/"v" prefix off one line of OpenCode's `--version` output (blizzard#438).
+# Strips a leading `opencode`/"version"/"v" prefix off one line of OpenCode's `--version` output.
 OPENCODE_VERSION_PATTERN = re.compile(
     r"^\s*(?:opencode(?:\s+version)?\s+)?(?:v)?"
     r"(?P<version>\d+\.\d+\.\d+(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
@@ -43,7 +43,7 @@ def normalize_opencode_version(raw: str | None) -> str | None:
     """The bare semantic version in one raw OpenCode ``--version`` output, or ``None`` when it
     isn't exactly one matching line — the normalizer both the live OpenCode probe and
     ``OpenCodeHealthProbe.normalize_version`` route a membership check through. Scoped to
-    OpenCode alone: each binding owns its own raw shape and normalizer (blizzard#606)."""
+    OpenCode alone: each binding owns its own raw shape and normalizer."""
     if raw is None:
         return None
     lines = [line for line in raw.splitlines() if line.strip()]
@@ -59,8 +59,8 @@ _SEMVER_PRERELEASE_PATTERN = re.compile(r"^\d+\.\d+\.\d+-")
 
 def version_admitted(version: str, admitted_range: SpecifierSet) -> bool:
     """Whether ``version`` is a member of ``admitted_range`` — the one membership check a
-    binding's declared range and any caller's own version, a corpus directory name included
-    (blizzard#604), are ever compared through. An unparsable or semver-pre-release ``version``
+    binding's declared range and any caller's own version, a corpus directory name included,
+    are ever compared through. An unparsable or semver-pre-release ``version``
     reads as not admitted rather than raising. Pre-releases are always excluded
     (``prereleases=False``), never ``SpecifierSet``'s own no-other-candidate ``filter`` default."""
     if _SEMVER_PRERELEASE_PATTERN.match(version):
@@ -111,7 +111,7 @@ def build_identity_env(
     elicitation: bool = False,
 ) -> dict[str, str]:
     """The per-lease worker-identity child env every binding's ``spawn``/``resume_with_message``/
-    ``judge`` is built from (issue #258): the allowlist plus the ``BLIZZARD_*`` vars a
+    ``judge`` is built from: the allowlist plus the ``BLIZZARD_*`` vars a
     worker reads to reach the runner. A resumed invocation inherits none of the original
     spawn env, so this rebuilds it exactly like a fresh one; a harness with its own extra
     identity vars layers them on top, never instead."""
@@ -170,7 +170,7 @@ def resolve_model(
 
 
 def resolvable_tier_ids(builtin_tiers: Mapping[str, str], model_aliases: Mapping[str, str]) -> tuple[str, ...]:
-    """Every tier id an adapter can resolve (blizzard#433): ``builtin_tiers`` merged with
+    """Every tier id an adapter can resolve: ``builtin_tiers`` merged with
     the runner's own alias table, an overridden id appearing once — the same
     override-by-key precedence each adapter's own ``_resolve_one_model`` applies.
     Identical for both bindings; only OpenCode's empty ``builtin_tiers`` differs from

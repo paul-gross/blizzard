@@ -1,4 +1,4 @@
-"""``blizzard runner garden findings`` (unit tier, D4), mirroring
+"""``blizzard runner garden findings`` (unit tier), mirroring
 ``tests/test_runner_chunk_history_cli.py``'s shape: ``httpx`` stubbed, no live socket. The
 route itself (authorization, hub forward, 403/404/503) is the component tier's
 ``tests/test_runner_garden_findings_api.py``.
@@ -129,7 +129,7 @@ def test_findings_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.unit
 def test_garden_findings_help_names_no_routine_or_scope_flag() -> None:
-    """D5: the verb takes no flag naming a routine or a scope — the hub derives both
+    """The verb takes no flag naming a routine or a scope — the hub derives both
     from the chunk's own run context, so there is nothing here for a worker to point at
     another routine's bucket."""
     result = CliRunner().invoke(runner_group, ["garden", "findings", "--help"])

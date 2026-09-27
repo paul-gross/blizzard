@@ -1,5 +1,5 @@
 """transition graph-provenance — adds ``transitions.graph_id``, backfilled config-free
-from each transition's own chunk pin (hub store tree, issue #90)
+from each transition's own chunk pin (hub store tree)
 
 Revision ID: 20260718_1215_hub_transition_graph_id
 Revises: 20260718_1200_hub_route_token_minted

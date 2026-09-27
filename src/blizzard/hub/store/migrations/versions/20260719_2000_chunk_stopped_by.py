@@ -1,5 +1,5 @@
 """chunk_stopped.stopped_by — who terminally stopped the chunk, nullable so a row written
-before this column reads back bare (hub store tree, issue #118)
+before this column reads back bare (hub store tree)
 
 Revision ID: 20260719_2000_hub_chunk_stopped_by
 Revises: 20260718_1300_hub_runner_env_capacity

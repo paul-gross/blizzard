@@ -1,9 +1,9 @@
-"""Provider-overload classification and backoff (blizzard#595).
+"""Provider-overload classification and backoff.
 
 Shared by a worker generation's own exit and a judge elicitation's own exit: both react to
 an overload fact the same way — record it and, short of the streak limit, resume in place
 after a bounded, growing wait, spending no retry and bumping no epoch. Imports neither
-``judgement`` nor ``dormant`` (D5's own composition boundary)."""
+``judgement`` nor ``dormant`` (a composition boundary)."""
 
 from __future__ import annotations
 
@@ -35,8 +35,8 @@ def classify_worker_overload(
 ) -> ProviderOverload | None:
     """This generation's own spawn/resume/nudge invocation, classified over ``output`` and
     ``lines`` — the caller's own single read of this generation's stdout and transcript
-    range, shared with its usage-limit classification so neither pays for the other's read
-    (blizzard#595 F4). ``None`` when not overloaded, or the owner is unresolvable."""
+    range, shared with its usage-limit classification so neither pays for the other's read.
+    ``None`` when not overloaded, or the owner is unresolvable."""
     session = lease.session
     if session is None:
         return None
@@ -61,8 +61,8 @@ def classify_judge_overload(
     ctx: LoopContext, lease: LeaseRecord, output: str, lines: Sequence[str]
 ) -> ProviderOverload | None:
     """This generation's own judge elicitation, classified over its already-read output and
-    transcript range (judge boundary to tail, shared with usage-limit classification —
-    blizzard#595 F4) — ``None`` when not overloaded."""
+    transcript range (judge boundary to tail, shared with usage-limit classification)
+    — ``None`` when not overloaded."""
     session = lease.session
     if session is None:
         return None
@@ -84,7 +84,7 @@ def record_judge_overload(
 
 
 def reset_if_streak_open(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Close an open streak on a clean exit (D5) — written only when one is actually open,
+    """Close an open streak on a clean exit — written only when one is actually open,
     so a lease that has never overloaded never gains a reset row of its own."""
     if ctx.stores.overload.overload_streak(lease.lease_id, lease.epoch) > 0:
         ctx.stores.overload.record_reset(lease_id=lease.lease_id, epoch=lease.epoch, at=ctx.clock.now())
@@ -117,7 +117,7 @@ def _record(
     if backing_off:
         if ctx.events is not None:
             # The same `dormant` cause `park_on_ask`/`park_paused` already publish for
-            # their own state flips — the SSE corpus gains no new kind (D10).
+            # their own state flips — the SSE corpus gains no new kind.
             ctx.events.publish_lease_changed(lease.lease_id, lease.chunk_id, cause="dormant")
         _log.warning(
             "provider overload — backing off in place",

@@ -1,4 +1,4 @@
-"""transcript_segments.supersedes (blizzard#250) — a re-shipped segment's pointer at the one
+"""transcript_segments.supersedes — a re-shipped segment's pointer at the one
 it replaces, so a lease read drops the superseded segment instead of concatenating both.
 
 Revision ID: 20260811_0905_hub_transcript_segment_supersedes

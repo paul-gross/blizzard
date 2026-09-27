@@ -1,7 +1,7 @@
-"""Lease wire bodies — the runner-local lease read (issues #28, #29).
+"""Lease wire bodies — the runner-local lease read.
 
 ``closed_at``/``closure_reason`` are both ``None`` iff the lease is active, and ``state``
-carries a seventh ``"backing-off"`` value (blizzard#595) alongside ``"closed"``. Datetimes
+carries a seventh ``"backing-off"`` value alongside ``"closed"``. Datetimes
 are ISO-8601 strings that **always carry an explicit UTC offset**
 (``2026-07-16T12:00:00+00:00``) — ``bzh:utc-instants``.
 """
@@ -15,7 +15,7 @@ from blizzard.runner.domain.leases import LeaseState
 
 class LeaseView(BaseModel):
     """One lease — active or recently-closed — with its joined binding facts and
-    derived state (issue #28; closed leases added issue #29)."""
+    derived state."""
 
     lease_id: str
     chunk_id: str
@@ -36,6 +36,6 @@ class LeaseView(BaseModel):
 
 
 class LeaseListResponse(BaseModel):
-    """Active leases, then recently-closed ones (issue #28/#29)."""
+    """Active leases, then recently-closed ones."""
 
     items: list[LeaseView] = []

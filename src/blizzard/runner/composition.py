@@ -1,4 +1,4 @@
-"""The runner-store composition root (blizzard#410, D4).
+"""The runner-store composition root.
 
 The only module under ``src/`` that names a concrete ``runner/store/internal/`` adapter,
 asserted by
@@ -50,7 +50,7 @@ def build_stores_and_connections(
     """Build the store bundle and hand back the ``RunnerStoreConnections`` every adapter in it
     shares — for the one caller (``build_hosted_app``) that wires a second ``store/internal/``-
     style collaborator (``JtiCacheRepository``) over the same engine, so it reuses this instance
-    instead of building its own (D4)."""
+    instead of building its own."""
     connections = RunnerStoreConnections(engine, errors)
     return _build_stores(connections), connections
 
@@ -85,5 +85,5 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
 
 def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerReadStores:
     """The read-only bundle a controller-facing collaborator takes — narrows build_stores's
-    bundle over the same adapter instances, never a second one (D3)."""
+    bundle over the same adapter instances, never a second one."""
     return RunnerReadStores.of(build_stores(engine, errors=errors))

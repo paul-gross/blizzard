@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the in-flight-elicitation repository seam (package-private,
-blizzard#443)."""
+"""SQLAlchemy adapter for the in-flight-elicitation repository seam (package-private)."""
 
 from __future__ import annotations
 

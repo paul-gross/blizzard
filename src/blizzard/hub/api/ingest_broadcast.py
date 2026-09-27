@@ -45,7 +45,7 @@ class IngestBroadcast:
     @classmethod
     def before_ingest(cls, services: HubServices, batch: RunnerFactBatch) -> IngestBroadcast:
         """One pre-mutation snapshot per distinct chunk, reused across the batch — this is the
-        hot path (issue #212)."""
+        hot path."""
         chunk_ids = [chunk_id for fact in batch.facts if isinstance(chunk_id := fact.payload.get("chunk_id"), str)]
         changes = ChunkChanged.before_many(services, chunk_ids)
         return cls(services=services, batch=batch, changes=changes)
@@ -87,7 +87,7 @@ class IngestBroadcast:
                 self._chunk_changed(fact, row_id, chunk_id, states[chunk_id])
 
     def _runner_pause(self, fact: RunnerFact, row_id: int | None) -> None:
-        """The frame carries the fact's own ``by``/``reason`` (issue #151), with the same ``by``
+        """The frame carries the fact's own ``by``/``reason``, with the same ``by``
         default applied when the fact omits one."""
         by = fact.payload.get("by")
         reason = fact.payload.get("reason")
@@ -101,7 +101,7 @@ class IngestBroadcast:
 
     def _chunk_changed(self, fact: RunnerFact, row_id: int | None, chunk_id: str, state: ChunkFrameState) -> None:
         """Published on the fact rather than on a status *change*, so a fact that moves no status
-        (``answer.delivered``, issue #165) still stales the chunk read."""
+        (``answer.delivered``) still stales the chunk read."""
         key = self._dedupe_key(fact, row_id, state)
         question_id = fact.payload.get("question_id")
         if fact.kind == QUESTION_ASKED and isinstance(question_id, str):
@@ -121,7 +121,7 @@ class IngestBroadcast:
             return f"escalations:{row_id}" if row_id is not None else None
         if fact.kind == LEASE_MINTED:
             # This site writes a `lease_facts` row, but its `claimed` cause maps to `route_created`
-            # (issue #213), so a lost-ack replay dedupes against the live route.
+            # so a lost-ack replay dedupes against the live route.
             route = state.route
             if route is not None and route.route_id is not None:
                 return f"route_created:{route.route_id}"

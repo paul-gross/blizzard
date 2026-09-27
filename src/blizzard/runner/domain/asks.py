@@ -1,4 +1,4 @@
-"""The worker ask/park repository seam (blizzard#410).
+"""The worker ask/park repository seam.
 
 A dormant lease reads as parked either on an unanswered question or on an operator
 pause (:mod:`~blizzard.runner.domain.pause`); :meth:`IReadAskRepository.parked_lease_ids`
@@ -70,7 +70,7 @@ class IReadAskRepository(Protocol):
     def parked_lease_ids(self) -> set[str]:
         """Leases dormant on a question **or an operator pause** — the union of
         :meth:`ask_parked_lease_ids` and :mod:`~blizzard.runner.domain.pause`'s own
-        ``pause_parked_lease_ids`` (issue #46). A parked lease has no live worker, so
+        ``pause_parked_lease_ids``. A parked lease has no live worker, so
         it is exempt from staleness reclamation ([ask-answer.md])."""
         ...
 
@@ -85,7 +85,7 @@ class IReadAskRepository(Protocol):
         ...
 
     def open_asks(self) -> list[AskRecord]:
-        """Every ask with no answer yet — forwarded-and-parked or still unforwarded (issue #51).
+        """Every ask with no answer yet — forwarded-and-parked or still unforwarded.
 
         An ask is open while its ``question_id`` carries no
         :meth:`~IWriteAskRepository.record_park_resume`, whether or not it has been
@@ -120,8 +120,7 @@ class IWriteAskRepository(IReadAskRepository, Protocol):
 
 
 class AskService:
-    """Composition-root-wired: the ask store, the clock, and the optional event publisher
-    (D4, blizzard#412)."""
+    """Composition-root-wired: the ask store, the clock, and the optional event publisher."""
 
     def __init__(
         self, store: IWriteAskRepository, clock: IClock, *, events: IRunnerEventPublisher | None = None
@@ -131,7 +130,7 @@ class AskService:
         self._events = events
 
     def record_ask(self, lease: LeaseRecord, *, question: str, options: list[str]) -> str:
-        """Record a worker's ask against its lease, minting the question id (issue #51).
+        """Record a worker's ask against its lease, minting the question id.
 
         ``lease`` is already resolved by the caller (``bzh:domain-takes-objects``)."""
         question_id = Id.mint(QUESTION_PREFIX, self._clock).value

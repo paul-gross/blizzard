@@ -1,9 +1,9 @@
-"""Transcript segment domain (blizzard#247, ``epic:transcripts``) — the ingest lane and
+"""Transcript segment domain (``epic:transcripts``) — the ingest lane and
 its store Protocol pair.
 
 :class:`TranscriptIngestService` is the batched store-and-forward push, idempotent
-against the lane's own high-water mark (D7) plus the natural-key dedupe (D8), and
-adjudicating three independent caps (D5/D6)."""
+against the lane's own high-water mark plus the natural-key dedupe, and
+adjudicating three independent caps."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from blizzard.foundation.logging import get_logger
 
 _log = get_logger("blizzard.hub.transcripts")
 
-#: A natural-key lookup's outcome (D8) — ``"rejected"`` re-adjudicates, never applies outright.
+#: A natural-key lookup's outcome — ``"rejected"`` re-adjudicates, never applies outright.
 NaturalKeyState = Literal["absent", "accepted", "rejected"]
 
 #: A single record's raw-turn-bytes ceiling — the rogue-runner backstop, not the working
@@ -29,7 +29,7 @@ CHUNK_BUDGET_MAX_BYTES = 64 * 1024 * 1024
 #: Per-runner rolling-24h rate (product plan: "roughly thirty busy nights' worth in one day").
 RUNNER_DAILY_RATE_MAX_BYTES = 2 * 1024 * 1024 * 1024
 
-#: :attr:`SegmentRecord.rejection_reason` values a cap adjudication may set (D5/D6).
+#: :attr:`SegmentRecord.rejection_reason` values a cap adjudication may set.
 REJECTED_RECORD_TOO_LARGE = "record_too_large"
 REJECTED_CHUNK_BUDGET_EXCEEDED = "chunk_budget_exceeded"
 REJECTED_RUNNER_DAILY_RATE_EXCEEDED = "runner_daily_rate_exceeded"
@@ -66,17 +66,17 @@ class SegmentRecord:
     harness_version: str | None
     record_truncated: bool
     turns_json: str
-    #: Re-ship only: the segment this replaces, which a lease read drops (blizzard#250).
+    #: Re-ship only: the segment this replaces, which a lease read drops.
     supersedes: str | None = None
     harness_id: str | None = None
-    #: Frozen at the runner's segment open (blizzard#439 D3).
+    #: Frozen at the runner's segment open.
     model: str | None = None
     effort: str | None = None
 
 
 @dataclass(frozen=True)
 class SegmentIndexRow:
-    """One segment's aggregated metadata (D12) — every stored/rejected record folded into
+    """One segment's aggregated metadata — every stored/rejected record folded into
     its owning segment. ``truncated`` is true iff any record was cap-rejected OR declared
     its own ``record_truncated``, a runner-side loss the hub's own caps never see."""
 
@@ -119,14 +119,14 @@ class IReadTranscriptSegments(Protocol):
     def records_for_segment(self, chunk_id: str, segment_id: str) -> list[SegmentRecordContent]: ...
 
     def runner_id_for_lease(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
-        """The ``runner_id`` on a lease's stored segments (D2), or ``None`` when it holds
-        none — the fleet-plane read route's own ownership signal (issue #249), resolved
+        """The ``runner_id`` on a lease's stored segments, or ``None`` when it holds
+        none — the fleet-plane read route's own ownership signal, resolved
         independently of the caller so the route can refuse a mismatch."""
         ...
 
     def records_for_lease(self, chunk_id: str, node_id: str, epoch: int, runner_id: str) -> list[SegmentRecordContent]:
-        """Every accepted-or-rejected record across a lease's ``(chunk_id, node_id, epoch)``
-        (D2), across every spawn generation, confined to ``runner_id``."""
+        """Every accepted-or-rejected record across a lease's ``(chunk_id, node_id, epoch)``,
+        across every spawn generation, confined to ``runner_id``."""
         ...
 
 
@@ -165,7 +165,7 @@ class TranscriptIngestResult:
 
 class TranscriptIngestService:
     """Apply a runner's batched transcript records idempotently against the transcript
-    lane's own high-water mark (D7). Caps are derived by summing stored rows (D2), never
+    lane's own high-water mark. Caps are derived by summing stored rows, never
     a maintained counter."""
 
     def __init__(self, *, store: IWriteTranscriptSegments, clock: IClock, caps: TranscriptCaps | None = None) -> None:
@@ -186,7 +186,7 @@ class TranscriptIngestService:
         for seq, record in sorted(records, key=lambda pair: pair[0]):
             if seq <= mark:
                 # A replayed already-decided seq must still report its cap outcome: the
-                # natural key (D8) is the durable record of that decision, not the ack.
+                # natural key is the durable record of that decision, not the ack.
                 state = self._store.natural_key_state(record.segment_id, record.turn_range_start)
                 if state == "rejected":
                     capped.append(seq)
@@ -207,7 +207,7 @@ class TranscriptIngestService:
                 else:
                     capped.append(seq)
                 continue
-            # Every reachable outcome advances the mark (D6) — no contract-mismatch
+            # Every reachable outcome advances the mark — no contract-mismatch
             # rejection exists here, unlike the fact lane; every field is wire-validated.
             mark = seq
             if self._apply(record, at=now):
@@ -228,7 +228,7 @@ class TranscriptIngestService:
         return TranscriptIngestResult(high_water=mark, applied=applied, already_applied=already, capped=capped)
 
     def _apply(self, record: SegmentRecord, *, at: datetime) -> bool:
-        """``True`` stored, ``False`` cap-rejected — both advance the high-water (D6)."""
+        """``True`` stored, ``False`` cap-rejected — both advance the high-water."""
         state = self._store.natural_key_state(record.segment_id, record.turn_range_start)
         if state == "accepted":
             return True
@@ -252,7 +252,7 @@ class TranscriptIngestService:
     def _reject_reason(self, record: SegmentRecord, *, byte_count: int, at: datetime) -> str | None:
         if byte_count > self._caps.record_max_bytes:
             return self._rejected(record, REJECTED_RECORD_TOO_LARGE, byte_count, self._caps.record_max_bytes)
-        # D4: only already-*stored* bytes count toward the chunk budget — a rejection
+        # Only already-*stored* bytes count toward the chunk budget — a rejection
         # counts toward the daily rate only, never the chunk budget.
         stored = self._store.chunk_stored_bytes(record.chunk_id)
         if stored + byte_count > self._caps.chunk_budget_max_bytes:

@@ -1,7 +1,7 @@
-"""The operational analytics query seam (blizzard#256) — durations, spend, and outcomes
-derived at query time (D1, ``bzh:facts-not-status``) over facts the hub already holds.
+"""The operational analytics query seam — durations, spend, and outcomes
+derived at query time (``bzh:facts-not-status``) over facts the hub already holds.
 New, not an extension of :mod:`queries` (``bzh:controller-read-only``): that module reads
-the derived-event projection alone. The D2/D5 folds below are pure functions over
+the derived-event projection alone. The folds below are pure functions over
 already-loaded facts (``bzh:domain-core``) — the adapter fetches and maps, this module
 decides."""
 
@@ -18,7 +18,7 @@ from blizzard.hub.domain.work import UsageTotal
 
 @dataclass(frozen=True)
 class OperationalCriteria:
-    """Every filter the operational datasets owe (blizzard#256 D7) — the scope shared
+    """Every filter the operational datasets owe — the scope shared
     with events and counts, narrowed to the four fields that mean something outside the
     derived-event projection: no ``extractor_version``, no event-shape filter."""
 
@@ -30,7 +30,7 @@ class OperationalCriteria:
 
 @dataclass(frozen=True)
 class DurationStats:
-    """One grouping key's step-duration rollup (D2/D3) — ``key`` is a node id or a graph
+    """One grouping key's step-duration rollup — ``key`` is a node id or a graph
     id. Runner-executed steps only (a hub-executed exit carries no real duration); the
     wall-clock semantics are :class:`~blizzard.wire.analytics.AnalyticsDurationView`'s
     own (``bzh:one-prose-home``)."""
@@ -43,7 +43,7 @@ class DurationStats:
 
 @dataclass(frozen=True)
 class SpendStats:
-    """One grouping key's usage/cost rollup (D6, D8) — ``key`` is a node, graph, or chunk
+    """One grouping key's usage/cost rollup — ``key`` is a node, graph, or chunk
     id (one shape for all three). Holds a
     :class:`~blizzard.hub.domain.work.UsageTotal`, not its fields flattened apart, so the
     lower-bound + PARTIAL contract keeps its one owner (``canon:one-owner``)."""
@@ -54,7 +54,7 @@ class SpendStats:
 
 @dataclass(frozen=True)
 class ChunkSpendPage:
-    """A bounded, keyset-paginated page of :class:`SpendStats` keyed by chunk id (D8) —
+    """A bounded, keyset-paginated page of :class:`SpendStats` keyed by chunk id —
     ``next_cursor`` is ``None`` exactly when this page is the last one, the same
     convention :class:`~blizzard.hub.domain.analytics.queries.EventPage` uses."""
 
@@ -64,7 +64,7 @@ class ChunkSpendPage:
 
 @dataclass(frozen=True)
 class OutcomeStats:
-    """One node's judged-choice distribution and attempt-failure count (D4) — two
+    """One node's judged-choice distribution and attempt-failure count — two
     distinct quantities, never blended: a judged failure edge consumes no retry budget,
     while a crash, verdict-less exit, or reap does. A delivery kick-back
     (``chunk_bounces``) counts as neither."""
@@ -74,12 +74,12 @@ class OutcomeStats:
     attempt_failures: int
 
 
-# --- D2/D5 pure folds — typed facts in, decided rows out ------------------------------
+# --- pure folds — typed facts in, decided rows out ------------------------------------
 
 
 @dataclass(frozen=True)
 class TransitionMovement:
-    """One ``transitions`` row already narrowed to what D2/D5 read — never touches the
+    """One ``transitions`` row already narrowed to what the folds below read — never touches the
     domain's own :class:`~blizzard.hub.domain.work.TransitionFact`, which carries fields
     (``choice_name``, executor) status derivation needs and these folds don't."""
 
@@ -109,8 +109,8 @@ class MigrationMovement:
 
 @dataclass(frozen=True)
 class LeaseEpoch:
-    """One deduped ``(chunk_id, epoch)``'s earliest mint (A7) — a candidate attempt D5
-    resolves a node for, or a duration fold's own interval start."""
+    """One deduped ``(chunk_id, epoch)``'s earliest mint (A7) — a candidate attempt
+    :func:`resolve_attempt_failures` resolves a node for, or a duration fold's own interval start."""
 
     chunk_id: str
     epoch: int
@@ -119,7 +119,7 @@ class LeaseEpoch:
 
 @dataclass(frozen=True)
 class StepDuration:
-    """One measured step interval (D2/D3): the exited node (``None`` for the first
+    """One measured step interval: the exited node (``None`` for the first
     movement out of entry), the graph, its seconds, and the exiting transition's own
     ``recorded_at`` — the last carried through so :func:`steps_in_window` can filter the
     fold's output by it."""
@@ -133,7 +133,7 @@ class StepDuration:
 def fold_step_durations(
     transitions: Sequence[TransitionMovement], lease_min_by_epoch: Mapping[tuple[str, int], datetime]
 ) -> list[StepDuration]:
-    """D2/D3: one interval per transition, chained within its own ``(chunk_id, epoch)``
+    """One interval per transition, chained within its own ``(chunk_id, epoch)``
     group (two+ can share one, e.g. a gate's entry and later resolution) — the first
     measures from the lease mint, each later one from its predecessor. Needs each
     group's WHOLE history: window by narrowing which groups are fetched, or by filtering
@@ -195,7 +195,7 @@ def summarize_durations(rows: Sequence[StepDuration], *, key: str) -> list[Durat
 class MissingGraphFact(RuntimeError):
     """A graph id :func:`resolve_attempt_failures` needed had no preloaded entry-node
     or chunk-pin row — the adapter's candidate query and this fold's own indexing have
-    drifted apart, or a referenced ``graphs`` row is gone (no FK enforces it, D5)."""
+    drifted apart, or a referenced ``graphs`` row is gone (no FK enforces it)."""
 
 
 def _require(mapping: Mapping[str, str], key: str, what: str) -> str:
@@ -216,7 +216,7 @@ def resolve_attempt_failures(
     graph_entry_node: Mapping[str, str],
     graph_id_filter: str | None,
 ) -> dict[str, int]:
-    """D5: count a node for every candidate lease epoch NOT bounced (D4), NOT resolved
+    """Count a node for every candidate lease epoch NOT bounced, NOT resolved
     by a transition/migration of its own, and superseded by a strictly newer lease. The
     node is the chunk's latest movement below that epoch (a tie favors the migration),
     or with no movement at all, the graph the chunk ran in AT that epoch — not its
@@ -292,7 +292,7 @@ class JudgedChoiceRow:
 
 
 def group_judged_choices(rows: Sequence[JudgedChoiceRow]) -> dict[str, dict[str, int]]:
-    """D4's judged half: each node's choice-name distribution, grouped from the
+    """The judged half of outcome tracking: each node's choice-name distribution, grouped from the
     ungrouped per-``(node, choice)`` rows the adapter fetches."""
     judged: dict[str, dict[str, int]] = {}
     for row in rows:
@@ -301,7 +301,7 @@ def group_judged_choices(rows: Sequence[JudgedChoiceRow]) -> dict[str, dict[str,
 
 
 def summarize_outcomes(judged: Mapping[str, dict[str, int]], failures: Mapping[str, int]) -> list[OutcomeStats]:
-    """D4's two-half merge: a node appears if it has a judged choice, an attempt
+    """The two-half merge: a node appears if it has a judged choice, an attempt
     failure, or both — never neither — node id ascending, the total order every
     ``/api/analytics/*`` response shares."""
     nodes = set(judged) | set(failures)
@@ -312,24 +312,24 @@ def summarize_outcomes(judged: Mapping[str, dict[str, int]], failures: Mapping[s
 
 
 class IReadOperationalAnalytics(Protocol):
-    """Read-only operational-datasets query Protocol (blizzard#256 D1) — the durations,
+    """Read-only operational-datasets query Protocol — the durations,
     spend, and outcomes routes' own seam (``bzh:controller-read-only``,
     ``bzh:repository-split``). No write repository backs it: every dataset here is
     derived at read time over facts other services already write."""
 
     def durations_by_node(self, criteria: OperationalCriteria) -> list[DurationStats]:
-        """Completed-step duration rollups grouped by the step's node (D2) — one entry
+        """Completed-step duration rollups grouped by the step's node — one entry
         per node id that had at least one completed step matching ``criteria``, ordered
         by ``key`` ascending."""
         ...
 
     def durations_by_graph(self, criteria: OperationalCriteria) -> list[DurationStats]:
-        """The same rollup grouped by the step's graph (D2) instead of its node — the
+        """The same rollup grouped by the step's graph instead of its node — the
         graph the transition itself happened in, never the chunk's current pin."""
         ...
 
     def spend_by_node(self, criteria: OperationalCriteria) -> list[SpendStats]:
-        """Usage/cost rollups grouped by ``usage_facts.node_id`` (D6), ordered by
+        """Usage/cost rollups grouped by ``usage_facts.node_id``, ordered by
         ``key`` ascending."""
         ...
 
@@ -338,7 +338,7 @@ class IReadOperationalAnalytics(Protocol):
         chunk that migrated attributes every usage fact it ever recorded to where it
         lives today, not to the graph it was in when the cost was incurred (a documented
         simplification: ``usage_facts`` carries no ``graph_id`` of its own, and is
-        deliberately not epoch-fenced either, D6)."""
+        deliberately not epoch-fenced either)."""
         ...
 
     def spend_by_chunk(self, criteria: OperationalCriteria, *, cursor: str | None = None, limit: int) -> ChunkSpendPage:
@@ -350,7 +350,7 @@ class IReadOperationalAnalytics(Protocol):
         ...
 
     def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:
-        """Judged-choice distribution and attempt-failure counts grouped by node (D4/D5),
+        """Judged-choice distribution and attempt-failure counts grouped by node,
         ordered by ``node_id`` ascending — a node with neither a judged choice nor an
         attempt failure matching ``criteria`` never appears."""
         ...

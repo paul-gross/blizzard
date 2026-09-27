@@ -1,6 +1,6 @@
 """Runner config's federation identity + local role knobs round-trip through ``to_toml``/``load``
-(issue #95) — ``public_url`` (its bare-string and multi-origin list forms, its derived
-``redirect_uris``, its load-time validation; issue #287), ``[auth]``, and ``[auth.users]``."""
+ — ``public_url`` (its bare-string and multi-origin list forms, its derived
+``redirect_uris``, its load-time validation), ``[auth]``, and ``[auth.users]``."""
 
 from __future__ import annotations
 
@@ -164,7 +164,7 @@ def test_auth_defaults_round_trip_on_a_fresh_scaffold(tmp_path: Path) -> None:
     assert reloaded.auth_users == ()
 
 
-# --- Model / effort tier aliases (issue #144) --------------------------------
+# --- Model / effort tier aliases --------------------------------
 
 
 def test_model_and_effort_aliases_round_trip(tmp_path: Path) -> None:
@@ -191,7 +191,7 @@ def test_a_scaffold_declaring_no_aliases_reads_back_empty(tmp_path: Path) -> Non
     assert reloaded.effort_aliases == ()
 
 
-# --- OpenCode's own per-harness configuration (D6) ---------------------------
+# --- OpenCode's own per-harness configuration ---------------------------
 
 
 def test_opencode_binary_and_aliases_round_trip(tmp_path: Path) -> None:
@@ -232,7 +232,7 @@ def test_opencode_worker_config_path_round_trips(tmp_path: Path) -> None:
 
 def test_an_upgraded_runner_with_no_opencode_table_still_resolves_a_worker_config_path(tmp_path: Path) -> None:
     """A pre-``[opencode]`` ``blizzard-runner.toml`` carries no ``worker_config_path``
-    at all — loading it must still resolve the same default a fresh ``init`` would (D7),
+    at all — loading it must still resolve the same default a fresh ``init`` would,
     never ``None``, so nothing falls back to OpenCode's own on-disk discovery."""
     tmp_path.mkdir(exist_ok=True)
     (tmp_path / "blizzard-runner.toml").write_text(f'db_url = "sqlite:///{tmp_path}/r.db"\n')

@@ -15,7 +15,7 @@ import { findingStateTone, isFindingExited } from './finding-state';
 
 /** A linked hub work item, legible for display — `label`/`webUrl` come straight off
  * `WorkItemView` rather than being guessed; `webUrl` is `null` once the chunk is
- * terminal (Decision 4), so the caller renders `label` alone instead of a dead
+ * terminal, so the caller renders `label` alone instead of a dead
  * link. */
 export interface ProposalWorkItemVm {
   readonly label: string;
@@ -23,7 +23,7 @@ export interface ProposalWorkItemVm {
 }
 
 /** One evidence row — a live-read finding, never a copy the proposal itself
- * carries (Decision 3). `workItem` repeats the same accepted-and-minted proposal's
+ * carries. `workItem` repeats the same accepted-and-minted proposal's
  * work item on every one of its finding rows, `null` otherwise.
  *
  * `state` is the row's whole classification: `FindingView.live` is deliberately not
@@ -65,7 +65,7 @@ export const PROPOSAL_EVIDENCE_ACTIONS: readonly { readonly verb: ProposalEviden
 
 /** How a proposal closed, rendered as the record it is (the docket's two closing
  * verbs) — `'accepted'` with a `null` `workItem` is the acceptance that says on the
- * record it minted nothing (Decision 5), never an empty space where the item would
+ * record it minted nothing, never an empty space where the item would
  * be. */
 export type ProposalClosureVm =
   | { readonly kind: 'passed'; readonly closedBy: string; readonly closedAt: string; readonly reason: string | null }
@@ -77,7 +77,7 @@ export type ProposalClosureVm =
       readonly workItem: ProposalWorkItemVm | null;
     };
 
-/** Who authored a proposal (blizzard#631) — `routine-run` names the routine that
+/** Who authored a proposal — `routine-run` names the routine that
  * raised it; `operator` names the authoring identity, plus the routine when one was
  * named, since an operator proposal may cite none at all. */
 export type ProposalOriginVm =
@@ -115,7 +115,7 @@ export interface ProposalPanelVm {
  * not do.
  *
  * A still-waiting proposal (`vm.closure === null`) offers Pass and Accept, each
- * naming the CLI verb behind it — withheld without `chunk:control` (Decision 6), the
+ * naming the CLI verb behind it — withheld without `chunk:control`, the
  * same permission the closing routes themselves require, via the `canControl` input
  * a viewer identity resolves to `false`.
  */
@@ -148,7 +148,7 @@ export class FleetProposalPanel {
 
   /** The case header's origin fragment — the routine name for a `routine-run`
    * proposal, or `operator · <createdBy>` with the routine named alongside when an
-   * operator proposal cites one (blizzard#631). */
+   * operator proposal cites one. */
   protected originLabel(origin: ProposalOriginVm): string {
     if (origin.kind === 'routine-run') return origin.routineName;
     return origin.routineName === null ? `operator · ${origin.createdBy}` : `operator · ${origin.createdBy} · ${origin.routineName}`;

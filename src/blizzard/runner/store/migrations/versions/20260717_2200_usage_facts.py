@@ -1,5 +1,5 @@
 """usage facts — one append-only row per harness invocation's cost/token telemetry, never
-a stored aggregate (runner store tree, issue #58, ``bzh:facts-not-status``)
+a stored aggregate (runner store tree, ``bzh:facts-not-status``)
 
 Revision ID: 20260717_2200_runner_usage_facts
 Revises: 20260717_0446_runner_pause_parks

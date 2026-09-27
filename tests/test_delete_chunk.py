@@ -1,8 +1,8 @@
-"""Chunk delete (component tier, blizzard#364) — ``DeleteService`` and the composite
+"""Chunk delete (component tier) — ``DeleteService`` and the composite
 ``WorkItemStore.delete_chunk_and_withdraw_hub_items`` write, driven against a real,
 migrated store. Every case here reaches the domain service and the stores directly, the
 way ``tests/test_hub_work_source.py`` drives ``WorkItemEditService`` directly — the
-``DELETE /chunks/{id}`` route itself (Phase 2) is covered over HTTP by
+``DELETE /chunks/{id}`` route itself is covered over HTTP by
 ``tests/test_chunk_delete_route.py``."""
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def _mint(chunks: ChunkStores, chunk_id: str, *, work_refs: list[WorkRef] | None
     return chunk
 
 
-# --- a deleted chunk is gone from every read (D6's widened ephemeral-id set) -------
+# --- a deleted chunk is gone from every read (the widened ephemeral-id set) -------
 
 
 def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
@@ -193,7 +193,7 @@ def test_activity_feed_shows_the_deletion_with_its_actor_and_no_other_row(tmp_pa
 
 
 def test_activity_feed_leaves_a_grouped_chunks_history_showing(tmp_path: Path) -> None:
-    """D6: only ``deleted`` chunk ids are excluded from the feed's other blocks — a
+    """Only ``deleted`` chunk ids are excluded from the feed's other blocks — a
     grouped chunk's history is existing, unchanged behavior."""
     chunks, _, _, engine = _stores(tmp_path)
     _mint(chunks, "ch_1")
@@ -207,7 +207,7 @@ def test_activity_feed_leaves_a_grouped_chunks_history_showing(tmp_path: Path) -
     assert "grouped" in causes
 
 
-# --- D4: only the chunk's open hub: pointer(s) are withdrawn; a forge: pointer stands
+# --- only the chunk's open hub: pointer(s) are withdrawn; a forge: pointer stands
 
 
 def test_delete_withdraws_only_open_hub_pointers_leaving_a_forge_pointer_untouched(tmp_path: Path) -> None:
@@ -278,7 +278,7 @@ def test_reingest_after_delete_a_forge_pointer_mints_a_fresh_chunk_reading_norma
     assert entries[0]["title"] == "issue title"
 
 
-# --- issue #460: a standing dependency edge and delete -----------------------------
+# --- a standing dependency edge and delete -----------------------------
 
 
 def test_delete_refuses_a_chunk_that_is_a_standing_prerequisite(tmp_path: Path) -> None:

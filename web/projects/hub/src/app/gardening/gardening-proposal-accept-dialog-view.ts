@@ -11,12 +11,12 @@ export interface AcceptSubmission {
 }
 
 /** The docket's two closing choices for Accept — minting is the default; declining
- * is available and, per Decision 5, deliberately the more effortful path: it gates
+ * is available and deliberately the more effortful path: it gates
  * submission on its own required reason where minting gates on nothing. */
 type AcceptMode = 'mint' | 'decline';
 
 /**
- * The Accept dialog's presentational view (Decision 5) —
+ * The Accept dialog's presentational view —
  * `gardening-run-dialog-view.ts`'s own scaffold: the mint/decline choice, the
  * prefilled editable body (mint only), and an optional reason either way. No query
  * or client dependency: the container injects the mutation and maps its async state

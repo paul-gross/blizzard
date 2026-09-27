@@ -5,7 +5,7 @@ import { type EnvRow, EnvListView } from './env-list-view';
 import { injectRunnerDashboardQuery } from './status.query';
 
 /**
- * The environments rail **container** (issue #106): one row per environment in the
+ * The environments rail **container**: one row per environment in the
  * runner's configured pool — the wire (`GET /api/dashboard`) carries the full
  * pool, so the panel never invents pool facts of its own. Owns the query, the
  * resolved async-state triad, and the ticking clock {@link EnvRow.heldFor} is

@@ -1,4 +1,4 @@
-"""Garden-proposal closure — the two verbs that end a proposal's life (blizzard#395):
+"""Garden-proposal closure — the two verbs that end a proposal's life:
 **pass** (considered and declined, with a reason) and **accept** (agreed, minting a
 linked hub work item by default). Closure is terminal, mirroring
 :class:`~blizzard.hub.domain.work.WorkItemClosure`. Takes an already-loaded
@@ -37,7 +37,7 @@ class GardenProposalItemOutcome(StrEnum):
 
 
 class GardenProposalCountBucket(StrEnum):
-    """Which of the four garden-proposal-count buckets (blizzard#547) a proposal falls
+    """Which of the four garden-proposal-count buckets a proposal falls
     into, classified by its current closure state — never stored, always derived by
     :func:`classify_proposal_count_bucket`."""
 
@@ -50,7 +50,7 @@ class GardenProposalCountBucket(StrEnum):
 def classify_proposal_count_bucket(
     closure: GardenProposalClosureKind | None, item_outcome: GardenProposalItemOutcome | None
 ) -> GardenProposalCountBucket:
-    """A proposal's count bucket (blizzard#547) from its current closure state: no
+    """A proposal's count bucket from its current closure state: no
     closure is `OPEN`, `PASSED` is `PASSED`, and `ACCEPTED` splits on `item_outcome`
     into `ACCEPTED_WITH_ITEM`/`ACCEPTED_WITHOUT_ITEM`. Raises rather than misclassify
     an `ACCEPTED` closure with no `item_outcome` — `GardenProposalClosureService.accept`
@@ -123,7 +123,7 @@ class IReadGardenProposalClosureRepository(Protocol):
     def find_by_item(self, source: str, ref: str) -> GardenProposalClosure | None:
         """The accepted closure that minted `(source, ref)`'s item, or `None` when no
         closure names that pointer — a pass or a declined accept, or simply no closure at
-        all (blizzard#394: reaching the proposal a delivered item answers)."""
+        all (reaching the proposal a delivered item answers)."""
         ...
 
 
@@ -146,7 +146,7 @@ class IWriteGardenProposalClosureRepository(IReadGardenProposalClosureRepository
 
 def _compose_minted_body(body: str, findings: Sequence[Finding]) -> str:
     """Wrap ``body`` with a "Related findings" section — one snapshot bullet per
-    ``findings`` entry plus the two lease-scoped read verbs (blizzard#397). Empty
+    ``findings`` entry plus the two lease-scoped read verbs. Empty
     ``findings`` returns ``body`` unchanged — no section, no preamble."""
     if not findings:
         return body

@@ -1,4 +1,4 @@
-"""``ExternalUsageSample`` — the tick's last step (issue #218, blizzard#436).
+"""``ExternalUsageSample`` — the tick's last step.
 
 Unit and component tiers against a real (tmp sqlite) store and a scriptable
 ``FakeSubscriptionSampler``: the per-slug cadence gate, that a sample never perturbs other
@@ -273,7 +273,7 @@ def test_an_empty_sample_is_persisted_and_buffered_as_an_empty_windows_collectio
     assert payload["windows"] == []
 
 
-# AC 3 — a miss writes a NULL-payload attempt row and enqueues a `missed` report (D7), never a `sampled` one.
+# AC 3 — a miss writes a NULL-payload attempt row and enqueues a `missed` report, never a `sampled` one.
 # --------------------------------------------------------------------------- #
 
 
@@ -305,7 +305,7 @@ def test_no_sample_records_a_null_payload_attempt_and_enqueues_no_sampled_report
 @pytest.mark.unit
 def test_a_miss_buffers_exactly_one_missed_report_with_the_exact_key_set(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """The `missed` fact payload carries no token, refresh token, or path — this pins its
-    exact key set (blizzard#504 D7 acceptance)."""
+    exact key set."""
     store = _store(tmp_path)
     sampler = FakeSubscriptionSampler(miss_reason=SampleMissReason.CREDENTIAL_LAPSED)
     ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
@@ -439,7 +439,7 @@ def test_a_very_large_interval_never_resamples_and_every_other_step_behaves_iden
     assert sampler_b.sample_calls == 1  # the very first, never-attempted-before sample only
 
 
-# AC 6 (blizzard#436 phase 2) — several declared subscriptions, sampled independently.
+# AC 6 — several declared subscriptions, sampled independently.
 # --------------------------------------------------------------------------- #
 
 
@@ -525,7 +525,7 @@ def test_a_failed_sample_advances_only_its_own_slugs_cadence_and_leaves_the_othe
 @pytest.mark.unit
 def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """A slug whose provider names no known sampler binding carries a ``None`` sampler
-    (blizzard#436) — no crash, no attempt row for it, and the other declared subscription
+     — no crash, no attempt row for it, and the other declared subscription
     is sampled normally in the same tick."""
     store = _store(tmp_path)
     known = FakeSubscriptionSampler(snapshot=_snapshot())
@@ -551,7 +551,7 @@ def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_pa
     assert store.last_external_usage_attempt_at("no-binding") is None  # never attempted
 
 
-# AC 7 (blizzard#504 Phase 2) — renewal, on the same cadence gate, before the sample.
+# AC 7 — renewal, on the same cadence gate, before the sample.
 # --------------------------------------------------------------------------- #
 
 

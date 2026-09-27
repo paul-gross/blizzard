@@ -1,4 +1,4 @@
-"""``external_subscription_usage.sampled`` facts land at the hub (issue #218, phase 3).
+"""``external_subscription_usage.sampled`` facts land at the hub.
 
 Drives ``FactIngestService`` directly against the real store adapters, exercising the
 per-runner seq high-water idempotency the wire contract promises. The component tier
@@ -522,7 +522,7 @@ def test_non_finite_or_out_of_range_utilization_windows_are_omitted_at_ingest(
 
 def test_a_stale_subscription_does_not_blank_a_healthy_sibling_at_the_component_tier(tmp_path: Path) -> None:
     """One subscription's sample going stale must not blank a healthy sibling's
-    (blizzard#436 phase 3's staleness-is-per-subscription acceptance bar), proven through
+    reading (staleness-is-per-subscription acceptance bar), proven through
     the real HTTP read, not just the pure-domain unit tier."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
@@ -560,7 +560,7 @@ def test_a_stale_subscription_does_not_blank_a_healthy_sibling_at_the_component_
     assert subscriptions["anthropic"]["windows"][0]["utilization_pct"] == 5.0
 
 
-# blizzard#504 D7 — the `missed` fact.
+# The `missed` fact.
 # --------------------------------------------------------------------------- #
 
 
@@ -631,7 +631,7 @@ def test_a_missed_fact_upserts_one_row_and_a_later_call_wins(tmp_path: Path) -> 
 
 
 def test_a_missed_fact_never_touches_the_sample_row(tmp_path: Path) -> None:
-    """The sample row and the miss row are siblings (D7) — landing one never overwrites
+    """The sample row and the miss row are siblings — landing one never overwrites
     or deletes the other."""
     _, engine = migrate_to(tmp_path, "head")
     clock = FixedClock(_T0)
@@ -754,7 +754,7 @@ def test_posted_missed_fact_publishes_runner_changed_once_and_a_replay_publishes
 
 def test_get_runners_renders_a_lapsed_credential_as_a_miss_only_condition_row(tmp_path: Path) -> None:
     """The hub end-to-end: a miss with no prior sample renders as a miss-only,
-    `credential_lapsed` row on `GET /api/runners` (D7)."""
+    `credential_lapsed` row on `GET /api/runners`."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
 

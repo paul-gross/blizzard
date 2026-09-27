@@ -81,7 +81,7 @@ export class ChunkArtifactBody {
     return at ? formatWhen(at) : null;
   });
 
-  /** {@link when}'s full local date + time, for the stamp's hover tooltip (issue #175) —
+  /** {@link when}'s full local date + time, for the stamp's hover tooltip —
    * replaces the raw-ISO `title` this span carried before, which didn't localize. */
   protected readonly whenTitle = computed(() => formatAbsolute(this.artifact().recorded_at));
 

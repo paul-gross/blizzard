@@ -38,7 +38,7 @@ class ChunkQueueStore:
         return {r.chunk_id: float(r.position) for r in rows}
 
     def promoted_ats(self) -> dict[str, datetime]:
-        """Each promoted chunk's ``chunk_promoted.promoted_at`` (issue #137)."""
+        """Each promoted chunk's ``chunk_promoted.promoted_at``."""
         with self._store.read("promoted_ats") as conn:
             rows = conn.execute(select(s.chunk_promoted.c.chunk_id, s.chunk_promoted.c.promoted_at)).all()
         return {r.chunk_id: r.promoted_at for r in rows}

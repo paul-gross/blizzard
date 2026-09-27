@@ -13,7 +13,7 @@ const BEACON_COLOR: Record<BeaconTone, string> = {
 };
 
 /**
- * The square lane-blink beacon (issue #106) — a small square that throbs for an
+ * The square lane-blink beacon — a small square that throbs for an
  * active/occupied state and sits static grey otherwise, honoring
  * `prefers-reduced-motion` either way. Extracted from the board's occupied-lane
  * header indicator (`board-column.ts`) and the environments rail's held indicator

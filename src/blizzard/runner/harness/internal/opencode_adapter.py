@@ -2,7 +2,7 @@
 
 Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the ``opencode``
 CLI. Reuses only the production event/record parsers (``opencode_shapes``) — never the
-diagnostic PROCESS/scratch machinery the compatibility proof owns (D5): every worker launches
+diagnostic PROCESS/scratch machinery the compatibility proof owns: every worker launches
 through :class:`~blizzard.runner.harness.process_launch.ProcessLauncher`, as Claude Code does."""
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ from blizzard.wire.envelope import TIER_PREFIX, NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
 
-# The well-known effort ordinal (issue #144); outside it needs an explicit `[opencode.effort.aliases]`, never a guess.
+# The well-known effort ordinal; outside it needs an explicit `[opencode.effort.aliases]`, never a guess.
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 
 # How often a fresh mint's pending handle re-reads the stdout capture while awaiting identity.
@@ -63,18 +63,18 @@ _MAX_IDENTITY_PREAMBLE_LINES = 20
 # Bound on the diagnostic stderr tail a failed handshake's error carries (enough for one traceback line).
 _STDERR_TAIL_BYTES = 2000
 
-# The status a usage-limit refusal reports (blizzard#594) — distinct from an ordinary
-# rate-limit's transient 429s (out of scope, issue #595) by its own message phrasing below.
+# The status a usage-limit refusal reports — distinct from an ordinary
+# rate-limit's transient 429s (out of scope) by its own message phrasing below.
 _USAGE_LIMIT_STATUS_CODE = 429
 _USAGE_LIMIT_MESSAGE_RE = re.compile(r"usage limit", re.IGNORECASE)
 
-# The captured shape's own relative-reset phrasing (blizzard#594 D6): "reset in 2 hours",
+# The captured shape's own relative-reset phrasing: "reset in 2 hours",
 # "reset in 1 day 4 hours" — a duration, never a clock time (unlike Claude Code's).
 _RESET_DURATION_RE = re.compile(
     r"reset\w*\s+in\s+(?:(\d+)\s*day[s]?\s*)?(?:(\d+)\s*hour[s]?\s*)?(?:(\d+)\s*minute[s]?\s*)?", re.IGNORECASE
 )
 
-# blizzard#595: `_PROVIDER_REFUSAL_STATUSES` (opencode_facts.py) excludes 529, so it never
+# `_PROVIDER_REFUSAL_STATUSES` (opencode_facts.py) excludes 529, so it never
 # collides with the usage-limit/refusal statuses above. The name match is a secondary
 # guard only — the status check above is the one known-shape signal.
 _OVERLOAD_STATUS_CODE = 529
@@ -83,20 +83,20 @@ _OVERLOAD_NAME_RE = re.compile(r"overloaded", re.IGNORECASE)
 
 @dataclass(frozen=True)
 class _PendingOpenCodeIdentity:
-    """Phase one's OpenCode-specific pending handle (D1): the launch is real, but identity
+    """Phase one's OpenCode-specific pending handle: the launch is real, but identity
     is read from the worker's own stdout (execution spec, "Fresh-session handshake"). Never
     constructed for a resume, which already knows its session id and returns a plain
     :class:`WorkerHandle` instead, whose ``await_identity`` is its own trivial phase two."""
 
     pid: int
-    pgid: int  # every launch gets one (D3) — see `ProcessLauncher.launch`
+    pgid: int  # every launch gets one — see `ProcessLauncher.launch`
     process_start_time: str
     stdout_path: str
     stderr_path: str
     process: IProcessProbe
     confirm_durable: Callable[[], None] = field(
         default=lambda: None, compare=False
-    )  # F1's disarm signal; no-op default
+    )  # disarms the daemon-death kill signal once durably recorded; no-op default
 
     def await_identity(self, timeout: float) -> WorkerHandle:
         deadline = time.monotonic() + timeout
@@ -190,14 +190,14 @@ class OpenCodeAdapter:
         # The one allowlisted env (``bzh:worker-env-allowlist``) every child this adapter
         # launches is built from — the declared passthrough plus any `PATH` prepend.
         self._worker_env = worker_env
-        # The runner-owned permission/plugin document (D7); `None` when this runtime
+        # The runner-owned permission/plugin document; `None` when this runtime
         # predates the OpenCode binding, or a deployment chose not to scaffold one.
         self._worker_config_path = worker_config_path
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
         # Injected, optional: with no catalog, a zero-cost step never gets an estimate.
         self._price_catalog = price_catalog
         self._process: IProcessProbe = process
-        # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings (D4).
+        # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings.
         self._launcher: IProcessLauncher = launcher
 
     def observe_version(self) -> str | None:
@@ -249,13 +249,13 @@ class OpenCodeAdapter:
         return None
 
     def resolvable_tier_ids(self) -> tuple[str, ...]:
-        """Every tier id this adapter can resolve (blizzard#433): OpenCode ships no
+        """Every tier id this adapter can resolve: OpenCode ships no
         built-in tier mapping, so only the runner's own ``[opencode.models.aliases]``
         table is resolvable here. Shared with Claude Code (``harness_shared.resolvable_tier_ids``)."""
         return harness_shared.resolvable_tier_ids({}, self._model_aliases)
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
-        """Always unsupported (D8): OpenCode's compaction reserve and automatic-compaction
+        """Always unsupported: OpenCode's compaction reserve and automatic-compaction
         switch do not represent Claude Code's numeric threshold, so no value here is ever
         translated — only ever dropped and logged once."""
         if value is None:
@@ -301,7 +301,7 @@ class OpenCodeAdapter:
             harness_shared.stdout_target(preamble.stderr_path) as stderr_file,
         ):
             try:
-                # F1: deferred — the caller's own `confirm_durable()` (right after ITS durable
+                # Deferred — the caller's own `confirm_durable()` (right after ITS durable
                 # provisional record lands) is what disarms this launch's parent-death signal.
                 launched = self._launcher.launch(
                     cmd,
@@ -319,7 +319,7 @@ class OpenCodeAdapter:
         )
         if resume_from:
             # Resume never performs the handshake (execution spec) — the stored session
-            # reference is already authoritative; `Spawner.spawn` still disarms it (F1).
+            # reference is already authoritative; `Spawner.spawn` still disarms it.
             return WorkerHandle(
                 session_id=resume_from,
                 pid=launched.pid,
@@ -369,7 +369,7 @@ class OpenCodeAdapter:
         )
         try:
             with harness_shared.stdout_target(output_path, mode="wb") as stdout_file:
-                # F1: deferred — the caller's own `confirm_durable()` (right after ITS durable
+                # Deferred — the caller's own `confirm_durable()` (right after ITS durable
                 # `record_elicitation_started`/`record_elicitation_relaunch` lands) disarms it.
                 launched = self._launcher.launch(
                     cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL, defer_disarm=True
@@ -378,7 +378,7 @@ class OpenCodeAdapter:
             _log.error("elicitation launch failed", binary=self._binary, cwd=session_cwd, detail=str(exc))
             raise HarnessSpawnError(f"failed to launch {self._binary} in {session_cwd}: {exc}") from exc
         _log.info("elicitation launched", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=session_cwd)
-        # F1: left armed — `Judgement._elicit`/`_relaunch` call `confirm_durable()` right after
+        # Left armed — `Judgement._elicit`/`_relaunch` call `confirm_durable()` right after
         # THEIR OWN durable `record_elicitation_started`/`record_elicitation_relaunch` lands.
         return WorkerHandle(
             session_id=session_id,
@@ -410,13 +410,13 @@ class OpenCodeAdapter:
             auto=True,
         )
         env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
-        # Deferred (F1, D4): a resume gets the same ownership spawn/judge get — `dormant.py::_wake`
+        # Deferred: a resume gets the same ownership spawn/judge get — `dormant.py::_wake`
         # calls `confirm_durable()` right after its own durable `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
                 cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=None, defer_disarm=True
             )
-        # `launched.pgid` is the launcher's own recorded group (D3) — carried to the
+        # `launched.pgid` is the launcher's own recorded group — carried to the
         # caller rather than left for it to assume `pgid == pid`.
         return ResumeHandle(
             pid=launched.pid,
@@ -449,7 +449,7 @@ class OpenCodeAdapter:
             preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
         )
         if self._worker_config_path:
-            # The runner-owned permission/plugin document (D7) — supplied both as a path and
+            # The runner-owned permission/plugin document — supplied both as a path and
             # its serialized content, as the compatibility proof's `configuration_isolation` probe established.
             env["OPENCODE_CONFIG"] = self._worker_config_path
             try:
@@ -622,8 +622,8 @@ class OpenCodeAdapter:
     def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
         # A run event never carries a step's provider/model — `output` alone never
         # resolves this binding's own gap. The only recovery is the export `model`'s
-        # absence forces (blizzard#629 D4), and only when this binding has no configured
-        # default of its own to price against instead (blizzard#640: never pay for a read
+        # absence forces, and only when this binding has no configured
+        # default of its own to price against instead (never pay for a read
         # a pinned or pre-configured invocation didn't need).
         del output
         return model is None and not self._model
@@ -667,7 +667,7 @@ class OpenCodeAdapter:
     @staticmethod
     def _decode_line(line: str) -> dict | None:
         """One transcript line, JSON-decoded if it is a well-formed object — shared by every
-        per-line reader below (F18) so one line is decoded at most once per pass over ``lines``."""
+        per-line reader below so one line is decoded at most once per pass over ``lines``."""
         stripped = line.strip()
         if not stripped:
             return None
@@ -684,7 +684,7 @@ class OpenCodeAdapter:
         """One decoded transcript line's completed-step parts with the ``(provider, model)``
         its shape carries, and the line's own observed ``(provider, model)`` independent of
         whether it carries a completed step — a run event contributes neither. One shared
-        shape-parse backs both (F18): a caller wanting only one of the two still pays for a
+        shape-parse backs both: a caller wanting only one of the two still pays for a
         single parse rather than two. Unparseable lines contribute nothing; never a raise."""
         try:
             event = parse_run_event(decoded)
@@ -714,7 +714,7 @@ class OpenCodeAdapter:
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         by_id: dict[str, tuple[OpenCodePart, str | None, str | None]] = {}
         observed: tuple[str, str] | None = None
-        # One pass over `lines` (F18): the observed (provider, model) is picked up off the
+        # One pass over `lines`: the observed (provider, model) is picked up off the
         # same decode that yields each line's finish-parts, rather than a second full pass
         # through `observed_model` re-decoding lines `_worker_sample` may have already read.
         for line in lines:
@@ -754,7 +754,7 @@ class OpenCodeAdapter:
         observed_model = f"{observed[0]}/{observed[1]}" if observed is not None else None
         return UsageSample(
             kind=kind,
-            # The export's own provider/model over a passed-in or configured one (blizzard#629):
+            # The export's own provider/model over a passed-in or configured one:
             # an export line names the model that actually ran, which `model` only approximates.
             model=observed_model or model or self._model or "opencode",
             input_tokens=input_tokens,
@@ -812,7 +812,7 @@ class OpenCodeAdapter:
         return now + timedelta(days=days, hours=hours, minutes=minutes)
 
     def classify_provider_overload(self, output: str, lines: Sequence[str]) -> ProviderOverload | None:
-        # Output only, like `classify_usage_limit` (blizzard#595): a root `error` event
+        # Output only, like `classify_usage_limit`: a root `error` event
         # carries the provider's own status, never OpenCode's session-export transcript.
         del lines
         for event in self._parse_events(output):

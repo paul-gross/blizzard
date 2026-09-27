@@ -81,11 +81,11 @@ DEFAULT_FORGE_OWNER = "blizzard"
 ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
 DEFAULT_FORGE_BASE_BRANCH = "main"
 
-#: The transcript-event derivation sweep's own interval (blizzard#254 D1) — a module
-#: constant; its own change probe (blizzard#524 D5) skips the pass when nothing changed.
+#: The transcript-event derivation sweep's own interval — a module
+#: constant; its own change probe skips the pass when nothing changed.
 EVENT_DERIVATION_INTERVAL_SECONDS = 60
 
-#: The delivery-materialization sweep's own interval (blizzard#366 D9).
+#: The delivery-materialization sweep's own interval.
 WORK_ITEM_MATERIALIZATION_INTERVAL_SECONDS = 60
 
 #: The close-intent drain sweep's own interval.
@@ -103,8 +103,8 @@ class _Sweepable(Protocol):
 class Sweep:
     """One reconciler stepped once per interval until shutdown (``bzh:steppable-loop``).
     The first pass runs immediately, unjittered; ``jitter_seconds`` offsets only the
-    second pass, so sibling sweeps synchronize once at boot then decorrelate for good
-    (blizzard#524 D8). ``timer`` is the injectable monotonic clock ``run`` measures each pass's elapsed time with."""
+    second pass, so sibling sweeps synchronize once at boot then decorrelate for good.
+    ``timer`` is the injectable monotonic clock ``run`` measures each pass's elapsed time with."""
 
     reconciler: _Sweepable
     interval_seconds: int
@@ -118,7 +118,7 @@ class Sweep:
         """The forge-status sweep a work source opts into, plus the always-on
         event-derivation, delivery-materialization, and close-drain sweeps — none on the
         store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
-        here (blizzard#524 D8) so their recurring cadence decorrelates from its second pass
+        here so their recurring cadence decorrelates from its second pass
         on."""
         services: HubServices | None = app.state.services
         if services is None:
@@ -191,7 +191,7 @@ class Sweep:
 
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message (issue #47)
+    """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
     and drive the sweeps across the app's lifetime. The tasks are created here — not in
     :func:`build_hosted_app` — because this is the one place that runs for every app the
     ``lifespan`` fires for."""
@@ -222,7 +222,7 @@ def create_app(
     # The event broker is always present (cheap, in-memory) so the SSE stream opens
     # cleanly even on the store-free app.
     app.state.events = services.events if services is not None else EventBroker()
-    # Set on shutdown by ``_lifespan``; every SSE stream races it (issue #47).
+    # Set on shutdown by ``_lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
 
     # API routers first, so /api/* always wins over the web mount at /.
@@ -249,7 +249,7 @@ def create_app(
     app.include_router(transcripts_router)
     app.include_router(analytics_router)
     app.include_router(work_sources_router)
-    # The runner-authenticated fleet router (issue #87) — a fleet verb is authenticated
+    # The runner-authenticated fleet router — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
     app.include_router(fleet_router)
 
@@ -262,7 +262,7 @@ def create_app(
 def _transcript_caps(config: HubConfig) -> TranscriptCaps:
     """The configured ingest ceilings, each falling back to the domain's own default —
     resolved here rather than in `HubConfig`, which carries overrides and never restates
-    a value the domain owns (blizzard#338)."""
+    a value the domain owns."""
     defaults = TranscriptCaps()
     configured = config.transcripts
     return TranscriptCaps(
@@ -281,9 +281,9 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
 
     owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
     # Constructed once here, ahead of the work-source registry and `build_services` below —
-    # one instance each, shared by every write path (blizzard#358) and auth path (blizzard#362).
+    # one instance each, shared by every write path and auth path.
     clock = SystemClock()
-    # The hub-store seam (issue #413) — one collaborator shared by every
+    # The hub-store seam — one collaborator shared by every
     # ``hub/store/internal/`` adapter constructed ahead of `build_services` below.
     store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
     user_store = UserRepository(store_connections, RepoErrorFactory(get_logger("blizzard.hub.auth")))
@@ -299,7 +299,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         dependencies=ChunkDependenciesStore(store_connections, clock),
     )
     # Own instances, ahead of `build_services` below — mirrors `work_item_store`'s own
-    # early construction (blizzard#394): the built-in hub closer needs this seam
+    # early construction: the built-in hub closer needs this seam
     # before `build_services` wires its own.
     finding_store = FindingStore(store_connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)
@@ -321,10 +321,10 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     )
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
-    # The provider-login seam (issue #92) is built only under `oauth`: under `none`
+    # The provider-login seam is built only under `oauth`: under `none`
     # there is no login mechanism to serve.
     oauth_providers = config.auth.oauth_providers if config.auth.mode == AUTH_MODE_OAUTH else ()
-    # The IdP signing-key lifecycle (issue #95) — likewise built only under `oauth`; a
+    # The IdP signing-key lifecycle — likewise built only under `oauth`; a
     # `none` deployment never touches disk for a keypair it will never mint or publish.
     signing_keys_dir = config.data_dir / "auth" / "signing-keys" if config.auth.mode == AUTH_MODE_OAUTH else None
 
@@ -356,7 +356,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         OrphanedProviders.of(config, services).check()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
     app = create_app(config, readiness=readiness, services=services)
-    # `host` disposes this on `app.state` (D5) — carried here.
+    # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
     return app
 
@@ -373,7 +373,7 @@ class OrphanedProviders:
         return cls(frozenset(services.identities.distinct_provider_names() - configured))
 
     def check(self) -> None:
-        """Fail boot with an actionable error (issue #92) — a rename must not silently orphan
+        """Fail boot with an actionable error — a rename must not silently orphan
         identities and re-mint duplicate users on the next login. Checked regardless of
         ``auth.mode``: an operator flipping back to ``none`` does not erase the guarantee."""
         if self.names:

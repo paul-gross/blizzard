@@ -1,4 +1,4 @@
-"""The packaged garden-routine graph (unit tier, blizzard#396).
+"""The packaged garden-routine graph (unit tier).
 
 Proves ``garden-routine`` loads, inlines its prompts, and passes mint-time validation
 clean — so ``graph sync`` can never reject it — and pins what the plan artifact froze:
@@ -111,7 +111,7 @@ def test_garden_routine_survey_states_reusable_class_spelling_guidance() -> None
 
 
 def test_garden_routine_reconcile_re_checks_delivered_findings_before_matching_the_survey() -> None:
-    """blizzard#583 Phase 3: a `delivered` finding's own recheck is the reconcile node's
+    """A `delivered` finding's own recheck is the reconcile node's
     first instruction, ahead of matching survey candidates."""
     prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
     assert "Re-check every delivered finding first" in prompt  # type: ignore[operator]
@@ -119,7 +119,7 @@ def test_garden_routine_reconcile_re_checks_delivered_findings_before_matching_t
 
 
 def test_garden_routine_reconcile_bucket_is_live_plus_delivered() -> None:
-    """The bucket reconcile reads is no longer a live-only read (blizzard#583 D2) — the
+    """The bucket reconcile reads is no longer a live-only read — the
     prompt says so up front, and the closing id-membership rule names both states."""
     prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
     assert "not live findings alone" in prompt  # type: ignore[operator]
@@ -152,7 +152,7 @@ def test_garden_routine_reconcile_names_the_open_proposals_read() -> None:
 
 def test_garden_routine_reconcile_judgement_cites_findings_by_id() -> None:
     """`nothing-to-propose` only holds when every still-live finding is named in an open
-    proposal's own `findings` list — the D4 citation rule, checkable now that reconcile
+    proposal's own `findings` list — the citation rule, checkable now that reconcile
     holds both the live bucket and the open-proposal set."""
     judgement = _doc().node("reconcile").judgement  # type: ignore[union-attr]
     assert judgement is not None

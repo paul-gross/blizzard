@@ -1,4 +1,4 @@
-"""The harness transcript seam's values and null source (blizzard#245).
+"""The harness transcript seam's values and null source.
 
 Covers :class:`TranscriptPosition`'s opaque round-trip, :class:`NullTranscriptSource`'s
 absent-but-healthy shape, and that :class:`ClaudeCodeAdapter` binds it by default —

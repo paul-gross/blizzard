@@ -1,5 +1,7 @@
 [tools]
 uv = "0.11.21"
+vale = "3.22.0"
+node = "22"
 
 [tasks.install]
 description = "Install dependencies"
@@ -41,7 +43,7 @@ run = "uv run pytest tests/test_sse_contract.py && (cd web && npx ng test fleet 
 
 [tasks.prose-check]
 description = "blizzard:prose-ratchet — fail on comment/docstring prose growth over the committed baseline, or any block over its bzh:prose-budget cap"
-run = "uv run python scripts/prose_density.py check --blocks src tests ../blizzard-mock/src"
+run = "uv run python scripts/prose_density.py check --blocks src tests ../blizzard-mock/src ../blizzard-mock/tests"
 
 [tasks.restatement-check]
 description = "blizzard:restatement-sweep — fail when a fact is stated at an undeclared site (new), a declared site is no longer observed (stale), a declared non-owner site carries no reason, or a designated owner does not actually state its fact"
@@ -67,8 +69,12 @@ run = "uv run pyright"
 description = "Export the hub and runner OpenAPI specs to ./openapi (frontend codegen + CI drift baseline)"
 run = "uv run blizzard-export-openapi --out-dir openapi"
 
+[tasks."process-ref-lint"]
+description = "Process-reference prose lint"
+run = "vale --output=line ."
+
 [tasks.gate]
-description = "Run the local equivalent of the PR-to-master merge gate (ruff, pyright, pytest, spec/client drift, eslint, vitest)"
+description = "Run the local equivalent of the PR-to-master merge gate (ruff, pyright, process-ref-lint, pytest, spec/client drift, eslint, vitest)"
 run = "./scripts/ci-gate.sh"
 
 [tasks.build]

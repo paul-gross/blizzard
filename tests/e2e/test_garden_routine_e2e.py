@@ -1,5 +1,5 @@
 """The packaged garden-routine graph end to end — the `test_garden_routine_e2e` scenario
-of the standing e2e smoke (blizzard#396).
+of the standing e2e smoke.
 
 The real packaged YAML is minted with only its prompts swapped for scripts the mock can
 execute — nodes, edges, session pools, and the ``garden_deliver`` command all travel to
@@ -261,7 +261,7 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
         routine_id = created.json()["routine_id"]
 
         # Every non-default scope this routine runs against below must already be
-        # related (blizzard#399 D1-D3) — the run route no longer mints one of its own.
+        # related — the run route no longer mints one of its own.
         for slug in (_SCOPE_CLEAN, _SCOPE_THICKET, _SCOPE_VIRGIN, _SCOPE_UNDECLARED):
             scope_created = hub.post("/api/scopes", json={"slug": slug, "description": ""})
             assert scope_created.status_code == 201, scope_created.text

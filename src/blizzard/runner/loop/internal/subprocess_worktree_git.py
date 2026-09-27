@@ -1,7 +1,7 @@
 """Subprocess-git adapter for the worker-artifact seam (package-private).
 
 A read-only confirmation, via the real ``git`` CLI, of an already-pushed git-commit
-declaration (issue #143). All ``subprocess`` usage is confined here, and a git failure is
+declaration. All ``subprocess`` usage is confined here, and a git failure is
 wrapped once into :class:`WorktreeGitError` and logged (``bzh:structlog-logging``).
 """
 
@@ -14,7 +14,7 @@ from blizzard.runner.loop.worktree import IWorktreeGit
 
 _log = get_logger("blizzard.runner.worktree")
 
-# A tick reaches this seam (issue #143), so it must be bounded — the value is generous
+# A tick reaches this seam, so it must be bounded — the value is generous
 # (a remote round-trip, not a build) rather than tuned, mirroring `checks.py`'s own default.
 WORKTREE_GIT_TIMEOUT = 60
 

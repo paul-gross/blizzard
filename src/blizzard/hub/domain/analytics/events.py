@@ -1,4 +1,4 @@
-"""The transcript-event store seam and its domain types (blizzard#254).
+"""The transcript-event store seam and its domain types.
 
 An event row is an immutable observation, never a status (``bzh:facts-not-status``): it
 is fully re-derivable from the segments that back it, and its source's mutability is
@@ -14,7 +14,7 @@ from typing import Protocol
 
 from blizzard.wire.transcript_segment import TurnSegmentView
 
-#: :attr:`TranscriptEvent.kind` values this build's extractors mint (D5) — open to a
+#: :attr:`TranscriptEvent.kind` values this build's extractors mint — open to a
 #: future extractor registering a new one; no column or migration gates a new entry.
 KIND_FILE_READ = "file_read"
 KIND_SKILL_INVOCATION = "skill_invocation"
@@ -23,7 +23,7 @@ KIND_AGENT_SPAWN = "agent_spawn"
 
 @dataclass(frozen=True)
 class SegmentProvenance:
-    """A segment's own frozen harness identity (blizzard#439 D2/D3) — one per
+    """A segment's own frozen harness identity — one per
     :meth:`IWriteTranscriptEvents.replace_segment_events` call, since it is the same for
     every event that call writes, never repeated per row. Each field ``None`` means
     unknown, never a value."""
@@ -44,9 +44,9 @@ class TranscriptEvent:
     kind: str
     turn_path: str
     occurrence: int
-    payload: str  # JSON object text (D5, `bzh:sql-portable` — never a JSON column type)
-    subject: str | None  # denormalized projection (blizzard#255 D1) — filterable, e.g. path prefix
-    tool: str | None  # the invoking tool name (blizzard#255 D1) — filterable
+    payload: str  # JSON object text (`bzh:sql-portable` — never a JSON column type)
+    subject: str | None  # denormalized projection — filterable, e.g. path prefix
+    tool: str | None  # the invoking tool name — filterable
     chunk_id: str
     node_id: str
     epoch: int
@@ -59,7 +59,7 @@ class TranscriptEvent:
 
 @dataclass(frozen=True)
 class DerivationMarker:
-    """One ``(segment_id, extractor_version)`` pair's most recent derivation (D6)."""
+    """One ``(segment_id, extractor_version)`` pair's most recent derivation."""
 
     segment_id: str
     extractor_version: str
@@ -71,7 +71,7 @@ class DerivationMarker:
 
 @dataclass(frozen=True)
 class CandidacyRead:
-    """One candidacy pass's whole visibility evaluation (blizzard#513 D2): the visible
+    """One candidacy pass's whole visibility evaluation: the visible
     segment set, and which of those segments' stored digests disagree with their current-
     version marker (or carry none at all). ``visible_segment_ids`` is exposed here so a
     caller that also needs the visible set itself never has to re-derive it."""
@@ -83,7 +83,7 @@ class CandidacyRead:
 @dataclass(frozen=True)
 class DerivationSignature:
     """A cheap aggregate fingerprint of every input :meth:`IReadTranscriptEvents.candidacy`
-    and its visibility read see today (blizzard#524 D5): row count, highest
+    and its visibility read see today: row count, highest
     ``transcript_segments.id``, latest ``received_at``, and ``chunks`` row count. No
     per-row content is read; two equal signatures mean nothing relevant changed."""
 
@@ -96,7 +96,7 @@ class DerivationSignature:
 @dataclass(frozen=True)
 class SegmentDerivationInput:
     """Everything a segment offers the derivation service: decoded once,
-    fingerprinted once. ``complete`` is ``False`` when a record is a content hole (D6) —
+    fingerprinted once. ``complete`` is ``False`` when a record is a content hole —
     ``turns`` is then a partial view, declared rather than indistinguishable from a
     session that read nothing."""
 
@@ -133,9 +133,9 @@ class IReadTranscriptEvents(Protocol):
     """Read-only operations over the derived event store and its derivation markers."""
 
     def visible_segment_ids(self, *, chunk_id: str | None = None) -> frozenset[str]:
-        """Every segment id the hub's own read path would show today (D1) — final, not
+        """Every segment id the hub's own read path would show today — final, not
         superseded, and pointing at a chunk that exists — narrowed to ``chunk_id`` when given
-        (the re-derive route's chunk-scoped call, D7)."""
+        (the re-derive route's chunk-scoped call)."""
         ...
 
     def derived_segment_ids(self) -> frozenset[str]:
@@ -144,7 +144,7 @@ class IReadTranscriptEvents(Protocol):
         ...
 
     def candidacy(self, extractor_version: str, *, chunk_id: str | None = None) -> CandidacyRead:
-        """The pass's one visibility evaluation (D2): a bulk, constant-statement-count read
+        """The pass's one visibility evaluation: a bulk, constant-statement-count read
         of the visible set's stored digests against their current-version markers — no
         content byte is read and no statement runs per segment. A segment absent from the
         visible set is never a candidate even with no marker at all."""
@@ -152,7 +152,7 @@ class IReadTranscriptEvents(Protocol):
 
     def derivation_signature(self) -> DerivationSignature:
         """One constant-cost aggregate read over every input :meth:`candidacy` and its
-        visibility read see (blizzard#524 D5) — no per-row read, so its cost never grows
+        visibility read see — no per-row read, so its cost never grows
         with segment count. Equal to a previous call's result exactly when nothing
         relevant to a pass has changed since, cheap enough to check before running the
         full pass (candidacy/derive/drop)."""
@@ -162,7 +162,7 @@ class IReadTranscriptEvents(Protocol):
         """``segment_id``'s decoded turns and content fingerprint, or ``None`` when the
         segment no longer exists at all (superseded segments still resolve; only a
         visible-set check decides whether to derive). The one method on this Protocol
-        that decodes content (D2) — :meth:`candidacy` never does."""
+        that decodes content — :meth:`candidacy` never does."""
         ...
 
     def derivation_marker(self, segment_id: str, extractor_version: str) -> DerivationMarker | None: ...
@@ -206,13 +206,13 @@ class IWriteTranscriptEvents(IReadTranscriptEvents, Protocol):
         provenance: SegmentProvenance,
     ) -> None:
         """One transaction: delete this pair's existing rows, write ``events`` each
-        stamped with ``provenance`` (D2), and write the marker (D6). Rows at *other*
+        stamped with ``provenance``, and write the marker. Rows at *other*
         extractor versions are untouched."""
         ...
 
     def drop_segments(self, segment_ids: frozenset[str]) -> None:
         """One transaction: delete every row and marker every one of ``segment_ids`` ever
         produced, at every extractor version — set-scoped rather than one transaction per
-        segment (D4), since segments leave the visible set in batches (D1, D6). A no-op
+        segment, since segments leave the visible set in batches. A no-op
         for an empty set."""
         ...

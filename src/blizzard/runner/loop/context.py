@@ -55,9 +55,9 @@ class LoopConfig:
     workspace_id: str
     max_agents: int = 1
     base_branch: str = "main"
-    #: The runner's configured environment-pool size (issue #69); ``None`` unreported.
+    #: The runner's configured environment-pool size; ``None`` unreported.
     env_capacity: int | None = None
-    #: This runner's own browser-reachable base URL (issue #95); empty registers no
+    #: This runner's own browser-reachable base URL; empty registers no
     #: federation identity.
     public_url: str = ""
     #: The redirect URI(s) this runner presents to the hub's IdP authorize endpoint (#95).
@@ -66,28 +66,28 @@ class LoopConfig:
     #: The runner's own local-API base URL, handed to a spawned worker as
     #: ``BLIZZARD_RUNNER_URL`` so its heartbeat hook posts back.
     local_api_url: str = "http://127.0.0.1:8431"
-    #: The winter workspace root — the spawn cwd for every worker (issue #17), so it loads
+    #: The winter workspace root — the spawn cwd for every worker, so it loads
     #: the workspace's shared context instead of starting below it in an env subdir.
     workspace_root: str = ""
-    #: The static workspace prompt from config (issue #17), resolved once at ``host``
+    #: The static workspace prompt from config, resolved once at ``host``
     #: startup — the fallback under the store's runtime override.
     workspace_prompt: str = ""
-    #: The operator's override of the baked-in blizzard preamble (issue #103), resolved
+    #: The operator's override of the baked-in blizzard preamble, resolved
     #: once at ``host`` startup. Empty means unset; there is no runtime override.
     runner_prompt: str = ""
     #: Node NAMES this runner imposes a human gate on — matched across all graphs and read
     #: at context build, so a config edit needs a restart, not just a new tick.
     gates: tuple[str, ...] = ()
-    #: The directory the per-lease harness-stdout files live in (issue #58); empty means
+    #: The directory the per-lease harness-stdout files live in; empty means
     #: no redirect. A worker's envelope survives the process there for later read-back.
     worker_stdout_dir: str = ""
     #: How long (days) a worker's captured stdout/stderr survive after being written, before
-    #: the periodic `Retention` sweep prunes them (issue #58) — unrelated to release, which
+    #: the periodic `Retention` sweep prunes them — unrelated to release, which
     #: leaves them in place.
     worker_stdout_retention_days: int = 14
-    #: The per-chunk spend cap (issue #61a); ``None`` means no cap.
+    #: The per-chunk spend cap; ``None`` means no cap.
     chunk_cap_usd: float | None = None
-    #: The runner-wide spend ceiling (issue #61b); ``None`` means no ceiling.
+    #: The runner-wide spend ceiling; ``None`` means no ceiling.
     runner_ceiling_usd: float | None = None
     #: The runner ceiling's rolling window in hours; unused while the ceiling is ``None``.
     runner_ceiling_window_hours: float = 24.0
@@ -96,29 +96,29 @@ class LoopConfig:
     #: The context sample step's per-lease cadence in seconds; unused while the lane is off.
     context_sample_interval_seconds: int = 60
     #: This runner's runtime directory (``RunnerConfig.root``), absolute; empty means
-    #: unresolved, and readers compose nothing from it rather than guessing (issue #251).
+    #: unresolved, and readers compose nothing from it rather than guessing.
     runner_dir: str = ""
-    #: The directory a detached judgement elicitation's reply file lands in (blizzard#443,
-    #: D4). Load-bearing, unlike ``worker_stdout_dir`` — always resolved to a real path by
+    #: The directory a detached judgement elicitation's reply file lands in.
+    #: Load-bearing, unlike ``worker_stdout_dir`` — always resolved to a real path by
     #: composition, never the empty-disables convention.
     elicitation_output_dir: str = ""
-    #: The transcript outbound lane's own switch (``[transcripts] ship``, issue #246); off
-    #: by default (D5) — the pump enqueues no delta while this is ``False``.
+    #: The transcript outbound lane's own switch (``[transcripts] ship``); off
+    #: by default — the pump enqueues no delta while this is ``False``.
     transcripts_ship: bool = False
-    #: The lane's byte-ceiling overrides (``[transcripts]``, blizzard#338); ``None`` keeps
+    #: The lane's byte-ceiling overrides (``[transcripts]``); ``None`` keeps
     #: `blizzard.runner.transcripts.caps`'s own defaults, which own the values.
     transcript_record_max_bytes: int | None = None
     transcript_chunk_max_bytes: int | None = None
-    #: This runner's selection policy over the peeked ready queue (``[queue] strict``,
-    #: blizzard#459); off by default reaches past a marked head for the first unmarked
+    #: This runner's selection policy over the peeked ready queue (``[queue] strict``);
+    #: off by default reaches past a marked head for the first unmarked
     #: entry, ``True`` holds at a marked head and yields no entry instead.
     queue_strict: bool = False
 
 
 @dataclass(frozen=True)
 class ResolvedSubscription:
-    """One declared subscription with its resolved sampler and renewer bindings (blizzard#436,
-    blizzard#504) — the loop step's own view. ``sampler``/``renewer`` are ``None`` for an
+    """One declared subscription with its resolved sampler and renewer bindings — the loop
+    step's own view. ``sampler``/``renewer`` are ``None`` for an
     unbound or unknown provider; ``provider`` rides along because the registration push
     reads it, though no view reaches it yet."""
 
@@ -132,7 +132,7 @@ class ResolvedSubscription:
 
 class ICloseableUsageHttpClient(Protocol):
     """Owns the shared, lazily-built HTTP client every declared subscription's sampler draws
-    from (blizzard#436, hub:95); whoever owns this ``LoopContext``'s lifetime closes it
+    from; whoever owns this ``LoopContext``'s lifetime closes it
     exactly once, whether or not a client was ever actually built."""
 
     def close(self) -> None: ...
@@ -153,7 +153,7 @@ class LoopContext:
     stores: RunnerStores
     clock: IClock
     hub: IHubClient
-    #: This tick's (or, standalone, this step's own) chunk-status read seam (blizzard#521) —
+    #: This tick's (or, standalone, this step's own) chunk-status read seam —
     #: see :mod:`blizzard.runner.loop.chunk_status_cache`.
     chunk_views: IChunkViews
     provider: IWorkspaceProvider
@@ -169,25 +169,25 @@ class LoopContext:
     env_release: EnvironmentRelease
     #: Required; every recorded session's owner resolves through it, with no single-harness fallback.
     harnesses: IHarnessRegistry
-    #: The check-runner seam (issue #114) — ``None`` when not wired, so a node with no
+    #: The check-runner seam — ``None`` when not wired, so a node with no
     #: ``checks:`` still ticks; a node that declares ``checks:`` needs it.
     check_runner: ICheckRunner | None = None
     #: Coarse "any transcript source wired" flag; a read still resolves per-owner via ``transcript_source_for``.
     transcripts_wired: bool = False
-    #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
+    #: The SSE publish seam, typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on ``blizzard runner tick``, a no-op there.
     events: IRunnerEventPublisher | None = None
-    #: Every declared provider subscription, resolved (blizzard#436) — each sampled when
+    #: Every declared provider subscription, resolved — each sampled when
     #: due against its own ``sample_interval_seconds`` and ``slug``-keyed anchor.
     subscriptions: tuple[ResolvedSubscription, ...] = ()
-    #: The shared subscription-sampling HTTP client's owner (blizzard#436, hub:95) — see
+    #: The shared subscription-sampling HTTP client's owner — see
     #: :class:`ICloseableUsageHttpClient`.
     usage_http_client: ICloseableUsageHttpClient = field(default_factory=_NoUsageHttpClient)
     #: This tick's capability memo (``tick()`` wires it); ``None`` rebuilds it per read.
     capabilities: TickCapabilities | None = None
     #: The loop's own cross-tick harness-version cache — unlike ``capabilities`` above, never rebound per tick.
     harness_versions: HarnessVersionCache | None = None
-    #: The loop's own cross-tick harness-health cache (blizzard#438) — mirrors ``harness_versions`` above.
+    #: The loop's own cross-tick harness-health cache — mirrors ``harness_versions`` above.
     harness_health: HarnessHealthCache | None = None
 
     def capability_snapshot(self) -> tuple[RunnerCapability, ...]:
@@ -212,7 +212,7 @@ class LoopContext:
         """``(start_position, start_unreadable)`` for a boundary about to open on ``session`` —
         the current transcript tail, or ``(None, True)`` when the source is unresolvable or the
         read fails; never conflate that with ``(None, False)``, a fresh session's own beginning
-        sentinel (blizzard#437 D6). Shared by every resume/judge/nudge boundary opener, so a
+        sentinel. Shared by every resume/judge/nudge boundary opener, so a
         transient read failure on any of them is durably distinguishable from a fresh spawn."""
         spawn_cwd = SpawnCwd(self.config.workspace_root, workdir).path
         try:

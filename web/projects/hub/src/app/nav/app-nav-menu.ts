@@ -3,7 +3,7 @@ import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, ViewportMenu } from 'fleet';
 
 /**
- * The hub top header's profile menu (issue #132) — the avatar-circle trigger
+ * The hub top header's profile menu — the avatar-circle trigger
  * burying `Log out` and the appearance switcher, which used to sit in
  * {@link AppNav}'s tab row as a standalone button plus a quiet `⋮` overflow
  * menu. Projected into the shared {@link BoardHeader}'s `[header-trailing]`
@@ -11,7 +11,7 @@ import { KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, ViewportMenu } from 'fle
  * header and the tab row are siblings there, and content projection only
  * reaches an element placed directly inside `<fleet-board-header>`.
  *
- * Built on the kit's CDK-menu primitives (issue #161): real menu semantics —
+ * Built on the kit's CDK-menu primitives: real menu semantics —
  * roving focus, arrow-key traversal, right/left into and out of the Appearance
  * submenu, `Escape` to close. The panel and its items are declared here rather
  * than projected into {@link KitMenu}, because `CdkMenu` finds its items by a

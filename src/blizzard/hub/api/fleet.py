@@ -1,9 +1,9 @@
-"""The runner-facing fleet router — every runner->hub call under ``/api/fleet/*`` (issue #87).
+"""The runner-facing fleet router — every runner->hub call under ``/api/fleet/*``.
 
 Enforcement is structural, not per-route: the router's own ``dependencies`` mean a fleet verb is
 authenticated *because of where it is mounted*, and a route declaring its own ``runner_id`` confines
 it further through :meth:`FleetRequest.assert_owns` — except the lease-transcript read, whose
-:func:`_demand_lease_owner` always raises rather than deferring (D3, issue #249)."""
+:func:`_demand_lease_owner` always raises rather than deferring."""
 
 from __future__ import annotations
 
@@ -132,7 +132,7 @@ class FleetRequest:
 
     def assert_owns(self, runner_id: str) -> None:
         """Reject a call whose declared ``runner_id`` differs from the resolved principal's
-        — only ever fires once a token *did* resolve, to some other runner (issue #86a)."""
+        — only ever fires once a token *did* resolve, to some other runner."""
         if self.principal is None or self.principal.runner_id == runner_id:
             return
         self.mode.refuse(
@@ -145,9 +145,9 @@ class FleetRequest:
 
 
 def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None) -> None:
-    """The lease-transcript read route's own ownership gate (D3, issue #249) — **always**
+    """The lease-transcript read route's own ownership gate — **always**
     raises on a mismatch, unlike :meth:`FleetRequest.assert_owns`, which ``runner_auth_mode``
-    leaves inert by default. ``owning_runner_id=None`` is Decision 1's "hub holds nothing"
+    leaves inert by default. ``owning_runner_id=None`` is the "hub holds nothing"
     branch, not a refusal — left for the caller to fall back on."""
     if owning_runner_id is not None and owning_runner_id != principal.runner_id:
         # The owning runner's id stays out of the response — logged server-side instead,
@@ -174,8 +174,8 @@ class MigrationTargets:
 
     @property
     def cross_graph(self) -> Graph | None:
-        """What a cross-graph migration edge (issue #90) names, resolved by name — ``None`` when the edge
-        is not cross-graph, names no enabled graph, or is missing outright (issue #101). Pinned by
+        """What a cross-graph migration edge names, resolved by name — ``None`` when the edge
+        is not cross-graph, names no enabled graph, or is missing outright. Pinned by
         ``tests/test_migration_apply.py::test_an_unresolvable_cross_graph_target_escalates_to_needs_human``."""
         from_node = self.graph.node_by_id(self.submission.from_node_id)
         if from_node is None:
@@ -187,7 +187,7 @@ class MigrationTargets:
 
     @property
     def intended(self) -> Graph | None:
-        """The chunk's standing migration intent (issue #124), resolved by id — ``None`` when none is set,
+        """The chunk's standing migration intent, resolved by id — ``None`` when none is set,
         the target was never minted, or it has since been retired, which leaves the intent set (pinned by
         ``tests/test_intended_migration_apply.py::test_forced_target_retired_at_consult_is_skipped``)."""
         intent = self.chunk.intended_migration
@@ -200,7 +200,7 @@ class MigrationTargets:
 
     @property
     def follow_latest(self) -> Graph | None:
-        """The newer same-name mint a follow-latest chunk drifts to (issue #164) — ``None`` when an explicit
+        """The newer same-name mint a follow-latest chunk drifts to — ``None`` when an explicit
         :attr:`intended` wins outright, when the effective policy resolves ``false`` (the graph's own
         tri-state, else the hub default), or when the name resolves to nothing or to no newer mint."""
         if self.chunk.intended_migration is not None:
@@ -221,7 +221,7 @@ class MigrationTargets:
 @router.get("/queue/peek", response_model=QueuePeekResponse)
 def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
     """The runner's FILL read — the whole ready-queue order: a filling runner needs every
-    ready chunk in one read. Kept as-is for a previous-minor caller (D7, blizzard#433);
+    ready chunk in one read. Kept as-is for a previous-minor caller;
     ``POST /queue/peek`` below is the matched counterpart."""
     statuses = services.chunks.facts.load_all_statuses()
     return queue_api.ReadyQueue.of(services, statuses).view
@@ -267,7 +267,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
 def get_chunk_statuses(
     chunk_id: Annotated[list[str], Query()], services: Annotated[HubServices, Depends(get_services)]
 ) -> list[ChunkStatusView]:
-    """The runner tick's slim batch status read (blizzard#521) — repeatable ``chunk_id``;
+    """The runner tick's slim batch status read — repeatable ``chunk_id``;
     an unknown or ephemeral id is omitted, never a 404."""
     return chunk_statuses_api.chunk_statuses(chunk_id, services)
 
@@ -289,7 +289,7 @@ router.add_api_route(
     name="fleet_get_pm_items_deprecated_alias",
     summary="Deprecated alias for GET /fleet/chunks/{chunk_id}/work-items",
     description=(
-        "Deprecated since issue #55 — use `GET /fleet/chunks/{chunk_id}/work-items`, which "
+        "Deprecated: use `GET /fleet/chunks/{chunk_id}/work-items`, which "
         "this path aliases onto the identical handler and returns the identical view."
     ),
 )
@@ -297,21 +297,21 @@ router.add_api_route(
 
 @router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def pause_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
-    """Pause the chunk with a runner's own bearer token (issue #185) — the same transition as the
+    """Pause the chunk with a runner's own bearer token — the same transition as the
     operator route, ``by`` defaulting to ``operator``."""
     return chunks_api.pause_chunk(chunk_id, ChunkPauseRequest(), services)
 
 
 @router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def resume_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
-    """Resume the chunk with a runner's own bearer token (issue #185). Takes no body, so the
+    """Resume the chunk with a runner's own bearer token. Takes no body, so the
     resume is always recorded as ``operator``."""
     return chunks_api.resume_chunk(chunk_id, ChunkPauseRequest(), services)
 
 
 @router.get("/summary", response_model=FleetSummaryView)
 def fleet_summary(services: Annotated[HubServices, Depends(get_services)]) -> FleetSummaryView:
-    """The fleet-pulse counts (issue #76), read with a runner's own bearer token. Fleet-router-only:
+    """The fleet-pulse counts, read with a runner's own bearer token. Fleet-router-only:
     this read has no anonymous counterpart."""
     return chunks_api.FleetPulse(services).view()
 
@@ -357,7 +357,7 @@ def _routine_run_or_404(chunk_id: str, services: HubServices) -> RunContext:
     """The run context that gates a worker's fleet-scoped read — 404 both for an
     unknown chunk and for one carrying no run context (not a routine run), shared by
     every fleet route that requires the chunk to be a routine run (garden
-    findings/proposals, and the analytics reads, blizzard#545). Callers decide what to
+    findings/proposals, and the analytics reads). Callers decide what to
     do with the returned run: the garden reads filter by its routine and scope; the
     analytics reads use it only to gate access, and return fleet-wide rollups over the
     window."""
@@ -375,8 +375,8 @@ def _routine_run_or_404(chunk_id: str, services: HubServices) -> RunContext:
 
 @router.get("/chunks/{chunk_id}/garden/findings", response_model=list[FindingView])
 def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[FindingView]:
-    """A worker's own routine's live-plus-`delivered` finding bucket (D5, D6, blizzard#583
-    D2), widened to every review-sourced finding on the same scope (blizzard#582 D3) — the
+    """A worker's own routine's live-plus-`delivered` finding bucket, widened to every
+    review-sourced finding on the same scope — the
     chunk's own run context derives the routine and the scope; no caller-supplied flag can
     name another. 404 both for an unknown chunk and for one carrying no run context (not a
     routine run): a chunk with nothing to read is refused rather than an empty bucket."""
@@ -407,12 +407,12 @@ def get_garden_proposals(
 
 @dataclass(frozen=True)
 class AnalyticsWindow:
-    """The one filter a worker's fleet-scoped analytics read takes: the window (D2,
-    blizzard#545) — ``since`` required (422 unset), ``until`` optional, both UTC-aware
+    """The one filter a worker's fleet-scoped analytics read takes: the window
+    — ``since`` required (422 unset), ``until`` optional, both UTC-aware
     instants (``bzh:utc-instants``). No graph, source, or event-shape filter: those stay
     the operator plane's own. Builds the operator plane's own filter types with only the
     window populated, so a fleet route renders through the identical criteria and
-    response-shaping helpers the operator route does (Decision 1)."""
+    response-shaping helpers the operator route does."""
 
     since: datetime
     until: datetime | None
@@ -444,7 +444,7 @@ def get_chunk_analytics_counts_files(
 ) -> AnalyticsCountsResponse:
     """A worker's own routine-run read of ``GET /api/analytics/counts/files`` — the same
     rows, over the window it names, gated on the chunk carrying a run context rather than
-    on operator credentials (blizzard#545)."""
+    on operator credentials."""
     _routine_run_or_404(chunk_id, services)
     return counts_response(services.analytics_events.counts_by_file(window.event_scope.criteria()))
 
@@ -455,7 +455,7 @@ def get_chunk_analytics_counts_skills(
     services: Annotated[HubServices, Depends(get_services)],
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
-    """A worker's own routine-run read of ``GET /api/analytics/counts/skills`` (blizzard#545)."""
+    """A worker's own routine-run read of ``GET /api/analytics/counts/skills``."""
     _routine_run_or_404(chunk_id, services)
     return counts_response(services.analytics_events.counts_by_skill(window.event_scope.criteria()))
 
@@ -466,7 +466,7 @@ def get_chunk_analytics_counts_agent_types(
     services: Annotated[HubServices, Depends(get_services)],
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
-    """A worker's own routine-run read of ``GET /api/analytics/counts/agent-types`` (blizzard#545)."""
+    """A worker's own routine-run read of ``GET /api/analytics/counts/agent-types``."""
     _routine_run_or_404(chunk_id, services)
     return counts_response(services.analytics_events.counts_by_agent_type(window.event_scope.criteria()))
 
@@ -477,7 +477,7 @@ def get_chunk_analytics_counts_nodes(
     services: Annotated[HubServices, Depends(get_services)],
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsCountsResponse:
-    """A worker's own routine-run read of ``GET /api/analytics/counts/nodes`` (blizzard#545)."""
+    """A worker's own routine-run read of ``GET /api/analytics/counts/nodes``."""
     _routine_run_or_404(chunk_id, services)
     return counts_response(services.analytics_events.counts_by_node(window.event_scope.criteria()))
 
@@ -488,7 +488,7 @@ def get_chunk_analytics_spend_nodes(
     services: Annotated[HubServices, Depends(get_services)],
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsSpendResponse:
-    """A worker's own routine-run read of ``GET /api/analytics/spend/nodes`` (blizzard#545)."""
+    """A worker's own routine-run read of ``GET /api/analytics/spend/nodes``."""
     _routine_run_or_404(chunk_id, services)
     return spend_response(services.operational_analytics.spend_by_node(operational_criteria(window.scope)))
 
@@ -499,14 +499,14 @@ def get_chunk_analytics_spend_graphs(
     services: Annotated[HubServices, Depends(get_services)],
     window: Annotated[AnalyticsWindow, Depends(AnalyticsWindow.of)],
 ) -> AnalyticsSpendResponse:
-    """A worker's own routine-run read of ``GET /api/analytics/spend/graphs`` (blizzard#545)."""
+    """A worker's own routine-run read of ``GET /api/analytics/spend/graphs``."""
     _routine_run_or_404(chunk_id, services)
     return spend_response(services.operational_analytics.spend_by_graph(operational_criteria(window.scope)))
 
 
 @router.get("/scopes", response_model=list[ScopeView])
 def get_scopes(services: Annotated[HubServices, Depends(get_services)]) -> list[ScopeView]:
-    """Every scope, newest first, each marked retired or not (blizzard#582 D2) — the
+    """Every scope, newest first, each marked retired or not — the
     deployment's scope vocabulary, read by `blizzard runner scope list` so a review's
     deferred findings can name an existing slug without a hub-interpreted default."""
     scopes = services.scopes.list_all()
@@ -582,7 +582,7 @@ def hub_advance(
     facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
     derived = facts.status()
     # `key` names the transition this call recorded — absent when the poll deferred or wrote a
-    # poll-attempt fact instead, since there is no fresh `transitions` row to key on (issue #213).
+    # poll-attempt fact instead, since there is no fresh `transitions` row to key on.
     advance_key = f"transitions:{result.transition_id}" if result is not None and result.transition_id else None
     change.publish(cause="hub-advanced", key=advance_key)
     if result is None:
@@ -612,9 +612,8 @@ def claim_route(
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> object:
     """Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,
-    already terminal ({done, stopped}, issue #118), standing on an unmet prerequisite
-    (blizzard#458), or incompatible with the runner's stored capabilities (blizzard#433
-    D9), else the first node envelope."""
+    already terminal ({done, stopped}), standing on an unmet prerequisite,
+    or incompatible with the runner's stored capabilities, else the first node envelope."""
     fleet.assert_owns(claim.runner_id)
     chunk = services.chunks.record.get(claim.chunk_id)
     if chunk is None:
@@ -670,7 +669,7 @@ def rekey_route_token(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RouteTokenRekeyResponse:
-    """Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext recovery for a
+    """Rotate the chunk's live route capability token — the lost-plaintext recovery for a
     claim whose response was never read back. Confined to the live route's own runner; this route
     presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting."""
     route = services.chunks.route.route_of(chunk_id)
@@ -716,7 +715,7 @@ def submit_completion(
     response = result.response
     fresh_migration = response.outcome is ApplyOutcome.MIGRATED and not already_migrated
     cause = "migrated" if fresh_migration else "node-completed"
-    # `key` names the fact this call wrote, per each cause's own mapped fact table (issue #213):
+    # `key` names the fact this call wrote, per each cause's own mapped fact table:
     # `migration_id` only for a genuine `migrated`, `transition_id` only when a fresh row backs it.
     if fresh_migration and result.migration_id is not None:
         key = f"chunk_migrations:{result.migration_id}"
@@ -815,7 +814,7 @@ def ingest_transcript_segments(
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> TranscriptSegmentAck:
     """Land the runner's batched transcript records — the transcript lane's own
-    store-and-forward push (D7), distinct from the fact lane at ``POST /api/fleet/events``."""
+    store-and-forward push, distinct from the fact lane at ``POST /api/fleet/events``."""
     fleet.assert_owns(batch.runner_id)
     records = [
         (record.seq, transcripts_api.to_domain_record(record, runner_id=batch.runner_id)) for record in batch.records
@@ -832,7 +831,7 @@ def get_lease_transcript_segments(
     services: Annotated[HubServices, Depends(get_services)],
     principal: Annotated[RunnerPrincipal | None, Depends(require_runner_principal)],
 ) -> LeaseTranscriptView:
-    """A runner's read-back of its own shipped segments (D2/D3, issue #249) — every
+    """A runner's read-back of its own shipped segments — every
     accepted record across every spawn generation under a lease's ``(chunk_id, node_id,
     epoch)``, confined against the ``runner_id`` already on those rows regardless of
     ``runner_auth_mode`` — this route's own always-raising ownership check, not the
@@ -869,7 +868,7 @@ def register_runner(
 ) -> RunnerRegistrationResponse:
     """Register a runner — runner id + workspace binding; idempotent upsert.
 
-    Runner-auth is checked at the router level (issue #86a); the ``subscriptions`` roster
+    Runner-auth is checked at the router level; the ``subscriptions`` roster
     rides the same authenticated write. The hub never rejects a registration over its
     roster — it doubles as the heartbeat every tick."""
     fleet.assert_owns(request.runner_id)

@@ -1,4 +1,4 @@
-"""``GET /api/spend`` — the fleet-wide spend-since read (issue #60).
+"""``GET /api/spend`` — the fleet-wide spend-since read.
 
 Sums usage facts across every chunk, filtered by ``recorded_at >= since`` — derived at
 read time, never a stored column (``bzh:facts-not-status``). Proves the fleet-wide sum,
@@ -92,7 +92,7 @@ def test_fleet_spend_sums_usage_across_every_chunk_since_the_cutoff(tmp_path: Pa
 
 def test_refuses_a_runner_principal(tmp_path: Path) -> None:
     """``GET /api/spend`` stays operator-only — a routine run reads its fleet-wide
-    spend total nowhere at all (blizzard#545's own out-of-scope, held here since no
+    spend total nowhere at all (held here since no
     other test refuses a runner token on this route)."""
     token = _seed_enrolled(tmp_path, runner_id="runner-a")
     hub = build_hub(tmp_path, auth_mode="oauth", runner_auth_mode=RUNNER_AUTH_ENFORCE)

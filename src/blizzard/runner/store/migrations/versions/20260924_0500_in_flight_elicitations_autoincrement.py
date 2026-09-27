@@ -1,7 +1,7 @@
 """Give ``in_flight_elicitations`` the same ``sqlite_autoincrement`` fix as
 ``outbound_buffer``/``transcript_outbound_buffer`` (blizzard-context:/standards/persistence.md): a
 deleted row's ``id`` must never be reissued, since ``pause_parks.interrupted_elicitation_id``
-(blizzard#627) now names an in-flight elicitation by that id.
+now names an in-flight elicitation by that id.
 
 Revision ID: 20260924_0500_in_flight_elicitations_autoincrement
 Revises: 20260924_0400_pause_park_interrupted_elicitation

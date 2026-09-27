@@ -1,5 +1,5 @@
 """Back-fill ``close_intents`` for every landed or hand-completed, non-ephemeral chunk with
-no terminal outcome (D7) — closing the whole accumulated backlog in one pass, blizzard#383.
+no terminal outcome — closing the whole accumulated backlog in one pass.
 
 Revision ID: 20260826_0930_close_intents_backfill
 Revises: 20260826_0900_close_intents

@@ -105,7 +105,7 @@ describe('board-card hover/selection tint shell sweep (web:shell-sweep)', () => 
   // One case, not two: the resting/hovered readings a "selected" comparison needs were
   // previously module-level state set by a sibling `it` and read by this one — isolate
   // either case (`-t`, `.only`, reordering) and the second silently compared a real color
-  // against `''`, passing vacuously (`review:F9`). Self-contained here instead.
+  // against `''`, passing vacuously. Self-contained here instead.
   it('washes a hovered card with a genuinely perceptible step, and reads a selected-but-unhovered card as distinct from both a resting and a hovered one', async () => {
     await loadDesignTokens();
 

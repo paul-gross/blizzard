@@ -1,8 +1,8 @@
-"""Scope create/edit requests and the read view (issue #389).
+"""Scope create/edit requests and the read view.
 
 A create names a slug and mints it if unseen, or reads back the existing scope
-unchanged (D4); edit changes only the stored description. The lifecycle verbs return an
-updated view, the graph lifecycle shape (issue #101)."""
+unchanged; edit changes only the stored description. The lifecycle verbs return an
+updated view, the graph lifecycle shape."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 
 class ScopeCreateRequest(BaseModel):
-    """Mint a scope, or no-op onto the existing one of the same slug (D4)."""
+    """Mint a scope, or no-op onto the existing one of the same slug."""
 
     slug: str
     description: str = ""

@@ -53,7 +53,7 @@ fleet-chunk-general-tab {
 /* No rule targets `app-chunk-node-history-container` itself, for the same reason
    none targets `app-chunk-transcripts-container` below — it is `display: contents`;
    its presentational child carries its own `flex: 1; min-height: 0` host. */
-/* No rule targets `app-chunk-transcripts-container` itself (review:F1) — it is
+/* No rule targets `app-chunk-transcripts-container` itself — it is
    `display: contents`, so it generates no box of its own to size; its child
    `app-chunk-transcripts-tab` is a direct flex item of the shell's own
    `.cps-body` instead, and carries `flex: 1; min-height: 0` on its own

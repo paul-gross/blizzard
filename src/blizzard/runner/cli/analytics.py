@@ -1,6 +1,6 @@
 """``blizzard runner analytics`` — a worker's own routine-run read of the fleet-wide file,
 skill, agent-type, and node usage counts, and the per-node and per-graph spend summaries,
-over a window it names (blizzard#545)."""
+over a window it names."""
 
 from __future__ import annotations
 

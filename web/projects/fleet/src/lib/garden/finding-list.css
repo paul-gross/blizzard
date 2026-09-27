@@ -23,7 +23,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-/* A `gone`-flagged row (D8) renders tinted against the amber family — "flagged for
+/* A `gone`-flagged row renders tinted against the amber family — "flagged for
  * review", distinct from an escalated run's red (`run-list.css`'s own
  * `.rl-body--escalated`) and from an exited row's plain dimming below. `gone` is
  * *not* exited: this row stays a normal, fully rendered, selectable-looking row. */
@@ -86,19 +86,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The row's own routine/scope (blizzard#486) — rendered only on a widened bucket
+/* The row's own routine/scope — rendered only on a widened bucket
  * that mixes rows from more than one routine or scope. Unlike `.fl-class`, these
  * wrap rather than ellipsize: `.fl-hdr-secondary` carries `flex-wrap: wrap`
  * (above) precisely so a routine name and a scope slug flow onto their own line at
  * a narrow width rather than forcing the row wider than its column — kept off
- * `.fl-hdr-primary`'s own class/ref line so the two never share a wrap context
- * (review:F2). */
+ * `.fl-hdr-primary`'s own class/ref line so the two never share a wrap context. */
 .fl-routine,
 .fl-scope {
   color: var(--label-dim);
   overflow-wrap: anywhere;
 }
-/* A review-sourced finding's own `source`/severity/raising-chunk trio (blizzard#582)
+/* A review-sourced finding's own `source`/severity/raising-chunk trio
    — rendered in `.fl-routine`/`.fl-scope`'s own wrapping slot, since a review-sourced
    row never carries a routine to share it with. */
 .fl-source {
@@ -107,7 +106,7 @@
   font-size: var(--fs-label);
   letter-spacing: 0.02em;
 }
-/* The severity pill (blizzard#582) sits beside `.fl-source`/`.fl-raised-by` in the same
+/* The severity pill sits beside `.fl-source`/`.fl-raised-by` in the same
    wrapping row — `.fl-raised-by`'s own reason for `white-space: nowrap` below applies
    here too, so the short label never breaks mid-pill. */
 .fl-severity {

@@ -1,4 +1,4 @@
-"""The selftest job resource — ``POST``/``GET /api/selftests`` (issue #54).
+"""The selftest job resource — ``POST``/``GET /api/selftests``.
 
 The adapter-drift canary as a resource with a result, not an RPC verb: POST mints a run
 and returns immediately, with the checks off the request thread; GET re-reads it. No

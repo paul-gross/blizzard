@@ -28,13 +28,13 @@
     </span>
     <span class="st-row">
       <!-- The DONE lane's status is already the upper-right node slot
-           ("done"/"stopped"); repeating it here would be issue #215's
+           ("done"/"stopped"); repeating it here would be a
            duplicate. Every other lane still names its status, since the
            node label there doesn't stand in for it. -->
       @if (!isDoneLane(card().status)) {
         <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
       }
-      <!-- The blocked marking (issue #461) reads beside the status, in the status's own
+      <!-- The blocked marking reads beside the status, in the status's own
            engraved style. Non-link pinned by `board-card.spec.ts`'s "references the
            prerequisite rather than reaching it…" case. -->
       @if (card().blockedOn) {
@@ -48,7 +48,7 @@
       }
       <!-- Pushed to the row's end via margin-left: auto rather than the row's
            own justify-content, so it lands right-aligned whether it's carrying
-           one child or two (issue #215) instead of drifting to a centered gap
+           one child or two instead of drifting to a centered gap
            only space-between produces with three total row children. -->
       <span class="meta-right">
         @if (isDoneLane(card().status) && card().completedAt; as completedAt) {

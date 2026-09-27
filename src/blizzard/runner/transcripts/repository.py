@@ -1,9 +1,9 @@
-"""Transcript domain types and the read-only repository seam (issue #29, widened blizzard#248).
+"""Transcript domain types and the read-only repository seam.
 
 :class:`Turn`/:class:`Transcript` are the parsed read model, carrying the hub segment wire's own turn
-shape — thinking turns and sidechains included (blizzard#248 D1/D2). A missing or unreadable transcript
+shape — thinking turns and sidechains included. A missing or unreadable transcript
 is a **normal** outcome, not an exception: ``.available``/``.reason`` carry it in-band. Read-only by
-design (``bzh:repository-split``) — the separate outbound lane (issue #246) does the writing."""
+design (``bzh:repository-split``) — the separate outbound lane does the writing."""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
-#: The shared turn wire vocabulary (blizzard#248 D1/D2); ``ask``/``verdict`` stay deferred.
+#: The shared turn wire vocabulary; ``ask``/``verdict`` stay deferred.
 TurnKind = Literal["env", "asst", "tool", "thinking", "sidechain"]
 
 #: Why a transcript is unavailable — all three are ordinary states; only ``unreadable`` logs at ERROR.
 TranscriptUnavailable = Literal["spawning", "not_found", "unreadable"]
 
-#: Which side answered a resolved transcript (D1) — the wire's ``provenance`` field.
+#: Which side answered a resolved transcript — the wire's ``provenance`` field.
 TranscriptProvenance = Literal["local", "archived"]
 
 
@@ -26,7 +26,7 @@ TranscriptProvenance = Literal["local", "archived"]
 class ToolCall:
     """A tool invocation, structured — mirrors
     :class:`~blizzard.runner.harness.transcript.ToolCall`. Carried through, never
-    re-materialized to a JSON string (blizzard#248 D1) — rendering structured ``input``
+    re-materialized to a JSON string — rendering structured ``input``
     is the viewer's job."""
 
     name: str
@@ -57,7 +57,7 @@ class Sidechain:
 
 @dataclass(frozen=True)
 class Turn:
-    """One conversation turn, carried in full (blizzard#248 D2). ``tool``/``sidechain`` populate only
+    """One conversation turn, carried in full. ``tool``/``sidechain`` populate only
     on a ``kind="tool"`` turn, except a ``"sidechain"`` turn's own ``sidechain``, which stands alone
     (unlinked); ``thinking_redacted`` is ``kind="thinking"``-only. ``tool.output`` is ``None`` while
     pending; ``truncated`` is block-level, distinct from :attr:`Transcript.truncated`."""

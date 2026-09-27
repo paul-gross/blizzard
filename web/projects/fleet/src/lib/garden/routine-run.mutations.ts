@@ -6,7 +6,7 @@ import { runRoutineMutationKey } from '../mutation-keys';
 import { hubRoutinesKey } from '../query-keys';
 
 /** Kick off a routine run — the gardening run dialog's own submission. The
- * create-then-run ordering (D3) is `GardeningRunDialog.onSubmit`'s own fact, not
+ * create-then-run ordering is `GardeningRunDialog.onSubmit`'s own fact, not
  * restated here. */
 export interface RoutineRunVars {
   readonly routineId: string;

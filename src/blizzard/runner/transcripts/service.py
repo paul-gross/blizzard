@@ -1,9 +1,9 @@
-"""The transcript route's domain read model (issue #29) — resolves a lease's transcript to
-a home per Decision 1 (blizzard#249). Holds only read-only seams (``bzh:repository-split``),
+"""The transcript route's domain read model — resolves a lease's transcript to
+a home. Holds only read-only seams (``bzh:repository-split``),
 so a controller may hold it directly (``bzh:controller-read-only``). ``leases.lease(lease_id)``
 spans closure — unlike ``active_lease`` — because a transcript outlives its lease. Local until
-acked, hub after (issue #249 AC1, :meth:`TranscriptService.for_lease`); the runner-plane's
-chunk-scoped segment reads (D1/D4) resolve locally too, through that same session-file read."""
+acked, hub after (:meth:`TranscriptService.for_lease`); the runner-plane's
+chunk-scoped segment reads resolve locally too, through that same session-file read."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from blizzard.runner.transcripts.repository import (
 
 @dataclass(frozen=True)
 class ResolvedTranscript:
-    """A lease's transcript, resolved to a home per Decision 1. ``provenance`` and
+    """A lease's transcript, resolved to a home. ``provenance`` and
     ``hub_unreachable`` carry straight onto their wire-field namesakes
     (``wire.transcript.TranscriptResponse``, the fields' own doc home)."""
 
@@ -36,10 +36,10 @@ class ResolvedTranscript:
 
 @dataclass(frozen=True)
 class ResolvedSegmentContent:
-    """One segment's resolved content, read straight from its session file (D1) — never
-    from the ledger's own shipped-turn accounting, which only bounds the index read (D6).
+    """One segment's resolved content, read straight from its session file — never
+    from the ledger's own shipped-turn accounting, which only bounds the index read.
     ``turns`` is ``[]`` with ``available=False`` when the session file is gone; a caller
-    renders that as ``truncated=True, turns=[]`` (D2's wire model has no unavailability field)."""
+    renders that as ``truncated=True, turns=[]`` (the wire model has no unavailability field)."""
 
     final: bool
     available: bool
@@ -48,7 +48,7 @@ class ResolvedSegmentContent:
 
 
 class TranscriptService:
-    """Resolves a lease id to its transcript, per Decision 1's home-selection table —
+    """Resolves a lease id to its transcript, via its home-selection table —
     ``None`` iff no such lease ever existed."""
 
     def __init__(
@@ -93,7 +93,7 @@ class TranscriptService:
             local = self._read_local(lease)
             return ResolvedTranscript(transcript=local, provenance="local", hub_unreachable=False)
 
-        # Closed and fully acked: the hub is the home (D1). A refusal, an empty index, and
+        # Closed and fully acked: the hub is the home. A refusal, an empty index, and
         # a turn-less "found" all fall back to local exactly alike.
         archived = self._archived.read_turns(chunk_id=lease.chunk_id, node_id=lease.node_id, epoch=lease.epoch)
         if archived.status == "found" and archived.turns:
@@ -113,14 +113,14 @@ class TranscriptService:
         return ResolvedTranscript(transcript=local, provenance="local", hub_unreachable=hub_unreachable)
 
     def segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentLedgerRow]:
-        """The chunk's segment ledger rows, straight off the store (D6) — open or
+        """The chunk's segment ledger rows, straight off the store — open or
         finalized, superseded or not. A chunk this store holds no lease for returns
-        ``[]``, which is also this method's whole ownership-exclusion behavior (D3):
+        ``[]``, which is also this method's whole ownership-exclusion behavior:
         the store never wrote another runner's segments in the first place."""
         return self._transcript_ledger.transcript_segments_for_chunk(chunk_id)
 
     def segment_content(self, chunk_id: str, segment_id: str) -> ResolvedSegmentContent | None:
-        """One segment's content, resolved through its session file (D1) — ``None`` iff no such
+        """One segment's content, resolved through its session file — ``None`` iff no such
         segment exists under this chunk on this store (404, mirroring :meth:`for_lease`). Windowed
         to this segment's own turns: starts where the preceding sibling left off, ends at this
         segment's own frozen cursor once finalized — never a sibling's still-advancing one."""

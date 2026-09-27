@@ -1,4 +1,4 @@
-"""``blizzard hub decision`` — issue #104: operator verbs over open gate decisions (list, resolve)."""
+"""``blizzard hub decision`` — operator verbs over open gate decisions (list, resolve)."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def decision_list(cli: CliContext) -> None:
 def decision_resolve(cli: CliContext, decision_id: str, choice: str, resolved_by: str) -> None:
     """Resolve an open decision by picking CHOICE (first-write-wins).
 
-    A pure client of ``POST /api/decisions/{id}/resolutions`` (issue #104's pluralized
+    A pure client of ``POST /api/decisions/{id}/resolutions`` (the pluralized
     resolution route)."""
     resp = cli.send(
         "post", f"/api/decisions/{decision_id}/resolutions", json_body={"choice": choice, "resolved_by": resolved_by}

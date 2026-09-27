@@ -1,7 +1,7 @@
-"""The one runner-owned launch of a worker, judge, or resume child (D4): every adapter's
+"""The one runner-owned launch of a worker, judge, or resume child: every adapter's
 ``spawn``/``resume_with_message``/``judge`` goes through :class:`ProcessLauncher`, never a bare
 ``subprocess.Popen``, so a child always gets its own group and a parent-death signal
-(``bzh:deterministic-shell``). ``defer_disarm=True`` (F1) holds the real binary behind a
+(``bzh:deterministic-shell``). ``defer_disarm=True`` holds the real binary behind a
 trampoline until ``confirm_durable()`` disarms it."""
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def _die_with_parent() -> None:
 # A no-DI-friction test default (`bzh:dependency-injection`) — the composition root injects its own.
 _SPAWN_EXECUTOR: Executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
 
-# The interposed trampoline (F1, module docstring) — its own tiny `ctypes` call, in its own exec'd process.
+# The interposed trampoline — its own tiny `ctypes` call, in its own exec'd process.
 _TRAMPOLINE_SOURCE = """
 import ctypes, os, sys
 _libc = ctypes.CDLL(None, use_errno=True)
@@ -60,10 +60,10 @@ os.execvp(argv[0], argv)
 
 @dataclass(frozen=True)
 class LaunchedProcess:
-    """The OS facts known the instant a child exists (D1) — before any identity is known.
-    ``pgid`` is recorded, not inferred at kill time (D3): ``start_new_session=True`` makes
+    """The OS facts known the instant a child exists — before any identity is known.
+    ``pgid`` is recorded, not inferred at kill time: ``start_new_session=True`` makes
     the child a fresh session-and-group leader, so its pgid equals its own pid.
-    ``confirm_durable`` is F1's disarm signal — a no-op unless ``defer_disarm=True``."""
+    ``confirm_durable`` is the trampoline's disarm signal — a no-op unless ``defer_disarm=True``."""
 
     pid: int
     pgid: int
@@ -73,7 +73,7 @@ class LaunchedProcess:
 
 class IProcessLauncher(Protocol):
     """Launches a worker, judge, or resume child under its own process group with a
-    parent-death signal (D4) — the one seam every adapter launches a subprocess through."""
+    parent-death signal — the one seam every adapter launches a subprocess through."""
 
     def launch(
         self,
@@ -90,7 +90,7 @@ class IProcessLauncher(Protocol):
         stdin is always ``/dev/null``, never the launcher's own, so a child that drains stdin
         before its turn sees EOF at once.
         Raises ``OSError`` on a launch failure — each adapter translates it into its own
-        ``HarnessSpawnError``. ``defer_disarm=True`` (F1) holds the real binary's ``exec()``
+        ``HarnessSpawnError``. ``defer_disarm=True`` holds the real binary's ``exec()``
         behind a trampoline until the returned handle's ``confirm_durable()`` is called."""
         ...
 
@@ -98,7 +98,7 @@ class IProcessLauncher(Protocol):
 class ProcessLauncher:
     """The one production :class:`IProcessLauncher` — every adapter launches through this.
     ``executor`` defaults to :data:`_SPAWN_EXECUTOR` for a test that doesn't care to wire
-    one; the composition root (D9) always injects its own instead, so both bindings share
+    one; the composition root always injects its own instead, so both bindings share
     ONE executor without depending on this module-level default."""
 
     def __init__(self, process: IProcessProbe, *, executor: Executor | None = None) -> None:
@@ -148,10 +148,9 @@ class ProcessLauncher:
         stderr: IO[bytes] | int | None,
     ) -> LaunchedProcess:
         """The plain, non-deferred launch: the real binary directly, armed for its whole life —
-        exactly today's pre-F1 behavior, and the right one for a caller with no durable-record
-        milestone of its own to defer a disarm to. Every adapter launch defers now (spawn,
-        judge, and resume all have one to defer to — D1/D4); this stays the base case for
-        whatever narrower caller genuinely has none."""
+        the right one for a caller with no durable-record milestone of its own to defer a
+        disarm to. Every adapter launch defers now (spawn, judge, and resume all have one to
+        defer to); this stays the base case for whatever narrower caller genuinely has none."""
         proc = self._launch_process(argv, cwd=cwd, env=env, stdout=stdout, stderr=stderr)
         start_time = self._process.start_time(proc.pid) or ""
         return LaunchedProcess(pid=proc.pid, pgid=proc.pid, process_start_time=start_time, confirm_durable=lambda: None)
@@ -166,7 +165,7 @@ class ProcessLauncher:
         stderr: IO[bytes] | int | None,
         pass_fds: tuple[int, ...] = (),
     ) -> subprocess.Popen[bytes]:
-        # fork()/exec() runs on `self._executor`'s worker thread, not the caller's (D4, see
+        # fork()/exec() runs on `self._executor`'s worker thread, not the caller's (see
         # `_SPAWN_EXECUTOR`); this call blocks for it, so the caller's own timing is unchanged.
         return self._executor.submit(
             subprocess.Popen,  # argv is adapter-composed, never shell-interpreted
@@ -201,7 +200,7 @@ def _ensure_executable(argv0: str, *, cwd: str | None, env: dict[str, str]) -> N
 
 
 def _confirm_once(write_fd: int) -> Callable[[], None]:
-    """One single-use disarm closure per launch (F1): writes the trampoline's go-byte, then
+    """One single-use disarm closure per launch: writes the trampoline's go-byte, then
     closes the write end — a second call is a harmless no-op rather than a write against a
     possibly-reused fd number."""
     sent = False

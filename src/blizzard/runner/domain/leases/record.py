@@ -37,7 +37,7 @@ class IReadLeaseRecordRepository(Protocol):
         ...
 
     def latest_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
-        """The chunk's most-recently-minted lease, active or closed (issue #52).
+        """The chunk's most-recently-minted lease, active or closed.
 
         Unlike :meth:`active_lease_for_chunk`, spans closed leases too — but, unlike
         :meth:`latest_lease_with_session_for_chunk`, may name a session-less mint."""
@@ -48,7 +48,7 @@ class IReadLeaseRecordRepository(Protocol):
         ...
 
     def lease(self, lease_id: str) -> LeaseRecord | None:
-        """The lease by id, regardless of closure — the transcript read (issue #29).
+        """The lease by id, regardless of closure — the transcript read.
 
         Distinct from :meth:`active_lease`: a transcript outlives its lease.
         """
@@ -56,7 +56,7 @@ class IReadLeaseRecordRepository(Protocol):
 
     def list_closed_leases(self, limit: int) -> list[ClosedLeaseRecord]:
         """The most recently closed leases, newest first — the panel's recent-history
-        read (issue #29).
+        read.
 
         ``limit`` bounds rows returned, never how long a closure fact lives on disk.
         """
@@ -65,7 +65,7 @@ class IReadLeaseRecordRepository(Protocol):
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
         """How many leases have been minted for this chunk at this node (retry budget).
 
-        Excludes an attempt an operator's restart preempted (issue #370) — that attempt was
+        Excludes an attempt an operator's restart preempted — that attempt was
         superseded rather than spent, so it does not carry the node toward exhaustion."""
         ...
 
@@ -74,7 +74,7 @@ class IReadLeaseRecordRepository(Protocol):
         ...
 
     def lease_ids_for_chunk(self, chunk_id: str) -> list[str]:
-        """Every lease id ever minted for this chunk, active or closed (issue #58).
+        """Every lease id ever minted for this chunk, active or closed.
 
         A chunk's tenure can span several node-steps and retries, each its own lease —
         this is the release-time read that finds every one of them, not just the
@@ -102,7 +102,7 @@ class IWriteLeaseRecordRepository(IReadLeaseRecordRepository, Protocol):
     ) -> int | None:
         """Close a lease — a clean transition or a failure/escalation.
 
-        When ``event_kind``/``event_payload`` are given (issue #125), the event is
+        When ``event_kind``/``event_payload`` are given, the event is
         enqueued to the outbound buffer **in the same transaction** as the closure —
         the two land together or not at all; return its seq, ``None`` when no event."""
         ...

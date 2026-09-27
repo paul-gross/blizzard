@@ -1,8 +1,8 @@
 """The runner-plane, chunk-scoped transcript segment routes — ``GET /api/chunks/{chunk_id}/transcripts``
-and ``GET .../transcripts/{segment_id}`` (runner-node-grouped-transcripts, D1/D3/D4). Exercised over a
+and ``GET .../transcripts/{segment_id}`` (runner-node-grouped-transcripts). Exercised over a
 real store via ``TestClient``, with a fake ``IReadTranscriptRepository`` standing in for the filesystem
 and an ``IReadArchivedTranscriptRepository`` that raises on any call — a route reaching the hub at all
-fails the test outright, proving D1's local-only claim rather than merely asserting an empty call log
+fails the test outright, proving the local-only claim rather than merely asserting an empty call log
 afterward."""
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ class FakeTranscriptRepository:
 
 
 class RaisingArchivedTranscriptRepository:
-    """Stands in for the hub — any call fails the test immediately (D1)."""
+    """Stands in for the hub — any call fails the test immediately."""
 
     def read_turns(self, *, chunk_id: str, node_id: str, epoch: int) -> ArchivedTranscript:
         raise AssertionError("the runner-plane segment routes must never call the hub")
@@ -127,7 +127,7 @@ def test_index_is_empty_for_a_chunk_this_runner_never_held(tmp_path: Path) -> No
 def test_index_includes_every_segment_under_the_chunk_regardless_of_which_runner_id_its_lease_names(
     tmp_path: Path,
 ) -> None:
-    """Ownership-exclusion (D3): a chunk whose leases carry two DIFFERENT ``runner_id``s —
+    """Ownership-exclusion: a chunk whose leases carry two DIFFERENT ``runner_id``s —
     unreachable in real fleet data, constructed only to prove the point — still reads back
     every segment this store holds; confinement is the physical store, never a filter on ``runner_id``."""
     app, store = _app_with_segments(tmp_path)
@@ -243,7 +243,7 @@ def test_content_windows_a_same_session_resume_to_each_segments_own_turns(tmp_pa
     )
     [gen2] = store.open_transcript_segments()
     # gen2 ships further turns after gen1 is already finalized — gen1's own bound must stay
-    # its own frozen cursor, never gen2's still-advancing one (round 2, F1).
+    # its own frozen cursor, never gen2's still-advancing one.
     store.record_transcript_deltas(
         segment_id=gen2.segment_id,
         chunk_id="ch_1",

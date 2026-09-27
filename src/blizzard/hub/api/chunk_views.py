@@ -48,7 +48,7 @@ class _RouteNotInjected(Enum):
     TOKEN = 0
 
 
-#: :meth:`ChunkView.of`'s default, distinct from an *injected* ``None`` (issue #421).
+#: :meth:`ChunkView.of`'s default, distinct from an *injected* ``None``.
 _ROUTE_NOT_INJECTED: Final = _RouteNotInjected.TOKEN
 
 
@@ -85,7 +85,7 @@ _LIVE_HOLDERS_NOT_INJECTED: Final = _LiveHoldersNotInjected.TOKEN
 
 
 def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedView | None:
-    """A derived marking's wire wrapping (issue #457) — the one home every caller of
+    """A derived marking's wire wrapping — the one home every caller of
     :func:`~blizzard.hub.domain.dependencies.derive_blocked_prerequisites` reaches through,
     listing routes and ``ChunkView`` alike. Takes the dependent's whole unmet set, in
     declared order: the marking names its first and counts them all. An absent or empty
@@ -110,13 +110,13 @@ class ChunkView:
     facts: ChunkFacts
     names: GraphNames
     route: Route | None | _RouteNotInjected = _ROUTE_NOT_INJECTED
-    #: Every pointer's live holder — the caller's own already-resolved map (issue #421).
+    #: Every pointer's live holder — the caller's own already-resolved map.
     live_holders: dict[WorkRef, str] | _LiveHoldersNotInjected = _LIVE_HOLDERS_NOT_INJECTED
-    #: The chunk's blocked marking (issue #457) — the caller's own already-derived value;
+    #: The chunk's blocked marking — the caller's own already-derived value;
     #: neither constructor derives it itself, so a caller that has no use for it (every verb
     #: response but the list and detail reads) pays nothing for it.
     blocked: BlockedView | None = None
-    #: The chunk's standing-edge neighborhood (issue #462) — the caller's own
+    #: The chunk's standing-edge neighborhood — the caller's own
     #: already-derived value, the same shape ``blocked`` takes.
     neighborhood: ChunkNeighborhoodView | None = None
 
@@ -155,7 +155,7 @@ class ChunkView:
         live_holders: dict[WorkRef, str],
         blocked: BlockedView | None = None,
     ) -> ChunkView:
-        """The bulk-read counterpart to :meth:`of` (issue #421): a fan-out list read injects
+        """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
         already-fetched facts, route and pointer live-holders, skipping a per-chunk
         ``load_facts``/``route_of``/``live_holders`` call. ``route=None`` means "no live
         route"; :meth:`of` leaves both uninjected."""
@@ -182,11 +182,11 @@ class ChunkView:
         return self.services.chunks.work_refs.live_holders(self.chunk.work_refs)
 
     def summary(self) -> ChunkSummary:
-        """The derived fleet-list row (issue #104) — rendered both by the list read and by
+        """The derived fleet-list row — rendered both by the list read and by
         every transition verb, from the same facts (``canon:one-owner``)."""
         node_id, node_name = self.current_node()
         status = self.facts.status()
-        # A terminal chunk reads unrouted regardless of injection (issue #140); on the
+        # A terminal chunk reads unrouted regardless of injection; on the
         # lazy path the guard also spares it the `route_of` query.
         if not holds_claim(status):
             route = None
@@ -321,7 +321,7 @@ class ChunkView:
         return PendingView(node_name=node.name, next_poll_at=iso_utc(pending.polled_at + PollPolicy.of(node).interval))
 
     def intended_migration(self) -> IntendedMigrationView | None:
-        """The chunk's standing migration intent as a view (issue #124), or ``None`` when no
+        """The chunk's standing migration intent as a view, or ``None`` when no
         intent is set."""
         intent = self.chunk.intended_migration
         if intent is None:
@@ -334,7 +334,7 @@ class ChunkView:
         )
 
     def _usage_history(self) -> list[ChunkUsageView]:
-        """The chunk's per-node-step usage facts, oldest first (issue #59)."""
+        """The chunk's per-node-step usage facts, oldest first."""
         return [
             ChunkUsageView(
                 node_id=u.node_id,
@@ -416,8 +416,8 @@ class ChunkHistoryView:
     def transitions(self) -> list[TransitionView]:
         """The chunk's transitions oldest-first.
 
-        Each edge's node ids resolve against *the graph the transition happened in* (issue
-        #90), keyed by ``TransitionFact.graph_id`` — not the chunk's current pin (pinned by
+        Each edge's node ids resolve against *the graph the transition happened in*,
+        keyed by ``TransitionFact.graph_id`` — not the chunk's current pin (pinned by
         ``tests/test_transition_graph_provenance.py``)."""
         return [
             TransitionView(
@@ -458,7 +458,7 @@ class ChunkHistoryView:
         ]
 
     def migrations(self) -> list[MigrationView]:
-        """The chunk's cross-graph migration steps oldest-first (issue #90).
+        """The chunk's cross-graph migration steps oldest-first.
 
         Each step names the graph it left and the graph it re-pinned to: ``from_node``
         resolves against the ``from_graph``, ``landed_node`` against the ``to_graph`` — each

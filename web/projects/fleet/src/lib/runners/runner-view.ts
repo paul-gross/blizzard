@@ -13,7 +13,7 @@ import { localPauseHint, runnerToggleHint, type RunnerRow } from './runner-rows'
 import { SubscriptionPaceGroup } from './subscription-pace-group';
 
 /**
- * The runner registry's presentational half (issue #80) — the registry
+ * The runner registry's presentational half — the registry
  * table's markup, liveness dot, claim lines, pause-brake badges, and the
  * pause/resume toggle. Renders exactly the rows it is handed; injects no
  * query or mutation, so a spec drives it with plain inputs.
@@ -33,7 +33,7 @@ export class RunnerPanelView {
    * copy until the read resolves. */
   readonly state = input.required<KitAsyncStateValue>();
 
-  /** Whether to render the hub pause/resume brake (issue #93) — the container passes
+  /** Whether to render the hub pause/resume brake — the container passes
    * `hasPermission(me, 'runner:pause')`. Admin-tier: a `contributor` sees the registry
    * and its liveness/paused badges but not the toggle it could only 403 on. Defaults
    * `false` so the brake stays withheld until permission is confirmed (no flash of a
@@ -52,7 +52,7 @@ export class RunnerPanelView {
   readonly pendingRunnerIds = input<readonly string[]>([]);
 
   /** The panel's last pause/resume failure, or `null` — rendered as a visible inline
-   * notice near the registry (issue #42's "report, don't swallow"). */
+   * notice near the registry ("report, don't swallow"). */
   readonly actionError = input<string | null>(null);
 
   /** Whether `row`'s own hub pause/resume mutation is in flight — the per-row
@@ -62,13 +62,13 @@ export class RunnerPanelView {
   }
 
   /** A claim's badge tone, read straight off `chunk-lanes.ts`'s `STATUS_TONE` — the
-   * single owner of the status→tone fold the board card colors from too (issue #156).
+   * single owner of the status→tone fold the board card colors from too.
    * No local table: a claim's color and its card's can never drift apart. */
   protected toneFor(status: ChunkStatus): Tone {
     return STATUS_TONE[status];
   }
 
-  /** Whether to render the env-slot bar (issue #69): only when the runner reported a
+  /** Whether to render the env-slot bar: only when the runner reported a
    * capacity. A runner registered by a client that predates the field has a null (or
    * absent) `env_capacity` and gets no bar, rather than a misleading zero-slot one. */
   protected hasCapacity(row: RunnerRow): boolean {

@@ -1,7 +1,7 @@
 import type { TranscriptSidechain, TranscriptTurn } from './transcript-turn';
 
 /**
- * Fold a read's late-linked turns (blizzard#338) back onto the calls they belong to.
+ * Fold a read's late-linked turns back onto the calls they belong to.
  *
  * The runner ships a transcript in windows, so a tool's result and a subagent's conversation
  * routinely arrive in a later record than the call that produced them — carried as an

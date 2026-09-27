@@ -1,4 +1,4 @@
-"""``IReadChunkRouteRepository.load_all_routes`` (component tier, blizzard#421).
+"""``IReadChunkRouteRepository.load_all_routes`` (component tier).
 
 Proves the bulk read derives the same route per chunk as ``route_of`` called one at a
 time, across ``test_load_all_facts_store``'s fixture, in a bounded query count."""

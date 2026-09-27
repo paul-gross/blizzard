@@ -1,7 +1,7 @@
 import { DestroyRef, type Signal, inject, signal } from '@angular/core';
 
 /**
- * A self-ticking `Date.now()` signal (issue #178) — the one construct a display
+ * A self-ticking `Date.now()` signal — the one construct a display
  * that must advance on its own reads instead of calling `Date.now()` inside a
  * `computed()`. That call is untracked: a `computed()` only recomputes when an
  * *input* signal changes, so a heartbeat bar or an "Ns ago" label built that way

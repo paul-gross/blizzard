@@ -1,4 +1,4 @@
-"""The blocked marking on the four read surfaces (issue #457) — the derivation of
+"""The blocked marking on the four read surfaces — the derivation of
 ``derive_blocked_markings`` proven end to end over HTTP.
 
 A marked chunk's ``status``, rank, and ranked list are untouched, and grouping, deletion,
@@ -172,7 +172,7 @@ def test_grouping_deletion_and_the_pre_claim_edit_still_admit_a_blocked_chunk(tm
 
 
 def test_a_completed_dependent_derives_no_marking_despite_its_standing_edge(tmp_path: Path) -> None:
-    """Review round 1 F1: hand-completing the dependent while its prerequisite stays
+    """Hand-completing the dependent while its prerequisite stays
     unmet must not leave a `done` chunk reporting itself `blocked` — that question no
     longer applies once the dependent is past the pre-claim window, even though the edge
     itself is still standing (never released)."""
@@ -216,8 +216,8 @@ class _CountingFactsStore(ChunkFactsStore):
 
 
 def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path: Path) -> None:
-    """Review round 1 F5, round 2 F1: ``GET /api/chunks/{id}``'s blocked-marking and
-    neighborhood (issue #462) share one standing-edges read and one resulting statuses map,
+    """``GET /api/chunks/{id}``'s blocked-marking and
+    neighborhood share one standing-edges read and one resulting statuses map,
     so its one prerequisite's facts are read through the same bulk `load_facts_for` call
     the neighborhood derivation makes — never a second per-chunk `load_facts`, and never
     the bulk `load_all_facts` seam."""

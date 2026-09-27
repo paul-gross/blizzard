@@ -19,14 +19,14 @@ class IReadChunkRouteRepository(Protocol):
 
     def load_all_routes(self) -> dict[str, Route]:
         """Every chunk's live route, keyed by chunk id — the bulk counterpart to
-        :meth:`route_of` (issue #421), bounded the way ``load_all_facts`` is. A chunk
+        :meth:`route_of`, bounded the way ``load_all_facts`` is. A chunk
         with no live route is absent from the dict, as :meth:`route_of` returns ``None``."""
         ...
 
     def routes_for(self, chunk_ids: Iterable[str]) -> dict[str, Route]:
         """The given chunks' live routes, keyed by chunk id — the by-id-set bulk read
         between :meth:`route_of`'s one-chunk read and :meth:`load_all_routes`'s
-        whole-fleet one (blizzard#521). A chunk with no live route is absent from the
+        whole-fleet one. A chunk with no live route is absent from the
         dict, as :meth:`route_of` returns ``None``."""
         ...
 
@@ -39,7 +39,7 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
     """Read-write chunk-route access."""
 
     def record_route(self, route: Route, *, token_hash: str, at: datetime) -> str:
-        """Record the route **and** mint its capability token's fact, atomically (issue #84a).
+        """Record the route **and** mint its capability token's fact, atomically.
 
         ``token_hash`` is the sha256 digest of the plaintext token, already hashed by the
         caller (``bzh:domain-takes-objects``); the token fact lands in the same store
@@ -48,12 +48,12 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
 
     def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
         """Append the ``route.released`` fact. Returns the freshly-written
-        ``route_released.id`` (issue #213's activity-feed key)."""
+        ``route_released.id`` (the activity-feed's key)."""
         ...
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
         """Append a fresh :class:`RouteTokenMintedFact` for the chunk's route — the re-key
-        path (issue #84b). Never mutates the prior token fact (``bzh:facts-not-status``):
+        path. Never mutates the prior token fact (``bzh:facts-not-status``):
         :attr:`RouteHistory.newest_token` supersedes it with no separate revocation step."""
         ...
 

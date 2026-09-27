@@ -1,4 +1,4 @@
-"""delivery kick-back bounces + per-node bounce cap (issue #64, hub store tree). Adds
+"""delivery kick-back bounces + per-node bounce cap (hub store tree). Adds
 ``chunk_bounces`` (natural-keyed on ``(chunk_id, epoch)``) and ``graph_nodes.bounce_cap``.
 
 Revision ID: 20260717_2345_hub_chunk_bounces

@@ -1,5 +1,5 @@
 """``blizzard hub item create/edit/delete`` (unit tier) — pure clients of the
-source-addressed work-item routes, driven here with ``httpx`` stubbed (blizzard#361).
+source-addressed work-item routes, driven here with ``httpx`` stubbed.
 """
 
 from __future__ import annotations
@@ -269,7 +269,7 @@ def test_delete_surfaces_the_hubs_capability_refusal_verbatim(monkeypatch: pytes
 def test_delete_of_a_live_held_item_surfaces_the_held_chunk_detail_not_the_canned_no_editor_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A held-chunk 409 (issue #364) is a different refusal than the capability gate the
+    """A held-chunk 409 is a different refusal than the capability gate the
     route's ``on_status`` canned message names — ``CliContext.detail()`` prefers the
     server's own ``detail`` over that fallback, so the real reason surfaces."""
 

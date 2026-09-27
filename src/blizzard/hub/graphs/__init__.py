@@ -117,7 +117,7 @@ class GraphFile:
     @property
     def inlined_yaml(self) -> str:
         """:attr:`body` re-serialized — what a mint taking raw ``definition_yaml``, which resolves no
-        file references of its own, needs (issue #123)."""
+        file references of its own, needs."""
         return yaml.safe_dump(self.body, sort_keys=False)
 
 
@@ -136,7 +136,7 @@ class PackagedGraphs:
 
     @property
     def paths(self) -> list[Path]:
-        """Every packaged graph's ``graph.yaml``, sorted by directory name (issue #146) so a report over
+        """Every packaged graph's ``graph.yaml``, sorted by directory name so a report over
         them reads the same way twice. The filename is the membership test, not a name blocklist that would
         need maintaining: a directory carrying no ``graph.yaml`` is skipped by construction."""
         return sorted(self.root.glob("*/graph.yaml"), key=lambda path: path.parent.name)

@@ -29,7 +29,7 @@ _NEW_PATHS = [
     "/api/runners/{runner_id}/resume",
     "/api/runners/{runner_id}/enrollments",
     "/api/spend",
-    # The runner-authenticated fleet router (issue #87) — mounted once with
+    # The runner-authenticated fleet router — mounted once with
     # `require_runner_principal` at router level.
     "/api/fleet/queue/peek",
     "/api/fleet/chunk-statuses",
@@ -51,7 +51,7 @@ _NEW_PATHS = [
     "/api/fleet/chunks/{chunk_id}/hub-advance",
 ]
 
-# The work-source rename's deprecated HTTP aliases (issue #55) — `(canonical, alias)`.
+# The work-source rename's deprecated HTTP aliases — `(canonical, alias)`.
 _DEPRECATED_ALIAS_PAIRS = [
     ("/api/chunks/{chunk_id}/work-items", "/api/chunks/{chunk_id}/pm-items"),
     ("/api/fleet/chunks/{chunk_id}/work-items", "/api/fleet/chunks/{chunk_id}/pm-items"),
@@ -86,7 +86,7 @@ def test_the_only_deprecated_operations_are_the_sanctioned_aliases() -> None:
 
 
 def test_each_deprecated_alias_returns_the_same_view_as_its_canonical_route(tmp_path: Path) -> None:
-    """One handler, two routes (issue #55) — the alias is not a second implementation to
+    """One handler, two routes — the alias is not a second implementation to
     drift. Driven against a real chunk carrying a work ref, so the assertion compares a
     populated view rather than two identical empty lists."""
     hub = build_hub(tmp_path, work_sources={"widget": FakeWorkSource(name="widget", body="the issue body")})

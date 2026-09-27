@@ -1,4 +1,4 @@
-"""``blizzard hub question`` — issue #104: operator verbs over open questions (list, answer)."""
+"""``blizzard hub question`` — operator verbs over open questions (list, answer)."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def question_answer(cli: CliContext, question_id: str, answer_text: str, answere
     """Answer an open question (first-write-wins CAS at the hub).
 
     A racing second answer loses and is told who already answered. A pure client of
-    ``POST /api/questions/{id}/answers`` (issue #104)."""
+    ``POST /api/questions/{id}/answers``."""
     resp = cli.send(
         "post", f"/api/questions/{question_id}/answers", json_body={"answer": answer_text, "answered_by": answered_by}
     )

@@ -1,8 +1,8 @@
-"""Fleet-wide reads spanning every chunk — currently just spend-since (issue #60).
+"""Fleet-wide reads spanning every chunk — currently just spend-since.
 
 ``GET /api/spend`` sums every usage fact in the requested window into one fleet-wide
 total, derived at read time (``bzh:facts-not-status``), never a stored column. The window
-is half-open — ``since`` inclusive, optional ``until`` exclusive (issue #183)."""
+is half-open — ``since`` inclusive, optional ``until`` exclusive."""
 
 from __future__ import annotations
 

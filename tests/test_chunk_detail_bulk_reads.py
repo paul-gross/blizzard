@@ -1,5 +1,4 @@
-"""``GET /chunks/{id}`` — the detail route's graph-name priming (component tier,
-blizzard#515/#518).
+"""``GET /chunks/{id}`` — the detail route's graph-name priming (component tier).
 
 Proves the route primes every graph id its history/restarts/migrations/intended
 migration name, so it never reaches `IReadGraphRepository.get` except the one

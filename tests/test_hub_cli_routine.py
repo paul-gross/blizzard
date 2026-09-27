@@ -1,6 +1,5 @@
 """``blizzard hub routine create|list|show|edit|trend|proposal-counts`` (unit tier) — pure
-clients of the routine routes, driven here with ``httpx`` stubbed (blizzard#389; ``trend``
-is blizzard#394 Phase 4; ``proposal-counts`` is blizzard#547 Phase 3), the
+clients of the routine routes, driven here with ``httpx`` stubbed, the
 ``tests/test_hub_cli_graph.py`` shape."""
 
 from __future__ import annotations
@@ -329,7 +328,7 @@ def test_routine_show_prints_the_harnesses_default(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.unit
 def test_routine_show_lists_the_routines_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """blizzard#488 Phase 3: ``routine show`` also reads ``GET /routines/{id}/scopes``
+    """``routine show`` also reads ``GET /routines/{id}/scopes``
     and appends a ``scopes:`` line naming every linked scope."""
 
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
@@ -405,7 +404,7 @@ def test_routine_edit_reads_the_current_name_then_patches(monkeypatch: pytest.Mo
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub routine scope add|remove` (blizzard#488 Phase 3)
+# `blizzard hub routine scope add|remove`
 
 
 @pytest.mark.unit

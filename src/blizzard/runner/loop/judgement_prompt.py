@@ -23,7 +23,7 @@ class JudgementPrompt:
         return (self.envelope.judgement_prompt or "") + self._checks_block() + self._elicitation_tail()
 
     def _checks_block(self) -> str:
-        """One line per check with its command and ``PASS``/``FAIL`` (issue #114).
+        """One line per check with its command and ``PASS``/``FAIL``.
 
         A failed check additionally shows its output tail; a node with no checks adds nothing.
         """

@@ -1,4 +1,4 @@
-"""The ``auth.superuser`` bootstrap lifecycle at boot (component tier, issue #94).
+"""The ``auth.superuser`` bootstrap lifecycle at boot (component tier).
 
 Exercises the full lifecycle against a real migrated store: pre-provision when
 unclaimed, promote-in-place when the email resolves to a user, idempotence across

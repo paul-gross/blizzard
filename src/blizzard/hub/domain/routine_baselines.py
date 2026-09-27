@@ -1,7 +1,7 @@
-"""Routine baselines — a read-only composition over the finding-set and delivery seams
-(blizzard#399, D5): one entry per scope a routine has swept, each carrying the baseline
-finding set's id, its recorded instant (`Id.minted_at`, D2), and per repo how much has
-landed since (D1). See `IReadFindingSetRepository.newest_by_scope_for_routine` for what
+"""Routine baselines — a read-only composition over the finding-set and delivery seams:
+one entry per scope a routine has swept, each carrying the baseline
+finding set's id, its recorded instant (`Id.minted_at`), and per repo how much has
+landed since. See `IReadFindingSetRepository.newest_by_scope_for_routine` for what
 absence means."""
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from blizzard.hub.domain.routines import Routine
 @dataclass(frozen=True)
 class RepoLandings:
     """One repo's baseline revision and how much has landed against it since —
-    `IReadChunkDeliveryRepository.count_landed_since`'s own fact (D1)."""
+    `IReadChunkDeliveryRepository.count_landed_since`'s own fact."""
 
     repo: str
     revision: str
@@ -27,7 +27,7 @@ class RepoLandings:
 
 @dataclass(frozen=True)
 class RoutineBaseline:
-    """One (routine, scope) pair's newest finding set (D5)."""
+    """One (routine, scope) pair's newest finding set."""
 
     scope_slug: str
     finding_set_id: str
@@ -45,7 +45,7 @@ class MalformedFindingSetIdError(ValueError):
 
 
 class RoutineBaselineService:
-    """The read-only baseline composition D5 names."""
+    """The read-only baseline composition."""
 
     def __init__(self, *, finding_sets: IReadFindingSetRepository, delivery: IReadChunkDeliveryRepository) -> None:
         self._finding_sets = finding_sets
@@ -53,7 +53,7 @@ class RoutineBaselineService:
 
     def baselines_for(self, routine: Routine) -> list[RoutineBaseline]:
         """Newest-swept-first (`finding_set_id` descending) — the picker's own ordering
-        cue (D5). Takes the already-resolved routine (`bzh:domain-takes-objects`)."""
+        cue. Takes the already-resolved routine (`bzh:domain-takes-objects`)."""
         sets = self._finding_sets.newest_by_scope_for_routine(routine.name)
         baselines = [self._baseline_of(finding_set) for finding_set in sets]
         return sorted(baselines, key=lambda b: b.finding_set_id, reverse=True)

@@ -1,4 +1,4 @@
-"""Unit-tier mirror of the service guard's table-vs-protocol check (blizzard-mock#4).
+"""Unit-tier mirror of the service guard's table-vs-protocol check.
 
 ``tests/service/test_parity_guard.py``'s table-vs-protocol check is service-gated as
 a whole, so a drifted ``_IHUBCLIENT_ENDPOINTS`` entry would only trip under

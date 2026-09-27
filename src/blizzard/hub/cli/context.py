@@ -23,7 +23,7 @@ ENV_HUB_URL = "BZ_HUB_URL"
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"
 CLIENT_TIMEOUT = 15.0
 
-#: The actionable hint a verb's own unnamed 401 maps to (issue #96).
+#: The actionable hint a verb's own unnamed 401 maps to.
 _LOGIN_HINT = "not authenticated — run `blizzard hub login`"
 
 #: The fallback a verb's own unnamed 403 falls back to when the body carries no ``detail``.
@@ -33,7 +33,7 @@ _FORBIDDEN_FALLBACK = "forbidden"
 @dataclass(frozen=True)
 class CliContext:
     """One operator verb's invocation — the resolved hub, the read-only local session
-    seam (issue #96, ``bzh:controller-read-only``), and whether to print JSON."""
+    seam (``bzh:controller-read-only``), and whether to print JSON."""
 
     hub_url: str
     session_reader: IReadSessionStore
@@ -66,7 +66,7 @@ class CliContext:
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
     ) -> list[Any]:
-        """Drain every page of a keyset-paginated list read (blizzard#526 D7), concatenating
+        """Drain every page of a keyset-paginated list read, concatenating
         ``key``'s rows across pages. Fixed at ``limit=1000`` so it never truncates as the
         fleet grows; no verb exposes ``--cursor``/``--limit`` of its own (``blizzard:cli-contract``)."""
         page_params = dict(params or {})
@@ -116,7 +116,7 @@ class CliContext:
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
     ) -> Iterator[str]:
-        """A ``GET`` read one decoded line at a time (the NDJSON bulk-export seam, D4).
+        """A ``GET`` read one decoded line at a time (the NDJSON bulk-export seam).
         Dispatches through ``httpx``'s module-level ``stream``, mirroring :meth:`send` so
         ``monkeypatch.setattr`` still intercepts it; a refusal resolves before any line is
         yielded, so it surfaces like :meth:`check`'s buffered path, not mid-iteration."""
@@ -159,8 +159,8 @@ class CliContext:
         """Map a handful of status codes to a ``ClickException`` reading the body's own
         ``detail`` (falling back to the per-code default named in ``on_status``); anything
         else still errors via ``raise_for_status``. A bare 401 not named in ``on_status``
-        gets the actionable login hint (issue #96); a bare 403 not named in ``on_status``
-        surfaces the server's own ``detail`` (D5)."""
+        gets the actionable login hint; a bare 403 not named in ``on_status``
+        surfaces the server's own ``detail``."""
         if on_status and resp.status_code in on_status:
             raise click.ClickException(self.detail(resp, on_status[resp.status_code]))
         if resp.status_code == httpx.codes.UNAUTHORIZED:
@@ -230,7 +230,7 @@ class CliContext:
         return resp
 
     def _headers(self) -> dict[str, str]:
-        """The ``Authorization: Bearer`` header for this hub (issue #96) — empty when the
+        """The ``Authorization: Bearer`` header for this hub — empty when the
         local session store holds none, so every verb keeps working with no login."""
         token = self.session_reader.load(self.hub_url)
         return {"Authorization": f"Bearer {token}"} if token else {}

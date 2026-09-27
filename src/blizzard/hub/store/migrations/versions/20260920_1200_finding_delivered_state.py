@@ -1,4 +1,4 @@
-"""Widens ``ck_finding_facts_kind`` to admit the ``delivered`` fact kind (blizzard#583).
+"""Widens ``ck_finding_facts_kind`` to admit the ``delivered`` fact kind.
 
 Revision ID: 20260920_1200_finding_delivered_state
 Revises: 20260920_1100_hub_usage_harness_provenance

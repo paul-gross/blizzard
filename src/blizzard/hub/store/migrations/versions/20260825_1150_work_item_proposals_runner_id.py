@@ -1,4 +1,4 @@
-"""work_item_proposals.runner_id — the proposing runner (D4), stamped at insert.
+"""work_item_proposals.runner_id — the proposing runner, stamped at insert.
 Nullable, no backfill.
 
 Revision ID: 20260825_1150_work_item_proposals_runner_id

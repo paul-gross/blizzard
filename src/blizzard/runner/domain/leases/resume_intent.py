@@ -1,5 +1,5 @@
 """The lease resume-intent repository seam — the restart resume-intent mark and its
-clear (issue #12/#13)."""
+clear."""
 
 from __future__ import annotations
 

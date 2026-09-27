@@ -1,5 +1,5 @@
 """``GET /api/fleet/scopes`` — the deployment's scope vocabulary, worker-facing
-(blizzard#582 D2, component tier). Reuses ``scopes.py``'s own ``scope_view`` projection,
+(component tier). Reuses ``scopes.py``'s own ``scope_view`` projection,
 the ``test_fleet_garden_findings_api.py`` shape."""
 
 from __future__ import annotations

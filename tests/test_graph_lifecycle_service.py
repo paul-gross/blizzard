@@ -1,5 +1,5 @@
 """GraphLifecycleService (unit tier) — the operator's retire/re-enable brake over one
-specific ``graph_id``, facts only (issue #101).
+specific ``graph_id``, facts only.
 
 A fake stands in for the store — only ``record_lifecycle`` is meaningfully implemented;
 every other seam raises loudly if called (``bzh:domain-core`` — no store, no tokens).

@@ -1,4 +1,4 @@
-"""The OpenCode export -> :class:`NormalizedTurn` normalizer (blizzard#437).
+"""The OpenCode export -> :class:`NormalizedTurn` normalizer.
 
 Pure and stdlib-only (``bzh:domain-core``): :func:`build_turns` takes already-parsed
 :class:`~.opencode_shapes.OpenCodeMessage` objects, never a raw export string, and never touches

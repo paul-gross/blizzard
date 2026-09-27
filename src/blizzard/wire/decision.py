@@ -39,14 +39,14 @@ class DocketEntryView(BaseModel):
 class DecisionSubmission(BaseModel):
     """A runner-config gate: submit a decision in place of a transition, carrying the
     gated step's artifacts, proposed work items, and fencing epoch as one atomic write.
-    ``proposals`` is legal only from a node declaring ``proposes_work_items`` (D4, D6)."""
+    ``proposals`` is legal only from a node declaring ``proposes_work_items``."""
 
     from_node_id: str  # the gated node — its choices become the decision's
     epoch: int  # the step's lease fence, checked against the chunk's latest
     runner_id: str
     artifacts: list[SubmittedArtifact] = []
     proposals: list[WorkItemProposal] = []
-    # The route capability token stamped at enqueue (issue #84a) — see
+    # The route capability token stamped at enqueue — see
     # `wire.completion.CompletionSubmission.route_token`; present-only in this phase.
     route_token: str | None = None
 

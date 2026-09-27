@@ -14,15 +14,15 @@ import {
 import { GardeningRunDialogView, type RunSubmission } from './gardening-run-dialog-view';
 
 /**
- * The gardening run dialog's container (blizzard#399 D6) — kicks off a routine run
+ * The gardening run dialog's container — kicks off a routine run
  * from a dialog: scope, mode, and a charge note, with the baseline read
- * (`GET /api/routines/{routine_id}/baselines`, D5) resolving before submission rather
+ * (`GET /api/routines/{routine_id}/baselines`) resolving before submission rather
  * than after.
  *
  * Injects `injectHubScopesQuery` (every scope, for descriptions),
- * `injectHubRoutineScopesQuery` (the routine's own related set, D6),
+ * `injectHubRoutineScopesQuery` (the routine's own related set),
  * `injectHubRoutineBaselinesQuery`, and `injectRunRoutineMutation`; composes their data
- * into the scope ordering D5 names, restricted to the routine's related, non-retired
+ * into the previously-swept-first scope ordering, restricted to the routine's related, non-retired
  * scopes, and delegates every field and the submission flow to
  * {@link GardeningRunDialogView} (`bzh:frontend-container-presentational`).
  *
@@ -48,26 +48,25 @@ export class GardeningRunDialog {
   protected readonly baselinesQuery = injectHubRoutineBaselinesQuery(() => this.routineId());
   private readonly runMutation = injectRunRoutineMutation();
 
-  /** The routine's own related set (D6), read off `GET /api/routines/{id}/scopes` —
+  /** The routine's own related set, read off `GET /api/routines/{id}/scopes` —
    * slugs only, joined below against the all-scopes read for descriptions. */
   private readonly relatedSlugs = computed<ReadonlySet<string>>(
     () => new Set(this.routineScopesQuery.data() ?? []),
   );
 
-  /** The routine's related, non-retired scopes (D6) — a retired scope stays related
+  /** The routine's related, non-retired scopes — a retired scope stays related
    * but is offered to no run. */
   private readonly liveScopes = computed<readonly ScopeView[]>(() =>
     (this.scopesQuery.data() ?? []).filter((s) => !s.retired && this.relatedSlugs().has(s.slug)),
   );
 
-  /** The scope slugs this routine has swept, D5's own read. */
+  /** The scope slugs this routine has swept. */
   protected readonly sweptSlugs = computed<ReadonlySet<string>>(
     () => new Set((this.baselinesQuery.data() ?? []).map((b) => b.scope_slug)),
   );
 
-  /** Previously-swept scopes first, in D5's own newest-swept-first order; every other
-   * live, related scope after, in the order `GET /api/scopes` served them (D5's own
-   * ordering criterion). */
+  /** Previously-swept scopes first, in newest-swept-first order; every other
+   * live, related scope after, in the order `GET /api/scopes` served them. */
   protected readonly orderedScopes = computed<readonly ScopeView[]>(() => {
     const swept = this.sweptSlugs();
     const bySlug = new Map(this.liveScopes().map((s) => [s.slug, s]));
@@ -78,7 +77,7 @@ export class GardeningRunDialog {
     return [...sweptOrdered, ...rest];
   });
 
-  /** `isEmpty` reads the related set's own literal count (D7) — never hardcoded. */
+  /** `isEmpty` reads the related set's own literal count — never hardcoded. */
   protected readonly state = computed(() =>
     asyncStateOf([this.scopesQuery, this.routineScopesQuery, this.baselinesQuery], this.liveScopes().length === 0),
   );

@@ -36,7 +36,7 @@ class FakeEventSource {
 }
 
 /** Stubs `/api/me` and `/api/auth/providers` — the two reads the app root's session
- * gate (`authState`, issue #93) depends on — plus every other route the app touches
+ * gate (`authState`) depends on — plus every other route the app touches
  * (health/chunks/fleet-spend/queue/etc, all default to `{}` via `stubRequestClient`).
  * `me` defaults to the full-permission operator identity (`auth.mode = "none"`'s
  * shape), so a spec that does not care about auth exercises the app exactly as it
@@ -60,7 +60,7 @@ function stubAuth(me: MeResponse | null = OPERATOR_ME_RESPONSE, providers: reado
 /** Same shape as {@link stubAuth}, but also captures each `/api/spend` request's
  * full URL (query string included) — unlike `stubRequestClient`'s `CapturedRequest`,
  * which drops it, this spec needs the raw `since`/`until` params to prove the
- * yesterday window reaches the request (issue #183). Conforms to
+ * yesterday window reaches the request. Conforms to
  * {@link RequestClientStub} (`requests`/`forRoute` unused, kept trivial) so it can
  * stand in for `authStub` in this file's shared `afterEach`. */
 function stubAuthCapturingSpendUrls(): RequestClientStub & { spendUrls: string[] } {
@@ -120,7 +120,7 @@ describe('hub App', () => {
     const nav = el.querySelector('[data-testid="app-nav"]');
     expect(header).toBeTruthy();
     expect(nav).toBeTruthy();
-    // The order AppShell enforces by construction (issue #325) — header above
+    // The order AppShell enforces by construction — header above
     // nav above routed content, the same fixed slot order the runner app root
     // composes its own header/nav/content into.
     expect(Boolean(header!.compareDocumentPosition(nav!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -373,9 +373,9 @@ describe('hub App', () => {
 
       expect(el.querySelector('[data-testid="nav-admin"]')).toBeNull();
 
-      // Log out lives inside the header's profile menu (issue #132) — closed by
+      // Log out lives inside the header's profile menu — closed by
       // default, so it opens the trigger before the entry is reachable. The
-      // menu is a CDK overlay (issue #161), so it renders on `document.body`
+      // menu is a CDK overlay, so it renders on `document.body`
       // rather than inside the fixture.
       el.querySelector<HTMLElement>('[data-testid="app-nav-menu"]')?.click();
       await settle(fixture);

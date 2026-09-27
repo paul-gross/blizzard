@@ -1,5 +1,5 @@
-"""findings, finding_facts, finding_sets, garden_proposals, garden_proposal_findings
-(blizzard#390). One hand-written revision mints all five; every table but the last is a
+"""findings, finding_facts, finding_sets, garden_proposals, garden_proposal_findings.
+One hand-written revision mints all five; every table but the last is a
 frozen local literal at its as-shipped shape (`bzh:frozen-revisions`), each reshaped by
 a later revision. `garden_proposal_findings` is never reshaped, so it still imports live.
 
@@ -42,7 +42,7 @@ _findings = sa.Table(
 sa.Index("ix_findings_routine_scope", _findings.c.routine_name, _findings.c.scope_slug)
 sa.Index("ix_findings_routine_class", _findings.c.routine_name, _findings.c.class_)
 
-# No `delivered` (blizzard#583) — reshaped by 20260920_1200_finding_delivered_state.
+# No `delivered` — reshaped by 20260920_1200_finding_delivered_state.
 _finding_facts = sa.Table(
     "finding_facts",
     _frozen_metadata,

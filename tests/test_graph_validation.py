@@ -206,7 +206,7 @@ def test_entry_reaching_no_terminal_is_a_warning_not_an_error() -> None:
     assert any("no path from entry" in w and "terminal" in w for w in result.warnings)
 
 
-# --- Checks gating (issue #114) ------------------------------------------------
+# --- Checks gating ------------------------------------------------
 
 
 def test_requires_checks_on_a_node_with_checks_is_legal() -> None:
@@ -293,7 +293,7 @@ def test_non_positive_checks_timeout_is_an_error() -> None:
     assert any("`checks_timeout` must be a positive number of seconds" in e for e in result.errors), result.errors
 
 
-# --- Proposed work items (D4) --------------------------------------------------
+# --- Proposed work items --------------------------------------------------
 
 
 def test_proposes_work_items_on_a_worker_node_mints() -> None:

@@ -16,7 +16,7 @@ from blizzard.runner.runtime import ensure_current_revision
 
 @click.group("transcript")
 def transcript_group() -> None:
-    """Operator: maintenance over this runner's own transcript lane (blizzard#250)."""
+    """Operator: maintenance over this runner's own transcript lane."""
 
 
 def _daemon_holding(config: RunnerConfig) -> str | None:

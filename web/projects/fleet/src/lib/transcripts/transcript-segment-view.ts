@@ -8,12 +8,12 @@ import type { TranscriptTurn } from './transcript-turn';
 
 /** Keep only the most recent this-many turns rendered for one segment — mirrors the
  * runner panel's own `MAX_TURNS` cap (`projected_transcript_repository.py`), so no
- * consumer renders an unbounded DOM for one large segment (`review:F7`). A sidechain's
+ * consumer renders an unbounded DOM for one large segment. A sidechain's
  * own turns are uncapped, same as the runner side. */
 const MAX_RENDERED_TURNS = 1000;
 
 /**
- * One open transcript segment, rendered with its own resume-seam links (D6)
+ * One open transcript segment, rendered with its own resume-seam links
  * and truncation/cap banners — the shared body both the Transcripts tab and the
  * node history tab's per-step detail pane mount, factored out once a second consumer
  * needed the same seam buttons and turn cap the Transcripts tab already carried.
@@ -49,7 +49,7 @@ export class TranscriptSegmentView {
    * open segment is the step's last (or the step's only) segment. */
   readonly continuesIn = input<TranscriptSegmentIndexEntry | null>(null);
 
-  /** The open segment's own recorded harness identity (blizzard#441) — `null` renders
+  /** The open segment's own recorded harness identity — `null` renders
    * no harness affordance at all, never a guess from the turns it holds. */
   readonly harnessId = input<string | null>(null);
 
@@ -62,7 +62,7 @@ export class TranscriptSegmentView {
   readonly openStandalone = output<SidechainOpenEvent>();
 
   /** {@link turns}, tail-capped at {@link MAX_RENDERED_TURNS} the same way the runner
-   * panel caps its own list (`review:F7`). A sidechain's own turns pass through
+   * panel caps its own list. A sidechain's own turns pass through
    * {@link TranscriptViewer} uncapped, same as the runner side. */
   protected readonly cappedTurns = computed(() => {
     const turns = this.turns();

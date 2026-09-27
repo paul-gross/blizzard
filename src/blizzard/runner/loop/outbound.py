@@ -84,7 +84,7 @@ class OutboundFacts:
     def command_failed(
         self, *, chunk_id: str | None, lease_id: str | None, node_name: str | None, command: str, stderr_tail: str
     ) -> None:
-        """A captured spawn/verify/env-prep command failure (issue #125), surfaced as a
+        """A captured spawn/verify/env-prep command failure, surfaced as a
         ``warning`` operational event that rides no closure and alters no control flow."""
         self.event(
             kind=_EVENT_COMMAND_FAILED,
@@ -97,7 +97,7 @@ class OutboundFacts:
         )
 
     def transcript_truncated(self, *, chunk_id: str, segment_id: str, reason: str, at: datetime) -> None:
-        """A transcript segment stopped shipping content (D4, issue #246), surfaced as a
+        """A transcript segment stopped shipping content, surfaced as a
         ``warning`` operational event on the FACT lane — the issue-#125 precedent.
         Truncation is never silent: it is also a field on the segment itself."""
         self.event(

@@ -1,4 +1,4 @@
-"""``GET /api/routines/trend`` (blizzard#394 Phase 4, component tier) — a routine's
+"""``GET /api/routines/trend`` (component tier) — a routine's
 finding inflow-against-outflow over a window, seeded straight through ``findings``/
 ``finding_facts`` so each fact's own ``recorded_at``/``introduced_at`` is pinned exactly
 (the ``tests/test_finding_api.py`` shape)."""
@@ -224,7 +224,7 @@ def test_trend_rejects_a_span_bucketing_past_the_period_cap(tmp_path: Path) -> N
 
 
 def test_trend_404s_on_an_unknown_routine_name(tmp_path: Path) -> None:
-    """blizzard#394 review F4: an unresolved routine name must not read as a genuinely
+    """An unresolved routine name must not read as a genuinely
     quiet window — `services.routines` is resolved at the edge before the read, the
     sibling routine routes' own 404 shape."""
     hub = build_hub(tmp_path)

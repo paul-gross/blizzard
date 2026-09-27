@@ -1,5 +1,5 @@
 """chunk model selection — a mutable ``model`` column on chunks, added only where an
-older database lacks it (issue #27, hub store tree)
+older database lacks it (hub store tree)
 
 Revision ID: 20260717_2318_hub_chunk_model_selection
 Revises: 20260717_0446_hub_chunk_pause_facts

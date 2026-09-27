@@ -1,4 +1,4 @@
-"""``blizzard runner takeover`` — the domain service + loop-guard (component tier, issue #52).
+"""``blizzard runner takeover`` — the domain service + loop-guard (component tier).
 
 Drives ``TakeoverService`` against a real tmp store with fakes at the seams: the three
 parked shapes each open cleanly with no force; a live worker attempt refuses without
@@ -89,7 +89,7 @@ def _seed_lease(
 ):  # type: ignore[no-untyped-def]
     """A build lease, spawned and bound — the shape every scenario below starts from.
 
-    The session stamps (issue #144) default to unset, i.e. the pre-#144 shape: every
+    The session stamps default to unset, i.e. the pre-#144 shape: every
     scenario that says nothing about them asserts today's bare resume command."""
     store.record_lease(
         NewLease(
@@ -308,12 +308,12 @@ def test_forced_takeover_skips_the_kill_when_the_recorded_pid_was_reused(tmp_pat
 
 
 def test_forced_takeover_group_kills_the_worker_when_a_pgid_is_recorded(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A live worker with a durable recorded pgid (D3) is killed by GROUP, never by bare
+    """A live worker with a durable recorded pgid is killed by GROUP, never by bare
     pid — the same preference `Attempt._kill_process` applies, reached here through the
     same shared, liveness-checked helper."""
     store = _store(tmp_path)
     _seed_lease(store, pid=100)
-    store.record_spawn(  # this generation's own group is durable (D3)
+    store.record_spawn(  # this generation's own group is durable
         "lease_1",
         pid=100,
         process_start_time="start-100",
@@ -438,7 +438,7 @@ def test_takeover_close_on_a_different_open_takeover_raises(tmp_path) -> None:  
 
 
 def test_takeover_close_is_idempotent_once_already_ended(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Ending an already-ended takeover is the desired state (issue #291), not an error —
+    """Ending an already-ended takeover is the desired state, not an error —
     the shape the CLI's own end-PATCH ``finally`` needs when ``Pull`` closes it first."""
     store = _store(tmp_path)
     _seed_lease(store)
@@ -620,7 +620,7 @@ def test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed(tmp
     assert store.active_lease_for_chunk("ch_1") is not None
 
 
-# The takeover reads the session's stamps (D4, issue #144).
+# The takeover reads the session's stamps.
 # --------------------------------------------------------------------------- #
 
 
@@ -650,7 +650,7 @@ def test_takeover_of_a_session_predating_the_stamps_renders_the_bare_command(tmp
 
 
 def test_takeover_carries_the_lease_identity_env_and_reminting_its_token(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The taken-over session's worker identity (issue #258): ``--resume`` inherits no
+    """The taken-over session's worker identity: ``--resume`` inherits no
     spawn env, so the takeover carries it — with a freshly re-minted capability token,
     invalidating the prior one, and never baked into the printable command."""
     store = _store(tmp_path)
@@ -675,7 +675,7 @@ def test_takeover_carries_the_lease_identity_env_and_reminting_its_token(tmp_pat
 
 
 def test_takeover_env_is_bounded_to_identity_plus_path_and_home(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """What leaves the daemon is a bounded set (issue #258 review): BLIZZARD_* identity
+    """What leaves the daemon is a bounded set: BLIZZARD_* identity
     plus PATH/HOME — never the daemon's TERM or an ``env_passthrough`` secret."""
     store = _store(tmp_path)
     _seed_lease(store)
@@ -693,7 +693,7 @@ def test_takeover_env_is_bounded_to_identity_plus_path_and_home(tmp_path) -> Non
 
 
 def test_takeover_path_carries_the_workers_path_prepend(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """D6: the takeover's forwarded ``PATH`` is built from the same configured
+    """The takeover's forwarded ``PATH`` is built from the same configured
     :class:`AllowlistedEnv` the worker's own spawn/resume used, so an operator resuming a
     worker's session resolves the same ``[worker] path_prepend`` tools the worker did."""
     monkeypatch.setenv("PATH", "/usr/bin:/bin")

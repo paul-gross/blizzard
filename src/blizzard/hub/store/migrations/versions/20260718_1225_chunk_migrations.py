@@ -1,4 +1,4 @@
-"""cross-graph migration fact table — chunk_migrations (hub store tree, issue #90). A
+"""cross-graph migration fact table — chunk_migrations (hub store tree). A
 frozen local literal, not a ``schema.py`` import (``bzh:frozen-revisions``).
 
 Revision ID: 20260718_1225_hub_chunk_migrations

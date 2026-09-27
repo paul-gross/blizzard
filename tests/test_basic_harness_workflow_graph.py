@@ -1,4 +1,4 @@
-"""The packaged basic-harness-workflow graph (unit tier, issue #231).
+"""The packaged basic-harness-workflow graph (unit tier).
 
 Proves ``bas-hwf`` loads, inlines its prompt file references, and passes mint-time
 validation clean — so a fresh hub's ``POST /graphs`` of it can never be rejected.
@@ -88,7 +88,7 @@ def test_bas_hwf_node_continuity() -> None:
 
 
 def test_bas_hwf_target_routing_table() -> None:
-    """The full routing table from blizzard#493."""
+    """The full ``bas-hwf`` node-to-node routing table."""
     doc = _doc()
 
     def routes(name: str) -> dict[str, str | None]:

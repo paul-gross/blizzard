@@ -1,6 +1,6 @@
-"""A local open takeover whose chunk the hub has since ended (issue #291).
+"""A local open takeover whose chunk the hub has since ended.
 
-Under D1 the open-takeover fact authorizes a resumed session's worker verbs, so a chunk
+The open-takeover fact authorizes a resumed session's worker verbs, so a chunk
 the hub ends mid-takeover must not leave that authorization standing forever.
 ``Pull._reconcile_takeovers`` folds into PULL — the same shape as
 ``_reconcile_escalations`` (#292) — the second, no-person-drives closer."""

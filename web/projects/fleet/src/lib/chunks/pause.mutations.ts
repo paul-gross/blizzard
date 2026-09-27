@@ -5,7 +5,7 @@ import { pauseChunkApiChunksChunkIdPausePost, resumeChunkApiChunksChunkIdResumeP
 import { chunkPauseMutationKey } from '../mutation-keys';
 import { hubChunkKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
-/** Toggle a chunk's operator pause brake (issue #46): pausing holds the claim, kills
+/** Toggle a chunk's operator pause brake: pausing holds the claim, kills
  * the active worker, and takes it off the ready queue; resuming clears the brake. */
 export interface ChunkPauseVars {
   readonly chunkId: string;
@@ -18,7 +18,7 @@ export interface ChunkPauseVars {
  * client (bzh:generated-client). Server-refused for `{done, stopped, delivering}`
  * (`PauseService`); the chunk detail dock mirrors that refusal so it never offers a
  * 409, and surfaces one anyway if the race is lost — a refusal reaches the caller as a
- * thrown error, nothing here swallows it (issue #42's pattern). On success it re-reads
+ * thrown error, nothing here swallows it. On success it re-reads
  * the fleet list, the ready queue, and the chunk detail — the same three keys
  * `injectPromoteChunkMutation` invalidates. `by` defaults to `operator` server-side.
  */

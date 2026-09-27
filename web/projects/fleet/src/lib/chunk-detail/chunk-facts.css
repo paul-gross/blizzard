@@ -29,7 +29,7 @@
   text-decoration: underline;
   outline: none;
 }
-/* The graph edit row (issue #27) — the same input-plus-act shape as the
+/* The graph edit row — the same input-plus-act shape as the
    awaiting-human answer row, scaled down to sit inside a .kv fact cell. */
 .edit-row {
   display: flex;

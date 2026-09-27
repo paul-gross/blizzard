@@ -1,15 +1,15 @@
-"""The mixed-harness lineage boundary, end to end (`bzh:e2e-node-sessions` phase 5).
+"""The mixed-harness lineage boundary, end to end (`bzh:e2e-node-sessions`).
 
 One graph — `build` (the runner's own configured default, Claude Code, no `session`
 declared) hands off to `opencode-review` (a graph-level named session pinned
-`harnesses: [opencode]`, issue #144) — traverses BOTH harness lineages inside one
+`harnesses: [opencode]`) — traverses BOTH harness lineages inside one
 chunk's run, driven against a real `blizzard-hub`/`blizzard-runner` subprocess pair
 (never `LoopWiring.tick_once()` in-process, unlike `test_acceptance_loop.py`; the
 restart follows `test_runner_federation_e2e.py`'s subprocess shape instead).
 
 The runner daemon is restarted twice, both CLEAN operator-style restarts (SIGTERM,
 relaunch unarmed) — no crash point armed, since that recovery proof already belongs to
-`tests/crash/test_kill9_sweep.py`'s OpenCode-lineage sweep (`bzh:crash-sweep` phase 4):
+`tests/crash/test_kill9_sweep.py`'s OpenCode-lineage sweep (`bzh:crash-sweep`):
 
 1. Right at the lineage boundary — after the hub records the transition from `build`
    into `opencode-review`, before the runner's own next tick would otherwise discover it
@@ -96,7 +96,7 @@ FIXTURE_ENV = "mixed-harness"
 BUILD_LANDED_FILE = "LANDED-MIXED-BUILD.md"
 REVIEW_LANDED_FILE = "LANDED-MIXED-OPENCODE.md"
 
-#: The graph-level named session (issue #144) the `opencode-review` node resumes —
+#: The graph-level named session the `opencode-review` node resumes —
 #: constrained to `harnesses: [opencode]` so the fresh mint that opens it is a real
 #: OpenCode dispatch, mirroring `tests/crash/support.py::OPENCODE_SESSION_NAME`'s own
 #: mechanism (this module's whole point is crossing the harness boundary WITHIN one
@@ -129,7 +129,7 @@ _CHUNK_DEFAULT_MODEL = ["claude-mixed-build"]
 _SESSION_MODEL = ["mock-provider/opencode-mixed-review"]
 
 #: Proven-dialect tool calls (mirrors `tests/service/test_mixed_harness_dispatch_service.py`'s
-#: `_CLAUDE_SKILL_BUILD_SCRIPT`/`_OPENCODE_TASK_BUILD_SCRIPT`, D10, blizzard#439): the
+#: `_CLAUDE_SKILL_BUILD_SCRIPT`/`_OPENCODE_TASK_BUILD_SCRIPT`): the
 #: OpenCode analytics dialect proves only `agent-spawn`, never an invented read/skill
 #: mapping — so `opencode-review`'s own tool call is a `task`, never a `Skill`.
 _BUILD_SKILL_NAME = "wf-mixed-review"
@@ -141,9 +141,9 @@ _GIT_COMMIT_PRODUCES = [{"name": "commit", "kind": "git_commit"}]
 
 #: The FIRST runner start's own tick interval — deliberately wide (seconds, not
 #: `tests.crash.support.TICK_SECONDS`'s brisk 0.3s) so restart #1 has a real gap to land
-#: in, rather than racing the runner's own next tick (see the module docstring's own D1).
+#: in, rather than racing the runner's own next tick (see the module docstring).
 #: Widened defensively past the minimum that machine ever needed, purely as slack against
-#: an overloaded one — `PeriodicDriver`'s own interruptible between-tick wait (D1) is what
+#: an overloaded one — `PeriodicDriver`'s own interruptible between-tick wait is what
 #: actually makes this non-racy; this constant only bounds how long that slack is.
 _BOUNDARY_TICK_SECONDS = "8"
 
@@ -151,7 +151,7 @@ _BOUNDARY_TICK_SECONDS = "8"
 def _start_runner(runner_dir: Path, *, tick_seconds: str) -> subprocess.Popen[str]:
     """`tests.crash.support.start_runner`'s own body, parameterized on the tick interval
     instead of hardcoding its brisk crash-sweep cadence — this module's one genuine
-    divergence from that helper's needs (see the module docstring's own D1). Never arms a
+    divergence from that helper's needs (see the module docstring). Never arms a
     crash point: every restart here is a clean operator-style SIGTERM, not a kill -9."""
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
     env = {**os.environ, "BZ_RUNNER_TICK_SECONDS": tick_seconds, ENV_HARNESS_FENCE: "1"}
@@ -167,8 +167,8 @@ def _start_runner(runner_dir: Path, *, tick_seconds: str) -> subprocess.Popen[st
 def _mixed_graph_yaml(build_landed_file: str, review_landed_file: str) -> str:
     """One `build -> opencode-review -> deliver` graph: `build` is the runner's own
     configured default (no `session` declared at all), `opencode-review` resumes
-    :data:`_MIXED_SESSION_NAME` — a graph-level named session pinned to OpenCode
-    (issue #144) — so the SAME chunk's traversal crosses the harness lineage boundary
+    :data:`_MIXED_SESSION_NAME` — a graph-level named session pinned to OpenCode —
+    so the SAME chunk's traversal crosses the harness lineage boundary
     once, inside one run, rather than two separate single-harness chunks."""
     import yaml
 
@@ -255,7 +255,7 @@ def _open_resume_intents(runner_dir: Path) -> set[str]:
 
 def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeout: float = 30.0) -> None:
     """Block until the mid-flight `opencode-review` worker has committed **and durably
-    declared** its git commit (issue #143) — the declaration, not the bare commit, is
+    declared** its git commit — the declaration, not the bare commit, is
     what a resume relies on to submit and land."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -460,8 +460,8 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
             )
             config.config_path.write_text(config.to_toml())
 
-            # 3. Start the runner — on the wide boundary tick (see the module docstring's
-            # own D1) — and let the Claude Code lineage (`build`) run to completion.
+            # 3. Start the runner — on the wide boundary tick (see the module docstring)
+            # — and let the Claude Code lineage (`build`) run to completion.
             runner_proc = _start_runner(runner_dir, tick_seconds=_BOUNDARY_TICK_SECONDS)
             await_http(runner_client, "/api/health", proc=runner_proc)
             assert _daemon_start_count(daemon_log) == 1, "the runner's own first start left no startup banner"

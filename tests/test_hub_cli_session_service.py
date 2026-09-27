@@ -1,4 +1,4 @@
-"""``SessionService`` (hub:98, ``bzh:controller-read-only``) — the application service
+"""``SessionService`` (``bzh:controller-read-only``) — the application service
 ``login``/``logout`` take instead of the raw ``IWriteSessionStore`` seam, proven here
 against a small fake store rather than through the CLI (that's ``test_hub_cli_login.py``)."""
 

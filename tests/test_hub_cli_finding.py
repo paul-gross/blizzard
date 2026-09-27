@@ -1,5 +1,5 @@
-"""``blizzard hub finding list|show`` (unit tier, blizzard#390) and the human-driven exit
-verbs (blizzard#394 Phase 2) — pure clients of the finding routes, driven here with
+"""``blizzard hub finding list|show`` (unit tier) and the human-driven exit
+verbs — pure clients of the finding routes, driven here with
 ``httpx`` stubbed, the ``tests/test_hub_cli_scope.py`` / ``test_hub_cli_garden_proposal.py``
 shape."""
 
@@ -204,7 +204,7 @@ def test_finding_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.mark.unit
 def test_finding_show_renders_a_review_sourced_finding(monkeypatch: pytest.MonkeyPatch) -> None:
-    """review:F11 — `show` must surface `source`/`severity`/`raised_by_chunk_id` for a
+    """`show` must surface `source`/`severity`/`raised_by_chunk_id` for a
     review-sourced finding rather than a bare, unhelpful `routine=None`."""
 
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:

@@ -1,4 +1,4 @@
-"""Builds the hub's OAuth provider registry from configuration (issue #92).
+"""Builds the hub's OAuth provider registry from configuration.
 
 One composition-root builder that resolves each provider's ``client_secret_env`` from
 the environment (never round-tripped through toml) and validates ``type``/``issuer``

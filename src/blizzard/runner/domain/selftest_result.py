@@ -1,4 +1,4 @@
-"""Durable selftest results (blizzard#438): the harness-health evaluator's own evidence of
+"""Durable selftest results: the harness-health evaluator's own evidence of
 each harness's most recently completed selftest run — its terminal status and when it was
 recorded. Latest-wins-per-``harness_id`` (``bzh:facts-not-status``): a completed run is a
 definite occurrence at a definite time, superseded only by the next run for the same

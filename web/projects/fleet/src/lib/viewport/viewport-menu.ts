@@ -16,7 +16,7 @@ const OPTIONS: readonly AppearanceOption[] = [
 ];
 
 /**
- * The appearance submenu (issue #161) — the viewport override as a real
+ * The appearance submenu — the viewport override as a real
  * `role="menuitemradio"` group rather than the always-visible chip row the
  * shells used to show inline, so the shell menus read as menus and the choice
  * is one arrow-key traversal away.

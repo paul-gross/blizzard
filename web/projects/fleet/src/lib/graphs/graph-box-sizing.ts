@@ -2,8 +2,7 @@ import type { GraphNodeView } from '../api/hub';
 import { producesNames, sessionLabel } from './graph-node';
 
 /**
- * Sizes a node's box to its *measured* text (issue #157: "measured text, not
- * char-count estimation") — split out of `graph-layout.ts` as the pure
+ * Sizes a node's box to its *measured* text — split out of `graph-layout.ts` as the pure
  * text-measurement/box-sizing seam, kept under the `web:lint` line cap.
  */
 
@@ -26,7 +25,7 @@ const META_PAD_X = 14;
 const MIN_NODE_WIDTH = 150;
 /** The width past which a node's meta line wraps onto further lines instead of
  * widening the box further — without it a long `produces:` list alone dictates an
- * absurdly wide box (issue #157). It bounds *wrapping*, not the box: the name row
+ * absurdly wide box. It bounds *wrapping*, not the box: the name row
  * never wraps, and a single unsplittable meta segment wider than this still widens
  * the box rather than being clipped. */
 const MAX_NODE_WIDTH = 420;
@@ -95,7 +94,7 @@ export interface NodeBox {
 
 /** Sizes one node's box to its *measured* text: the name row (never wrapped) sets a
  * floor, and the meta line wraps at {@link MAX_NODE_WIDTH} with the box growing
- * downward by {@link META_LINE_HEIGHT} per extra line (issue #157). */
+ * downward by {@link META_LINE_HEIGHT} per extra line. */
 export function nodeBox(node: GraphNodeView, measure: TextMeasurer): NodeBox {
   const badgeWidth = measure(node.executor.toUpperCase(), 'badge') + BADGE_PAD_X * 2;
   const nameRow = NAME_PAD_L + measure(node.name, 'name') + NAME_GAP + badgeWidth + BADGE_GAP_R;

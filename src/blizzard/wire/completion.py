@@ -23,14 +23,14 @@ class SubmittedArtifact(BaseModel):
     name: str
     kind: ArtifactKind
     # git_commit variant — the branch is pushed to the forge before submission. `forge` is
-    # the worker's own declared origin (issue #143).
+    # the worker's own declared origin.
     forge: str | None = None
     repo: str | None = None
     branch_name: str | None = None
     commit_hash: str | None = None
     # asset variant
     content: str | None = None
-    # True when this asset's content came from an explicit attach (issue #113) rather
+    # True when this asset's content came from an explicit attach rather
     # than the judgement assessment fallback.
     attached: bool = False
 
@@ -49,7 +49,7 @@ class CreateWorkItemProposal(BaseModel):
 class UpdateWorkItemProposal(BaseModel):
     """A proposed update to an existing work item — its ``{source, ref}`` pointer plus
     evidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent
-    item) is recorded, not refused (D5) — resolving the pointer is left to materialization."""
+    item) is recorded, not refused — resolving the pointer is left to materialization."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -79,12 +79,12 @@ class Coverage:
     @property
     def satisfied_names(self) -> set[str]:
         """The ``produces:`` names these artifacts explicitly satisfy — an artifact with
-        ``attached=True``, or a ``GIT_COMMIT`` artifact (issue #113). A name present only as
+        ``attached=True``, or a ``GIT_COMMIT`` artifact. A name present only as
         the judgement-assessment fallback is excluded (``test_produces_coverage_agreement``)."""
         return {a.name for a in self.artifacts if a.attached or a.kind == ArtifactKind.GIT_COMMIT}
 
     def unmet[P: _ProducesLike](self, specs: Sequence[P]) -> list[P]:
-        """The ``produces:`` specs these artifacts do **not** cover (issue #143, D2).
+        """The ``produces:`` specs these artifacts do **not** cover.
 
         An ``asset`` spec is met by an artifact of **its own name** in
         :attr:`satisfied_names`; a ``git_commit`` spec is met by **any**
@@ -102,7 +102,7 @@ class Coverage:
 
 
 class CheckResult(BaseModel):
-    """One deterministic check's **runner-executed** outcome (issue #114).
+    """One deterministic check's **runner-executed** outcome.
 
     Carries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire."""
 
@@ -124,8 +124,8 @@ class ChecksGate:
 
     @property
     def violated(self) -> bool:
-        """``True`` iff a ``requires_checks`` choice is being taken while any check is red
-        (issue #114) — the one shared home for the predicate, guarded by
+        """``True`` iff a ``requires_checks`` choice is being taken while any check is red —
+        the one shared home for the predicate, guarded by
         ``tests/test_checks_gate_agreement.py``. An ungated choice is never violated; a node
         with no checks records none, so the gate is vacuously satisfied."""
         return self.requires_checks and any(not r.passed for r in self.check_results)
@@ -138,16 +138,16 @@ class CompletionSubmission(BaseModel):
     epoch: int  # the executing lease's fence, checked against the chunk's latest
     runner_id: str
     from_node_id: str
-    # The runner-executed check facts (issue #114) — ``(command, passed)`` per command;
+    # The runner-executed check facts — ``(command, passed)`` per command;
     # empty for a node with no ``checks:``.
     check_results: list[CheckResult] = []
     artifacts: list[SubmittedArtifact] = []
     # Proposed work items (`create` or `update`, discriminated on `kind`) riding this
-    # completion — legal only from a node declaring `proposes_work_items` (D4, D6).
+    # completion — legal only from a node declaring `proposes_work_items`.
     proposals: list[WorkItemProposal] = []
     # Set only on a gate-resolving transition. Its presence is what makes a transition
     # out of a human-judged node legal; without it the transition is rejected.
     decision_id: str | None = None
-    # The route capability token stamped at enqueue (issue #84a) — evidence the submitter
+    # The route capability token stamped at enqueue — evidence the submitter
     # still holds the chunk's live route. Optional: the hub does not reject on it.
     route_token: str | None = None

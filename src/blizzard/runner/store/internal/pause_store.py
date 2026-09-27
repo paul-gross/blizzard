@@ -1,5 +1,4 @@
-"""SQLAlchemy adapter for the pause-brake/daemon-liveness repository seam (package-private,
-blizzard#410)."""
+"""SQLAlchemy adapter for the pause-brake/daemon-liveness repository seam (package-private)."""
 
 from __future__ import annotations
 
@@ -123,7 +122,7 @@ class PauseStore:
         reason: str | None = None,
     ) -> int:
         # Both inserts, one transaction: two would leave a `kill -9` window where the runner
-        # has stopped claiming and the hub is never told (issue #43).
+        # has stopped claiming and the hub is never told.
         with self._store.begin() as conn:
             conn.execute(
                 local_pause_facts.insert().values(

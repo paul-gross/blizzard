@@ -188,7 +188,7 @@ class ProbeResult:
 @dataclass(frozen=True)
 class CompatibilityReport:
     """A complete, ordered compatibility report for one observed harness version.
-    ``admitted_range`` is an opaque display string (D2): the probe judges
+    ``admitted_range`` is an opaque display string: the probe judges
     ``observed_version`` against its own declared range and hands both that display
     string and the resulting ``version_admitted`` bool here already-decided."""
 
@@ -291,7 +291,7 @@ class CompatibilityReport:
 class ICompatibilityProbe(Protocol):
     """The inward-facing boundary for a live compatibility proof.
     ``admitted_range`` and ``version_admitted`` are the probe's own already-decided
-    verdict (D2): whatever scheme a concrete admitted range uses is checked entirely
+    verdict: whatever scheme a concrete admitted range uses is checked entirely
     on the probe's own side, before ``run`` returns."""
 
     observed_version: str

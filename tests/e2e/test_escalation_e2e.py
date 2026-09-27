@@ -154,7 +154,7 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path
         takeover = escalation["takeover_command"]
         assert takeover, "the escalation must surface a pasteable takeover command"
 
-        # Wrapped entry point asserted as shape only (issue #251); `--dir` must be the
+        # Wrapped entry point asserted as shape only; `--dir` must be the
         # resolved runtime root, which need not equal the raw `tmp_path / "runner"` expression.
         runner_dir = (tmp_path / "runner").resolve()
         wrapped_takeover = escalation["wrapped_takeover_command"]

@@ -3,12 +3,12 @@ import { runnerApi } from 'fleet';
 
 import { runnerLogoutInFlight } from './auth.query';
 
-/** `sessionStorage` key marking that a bounce was already attempted this cycle
- * (issue #312) — the backstop `handle` checks across the full-page navigation
+/** `sessionStorage` key marking that a bounce was already attempted this cycle —
+ * the backstop `handle` checks across the full-page navigation
  * it drives: a no-session `401` classified while this is still set did not get
  * fixed by the last attempt, so the seam surfaces {@link SessionRecovery.recovering}
  * instead of navigating again. Cleared only by a session read that resolves a
- * username (D4) — the one proof the bounce actually worked. */
+ * username — the one proof the bounce actually worked. */
 const RENEWAL_MARK_KEY = 'blizzard.runner.session-renewal-attempted';
 
 const SESSION_PATH = '/api/auth/session';
@@ -30,7 +30,7 @@ function isSessionRead(request: Request): boolean {
 }
 
 /** `GET /api/auth/login?return_to=…` for the live route, built from `location`
- * so the target is same-origin by construction (D1). */
+ * so the target is same-origin by construction. */
 function loginUrl(): string {
   const { pathname, search } = globalThis.location;
   return `/api/auth/login?return_to=${encodeURIComponent(pathname + search)}`;
@@ -49,16 +49,16 @@ function loginUrl(): string {
 export type RecoveryOutcome = 'skipped' | 'not-applicable' | 'read-failed' | 'bounced' | 'already-recovering';
 
 /**
- * The runner webapp's session-recovery seam (issue #312) — the response interceptor
+ * The runner webapp's session-recovery seam — the response interceptor
  * body `provideSessionRecovery` (`session-recovery.provider.ts`) registers on
- * `runnerClient`, and (blizzard#317 D9) {@link "./runner-live-updates".RunnerLiveUpdates}'s stream
+ * `runnerClient`, and {@link "./runner-live-updates".RunnerLiveUpdates}'s stream
  * auth-failure channel. Classifies every `401` either caller sees and drives the
  * federation bounce for the one case it can fix: a gated surface whose runner
  * session has expired. Every other `401` — an upstream rejection with a resolved
  * username, or an authless surface — passes through untouched, left to degrade in
  * its own region exactly as it does today (`chunk-title.query.ts` et al.).
  *
- * Two guards keep a session drop from looping (D4): an in-memory single-flight flag
+ * Two guards keep a session drop from looping: an in-memory single-flight flag
  * coalesces the burst of `401`s the panel's concurrent polls — and now the stream's
  * own terminal auth failure — produce into one classification, and the
  * `sessionStorage` mark above survives the navigation itself — a further no-session
@@ -73,7 +73,7 @@ export class SessionRecovery {
 
   /** Set once a bounce was already attempted (the mark is set) and a further
    * no-session `401` arrives before it completes — the one condition the
-   * recovery view (Phase 2) renders for. */
+   * recovery view renders for. */
   readonly recovering = this.attemptFailed.asReadonly();
 
   private inFlight = false;
@@ -96,10 +96,10 @@ export class SessionRecovery {
 
   /**
    * Classify a `401` — from the interceptor's `handle` above, or from
-   * {@link "./runner-live-updates".RunnerLiveUpdates}'s stream on `SseService`'s `authFailed` (D9) — by
+   * {@link "./runner-live-updates".RunnerLiveUpdates}'s stream on `SseService`'s `authFailed` — by
    * re-reading `GET /api/auth/session`, and drive the federation bounce for the one
    * case it can fix: a no-session `401` while the surface is gated. Lifted out of
-   * `handle`'s body (D9) so a caller with no `Response`/`Request` of its own — the
+   * `handle`'s body so a caller with no `Response`/`Request` of its own — the
    * stream's transport never produces either — can still drive the same
    * classify-and-bounce logic and land in the same {@link recovering} state on a
    * repeat. Guarded exactly as `handle` always was: a logout in flight suspends the
@@ -109,7 +109,7 @@ export class SessionRecovery {
    * Returns its {@link RecoveryOutcome} so a caller that cannot render
    * {@link recovering} directly — the stream channel — can tell a transient failure
    * of the session read itself apart from a definitive answer, and act only on that
-   * one case (D3).
+   * one case.
    */
   async recoverFromUnauthenticated(): Promise<RecoveryOutcome> {
     if (runnerLogoutInFlight() || this.inFlight) return 'skipped';

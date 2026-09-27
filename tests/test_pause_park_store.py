@@ -1,4 +1,4 @@
-"""The runner-side pause-park store — a separate table pair from park_facts (issue #46).
+"""The runner-side pause-park store — a separate table pair from park_facts.
 
 ``OPEN_PAUSE_PARK`` must use a timestamp-correlated ``NOT EXISTS`` predicate, not a
 naive set-difference — the naive form reads a re-parked lease as still resumed. Also
@@ -177,7 +177,7 @@ def test_mark_crash_resume_intents_skips_a_pause_parked_lease(tmp_path):  # type
 
 
 def test_open_pause_parks_carries_each_parks_teardown_facts(tmp_path):  # type: ignore[no-untyped-def]
-    """The plural ADVANCE hoists once per tick (blizzard#627): every open park by lease id,
+    """The plural ADVANCE hoists once per tick: every open park by lease id,
     each with its ``parked_at`` and the elicitation its interrupt named — ``None`` on a
     park that named none, and absent once resumed."""
     store = _store(tmp_path)

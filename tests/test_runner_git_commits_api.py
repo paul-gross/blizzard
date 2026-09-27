@@ -1,4 +1,4 @@
-"""``POST /api/leases/{id}/git-commits`` (issue #143, Phase 3).
+"""``POST /api/leases/{id}/git-commits``.
 
 Exercised over a real store via TestClient: the route's shape, its 403/404/503 forms,
 and the round-trip it delegates to
@@ -165,7 +165,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) -> None:
-    """The worker-authorization resolver's other half (issue #291): once an open
+    """The worker-authorization resolver's other half: once an open
     takeover names the (now closed) reference lease, its re-minted token reaches
     this route the same as an ordinary active lease would."""
     app, store = _app_with_declarations(tmp_path)

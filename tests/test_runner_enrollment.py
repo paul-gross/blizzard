@@ -1,4 +1,4 @@
-"""Runner enrollment + the registration auth check (component tier, issue #86a).
+"""Runner enrollment + the registration auth check (component tier).
 
 Drives the real hub over a tmp store: enrollment mints/rotates a bearer token
 (plaintext returned once, only its sha256 hash stored); registration applies the auth

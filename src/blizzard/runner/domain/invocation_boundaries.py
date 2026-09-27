@@ -1,4 +1,4 @@
-"""The durable transcript invocation-boundary repository seam (blizzard#437 D6/D11).
+"""The durable transcript invocation-boundary repository seam.
 
 One row per fleet-driven invocation — a worker spawn generation, a resume generation, a
 judgement, or a nudge — recording the transcript position it started from, durably BEFORE
@@ -19,10 +19,10 @@ __all__ = [
     "InvocationBoundaryRecord",
 ]
 
-#: The four invocation kinds a boundary ever names — a nudge's own, distinct from ``resume`` (D5).
+#: The four invocation kinds a boundary ever names — a nudge's own, distinct from ``resume``.
 InvocationBoundaryKind = Literal["spawn", "resume", "judge", "nudge"]
 
-#: Worker-starting kinds, tried in order (``"judge"`` excluded, D5) — shared with the invariant checker.
+#: Worker-starting kinds, tried in order (``"judge"`` excluded) — shared with the invariant checker.
 WORKER_STARTING_KINDS: tuple[InvocationBoundaryKind, ...] = ("spawn", "resume", "nudge")
 
 
@@ -51,7 +51,7 @@ class IReadInvocationBoundaryRepository(Protocol):
 
     def boundary(self, lease_id: str, generation: int, kind: InvocationBoundaryKind) -> InvocationBoundaryRecord | None:
         """This exact invocation's boundary, or ``None`` when it was never opened — the
-        read interrupted-usage recovery (blizzard#437 Phase 4) keys its range read from."""
+        read interrupted-usage recovery keys its range read from."""
         ...
 
     def open_boundaries_for_lease(self, lease_id: str) -> list[InvocationBoundaryRecord]:
@@ -94,7 +94,7 @@ class IWriteInvocationBoundaryRepository(IReadInvocationBoundaryRepository, Prot
         start_unreadable: bool = False,
     ) -> None:
         """Move an already-open ``(lease, generation, kind)`` boundary's own start forward in
-        place, rather than opening a second row (blizzard#594): a judge-usage-limit park's
+        place, rather than opening a second row: a judge-usage-limit park's
         resume reuses the SAME judge boundary for its fresh elicitation, since
         ``record_boundary_open``'s check-then-insert never mints a second row for one
         ``(lease, generation, kind)`` — the transcript range a still-standing boundary bounds
@@ -103,8 +103,8 @@ class IWriteInvocationBoundaryRepository(IReadInvocationBoundaryRepository, Prot
         ...
 
     def close_boundaries_for_lease(self, lease_id: str, *, reason: str, at: datetime) -> None:
-        """Close every one of this lease's still-open boundaries (``bzh:open-facts-declare-closure``,
-        D11) — called once, from the one funnel every lease closure path shares
+        """Close every one of this lease's still-open boundaries (``bzh:open-facts-declare-closure``)
+        — called once, from the one funnel every lease closure path shares
         (:meth:`~blizzard.runner.loop.attempt.Attempt.close`), so a hub-terminal chunk's
         boundaries close the same way a locally-driven one's do. An UPDATE over ``closed_at
         IS NULL``, naturally idempotent under a crash-and-retry of the closure path itself."""

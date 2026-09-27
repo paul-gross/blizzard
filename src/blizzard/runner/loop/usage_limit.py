@@ -1,4 +1,4 @@
-"""Usage-limit exit classification and pause engagement (blizzard#594).
+"""Usage-limit exit classification and pause engagement.
 
 Shared by a worker generation's own exit (:mod:`blizzard.runner.loop.steps`'s ``Advance``)
 and a judge elicitation's own exit (:mod:`blizzard.runner.loop.judgement`'s ``Judgement``):
@@ -27,7 +27,7 @@ from blizzard.runner.loop.context import LoopContext
 
 _log = get_logger("blizzard.runner.loop")
 
-# The brake is written before the park (D2) — a crash after the brake but before the park
+# The brake is written before the park — a crash after the brake but before the park
 # leaves an exited, unparked lease that the next pass classifies again and completes.
 _CP_WORKER_AFTER_BRAKE = crashpoint(
     "usagelimit.worker-after-brake.before-park",
@@ -47,7 +47,7 @@ def classify_worker_usage_limit(
     """This generation's own spawn/resume/nudge invocation, classified over ``output`` and
     ``lines`` — the caller's own single read of this generation's stdout and transcript
     range, shared with its provider-overload classification so neither pays for the other's
-    read (blizzard#595 F4). ``None`` when not usage-limited, or the owner is unresolvable."""
+    read. ``None`` when not usage-limited, or the owner is unresolvable."""
     session = lease.session
     if session is None:
         return None
@@ -78,8 +78,8 @@ def classify_judge_usage_limit(
     ctx: LoopContext, lease: LeaseRecord, output: str, lines: Sequence[str]
 ) -> UsageLimit | None:
     """This generation's own judge elicitation, classified over its already-read output and
-    transcript range (judge boundary to tail, shared with provider-overload classification —
-    blizzard#595 F4) — ``None`` when not usage-limited."""
+    transcript range (judge boundary to tail, shared with provider-overload classification)
+    — ``None`` when not usage-limited."""
     session = lease.session
     if session is None:
         return None
@@ -126,7 +126,7 @@ def _reason(ctx: LoopContext, harness_id: str, limit: UsageLimit) -> str:
 
 def _fallback_reset(ctx: LoopContext) -> datetime | None:
     """The soonest future reset among every declared subscription's own latest-sampled
-    windows at or past 100% utilization (D4) — no harness-to-subscription mapping, just
+    windows at or past 100% utilization — no harness-to-subscription mapping, just
     what every declared subscription itself last reported. ``None`` when nothing exhausted
     is on record, which the caller reads as "no reset time known", not "no limit"."""
     now = ctx.clock.now()

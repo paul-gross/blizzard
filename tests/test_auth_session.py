@@ -1,4 +1,4 @@
-"""Session-cookie/bearer resolution + ``require(<permission>)`` gating (issue #91; #210).
+"""Session-cookie/bearer resolution + ``require(<permission>)`` gating.
 
 A ``pending`` identity reaches only ``GET /api/me`` and is refused on the SSE stream; a
 ``guest`` reaches every ``fleet:view`` read but is refused every mutation; an

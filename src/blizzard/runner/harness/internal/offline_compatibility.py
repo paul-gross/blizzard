@@ -1,4 +1,4 @@
-"""Offline compatibility classification against the committed fixture corpus (blizzard#438).
+"""Offline compatibility classification against the committed fixture corpus.
 Distinct from :class:`~blizzard.runner.harness.compatibility.CompatibilityDiagnostic`, which
 runs a live probe: this classifies an already-observed version from its committed
 ``contracts/<harness_id>/<version>/manifest.json``, read-only and dependency-free beyond
@@ -38,8 +38,8 @@ def admitted_corpus_versions(
     """Every committed ``corpus_root/harness_id/<version>/manifest.json`` version whose version
     lies inside ``admitted_range``, oldest first — the corpus fixtures a reference-corpus lookup
     or a binding's own declared-degradations union may ever resolve to. Membership is checked
-    through :func:`~blizzard.runner.harness.internal.harness_shared.version_admitted`
-    (blizzard#604), the one rule a corpus name and an observed version are both judged by."""
+    through :func:`~blizzard.runner.harness.internal.harness_shared.version_admitted`,
+    the one rule a corpus name and an observed version are both judged by."""
 
     harness_dir = corpus_root / harness_id
     if not harness_dir.is_dir():
@@ -106,7 +106,7 @@ def classify_offline(
     """The pinned classification a committed corpus fixture records for ``observed_version``'s
     own :func:`reference_corpus_version`, or ``None`` when no version was observed or none
     resolves. ``admitted_range`` only selects the reference corpus — never asserts
-    ``observed_version`` is itself admitted (D2); a caller checks that separately.
+    ``observed_version`` is itself admitted; a caller checks that separately.
     ``corpus_root`` defaults to this repo's own ``contracts/`` tree."""
 
     if observed_version is None:

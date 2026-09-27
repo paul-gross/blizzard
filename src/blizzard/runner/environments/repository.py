@@ -1,4 +1,4 @@
-"""The environment-binding repository seam (blizzard#410).
+"""The environment-binding repository seam.
 
 Chunk→env binding, release, and tenure facts — an *held* env is one whose binding has
 no release fact (``bzh:facts-not-status``)."""
@@ -54,7 +54,7 @@ class IReadEnvironmentRepository(Protocol):
         ...
 
     def held_bindings(self) -> list[EnvBindingRecord]:
-        """Every currently-held env binding, across every chunk (issue #51).
+        """Every currently-held env binding, across every chunk.
 
         :meth:`bindings_for_chunk` widened from one chunk to the whole fleet this runner
         holds, on the same ``held`` predicate."""

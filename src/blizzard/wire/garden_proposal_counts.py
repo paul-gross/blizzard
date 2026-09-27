@@ -1,4 +1,4 @@
-"""Garden-proposal counts (blizzard#547) — the `GET /api/routines/proposal-counts` read
+"""Garden-proposal counts — the `GET /api/routines/proposal-counts` read
 view. `created` is echoed as the sum of the four bucket counts, never carried as its own
 column (`GardenProposalCounts.created`'s own rule)."""
 
@@ -11,7 +11,7 @@ from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 
 class GardenProposalCountsRowView(BaseModel):
     """One origin/routine/class triple's garden-proposal counts over the requested
-    window (blizzard#631). `routine_name` is nullable for an operator-authored row
+    window. `routine_name` is nullable for an operator-authored row
     naming no routine."""
 
     model_config = ConfigDict(populate_by_name=True)

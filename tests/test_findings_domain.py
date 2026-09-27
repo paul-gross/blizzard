@@ -1,6 +1,6 @@
-"""``derive_liveness`` — the newest-fact-wins finding read (unit tier, blizzard#390):
+"""``derive_liveness`` — the newest-fact-wins finding read (unit tier):
 no facts reads live with nothing seen; a plain add/observe history stays live; a `gone`
-takes it out of the live bucket; a later fact after `gone` restores it (D3); and
+takes it out of the live bucket; a later fact after `gone` restores it; and
 `observed_count` counts only `observed` facts, never the initial `add`."""
 
 from __future__ import annotations
@@ -92,7 +92,7 @@ def test_a_gone_fact_takes_it_out_of_the_live_bucket() -> None:
 
 
 def test_a_delivered_fact_folds_to_its_own_state_not_resolved() -> None:
-    """A delivery-triggered closure (blizzard#583) is `delivered`, distinct from
+    """A delivery-triggered closure is `delivered`, distinct from
     `resolved` — never live, but not the human-settled state either."""
     facts = [
         FindingFact(kind="add", recorded_at=_T0),
@@ -123,7 +123,7 @@ def test_a_later_fact_after_gone_restores_liveness() -> None:
 
 
 def test_a_later_fact_after_delivered_restores_liveness_too() -> None:
-    """`delivered`'s own revival mirror (blizzard#583) — an `observed` after it reads as
+    """`delivered`'s own revival mirror — an `observed` after it reads as
     the delivery having been wrong or premature, restoring the finding to `live` exactly
     like reviving a merely-`gone` one."""
     facts = [

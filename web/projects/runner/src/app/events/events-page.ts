@@ -3,7 +3,7 @@ import { KitPanel } from 'fleet';
 import { FactLog } from 'local-panel';
 
 /**
- * The `/events` route (issue #313) — the local fact log at full width,
+ * The `/events` route — the local fact log at full width,
  * split out of the panel layout's right rail so it gets the whole viewport
  * rather than a rail-sized panel. {@link FactLog} is self-fetching
  * (`status.query.ts`'s shared dashboard read), so this page owns nothing

@@ -1,4 +1,4 @@
-"""Checks-gate enforcement end to end — issue #114, the full-stack proof.
+"""Checks-gate enforcement end to end — the full-stack proof.
 
 Two scenarios over the real forge + hub + runner: a red gated ``pass``
 (``requires_checks: true``) is bounced and re-queued, landing once green (AC #4); a red

@@ -1,4 +1,4 @@
-"""work_item_closures — delivery closure attempt outcomes (issue #216, hub store tree).
+"""work_item_closures — delivery closure attempt outcomes (hub store tree).
 One new table, ``checkfirst`` so a fresh ``base -> head`` and an upgrade converge.
 
 Revision ID: 20260801_1400_hub_work_item_closures

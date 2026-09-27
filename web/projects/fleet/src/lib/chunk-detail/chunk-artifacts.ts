@@ -7,7 +7,7 @@ import { ChunkArtifactBody } from './chunk-artifact-body';
 import { sortArtifacts } from './sort-artifacts';
 
 /**
- * The chunk's artifact store (issue #79, relinked #160) — every entry keyed
+ * The chunk's artifact store (relinked #160) — every entry keyed
  * `{node}.{artifact-name}.{epoch}`, listed as rows. Owns the ordering and the
  * empty state; each row's own rendering (the head, and for a `git_commit` its
  * pinned reference) belongs to {@link ChunkArtifactBody} — the same single
@@ -46,7 +46,7 @@ export class ChunkArtifacts {
    * (`chunk-detail-panel.ts`'s `.d-sec`), which has no panel chrome of its own
    * around this component and relies on the heading both visually and as its
    * `aria-labelledby` target. A consumer that already wraps this component in
-   * a titled `<fleet-kit-panel label="artifacts">` (issue #205) sets this
+   * a titled `<fleet-kit-panel label="artifacts">` sets this
    * `false` so the label doesn't render twice. */
   readonly heading = input(true);
 

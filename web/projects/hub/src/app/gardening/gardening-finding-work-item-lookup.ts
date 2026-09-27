@@ -14,7 +14,7 @@ export interface FindingWorkItemLookup {
 }
 
 /**
- * Resolves every finding's accepted-and-minted work item (D4) off the garden
+ * Resolves every finding's accepted-and-minted work item off the garden
  * proposals docket — split out of `gardening-findings-page.ts` purely to keep
  * that file under the lint's own line cap; every doc comment below is this page's
  * own reasoning, unchanged by the move.

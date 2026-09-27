@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, booleanAttribute, input, output } from '@angular/core';
 
 /**
- * The text-control chrome (blizzard#399 F2) — the font, background, border, and
+ * The text-control chrome — the font, background, border, and
  * focus-visible outline three separate call sites (a chunk's inline answer field,
  * the gardening run dialog's charge note, and its new-scope slug/description
  * fields) each hand-retyped byte-for-byte instead of sharing

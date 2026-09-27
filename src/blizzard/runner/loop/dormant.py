@@ -32,16 +32,16 @@ _log = get_logger("blizzard.runner.loop")
 #: inert in prose and in a behavior script alike. The exact prose is unpinned.
 _RESTART_MESSAGE = "# The supervisor restarted; continue your task where you left off."
 
-#: The message ADVANCE delivers into a session the operator paused and resumed (issue #46).
+#: The message ADVANCE delivers into a session the operator paused and resumed.
 #: Same inert ``#``-prefixed framing; the exact prose is unpinned.
 _UNPAUSE_MESSAGE = "# The operator resumed this chunk; continue your task where you left off."
 
-#: The message a worker generation's own overload backoff delivers on wake (blizzard#595).
+#: The message a worker generation's own overload backoff delivers on wake.
 #: Same inert ``#``-prefixed framing; the exact prose is unpinned.
 _OVERLOAD_BACKOFF_MESSAGE = "# The provider was overloaded; retrying automatically."
 
 # The restart re-attach. `_wake`'s own middle (a resumed process launched but not yet
-# durably recorded) is armed exactly like SPAWN's two-phase mint (D1/D4), below; recovery
+# durably recorded) is armed exactly like SPAWN's two-phase mint, below; recovery
 # re-runs RESUME idempotently regardless of which of these four windows a crash lands in.
 _CP_RESUME_AFTER_KILL = crashpoint("resume.after-kill.before-reattach", "survivor killed; session not yet re-attached")
 _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached under the same lease; intent cleared")
@@ -49,7 +49,7 @@ _CP_WAKE_AFTER_LAUNCH = crashpoint(
     "resume.wake.after-launch.before-record", "resumed process exists; pid not yet durable"
 )
 _CP_WAKE_AFTER_RECORD = crashpoint("resume.wake.after-record", "resumed pid durably recorded; launch not yet disarmed")
-# The transcript invocation boundary (blizzard#437 D6): a plain resume's own new pre-launch write.
+# The transcript invocation boundary: a plain resume's own new pre-launch write.
 _CP_WAKE_AFTER_BOUNDARY = crashpoint(
     "resume.wake.after-boundary-record.before-launch", "resume invocation boundary durable; session not yet resumed"
 )
@@ -68,7 +68,7 @@ class DormantSession:
 
     def resume_on_unmet_produces(self, message: str, bindings: list[EnvBindingRecord]) -> None:
         """Resume a session that exited with required ``produces:`` unattached, instead of
-        judging it (issue #422) — no retry consumed, no epoch bumped. Owner resolution is
+        judging it — no retry consumed, no epoch bumped. Owner resolution is
         checked **before** the generation's spend is recorded (the same "resolve before any
         mutation" shape :meth:`_restart` uses), so an unresolvable owner escalates in place
         rather than recording a spend for a wake that never happens."""
@@ -77,8 +77,8 @@ class DormantSession:
         if harness is None:
             return
         self.ctx.usage.record_worker(lease, bindings)
-        # The nudge already opened its own boundary at the call site (D6) — `_wake` self-
-        # determines this and skips opening a second one (D5), even for a LATER, unrelated wake.
+        # The nudge already opened its own boundary at the call site — `_wake` self-
+        # determines this and skips opening a second one, even for a LATER, unrelated wake.
         pid, _ = self._wake(message, bindings, harness=harness)
         _log.info(
             "resumed premature exit for unmet produces",
@@ -104,7 +104,7 @@ class DormantSession:
             lease_id=lease.lease_id, chunk_id=lease.chunk_id, question_id=ask.question_id, parked_at=now
         )
         if self.ctx.events is not None:
-            # LeaseActivity.state (D4) flips to "parked" — see LeaseChangeCause's own doc
+            # LeaseActivity.state flips to "parked" — see LeaseChangeCause's own doc
             # (wire/sse_runner.py) for why this cause isn't record_closure's "parked".
             self.ctx.events.publish_lease_changed(
                 lease.lease_id,
@@ -115,7 +115,7 @@ class DormantSession:
 
     def restart_or_release(self) -> None:
         """Park a paused chunk, else resume in place, else abandon it if the hub reassigned its
-        chunk (issue #46), or if the hub no longer knows it at all (blizzard#9).
+        chunk, or if the hub no longer knows it at all.
 
         The pause branch is **first** and keys on the pause *fact*, not the lossy derived status.
         It is conjoined with ``ours``, so a detached-then-paused chunk still abandons."""
@@ -181,9 +181,9 @@ class DormantSession:
     def on_unpause(self, park: PauseParkRecord, elicitation: ElicitationRecord | None) -> None:
         """Finish a pause park's teardown, then poll its chunk; once the operator resumes it, restart
         its session. The teardown runs ahead of every gate below — brake, hub, the pause itself —
-        since a kill is not a spawn and the interrupted envelope is owed its recording regardless
-        (blizzard#627). The pause cost the chunk a process, not an attempt; an **ask-parked** lease
-        returns early even once unpaused, so a lift never conjures an absent answer (issue #46).
+        since a kill is not a spawn and the interrupted envelope is owed its recording regardless.
+        The pause cost the chunk a process, not an attempt; an **ask-parked** lease
+        returns early even once unpaused, so a lift never conjures an absent answer.
         ``elicitation`` is the tick's hoisted read (``bzh:bulk-reconstitution``) of this lease's
         in-flight elicitation, if any — the settled-check's own use of it below; the later,
         far rarer resume-time check reads fresh, since settling may have just cleared it."""
@@ -221,7 +221,7 @@ class DormantSession:
         harness = self._resolve_harness(via="unpause-resume")
         if harness is None:
             return
-        # The paused generation's own usage (F12) — recorded before `_wake` mints the new one.
+        # The paused generation's own usage — recorded before `_wake` mints the new one.
         self.ctx.usage.record_worker(lease, bindings)
         pid, _ = self._wake(_UNPAUSE_MESSAGE, bindings, harness=harness, at=now)
         self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
@@ -235,7 +235,7 @@ class DormantSession:
 
     def _pause_park_settled(self, park: PauseParkRecord, elicitation: ElicitationRecord | None) -> bool:
         """True once nothing of the lease's is alive after `park_paused`'s interrupt — the worker's
-        group and the elicitation the park names (blizzard#627). Alive within the drain budget of
+        group and the elicitation the park names. Alive within the drain budget of
         ``parked_at``: left alone, no wake. Past it: SIGKILLed. A named elicitation that has exited
         books its ``judge`` usage, then clears — ``Judgement.collect``'s own order, both replays
         idempotent. An unnamed standing record is a usage-limit judge park's, left for its relaunch.
@@ -301,7 +301,7 @@ class DormantSession:
 
     def on_overload_backoff(self, fact: OverloadFactRecord) -> None:
         """No-op until ``fact.resume_after`` has passed, then resume the same
-        lease/epoch/session in place (blizzard#595) — no retry consumed, no epoch bumped.
+        lease/epoch/session in place — no retry consumed, no epoch bumped.
 
         Nothing is written on the no-op branch: ``resume_after`` is already durable, and
         `backing_off_facts` re-derives the same fact next tick. A worker generation wakes
@@ -327,7 +327,7 @@ class DormantSession:
         harness = self._resolve_harness(via="overload-backoff-resume")
         if harness is None:
             return
-        # The overloaded generation's own usage (F12) — recorded before `_wake` mints the new one.
+        # The overloaded generation's own usage — recorded before `_wake` mints the new one.
         self.ctx.usage.record_worker(lease, bindings)
         pid, _ = self._wake(_OVERLOAD_BACKOFF_MESSAGE, bindings, harness=harness, at=now)
         _log.info(
@@ -339,7 +339,7 @@ class DormantSession:
         )
 
     def _resume_judge_overload_backoff(self, now: datetime) -> None:
-        """The judge half of :meth:`on_overload_backoff` (blizzard#595) — clear-then-relaunch,
+        """The judge half of :meth:`on_overload_backoff` — clear-then-relaunch,
         exactly :meth:`_resume_judge_usage_limit_park`'s own shape: the stale record from the
         overloaded elicitation is left for `Judgement._launch`'s own `record_elicitation_launch`
         to delete-then-insert over, so there is no window where neither record exists."""
@@ -376,10 +376,10 @@ class DormantSession:
         )
 
     def _resume_judge_usage_limit_park(self, now: datetime) -> None:
-        """Unpause a judge-usage-limit park (blizzard#594): the worker's own turn already
+        """Unpause a judge-usage-limit park: the worker's own turn already
         finished normally before its verdict elicitation hit the limit, so there is nothing
         left to "continue" — re-running `Judgement` mints a fresh elicitation instead of
-        waking the worker with `_UNPAUSE_MESSAGE`, as D2 requires. The stale record from the
+        waking the worker with `_UNPAUSE_MESSAGE`. The stale record from the
         limited elicitation is left for `Judgement._launch`'s own `record_elicitation_launch`
         to delete-then-insert over, rather than cleared here first — no window where neither
         record exists. The park-resume is recorded only AFTER the fresh elicitation is
@@ -438,7 +438,7 @@ class DormantSession:
                 return
         now = self.ctx.clock.now()
         # Kill-first — never two processes on one session — via the shared, liveness-checked
-        # kill (D3): a stale/reused pid is never blindly signaled.
+        # kill: a stale/reused pid is never blindly signaled.
         kill_owned_process(
             self.ctx.process, pid=lease.pid, process_start_time=lease.process_start_time, pgid=lease.pgid
         )
@@ -450,7 +450,7 @@ class DormantSession:
             )
             Attempt(self.ctx, lease).abandon(killed=True, via="resume")
             return
-        # The crashed generation's own usage (F12) — recorded before `_wake` mints the new one.
+        # The crashed generation's own usage — recorded before `_wake` mints the new one.
         self.ctx.usage.record_worker(lease, bindings)
         pid, _ = self._wake(_RESTART_MESSAGE, bindings, harness=harness, at=now)
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
@@ -500,7 +500,7 @@ class DormantSession:
         """Whether some worker-starting kind (:data:`WORKER_STARTING_KINDS`) already opened
         its boundary at this generation — `_wake`'s own, self-determined guard against opening
         a second one alongside a nudge's own, even across a LATER, unrelated wake trigger
-        reaching the same still-dormant lease (blizzard#437 D5/F6)."""
+        reaching the same still-dormant lease."""
         return any(
             b.generation == generation and b.kind in WORKER_STARTING_KINDS
             for b in self.ctx.stores.invocation_boundaries.open_boundaries_for_lease(self.lease.lease_id)
@@ -518,7 +518,7 @@ class DormantSession:
         lease, returning that pid with the instant it was stamped — an omitted ``at`` reads the
         clock *after* the resume returns. ``harness`` is the caller's already-resolved owner, so
         this method can never be reached with an unresolvable one. Opens a `resume` boundary
-        unless :meth:`_worker_boundary_already_open` finds one open already (D5/D6)."""
+        unless :meth:`_worker_boundary_already_open` finds one open already."""
         lease = self.lease
         spawner = Spawner(self.ctx)
         session = lease.session
@@ -550,9 +550,9 @@ class DormantSession:
             preamble=spawner.preamble(lease, bindings),
             chunk_id=lease.chunk_id,
             model=lease.resolved_model,
-            # Reasserted, not sticky (issue #144) — see the judge call site's note.
+            # Reasserted, not sticky — see the judge call site's note.
             effort=lease.resolved_effort,
-            # Reasserted, not sticky either (blizzard#343) — mirrors effort's treatment.
+            # Reasserted, not sticky either — mirrors effort's treatment.
             compaction_window=lease.resolved_compaction_window,
         )
         _CP_WAKE_AFTER_LAUNCH.reached()  # the process exists; nothing about it is durable yet
@@ -562,10 +562,10 @@ class DormantSession:
             self.ctx.stores.liveness.record_spawn(
                 lease.lease_id,
                 pid=resumed.pid,
-                # The launcher's own recorded start time (D3) — never re-probed a second
-                # time here, which would race a pid-reuse window opening after it (F14).
+                # The launcher's own recorded start time — never re-probed a second
+                # time here, which would race a pid-reuse window opening after it.
                 process_start_time=resumed.process_start_time,
-                # The launcher's own recorded group (D3) — carried through, never inferred
+                # The launcher's own recorded group — carried through, never inferred
                 # as `pgid=pid` at this call site.
                 pgid=resumed.pgid,
                 session=lease.session,  # unchanged — same concrete session under the same lease
@@ -573,12 +573,12 @@ class DormantSession:
                 harness_version=version,
             )
         except Exception:
-            # F1: a plain raise here never disarms the trampoline on its own — kill it
+            # A plain raise here never disarms the trampoline on its own — kill it
             # explicitly instead (`Spawner.spawn`'s own guard, mirrored here).
             self.ctx.process.kill_group(resumed.pgid)
             raise
         _CP_WAKE_AFTER_RECORD.reached()  # ownership durable; not yet disarmed
-        # F1: disarm only now this record is durable — a later REAP/ADVANCE pass can
+        # Disarm only now this record is durable — a later REAP/ADVANCE pass can
         # re-adopt this exact process past here.
         resumed.confirm_durable()
         if self.ctx.events is not None:

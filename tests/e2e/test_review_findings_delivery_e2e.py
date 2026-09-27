@@ -1,4 +1,4 @@
-"""The `record-findings` node end to end (blizzard#582 Phase 3): the real packaged
+"""The `record-findings` node end to end: the real packaged
 `basic-development-workflow` graph, its `deliver`/`record-findings` scripts unscripted, runs
 against the real hub route. A scripted review publishes a `review-finding-delta` with one
 `deferred`, one `fixed`, and one `refuted` entry; after landing, only the deferred entry is a

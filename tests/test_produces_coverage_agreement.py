@@ -1,4 +1,4 @@
-"""The hub backstop and the runner nudge agree on produces-coverage (issues #113, #143).
+"""The hub backstop and the runner nudge agree on produces-coverage.
 
 Both must call the one shared :class:`~blizzard.wire.completion.Coverage` rather
 than each re-derive "covered" inline. Drives both predicates over one scenario matrix and
@@ -40,7 +40,7 @@ def _node(*, produces: list[str | ProducesSpec]) -> Node:
 
 
 def _git_commit_spec(name: str = "commit") -> ProducesSpec:
-    """A ``{kind: git_commit}`` expectation — the D1 mapping form, as ``build`` nodes
+    """A ``{kind: git_commit}`` expectation — the mapping form, as ``build`` nodes
     author it (``name`` defaults to ``commit``, the packaged graphs' own convention, but
     is never what a real git-commit artifact is named)."""
     return ProducesSpec(name=name, kind=ArtifactKind.GIT_COMMIT)
@@ -57,7 +57,7 @@ def _asset(name: str, *, attached: bool) -> SubmittedArtifact:
 
 
 #: (id, produces, submission artifacts, expected "is every name covered?"). A ``produces``
-#: entry is either a bare asset name (``str``) or a :func:`_git_commit_spec` (issue #143, D2).
+#: entry is either a bare asset name (``str``) or a :func:`_git_commit_spec`.
 _SCENARIOS = [
     ("no-produces", [], [], True),
     ("git-commit-covers-the-name", ["backend"], [_git_commit("backend")], True),
@@ -77,7 +77,7 @@ _SCENARIOS = [
         True,
     ),
     ("an-unrelated-artifact-covers-nothing", ["findings"], [_git_commit("backend")], False),
-    # --- git_commit-kind expectations (issue #143, D2): kind match, not name match. ---
+    # --- git_commit-kind expectations: kind match, not name match. ---
     (
         "git-commit-kind-covered-by-a-repo-named-artifact",
         [_git_commit_spec()],
@@ -145,7 +145,7 @@ def test_hub_and_runner_agree_on_coverage(
 
 
 def test_a_git_commit_covered_name_never_nudges_the_worker() -> None:
-    """The runner half of the regression, pinned on its own (issue #143): a committed
+    """The runner half of the regression, pinned on its own: a committed
     and declared ``produces:`` name must not provoke a nudge."""
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], produces=["backend"])
 
@@ -161,7 +161,7 @@ def test_a_runner_local_attachment_covers_the_name_without_any_artifact() -> Non
 
 
 def test_a_git_commit_kind_expectation_is_covered_by_kind_not_by_name() -> None:
-    """The runner half of the D2 kind-match rule, pinned on its own (issue #143): a
+    """The runner half of the kind-match rule, pinned on its own: a
     ``git_commit`` spec is met by kind, not by a name no real artifact ever carries."""
     envelope = make_envelope(
         "ch_1",
@@ -175,7 +175,7 @@ def test_a_git_commit_kind_expectation_is_covered_by_kind_not_by_name() -> None:
 
 
 def test_a_git_commit_kind_expectation_with_zero_commits_nudges_the_worker() -> None:
-    """The runner's other D2 half: zero ``GIT_COMMIT`` artifacts leaves a ``git_commit``
+    """The runner's other half: zero ``GIT_COMMIT`` artifacts leaves a ``git_commit``
     spec missing — nudge-worthy — exactly as a zero-attachment asset spec is today."""
     envelope = make_envelope(
         "ch_1",

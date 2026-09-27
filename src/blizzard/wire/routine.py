@@ -1,7 +1,7 @@
-"""Routine create/edit/run requests and their read views (issue #389, blizzard#392).
+"""Routine create/edit/run requests and their read views.
 
-A create names the graph its runs execute and a default scope (minted if unseen, D4);
-edit changes everything but the name, which is immutable (D7). A run mints, ingests, and
+A create names the graph its runs execute and a default scope (minted if unseen);
+edit changes everything but the name, which is immutable. A run mints, ingests, and
 promotes a hub work item from the routine in one act."""
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ class RoutineCreateRequest(BaseModel):
 
 
 class RoutineEditRequest(BaseModel):
-    """``name`` is required and must equal the routine's current one (D7) — the request
+    """``name`` is required and must equal the routine's current one — the request
     restates it so a caller cannot silently target the wrong routine's edit."""
 
     name: str
@@ -52,7 +52,7 @@ class RoutineView(BaseModel):
 
 
 class RoutineRunRequest(BaseModel):
-    """``POST /api/routines/{routine_id}/run`` (blizzard#392) — ``scope_slug`` omitted
+    """``POST /api/routines/{routine_id}/run`` — ``scope_slug`` omitted
     or ``None`` defaults to the routine's own; ``mode`` is ``"full"`` or ``"delta"``, a
     requested ``"delta"`` with no recorded baseline downgrading to ``"full"`` on the
     response rather than refusing."""
@@ -66,7 +66,7 @@ class RoutineRunRequest(BaseModel):
 
 class RoutineBaselineRepoView(BaseModel):
     """One repo's recorded baseline revision and how much has landed against it since
-    (D1) — ``GET /api/routines/{routine_id}/baselines``."""
+    — ``GET /api/routines/{routine_id}/baselines``."""
 
     repo: str
     revision: str
@@ -74,7 +74,7 @@ class RoutineBaselineRepoView(BaseModel):
 
 
 class RoutineBaselineView(BaseModel):
-    """One scope a routine has swept (D5) — see
+    """One scope a routine has swept — see
     `IReadFindingSetRepository.newest_by_scope_for_routine` for what absence means."""
 
     scope_slug: str

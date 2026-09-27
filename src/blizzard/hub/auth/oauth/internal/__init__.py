@@ -1,4 +1,4 @@
-"""OAuth provider conformers — package-private (issue #92, ``bzh:dependency-inversion``).
+"""OAuth provider conformers — package-private (``bzh:dependency-inversion``).
 
 Everything here is confined to ``hub/auth/oauth/`` and must not be imported from
 outside it; a consumer depends on :class:`~blizzard.hub.auth.oauth.provider.IOAuthProvider`

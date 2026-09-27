@@ -1,8 +1,8 @@
-"""``ScopeStore`` — the scope repository (blizzard#389, component tier).
+"""``ScopeStore`` — the scope repository (component tier).
 
 Exercises ``ensure``/``edit_description``/``record_lifecycle`` through the read/write
 Protocol split (``bzh:repository-split``), migrated-to-head sqlite-on-disk — the
-``tests/test_work_item_store.py`` shape. ``ensure``'s first-write-wins CAS (D5) is
+``tests/test_work_item_store.py`` shape. ``ensure``'s first-write-wins CAS is
 proven directly against a pre-seeded row, mirroring a losing concurrent second mint."""
 
 from __future__ import annotations
@@ -49,8 +49,8 @@ def test_ensure_on_an_unknown_slug_mints_one_row(tmp_path: Path) -> None:
 
 
 def test_ensure_on_an_existing_slug_reads_back_the_existing_row_unchanged(tmp_path: Path) -> None:
-    """The CAS's losing branch (D5): a slug already minted, ``ensure`` called again with
-    a different description, leaves the stored description untouched (D4)."""
+    """The CAS's losing branch: a slug already minted, ``ensure`` called again with
+    a different description, leaves the stored description untouched."""
     store = _store(tmp_path)
     first = store.ensure("blizzard", description="original", at=_NOW)
 
@@ -116,7 +116,7 @@ def test_a_second_retire_is_a_harmless_no_op(tmp_path: Path) -> None:
 def test_a_driver_fault_mid_read_raises_the_wrapped_error_and_logs_once(tmp_path: Path) -> None:
     """The schema goes missing out from under an otherwise-healthy engine — a fault
     raised inside the caller's ``with`` block, past connection acquisition, proving the
-    seam's wrap site encloses the whole unit of work (D1) and not just acquisition."""
+    seam's wrap site encloses the whole unit of work and not just acquisition."""
     store, engine = _store_and_engine(tmp_path)
     engine.dispose()
     (tmp_path / "hub.db").unlink()

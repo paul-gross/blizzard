@@ -52,7 +52,7 @@ class QuestionView(BaseModel):
     """A question row with its derived answer *and delivery* state.
 
     ``answered`` and the answer fields derive from the presence of the answer row;
-    ``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact (issue #165)."""
+    ``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact."""
 
     question_id: str
     chunk_id: str

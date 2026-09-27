@@ -1,4 +1,4 @@
-"""``blizzard runner scope`` — the deployment's scope vocabulary (blizzard#582 D2)."""
+"""``blizzard runner scope`` — the deployment's scope vocabulary."""
 
 from __future__ import annotations
 

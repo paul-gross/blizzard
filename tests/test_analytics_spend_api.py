@@ -1,7 +1,7 @@
-"""The analytics spend routes (blizzard#256, Phase 3, component tier): the
+"""The analytics spend routes (component tier): the
 TRANSCRIPT_READ auth triad, real usage/cost rollups by node, graph, and chunk, every
-shared filter (D7), cursor paging and NDJSON parity for the per-chunk grouping, and the
-reconciliation test against ``UsageTotal.of`` and ``GET /api/spend`` (D6)."""
+shared filter, cursor paging and NDJSON parity for the per-chunk grouping, and the
+reconciliation test against ``UsageTotal.of`` and ``GET /api/spend``."""
 
 from __future__ import annotations
 
@@ -302,7 +302,7 @@ def test_the_ndjson_stream_carries_its_cursor_across_batches(tmp_path: Path) -> 
     assert len(lines) == 2
 
 
-# --- the shared filter vocabulary (D7) -----------------------------------------------
+# --- the shared filter vocabulary -----------------------------------------------
 
 
 def test_spend_honors_the_source_filter(tmp_path: Path) -> None:
@@ -393,7 +393,7 @@ def test_spend_reconciles_with_usage_total_and_the_fleet_spend_route(tmp_path: P
     assert summed_cost == pytest.approx(domain_total.cost_usd) == pytest.approx(fleet_spend["cost_usd"])
     assert summed_partial == domain_total.cost_partial == fleet_spend["cost_partial"] is True
 
-    # blizzard#517: an empty window folds to zeros, never a fabricated PARTIAL.
+    # An empty window folds to zeros, never a fabricated PARTIAL.
     empty_since = (hub.clock.now() + timedelta(days=1)).isoformat()
     empty_spend = hub.client.get("/api/spend", params={"since": empty_since}, headers=_cookie(token)).json()
     assert empty_spend["input_tokens"] == 0

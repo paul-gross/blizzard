@@ -1,10 +1,10 @@
-"""Where a detached judgement elicitation's reply lands (blizzard#443, D4).
+"""Where a detached judgement elicitation's reply lands.
 
 Load-bearing, unlike the diagnostic worker-stdout lane (`bzh:daemon-stdout-to-file`): the
 verdict and the attempt's usage live only here, so a launch with nowhere to write fails
 loudly rather than proceeding uncollectable — ``root`` is never the empty-disables string
 ``WorkerStdoutFiles`` accepts. One file per launch attempt, never appended to, so a
-relaunch's second document can never corrupt the first's (D4)."""
+relaunch's second document can never corrupt the first's."""
 
 from __future__ import annotations
 

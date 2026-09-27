@@ -1,5 +1,5 @@
-"""Chunk-dependency routes — declare and release a dependency edge between two chunks
-(issue #456), the operator's own control-plane surface. Release addresses the standing
+"""Chunk-dependency routes — declare and release a dependency edge between two chunks,
+the operator's own control-plane surface. Release addresses the standing
 edge by its ordered pair, never a minted edge id — deliberately no GET or listing route
 here, which stays #457's to add."""
 
@@ -46,7 +46,7 @@ def _resolve_dependent(services: HubServices, chunk_id: str) -> Chunk:
 
 def _resolve_prerequisite(services: HubServices, chunk_id: str) -> Chunk:
     """Resolve the named prerequisite, telling an ephemeral id (grouped-away or deleted)
-    from one never minted (issue #456) via the further ``is_ephemeral`` read. Raises
+    from one never minted via the further ``is_ephemeral`` read. Raises
     :class:`PrerequisiteIsEphemeral` for the former, 404 for the latter — an early-out
     only; ``DependencyService`` re-derives the same fact, and is the sole guard, under the lock."""
     chunk = services.chunks.record.get(chunk_id)
@@ -91,7 +91,7 @@ def declare_dependency(
     request: ChunkDependencyDeclareRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> object:
-    """Declare that CHUNK depends on ``prerequisite_chunk_id`` (issue #456).
+    """Declare that CHUNK depends on ``prerequisite_chunk_id``.
 
     Idempotent: an already-standing pair is reported back before the prerequisite is even resolved, so one since gone
     ephemeral cannot turn a refusal. 404 for an unknown dependent, or one a race deletes between resolving it and this
@@ -132,8 +132,8 @@ def release_dependency(
     request: ChunkDependencyReleaseRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> object:
-    """Release CHUNK's standing dependency on ``prerequisite_chunk_id`` (issue
-    #456) — recorded, never deleted. Admitted whenever the edge stands, whatever the
+    """Release CHUNK's standing dependency on ``prerequisite_chunk_id``
+    — recorded, never deleted. Admitted whenever the edge stands, whatever the
     prerequisite's own state. 404 for an unknown dependent; 409 when no edge stands."""
     dependent = _resolve_dependent(services, chunk_id)
     try:

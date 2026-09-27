@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 
 /**
- * The modal shell (blizzard#399 D6) — the chrome a dialog needs and no dialog under
+ * The modal shell — the chrome a dialog needs and no dialog under
  * `fleet/lib/kit/` had before this one: a viewport-covering scrim, a centred, framed
  * panel with header/body/footer slots, `role="dialog"`/`aria-modal`, Escape and
  * backdrop dismissal, and focus containment. Presentational only, no client or query
@@ -11,7 +11,7 @@ import { CdkTrapFocus } from '@angular/cdk/a11y';
  * output, never deciding for itself whether closing is allowed.
  *
  * Focus containment is `@angular/cdk/a11y`'s `CdkTrapFocus` (already a workspace
- * dependency via `@angular/cdk/menu`, issue #161) — it cycles Tab within the panel and,
+ * dependency via `@angular/cdk/menu`) — it cycles Tab within the panel and,
  * with `cdkTrapFocusAutoCapture`, moves focus into the panel the instant it opens; both
  * are directives, not a service, so they cost this component no query/client
  * dependency of their own.
@@ -28,7 +28,7 @@ import { CdkTrapFocus } from '@angular/cdk/a11y';
  * all, and every open re-mounts a fresh focus-trap capture.
  *
  * The panel's header/body/footer rows are named `.p-hdr`/`.p-body`/`.p-ftr`
- * (blizzard#399 F15) — {@link KitPanel}'s own slot-naming convention, not a second
+ * — {@link KitPanel}'s own slot-naming convention, not a second
  * scheme invented alongside it, even though this dialog does not compose
  * `<fleet-kit-panel>` directly: `KitPanel` models one header over one
  * continuously-scrolling body, and this dialog needs a third, always-visible,

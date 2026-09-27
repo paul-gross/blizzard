@@ -1,4 +1,4 @@
-"""blizzard#366 Phase 2 — ``WorkItemMaterializationReconciler.sweep()`` against a real,
+"""``WorkItemMaterializationReconciler.sweep()`` against a real,
 migrated store: a delivered chunk's proposals become real work items (``create``) or
 appended evidence (``update``), an unresolvable proposal is recorded with its reason,
 and a transient failure leaves the proposal for the next pass. Inverts
@@ -140,7 +140,7 @@ def test_a_second_sweep_mints_no_duplicate_item_and_records_no_second_outcome(tm
 
 
 def test_proposals_from_two_epochs_of_the_same_node_both_materialize(tmp_path: Path) -> None:
-    """D3: no epoch filter — every fence-accepted proposal row materializes, including
+    """No epoch filter — every fence-accepted proposal row materializes, including
     one from an earlier epoch that retried before the chunk went on to deliver."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _ingest(hub)
@@ -242,7 +242,7 @@ def test_unresolvable_update_cases_are_recorded_with_reason_and_siblings_still_m
 def test_a_retired_default_graph_leaves_the_create_proposal_unjudged_until_re_enabled(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     # The delivering chunk's own graph shares the packaged default's name; retiring it
-    # after the chunk is already claimed on it leaves that claim untouched (issue #101)
+    # after the chunk is already claimed on it leaves that claim untouched
     # while starving `ensure_default()`'s later name resolution for the reconciler's mint.
     chunk_id, node_id = _ingest(hub, ref="12")
     graphs = hub.client.get("/api/graphs").json()
@@ -267,7 +267,7 @@ def test_a_retired_default_graph_leaves_the_create_proposal_unjudged_until_re_en
 
 
 def test_a_pre_empted_ref_leaves_the_create_proposal_unjudged(tmp_path: Path) -> None:
-    """``IngestConflict``: an out-of-band ingest of ``hub:1`` — the ref the reconciler's
+    """``IngestConflict``: an out-of-band ingest of ref ``1`` on source ``hub`` — the ref the reconciler's
     own ``allocate_ref`` would mint next — pre-empts it. The burned ref is never retried,
     so the very next sweep succeeds under a fresh one instead of colliding forever."""
     hub = build_hub(tmp_path)
@@ -288,7 +288,7 @@ def test_a_pre_empted_ref_leaves_the_create_proposal_unjudged(tmp_path: Path) ->
     assert "loses the race" in titles
 
 
-# --- default-graph resolution, once per pass (blizzard#524 D6) ------------------
+# --- default-graph resolution, once per pass ------------------
 
 
 def test_the_default_graph_resolves_once_per_pass_not_once_per_create_proposal(

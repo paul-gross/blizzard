@@ -1,4 +1,4 @@
-"""Reconcile ``host``'s positional DIRECTORY with its ``--dir`` option (issue #3).
+"""Reconcile ``host``'s positional DIRECTORY with its ``--dir`` option.
 
 Ranked per ``src/blizzard/cli/param_rank.py``: only a command-line tie that disagrees
 is a usage error."""

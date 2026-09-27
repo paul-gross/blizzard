@@ -13,12 +13,12 @@ import {
   usageForStep as sumStepUsage,
 } from './chunk-timeline-rows';
 
-/** The chunk's node-history timeline (issue #79) — one row per judged node,
+/** The chunk's node-history timeline — one row per judged node,
  * oldest-first: the node, the verdict that closed it in an aligned column
  * (`BUILD  PASS`, `REVIEW  FAIL`), and where that verdict routed the chunk —
  * capped by a synthetic row for the node currently in flight (`RUN` in cyan,
- * or the parked state's own verb), plus each step's own summed usage
- * (issue #60). Row derivation ({@link HistoryRow}, {@link ActiveRow}, usage
+ * or the parked state's own verb), plus each step's own summed usage.
+ * Row derivation ({@link HistoryRow}, {@link ActiveRow}, usage
  * summing) lives in `chunk-timeline-rows.ts` (`canon:one-owner`) — this
  * component only renders it. Presentational either way a row responds:
  * {@link activatable} makes a keyed row emit {@link ChunkTimeline.pickStep}
@@ -33,7 +33,7 @@ import {
  * The interactive `.step` div nested inside it, not the `<li>` itself, carries
  * `role="button"`/tabindex when {@link activatable} — a role set directly on
  * an `<li>` would override its implicit listitem role instead of layering on
- * top of it (`review:F5`). Nesting works with the column layout rather than
+ * top of it. Nesting works with the column layout rather than
  * against it: `.step` subgrids a second time from the bare `<li>`'s own
  * subgrid, so the verdict column stays aligned exactly as it did with one
  * subgrid level.
@@ -64,7 +64,7 @@ export class ChunkTimeline {
    * which has no panel chrome of its own and relies on the heading both
    * visually and as its `aria-labelledby` target; a consumer already
    * wrapped in a titled `<fleet-kit-panel label="node history">`
-   * (issue #205) sets this `false`. */
+   * sets this `false`. */
   readonly heading = input(true);
 
   /** Whether a row carrying a real join key activates by mouse/Enter/Space, emitting
@@ -97,8 +97,8 @@ export class ChunkTimeline {
 
   /** Emitted with an activated row's join key, or `null` when the already-selected
    * row is re-activated — the only way to clear a step selection from this component,
-   * since re-navigating to an identical URL is a no-op the router drops
-   * (`review:F6`). Never emitted for a `null`-keyed row (a migration, or an active
+   * since re-navigating to an identical URL is a no-op the router drops.
+   * Never emitted for a `null`-keyed row (a migration, or an active
    * row with no epoch yet) or while {@link activatable} is `false`. */
   readonly pickStep = output<string | null>();
 
@@ -116,7 +116,7 @@ export class ChunkTimeline {
 
   protected readonly historyRows = computed<readonly HistoryRow[]>(() => deriveHistoryRows(this.detail()));
 
-  /** Whether the timeline spans more than one graph (issue #90) — a chunk that migrated.
+  /** Whether the timeline spans more than one graph — a chunk that migrated.
    * When true the board labels each row with the graph it happened in; a single-graph
    * chunk shows no graph badge (it would be noise). A migration inherently crosses two
    * graphs (its target may not yet have its own row), so its presence alone qualifies. */

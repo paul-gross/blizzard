@@ -1,7 +1,7 @@
-"""The cross-daemon invariant binding the transcript lane's two per-record caps
-(blizzard#247 D4/D5). Neither side can see the other's constant, so nothing but this file
+"""The cross-daemon invariant binding the transcript lane's two per-record caps.
+Neither side can see the other's constant, so nothing but this file
 keeps them ordered, and the ordering decides whether an oversized record loses some of its
-content or all of it. Scoped to the **defaults**: blizzard#338 made both caps
+content or all of it. Scoped to the **defaults**: this made both caps
 operator-settable, and a configured pair is unvalidated by construction, so the last test
 here pins the warning each scaffolded config carries instead."""
 

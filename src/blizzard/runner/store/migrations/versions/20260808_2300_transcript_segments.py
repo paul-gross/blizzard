@@ -1,5 +1,5 @@
 """transcript segments and their own outbound buffer — the dedicated transcript lane
-(runner store tree, issue #246), shipping blizzard#247's turn-range wire shape
+(runner store tree), shipping the turn-range wire shape
 
 Revision ID: 20260808_2300_runner_transcript_segments
 Revises: 20260801_1500_runner_external_usage_samples

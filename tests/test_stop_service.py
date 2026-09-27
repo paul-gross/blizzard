@@ -1,4 +1,4 @@
-"""StopService (unit tier) — terminal operator abandonment, facts only (issue #118).
+"""StopService (unit tier) — terminal operator abandonment, facts only.
 
 A fake stands in for the lifecycle store — only ``record_stop`` is meaningfully
 implemented; every other seam raises loudly if called, including the route release

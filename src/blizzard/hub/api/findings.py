@@ -1,4 +1,4 @@
-"""Finding routes (blizzard#390; write verbs blizzard#394).
+"""Finding routes.
 
 ``GET /api/findings`` is the pass's own bucket read
 (blizzard-product:/delivered/garden/machinery.md §Managing findings and proposals):
@@ -38,7 +38,7 @@ def _finding_view_fields(finding: Finding) -> dict[str, object]:
     """The one `Finding` -> wire-dict projection — `finding_view` wraps it in
     `FindingView.model_validate`, `get_finding` extends it with `facts` and wraps in
     `FindingDetailView.model_validate`, so neither round-trips the other's already-
-    validated model through `model_dump` (review:F8)."""
+    validated model through `model_dump`."""
     return {
         "finding_id": finding.finding_id,
         "routine_name": finding.routine_name,
@@ -70,7 +70,7 @@ def finding_view(finding: Finding) -> FindingView:
 
 def _fact_view(fact: FindingFact) -> FindingFactView:
     """The one ``FindingFact`` -> ``FindingFactView`` projection, `finding_view`'s own
-    sibling for a chain entry (blizzard#487)."""
+    sibling for a chain entry."""
     return FindingFactView(
         kind=fact.kind,
         recorded_at=iso_utc(fact.recorded_at),
@@ -116,9 +116,9 @@ def list_findings(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> FindingsPageView:
-    """The findings bucket, widened to every routine and every scope (blizzard#486),
-    bounded and keyset-paginated (blizzard#526 D1/D5) — live only, unless `include_gone`
-    (D3), which also surfaces every exited finding, not just a merely `gone` one.
+    """The findings bucket, widened to every routine and every scope,
+    bounded and keyset-paginated — live only, unless `include_gone`,
+    which also surfaces every exited finding, not just a merely `gone` one.
     `routine` and `scope` are both optional, independently:
 
     - both named — one routine's findings under one scope
@@ -126,7 +126,7 @@ def list_findings(
     - `routine` absent, `scope` named — every routine's findings under one scope
     - both absent — every finding across every routine and every scope
 
-    `source` further narrows to `"routine"` or `"review"` (blizzard#582); absent reads
+    `source` further narrows to `"routine"` or `"review"`; absent reads
     both. All share `list_page`'s own total `finding_id` order."""
     try:
         page = services.findings.list_page(
@@ -144,7 +144,7 @@ def list_findings(
 
 @router.get("/findings/{finding_id}", response_model=FindingDetailView, dependencies=[Depends(require(FLEET_VIEW))])
 def get_finding(finding_id: str, services: Annotated[HubServices, Depends(get_services)]) -> FindingDetailView:
-    """One finding's whole record, plus its whole fact chain oldest-first (blizzard#487);
+    """One finding's whole record, plus its whole fact chain oldest-first;
     404 on an unknown id."""
     result = services.findings.get_with_facts(finding_id)
     if result is None:

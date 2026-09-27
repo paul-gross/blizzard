@@ -1,9 +1,9 @@
-"""The transcript read — ``GET /api/leases/{lease_id}/transcript`` (issue #29, blizzard#249).
+"""The transcript read — ``GET /api/leases/{lease_id}/transcript``.
 
 **Lease-keyed, not session-keyed**: ``session_id`` is nullable, so a session-keyed route
 could only 404 a ``spawning`` lease, collapsing "agent is starting up" into "not found".
 **200-always with an in-band ``reason``** while the owner resolves; **503** when it can't;
-**404** means no lease with this id, ever. A closed lease stays readable (D1)."""
+**404** means no lease with this id, ever. A closed lease stays readable."""
 
 from __future__ import annotations
 

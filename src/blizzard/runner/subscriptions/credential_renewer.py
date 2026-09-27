@@ -1,7 +1,7 @@
-"""The per-provider credential-renewal seam (blizzard#504) — a **pluggable,
+"""The per-provider credential-renewal seam — a **pluggable,
 provider-selected** external-system seam (``bzh:pluggable-seams``), selected beside each
 declared subscription's sampler binding at composition. Renewal is delegated to the
-vendor CLI: blizzard never opens a credential file for writing (D1) — a binding asks the
+vendor CLI: blizzard never opens a credential file for writing — a binding asks the
 vendor's own tooling to refresh it, and reports only whether that ask worked."""
 
 from __future__ import annotations

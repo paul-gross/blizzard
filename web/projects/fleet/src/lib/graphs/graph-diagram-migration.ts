@@ -10,7 +10,7 @@ const CORNER_RADIUS = 14;
 /**
  * One migration sink's SVG shape — a labelled exit pill for a `graph:<name>` choice
  * target ({@link LaidOutMigration}), split out the same way `graph-diagram-node-shape.ts`
- * and `graph-diagram-start.ts` were (issue #157's `web:lint` line cap): an
+ * and `graph-diagram-start.ts` were (`web:lint` line cap): an
  * attribute-selector component (`g[fleetGraphDiagramMigration]`) rendering as a plain
  * `<g>` inside the parent's `<svg>`, one per distinct target graph name the parent
  * loops over.

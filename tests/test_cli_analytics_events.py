@@ -1,6 +1,6 @@
-"""``blizzard hub analytics events`` (blizzard#257 Phase 2) — a pure client of
+"""``blizzard hub analytics events`` — a pure client of
 ``GET /api/analytics/events``/``/events/ndjson`` driven with ``httpx`` stubbed (unit
-tier): the three output modes (D3), the incompatible-flag guards, D6's local→UTC
+tier): the three output modes, the incompatible-flag guards, the local→UTC
 ``--since``/``--until`` conversion, and the bare 401/403 messages."""
 
 from __future__ import annotations
@@ -86,7 +86,7 @@ def _local_timezone(tz: str) -> Iterator[None]:
         time.tzset()
 
 
-# --- D3: the three output modes -----------------------------------------------------
+# --- the three output modes -----------------------------------------------------
 
 
 def test_default_output_is_a_human_table(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -121,7 +121,7 @@ def test_ndjson_streams_every_line_to_stdout(monkeypatch: pytest.MonkeyPatch) ->
     assert result.output.splitlines() == ['{"id": 1}', '{"id": 2}']
 
 
-# --- D3: the incompatible-flag guards ------------------------------------------------
+# --- the incompatible-flag guards ------------------------------------------------
 
 
 def test_ndjson_rejects_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -218,7 +218,7 @@ def test_the_default_limit_is_200_when_not_given(monkeypatch: pytest.MonkeyPatch
     assert calls[0]["limit"] == "200"
 
 
-# --- D6: --since/--until cross the boundary UTC-aware --------------------------------
+# --- --since/--until cross the boundary UTC-aware --------------------------------
 
 
 def test_since_and_until_convert_the_operators_local_time_to_utc(monkeypatch: pytest.MonkeyPatch) -> None:

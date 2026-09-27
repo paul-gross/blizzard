@@ -119,13 +119,13 @@ revision.
 
 The run looked and could not find the finding named by `id`. Ordinarily this does not close the finding — it flags it
 for a person, because a finding leaves the live set on human judgment and never on a pass's word alone. The one
-exception: a finding a delivery already closed to `delivered` is a person's own claim that the ground moved, so a
-`gone` op naming one settles it to `resolved` outright rather than flagging it again. `note` says why the run believes
-it is gone.
+exception: a finding a delivery already closed to `delivered` is a person's own claim that the ground moved, so a `gone`
+op naming one settles it to `resolved` outright rather than flagging it again. `note` says why the run believes it is
+gone.
 
 ## A run's bucket also holds review-sourced findings
 
-A delivery lane's own review round can raise a finding too (`review/finding-format`, blizzard#582) — filed under a
-scope exactly like this routine's own, but with no routine lineage behind it. A run sweeping that same scope reads
-those findings in its own live-plus-`delivered` bucket alongside its routine's, and may answer one with `observed` or
-`gone` exactly as it would one of its own: liveness is derived from facts, not from which format minted the finding.
+A delivery lane's own review round can raise a finding too (`review/finding-format`) — filed under a scope exactly like
+this routine's own, but with no routine lineage behind it. A run sweeping that same scope reads those findings in its
+own live-plus-`delivered` bucket alongside its routine's, and may answer one with `observed` or `gone` exactly as it
+would one of its own: liveness is derived from facts, not from which format minted the finding.

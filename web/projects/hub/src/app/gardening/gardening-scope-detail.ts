@@ -94,8 +94,8 @@ export class GardeningScopeDetail {
   protected readonly canEditScopes = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
 
   /** The selected scope's related routines, each resolved to a name and its
-   * default-ness off the already-held routines list (D2) — `null` until both that
-   * list and the scope-routines read resolve (D5): gating on the id read alone would
+   * default-ness off the already-held routines list — `null` until both that
+   * list and the scope-routines read resolve: gating on the id read alone would
    * let it settle first and render every entry as its bare id with no name and no
    * default marked, which self-corrects once `routinesQuery` catches up but reads as
    * a wrong, settled answer in between. */

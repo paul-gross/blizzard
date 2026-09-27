@@ -1,8 +1,7 @@
 """Transcript-event derivation convergence: a finalized segment's events appear with no
 manual step, a second pass writes nothing new, a version bump re-derives history while
 leaving the prior version's rows intact, a superseded segment's rows are dropped, and a
-content-hole segment re-derives once its record is accepted (blizzard#254, Phase 3 —
-component tier)."""
+content-hole segment re-derives once its record is accepted (component tier)."""
 
 from __future__ import annotations
 
@@ -153,7 +152,7 @@ def test_a_finalized_segments_events_appear_with_no_manual_step(fixture: _Fixtur
 
 
 def test_a_derived_events_provenance_matches_its_segments_own(fixture: _Fixture) -> None:
-    """blizzard#439 D2/D3: the segment's own frozen harness identity rides every event
+    """The segment's own frozen harness identity rides every event
     that segment derives, read straight off `transcript_segments`."""
     fixture.segments.insert_accepted(
         _segment_record(harness_id="claude_code", model="claude-sonnet-5", effort="high"),
@@ -184,7 +183,7 @@ def test_the_derived_events_graph_id_falls_back_to_the_mint_pin_with_no_matching
     fixture: _Fixture,
 ) -> None:
     """A chunk with no transition matching the segment's ``(node_id, epoch)`` resolves
-    its graph via the mint-pin fallback (D4) — proven here through a chunk minted with
+    its graph via the mint-pin fallback — proven here through a chunk minted with
     no transition recorded at all."""
     fixture.chunks.record.mint(Chunk(chunk_id="ch_unmoved", graph_id="gr_unmoved", work_refs=[], minted_at=_NOW))
     fixture.segments.insert_accepted(
@@ -259,7 +258,7 @@ def test_sweep_resolves_graph_pins_with_one_load_facts_for_and_one_graph_id_of_m
 
 
 def test_candidate_segment_ids_narrows_to_the_given_chunk(fixture: _Fixture) -> None:
-    """The re-derive route's chunk-scoped call (blizzard#254 D7)."""
+    """The re-derive route's chunk-scoped call."""
     fixture.mint_chunk("ch_2")
     fixture.segments.insert_accepted(
         _segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_NOW
@@ -374,7 +373,7 @@ def test_a_superseded_segments_rows_are_dropped(fixture: _Fixture) -> None:
 
 
 def test_derive_segment_reports_true_for_a_segment_with_derivation_input(fixture: _Fixture) -> None:
-    """The re-derive route's segment-scoped branch consults this bit (blizzard#321) —
+    """The re-derive route's segment-scoped branch consults this bit —
     a derivable segment reports it actually derived."""
     fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
 
@@ -384,7 +383,7 @@ def test_derive_segment_reports_true_for_a_segment_with_derivation_input(fixture
 
 def test_derive_segment_reports_false_for_a_segment_with_no_derivation_input(fixture: _Fixture) -> None:
     """An unknown segment id — a typo, a stale id, one never ingested — is the no-op the
-    route must not report as ``derived: 1`` (blizzard#321)."""
+    route must not report as ``derived: 1``."""
     pins = fixture.service.graph_pins_for(["sg_does_not_exist"])
     assert fixture.service.derive_segment("sg_does_not_exist", pins) is False
     assert fixture.stored_events() == []
@@ -402,7 +401,7 @@ def test_a_content_hole_segment_derives_incomplete_then_re_derives_once_accepted
     assert marker.event_count == 0
 
     # A later instant than the rejected insert's, not `_NOW` again: the change probe reads
-    # `received_at` moving forward as its signal a record was rewritten (blizzard#524 D5).
+    # `received_at` moving forward as its signal a record was rewritten.
     fixture.segments.update_to_accepted(record, byte_count=10, codec="zlib", at=_NOW + timedelta(seconds=1))
     fixture.reconciler.sweep()
 
@@ -512,7 +511,7 @@ def test_a_pin_resolution_fault_skips_the_whole_pass_without_raising(fixture: _F
     assert fixture.stored_events() == []
 
 
-# --- bulk candidacy, zero decode, batched drop (blizzard#513) -----------------
+# --- bulk candidacy, zero decode, batched drop -----------------
 
 
 def test_a_steady_state_pass_decompresses_no_content_and_holds_a_flat_statement_count(
@@ -530,7 +529,7 @@ def test_a_steady_state_pass_decompresses_no_content_and_holds_a_flat_statement_
     def _boom(*_: object, **__: object) -> bytes:
         raise AssertionError("a steady-state pass must not decompress any content")
 
-    # Past the derivation change probe's forced floor (blizzard#524 D5), so each timed
+    # Past the derivation change probe's forced floor, so each timed
     # sweep below runs the real candidacy read rather than the probe's cheap
     # unchanged-signature skip — the skip alone would make small_count == large_count
     # trivially true without ever exercising the bulk read this test targets.
@@ -628,7 +627,7 @@ def test_an_extractor_version_bump_decodes_each_segment_at_most_once(
     assert decompress_calls == 1
 
 
-# --- the change probe and its forced floor (blizzard#524 D5) ------------------
+# --- the change probe and its forced floor ------------------
 
 
 def test_an_unchanged_signature_skips_the_pass_entirely(fixture: _Fixture, monkeypatch: pytest.MonkeyPatch) -> None:

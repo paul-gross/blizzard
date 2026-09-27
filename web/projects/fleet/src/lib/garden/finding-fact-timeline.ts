@@ -5,7 +5,7 @@ import { KitAsyncState } from '../kit/kit-async-state';
 import { deriveFactTimelineRows, type FindingFactRow } from './finding-fact-timeline-rows';
 
 /**
- * A finding's whole fact chain (blizzard#487, phase 1 of 2), rendered oldest-first —
+ * A finding's whole fact chain, rendered oldest-first —
  * the append-only record `finding-panel.ts`'s own record/summary/note blocks read
  * only the newest of. Presentational and much simpler than `chunk-timeline.ts`, the
  * pair's own model: no join keys, no activation, no per-row usage figures, just an

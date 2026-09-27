@@ -34,7 +34,7 @@ class ChunkLifecycleStore:
             return is_ephemeral_id(conn, chunk_id)
 
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
-        """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
+        """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins."""
         with self._store.write("record_pause") as conn:
             result = conn.execute(
                 s.chunk_pause_facts.insert().values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by)
@@ -44,7 +44,7 @@ class ChunkLifecycleStore:
 
     def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact, release any live route, and release any
-        held fleet-wide hub-exec slot — all in **one** transaction (issue #118), so a
+        held fleet-wide hub-exec slot — all in **one** transaction, so a
         ``kill -9`` cannot leave the chunk durably ``stopped`` with its route still live.
         The route check runs against this same connection (:func:`route_of_conn`), so
         there is no read-then-write race. The slot release is unconditional."""
@@ -66,7 +66,7 @@ class ChunkLifecycleStore:
 
     def record_completion(self, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.completed`` fact, release any live route, and release any
-        held fleet-wide hub-exec slot — all in **one** transaction (issue #294), mirroring
+        held fleet-wide hub-exec slot — all in **one** transaction, mirroring
         :meth:`record_stop`, so a ``kill -9`` cannot leave the chunk durably ``done`` with
         its route still live. The caller has already checked the chunk is not already
         ``done`` — this always writes a fresh row."""

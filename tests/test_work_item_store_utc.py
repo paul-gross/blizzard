@@ -1,4 +1,4 @@
-"""``WorkItemStore`` round-trips its own written instants (issue #357, ``bzh:utc-instants``).
+"""``WorkItemStore`` round-trips its own written instants (``bzh:utc-instants``).
 
 ``created_at``/``edited_at``/``closed_at`` must read back UTC-aware — impossible on a
 plain ``DateTime`` column, since sqlite drops ``tzinfo`` on write. See

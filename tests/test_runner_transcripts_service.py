@@ -1,6 +1,6 @@
-"""``transcripts/service.py`` — home selection for a lease's transcript (blizzard#249, D1).
+"""``transcripts/service.py`` — home selection for a lease's transcript.
 
-Every branch of Decision 1's resolution table, driven against a real store (for
+Every branch of the home-selection resolution table, driven against a real store (for
 ``lease``/``active_lease``) with fake local and archived repositories standing in for the
 filesystem and the hub — so this file's job is the *resolution*, never the transport or
 the normalization, both pinned elsewhere."""
@@ -147,7 +147,7 @@ def test_an_open_lease_reads_local_and_is_never_asked_of_the_hub(tmp_path: Path)
     assert resolved.provenance == "local"
     assert [t.text for t in resolved.transcript.turns] == ["hi"]
     assert resolved.hub_unreachable is False
-    assert archived.calls == []  # D1: an open lease is never asked of the hub at all
+    assert archived.calls == []  # An open lease is never asked of the hub at all
 
 
 def _close(store, **overrides: object) -> None:  # type: ignore[no-untyped-def]
@@ -229,7 +229,7 @@ def test_a_closed_fully_acked_lease_serves_the_hubs_segments(tmp_path: Path) -> 
 
 @pytest.mark.unit
 def test_a_closed_lease_with_unshipped_turns_still_reads_local_not_the_hubs_prefix(tmp_path: Path) -> None:
-    """Issue #249 AC1 — *local until acked, hub after*. A bounded drain leaves a just-closed
+    """*Local until acked, hub after*. A bounded drain leaves a just-closed
     lease's tail buffered, so the hub holds a **prefix**; serving that under the archived
     badge would silently shorten the transcript."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -325,7 +325,7 @@ def test_a_closed_lease_the_hub_holds_only_cap_rejected_records_falls_back_to_lo
 
 @pytest.mark.unit
 def test_a_closed_lease_the_hub_refuses_falls_back_to_local(tmp_path: Path) -> None:
-    """A refusal is a definite answer, not a transport failure (D1) — resolved to local
+    """A refusal is a definite answer, not a transport failure — resolved to local
     exactly like "holds nothing", never the hub-unreachable state."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _closed_lease(store)
@@ -347,7 +347,7 @@ def test_a_closed_lease_the_hub_refuses_falls_back_to_local(tmp_path: Path) -> N
 
 @pytest.mark.unit
 def test_a_closed_lease_the_hub_is_unreachable_but_local_still_answers_falls_back_quietly(tmp_path: Path) -> None:
-    """D1's one non-obvious cell: the hub is unreachable, but local can still answer, so
+    """One non-obvious cell: the hub is unreachable, but local can still answer, so
     the wire's ``hub_unreachable`` flag stays unset — the closed-lease view degrades to
     local without flagging an outage the operator has no local evidence of."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -373,7 +373,7 @@ def test_a_closed_lease_the_hub_is_unreachable_but_local_still_answers_falls_bac
 
 @pytest.mark.unit
 def test_a_closed_lease_the_hub_is_unreachable_and_local_cannot_answer_either_flags_it(tmp_path: Path) -> None:
-    """D1's remaining cell: the hub is unreachable *and* local cannot answer either — the
+    """The remaining cell: the hub is unreachable *and* local cannot answer either — the
     only case the wire's ``hub_unreachable`` flag is set."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _closed_lease(store)  # no local fake entry for "sess-a" -> not_found
@@ -390,7 +390,7 @@ def test_a_closed_lease_the_hub_is_unreachable_and_local_cannot_answer_either_fl
     assert resolved.hub_unreachable is True
 
 
-# --- runner-plane chunk-scoped segment reads (D1, D4, D6) -----------------------
+# --- runner-plane chunk-scoped segment reads -----------------------
 
 
 @pytest.mark.unit
@@ -526,7 +526,7 @@ def test_segment_content_windows_a_same_session_resume_to_each_segments_own_turn
     service = _service(store, local=local)
 
     # gen2 ships further turns after gen1 is already finalized — gen1's own bound must stay
-    # its own frozen cursor, never gen2's still-advancing one (round 2, F1).
+    # its own frozen cursor, never gen2's still-advancing one.
     store.record_transcript_deltas(
         segment_id=gen2.segment_id,
         chunk_id="ch_1",

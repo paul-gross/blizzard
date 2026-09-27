@@ -1,6 +1,6 @@
 """Transcript-event store: dialect-portable DDL, the visible-set query, the decode of a
 segment's stored content into turn objects, and the scoped-replacement natural key
-(blizzard#254, Phase 1 — unit tier)."""
+(unit tier)."""
 
 from __future__ import annotations
 
@@ -216,7 +216,7 @@ def test_visible_segment_ids_includes_a_final_unsuperseded_segment(tmp_path: Pat
 
 
 def test_visible_segment_ids_narrows_to_the_given_chunk(tmp_path: Path) -> None:
-    """The re-derive route's chunk-scoped call (blizzard#254 D7)."""
+    """The re-derive route's chunk-scoped call."""
     engine = _migrated_engine(tmp_path)
     segments = TranscriptSegmentStore(hub_store_connections(engine))
     segments.insert_accepted(_segment_record(segment_id="sg_1", chunk_id="ch_1"), byte_count=10, codec="zlib", at=_NOW)
@@ -270,7 +270,7 @@ def test_segment_derivation_input_decodes_turns_from_stored_content(tmp_path: Pa
 
 
 def test_segment_derivation_input_folds_harness_version_across_windows(tmp_path: Path) -> None:
-    """blizzard#439 D3: the runner folds ``harness_version`` per shipped window, so an
+    """The runner folds ``harness_version`` per shipped window, so an
     early window that never observed it (``None``) must not shadow a later window's real
     value once both windows' records land on the same segment."""
     engine = _migrated_engine(tmp_path)
@@ -330,7 +330,7 @@ def test_content_fingerprint_changes_when_a_rejected_record_is_later_accepted(tm
     assert after.content_fingerprint != before.content_fingerprint
 
 
-# --- bulk candidacy (blizzard#513 D2) ---------------------------------------
+# --- bulk candidacy ---------------------------------------
 
 
 def test_candidacy_treats_a_segment_with_no_marker_as_a_candidate(tmp_path: Path) -> None:
@@ -369,7 +369,7 @@ def test_candidacy_excludes_a_segment_whose_marker_matches_its_current_digests(t
 
 
 def test_candidacy_includes_a_segment_whose_content_changed_since_its_marker(tmp_path: Path) -> None:
-    """A rejected record later accepted (blizzard#513 acceptance criterion 2)."""
+    """A rejected record later accepted."""
     engine = _migrated_engine(tmp_path)
     segments = TranscriptSegmentStore(hub_store_connections(engine))
     record = _segment_record()
@@ -394,8 +394,8 @@ def test_candidacy_includes_a_segment_whose_content_changed_since_its_marker(tmp
 
 
 def test_candidacy_includes_a_segment_after_a_late_record_lands(tmp_path: Path) -> None:
-    """A late record landing under an already-derived segment (blizzard#513 acceptance
-    criterion 2) — a second record arrives at a new ``turn_range_start`` for a segment
+    """A late record landing under an already-derived segment — a second
+    record arrives at a new ``turn_range_start`` for a segment
     id whose earlier record already made it visible and derived."""
     engine = _migrated_engine(tmp_path)
     segments = TranscriptSegmentStore(hub_store_connections(engine))
@@ -426,7 +426,7 @@ def test_candidacy_includes_a_segment_after_a_late_record_lands(tmp_path: Path) 
 
 
 def test_candidacy_includes_a_still_rejected_segment_whose_harness_version_refreshed(tmp_path: Path) -> None:
-    """blizzard#439: a still-rejected re-offer can refresh ``harness_version`` with no
+    """A still-rejected re-offer can refresh ``harness_version`` with no
     change to its content — the fingerprint must still move, or the refreshed value
     never reaches an already-derived event."""
     engine = _migrated_engine(tmp_path)
@@ -469,7 +469,7 @@ def test_candidacy_narrows_to_the_given_chunk(tmp_path: Path) -> None:
     assert read.candidate_segment_ids == ["sg_1"]
 
 
-# --- scoped replacement (D6) ------------------------------------------------
+# --- scoped replacement ------------------------------------------------
 
 
 def test_replace_segment_events_writes_events_and_marker(tmp_path: Path) -> None:
@@ -627,7 +627,7 @@ def test_drop_segments_is_a_set_scoped_no_op_for_an_empty_set(tmp_path: Path) ->
 def test_drop_segments_batches_a_stale_set_larger_than_one_batch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """blizzard#513 D4 — an unbounded ``IN (...)`` over a mass, simultaneous visibility
+    """An unbounded ``IN (...)`` over a mass, simultaneous visibility
     loss has no ceiling; ``drop_segments`` batches instead, and every segment in a stale
     set spanning several batches is still dropped."""
     monkeypatch.setattr(store_module, "_DROP_SEGMENTS_BATCH_SIZE", 2)

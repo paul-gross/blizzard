@@ -1,4 +1,4 @@
-"""UTC-explicit instants, store to wire (``bzh:utc-instants``, issue #28).
+"""UTC-explicit instants, store to wire (``bzh:utc-instants``).
 
 Three primitives, one per boundary a naive datetime could otherwise cross: the
 :class:`UtcDateTime` store column type, the :func:`as_utc` comparison coercion, and

@@ -97,7 +97,7 @@ def test_group_alive_leaves_a_still_running_leader_untouched() -> None:
 @pytest.mark.unit
 def test_interrupt_group_signals_a_real_process_group() -> None:
     """``interrupt_group`` reaches a real throwaway process group: a child with no SIGINT
-    handler dies on it, exactly the graceful-shutdown drain's own signal (issue #12)."""
+    handler dies on it, exactly the graceful-shutdown drain's own signal."""
     probe = LinuxProcessProbe()
     proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
     try:
@@ -119,7 +119,7 @@ def test_interrupt_group_of_an_already_gone_group_is_a_noop() -> None:
 
 
 # `kill_owned_process` — the one shared, liveness-checked, pgid-preferring teardown every
-# owned-process kill site (attempt, dormant, takeover) routes through (D3).
+# owned-process kill site (attempt, dormant, takeover) routes through.
 
 
 @pytest.mark.unit

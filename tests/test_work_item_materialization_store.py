@@ -1,8 +1,8 @@
-"""blizzard#366 Phase 1 — the schema and the repository seams materialization needs:
-``work_item_proposals.runner_id`` stamped at every proposal-carrying write lane, the D2
-candidate read (``unmaterialized_proposals``), and D8's two atomic composite writes
+"""The schema and the repository seams materialization needs:
+``work_item_proposals.runner_id`` stamped at every proposal-carrying write lane, the
+candidate read (``unmaterialized_proposals``), and the two atomic composite writes
 (``materialize_create``/``materialize_update``) plus the standalone ``unresolved``
-recorder. The reconciler that drives these (Phase 2) lives in
+recorder. The reconciler that drives these lives in
 ``tests/test_work_item_materialization.py``."""
 
 from __future__ import annotations
@@ -270,7 +270,7 @@ def test_runner_id_is_stamped_on_a_cross_graph_migration(tmp_path: Path) -> None
     assert _stored_runner_ids(hub, chunk_id) == ["r-submit"]
 
 
-# --- IReadChunkDeliveryRepository.unmaterialized_proposals() — the D2 candidate read --
+# --- IReadChunkDeliveryRepository.unmaterialized_proposals() — the candidate read --
 
 
 def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tmp_path: Path) -> None:
@@ -329,7 +329,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         release_route=True,
     )
 
-    # Delivered, then later stopped — still counts as delivered (D2's did-it-deliver reading).
+    # Delivered, then later stopped — still counts as delivered (the did-it-deliver reading).
     chunks.movement.record_transition(
         transition_id="tr_stopped_after",
         chunk_id=stopped_after_delivery,
@@ -424,7 +424,7 @@ def test_candidate_read_excludes_an_already_judged_proposal(tmp_path: Path) -> N
 def test_candidate_read_issues_one_statement_regardless_of_how_many_proposals_are_already_judged(
     tmp_path: Path,
 ) -> None:
-    """blizzard#524 D6: every exclusion (delivered, ephemeral, judged, struck) is pushed
+    """Every exclusion (delivered, ephemeral, judged, struck) is pushed
     into the one SQL statement as a subquery, so a backlog of already-judged proposals
     never costs the read a re-fetch-and-re-filter pass in Python."""
     hub = build_hub(tmp_path)
@@ -456,7 +456,7 @@ def test_candidate_read_issues_one_statement_regardless_of_how_many_proposals_ar
     assert count == 1
 
 
-# --- D8's two composite writes: all-or-nothing, idempotent per proposal_id ----
+# --- The two composite writes: all-or-nothing, idempotent per proposal_id ----
 
 
 def test_record_work_item_materialization_returns_false_on_a_second_call(tmp_path: Path) -> None:

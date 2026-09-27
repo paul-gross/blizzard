@@ -9,7 +9,7 @@ import { AppNavMenu } from './app-nav-menu';
  * The hub board shell's half of `web:shell-sweep`
  * (`blizzard-context:/verification/blizzard.md` bzh:web-shell-sweep) — a real,
  * headless-Chromium proof that `BoardHeader`'s narrowing collapse
- * (issue #163) never carries the profile menu off-viewport, at every width
+ * never carries the profile menu off-viewport, at every width
  * from a wide monitor down to a phone forced into desktop mode.
  *
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`)

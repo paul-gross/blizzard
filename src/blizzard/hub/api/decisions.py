@@ -1,4 +1,4 @@
-"""Decision routes — the anonymous **operator** surface (issue #87, #104).
+"""Decision routes — the anonymous **operator** surface.
 
 ``GET /decisions`` lists the open decisions; ``POST /decisions/{id}/resolutions``
 records a person's choice first-write-wins. The controller stays read-only over the
@@ -37,7 +37,7 @@ router = APIRouter(prefix="/api", tags=["decisions"], dependencies=[Depends(reje
 
 def _docket_entry_view(entry: DocketEntry) -> DocketEntryView:
     """Map one :class:`DocketEntry` to its wire view — a malformed stored payload
-    renders bare rather than failing the whole gate read (D5)."""
+    renders bare rather than failing the whole gate read."""
     proposal = entry.proposal
     payload: CreateWorkItemProposal | UpdateWorkItemProposal | None = None
     malformed = False
@@ -98,7 +98,7 @@ def resolve_decision(
     """Resolve an open decision, first-write-wins CAS.
 
     ``resolved_by`` is taken from the authenticated session identity, never the request
-    body's ``resolved_by`` field — a spoofed value there is silently ignored (issue #91)."""
+    body's ``resolved_by`` field — a spoofed value there is silently ignored."""
     pre_decision = services.chunks.decisions.get_decision(decision_id)
     if pre_decision is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown decision {decision_id}")

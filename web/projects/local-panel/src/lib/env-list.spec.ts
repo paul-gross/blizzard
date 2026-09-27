@@ -12,8 +12,8 @@ let stub: RequestClientStub | undefined;
 afterEach(() => stub?.restore());
 
 /** A full `DashboardView` body, `environments.items` set to `envs` and every other
- * section its empty default — `EnvList` reads off the shared `/api/dashboard` poll
- * (issue #311), not a `/api/environments` route of its own. */
+ * section its empty default — `EnvList` reads off the shared `/api/dashboard` poll,
+ * not a `/api/environments` route of its own. */
 function dashboardBody(envs: readonly runnerApi.EnvironmentView[]): runnerApi.DashboardView {
   return {
     runner: {

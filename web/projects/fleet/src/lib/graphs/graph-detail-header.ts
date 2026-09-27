@@ -34,8 +34,8 @@ export class GraphDetailHeader {
   readonly graphId = input.required<string>();
   readonly retired = input.required<boolean>();
 
-  /** Whether the current identity may author graphs (`graph:edit`, admin-tier — issue
-   * #93) — gates the retire/re-enable control. */
+  /** Whether the current identity may author graphs (`graph:edit`, admin-tier)
+   * — gates the retire/re-enable control. */
   readonly canEdit = input(false);
 
   /** Whether the retire/enable mutation is in flight — disables both Retire and
@@ -65,7 +65,7 @@ export class GraphDetailHeader {
     readonly run: () => void;
   } | null>(null);
 
-  /** Open a confirmation before emitting `retire` for the container's mutation to fire (issue #101). */
+  /** Open a confirmation before emitting `retire` for the container's mutation to fire. */
   protected onRetire(): void {
     const graphId = this.graphId();
     this.pendingConfirm.set({
@@ -78,7 +78,7 @@ export class GraphDetailHeader {
     });
   }
 
-  /** Open a confirmation before emitting `enable` for the container's mutation to fire (issue #101). */
+  /** Open a confirmation before emitting `enable` for the container's mutation to fire. */
   protected onEnable(): void {
     const graphId = this.graphId();
     this.pendingConfirm.set({

@@ -5,7 +5,7 @@ import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { type WorkItemsState } from './work-items-state';
 
 /**
- * The work item's issue pass-through (issue #24, issue #79) — the chunk's
+ * The work item's issue pass-through — the chunk's
  * linked forge issue(s): title, body, and messages. Owns its own
  * loading/error/empty triad through the shared kit's async-state component
  * rather than a re-typed `<p class="status">`, and delegates the
@@ -13,7 +13,7 @@ import { type WorkItemsState } from './work-items-state';
  * fetch triad, the list's is the per-issue accordion row. Presentational
  * only; the forge read itself lives in the container.
  *
- * `placement` (issue #318) forwards to the inner `fleet-kit-async-state`,
+ * `placement` forwards to the inner `fleet-kit-async-state`,
  * defaulting to its own `'center'` — every existing mount (the desktop dock's
  * `chunk-detail-panel.ts`, the shared `chunk-page/chunk-general-tab.ts` both
  * apps compose) keeps its prior rendering unchanged. The runner's narrow
@@ -30,13 +30,13 @@ import { type WorkItemsState } from './work-items-state';
   styleUrl: './chunk-issue-pane.css',
 })
 export class ChunkIssuePane {
-  /** The chunk's related work items + fetch state, from the container (issue #24).
+  /** The chunk's related work items + fetch state, from the container.
    * Defaults to `loading` so the pane constructs without the container wiring it. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
 
   /** Forwarded to the inner `fleet-kit-async-state` — `'center'` (the default,
    * every existing mount's prior behavior) or `'inline'` (the runner's narrow
-   * chunk detail route, issue #318). */
+   * chunk detail route). */
   readonly placement = input<'center' | 'inline'>('center');
 
   /** The async triad's resolved state — loading/error take precedence, then no

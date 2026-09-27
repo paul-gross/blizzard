@@ -105,7 +105,7 @@ describe('EventsPanel', () => {
   it('builds no blank runner chip from an escalation row, which names no runner', async () => {
     // `GET /api/events` unions the event_log with a projection of every open escalation,
     // and a projected escalation carries `runner_id: null` — it must not become a
-    // label-less chip whose value collides with the "All" reset sentinel (issue #155).
+    // label-less chip whose value collides with the "All" reset sentinel.
     const WITH_ESCALATION = [
       { id: -1, recorded_at: '2026-07-16T00:00:03Z', severity: 'critical', kind: 'needs-human', runner_id: null, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', message: 'chunk needs a human' },
       ...EVENTS,

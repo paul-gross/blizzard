@@ -6,7 +6,7 @@ gardening: runs are readable).
 enumerable (`bzh:facts-not-status`) — a run's `outcome` is derived fresh from the
 chunk's own facts every read, never stored, the way every other chunk status is. The
 delta a delivered set actually published is read back from its own artifact, parsed as
-`FindingDelta` (D2) — never reconstructed from `finding_facts` — and an add op is linked
+`FindingDelta` — never reconstructed from `finding_facts` — and an add op is linked
 to the finding id it minted positionally, by the order `GardenDelivery.deliver` wrote
 both in; a set predating that linkage naturally yields no matched adds rather than a
 fabricated one."""
@@ -30,7 +30,7 @@ from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp, Obs
 @dataclass(frozen=True)
 class DeliveredSet:
     """One `finding_sets` row a run delivered — the list read's own per-set shape
-    (D4: reported one entry per set, several sets from one run never merged into one).
+    (reported one entry per set, several sets from one run never merged into one).
 
     `added_count`/`observed_count`/`gone_count` are how many `add`/`observed`/`gone`
     facts *this delivery* recorded on `finding_facts.finding_set_id` — this delivery's
@@ -109,7 +109,7 @@ class GoneFinding:
 @dataclass(frozen=True)
 class DeliveredSetDelta:
     """One delivered set's own published delta — added, observed, and gone kept as
-    three distinct groups (D4), never merged."""
+    three distinct groups, never merged."""
 
     finding_set_id: str
     revisions: dict[str, str]
@@ -122,7 +122,7 @@ class DeliveredSetDelta:
 @dataclass(frozen=True)
 class RunDelta:
     """One run's full detail — `run_delta`'s own read: its identity, its derived
-    outcome, and, per delivered set, the delta it actually published (D4: several sets
+    outcome, and, per delivered set, the delta it actually published (several sets
     from one run stay separately grouped here too)."""
 
     chunk_id: str
@@ -158,7 +158,7 @@ class RunRecord:
 @dataclass(frozen=True)
 class DeliveredSetRaw:
     """One delivered set's own artifact text, plus the finding ids its `add` facts
-    minted in artifact order (D1) — `delivered_sets`'s own per-set read, the input
+    minted in artifact order — `delivered_sets`'s own per-set read, the input
     `_set_delta` folds into a `DeliveredSetDelta`."""
 
     finding_set_id: str
@@ -241,7 +241,7 @@ def _observed_ids(delta: FindingDelta) -> list[str]:
 
 def _set_delta(raw: DeliveredSetRaw, delta: FindingDelta, findings: Mapping[str, Finding]) -> DeliveredSetDelta:
     """Fold one delivered set's parsed artifact into its own added/observed/gone groups —
-    an add op is zipped positionally against `raw.add_finding_ids` (D1), never
+    an add op is zipped positionally against `raw.add_finding_ids`, never
     `strict`: a set predating the `finding_facts.finding_set_id` linkage carries no add
     ids at all, and every add on it degrades to an unmatched `finding_id=None` rather
     than raising or fabricating one. An observed op degrades the same way in the other

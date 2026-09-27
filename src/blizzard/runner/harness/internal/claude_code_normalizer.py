@@ -1,4 +1,4 @@
-"""The Claude Code JSONL → :class:`NormalizedTurn` normalizer (blizzard#245).
+"""The Claude Code JSONL → :class:`NormalizedTurn` normalizer.
 
 Pure and stdlib-only (``bzh:domain-core``): :meth:`NormalizedFile.of_lines` takes already-read
 lines, never a path. Main-conversation records are read in **file order**; the ``uuid``/``parentUuid``
@@ -333,7 +333,7 @@ class NormalizedFile:
     agent_id_by_tool_turn: dict[int, str]
     discovered_agent_ids: frozenset[str]
     harness_version: str | None
-    #: The two cross-window handles (blizzard#338): results whose call this window never saw,
+    #: The two cross-window handles: results whose call this window never saw,
     #: and the agent-id -> spawning ``tool_use_id`` pairs it revealed.
     late_tool_outputs: list[LateToolOutput] = field(default_factory=list)
     agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
@@ -429,7 +429,7 @@ class _TurnCollapser:
         self.tool_turns_by_record_uuid: dict[str, list[int]] = {}
         self.agent_id_by_tool_turn: dict[int, str] = {}
         self.discovered_agent_ids: set[str] = set()
-        #: The two cross-window handles (blizzard#338) — see `LateToolOutput` and
+        #: The two cross-window handles — see `LateToolOutput` and
         #: `NormalizedFile.agent_tool_use_ids`.
         self.late_tool_outputs: list[LateToolOutput] = []
         self.agent_tool_use_ids: dict[str, str] = {}
@@ -530,7 +530,7 @@ class _TurnCollapser:
             output = Text.of_content(block.get("content"))
             if index is None:
                 # Its `tool_use` fell outside this window, so no turn here can carry the
-                # output — surfaced by id rather than dropped (blizzard#338).
+                # output — surfaced by id rather than dropped.
                 self.late_tool_outputs.append(
                     LateToolOutput(tool_use_id=tool_use_id, output=output.text, output_truncated=output.truncated)
                 )

@@ -77,16 +77,16 @@ class ReadyQueue:
             # could strand the chunk, so leave it; the next tick resolves it authoritatively.
             return False
         if outcome.won:
-            self.ctx.chunk_views.invalidate(chunk_id)  # D5 — a later get() this tick sees the win
+            self.ctx.chunk_views.invalidate(chunk_id)  # a later get() this tick sees the win
         # A dependency block discovered only here, at claim time, is invisible to the peeked
         # snapshot's own `blocked` field — strict mode must hold at it exactly as it holds at
-        # a statically-known block (F3), so `entry` stays in `_entries` rather than being
+        # a statically-known block, so `entry` stays in `_entries` rather than being
         # dropped before the outcome that would have vetoed the drop was known.
         strict_dependency_hold = self.ctx.config.queue_strict and outcome.denied_dependency is not None
         if not strict_dependency_hold:
             self._entries.remove(entry)
         if outcome.denied_paused is not None:
-            # Refused outright, not beaten in the race (issue #44) — stop filling this tick
+            # Refused outright, not beaten in the race — stop filling this tick
             # rather than burn the remaining slots on claims that will be refused the same way.
             _log.info(
                 "route claim denied — runner paused at the hub", chunk_id=chunk_id, runner_id=self.ctx.config.runner_id
@@ -94,7 +94,7 @@ class ReadyQueue:
             self.ctx.env_release.release_binding(chunk_id, acquired)
             return False
         if outcome.denied_terminal is not None:
-            # The chunk reached a terminal state between this peek and this claim (issue #118)
+            # The chunk reached a terminal state between this peek and this claim
             # — not a race loss. Undo the binding and move on; it cannot be peeked again.
             _log.info(
                 "route claim denied — chunk is terminal", chunk_id=chunk_id, status=outcome.denied_terminal.status
@@ -102,7 +102,7 @@ class ReadyQueue:
             self.ctx.env_release.release_binding(chunk_id, acquired)
             return True
         if outcome.denied_dependency is not None:
-            # Stands on an unmet prerequisite (blizzard#458) — not a race loss either.
+            # Stands on an unmet prerequisite — not a race loss either.
             # Undo the binding; reach-ahead moves on since it may become claimable again
             # later, but strict mode stops the whole run here instead of falling through
             # past a head that is (dynamically) still blocked.
@@ -114,7 +114,7 @@ class ReadyQueue:
             self.ctx.env_release.release_binding(chunk_id, acquired)
             return not strict_dependency_hold
         if outcome.denied_incompatible is not None:
-            # Not a race loss or a dependency block (blizzard#433 D9) — nothing to hold at.
+            # Not a race loss or a dependency block — nothing to hold at.
             _log.info("route claim denied — runner incompatible with chunk", chunk_id=chunk_id)
             self.ctx.env_release.release_binding(chunk_id, acquired)
             return True
@@ -123,15 +123,15 @@ class ReadyQueue:
             self.ctx.env_release.release_binding(chunk_id, acquired)  # someone else won — undo our binding
             return True
         _CP_AFTER_CLAIM.reached()
-        # Stash the won claim's plaintext route token (issue #84a) before spawning: every later
+        # Stash the won claim's plaintext route token before spawning: every later
         # reader takes it out of the store, never off `outcome.claimed` directly.
         self.ctx.stores.tokens.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
         Spawner(self.ctx).enter_node(chunk_id, outcome.claimed.envelope, acquired, via="fill")
         return True
 
     def _next(self) -> QueuePeekEntry | None:
-        """Pick this runner's entry out of this fill's one peeked snapshot (blizzard#459),
-        left in place until ``claim_one()`` knows the outcome and drops it itself (F3) —
+        """Pick this runner's entry out of this fill's one peeked snapshot,
+        left in place until ``claim_one()`` knows the outcome and drops it itself —
         a later ``claim_one()`` this same ``Fill.run()`` must not silently move past an
         entry whose outcome is still undetermined. Strict holds at a marked head and yields
         nothing rather than falling through — an idle tick reads the same as an empty queue
@@ -162,7 +162,7 @@ class ReadyQueue:
                 detail=str(exc),
             )
             # No lease exists yet (the chunk is not claimed), so this is a chunk-scoped
-            # `command-failed` (issue #125).
+            # `command-failed`.
             OutboundFacts(self.ctx).command_failed(
                 chunk_id=entry.chunk_id,
                 lease_id=None,
@@ -239,7 +239,7 @@ class InterruptedClaims:
             return  # hub unreachable — the binding is durable; retry next tick
         ours = view.route_runner_id == self.ctx.config.runner_id
         if requeued:
-            # An explicit human decision (issue #53) outranks every other branch below —
+            # An explicit human decision outranks every other branch below —
             # nothing here should second-guess it.
             if ours:
                 self._resume_requeued(chunk_id)
@@ -260,7 +260,7 @@ class InterruptedClaims:
         elif view.route_runner_id is not None and not ours:
             self._release(chunk_id, "releasing binding — another runner won the chunk")
         elif view.route_runner_id is None:
-            # No live route, and neither claimable nor ours to adopt (blizzard#202). Release
+            # No live route, and neither claimable nor ours to adopt. Release
             # explicitly instead of matching no branch and leaking the binding forever.
             self._release(
                 chunk_id,
@@ -286,7 +286,7 @@ class InterruptedClaims:
                 return
             except HubClientError:
                 return  # hub unreachable — the binding is durable; retry next tick
-            self.ctx.chunk_views.invalidate(chunk_id)  # D5 — named alongside the other writes
+            self.ctx.chunk_views.invalidate(chunk_id)  # named alongside the other writes
             self.ctx.stores.tokens.set_route_token(chunk_id, token=rekeyed.route_token, at=self.ctx.clock.now())
         envelope = self._envelope(chunk_id, "adopted")
         if envelope is None:
@@ -336,10 +336,10 @@ class InterruptedClaims:
         except HubClientError:
             return  # hub unreachable — the binding is durable; retry next tick
         if outcome.won:
-            self.ctx.chunk_views.invalidate(chunk_id)  # D5 — a later get() this tick sees the win
+            self.ctx.chunk_views.invalidate(chunk_id)  # a later get() this tick sees the win
         if outcome.denied_paused is not None:
             # Refused outright because this runner is paused upstream, not lost to another
-            # runner (issue #44).
+            # runner.
             self._release(chunk_id, "interrupted claim denied — runner paused at the hub")
             return
         if outcome.conflict is not None or outcome.claimed is None:
@@ -347,7 +347,7 @@ class InterruptedClaims:
             return
         _log.info("re-claimed interrupted chunk — spawning current node", chunk_id=chunk_id)
         # A reclaim is a fresh claim, so its token overwrites whatever this chunk's row held
-        # before — a fresh claim always wins (issue #84a).
+        # before — a fresh claim always wins.
         self.ctx.stores.tokens.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
         Spawner(self.ctx).spawn(
             chunk_id, outcome.claimed.envelope, envs, via="reclaim", harness_id=self._latest_owner(chunk_id)

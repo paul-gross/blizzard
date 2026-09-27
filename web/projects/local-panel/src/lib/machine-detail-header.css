@@ -3,8 +3,8 @@
 }
 /* Two clusters, space-between — the hub board's own header shape: identity
    on the left, actions on the right. Wraps rather than overflows once the
-   dock is only as wide as a phone. Paints no chrome of its own (issue
-   #307) — projected into KitPanel's own fleetKitPanelHeader slot in owns-the-bar
+   dock is only as wide as a phone. Paints no chrome of its own —
+   projected into KitPanel's own fleetKitPanelHeader slot in owns-the-bar
    mode (kit-panel.ts's own declared contract for that mode, which the kit
    observes through its KitPanelHeader query), which already sizes this root to the bar's
    full width and supplies the bar's background and border; a second copy

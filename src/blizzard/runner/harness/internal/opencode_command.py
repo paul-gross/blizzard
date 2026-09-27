@@ -1,4 +1,4 @@
-"""The one OpenCode CLI command builder (execution spec, D5/"Worker process").
+"""The one OpenCode CLI command builder (execution spec, "Worker process").
 
 Every non-interactive invocation kind composes through :meth:`OpenCodeCommand.build`, so a
 flag every kind requires (``--format json``) or only some carry (``--model`` at mint only)
@@ -54,13 +54,13 @@ class OpenCodeCommand:
             cmd += ["--variant", variant]
         if auto:
             # `--auto` approves what the runner-owned config does not explicitly deny
-            # (D7) — never a CLI-composed deny rule; those live in that document alone.
+            # — never a CLI-composed deny rule; those live in that config alone.
             cmd.append("--auto")
         cmd.append(prompt)
         return cmd
 
     def takeover_argv(self, *, session_id: str, model: str | None = None, variant: str | None = None) -> list[str]:
-        """The exec'd interactive TUI argv (issue #258) — no ``--format json``, no
+        """The exec'd interactive TUI argv — no ``--format json``, no
         ``--auto``: an attended session is a human at a terminal who approves tool use
         live, never fleet automation."""
         cmd = [self.binary, "--session", session_id]

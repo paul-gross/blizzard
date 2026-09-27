@@ -40,25 +40,25 @@ pytestmark = pytest.mark.component
 
 def _engine(tmp_path: Path):  # type: ignore[no-untyped-def]
     """A migrated store engine — every ``WorkSourceEntry.registry`` call needs one
-    to seat the built-in ``hub`` source (issue #357)."""
+    to seat the built-in ``hub`` source."""
     return migrate_to(tmp_path, "head")[1]
 
 
 def _clock() -> FixedClock:
     """A fixed clock — every ``WorkSourceEntry.registry`` call needs one to seat the
-    built-in ``hub`` source's editor (blizzard#358)."""
+    built-in ``hub`` source's editor."""
     return FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
 
 
 def _users(engine):  # type: ignore[no-untyped-def]
     """A user repository over the same engine — every ``WorkSourceEntry.registry`` call
-    needs one to seat the built-in ``hub`` source's login resolution (blizzard#362)."""
+    needs one to seat the built-in ``hub`` source's login resolution."""
     return UserRepository(hub_store_connections(engine), RepoErrorFactory(get_logger("tests.test_work_source")))
 
 
 def _work_deps(engine):  # type: ignore[no-untyped-def]
     """The work-item store and delete-cascade wiring every ``WorkSourceEntry.registry``
-    call needs to seat the built-in ``hub`` source's editor (issue #364)."""
+    call needs to seat the built-in ``hub`` source's editor."""
     store = hub_store_connections(engine)
     work_item_store = WorkItemStore(store)
     delete = DeleteService(
@@ -73,7 +73,7 @@ def _work_deps(engine):  # type: ignore[no-untyped-def]
 
 def _resolution(engine):  # type: ignore[no-untyped-def]
     """The garden-proposal delivery-resolution seam every ``WorkSourceEntry.registry``
-    call needs to seat the built-in ``hub`` source's closer (blizzard#394 Phase 3)."""
+    call needs to seat the built-in ``hub`` source's closer."""
     store = hub_store_connections(engine)
     return GardenProposalDeliveryResolution(
         closures=GardenProposalClosureStore(store),
@@ -287,7 +287,7 @@ def test_factory_fails_at_boot_naming_the_unset_token_variable(tmp_path: Path) -
 
 
 def test_factory_over_an_empty_source_list_still_seats_the_built_in_hub_source(tmp_path: Path) -> None:
-    """Zero ``[[work_source]]`` entries is a legal, non-empty registry (issue #357):
+    """Zero ``[[work_source]]`` entries is a legal, non-empty registry:
     the built-in ``hub`` source is always seated, with no config and no credential."""
     engine = _engine(tmp_path)
     work_item_store, delete = _work_deps(engine)
@@ -365,7 +365,7 @@ def test_registry_get_over_an_empty_registry_is_none() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# IWorkAnnotator — the write half (forge-status projection, issue #177)
+# IWorkAnnotator — the write half (forge-status projection)
 
 
 def test_set_status_adds_the_desired_label_and_removes_the_other() -> None:
@@ -542,7 +542,7 @@ def test_registry_annotator_returns_the_bound_annotator() -> None:
     assert registry.annotating_names() == ["widget"]
 
 
-# The factory's opt-in wiring (issue #179 Phase 3): an annotator is built only for a
+# The factory's opt-in wiring: an annotator is built only for a
 # source configured with annotate=True.
 
 
@@ -590,7 +590,7 @@ def test_factory_builds_an_annotator_for_an_opted_in_source(monkeypatch: pytest.
 
 
 # --------------------------------------------------------------------------- #
-# IWorkCloser — the close half (delivery-time closure, issue #216)
+# IWorkCloser — the close half (delivery-time closure)
 
 
 def test_close_issues_the_documented_patch() -> None:
@@ -676,7 +676,7 @@ def test_factory_builds_a_closer_for_every_configured_source(monkeypatch: pytest
 
 def test_factory_seats_the_hub_closer_with_zero_configured_sources(tmp_path: Path) -> None:
     """The built-in ``hub`` source needs no ``[[work_source]]`` stanza at all to be
-    seated as a closer (issue #360)."""
+    seated as a closer."""
     engine = _engine(tmp_path)
     work_item_store, delete = _work_deps(engine)
     registry = WorkSourceEntry.registry(

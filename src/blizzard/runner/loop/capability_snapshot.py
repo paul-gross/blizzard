@@ -1,4 +1,4 @@
-"""This runner's own capability snapshot (blizzard#433) — shared by every outbound call
+"""This runner's own capability snapshot — shared by every outbound call
 that carries one: the registration push (``steps.py``'s ``Pull._sync_registry``) and the
 matched fleet peek (``claim.py``'s ``ReadyQueue.peeked``). A free function rather than a
 method on either caller's own module, since ``steps.py`` imports ``claim.py`` — a method
@@ -67,7 +67,7 @@ def _unmapped_tiers(adapter: _ResolvesModelStrict, declared: tuple[tuple[str, st
 
 @dataclass
 class HarnessHealthCache:
-    """Every configured harness binding's last-computed health result (blizzard#438), held
+    """Every configured harness binding's last-computed health result, held
     across ticks like :class:`HarnessVersionCache` — health evidence includes subprocess
     and credential probes, so recomputing on every peek would put that cost on the read
     path instead of this cache's own bounded refresh window."""
@@ -109,7 +109,7 @@ class HarnessHealthCache:
         supported_version = probe.supported_version()
         normalized_version = probe.normalize_version(observed_version)
         classifies_offline = probe.classifies_offline()
-        # D2: membership against the range is this caller's job; `None` here means nothing
+        # Membership against the range is this caller's job; `None` here means nothing
         # observed, distinct from a non-member, and a `None` `supported_version` means no range.
         version_admitted = (
             None
@@ -174,7 +174,7 @@ class HarnessHealthCache:
 
 
 def default_harness_id(harnesses: IHarnessRegistry) -> str | None:
-    """The runner's own default harness (blizzard#433) — the registry's own binding order
+    """The runner's own default harness — the registry's own binding order
     decides which one that is, with no separate config key. ``None`` only for the legacy
     no-bindings registry some tests construct. The one place this is decided; both
     ``capability_snapshot`` and ``spawn.py``'s no-``session_harnesses`` fallback defer here."""
@@ -188,7 +188,7 @@ def capability_snapshot(
     health: HarnessHealthCache | None = None,
 ) -> tuple[RunnerCapability, ...]:
     """One entry per known harness binding, each carrying the tier ids its adapter can resolve, its observed
-    version, and its computed availability (blizzard#438). The entry matching :func:`default_harness_id` is marked
+    version, and its computed availability. The entry matching :func:`default_harness_id` is marked
     ``default``. ``versions`` routes the version probe through the cross-tick cache when wired; omitted, this probes
     directly (a one-shot caller with no "next tick" a cache would pay off). ``health`` omitted defaults every entry
     ``available=True`` — a caller with no health cache wired asserts none, matching the wire's own default."""

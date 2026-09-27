@@ -1,4 +1,4 @@
-"""``FindingStore`` — the finding repository (blizzard#390, component tier).
+"""``FindingStore`` — the finding repository (component tier).
 
 Migrated-to-head sqlite-on-disk — the ``tests/test_scope_store.py`` shape. Proves a
 finding named by id across two runs, and the two indexed reads (`list_for`'s
@@ -119,7 +119,7 @@ def test_get_with_facts_of_an_unknown_id_is_none(tmp_path: Path) -> None:
 
 
 def test_record_facts_is_all_or_nothing(tmp_path: Path) -> None:
-    """Pins D7: one bad entry in a batch rolls back every entry in it, not just its own."""
+    """One bad entry in a batch rolls back every entry in it, not just its own."""
     store = _store(tmp_path)
     _add(store, finding_id="fin_1")
 
@@ -135,7 +135,7 @@ def test_record_facts_is_all_or_nothing(tmp_path: Path) -> None:
 
 
 def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:
-    """The second run's `observed` op names the finding fin_1 recorded first (D2) —
+    """The second run's `observed` op names the finding fin_1 recorded first —
     matching is a reference, never a recomputed fingerprint."""
     store = _store(tmp_path)
     _add(store)
@@ -148,7 +148,7 @@ def test_a_finding_is_named_by_id_across_two_runs(tmp_path: Path) -> None:
 
 
 def test_a_persons_exit_verb_records_no_finding_set(tmp_path: Path) -> None:
-    """A human-driven fact belongs to no run (blizzard#401 D1) — unlike a delivered
+    """A human-driven fact belongs to no run — unlike a delivered
     add/observed/gone, it carries no `finding_set_id`."""
     store, engine = _store_and_engine(tmp_path)
     _add(store)
@@ -161,8 +161,8 @@ def test_a_persons_exit_verb_records_no_finding_set(tmp_path: Path) -> None:
 
 
 def test_a_delivered_facts_actor_reads_back_through_the_real_store(tmp_path: Path) -> None:
-    """The `actor` column threaded through `Finding`/`FindingLiveness` (blizzard#583 D3)
-    round-trips through the real store, not just a hand-built domain object — D3's
+    """The `actor` column threaded through `Finding`/`FindingLiveness`
+    round-trips through the real store, not just a hand-built domain object — the
     settle-with-original-actor behavior rests on this read, not a fixture."""
     store = _store(tmp_path)
     _add(store)
@@ -233,7 +233,7 @@ def test_list_across_routines_orders_by_finding_id(tmp_path: Path) -> None:
 
 
 def test_facts_for_many_batches_across_a_batch_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """review:F6 — shrinks the batch size so seeding stays cheap, then seeds one more
+    """Shrinks the batch size so seeding stays cheap, then seeds one more
     finding than two full batches to prove a chain landing in the second (or third)
     batch still comes back correctly via `list_across_routines`, the unbounded caller."""
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)

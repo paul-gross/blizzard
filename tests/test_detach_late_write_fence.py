@@ -1,4 +1,4 @@
-"""The late-write fence after a detach (issue #38 acceptance criterion).
+"""The late-write fence after a detach.
 
 A detached runner's late completion is rejected by the lease floor and does not
 resurrect the route. Detach relies on the existing epoch fence as-is — this test

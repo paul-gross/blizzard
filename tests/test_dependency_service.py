@@ -1,5 +1,5 @@
 """DependencyService (unit tier) — declaring and releasing a chunk dependency edge, under
-the shared claim lock (issue #456).
+the shared claim lock.
 
 A fake stands in for the dependencies store and the facts read seam — every unimplemented
 method raises loudly if called (``bzh:domain-core``). The lock's cross-declaration race

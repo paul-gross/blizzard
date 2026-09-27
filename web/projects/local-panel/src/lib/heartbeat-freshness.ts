@@ -24,11 +24,11 @@ export const STALE_AFTER_MS = 60 * 60_000;
  * actually lives is where the bar visibly moves, and the long tail to reap
  * drains out the rest.
  *
- * `record_heartbeat` is deliberately silent (D7, no SSE event announces it), so
+ * `record_heartbeat` is deliberately silent (no SSE event announces it), so
  * on a healthy, actively-beating lease this bar's anchor only advances on
  * {@link RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS} (`polling.ts`) or an unrelated
  * lease-changed frame — real cadence is tighter, but the bar cannot resolve an
- * age finer than that interval. Blizzard#334 (D4): rather than render a
+ * age finer than that interval. Rather than render a
  * partial drain it cannot back, an age at or under the backstop interval reads
  * 100%; the curve only starts draining past it, anchored at the interval
  * itself rather than at zero age, so it tracks the poll floor if that value
@@ -52,7 +52,7 @@ export class HeartbeatFreshness {
   /** Whether the server already derived this lease `stale` — colors the bar red. */
   readonly stale = input(false);
 
-  /** Ticks once a second (issue #178) so the bar drains between polls, not just when
+  /** Ticks once a second so the bar drains between polls, not just when
    * `leases.query.ts`'s backstop hands this row a fresh `lastHeartbeatAt` — see
    * `RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS` (`polling.ts`) for that anchor's own bound. */
   private readonly now = injectNowSignal(1000);
@@ -62,7 +62,7 @@ export class HeartbeatFreshness {
   protected readonly percent = computed<number>(() => {
     const age = this.freshAgeMs();
     if (age === null) return 0;
-    // D4: the bar cannot resolve an age finer than its own anchor's sampling
+    // The bar cannot resolve an age finer than its own anchor's sampling
     // interval, so an age within it drains to nothing before the log curve
     // ever sees it.
     const resolvedAge = Math.max(0, age - RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS);

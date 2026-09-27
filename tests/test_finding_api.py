@@ -1,5 +1,5 @@
-"""Finding routes — the read half (blizzard#390) and the human-driven exit verbs
-(blizzard#394 Phase 2), component tier.
+"""Finding routes — the read half and the human-driven exit verbs,
+component tier.
 
 The read half proves a routine's live findings under one scope, and nothing else, seeded
 through ``FindingStore``. The exit routes prove each verb is reachable, refuses a missing
@@ -87,7 +87,7 @@ def test_list_returns_a_routines_live_findings_under_one_scope_and_nothing_else(
 
 
 def test_list_reads_a_delivered_finding_only_with_include_gone(tmp_path: Path) -> None:
-    """blizzard#583: `delivered` is neither `live` nor absent from the read verb — it
+    """`delivered` is neither `live` nor absent from the read verb — it
     behaves like every other exited state on `GET /api/findings`, unlike the fleet-scoped
     bucket route, which surfaces it unconditionally."""
     hub = build_hub(tmp_path)
@@ -173,7 +173,7 @@ def test_list_widens_across_the_four_routine_scope_combinations(tmp_path: Path) 
 
 
 def test_list_narrows_to_source(tmp_path: Path) -> None:
-    """blizzard#582: `source` further narrows a `GET /api/findings` read, independent
+    """`source` further narrows a `GET /api/findings` read, independent
     of `routine`/`scope` — absent reads both sources."""
     hub = build_hub(tmp_path)
     _seed_scope(hub, "blizzard")

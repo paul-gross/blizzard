@@ -238,7 +238,7 @@ def test_resolution_is_first_write_wins(tmp_path: Path) -> None:
         f"/api/decisions/{decision_id}/resolutions", json={"choice": "reject", "resolved_by": "bob"}
     )
     assert second.status_code == 409
-    # `resolved_by` in the body is a spoof attempt — issue #91 overwrites it with the
+    # `resolved_by` in the body is a spoof attempt — the route overwrites it with the
     # resolved session identity, `"operator"` under the default `auth.mode = "none"`.
     assert second.json()["already_resolved_by"] == "operator"
 
@@ -324,7 +324,7 @@ def test_requeue_closes_an_escalation_by_supersession(tmp_path: Path) -> None:
     hub.clock.advance(timedelta(seconds=1))
     rq = hub.client.post(f"/api/chunks/{chunk_id}/requeues")
     assert rq.status_code == 202, rq.text
-    # The response is the transitioned chunk's summary (issue #104), not a bare
+    # The response is the transitioned chunk's summary, not a bare
     # `{"chunk_id": ...}`.
     assert rq.json()["chunk_id"] == chunk_id
     assert rq.json()["status"] == "ready"
@@ -351,10 +351,10 @@ def test_detach_a_claimed_chunk_re_derives_ready_and_reenters_the_queue(tmp_path
     chunk_id, _ = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)
     # No clock.advance: route creation and release land at the same fixed instant. The
-    # route-event seq tiebreak (issue #41), not the timestamp, decides the tie.
+    # route-event seq tiebreak, not the timestamp, decides the tie.
     resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
     assert resp.status_code == 202, resp.text
-    # The response is the transitioned chunk's summary (issue #104), not a bare
+    # The response is the transitioned chunk's summary, not a bare
     # `{"chunk_id": ...}`.
     assert resp.json()["chunk_id"] == chunk_id
     assert resp.json()["status"] == "ready"
@@ -411,7 +411,7 @@ def test_detach_publishes_chunk_changed_and_queue_changed(tmp_path: Path) -> Non
     hub = build_hub(tmp_path)
     chunk_id, _ = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)
-    # No clock.advance: the route creation and the release tie on timestamp (issue #41).
+    # No clock.advance: the route creation and the release tie on timestamp.
     before = len(hub.events.snapshot())
 
     assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
@@ -423,7 +423,7 @@ def test_detach_publishes_chunk_changed_and_queue_changed(tmp_path: Path) -> Non
 
 
 def test_reclaim_at_a_same_instant_tie_still_derives_running(tmp_path: Path) -> None:
-    """The other half of issue #41's tie: a fresh claim landing at the exact instant of
+    """The other half of the tie: a fresh claim landing at the exact instant of
     a prior release must not lose the live route — the route-event seq tiebreak, not the
     timestamp, is what keeps this a live route."""
     hub = build_hub(tmp_path)

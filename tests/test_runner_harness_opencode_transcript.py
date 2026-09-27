@@ -26,7 +26,7 @@ from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
-# The oldest committed corpus inside the admitted range (blizzard#438) — stays correct as corpora are added.
+# The oldest committed corpus inside the admitted range — stays correct as corpora are added.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = _PACKAGE_ROOT / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
 
@@ -227,7 +227,7 @@ def test_cold_turns_since_tolerates_an_empty_tool_title() -> None:
 
 @pytest.mark.unit
 def test_forward_turns_since_only_reemits_the_identity_that_changed() -> None:
-    """review F3: a pending tool part completing on a LATER read must not re-emit the whole
+    """review a pending tool part completing on a LATER read must not re-emit the whole
     call as a second, full turn — the cursor admits it as ``"updated"``, and that ships a
     ``LateToolOutput`` patch instead, the same shape Claude Code's own late-output case uses."""
     exporter = FakeExporter(
@@ -280,7 +280,7 @@ def test_forward_turns_since_only_reemits_the_identity_that_changed() -> None:
 
 @pytest.mark.unit
 def test_a_tool_part_updated_with_no_output_yet_ships_nothing() -> None:
-    """review F3: pending -> running carries no output to patch, so the revision is simply
+    """review pending -> running carries no output to patch, so the revision is simply
     not shipped — not a duplicate turn, not an empty patch."""
     exporter = FakeExporter(
         {
@@ -423,7 +423,7 @@ def _root_with_child_candidate(child_session_id: str = "child-1") -> str:
 
 @pytest.mark.unit
 def test_a_child_export_whose_parent_id_mismatches_surfaces_as_unlinked_and_is_retried() -> None:
-    """review F4: a momentary `parentID` mismatch is visible (not lost) and retried on a
+    """review a momentary `parentID` mismatch is visible (not lost) and retried on a
     later tick, without ever violating the cursor's own never-re-admit contract for the
     already-shipped spawning tool part."""
     root = _root_with_child_candidate()
@@ -464,7 +464,7 @@ def test_a_child_export_whose_parent_id_mismatches_surfaces_as_unlinked_and_is_r
 
 @pytest.mark.unit
 def test_a_child_export_that_fails_once_then_succeeds() -> None:
-    """review F4: an export failure is visible (not lost) and picked up once the child
+    """review an export failure is visible (not lost) and picked up once the child
     becomes readable, rather than a permanent, silent loss."""
     root = _root_with_child_candidate()
     exporter = FakeExporter({"root-1": root, "child-1": OpenCodeExportError("gone")})
@@ -544,7 +544,7 @@ def test_read_raw_lines_returns_the_range_and_round_trips_through_the_adapter() 
 
 @pytest.mark.unit
 def test_read_raw_lines_reuses_the_export_a_preceding_tail_position_just_fetched() -> None:
-    """review F17: `tail_position` immediately followed by `read_raw_lines` for the same
+    """review `tail_position` immediately followed by `read_raw_lines` for the same
     session — `_worker_sample`'s own shape — costs one real export, not two."""
     exporter = FakeExporter(
         {
@@ -683,7 +683,7 @@ def test_context_tokens_is_unconditionally_none() -> None:
     assert source.context_tokens("sess-1", spawn_cwd=None) is None
 
 
-# --- pinned corpus (review F23): the real fixtures, not only hand-built ones ---
+# --- pinned corpus: the real fixtures, not only hand-built ones ---
 
 
 @pytest.mark.unit

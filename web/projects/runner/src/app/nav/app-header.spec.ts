@@ -10,13 +10,13 @@ import { vi } from 'vitest';
 import { AppHeader } from './app-header';
 
 /** A `RunnerLiveUpdates` stand-in so a spec can drive {@link AppHeader}'s
- * `connection` fold (blizzard#333) without opening a real stream — the header
+ * `connection` fold without opening a real stream — the header
  * only ever reads `status`/`authFailed`, never starts or restarts it. */
 function fakeLiveUpdates(status: SseStatus, authFailed = false): Provider {
   return { provide: RunnerLiveUpdates, useValue: { status: signal(status), authFailed: signal(authFailed) } };
 }
 
-/** A full `DashboardView` body (issue #311) — every field this header's own
+/** A full `DashboardView` body — every field this header's own
  * dashboard read touches (`runner.capacities`, `environments`), plus every
  * other section a plausible/empty default. */
 function dashboardBody(overrides: Partial<runnerApi.DashboardView> = {}): runnerApi.DashboardView {
@@ -166,7 +166,7 @@ describe('AppHeader', () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    // The CDK renders the menu into an overlay on `document.body` (issue #161),
+    // The CDK renders the menu into an overlay on `document.body`,
     // outside the fixture's own element.
     expect(document.body.querySelector('[data-testid="local-panel-appearance"]')).toBeNull();
 
@@ -254,7 +254,7 @@ describe('AppHeader', () => {
   });
 
   /*
-   * This shell's half of the header's tiered collapse (issue #163). `BoardHeader`
+   * This shell's half of the header's tiered collapse. `BoardHeader`
    * pins its trailing cluster `flex: none`, but it can only collapse the cells it
    * renders itself — and this header projects a pause control and an identity
    * block in beside the menu, where the hub board projects only the menu. jsdom

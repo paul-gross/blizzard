@@ -50,7 +50,7 @@ graph_nodes = Table(
     Column("prompt", Text, nullable=True),  # inlined text, never a path
     Column("judgement_prompt", Text, nullable=True),  # the verdict-elicitation prompt; null at a gate/hub node
     Column("session", String, nullable=False),  # resume | fresh
-    # The targeted-resume source node name (issue #115) — the parsed ``<name>`` of a
+    # The targeted-resume source node name — the parsed ``<name>`` of a
     # ``session: resume:<name>`` form; null for bare ``resume``/``fresh``.
     Column("session_source", String, nullable=True),
     Column("judged_by", String, nullable=False),  # worker | human
@@ -71,7 +71,7 @@ graph_nodes = Table(
     # (``hub_node.DEFAULT_POLL_INTERVAL`` / ``DEFAULT_POLL_TIMEOUT``).
     Column("poll_interval_seconds", Integer, nullable=True),
     Column("poll_timeout_seconds", Integer, nullable=True),
-    # Whether this node's completion may carry proposed work items (D4) — null/false is
+    # Whether this node's completion may carry proposed work items — null/false is
     # off, the default for every node predating the policy.
     Column("proposes_work_items", Boolean, nullable=True),
 )
@@ -104,7 +104,7 @@ graph_edges = Table(
 )
 Index("ix_graph_edges_from_node_id", graph_edges.c.from_node_id)
 
-# The graph-level named-session declarations (issue #144) — one row per `sessions:` entry,
+# The graph-level named-session declarations — one row per `sessions:` entry,
 # keyed `(graph_id, name)`, since `name` is what every reference resolves by.
 graph_sessions = Table(
     "graph_sessions",
@@ -139,7 +139,7 @@ graph_artifacts = Table(
     Column("content", Text, nullable=False),
 )
 
-# --- Graph lifecycle facts (graph.retired / graph.enabled — issue #101) -------
+# --- Graph lifecycle facts (graph.retired / graph.enabled) -------------------
 # The reversible retire/re-enable brake over one graph_id: append-only, newest-fact-wins.
 
 graph_lifecycle_facts = Table(
@@ -153,7 +153,7 @@ graph_lifecycle_facts = Table(
 )
 Index("ix_graph_lifecycle_facts_graph_id", graph_lifecycle_facts.c.graph_id)
 
-# The per-graph follow-latest policy (issue #164) — append-only, newest-fact-wins.
+# The per-graph follow-latest policy — append-only, newest-fact-wins.
 # `follow_latest` is **tri-state**: NULL (or no row at all) inherits the hub setting.
 graph_policy_facts = Table(
     "graph_policy_facts",
@@ -165,8 +165,8 @@ graph_policy_facts = Table(
     Column("set_by", String, nullable=False),
 )
 
-# --- Scopes (an operator-authored slug the hub stores and hands back, issue #389) ---
-# The slug is the primary key (D1): mint-on-name means a different slug is a different
+# --- Scopes (an operator-authored slug the hub stores and hands back) ---
+# The slug is the primary key: mint-on-name means a different slug is a different
 # bucket by design, so it is already the stable, immutable, groupable key.
 
 scopes = Table(
@@ -177,8 +177,8 @@ scopes = Table(
     Column("created_at", UtcDateTime, nullable=False),
 )
 
-# The reversible retire/enable brake over one scope slug (issue #389) — the
-# graph_lifecycle_facts shape: append-only, newest-fact-wins (D3).
+# The reversible retire/enable brake over one scope slug — the
+# graph_lifecycle_facts shape: append-only, newest-fact-wins.
 scope_lifecycle_facts = Table(
     "scope_lifecycle_facts",
     metadata,
@@ -189,19 +189,19 @@ scope_lifecycle_facts = Table(
     Column("set_by", String, nullable=False),
 )
 
-# --- Routines (an operator-authored graph + default-scope + run-defaults pointer,
-# issue #389) — a mutable entity row: name/graph/default scope/model/effort edit in
-# place (D3), so `routine_id` is a surrogate key the name's own lineage survives under.
+# --- Routines (an operator-authored graph + default-scope + run-defaults pointer)
+# — a mutable entity row: name/graph/default scope/model/effort edit in place, so
+# `routine_id` is a surrogate key the name's own lineage survives under.
 
 routines = Table(
     "routines",
     metadata,
     Column("routine_id", String, primary_key=True),  # rtn_<ulid>
     Column("name", String, nullable=False),
-    Column("graph_name", String, nullable=False),  # a graph *name*, not a graph_id (D2)
+    Column("graph_name", String, nullable=False),  # a graph *name*, not a graph_id
     Column("default_scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
     # The routine's default model preference (JSON list[str]) and effort — the
-    # chunks.default_model/default_effort shape (issue #144). Both nullable and minted
+    # chunks.default_model/default_effort shape. Both nullable and minted
     # empty: an empty preference means express none.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
@@ -212,8 +212,8 @@ routines = Table(
     UniqueConstraint("name", name="uq_routines_name"),
 )
 
-# The many-to-many between a routine and every scope its runs may write into
-# (blizzard#488) — mutable like garden_proposal_findings, not append-only like scope_lifecycle_facts.
+# The many-to-many between a routine and every scope its runs may write into —
+# mutable like garden_proposal_findings, not append-only like scope_lifecycle_facts.
 
 routine_scopes = Table(
     "routine_scopes",
@@ -243,21 +243,21 @@ chunks = Table(
     Column("chunk_id", String, primary_key=True),  # ch_<ulid>
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),  # pinned at mint
     Column("minted_at", UtcDateTime, nullable=False),
-    # RETAINED AND UNREAD (superseded by `default_model`/`default_effort`, issue #144):
+    # RETAINED AND UNREAD (superseded by `default_model`/`default_effort`):
     # a new row carries the migration's `server_default`. Never read it as a current fact.
     Column("model", String, nullable=False),
-    # The chunk's **default** model preference (JSON `list[str]`) and effort (issue #144).
+    # The chunk's **default** model preference (JSON `list[str]`) and effort.
     # Both nullable and minted empty: an empty preference means *express none*.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
     # The chunk's default harness preference — the `default_model` shape:
     # JSON `list[str]`, nullable, minted empty meaning express none.
     Column("default_harnesses", Text, nullable=True),
-    # The chunk's standing intent to migrate at its next transition (issue #124) — a JSON
+    # The chunk's standing intent to migrate at its next transition — a JSON
     # `{"mode", "graph_id", "node_name"}` blob, read whole; NULL while no intent is set.
     Column("intended_migration", Text, nullable=True),
 )
-# (minted_at, chunk_id) for newest-first bounded reads since a timestamp (D6).
+# (minted_at, chunk_id) for newest-first bounded reads since a timestamp.
 Index("ix_chunks_minted_at_chunk_id", chunks.c.minted_at, chunks.c.chunk_id)
 
 chunk_work_refs = Table(
@@ -269,8 +269,8 @@ chunk_work_refs = Table(
     Column("ref", String, nullable=False),
 )
 Index("ix_chunk_work_refs_chunk_id", chunk_work_refs.c.chunk_id)
-# (source, ref) also serves a source-only filter via its leading column (blizzard#519
-# D5's own reasoning) — no separate single-column source index.
+# (source, ref) also serves a source-only filter via its leading column — no separate
+# single-column source index.
 Index("ix_chunk_work_refs_source_ref", chunk_work_refs.c.source, chunk_work_refs.c.ref)
 
 # --- Movement record (transition.recorded) ------------------------------------
@@ -280,7 +280,7 @@ transitions = Table(
     metadata,
     Column("transition_id", String, primary_key=True),  # tr_<ulid>
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    # The graph this transition happened in (issue #90) — so a later cross-graph migration
+    # The graph this transition happened in — so a later cross-graph migration
     # never strands its node ids against the new pin. No ForeignKey, like its siblings.
     Column("graph_id", String, nullable=False),
     Column("from_node_id", String, nullable=True),  # null on the first transition out of entry
@@ -295,16 +295,15 @@ transitions = Table(
 # epoch) join, at no extra write cost over a single-column index.
 Index("ix_transitions_chunk_id_epoch", transitions.c.chunk_id, transitions.c.epoch)
 
-# (recorded_at, transition_id) for newest-first bounded reads since a timestamp (D6,
-# issue #213) — this table is the one high-volume source among the tables such a read
-# spans.
+# (recorded_at, transition_id) for newest-first bounded reads since a timestamp — this
+# table is the one high-volume source among the tables such a read spans.
 Index("ix_transitions_recorded_at_transition_id", transitions.c.recorded_at, transitions.c.transition_id)
 
-# The delivery-materialization sweep's own candidate read (blizzard#366) — every pass
+# The delivery-materialization sweep's own candidate read — every pass
 # scans for `to_node_id == RESERVED_TERMINAL` across the whole table.
 Index("ix_transitions_to_node_id", transitions.c.to_node_id)
 
-# --- Cross-graph migration record (chunk_migrations — issue #90) ---------------
+# --- Cross-graph migration record (chunk_migrations) ---------------
 # Its own fact, never a ``transitions`` row (``bzh:migration-not-transition``).
 
 chunk_migrations = Table(
@@ -321,12 +320,12 @@ chunk_migrations = Table(
     Column("model_after", String, nullable=True),  # the re-pinned model, or null (kept current)
     Column("epoch", Integer, nullable=False),  # the submitting fence; the natural-key third part
     Column("recorded_at", UtcDateTime, nullable=False),
-    # What moved the chunk (issues #164, #371): authored-edge | intent | follow-latest | restart.
+    # What moved the chunk: authored-edge | intent | follow-latest | restart.
     # Nullable — a row predating the discriminator stays honestly unattributed.
     Column("source", String, nullable=True),
 )
 Index("ix_chunk_migrations_chunk_id", chunk_migrations.c.chunk_id)
-# (recorded_at, migration_id) for newest-first bounded reads since a timestamp (D6).
+# (recorded_at, migration_id) for newest-first bounded reads since a timestamp.
 Index("ix_chunk_migrations_recorded_at_migration_id", chunk_migrations.c.recorded_at, chunk_migrations.c.migration_id)
 
 # --- Artifacts (the chunk artifact store) --------------------------------------
@@ -343,18 +342,18 @@ artifacts = Table(
     Column("kind", String, nullable=False),  # git_commit | asset
     Column("data", Text, nullable=False),  # '<branch>:<commit>' | raw content
     Column("repo", String, nullable=True),  # git_commit only
-    Column("forge", String, nullable=True),  # git_commit only (issue #143); null = legacy row
+    Column("forge", String, nullable=True),  # git_commit only; null = legacy row
     Column("produced_at", UtcDateTime, nullable=False),
 )
-# (chunk_id, node_id, epoch): a chunk's artifacts inlined by chunk (blizzard#519);
+# (chunk_id, node_id, epoch): a chunk's artifacts inlined by chunk;
 # node_id/epoch trail so the same index still serves a chunk-only lookup as its
 # leading-column prefix.
 Index("ix_artifacts_chunk_id_node_id_epoch", artifacts.c.chunk_id, artifacts.c.node_id, artifacts.c.epoch)
 
-# --- Findings and finding sets (blizzard#390) -----------------------------------
+# --- Findings and finding sets -----------------------------------
 # A finding is a durable observation a routine's run recorded — first class the way an
 # artifact is (blizzard-product:/delivered/garden/machinery.md §Findings are artifacts). This
-# table carries no live/last_seen_at/observed_count column (D2, D4): finding_facts is
+# table carries no live/last_seen_at/observed_count column: finding_facts is
 # append-only, and every reader derives them fresh, newest-fact-wins, the
 # scope_lifecycle_facts shape.
 
@@ -362,22 +361,22 @@ findings = Table(
     "findings",
     metadata,
     Column("finding_id", String, primary_key=True),  # fin_<ulid>
-    # D5 — a routine's own name, not its surrogate id; null for a `source="review"` finding,
-    # which carries no routine lineage (blizzard#582 D1).
+    # A routine's own name, not its surrogate id; null for a `source="review"` finding,
+    # which carries no routine lineage.
     Column("routine_name", String, nullable=True),
-    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),  # D5
+    Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
     Column("class", String, key="class_", nullable=False),  # the deployment's own vocabulary; opaque to the hub
     Column("locus", String, nullable=False),  # a repo-relative path, optionally :line/::symbol; opaque to the hub
     Column("summary", Text, nullable=False),
     Column("introduced", String, nullable=True),  # best-effort blame commit; null when not resolvable
-    # `introduced`'s own authored instant (blizzard#394) — nullable, never backfilled: null
+    # `introduced`'s own authored instant — nullable, never backfilled: null
     # wherever unresolved, by design.
     Column("introduced_at", UtcDateTime, nullable=True),
     # "routine" (a routine's run raised it) or "review" (a delivery lane's review raised
-    # it, blizzard#582 D1) — a finding's home, not its liveness.
+    # it) — a finding's home, not its liveness.
     Column("source", String, nullable=False, server_default="routine"),
     # blizzard's own closed severity vocabulary (blocking/should-fix) — null for a
-    # routine-sourced finding, which carries no severity of its own (blizzard#582 D1).
+    # routine-sourced finding, which carries no severity of its own.
     Column("severity", String, nullable=True),
     # The chunk whose review raised this finding — null for a routine-sourced finding.
     Column("raised_by_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=True),
@@ -386,12 +385,12 @@ findings = Table(
 
 Index("ix_findings_routine_scope", findings.c.routine_name, findings.c.scope_slug)
 Index("ix_findings_routine_class", findings.c.routine_name, findings.c.class_)
-# The garden bucket's widened read (blizzard#582 D3): a review-sourced finding on the
+# The garden bucket's widened read: a review-sourced finding on the
 # same scope filters on this index instead of `ix_findings_routine_scope` above.
 Index("ix_findings_scope_source", findings.c.scope_slug, findings.c.source)
 
 # One row per `add`/`observed`/`gone`/`delivered`/exit/`reopened` transformation a delivered
-# list or a person applied to a finding (D2, D4, blizzard#394, blizzard#583) — first-recorded,
+# list or a person applied to a finding — first-recorded,
 # last-seen, and the observed count are reads over this table, never a cached summary on `findings`.
 
 finding_facts = Table(
@@ -402,14 +401,14 @@ finding_facts = Table(
     Column("kind", String, nullable=False),  # FACT_KINDS, domain/findings.py
     Column("recorded_at", UtcDateTime, nullable=False),
     Column("note", Text, nullable=True),  # gone's/delivered's/an exit's/reopened's note; null for add/observed
-    # Who recorded a human-driven fact (blizzard#394) — null for a run-driven add/observed/gone.
+    # Who recorded a human-driven fact — null for a run-driven add/observed/gone.
     Column("actor", String, nullable=True),
-    # The proposal a `delivered` fact answered (blizzard#394, blizzard#583) — null for a
-    # hand resolution, and null again on the `resolved` fact a later run settles it to (D3).
+    # The proposal a `delivered` fact answered — null for a
+    # hand resolution, and null again on the `resolved` fact a later run settles it to.
     Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), nullable=True),
-    # The absorbing finding, set only on a `superseded` fact (blizzard#394).
+    # The absorbing finding, set only on a `superseded` fact.
     Column("superseded_by", String, ForeignKey("findings.finding_id"), nullable=True),
-    # The delivered list this fact belongs to (blizzard#401 D1) — written by delivery for
+    # The delivered list this fact belongs to — written by delivery for
     # the `add`/`observed`/`gone` facts it materializes; null for a person's exit verb,
     # which belongs to no run. No backfill: a fact predating this column reads back null.
     Column("finding_set_id", String, ForeignKey("finding_sets.finding_set_id"), nullable=True),
@@ -426,22 +425,22 @@ finding_facts = Table(
 Index("ix_finding_facts_finding_id_id", finding_facts.c.finding_id, finding_facts.c.id)
 
 # A run's own delta reads every fact belonging to one delivered set, once per set, on
-# every `GET /api/runs/{chunk_id}` (blizzard#401) — unindexed like no other fact-table
+# every `GET /api/runs/{chunk_id}` — unindexed like no other fact-table
 # filter column here.
 Index("ix_finding_facts_finding_set_id", finding_facts.c.finding_set_id)
 
-# The set a delivered finding list mints, one per artifact (D6) — scope, the
+# The set a delivered finding list mints, one per artifact — scope, the
 # per-repository revisions, and the routine's measurement live here, never per finding.
 
 finding_sets = Table(
     "finding_sets",
     metadata,
     Column("finding_set_id", String, primary_key=True),  # fins_<ulid>
-    Column("artifact_id", String, ForeignKey("artifacts.artifact_id"), nullable=False, unique=True),  # D6
-    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # D6 — the run that delivered it
+    Column("artifact_id", String, ForeignKey("artifacts.artifact_id"), nullable=False, unique=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the run that delivered it
     Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
     # The routine that recorded this set, by name — a chunk may hold pointers from more
-    # than one source, so joining through it to a work item's routine is ambiguous (D5).
+    # than one source, so joining through it to a work item's routine is ambiguous.
     Column("routine_name", String, nullable=False, server_default=""),
     Column("revisions", Text, nullable=False),  # JSON {repo: revision} (`bzh:sql-portable`)
     Column("measurement", Text, nullable=True),  # opaque, routine-strategy-defined; null when none was recorded
@@ -450,9 +449,9 @@ finding_sets = Table(
 Index("ix_finding_sets_chunk_id", finding_sets.c.chunk_id)
 Index("ix_finding_sets_routine_scope", finding_sets.c.routine_name, finding_sets.c.scope_slug)
 
-# --- Garden proposals (blizzard#390) ---------------------------------------------
+# --- Garden proposals ---------------------------------------------
 # A proposed response — never `proposals`, so neither this nor `work_item_proposals`
-# inherits an unqualified name a call site could confuse (D1). What a proposal is, and
+# inherits an unqualified name a call site could confuse. What a proposal is, and
 # whether it needs a finding, is `blizzard-context:/domain/findings-and-proposals.md`'s own.
 
 garden_proposals = Table(
@@ -460,7 +459,7 @@ garden_proposals = Table(
     metadata,
     Column("proposal_id", String, primary_key=True),  # gprop_<ulid>
     # `routine-run` (the routine's own run raised it) or `operator` (an operator
-    # authored it directly, blizzard#631) — a mint-time fact, fixed at insert and never
+    # authored it directly) — a mint-time fact, fixed at insert and never
     # inferred from a null `routine_name`.
     Column("origin", String, nullable=False, server_default="routine-run"),
     # Named by the routine's own name — required for `routine-run`, optional for
@@ -474,7 +473,7 @@ garden_proposals = Table(
     Column("created_at", UtcDateTime, nullable=False),
     # A delivered proposal's idempotence key: the artifact it was delivered from plus
     # its submission-local `ref` — null for a proposal minted outside delivery
-    # (`GardenProposalAuthoring`, blizzard#390), which carries no source artifact. No
+    # (`GardenProposalAuthoring`), which carries no source artifact. No
     # `ForeignKey` — SQLite cannot drop an FK column.
     Column("source_artifact_id", String, nullable=True),
     Column("ref", String, nullable=True),
@@ -495,7 +494,7 @@ Index(
     unique=True,
 )
 
-# The findings a proposal answers (D7) — a join, not a JSON list, so which-work-resolved-
+# The findings a proposal answers — a join, not a JSON list, so which-work-resolved-
 # which-findings is a query rather than a scan (`bzh:sql-portable`). May carry no rows at
 # all for a proposal citing none.
 
@@ -508,10 +507,10 @@ garden_proposal_findings = Table(
 
 Index("ix_garden_proposal_findings_finding_id", garden_proposal_findings.c.finding_id)
 
-# --- Garden proposal closures (blizzard#395) --------------------------------------
+# --- Garden proposal closures --------------------------------------
 # The record both closing verbs leave — pass or accept. A durable fact, not a status
 # column on `garden_proposals` itself: closing writes only this row, never a flag on the
-# mutable proposal (which does carry edit/attach/detach verbs while open, blizzard#631),
+# mutable proposal (which does carry edit/attach/detach verbs while open),
 # so closure is terminal the moment it exists, and the unique `proposal_id` makes a
 # second close fail at the write rather than in a read-then-write gap.
 
@@ -530,7 +529,7 @@ garden_proposal_closures = Table(
     UniqueConstraint("proposal_id", name="uq_garden_proposal_closures_proposal_id"),
 )
 
-# The reverse read a delivered item's own `(source, ref)` needs (blizzard#394).
+# The reverse read a delivered item's own `(source, ref)` needs.
 # Unique, so `find_by_item`'s `one_or_none()` is DB-enforced, not merely assumed.
 Index(
     "ix_garden_proposal_closures_source_ref",
@@ -553,7 +552,7 @@ work_item_proposals = Table(
     Column("kind", String, nullable=False),  # create | update
     Column("data", Text, nullable=False),  # JSON object, kind-shaped
     Column("proposed_at", UtcDateTime, nullable=False),
-    # The proposing runner (blizzard#366) — nullable, no backfill: a row written before
+    # The proposing runner — nullable, no backfill: a row written before
     # this column existed carries no proposer, and materializes as unresolved for it.
     Column("runner_id", String, nullable=True),
     # No unique constraint narrower than the primary key — a proposal list is multi-row per
@@ -561,7 +560,7 @@ work_item_proposals = Table(
 )
 Index("ix_work_item_proposals_chunk_id", work_item_proposals.c.chunk_id)
 
-# --- Proposal materialization outcomes (blizzard#366) -------------------------
+# --- Proposal materialization outcomes -------------------------
 # One row per proposal's terminal judgment — created / updated / unresolved — recorded
 # once and never re-judged; a transient failure records nothing and is retried.
 
@@ -623,7 +622,7 @@ route_created = Table(
     Column("seq", Integer, nullable=False),
 )
 Index("ix_route_created_chunk_id", route_created.c.chunk_id)
-# (created_at, route_id) for newest-first bounded reads since a timestamp (D6).
+# (created_at, route_id) for newest-first bounded reads since a timestamp.
 Index("ix_route_created_created_at_route_id", route_created.c.created_at, route_created.c.route_id)
 
 route_environments = Table(
@@ -645,12 +644,12 @@ route_released = Table(
     Column("seq", Integer, nullable=False),
 )
 Index("ix_route_released_chunk_id", route_released.c.chunk_id)
-# (released_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# (released_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
 Index("ix_route_released_released_at_id", route_released.c.released_at, route_released.c.id)
 
-# --- Route capability tokens (route_token_minted — issue #84a) ----------------
+# --- Route capability tokens (route_token_minted) ----------------
 # Only the sha256 digest is persisted; ``seq`` shares the per-chunk route counter.
 route_token_minted = Table(
     "route_token_minted",
@@ -685,7 +684,7 @@ delivery_landed = Table(
 )
 Index("ix_delivery_landed_chunk_id", delivery_landed.c.chunk_id)
 
-# --- Delivery closure facts (work_item_closures — issue #216) -----------------
+# --- Delivery closure facts (work_item_closures) -----------------
 # One row per close-attempt outcome; `closed`/`gone` are terminal, `failed` is retried.
 
 work_item_closures = Table(
@@ -716,10 +715,10 @@ close_intents = Table(
     UniqueConstraint("chunk_id", "source", "ref", name="uq_close_intents_chunk_source_ref"),
 )
 # A pending-intents filter on `retired_at IS NULL` — sqlite indexes NULLs too, so a
-# plain index still serves it (blizzard#519).
+# plain index still serves it.
 Index("ix_close_intents_pending", close_intents.c.retired_at)
 
-# --- Close-intent drain attempts (close_intent_attempts, blizzard#524 D7) ------------
+# --- Close-intent drain attempts (close_intent_attempts) ------------
 # Append-only (`bzh:facts-not-status`): a terminal outcome retires the intent instead of writing a row here.
 
 close_intent_attempts = Table(
@@ -818,7 +817,7 @@ chunk_promoted = Table(
     Column("promoted_at", UtcDateTime, nullable=False),  # not_ready -> ready
 )
 Index("ix_chunk_promoted_chunk_id", chunk_promoted.c.chunk_id)
-# (promoted_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# (promoted_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
 Index("ix_chunk_promoted_promoted_at_id", chunk_promoted.c.promoted_at, chunk_promoted.c.id)
@@ -831,16 +830,16 @@ chunk_stopped = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("stopped_at", UtcDateTime, nullable=False),  # terminal operator abandonment
-    # Who stopped it (issue #118) — nullable: a row predating the column reads back `None`.
+    # Who stopped it — nullable: a row predating the column reads back `None`.
     Column("stopped_by", String, nullable=True),
 )
 Index("ix_chunk_stopped_chunk_id", chunk_stopped.c.chunk_id)
-# (stopped_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# (stopped_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
 Index("ix_chunk_stopped_stopped_at_id", chunk_stopped.c.stopped_at, chunk_stopped.c.id)
 
-# An operator's manual completion (issue #294) — outranks a ``chunk_stopped`` row recorded
+# An operator's manual completion — outranks a ``chunk_stopped`` row recorded
 # at or before it (``ChunkFacts._operator_completion_outranks_stop``), the motivating case.
 chunk_completed = Table(
     "chunk_completed",
@@ -851,12 +850,12 @@ chunk_completed = Table(
     Column("completed_by", String, nullable=False),
 )
 Index("ix_chunk_completed_chunk_id", chunk_completed.c.chunk_id)
-# (completed_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# (completed_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
 Index("ix_chunk_completed_completed_at_id", chunk_completed.c.completed_at, chunk_completed.c.id)
 
-# The fact that makes an unacquired chunk ephemeral by deletion (issue #364) — a
+# The fact that makes an unacquired chunk ephemeral by deletion — a
 # ``chunk_grouped``-shaped sibling; ``deleted_by`` is non-null, with no legacy row predating it.
 chunk_deleted = Table(
     "chunk_deleted",
@@ -866,12 +865,12 @@ chunk_deleted = Table(
     Column("deleted_at", UtcDateTime, nullable=False),
     Column("deleted_by", String, nullable=False),
 )
-# (deleted_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# (deleted_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
 Index("ix_chunk_deleted_deleted_at_id", chunk_deleted.c.deleted_at, chunk_deleted.c.id)
 
-# --- Chunk dependency edges (issue #456) --------------------------------------
+# --- Chunk dependency edges --------------------------------------
 # One row per edge; ``released_at``/``released_by`` set once, together — never deleted.
 
 chunk_dependencies = Table(
@@ -898,18 +897,18 @@ escalations = Table(
     # The runner-composed ``blizzard runner takeover`` invocation, beside the raw
     # harness-resume ``takeover_command``. Stored pre-composed; empty when none was.
     Column("wrapped_takeover_command", Text, nullable=False, server_default=""),
-    # Set only when a gate's resolved choice migrated to an unresolvable target (issue
-    # #110), so the gate's decision derives closed here too. Null otherwise.
+    # Set only when a gate's resolved choice migrated to an unresolvable target, so the
+    # gate's decision derives closed here too. Null otherwise.
     Column("decision_id", String, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_escalations_chunk_id", escalations.c.chunk_id)
-# (recorded_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# (recorded_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
 Index("ix_escalations_recorded_at_id", escalations.c.recorded_at, escalations.c.id)
 
-# --- Usage facts (usage.recorded — issue #59) --------------------------------
+# --- Usage facts (usage.recorded) --------------------------------
 # One row per harness invocation. **Not** epoch-fenced: a zombie's spend is real spend.
 
 usage_facts = Table(
@@ -922,7 +921,7 @@ usage_facts = Table(
     Column("runner_id", String, nullable=False),  # the reporting runner — audit/attribution only
     Column("kind", String, nullable=False),  # spawn | resume | judge
     Column("model", String, nullable=False),
-    # The invocation's own recorded harness identity (blizzard#441) — nullable and
+    # The invocation's own recorded harness identity — nullable and
     # un-backfilled; NULL declares unknown, never a value.
     Column("harness_id", String, nullable=True),
     Column("harness_version", String, nullable=True),
@@ -937,10 +936,10 @@ usage_facts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_usage_facts_chunk_id", usage_facts.c.chunk_id)
-# The spend read's range predicate (blizzard#517) — no deployment folds it in SQL yet
+# The spend read's range predicate — no deployment folds it in SQL yet
 # without an index-backed range.
 Index("ix_usage_facts_recorded_at", usage_facts.c.recorded_at)
-# The analytics spend-by-node grouping (blizzard#519) — otherwise a temp B-tree.
+# The analytics spend-by-node grouping — otherwise a temp B-tree.
 Index("ix_usage_facts_node_id", usage_facts.c.node_id)
 
 # --- Questions and answers (the ask/answer rendezvous) ----------------------
@@ -961,7 +960,7 @@ questions = Table(
     Column("asked_at", UtcDateTime, nullable=False),  # reap clock stops for the chunk from here
 )
 Index("ix_questions_chunk_id", questions.c.chunk_id)
-# (asked_at, question_id) for newest-first bounded reads since a timestamp (D6).
+# (asked_at, question_id) for newest-first bounded reads since a timestamp.
 Index("ix_questions_asked_at_question_id", questions.c.asked_at, questions.c.question_id)
 
 question_answers = Table(
@@ -974,7 +973,7 @@ question_answers = Table(
     Column("answered_by", String, nullable=False),  # who won the CAS
     Column("answered_at", UtcDateTime, nullable=False),
 )
-# (answered_at, question_id) for newest-first bounded reads since a timestamp (D6); the
+# (answered_at, question_id) for newest-first bounded reads since a timestamp; the
 # PK IS the question id, so it also serves as the row's own tie-break column.
 Index("ix_question_answers_answered_at_question_id", question_answers.c.answered_at, question_answers.c.question_id)
 
@@ -1004,7 +1003,7 @@ decisions = Table(
     Column("submitted_at", UtcDateTime, nullable=False),
 )
 Index("ix_decisions_chunk_id", decisions.c.chunk_id)
-# (submitted_at, decision_id) for newest-first bounded reads since a timestamp (D6).
+# (submitted_at, decision_id) for newest-first bounded reads since a timestamp.
 Index("ix_decisions_submitted_at_decision_id", decisions.c.submitted_at, decisions.c.decision_id)
 
 decision_resolutions = Table(
@@ -1017,7 +1016,7 @@ decision_resolutions = Table(
     Column("resolved_by", String, nullable=False),
     Column("resolved_at", UtcDateTime, nullable=False),
 )
-# (resolved_at, decision_id) for newest-first bounded reads since a timestamp (D6); the
+# (resolved_at, decision_id) for newest-first bounded reads since a timestamp; the
 # PK IS the decision id, so it also serves as the row's own tie-break column.
 Index(
     "ix_decision_resolutions_resolved_at_decision_id",
@@ -1036,12 +1035,12 @@ requeues = Table(
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
 )
 Index("ix_requeues_chunk_id", requeues.c.chunk_id)
-# (requeued_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# (requeued_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
 Index("ix_requeues_requeued_at_id", requeues.c.requeued_at, requeues.c.id)
 
-# An operator's forced move of a chunk onto a node, now (issue #370) — a movement fact of
+# An operator's forced move of a chunk onto a node, now — a movement fact of
 # its own, never a transition: nothing judged it and no edge was taken.
 chunk_restarts = Table(
     "chunk_restarts",
@@ -1063,12 +1062,12 @@ chunk_restarts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_chunk_restarts_chunk_id", chunk_restarts.c.chunk_id)
-# (recorded_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# (recorded_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
 Index("ix_chunk_restarts_recorded_at_id", chunk_restarts.c.recorded_at, chunk_restarts.c.id)
 
-# --- Chunk pause facts (chunk.paused / chunk.resumed — issue #46) -----------
+# --- Chunk pause facts (chunk.paused / chunk.resumed) -----------
 # An operator-level brake over one chunk: append-only, newest-fact-wins.
 
 chunk_pause_facts = Table(
@@ -1081,7 +1080,7 @@ chunk_pause_facts = Table(
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )
 Index("ix_chunk_pause_facts_chunk_id", chunk_pause_facts.c.chunk_id)
-# (set_at, id) for newest-first bounded reads since a timestamp (D6), portable across
+# (set_at, id) for newest-first bounded reads since a timestamp, portable across
 # sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the rowid as
 # a tie-break).
 Index("ix_chunk_pause_facts_set_at_id", chunk_pause_facts.c.set_at, chunk_pause_facts.c.id)
@@ -1120,7 +1119,7 @@ chunk_grouped = Table(
     Column("grouped_into", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the survivor
     Column("grouped_at", UtcDateTime, nullable=False),
 )
-# (grouped_at, id) for newest-first bounded reads since a timestamp (D6), portable
+# (grouped_at, id) for newest-first bounded reads since a timestamp, portable
 # across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
 # rowid as a tie-break).
 Index("ix_chunk_grouped_grouped_at_id", chunk_grouped.c.grouped_at, chunk_grouped.c.id)
@@ -1135,16 +1134,16 @@ runner_registrations = Table(
     Column("workspace_id", String, nullable=False),  # the per-runner workspace binding
     Column("registered_at", UtcDateTime, nullable=False),
     Column("last_seen_at", UtcDateTime, nullable=False),  # liveness derives from this
-    # The hub-minted bearer token's sha256 hex digest (issue #86a) — nullable (an
+    # The hub-minted bearer token's sha256 hex digest — nullable (an
     # unenrolled runner has none), indexed for the reverse token lookup.
     Column("token_hash", Text, nullable=True, index=True),
-    # The runner's configured environment-pool size (issue #69) — nullable when the runner
+    # The runner's configured environment-pool size — nullable when the runner
     # reports none. Refreshed in place on each re-registration.
     Column("env_capacity", Integer, nullable=True),
-    # The runner's own browser-reachable base URL (issue #95) — nullable: a runner that
+    # The runner's own browser-reachable base URL — nullable: a runner that
     # registers none cannot be a federation target. Refreshed in place.
     Column("public_url", Text, nullable=True),
-    # The runner's allowed redirect URIs (issue #95), JSON `list[str]` — exact-matched
+    # The runner's allowed redirect URIs, JSON `list[str]` — exact-matched
     # against a presented `redirect_uri` before a JWT is minted (the open-redirect guard).
     Column("redirect_uris", Text, nullable=True),
     # The runner's reported capability snapshot, JSON `list[dict]`, one per harness binding.
@@ -1164,7 +1163,7 @@ runner_pause_facts = Table(
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )
 
-# The runner's *own* brake, as reported to us (issue #43) — a separate table because the
+# The runner's *own* brake, as reported to us — a separate table because the
 # hub only ever reads it. No ForeignKey: a fact can arrive before its registration does.
 
 runner_local_pause_facts = Table(
@@ -1175,13 +1174,13 @@ runner_local_pause_facts = Table(
     Column("paused", Boolean, nullable=False),  # locally_paused derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),  # the runner's clock, off the fact's payload
     Column("set_by", String, nullable=False),
-    # The composed cause string off the fact's payload (issue #61) — nullable, since a
+    # The composed cause string off the fact's payload — nullable, since a
     # manual pause carries none.
     Column("reason", Text, nullable=True),
 )
 
 # The runner's latest sampled external-usage snapshot, one row per declared subscription
-# (issue #218) — advisory. No ForeignKey: a raise would stall the rail.
+# — advisory. No ForeignKey: a raise would stall the rail.
 runner_external_usage = Table(
     "runner_external_usage",
     metadata,
@@ -1198,7 +1197,7 @@ runner_external_usage = Table(
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
-# The runner's newest external-usage *miss* per slug (blizzard#504 D7) — sibling to `runner_external_usage`, no FK.
+# The runner's newest external-usage *miss* per slug — sibling to `runner_external_usage`, no FK.
 runner_external_usage_misses = Table(
     "runner_external_usage_misses",
     metadata,
@@ -1213,7 +1212,7 @@ runner_external_usage_misses = Table(
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
-# --- The identity spine: users, provider identities, sessions (issue #91) -----
+# --- The identity spine: users, provider identities, sessions -----
 # ``role`` is a coarse tag expanded through a static map, never a stored permission list.
 
 users = Table(
@@ -1227,7 +1226,7 @@ users = Table(
     Column("created_at", UtcDateTime, nullable=False),
 )
 
-# A partial unique index (D2) — dialect-keyed rather than raw ``text()``, staying inside
+# A partial unique index — dialect-keyed rather than raw ``text()``, staying inside
 # SQLAlchemy's portable DDL surface (``bzh:sql-portable``).
 Index(
     "uq_users_email",
@@ -1263,9 +1262,9 @@ sessions = Table(
     Column("last_seen_at", UtcDateTime, nullable=False),
 )
 
-# --- The provider-login seam: single-use state, non-chunk auth facts (issue #92) ----
+# --- The provider-login seam: single-use state, non-chunk auth facts ----
 
-# A single-use ``state`` (decision D5), read-and-deleted in one call, so a replayed value
+# A single-use ``state``, read-and-deleted in one call, so a replayed value
 # can never resolve twice. Expiry is checked at read, never swept.
 auth_state = Table(
     "auth_state",
@@ -1277,7 +1276,7 @@ auth_state = Table(
     Column("code_challenge", String, nullable=True),  # reserved for #96's PKCE public client
     Column("created_at", UtcDateTime, nullable=False),
     Column("expires_at", UtcDateTime, nullable=False),
-    Column("user_id", String, nullable=True),  # issue #96, cli_login rows only — see note above
+    Column("user_id", String, nullable=True),  # cli_login rows only — see note above
 )
 
 # The append-only, non-chunk auth/security event log (``bzh:facts-not-status``) — these
@@ -1293,7 +1292,7 @@ auth_facts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- The superuser bootstrap lifecycle (issue #94) ---------------------------------
+# --- The superuser bootstrap lifecycle ---------------------------------------------
 # A **singleton** row, so a config change naming a different email can still demote.
 superuser_bootstrap = Table(
     "superuser_bootstrap",
@@ -1304,7 +1303,7 @@ superuser_bootstrap = Table(
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
-# --- Operational event log (event_log — issue #125) ---------------------------
+# --- Operational event log (event_log) ---------------------------
 # ``chunk_id``/``runner_id`` are nullable — runner-scoped/hub-authored, respectively. ``detail`` is opaque JSON.
 
 event_log = Table(
@@ -1325,8 +1324,8 @@ event_log = Table(
 # The read's own sort key (newest-first) — indexed so ordering never scans the table.
 Index("ix_event_log_recorded_at", event_log.c.recorded_at)
 
-# --- Transcript segments (blizzard#247, epic:transcripts) ----------------------
-# One row per shipped record (D1), append-only; the natural key (D8) dedupes re-offers.
+# --- Transcript segments (epic:transcripts) ----------------------
+# One row per shipped record, append-only; the natural key dedupes re-offers.
 
 transcript_segments = Table(
     "transcript_segments",
@@ -1343,30 +1342,30 @@ transcript_segments = Table(
     # True on the one record that closes the segment out — never inferred from a
     # transition, since a tail may land after the step's completion (product plan).
     Column("final", Boolean, nullable=False),
-    # A cap rejection (D5/D6): no content, no codec; `rejection_reason` is non-null iff
+    # A cap rejection: no content, no codec; `rejection_reason` is non-null iff
     # `rejected`.
     Column("rejected", Boolean, nullable=False),
     Column("rejection_reason", String, nullable=True),
-    # Raw, uncompressed turn bytes as received (D4) — the budget currency for both caps,
+    # Raw, uncompressed turn bytes as received — the budget currency for both caps,
     # regardless of `rejected`.
     Column("byte_count", Integer, nullable=False),
-    Column("codec", String, nullable=True),  # e.g. "zlib" (D10); null iff rejected
+    Column("codec", String, nullable=True),  # e.g. "zlib"; null iff rejected
     Column("content", LargeBinary, nullable=True),  # compressed turns JSON; null iff rejected
     # The harness family that produced the source transcript. This is deliberately
     # separate from its observed version and the normalizer version below.
     Column("harness_id", String, nullable=True),
     Column("normalizer_version", String, nullable=False),
     Column("harness_version", String, nullable=True),
-    # Frozen at the runner's segment open (blizzard#439 D3); nullable, no backfill.
+    # Frozen at the runner's segment open; nullable, no backfill.
     Column("model", String, nullable=True),
     Column("effort", String, nullable=True),
     # The runner's OWN cap declaration, distinct from `rejected` above; nullable, no backfill.
     Column("record_truncated", Boolean, nullable=True),
     # Re-ship only: the segment this replaces — dropped from a bounded per-lease read.
     Column("supersedes", String, nullable=True),
-    # Hub-stamped receipt instant — the D3 rolling 24h window anchors here, never on the runner's.
+    # Hub-stamped receipt instant — the rolling 24h window anchors here, never on the runner's.
     Column("received_at", UtcDateTime, nullable=False),
-    # A per-record fingerprint of `(turn_range_start, rejected, content)` (blizzard#513 D1),
+    # A per-record fingerprint of `(turn_range_start, rejected, content)`,
     # so a bulk candidacy read detects a content change without reading `content` at all.
     Column("content_digest", String, nullable=False),
     UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),
@@ -1375,14 +1374,14 @@ transcript_segments = Table(
 Index("ix_transcript_segments_chunk_id", transcript_segments.c.chunk_id)
 Index("ix_transcript_segments_runner_received_at", transcript_segments.c.runner_id, transcript_segments.c.received_at)
 Index("ix_transcript_segments_segment_id", transcript_segments.c.segment_id)
-# A visible-segment read's `NOT IN (SELECT supersedes ...)` anti-join (blizzard#519).
+# A visible-segment read's `NOT IN (SELECT supersedes ...)` anti-join.
 Index("ix_transcript_segments_supersedes", transcript_segments.c.supersedes)
 # (final, chunk_id): a visible-segment read's outer `WHERE final = TRUE`, `final`
 # leading because it is the more selective predicate; `chunk_id` second lets an `IN
-# (chunks)` probe and a `DISTINCT` ride the same index (blizzard#519).
+# (chunks)` probe and a `DISTINCT` ride the same index.
 Index("ix_transcript_segments_final_chunk_id", transcript_segments.c.final, transcript_segments.c.chunk_id)
 
-# --- Transcript lane high-water mark (D7 — own table, not runner_high_water) --------
+# --- Transcript lane high-water mark (own table, not runner_high_water) --------
 # `runner_high_water` belongs to the fact lane; a second lane sharing it would collide.
 
 transcript_high_water = Table(
@@ -1393,7 +1392,7 @@ transcript_high_water = Table(
     Column("updated_at", UtcDateTime, nullable=False),
 )
 
-# --- Derived transcript events (blizzard#254) — one row per occurrence, re-derivable ---
+# --- Derived transcript events — one row per occurrence, re-derivable ---
 # from `transcript_segments` at any later extractor version (`bzh:facts-not-status`: an
 # immutable observation computed from already-durable rows, never a status).
 
@@ -1402,30 +1401,30 @@ transcript_events = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("segment_id", String, nullable=False),
-    # The extractor version that produced this row (D5/D9) — a bump re-derives history
+    # The extractor version that produced this row — a bump re-derives history
     # while leaving earlier-version rows untouched.
     Column("extractor_version", String, nullable=False),
     Column("kind", String, nullable=False),
-    # This event's location in the segment's turn tree (D8): "N" for a main-lane turn,
+    # This event's location in the segment's turn tree: "N" for a main-lane turn,
     # "N.M" one sidechain deep, "N.M.K" two, and so on.
     Column("turn_path", String, nullable=False),
     # Disambiguates more than one event of the same kind at the same `turn_path` — 0 for
     # every extractor today, kept general for one that could ever multi-match a turn.
     Column("occurrence", Integer, nullable=False),
-    Column("payload", Text, nullable=False),  # JSON object, kind-shaped (D5, `bzh:sql-portable`)
-    # `payload`'s filterable projection (blizzard#255 D1) — principal subject and
+    Column("payload", Text, nullable=False),  # JSON object, kind-shaped (`bzh:sql-portable`)
+    # `payload`'s filterable projection — principal subject and
     # invoking tool; `None` for a kind with no single natural subject, never guessed.
     Column("subject", String, nullable=True),
     Column("tool", String, nullable=True),
-    # Denormalized node-step context (D4), stamped at derive time.
+    # Denormalized node-step context, stamped at derive time.
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("node_id", String, nullable=False),
     Column("epoch", Integer, nullable=False),
     Column("spawn_generation", Integer, nullable=False),
     Column("graph_id", String, nullable=False),
-    Column("depth", Integer, nullable=False),  # 0 main lane; nesting depth otherwise (D8)
+    Column("depth", Integer, nullable=False),  # 0 main lane; nesting depth otherwise
     Column("agent_type", String, nullable=True),  # nearest-enclosing sidechain's; None at depth 0
-    # The segment's own frozen provenance (blizzard#439), stamped once per derivation call.
+    # The segment's own frozen provenance, stamped once per derivation call.
     Column("harness_id", String, nullable=True),
     Column("harness_version", String, nullable=True),
     Column("model", String, nullable=True),
@@ -1448,10 +1447,10 @@ Index("ix_transcript_events_segment_id", transcript_events.c.segment_id)
 Index("ix_transcript_events_subject", transcript_events.c.subject)
 Index("ix_transcript_events_tool", transcript_events.c.tool)
 # (extractor_version, id) for a per-extractor cursor read: `extractor_version = ? AND
-# id > cursor ORDER BY id` (blizzard#519).
+# id > cursor ORDER BY id`.
 Index("ix_transcript_events_extractor_version_id", transcript_events.c.extractor_version, transcript_events.c.id)
 
-# --- Per-segment derivation marker (D6) — replaced, never appended: what a segment's ---
+# --- Per-segment derivation marker — replaced, never appended: what a segment's ---
 # most recent derivation at a given extractor version saw, when, and whether it was complete.
 
 transcript_event_derivations = Table(
@@ -1459,18 +1458,18 @@ transcript_event_derivations = Table(
     metadata,
     Column("segment_id", String, primary_key=True),
     Column("extractor_version", String, primary_key=True),
-    # A fingerprint of the segment's stored content as of this derivation (D6) — compared
+    # A fingerprint of the segment's stored content as of this derivation — compared
     # against the segment's current fingerprint to detect a content change (a rejected
     # record later accepted, a late record landing) that the sweep must re-derive over.
     Column("content_fingerprint", String, nullable=False),
     Column("derived_at", UtcDateTime, nullable=False),
     Column("event_count", Integer, nullable=False),
     # False when the segment held a content hole (a rejected record) at derivation time —
-    # declared, never silently indistinguishable from a session that read nothing (D6).
+    # declared, never silently indistinguishable from a session that read nothing.
     Column("complete", Boolean, nullable=False),
 )
 
-# --- Work items (hub-owned work items — issue #357) ---------------------------
+# --- Work items (hub-owned work items) ---------------------------
 # A mutable entity row, not a fact table: title/body/edited_at change in place, and
 # closure is recorded on the row itself (nullable ``closed_at`` + ``closure``) rather
 # than a separate append-only table, because there is exactly one current state to read
@@ -1497,7 +1496,7 @@ work_items = Table(
     # Unset while open. Set together, once, when the item closes.
     Column("closed_at", UtcDateTime, nullable=True),
     Column("closure", String, nullable=True),  # delivered | withdrawn
-    # A routine run's own recorded values, nullable (blizzard#392) — unindexed: the pair's
+    # A routine run's own recorded values, nullable — unindexed: the pair's
     # actual read path is `finding_sets(routine_name, scope_slug)`, not this table.
     Column("routine_name", String, nullable=True),
     Column("scope_slug", String, nullable=True),
@@ -1507,9 +1506,9 @@ work_items = Table(
 
 Index("ix_work_items_source", work_items.c.source)
 
-# --- Work item runs (a run's identity — blizzard#393) -----------------------
-# What routine, scope, and mode a work item's run is executing under — minted by
-# blizzard#392, read back through a chunk's first work ref (D1: `routine_name`, not a
+# --- Work item runs (a run's identity) -----------------------
+# What routine, scope, and mode a work item's run is executing under — minted together
+# with the work item, read back through a chunk's first work ref (`routine_name`, not a
 # surrogate `routine_id`, the `findings.routine_name` shape).
 
 work_item_runs = Table(

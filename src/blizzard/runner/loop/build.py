@@ -60,8 +60,8 @@ _HTTP_TIMEOUT = 30.0
 
 class _LazyUsageHttpClient:
     """One ``httpx.Client`` every declared subscription's sampler shares, built only when a
-    sample first runs (blizzard#436, hub:95) — a runner with no live subscription opens no
-    connection pool. Implements :class:`~blizzard.runner.loop.context.ICloseableUsageHttpClient`
+    sample first runs — a runner with no live subscription opens no connection pool.
+    Implements :class:`~blizzard.runner.loop.context.ICloseableUsageHttpClient`
     and the zero-arg provider shape every sampler's ``http_client`` expects."""
 
     def __init__(self) -> None:
@@ -87,7 +87,7 @@ class LoopWiring:
     config: RunnerConfig
     workspace_prompt: str
     runner_prompt: str
-    #: The SSE broker (D2, blizzard#317) shared with the served app when one composer
+    #: The SSE broker shared with the served app when one composer
     #: builds both; ``None`` for a loop-only caller (``blizzard runner tick`` and siblings).
     events: EventBroker | None = None
 
@@ -100,13 +100,13 @@ class LoopWiring:
         self, hub: IHubClient, *, engine: Engine | None = None, health_cache: HarnessHealthCache | None = None
     ) -> LoopContext:
         """Wire a :class:`LoopContext`; the caller owns the ``httpx.Client`` behind ``hub``,
-        and the returned context's own ``usage_http_client`` (blizzard#436, hub:95) —
-        closed the same way, once the caller is done with the context.
+        and the returned context's own ``usage_http_client`` — closed the same way,
+        once the caller is done with the context.
 
-        Builds its own engine (kept separate from ``host``'s own, D4) unless ``engine`` is
+        Builds its own engine (kept separate from ``host``'s own) unless ``engine`` is
         given — :class:`PeriodicDriver` passes its own so it can dispose it on thread exit
-        (D5) without threading it through :class:`LoopContext` for a step to see.
-        ``health_cache`` is the same exception ``engine`` is (blizzard#438): ``host`` passes
+        without threading it through :class:`LoopContext` for a step to see.
+        ``health_cache`` is the same exception ``engine`` is: ``host`` passes
         the one instance it also gave the served app (``HostedApp.harness_health``), so a
         dashboard read and the loop's own registered availability read one shared, single
         source of truth rather than two independently-refreshing caches that can disagree."""
@@ -129,12 +129,12 @@ class LoopWiring:
                 OPENCODE_HARNESS_ID: config.opencode_model_aliases,
             },
         )
-        # The subscription-sampling seam (blizzard#436) — each declaration paired with its
+        # The subscription-sampling seam — each declaration paired with its
         # resolved binding; an unknown provider selects `None` (declared, unsampled). Every
-        # sampler shares one lazily-built HTTP client, owned by this context (blizzard#436,
-        # hub:95), rather than opening its own.
+        # sampler shares one lazily-built HTTP client, owned by this context,
+        # rather than opening its own.
         usage_http_client = _LazyUsageHttpClient()
-        # The renewal seam's own one-shot subprocess (blizzard#504) — shared across every
+        # The renewal seam's own one-shot subprocess — shared across every
         # declared subscription's renewer binding, same as the sampler's shared HTTP client.
         one_shot_subprocess = SubprocessOneShotProcess()
         resolved_subscriptions = tuple(
@@ -148,11 +148,11 @@ class LoopWiring:
             )
             for declaration in config.resolved_subscriptions()
         )
-        # The per-lease harness-stdout directory (issue #58), created once here so a worker's
+        # The per-lease harness-stdout directory, created once here so a worker's
         # stdout redirect target always exists by the time a spawn/resume opens it.
         worker_stdout_dir = config.root / "worker-stdout"
         worker_stdout_dir.mkdir(parents=True, exist_ok=True)
-        # The detached elicitation's own output directory (blizzard#443, D4) — load-bearing,
+        # The detached elicitation's own output directory — load-bearing,
         # so it is always created, unlike `worker_stdout_dir`'s empty-disables convention.
         elicitation_output_dir = config.root / "elicitation-output"
         elicitation_output_dir.mkdir(parents=True, exist_ok=True)
@@ -164,12 +164,12 @@ class LoopWiring:
             env_capacity=(
                 config.max_environments if config.workspace_provider == "basic" else len(config.workspace_envs)
             ),
-            public_url=config.public_url,  # issue #95 — this runner's own federation identity
+            public_url=config.public_url,  # this runner's own federation identity
             redirect_uris=config.redirect_uris,
             local_api_url=config.local_api_url,
             gates=config.gates,
             # Basic workers run in their acquired workdir, away from shared clones.
-            # Winter keeps its configured workspace-wide spawn cwd (issue #17).
+            # Winter keeps its configured workspace-wide spawn cwd.
             workspace_root="" if config.workspace_provider == "basic" else config.workspace_root,
             workspace_prompt=self.workspace_prompt,
             runner_prompt=self.runner_prompt,
@@ -193,14 +193,14 @@ class LoopWiring:
             stores=stores,
             clock=_clock,
             hub=hub,
-            # The non-memoizing default (D4) — only `tick()` itself upgrades this per call.
+            # The non-memoizing default — only `tick()` itself upgrades this per call.
             chunk_views=ReadThroughChunkViews(hub),
             provider=provider,
             subscriptions=resolved_subscriptions,
             usage_http_client=usage_http_client,
             process=LinuxProcessProbe(),
             worktree_git=SubprocessWorktreeGit(),
-            # The check-runner seam (issue #114) — see `runner/loop/checks.py`.
+            # The check-runner seam — see `runner/loop/checks.py`.
             check_runner=SubprocessCheckRunner(worker_env=config.worker_env),
             config=loop_config,
             worker_files=_worker_files,
@@ -233,9 +233,9 @@ class LoopWiring:
             transcripts_wired=True,
             events=self.events,
             harnesses=harnesses,
-            # Built once here (D4), long-lived across every tick `PeriodicDriver._run` drives on this context.
+            # Built once here, long-lived across every tick `PeriodicDriver._run` drives on this context.
             harness_versions=HarnessVersionCache(clock=_clock),
-            # Mirrors `harness_versions` (D4): built once, long-lived across every tick.
+            # Mirrors `harness_versions`: built once, long-lived across every tick.
             harness_health=health_cache,
         )
 
@@ -250,7 +250,7 @@ class LoopWiring:
                 ctx.usage_http_client.close()
 
     def backfill_transcripts(self, *, dry_run: bool, limit: int | None = None) -> TranscriptBackfillReport:
-        """Run one transcript-backfill pass (blizzard#250) — the operator verb's own entry,
+        """Run one transcript-backfill pass — the operator verb's own entry,
         wired here rather than at the CLI so the composition root stays the one place a
         context is built."""
         config = self.config
@@ -326,7 +326,7 @@ class PeriodicDriver:
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="blizzard-runner-loop", daemon=True)
         self._client: httpx.Client | None = None
-        # `host`'s own shared instance (blizzard#438, `HostedApp.harness_health`), so this
+        # `host`'s own shared instance (`HostedApp.harness_health`), so this
         # loop's registered availability and the served app's diagnostics read one cache.
         self._harness_health = harness_health
 
@@ -339,7 +339,7 @@ class PeriodicDriver:
         The join is **unbounded** on purpose: the graceful-shutdown resume marking runs
         right after this returns and must not race a live tick writing the same store. A
         tick cannot run forever — every seam it touches is timeout-bounded, including the
-        judgement elicitation itself (blizzard#443): `judge` launches detached and returns
+        judgement elicitation itself: `judge` launches detached and returns
         immediately rather than blocking a tick on a live model turn. One known exception:
         a fresh OpenCode spawn still blocks the tick synchronously on its own identity
         handshake, bounded by `DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS` (10s) rather than
@@ -351,7 +351,7 @@ class PeriodicDriver:
     def _run(self) -> None:
         config = self._wiring.config
         self._client = httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers())
-        # Built here, not inside `context()`, so this thread can dispose it on exit (D5) —
+        # Built here, not inside `context()`, so this thread can dispose it on exit —
         # a gracefully stopped runner is a single-file store again. Inside the `try` below,
         # not before it: a raising `context()` call must still reach `finally`'s dispose.
         engine = create_engine_from_url(config.db_url)

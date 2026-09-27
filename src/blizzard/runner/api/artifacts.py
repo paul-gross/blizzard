@@ -1,4 +1,4 @@
-"""A worker's read of its own node-step artifacts (issue #127), its graph mint's own
+"""A worker's read of its own node-step artifacts, its graph mint's own
 baked-in declarations, and blizzard's own published system-artifact set — resolved
 latest-by-epoch for node scope, or one by name, whose ``:path`` converter captures a slash
 verbatim. Graph scope answers from the runner's own pinned-mint mirror; node and system
@@ -156,7 +156,7 @@ def get_artifact(
     ``404`` when nothing matches. A supplied ``node`` settles scope to node on its own — neither
     a graph declaration nor a system artifact has a producing node — so pairing it with
     ``scope=graph``/``scope=system`` is ``400``. More than one candidate — several upstream
-    nodes (issue #169), or a name colliding across scopes — is ``409`` naming them."""
+    nodes, or a name colliding across scopes — is ``409`` naming them."""
     lease = authorized_lease(lease_id, request)
     if node is not None and scope is not None and scope in _NODELESS_SCOPES:
         raise HTTPException(

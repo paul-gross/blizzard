@@ -26,7 +26,7 @@ export const LANES: readonly Lane[] = [
  * The transient `delivering` shows under RUNNING and the terminal `stopped` under
  * DONE. `paused` shares WAIT/HUMAN with `waiting_on_human`: that is the lane for work
  * stopped pending a human, which is what an operator's pause is. `ready` has its own
- * READY lane on the board (issue #137) — the ready queue *is* a board column now,
+ * READY lane on the board — the ready queue *is* a board column now,
  * ordered by hub dispatch order and reshaped in place by drag-and-drop, so every
  * status maps to a lane and a chunk shows in exactly one place. The lane's key is
  * still `notready` for the renamed BACKLOG column: the key is a selector consumed by
@@ -54,7 +54,7 @@ export function laneFor(status: ChunkStatus): string {
 }
 
 /**
- * Every chunk status folded onto the shared {@link Tone} vocabulary (issue #81) —
+ * Every chunk status folded onto the shared {@link Tone} vocabulary —
  * the fleet-side half of "one status-to-tone mapping consumed by both libraries";
  * `local-panel`'s `deriveMachineChunkStatus` (`chunk-status.ts`) is the other half,
  * folding the runner's own lease-state derivation onto the same `Tone` union rather

@@ -1,6 +1,5 @@
 """``blizzard hub chunk migrate`` / ``restart`` / ``set`` / ``show`` (unit tier) — pure
-clients of ``PATCH``/``GET /api/chunks/{id}``, driven here with ``httpx`` stubbed
-(issues #124, #144).
+clients of ``PATCH``/``GET /api/chunks/{id}``, driven here with ``httpx`` stubbed.
 """
 
 from __future__ import annotations
@@ -260,7 +259,7 @@ def test_restart_maps_409_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) 
     assert "does not exist on graph gr_1" in result.output
 
 
-# `chunk set --default-model/--default-effort` (issue #144) — the CLI-only surface.
+# `chunk set --default-model/--default-effort` — the CLI-only surface.
 # --------------------------------------------------------------------------- #
 
 
@@ -453,7 +452,7 @@ def test_show_reads_default_harnesses_back_in_text_mode(monkeypatch: pytest.Monk
     assert "default harnesses: claude_code, codex" in result.output
 
 
-# `chunk show` — blocked marking and neighborhood (issue #476/#457/#462).
+# `chunk show` — blocked marking and neighborhood.
 # --------------------------------------------------------------------------- #
 
 
@@ -546,7 +545,7 @@ def test_show_marks_no_estimate_when_none_was_reported(monkeypatch: pytest.Monke
     assert "~$" not in result.output
 
 
-# `chunk depend` / `chunk release-dependency` (issue #476) — pure clients of the two
+# `chunk depend` / `chunk release-dependency` — pure clients of the two
 # existing dependency routes.
 # --------------------------------------------------------------------------- #
 

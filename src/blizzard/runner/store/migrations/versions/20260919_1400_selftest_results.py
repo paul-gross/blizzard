@@ -1,4 +1,4 @@
-"""Add the durable selftest-result table (blizzard#438).
+"""Add the durable selftest-result table.
 
 Revision ID: 20260919_1400_selftest_results
 Revises: 20260919_1000_transcript_segment_provenance

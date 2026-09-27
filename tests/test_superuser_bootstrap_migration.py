@@ -1,4 +1,4 @@
-"""The superuser-bootstrap migration — ``superuser_bootstrap`` (component tier, issue #94).
+"""The superuser-bootstrap migration — ``superuser_bootstrap`` (component tier).
 
 Covers the "existing store, upgraded onward" half plus the downgrade; a fresh
 ``base -> head`` store is already covered by ``test_store_migrations.py``."""

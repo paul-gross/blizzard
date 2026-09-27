@@ -1,5 +1,5 @@
 """``AuthService`` — mint/resolve/slide sessions, mint collision-free usernames (unit
-tier, issue #91).
+tier).
 
 Exercised against in-memory fakes of the three repository Protocols; the real
 SQLAlchemy adapters are exercised at component tier (``tests/test_auth_repositories.py``).
@@ -438,7 +438,7 @@ def test_mint_username_falls_back_to_user_for_an_all_symbol_handle() -> None:
     assert service.mint_username("###") == "user"
 
 
-# --- link_or_mint (issue #92) -------------------------------------------------
+# --- link_or_mint -------------------------------------------------
 
 
 def _provider_identity(
@@ -534,7 +534,7 @@ def test_link_or_mint_never_merges_an_unverified_email_even_when_it_matches() ->
     assert len(users.by_id) == 2
 
 
-# --- state (decision D5) -------------------------------------------------------
+# --- state -------------------------------------------------------------
 
 
 def test_start_state_then_consume_state_round_trips() -> None:
@@ -577,7 +577,7 @@ def test_consume_state_rejects_an_expired_state() -> None:
     assert service.consume_state(state) is None
 
 
-# --- assign_role (issue #94) ---------------------------------------------------
+# --- assign_role ---------------------------------------------------------
 
 
 def _identity(user: User) -> ResolvedIdentity:
@@ -726,7 +726,7 @@ def test_assign_role_is_a_no_op_when_the_role_is_unchanged() -> None:
     assert auth_facts.list_recent() == []
 
 
-# --- superuser bootstrap (issue #94) --------------------------------------------
+# --- superuser bootstrap --------------------------------------------------
 
 
 def test_bootstrap_apply_role_records_a_system_actor_fact() -> None:

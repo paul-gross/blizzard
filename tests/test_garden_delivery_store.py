@@ -1,5 +1,5 @@
-"""``GardenDeliveryStore`` — the garden-delivery-materialization repository (blizzard#393
-Phase 3, component tier). Migrated-to-head sqlite-on-disk — the
+"""``GardenDeliveryStore`` — the garden-delivery-materialization repository
+(component tier). Migrated-to-head sqlite-on-disk — the
 ``tests/test_garden_proposal_store.py`` shape."""
 
 from __future__ import annotations
@@ -119,7 +119,7 @@ def _full_plan(*, at: datetime = _NOW) -> DeliveryPlan:
 
 
 def test_deliver_writes_a_facts_own_actor_column(tmp_path: Path) -> None:
-    """blizzard#583 D3: the `resolved` fact a `gone` op settles a `delivered` finding to
+    """The `resolved` fact a `gone` op settles a `delivered` finding to
     carries the actor `GardenDelivery` threaded onto `FindingFactRecord`."""
     store, engine = _store_and_engine(tmp_path)
     plan = DeliveryPlan(
@@ -178,7 +178,7 @@ def test_deliver_writes_every_row(tmp_path: Path) -> None:
             ("fin_3", "gone", "couldn't reproduce"),
         ]
         # Every add/observed/gone fact this delivery materialized attributes to the
-        # finding_set it was delivered under (blizzard#401 D1).
+        # finding_set it was delivered under.
         assert {r.finding_set_id for r in fact_rows} == {"fins_1"}
 
         set_rows = conn.execute(sa.select(finding_sets)).all()

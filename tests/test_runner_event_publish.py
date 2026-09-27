@@ -1,4 +1,4 @@
-"""Publish-at-mutation (D4, blizzard#317 Phase 3) — component tier.
+"""Publish-at-mutation — component tier.
 
 One call site per event kind at minimum, more where a kind has several distinct trigger
 seams worth covering. Each assertion is on the broker's own recorded frame, never on the
@@ -142,7 +142,7 @@ def test_fill_claim_publishes_lease_created_environment_bound_and_fact_changed(t
     assert lease_frames[0]["cause"] == "created"
     assert lease_frames[0]["chunk_id"] == "ch_1"
     # The pid-recorded flip to `running` gets its own frame — the 'created' mint alone
-    # leaves a re-reader seeing `spawning` until the next backstop poll (blizzard#317 review).
+    # leaves a re-reader seeing `spawning` until the next backstop poll.
     assert lease_frames[1]["cause"] == "spawned"
     assert lease_frames[1]["lease_id"] == lease_frames[0]["lease_id"]
 
@@ -244,8 +244,8 @@ def test_pull_abandon_publishes_environment_released(tmp_path: Path) -> None:
 
 def test_env_release_release_binding_publishes_environment_released(tmp_path: Path) -> None:
     """`release_binding` (undoing a just-recorded claim that never landed) shares
-    `_publish_released` with `release_chunk` above, but census F6 (review round 6) found
-    no test drove this call site on its own — pinned directly here."""
+    `_publish_released` with `release_chunk` above, but no test drove this call site on
+    its own — pinned directly here."""
     store = _store(tmp_path)
     events = EventBroker()
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
@@ -382,7 +382,7 @@ def test_attempt_abandon_retiring_an_open_park_does_not_publish_ask_answered(tmp
     assert _frames(events, "lease-changed")[-1]["cause"] == "released"
 
 
-# --- lease-changed(dormant) — park without closure (review round 3, F1) ----------------- #
+# --- lease-changed(dormant) — park without closure ----------------- #
 
 
 def test_dormant_park_on_ask_publishes_lease_changed_dormant(tmp_path: Path) -> None:
@@ -610,7 +610,7 @@ def test_pull_reconcile_takeovers_publishes_takeover_closed(tmp_path: Path) -> N
 
 def test_outbound_drain_ack_republishes_fact_changed_on_the_same_seq(tmp_path: Path) -> None:
     """The enqueue frame alone leaves the fact log's ✓/· flush marker stuck unacked until
-    the next backstop poll (blizzard#317 review) — the drain's own ack must re-announce."""
+    the next backstop poll — the drain's own ack must re-announce."""
     store = _store(tmp_path)
     events = EventBroker()
     hub = FakeHub()
@@ -635,7 +635,7 @@ def test_outbound_drain_ack_republishes_fact_changed_on_the_same_seq(tmp_path: P
     assert hub.pushed and hub.pushed[0].seq == 1, "the fake hub never actually received the fact"
 
 
-# --- fact-changed for the outbound_buffer writes that bypassed enqueue_outbound (review round 4, F1) --- #
+# --- fact-changed for the outbound_buffer writes that bypassed enqueue_outbound --- #
 
 
 def test_ceiling_pause_publishes_fact_changed(tmp_path: Path) -> None:
@@ -682,7 +682,7 @@ def test_ceiling_pause_publishes_fact_changed(tmp_path: Path) -> None:
 
 
 def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
-    """`record_local_pause`'s other call site (review round 6's F6): `SpendCeiling.run`
+    """`record_local_pause`'s other call site: `SpendCeiling.run`
     above is pinned, but nothing drove `PATCH /api/runner` itself before this."""
     store = _store(tmp_path)
     events = EventBroker()
@@ -701,7 +701,7 @@ def test_patch_runner_route_publishes_fact_changed(tmp_path: Path) -> None:
 
 
 def test_usage_recorder_publishes_fact_changed_and_an_exact_replay_publishes_nothing(tmp_path: Path) -> None:
-    """`record_usage` also inserts straight into outbound_buffer — D7 names only the usage
+    """`record_usage` also inserts straight into outbound_buffer — names only the usage
     sampler's own elapsed-time readout as backstop-bounded, not this fact-log row. An exact
     replay (same lease/generation/kind) enqueues nothing, so nothing is announced either."""
     store = _store(tmp_path)
@@ -739,7 +739,7 @@ def test_usage_recorder_publishes_fact_changed_and_an_exact_replay_publishes_not
 
 def test_context_sample_crossing_publishes_fact_changed(tmp_path: Path) -> None:
     """`record_context_sample` buffers a report only on a first crossing — this pins that the
-    occasional row it does buffer is announced, distinct from D7's elapsed-time-derived cadence."""
+    occasional row it does buffer is announced, distinct from its elapsed-time-derived cadence."""
     store = _store(tmp_path)
     events = EventBroker()
     _seed_lease(store, retries_max=2)
@@ -813,7 +813,7 @@ def test_external_usage_sample_publishes_fact_changed(tmp_path: Path) -> None:
 
 
 def test_external_usage_miss_publishes_fact_changed(tmp_path: Path) -> None:
-    """A miss now buffers its own `missed` report (blizzard#504 D7) — this pins that the
+    """A miss now buffers its own `missed` report — this pins that the
     row it buffers is announced, mirroring the sampled sibling above."""
     store = _store(tmp_path)
     events = EventBroker()
@@ -883,7 +883,7 @@ def test_attempt_retry_closure_publishes_fact_changed_for_its_own_event(tmp_path
     assert fact_frames[0]["seq"] == written[0].seq > 1
 
 
-# --- a broker-less context publishes nothing, degrading cleanly (D2) -------------------- #
+# --- a broker-less context publishes nothing, degrading cleanly -------------------- #
 
 
 def test_no_broker_wired_publishes_nothing_and_raises_nothing(tmp_path: Path) -> None:

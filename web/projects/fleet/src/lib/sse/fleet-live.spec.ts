@@ -47,7 +47,7 @@ describe('FleetLiveUpdates', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    // Fake timers throughout: dispatch's coalescing window (issue #310) is a real
+    // Fake timers throughout: dispatch's coalescing window is a real
     // setTimeout, so every test that emits a frame and checks invalidateQueries needs
     // to advance past it.
     vi.useFakeTimers();
@@ -68,10 +68,10 @@ describe('FleetLiveUpdates', () => {
   });
 
   it('invalidates the fleet list, the chunk detail, the queue, the fleet spend read, and the events feed on a chunk-changed event', () => {
-    // Usage rides the same fact a chunk-changed reports (issue #60): a chunk's derived
+    // Usage rides the same fact a chunk-changed reports: a chunk's derived
     // cost total and the fleet-wide spend both derive from it, so this event must
     // re-query both, not just status-shaped reads. The events feed unifies open
-    // escalations with logged events (blizzard#125 Phase 4), and an escalation
+    // escalations with logged events, and an escalation
     // surfaces as a chunk-changed frame (status -> needs_human), so this must stale
     // the Events tab too.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
@@ -237,9 +237,9 @@ describe('FleetLiveUpdates', () => {
   });
 
   it('re-reads the registry on every runner-changed kind, including the muted ones', () => {
-    // Issue #151: muting is the *feed's* concern only. The liveness column refreshes off
+    // Muting is the *feed's* concern only. The liveness column refreshes off
     // the heartbeat flood, so a mute that reached dispatch would freeze it. Each kind is
-    // emitted in its own coalesce window (issue #310 collapses same-window duplicates),
+    // emitted in its own coalesce window (coalescing collapses same-window duplicates),
     // so a per-kind flush still shows up as its own invalidation here.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
@@ -256,7 +256,7 @@ describe('FleetLiveUpdates', () => {
   });
 
   it('keeps the registration and heartbeat kinds out of the event feed', () => {
-    // Issue #151: a runner re-registers every pull cycle, so left in the ring these would
+    // A runner re-registers every pull cycle, so left in the ring these would
     // evict every event an operator actually wants within a few cycles.
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
     const live = TestBed.inject(FleetLiveUpdates);

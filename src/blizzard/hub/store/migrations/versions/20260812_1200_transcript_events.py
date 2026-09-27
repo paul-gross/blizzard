@@ -1,4 +1,4 @@
-"""transcript events (blizzard#254, epic:transcripts, hub store tree) — the derived,
+"""transcript events (epic:transcripts, hub store tree) — the derived,
 re-derivable event stream and its per-segment derivation marker. Creates both, ``checkfirst``.
 
 Revision ID: 20260812_1200_hub_transcript_events

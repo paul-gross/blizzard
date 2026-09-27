@@ -26,14 +26,14 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
   styleUrl: './agent-row.css',
 })
 export class AgentRow {
-  /** The lease this row renders, incl. the server-derived `state` (issue #28). */
+  /** The lease this row renders, incl. the server-derived `state`. */
   readonly agent = input.required<runnerApi.LeaseView>();
 
-  /** Whether a container considers this row the current selection (issue #29). */
+  /** Whether a container considers this row the current selection. */
   readonly selected = input(false);
 
   /**
-   * Emits this row's `lease_id` on click, Enter, or Space (issue #29). Named
+   * Emits this row's `lease_id` on click, Enter, or Space. Named
    * `selectLease`, matching `board-shell.ts`'s `selectChunk` — the house
    * convention for a row-select output — rather than the native `select`
    * DOM event name.

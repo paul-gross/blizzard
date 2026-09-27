@@ -1,5 +1,5 @@
 """The hub denies a claim whose runner capabilities no longer cover the chunk, under the
-claim lock (blizzard#433 D9, component tier) — mirroring the dependency denial's shape
+claim lock (component tier) — mirroring the dependency denial's shape
 (``tests/test_claim_dependency_denial.py``): a distinct 409, refused outright rather than
 lost to a race, re-derived fresh against the *stored registration* so a peek-then-claim
 skew in reported capabilities can never slip an incompatible chunk through."""
@@ -89,7 +89,7 @@ def test_registration_with_no_capabilities_is_never_revalidated(tmp_path: Path) 
 
 
 def test_claim_denied_when_the_only_satisfying_capability_is_unavailable(tmp_path: Path) -> None:
-    """A capability health has withdrawn (blizzard#438, ``available=False``) satisfies no
+    """A capability health has withdrawn (``available=False``) satisfies no
     lineage, even though it otherwise matches by harness id and default binding — the same
     409 an entirely mismatched capability draws."""
     hub = build_hub(tmp_path)

@@ -1,4 +1,4 @@
-"""usage facts — harness cost/token telemetry per invocation, hub-side (issue #59, hub store tree)
+"""usage facts — harness cost/token telemetry per invocation, hub-side (hub store tree)
 
 One append-only row per invocation, **not** epoch-fenced: stale spend is real spend.
 Revision ID: 20260717_2330_hub_usage_facts

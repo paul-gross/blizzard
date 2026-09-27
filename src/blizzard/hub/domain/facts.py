@@ -46,7 +46,7 @@ from blizzard.wire.facts import (
 
 _log = get_logger("blizzard.hub.facts")
 
-# The chunk-scoped, fence-advancing kinds gated on intake (issue #84b): a fabricated one from a
+# The chunk-scoped, fence-advancing kinds gated on intake: a fabricated one from a
 # non-holder must not advance the fence or open a decision. Runner-scoped kinds are never gated.
 _ROUTE_TOKEN_GATED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
 
@@ -144,7 +144,7 @@ class RunnerFactsService:
     ) -> int:
         """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``.
 
-        Returns the freshly-written ``escalations.id`` (issue #213's activity-feed key)."""
+        Returns the freshly-written ``escalations.id`` (its activity-feed key)."""
         return self._escalations.record_escalation(
             chunk_id,
             epoch=epoch,
@@ -157,7 +157,7 @@ class RunnerFactsService:
 @dataclass(frozen=True)
 class FactIngestResult:
     """:meth:`FactIngestService.ingest`'s own return — the wire :class:`RunnerFactAck` plus, per
-    freshly-applied fact (issue #213), the id of the row it wrote. ``row_id_by_seq`` carries an entry
+    freshly-applied fact, the id of the row it wrote. ``row_id_by_seq`` carries an entry
     only for a kind whose own id is not already in its payload. Not a wire type."""
 
     ack: RunnerFactAck
@@ -166,8 +166,7 @@ class FactIngestResult:
 
 class FactIngestService:
     """Apply a runner's batched pushed facts idempotently against its high-water mark. Most facts are
-    chunk-scoped and land through one of the seams above; ``fleet`` is here for the runner-scoped ones
-    (issue #43)."""
+    chunk-scoped and land through one of the seams above; ``fleet`` is here for the runner-scoped ones."""
 
     def __init__(
         self,
@@ -203,7 +202,7 @@ class FactIngestService:
                 continue
             ok, row_id = self._apply(batch.runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode)
             if not ok:
-                # A contract mismatch, not an idempotency skip (issue #84b): do not advance the mark
+                # A contract mismatch, not an idempotency skip: do not advance the mark
                 # past it, and name it in the ack.
                 rejected.append(fact.seq)
                 continue
@@ -236,7 +235,7 @@ class FactIngestService:
         self, runner_id: str, kind: str, payload: dict[str, object], *, route_token_mode: str
     ) -> tuple[bool, int | None]:
         """Apply one fact; ``(True, row_id)`` on success — ``row_id`` is the freshly-written
-        row's own id (issue #213) only for a kind whose id is not already in its own
+        row's own id only for a kind whose id is not already in its own
         payload (``escalation.recorded``/``event.recorded``), else ``None``. ``(False,
         None)`` on an unknown kind or a route-token rejection."""
         now = self._clock.now()
@@ -279,7 +278,7 @@ class FactIngestService:
             return True, None
         if kind == USAGE_RECORDED:
             # No epoch fence and no route-token gate: trailing-epoch spend is real and attributed to its
-            # own epoch (issue #84b; pinned in tests/test_usage_facts_ingest.py, test_route_token_authz.py).
+            # own epoch (pinned in tests/test_usage_facts_ingest.py, test_route_token_authz.py).
             self._usage.record_usage(
                 fact.require_text("chunk_id"),
                 node_id=fact.require_text("node_id"),
@@ -299,7 +298,7 @@ class FactIngestService:
             )
             return True, None
         if kind == EVENT_RECORDED:
-            # Neither epoch-fenced nor route-token-gated (issue #125): an event from a fenced-out or
+            # Neither epoch-fenced nor route-token-gated: an event from a fenced-out or
             # dying worker is exactly the signal this log exists to surface. `chunk_id` is optional.
             wire_kind = narrow_event_log_kind(fact.require_text("kind"))
             wire_severity = fact.require_text("severity")
@@ -338,7 +337,7 @@ class FactIngestService:
             )
             return True, None
         if kind == EXTERNAL_SUBSCRIPTION_USAGE_MISSED:
-            # Advisory sibling to the sampled fact above (D7) — refresh-in-place per
+            # Advisory sibling to the sampled fact above — refresh-in-place per
             # (runner_id, slug), in its own table, never touching the sample row.
             slug = fact.get("slug")
             if not isinstance(slug, str) or not slug:
@@ -367,8 +366,8 @@ class FactIngestService:
         return False, None
 
     def _route_token_ok(self, chunk_id: str, runner_id: str, fact: Payload, *, mode: str) -> bool:
-        """Route-token authorization for a chunk-scoped, fence-advancing fact (issue
-        #84b) — the buffered-push counterpart of ``apply.py``'s own check. A chunk the
+        """Route-token authorization for a chunk-scoped, fence-advancing fact — the
+        buffered-push counterpart of ``apply.py``'s own check. A chunk the
         hub has never minted (``load_facts`` returns ``None``, e.g. a malformed/stale
         payload) falls back to an empty :class:`ChunkFacts`, which
         :class:`RouteToken` already rejects as having no live route."""

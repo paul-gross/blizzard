@@ -1,7 +1,7 @@
 import type { GraphSummaryView } from 'fleet';
 
 /**
- * The effective graph for a routine's `graph_name` (blizzard#399 D7) — the same
+ * The effective graph for a routine's `graph_name` — the same
  * newest-non-retired-per-name resolution `IReadGraphRepository.get_enabled_by_name`
  * performs, so the board can never disagree with what a run itself refuses on.
  *

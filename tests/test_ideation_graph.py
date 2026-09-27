@@ -1,4 +1,4 @@
-"""The packaged ideation graph (unit tier, blizzard#546).
+"""The packaged ideation graph (unit tier).
 
 Proves ``ideation`` loads, inlines its prompts, and validates clean at mint, and pins
 its shape: the run paths, the session policy, the `classes` bake, and a run with no

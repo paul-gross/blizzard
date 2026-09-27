@@ -117,8 +117,8 @@ nodes:
 
 
 def test_mint_round_trips_node_produces_and_checks_through_the_store(tmp_path: Path) -> None:
-    """A node's ``produces``/``checks`` survive a store reload — both authored forms
-    (D1, issue #143): the bare-string ``review-findings`` (``kind=asset``, every
+    """A node's ``produces``/``checks`` survive a store reload — both authored forms:
+    the bare-string ``review-findings`` (``kind=asset``, every
     pre-#143 graph's shape) and the mapping ``{name: commit, kind: git_commit}``."""
     hub = build_hub(tmp_path)
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _PRODUCES_GRAPH})

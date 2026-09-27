@@ -1,12 +1,12 @@
 /**
- * The limit every drained hub read passes explicitly (blizzard#526 D7) — the board's
+ * The limit every drained hub read passes explicitly — the board's
  * counterpart to the CLI's own `CliContext.get_all`. No view truncates at any future
  * fleet size.
  */
 export const DRAIN_LIMIT = 1000;
 
 /**
- * Drains every page of a hub keyset-paginated list read (blizzard#526 D7).
+ * Drains every page of a hub keyset-paginated list read.
  * `fetchPage` is called once per page with the previous page's `next_cursor`
  * (`undefined` on the first call); a page whose `next_cursor` is `null`/`undefined`
  * ends the drain, so a fleet within one page — today's size, on every endpoint this

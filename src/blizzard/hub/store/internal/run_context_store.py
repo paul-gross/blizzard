@@ -1,5 +1,5 @@
-"""SQLAlchemy adapter for the run-context repository seam (package-private,
-blizzard#393). All ``sqlalchemy`` usage is confined here
+"""SQLAlchemy adapter for the run-context repository seam (package-private).
+All ``sqlalchemy`` usage is confined here
 (``bzh:dependency-inversion``). Resolves a chunk's first work ref straight against
 ``work_items`` rather than composing another store instance (``bzh:repository-split``)
 — this store depends only on :class:`HubStoreConnections`."""
@@ -18,8 +18,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 def insert_run_context_row(conn: Connection, work_item_id: str, context: RunContext) -> None:
     """Insert one ``work_item_runs`` row on a caller-supplied ``conn`` — mirrors
     :func:`~blizzard.hub.store.internal.chunk_rows.insert_chunk_rows`'s shared-connection
-    shape, so a routine run's own composite write folds this into its own transaction
-    (blizzard#392/#393)."""
+    shape, so a routine run's own composite write folds this into its own transaction."""
     conn.execute(
         insert(s.work_item_runs).values(
             work_item_id=work_item_id,

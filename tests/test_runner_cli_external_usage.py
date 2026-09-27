@@ -1,4 +1,4 @@
-"""``blizzard runner external-usage probe`` — the diagnostic CLI's SLUG argument (blizzard#436).
+"""``blizzard runner external-usage probe`` — the diagnostic CLI's SLUG argument.
 
 SLUG is optional, defaulting to the legacy ``anthropic`` declaration every scaffolded runner
 still carries, so every pre-existing invocation with no positional argument keeps working."""

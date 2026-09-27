@@ -1,4 +1,4 @@
-"""Runner service tier — the analytics proxy legs against a real mock hub (blizzard#545).
+"""Runner service tier — the analytics proxy legs against a real mock hub.
 
 The mock hub's own ``GET /api/fleet/chunks/{id}/analytics/...`` is what a real runner's
 ``GET /api/leases/{id}/analytics/...`` proxies to, over a real process boundary — a real

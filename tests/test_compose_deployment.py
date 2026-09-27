@@ -1,5 +1,5 @@
 """The reference compose deployment (``packaging/docker/``) — the static packaging
-contract (issue #191). No docker required — the stack actually standing up, serving
+contract. No docker required — the stack actually standing up, serving
 through the proxy, and surviving a restart is ``blizzard:compose-smoke``
 (``mise run compose-smoke``), local-only.
 """

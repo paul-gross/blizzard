@@ -1,5 +1,5 @@
-"""Review-findings-delivery route — the `record-findings` node's own POST (blizzard#582
-Phase 1, component tier). Seeds a chunk via ``seed_work_item`` (its own resting chunk)
+"""Review-findings-delivery route — the `record-findings` node's own POST
+(component tier). Seeds a chunk via ``seed_work_item`` (its own resting chunk)
 and posts a ``review-finding-delta`` artifact recorded via
 ``services.hub_node.record_marker`` — the ``tests/test_garden_delivery_api.py`` shape,
 minus the run-context seam this route does not need."""
@@ -257,7 +257,7 @@ def test_a_replayed_delivery_still_reports_recorded_and_mints_nothing_new(tmp_pa
 
 
 def test_a_replay_at_a_fresh_epoch_stays_a_no_op(tmp_path: Path) -> None:
-    """D6: idempotence is keyed on the chunk alone, so even a fresh node/epoch visit for
+    """Idempotence is keyed on the chunk alone, so even a fresh node/epoch visit for
     an already-delivered chunk mints nothing new."""
     hub = build_hub(tmp_path)
     chunk_id = _seed_chunk(hub)

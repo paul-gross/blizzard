@@ -1,7 +1,7 @@
-"""Work-source item routes (blizzard#358) — the operator-plane editor surface over a
+"""Work-source item routes — the operator-plane editor surface over a
 work source's browsable items, human-plane throughout (``reject_runner_principal``).
 
-Every source-addressed route is gated on the source's editor (D4, reads included): an
+Every source-addressed route is gated on the source's editor (reads included): an
 unknown source is 404, a known one with no editor is 409. The sources listing itself
 carries no gate; it renders each source's capability booleans instead."""
 
@@ -49,7 +49,7 @@ router = APIRouter(prefix="/api", tags=["work-sources"], dependencies=[Depends(r
 
 
 def _require_editor(source: str, services: HubServices) -> tuple[IWorkSource, IWorkEditor]:
-    """The named source and its editor, or the D4 refusal: 404 for an unknown source,
+    """The named source and its editor, or the refusal: 404 for an unknown source,
     409 for a known one with no editor — a structural refusal for every source but
     ``hub``, since no ``[[work_source]]`` field could ever opt a configured source into
     editing (``blizzard-context:/architecture/system-shape.md``), not merely "not opted
@@ -121,7 +121,7 @@ def list_work_items(
     services: Annotated[HubServices, Depends(get_services)],
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> WorkItemsListView:
-    """Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 per D4."""
+    """Up to LIMIT items at SOURCE, newest first, open and closed alike. 404/409 from the source's editor gate."""
     source_obj, editor = _require_editor(source, services)
     items = editor.list(limit=limit)
     holders = services.chunks.work_refs.live_holders(WorkRef(source=item.source, ref=item.ref) for item in items)
@@ -156,7 +156,7 @@ def create_work_item(
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> object:
     """Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
-    resting ``not_ready`` chunk in the same transaction (blizzard#359). 404/409 per D4,
+    resting ``not_ready`` chunk in the same transaction. 404/409 from the source's editor gate,
     422 for a blank title or body, 409 if an out-of-band ingest already holds the
     allocated ref's pointer, 503 if every graph named after the packaged default has
     been retired (the operator's brake, mirroring ``POST /chunks``)."""
@@ -208,7 +208,7 @@ def create_work_item(
 )
 def get_work_item(source: str, ref: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemView:
     """One item at SOURCE by REF, open or closed. 404 for an unknown source, an
-    unallocated ref (D9), or a known source with no editor answered as 409 (D4)."""
+    unallocated ref, or a known source with no editor answered as 409."""
     source_obj, editor = _require_editor(source, services)
     pointer = WorkRef(source=source, ref=ref)
     try:
@@ -235,8 +235,8 @@ def patch_work_item(
     services: Annotated[HubServices, Depends(get_services)],
 ) -> WorkItemView:
     """Replace the given fields in place, all-or-nothing. 404 for an unknown source or
-    an unallocated ref (D9); 409 for a known source with no editor (D4) or an item that
-    already carries a closure (D5); 422 for a blank title or body."""
+    an unallocated ref; 409 for a known source with no editor or an item that
+    already carries a closure; 422 for a blank title or body."""
     source_obj, editor = _require_editor(source, services)
     pointer = WorkRef(source=source, ref=ref)
     # Sentinel-tagged rather than merged here: filling an omitted field at the edge needs a
@@ -270,11 +270,11 @@ def withdraw_work_item(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> WorkItemView:
-    """Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref
-    (D9), or a chunk a race deletes between resolving it and this write; 409 for a known
-    source with no editor (D4), an item already closed, or one an *acquired* live chunk
-    holds (D5, D10) — an unacquired holder deletes instead unless it is now a standing
-    prerequisite for another chunk (issue #460), also 409."""
+    """Withdraw the item at SOURCE/REF. 404 for an unknown source, an unallocated ref,
+    or a chunk a race deletes between resolving it and this write; 409 for a known
+    source with no editor, an item already closed, or one an *acquired* live chunk
+    holds — an unacquired holder deletes instead unless it is now a standing
+    prerequisite for another chunk, also 409."""
     source_obj, editor = _require_editor(source, services)
     pointer = WorkRef(source=source, ref=ref)
     try:

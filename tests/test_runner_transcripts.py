@@ -110,7 +110,7 @@ def test_is_meta_record_is_filtered(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_is_sidechain_record_is_filtered(tmp_path: Path) -> None:
     """An unresolvable ``isSidechain`` record surfaces as its own top-level ``"sidechain"``
-    turn (blizzard#248 D2/D7) — the unlinked routing itself is pinned in
+    turn — the unlinked routing itself is pinned in
     ``test_runner_harness_claude_code_normalizer.py``."""
     _write(tmp_path, [fx.sidechain_record()])
     transcript = _read(tmp_path)
@@ -123,7 +123,7 @@ def test_is_sidechain_record_is_filtered(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_a_thinking_turn_carries_through_as_its_own_kind(tmp_path: Path) -> None:
-    """A thinking block is now a panel turn in its own right (blizzard#248 D2) —
+    """A thinking block is now a panel turn in its own right —
     previously the projection's own ``kind != "thinking"`` filter dropped it entirely."""
     _write(tmp_path, [fx.user_env("hello"), fx.thinking_block(text="pondering", signature=None)])
     transcript = _read(tmp_path)
@@ -146,7 +146,7 @@ def test_a_redacted_thinking_turn_carries_presence_not_prose(tmp_path: Path) -> 
 @pytest.mark.component
 def test_a_sidecar_backed_sidechain_nests_under_its_spawning_tool_turn(tmp_path: Path) -> None:
     """A *resolved* sidechain (link route 1, via a real sidecar file) nests under its
-    spawning tool turn (blizzard#248 D2/D6) — it no longer vanishes."""
+    spawning tool turn — it no longer vanishes."""
     _write(
         tmp_path,
         [
@@ -220,7 +220,7 @@ def test_truncated_final_line_is_dropped_silently(tmp_path: Path) -> None:
 
 
 # Caps — MAX_TURNS moved here; MAX_BLOCK_CHARS (text) stays in the normalizer; the tool-input
-# MAX_BLOCK_CHARS below applies only once a serialized input would exceed it (blizzard#248 D2).
+# MAX_BLOCK_CHARS below applies only once a serialized input would exceed it.
 
 
 @pytest.mark.component
@@ -273,7 +273,7 @@ def test_max_block_chars_degrades_an_oversized_tool_input_to_a_capped_raw_string
 
 @pytest.mark.component
 def test_a_tool_inputs_structure_carries_through_untouched_below_the_cap(tmp_path: Path) -> None:
-    """The wire's structured ``input`` (blizzard#248 D1) — the projection no longer
+    """The wire's structured ``input`` — the projection no longer
     re-materializes it to a JSON string; rendering is the viewer's job."""
     _write(tmp_path, [fx.assistant_tool_use("t1", "Bash", {"command": "ls"})])
     transcript = _read(tmp_path)
@@ -312,7 +312,7 @@ def test_a_string_shaped_tool_input_carries_through_unparsed_below_the_cap(tmp_p
 def test_an_oversized_string_shaped_tool_input_degrades_and_relabels_to_other(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``review:F13`` — ``CappedToolCall.of``'s degrade-and-relabel path off a
+    """``CappedToolCall.of``'s degrade-and-relabel path off a
     non-``"object"`` shape, where ``serialized`` comes from ``tool.input_unparsed``: a
     distinct branch from :func:`test_max_block_chars_degrades_an_oversized_tool_input_to_a_capped_raw_string`."""
     monkeypatch.setattr(projection_module, "MAX_BLOCK_CHARS", 10)
@@ -350,7 +350,7 @@ def _scripted_batch(*, truncated: bool, sidechain_truncated: bool) -> Transcript
 
 @pytest.mark.unit
 def test_a_sidechain_only_truncation_now_reaches_the_panels_truncated_flag() -> None:
-    """Inverted by blizzard#248 D2: this projection now carries every sidechain through,
+    """Inverted: this projection now carries every sidechain through,
     so a sidecar-only read-budget truncation cuts content the panel renders and must
     raise its TRUNCATED banner — the opposite of when sidechains were discarded."""
     source = FakeTranscriptSource({"sess-1": _scripted_batch(truncated=False, sidechain_truncated=True)})

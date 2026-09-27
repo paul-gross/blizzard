@@ -9,12 +9,12 @@ export interface KitChipOption {
 }
 
 /**
- * One choice chip (issue #78) — a small bordered, selectable pill. Standalone
+ * One choice chip — a small bordered, selectable pill. Standalone
  * so a caller with a single ad-hoc chip (not a whole options row) can use it
  * directly; {@link KitChips} composes it for the common case of an option
  * list.
  *
- * Fully rounded, matching `kit-badge.ts`'s `soft` variant (issue #153): the
+ * Fully rounded, matching `kit-badge.ts`'s `soft` variant: the
  * board's soft-pill vocabulary is one shape language, so every chips row —
  * today the Events tab's filters, the viewport toggle, and the runner chunk
  * detail page's attempt tabs — reads the same as the badges beside it rather
@@ -33,7 +33,7 @@ export class KitChip {
 }
 
 /**
- * A row of choice chips (issue #78) — the inline-option-row shape for a
+ * A row of choice chips — the inline-option-row shape for a
  * closed set of choices (e.g. a graph's edge choices, a status filter):
  * renders one {@link KitChip} per option, `(choose)` firing the clicked
  * option's `value`.

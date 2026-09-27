@@ -1,5 +1,5 @@
 """``blizzard.hub.cli.sessions.internal.session_file`` — the CLI's local session-token
-file (unit tier, issue #96).
+file (unit tier).
 
 Pins the two acceptance-criteria facts directly: the file (and its parent directory)
 are created owner-only, and ``logout`` removes the entry. The real machine's config

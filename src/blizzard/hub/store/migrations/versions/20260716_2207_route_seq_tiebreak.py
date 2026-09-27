@@ -1,5 +1,5 @@
 """route-event monotonic tiebreak — ``seq`` on ``route_created``/``route_released``, with
-a backfill assigning 1..n in timestamp order, ties created-before-released (issue #41)
+a backfill assigning 1..n in timestamp order, ties created-before-released
 
 Revision ID: 20260716_2207_hub_route_seq_tiebreak
 Revises: 20260716_2206_hub_pr_opened_idempotent

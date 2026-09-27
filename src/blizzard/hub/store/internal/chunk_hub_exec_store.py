@@ -5,7 +5,7 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 claim; nothing here derives status. Timestamps arrive already stamped
 (``bzh:injected-clock``).
 
-D6: ``record_hub_step_transition`` stays one transaction on one connection, unchanged by
+``record_hub_step_transition`` stays one transaction on one connection, unchanged by
 the seam carve — the shared row helpers below are plain function calls inside that same
 ``with self._store.write(...)`` block, never a second connection."""
 

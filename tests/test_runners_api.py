@@ -1,4 +1,4 @@
-"""Operator ``GET /api/runners/{runner_id}`` (issue #104, S5), component tier.
+"""Operator ``GET /api/runners/{runner_id}`` (S5), component tier.
 
 Symmetric with ``GET /api/runners``: reuses :func:`~blizzard.hub.api.runners.runner_view`
 for the same derived-liveness shape, 404 on unknown, and rejects a runner's bearer

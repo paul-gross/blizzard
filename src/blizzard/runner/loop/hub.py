@@ -39,7 +39,7 @@ class HubClientError(RuntimeError):
 
 
 class ChunkNotFoundError(HubClientError):
-    """The hub reports a chunk unknown (404) — terminal, not transient (blizzard#9).
+    """The hub reports a chunk unknown (404) — terminal, not transient.
 
     Raised by :meth:`IHubClient.get_envelope` and, at the chunk-view cache layer
     (:mod:`blizzard.runner.loop.chunk_status_cache`, not ``IHubClient`` itself —
@@ -52,7 +52,7 @@ class ChunkNotFoundError(HubClientError):
 class RouteClaimOutcome:
     """The result of a route claim: exactly one of ``claimed`` / ``conflict`` /
     ``denied_paused`` (#44) / ``denied_terminal`` (#118) / ``denied_dependency``
-    (blizzard#458) / ``denied_incompatible`` (blizzard#433 D9) set. A conflict is a race
+    / ``denied_incompatible`` set. A conflict is a race
     this claim lost; every denial means the hub refused it before any race."""
 
     claimed: RouteClaimResponse | None = None
@@ -93,9 +93,8 @@ class IHubClient(IChunkStatusReader, Protocol):
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
         """``POST /api/fleet/routes`` — claim work; 409 loses the race (or, distinctly,
-        the chunk is already terminal — issue #118 — or stands on an unmet prerequisite —
-        blizzard#458), 403 means the hub registry already has this runner paused (issue
-        #44)."""
+        the chunk is already terminal or stands on an unmet prerequisite), 403 means
+        the hub registry already has this runner paused."""
         ...
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
@@ -112,8 +111,8 @@ class IHubClient(IChunkStatusReader, Protocol):
 
     def push_transcripts(self, batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
         """``POST /api/fleet/transcripts`` — the transcript lane's own store-and-forward
-        push, seq-idempotent against its own high-water mark (D3, issue #246; hub storage
-        is blizzard#247). Structurally independent of :meth:`push_facts`: a wedged or slow
+        push, seq-idempotent against its own high-water mark. Structurally independent
+        of :meth:`push_facts`: a wedged or slow
         transcript flush never blocks it."""
         ...
 
@@ -158,6 +157,6 @@ class IHubClient(IChunkStatusReader, Protocol):
 
     def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
         """``POST /api/fleet/chunks/{id}/route-token`` — rotate the chunk's route
-        capability token (issue #84b). Why it exists: `src/blizzard/hub/domain/claim.py`'s
+        capability token. Why it exists: `src/blizzard/hub/domain/claim.py`'s
         ``ClaimService.rekey``."""
         ...

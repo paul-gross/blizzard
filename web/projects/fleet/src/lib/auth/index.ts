@@ -1,5 +1,5 @@
 /*
- * `auth/`'s sub-barrel (issue #93, `bzh:frontend-disjoint-diffs`) — the login/session
+ * `auth/`'s sub-barrel (`bzh:frontend-disjoint-diffs`) — the login/session
  * feature's public surface, re-exported one line from the root `public-api.ts`.
  */
 

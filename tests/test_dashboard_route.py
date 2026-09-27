@@ -1,4 +1,4 @@
-"""The composed dashboard read — ``GET /api/dashboard`` (issue #311).
+"""The composed dashboard read — ``GET /api/dashboard``.
 
 Proves the eight local sections populate the same way their own individual routes do,
 ``fleet_summary`` alone degrades to ``None`` on a hub outage or an unwired runner, and
@@ -232,8 +232,8 @@ def test_the_dashboards_own_hub_call_carries_the_bounded_timeout(tmp_path: Path)
 
 @pytest.mark.component
 def test_the_dashboards_own_unreachable_hub_line_logs_below_error(tmp_path: Path) -> None:
-    """A hub outage here is tolerated degradation — the eight local sections still stand
-    (issue #374) — so this route's own unreachable-hub line logs below the module
+    """A hub outage here is tolerated degradation — the eight local sections still stand —
+    so this route's own unreachable-hub line logs below the module
     default ``error``, distinct from ``/api/fleet-summary``'s own call, which keeps it
     (proven by ``test_fleet_summary_proxy.py``)."""
 

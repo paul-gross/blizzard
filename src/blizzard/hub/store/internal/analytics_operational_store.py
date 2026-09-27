@@ -1,9 +1,9 @@
-"""SQLAlchemy adapter for the operational analytics query seam (package-private,
-blizzard#256). Reads ``transitions``/``lease_facts``/``usage_facts``/``chunk_migrations``
+"""SQLAlchemy adapter for the operational analytics query seam (package-private).
+Reads ``transitions``/``lease_facts``/``usage_facts``/``chunk_migrations``
 directly, the same tables the chunk-seam adapters (``hub/store/internal/chunk_*_store.py``)
 write — several ``internal/`` adapters sharing one engine is established (see
 :mod:`analytics_event_query_store`). Filtering stays portable SQL (``bzh:sql-portable``);
-D2/D5's own business rules live in the domain-owned fold this adapter only fetches and maps
+the business rules live in the domain-owned fold this adapter only fetches and maps
 rows for."""
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ from blizzard.hub.store.internal.usage_aggregate import usage_aggregate_columns
 
 
 def _runner_executed_or_entry(t: Any, gn: Any) -> Any:
-    """D2's runner-executed-step restriction, factored once so
+    """The runner-executed-step restriction, factored once so
     ``_duration_window_groups_stmt`` and ``_duration_rows_stmt`` — which must agree, since
     the first selects the groups the second fetches rows for — can't silently diverge."""
     return (gn.c.executor == Executor.RUNNER.value) | (t.c.from_node_id.is_(None))
@@ -78,7 +78,7 @@ def _source_chunks_stmt(source: str) -> Select[Any]:
 
 def _duration_window_groups_stmt(criteria: OperationalCriteria) -> Select[Any]:
     """Every distinct ``(chunk_id, epoch)`` with a matching runner-step transition in the
-    window (D2) — which GROUPS the window admits, not which rows survive.
+    window — which GROUPS the window admits, not which rows survive.
     ``_duration_rows_stmt`` fetches each group's full unwindowed history; ``steps_in_window``
     narrows the fold's output back down afterward."""
     t, gn = s.transitions, s.graph_nodes
@@ -96,7 +96,7 @@ def _duration_window_groups_stmt(criteria: OperationalCriteria) -> Select[Any]:
 
 
 def _duration_rows_stmt(criteria: OperationalCriteria) -> Select[Any]:
-    """Every completed *runner-executed* step (D2) for a window-admitted
+    """Every completed *runner-executed* step for a window-admitted
     ``(chunk_id, epoch)`` group, unwindowed by time — narrowed via a correlated subquery
     over ``_duration_window_groups_stmt``, not a materialized id list, so the bind count
     stays independent of the caller's chunk fan-out (``bzh:sql-portable``). Outer-joined
@@ -134,8 +134,8 @@ def _decode_chunk_cursor(cursor: str) -> str:
 
 def _spend_filtered_stmt(base: Select[Any], criteria: OperationalCriteria) -> Select[Any]:
     """``usage_facts`` joined to its chunk — every grouping needs the join, since the
-    graph filter (D7) narrows by the chunk's current graph pin, ``usage_facts`` carrying
-    no ``graph_id`` of its own (D6's ``spend_by_graph`` documents why that pin, not a
+    graph filter narrows by the chunk's current graph pin, ``usage_facts`` carrying
+    no ``graph_id`` of its own (``spend_by_graph`` documents why that pin, not a
     historical one, is what "this graph" means here)."""
     u, c = s.usage_facts, s.chunks
     stmt = base.select_from(u.join(c, u.c.chunk_id == c.c.chunk_id))
@@ -151,7 +151,7 @@ def _spend_filtered_stmt(base: Select[Any], criteria: OperationalCriteria) -> Se
 
 
 def _spend_group_stmt(criteria: OperationalCriteria, *, group_col: Any) -> Select[Any]:
-    """Usage/cost summed in SQL, grouped by ``group_col`` (D6) — the aggregate columns
+    """Usage/cost summed in SQL, grouped by ``group_col`` — the aggregate columns
     ``usage_aggregate_columns`` owns."""
     stmt = select(group_col.label("key"), *usage_aggregate_columns())
     stmt = _spend_filtered_stmt(stmt, criteria)
@@ -193,7 +193,7 @@ def _to_spend_stats(row: Any) -> SpendStats:
 
 
 def _judged_distribution_stmt(criteria: OperationalCriteria) -> Select[Any]:
-    """One row per ``(node, choice)`` matching ``criteria`` (D4) — only rows carrying a
+    """One row per ``(node, choice)`` matching ``criteria`` — only rows carrying a
     ``choice_name``, anti-joined against ``chunk_bounces`` on ``(chunk_id, epoch)`` so a
     kick-back's own same-epoch routing transition is excluded too (``hub_node.py``
     records both). A migration-completed step is not counted here either — a documented
@@ -218,7 +218,7 @@ def _candidate_lease_epochs_stmt(criteria: OperationalCriteria) -> Select[Any]:
     and whose *deduped* mint falls in the window — filtered after the A7 dedup via the
     subquery wrap below, not before it, so the window can't pick a different duplicate as
     "earliest mint" than the dedupe alone would. The graph filter is not pushed here: it
-    applies once D5 has derived a failed attempt's own graph."""
+    applies once ``resolve_attempt_failures`` has derived a failed attempt's own graph."""
     sub = _lease_min_stmt().subquery()
     stmt = select(sub.c.chunk_id, sub.c.epoch, sub.c.minted_at)
     if criteria.source is not None:
@@ -241,8 +241,9 @@ def _candidate_chunk_ids_stmt(criteria: OperationalCriteria) -> Select[Any]:
 def _chunk_max_lease_epoch_stmt(criteria: OperationalCriteria) -> Select[Any]:
     """Each candidate chunk's own newest lease epoch, deliberately unwindowed by
     ``criteria`` — a lease minted after ``until`` (or before ``since``) still proves an
-    in-window candidate epoch IS superseded (D5's positive end-of-attempt evidence), so
-    whether it is over cannot itself be decided from inside the window."""
+    in-window candidate epoch IS superseded (positive end-of-attempt evidence for
+    ``resolve_attempt_failures``), so whether it is over cannot itself be decided from
+    inside the window."""
     t = s.lease_facts
     stmt = select(t.c.chunk_id, func.max(t.c.epoch).label("max_epoch"))
     return stmt.where(t.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria))).group_by(t.c.chunk_id)
@@ -250,8 +251,9 @@ def _chunk_max_lease_epoch_stmt(criteria: OperationalCriteria) -> Select[Any]:
 
 def _chunk_transitions_stmt(criteria: OperationalCriteria) -> Select[Any]:
     """Every transition ever recorded for a candidate chunk — unfiltered by
-    ``criteria``'s own window/graph: D5 resolves a failed attempt's node from whatever
-    movement came before it, which can predate the window a caller asked about."""
+    ``criteria``'s own window/graph: ``resolve_attempt_failures`` resolves a failed
+    attempt's node from whatever movement came before it, which can predate the window
+    a caller asked about."""
     t = s.transitions
     cols = (t.c.chunk_id, t.c.epoch, t.c.transition_id, t.c.from_node_id, t.c.to_node_id, t.c.graph_id, t.c.recorded_at)
     return select(*cols).where(t.c.chunk_id.in_(_candidate_chunk_ids_stmt(criteria)))
@@ -283,10 +285,10 @@ def _chunks_graph_stmt(criteria: OperationalCriteria) -> Select[Any]:
 
 def _candidate_graph_ids_stmt(criteria: OperationalCriteria) -> CompoundSelect[Any]:
     """Every graph id the outcomes fold might index into — a candidate chunk's own pin,
-    or a migration's ``to``/``from_graph_id`` (D5's no-movement fallback can resolve via
-    the latter) — as a correlated subquery, not a materialized id list, mirroring
-    ``_candidate_chunk_ids_stmt``'s own reason: `graphs.graph_id` is a per-mint id, so an
-    unwindowed request binds one parameter per graph version any chunk has ever run."""
+    or a migration's ``to``/``from_graph_id`` (``resolve_attempt_failures``'s no-movement
+    fallback can resolve via the latter) — as a correlated subquery, not a materialized
+    id list, mirroring ``_candidate_chunk_ids_stmt``'s own reason: `graphs.graph_id` is a
+    per-mint id, so an unwindowed request binds one parameter per graph version any chunk has ever run."""
     c, m = s.chunks, s.chunk_migrations
     chunk_ids = _candidate_chunk_ids_stmt(criteria)
     return union(

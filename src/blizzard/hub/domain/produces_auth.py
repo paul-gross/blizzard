@@ -1,5 +1,5 @@
 """Produces-artifact authorization — the hub-side backstop on a node's ``produces:``
-declaration (issue #113).
+declaration.
 
 The backstop against a submission carrying no explicit attachment and no covering git
 commit for a declared name. Its coverage predicate is shared via
@@ -27,7 +27,7 @@ class Produces:
 
     def rejection(self, *, mode: str) -> str | None:
         """A failure detail to reject with under ``enforce``, naming every spec the
-        submission does not cover per its declared kind (issue #143, D2), or ``None`` to
+        submission does not cover per its declared kind, or ``None`` to
         proceed — under ``warn`` a gap is logged and proceeds."""
         if not self.node.produces:
             return None

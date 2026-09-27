@@ -36,11 +36,11 @@ async function render(overrides: Record<string, unknown> = {}) {
       provideZonelessChangeDetection(),
       // `LocalPanelLayout` itself is presentational, but it composes several
       // self-fetching mini-containers that inject their own queries/mutations —
-      // `ChunkRow`'s severable work-item-title read (issue #28, decision 1) —
+      // `ChunkRow`'s severable work-item-title read —
       // so a TanStack Query context has to exist for the fixture to construct
       // at all.
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      // The detail dock's header links the chunk name to its route now (issue #318).
+      // The detail dock's header links the chunk name to its route now.
       provideRouter([]),
     ],
   }).compileComponents();

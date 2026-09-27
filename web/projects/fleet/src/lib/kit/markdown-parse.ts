@@ -1,5 +1,5 @@
 /**
- * The bounded-subset markdown parser {@link KitMarkdown} walks (blizzard#362) — headings,
+ * The bounded-subset markdown parser {@link KitMarkdown} walks — headings,
  * paragraphs, fenced/inline code, bullet/ordered lists, links, bold, and italic. Anything
  * outside that subset (raw HTML, tables, blockquotes, images, …) is never specially
  * recognized, so it survives into a `text` inline node and renders as literal source text

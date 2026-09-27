@@ -2,7 +2,7 @@
 
 The runner's loop is driven one tick at a time against a mock hub whose levers
 manufacture rare states: unreachable hub, dropped ack, stale envelope — plus two scenarios
-reading a real transcript back through the runner's own local HTTP API (#29, blizzard#249).
+reading a real transcript back through the runner's own local HTTP API.
 """
 
 from __future__ import annotations
@@ -162,7 +162,7 @@ def test_dropped_ack_reapplies_idempotently_through_to_done(tmp_path: Path) -> N
 def _local_pause_reason(config: RunnerConfig) -> str | None:
     """The runner's own store, read directly — no local API server is up in this tier
     (``LoopWiring.tick_once`` alone drives the loop), so the store is the ground truth
-    the runner's own ``GET /api/runner`` would otherwise mirror (blizzard#594)."""
+    the runner's own ``GET /api/runner`` would otherwise mirror."""
     engine = create_engine_from_url(config.db_url)
     try:
         return SqlAlchemyRunnerStore(engine, runner_store_errors()).local_pause_reason(config.runner_id)
@@ -173,7 +173,7 @@ def _local_pause_reason(config: RunnerConfig) -> str | None:
 def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_failing_the_attempt(
     tmp_path: Path,
 ) -> None:
-    """blizzard#594: a worker generation that exits usage-limited engages the runner's own
+    """A worker generation that exits usage-limited engages the runner's own
     local pause brake, reason mirrored to the hub, no retry spent and no escalation —
     never the hub's own brake, and the chunk never fails."""
     bin_dir = require_mock_fleet()
@@ -187,7 +187,7 @@ def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_fail
         chunk_id = resp.json()["chunk_id"]
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         # Unset, the classifier's transcript read falls back to ``~/.claude/projects`` and
-        # silently finds nothing (blizzard#594, bzh:crash-sweep's own fix for the same gap).
+        # silently finds nothing (bzh:crash-sweep's own fix for the same gap).
         config = dataclasses.replace(config, transcripts_root=str(workspace / ".blizzard-mock-harness" / "transcripts"))
 
         engaged = poll_until(
@@ -217,7 +217,7 @@ def test_usage_limit_engages_the_local_brake_and_reports_the_reason_without_fail
 
 
 def test_fill_absorbs_a_dependency_denial_then_claims_once_it_clears(tmp_path: Path) -> None:
-    """blizzard#458, real runner against the mock hub: the ``dependency_unmet`` lever
+    """Real runner against the mock hub: the ``dependency_unmet`` lever
     denies FILL's claim with a 409 the runner has no special case for — the chunk stays
     unclaimed while the lever stands, and lands once the prerequisite is cleared."""
     bin_dir = require_mock_fleet()
@@ -245,7 +245,7 @@ def test_fill_absorbs_a_dependency_denial_then_claims_once_it_clears(tmp_path: P
 
 
 def test_fill_reaches_past_a_marked_head_by_default_against_a_real_mock_hub(tmp_path: Path) -> None:
-    """blizzard#459, real runner against the mock hub: with a marked head and an
+    """Real runner against the mock hub: with a marked head and an
     unmarked entry behind it, the default (``queue_strict=False``) reaches past the
     marked head and claims the unmarked one — the marked one stays ``ready``."""
     bin_dir = require_mock_fleet()
@@ -271,7 +271,7 @@ def test_fill_reaches_past_a_marked_head_by_default_against_a_real_mock_hub(tmp_
 
 
 def test_fill_strict_holds_at_a_marked_head_against_a_real_mock_hub(tmp_path: Path) -> None:
-    """blizzard#459, real runner against the mock hub: the same marked-head peek, this
+    """Real runner against the mock hub: the same marked-head peek, this
     time under ``[queue] strict`` — FILL claims neither entry, holding at the head
     rather than reaching past it."""
     bin_dir = require_mock_fleet()
@@ -299,7 +299,7 @@ def test_fill_strict_holds_at_a_marked_head_against_a_real_mock_hub(tmp_path: Pa
 
 
 def _pending_transcript_outbound(config: RunnerConfig) -> int:
-    """The depth of the runner's transcript-lane buffer — D3's own, never the fact lane's."""
+    """The depth of the runner's transcript-lane buffer — the transcript lane's own, never the fact lane's."""
     engine = create_engine_from_url(config.db_url)
     try:
         return len(SqlAlchemyRunnerStore(engine, runner_store_errors()).pending_transcript_outbound())
@@ -308,7 +308,7 @@ def _pending_transcript_outbound(config: RunnerConfig) -> int:
 
 
 def test_transcript_route_failure_never_blocks_the_fact_lane(tmp_path: Path) -> None:
-    """D6: with the transcript route 503ing, the fact lane still lands the chunk while
+    """With the transcript route 503ing, the fact lane still lands the chunk while
     transcript facts buffer; the backlog flushes with no loss or duplication on return."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
@@ -342,7 +342,7 @@ def test_transcript_route_failure_never_blocks_the_fact_lane(tmp_path: Path) -> 
 
 
 def test_transcript_route_slow_never_blocks_the_fact_lane(tmp_path: Path) -> None:
-    """D6's other half (review F18): the test above proves wedged (hard-down);
+    """The slow-route counterpart to the test above: that one proves wedged (hard-down);
     `delay_transcripts` proves the route can answer, slowly, and the chunk still lands."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
@@ -459,7 +459,7 @@ def test_a_real_runners_registration_carries_every_declared_subscription(tmp_pat
 
 
 def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:
-    """Issue #118's backstop, driven over a real hub response rather than ``FakeHub``."""
+    """The stopped-chunk lease-abandon backstop, driven over a real hub response rather than ``FakeHub``."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     fenced = _tick_env()
@@ -486,7 +486,7 @@ def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(t
 
 
 def test_pull_closes_the_local_escalation_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:
-    """Issues #292/#293's sweep, driven over a real hub response."""
+    """The stopped-chunk escalation-closure sweep, driven over a real hub response."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     fenced = _tick_env()
@@ -516,7 +516,7 @@ def test_pull_closes_the_local_escalation_when_the_hub_reports_the_chunk_stopped
         )
 
 
-# Transcript provenance — the panel's read proven at fleet tier (issue #29).
+# Transcript provenance — the panel's read proven at fleet tier.
 
 #: A real unified diff, applied for real by the mock's own ``git apply`` plumbing (see
 #: ``blizzard-mock``'s ``test_script_applies_diff_and_makes_real_commit``).
@@ -541,7 +541,7 @@ _TRANSCRIPT_BUILD_SCRIPT = (
     f"ctx.cwd = pathlib.Path(ctx.cwd) / {REPO_NAME!r}\n"
     f"apply_diff({_TRANSCRIPT_DIFF!r})\n"
     f"commit({_TRANSCRIPT_COMMIT_MESSAGE!r})\n"
-    # Push the branch and declare it (issue #143) — the worker does this itself,
+    # Push the branch and declare it — the worker does this itself,
     # through the real `blizzard runner artifact commit` verb.
     "_repo_dir = str(ctx.cwd)\n"
     "_branch = subprocess.run(\n"
@@ -562,7 +562,7 @@ _TRANSCRIPT_BUILD_SCRIPT = (
 
 
 def _transcript_chunk_spec(work_ref_url: str) -> dict:
-    """A scripted build -> deliver chunk whose build node mints tool turns (issue #29)."""
+    """A scripted build -> deliver chunk whose build node mints tool turns."""
     return {
         "graph_id": "gr_transcript",
         "entry": "build",
@@ -657,7 +657,7 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
     bash_tool = tool_turns["Bash"]
     assert edit_tool["output"], "the Edit turn's tool output was never filled in"
     assert bash_tool["output"], "the Bash turn's tool output was never filled in"
-    # The structured `input` survives the wire as a mapping (blizzard#248 D1), never a
+    # The structured `input` survives the wire as a mapping, never a
     # re-materialized JSON string.
     assert isinstance(bash_tool["input"], dict), f"tool input is not structured: {bash_tool!r}"
 
@@ -691,7 +691,7 @@ def _worker_credential(config: RunnerConfig, lease_id: str) -> dict[str, str]:
 
 
 def _graph_artifact_chunk_spec(work_ref: str) -> dict:
-    """``mock_hub_chunk_spec`` plus one graph-scoped declaration — the phase 2b seed
+    """``mock_hub_chunk_spec`` plus one graph-scoped declaration — the seed
     lever a real runner mints and pins into its own store before the node even starts."""
     spec = mock_hub_chunk_spec(work_ref)
     spec["graph_artifacts"] = [{"name": "docket", "kind": "asset", "content": "the docket text"}]
@@ -717,7 +717,7 @@ def test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unrea
 
         with _runner_api(config):
             # 40s, not 10s: the node-scope read below now rides HubProxy's bounded-backoff
-            # retry (blizzard#467) before its 503 surfaces, so the client must outwait the
+            # retry before its 503 surfaces, so the client must outwait the
             # retry ceiling rather than the old single-attempt latency.
             runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=40.0)
             try:
@@ -766,7 +766,7 @@ _SEEDED_SEGMENT_SEQ = 10_000
 
 
 def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(tmp_path: Path) -> None:
-    """All three of blizzard#249 D1's homes over ``build_hosted_app``'s real outbound
+    """All three of the transcript read's provenance homes over ``build_hosted_app``'s real outbound
     wiring — local while open, the hub once closed (even with the local file rotated
     away), and the distinct hub-unreachable state once the hub process is gone."""
     bin_dir = require_mock_fleet()
@@ -834,7 +834,7 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
 
                 archived = panel.get(f"/api/leases/{lease_id}/transcript").json()
                 assert archived["provenance"] == "archived", archived
-                # Every kind survives the trip since blizzard#248 widened the read model —
+                # Every kind survives the trip since the read model was widened —
                 # a thinking turn reaching the panel is what a narrowing read would lose.
                 assert [t["text"] for t in archived["turns"]] == ["from the hub archive", "and its reasoning"], archived
                 assert [t["kind"] for t in archived["turns"]] == ["asst", "thinking"], archived
@@ -890,7 +890,7 @@ def _tick_then(config: RunnerConfig, fenced: dict[str, str], check) -> bool:
     return bool(check())
 
 
-# --- The runner's SSE stream (blizzard#317 Phase 2): no mock fleet needed, a bare
+# --- The runner's SSE stream: no mock fleet needed, a bare
 # migrated runtime dir serves the local API, and these tests drive the broker directly.
 
 
@@ -1021,7 +1021,7 @@ def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Pat
 
 
 def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: Path) -> None:
-    """SIGTERM sets ``app.state.shutdown`` synchronously (D1/D3): the process exits well
+    """SIGTERM sets ``app.state.shutdown`` synchronously: the process exits well
     inside uvicorn's graceful-drain bound with a client still connected, so the crash
     sweep's whole-process SIGTERM case finds the resume-marking ``finally`` unstranded."""
     runner_dir = tmp_path / "runner"

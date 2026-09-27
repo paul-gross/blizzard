@@ -7,7 +7,7 @@ import type { Tone, runnerApi } from 'fleet';
  * `ChunkStatus` of its own (that enum is the hub's); this is the local panel's
  * projection of the same idea from the facts this box holds.
  *
- * `tone` is the shared {@link Tone} vocabulary (issue #81, `fleet/lib/kit/tone.ts`) —
+ * `tone` is the shared {@link Tone} vocabulary (`fleet/lib/kit/tone.ts`) —
  * matching the hub board's status→color scheme (board-shell/chunk-detail-panel): live
  * work amber, human-blocked red, human-waiting amber-hi, landed green, spawning cyan,
  * spent rows dim.

@@ -1,4 +1,4 @@
-"""Freeze the resolved model/effort pair onto each transcript segment (blizzard#439).
+"""Freeze the resolved model/effort pair onto each transcript segment.
 
 Two guarded, nullable columns — un-backfilled, so NULL declares unknown, never a value.
 Revision ID: 20260919_1000_transcript_segment_provenance

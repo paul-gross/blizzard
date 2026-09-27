@@ -2,7 +2,7 @@
 
 ``FleetSpendView`` is a usage/cost total summed at read time over a caller-chosen window,
 never a stored column. ``FleetSummaryView`` folds every chunk's derived status to four
-buckets (issues #60, #76, #87).
+buckets.
 """
 
 from __future__ import annotations

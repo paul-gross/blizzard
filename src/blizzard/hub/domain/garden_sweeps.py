@@ -1,6 +1,6 @@
 """A routine's per-scope last-swept table and its windowed measurement series — a read
 over `finding_sets`, each row joined to its own artifact's `produced_at`. Last-swept is
-unwindowed (D2): a scope swept months ago must never read as never. The measurement
+unwindowed: a scope swept months ago must never read as never. The measurement
 series is cut to `[since, until)`, the same window `garden_trend.py`'s own read reports
 over; the cut is done in Python, not SQL (`bzh:sql-portable`), the same split
 `garden_trend.py` makes."""
@@ -29,7 +29,7 @@ class SweepFact:
 
 @dataclass(frozen=True)
 class ScopeSweep:
-    """One row of the last-swept table (D3, D4) — `finding_set_id`/`produced_at` `None`
+    """One row of the last-swept table — `finding_set_id`/`produced_at` `None`
     marks a scope this routine has never swept."""
 
     scope_slug: str
@@ -40,7 +40,7 @@ class ScopeSweep:
 
 @dataclass(frozen=True)
 class MeasurementReading:
-    """One recorded measurement inside the window (D5) — opaque text, never parsed."""
+    """One recorded measurement inside the window — opaque text, never parsed."""
 
     scope_slug: str
     produced_at: datetime
@@ -58,7 +58,7 @@ class GardenSweeps:
 
 class IReadGardenSweepsRepository(Protocol):
     def sweeps_for_routine(self, routine_name: str) -> list[SweepFact]:
-        """Every `finding_sets` row for `routine_name`, unwindowed (D2), each joined to
+        """Every `finding_sets` row for `routine_name`, unwindowed, each joined to
         its own artifact's `produced_at` — `finding_sets` carries no timestamp of its
         own."""
         ...
@@ -73,8 +73,8 @@ def compute_sweeps(
     until: datetime,
 ) -> GardenSweeps:
     """Fold `facts` (already unwindowed) into the last-swept table over `scope_slugs` —
-    the routine's declared set, retired scopes already filtered out by the caller (D3)
-    — and the windowed measurement series (D2, D5). One pass over `facts`:
+    the routine's declared set, retired scopes already filtered out by the caller
+    — and the windowed measurement series. One pass over `facts`:
     newest-per-scope by `produced_at`, ties broken by `finding_set_id`
     (ULID-monotonic, `garden_trend.py`'s own tie convention)."""
     newest: dict[str, SweepFact] = {}

@@ -26,7 +26,7 @@
    from only its own content, which can't keep the verdicts aligned once
    a column is content-sized (two rows with differently-long node names
    would size that column differently). `.step`, nested one level inside
-   `.step-item` (`review:F5`), subgrids a second time so the same alignment
+   `.step-item`, subgrids a second time so the same alignment
    carries through the extra level. */
 .timeline {
   display: grid;
@@ -166,7 +166,7 @@
 .step[data-choice='run'] .verdict {
   color: var(--cyan);
 }
-/* A cross-graph migration (issue #90) reads cyan — a deliberate hop, not a failure. */
+/* A cross-graph migration reads cyan — a deliberate hop, not a failure. */
 .step[data-choice='migrated'] .verdict {
   color: var(--cyan);
 }
@@ -213,7 +213,7 @@ a.gr:focus-visible {
   pointer-events: auto;
 }
 /* A history step's own usage — its own full-width row under the step's main
-   cells (issue #182), not squeezed onto the same line as the verdict/timestamp.
+   cells, not squeezed onto the same line as the verdict/timestamp.
    The node-history column is one third of the detail panel (chunk-detail-panel.ts's
    three-way split) — often only ~300px wide, sometimes narrower still — so
    reserving a fixed column on the *shared* row starves the 1fr verdict track and
@@ -247,7 +247,7 @@ a.gr:focus-visible {
   text-align: right;
   white-space: nowrap;
 }
-/* The harness-provenance badge beside a step's usage figures (blizzard#441). */
+/* The harness-provenance badge beside a step's usage figures. */
 .harness-badge {
   padding: 0 4px;
   border: 1px solid var(--line);
@@ -257,7 +257,7 @@ a.gr:focus-visible {
   text-transform: uppercase;
   white-space: nowrap;
 }
-/* The PARTIAL badge marks a cost total whose sum is a lower bound (issue #60). */
+/* The PARTIAL badge marks a cost total whose sum is a lower bound. */
 .partial-badge {
   margin-left: 4px;
   padding: 0 4px;

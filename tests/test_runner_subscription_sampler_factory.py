@@ -1,4 +1,4 @@
-"""``select_sampler`` — the provider -> sampler-binding selection (blizzard#436).
+"""``select_sampler`` — the provider -> sampler-binding selection.
 
 A runner may declare a subscription for a provider blizzard ships no binding for yet;
 selection reads that as "declared, but unsampled" rather than a config-load failure, so

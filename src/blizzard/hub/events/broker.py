@@ -1,5 +1,5 @@
 """The hub event broker — its typed ``publish_*`` wrappers and event-type vocabulary over
-the kind-agnostic core (D1, blizzard#317) shared with the runner. The history/replay/
+the kind-agnostic core shared with the runner. The history/replay/
 live-fanout machinery — id minting, the bounded ring, per-connection queues — lives in
 :mod:`blizzard.foundation.events.broker`; this module owns only what is hub-specific: the
 event-type names, their payload shapes, and each mutation seam's ``publish_*`` helper."""
@@ -31,7 +31,7 @@ QUEUE_CHANGED = "queue-changed"
 RUNNER_CHANGED = "runner-changed"
 EVENT_LOGGED = "event-logged"
 
-#: Every event-type name the broker can publish (issue #235). This tuple, not the bare
+#: Every event-type name the broker can publish. This tuple, not the bare
 #: constants above, is the broker's declared vocabulary.
 EVENT_TYPES: tuple[str, ...] = (
     CHUNK_CHANGED,
@@ -67,9 +67,9 @@ class EventBroker(_EventBroker):
         """A chunk's derived status changed.
 
         Optionals are added to the payload only when supplied, never serialized as
-        ``null`` (issue #212). ``key`` (issue #213) is the table-qualified natural key of
-        the fact this frame describes, absent when there is no such fact. ``by`` (issue
-        #364) rides the ``deleted`` cause, mirroring :meth:`publish_runner_changed`."""
+        ``null``. ``key`` is the table-qualified natural key of
+        the fact this frame describes, absent when there is no such fact. ``by`` rides
+        the ``deleted`` cause, mirroring :meth:`publish_runner_changed`."""
         payload = ChunkChangedPayload(
             chunk_id=chunk_id,
             status=status,
@@ -107,7 +107,7 @@ class EventBroker(_EventBroker):
     def publish_queue_changed(self) -> int:
         """The ready queue's membership or order changed — the board re-peeks.
 
-        Carries no ``key`` (issue #213): a reorder writes N rows with no per-row news, so
+        Carries no ``key``: a reorder writes N rows with no per-row news, so
         there is no single durable fact this frame could name."""
         return self.publish(QUEUE_CHANGED, QueueChangedPayload().to_payload())
 
@@ -120,10 +120,10 @@ class EventBroker(_EventBroker):
         reason: str | None = None,
         key: str | None = None,
     ) -> int:
-        """A runner's registry state changed — ``kind`` names which change (issue #151).
+        """A runner's registry state changed — ``kind`` names which change.
 
         ``by`` rides the four pause/resume kinds and ``reason`` the runner-local pair.
-        ``key`` (issue #213) names the pause-family fact's identity, absent on
+        ``key`` names the pause-family fact's identity, absent on
         ``registered``/``heartbeat``, which have no fact table."""
         payload = RunnerChangedPayload(runner_id=runner_id, kind=kind, by=by, reason=reason, key=key).to_payload()
         return self.publish(RUNNER_CHANGED, payload)
@@ -137,9 +137,9 @@ class EventBroker(_EventBroker):
         runner_id: str | None,
         key: str | None = None,
     ) -> int:
-        """An operational event landed in the event log (issue #125). The frame carries
+        """An operational event landed in the event log. The frame carries
         only identifying fields; the row itself is read back off ``GET /api/events``.
-        ``key`` (issue #213) names the ``event_log`` row's own id."""
+        ``key`` names the ``event_log`` row's own id."""
         payload = EventLoggedPayload(
             severity=severity, kind=kind, chunk_id=chunk_id, runner_id=runner_id, key=key
         ).to_payload()

@@ -1,5 +1,5 @@
-"""SQLAlchemy adapter for the hub-owned work item repository seam (issue #357,
-package-private). All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``).
+"""SQLAlchemy adapter for the hub-owned work item repository seam
+(package-private). All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``).
 Timestamps arrive already stamped (``bzh:injected-clock``).
 """
 
@@ -144,9 +144,9 @@ class WorkItemStore:
     ) -> tuple[WorkItemRecord, int | None]:
         """:meth:`create_with_chunk` plus the promote-then-tail-stamp pair
         (:func:`~blizzard.hub.store.internal.chunk_rows.insert_promote_rows`) plus the
-        run's own identity row (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`,
-        blizzard#393), on one ``engine.begin()`` connection — a routine run's own one-act
-        mint (blizzard#392)."""
+        run's own identity row (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`),
+        on one ``engine.begin()`` connection — a routine run's own one-act
+        mint."""
         with self._store.write("create_with_chunk_and_promote") as conn:
             work_item_id = self._insert_item(
                 conn,
@@ -199,7 +199,7 @@ class WorkItemStore:
     ) -> str:
         """Insert one ``work_items`` row on ``conn``, open, and return its minted id.
         ``routine_name``/``scope_slug``/``run_mode`` are a routine run's own indexed
-        values (blizzard#392) — ``None`` for every other item."""
+        values — ``None`` for every other item."""
         work_item_id = Id.mint_at(WORK_ITEM_PREFIX, at).value
         author_payload = (
             {"user_id": author.user_id}
@@ -277,7 +277,7 @@ class WorkItemStore:
         chunk: Chunk,
     ) -> bool:
         """Mint the item, ``chunk``'s own rows, and ``proposal_id``'s ``created`` outcome
-        fact on one ``engine.begin()`` connection (D8) — :meth:`create_with_chunk` plus
+        fact on one ``engine.begin()`` connection — :meth:`create_with_chunk` plus
         the outcome row, checked first so an already-judged proposal mints nothing."""
         with self._store.write("materialize_create") as conn:
             if not insert_materialization_row(
@@ -304,8 +304,8 @@ class WorkItemStore:
 
     def materialize_update(self, *, proposal_id: str, source: str, ref: str, evidence: str, at: datetime) -> bool:
         """Append ``evidence`` to an open item's body, stamp ``edited_at``, and record
-        ``proposal_id``'s ``updated`` outcome fact on one ``engine.begin()`` connection
-        (D8). Returns ``False`` and writes nothing when already judged, or when the item
+        ``proposal_id``'s ``updated`` outcome fact on one ``engine.begin()`` connection.
+        Returns ``False`` and writes nothing when already judged, or when the item
         is no longer open — the append is one SQL-level concatenation so no read-then-write
         gap can lose a concurrent edit."""
         with self._store.write("materialize_update") as conn:
@@ -347,7 +347,7 @@ class WorkItemStore:
         closed_by: str,
     ) -> WorkItemRecord | None:
         """Insert the accepted-and-minted ``garden_proposal_closures`` row, the item, and
-        ``chunk``'s own rows on one ``engine.begin()`` connection (blizzard#395) —
+        ``chunk``'s own rows on one ``engine.begin()`` connection —
         :meth:`materialize_create`'s shape, the closure row checked first so an
         already-closed proposal mints nothing."""
         with self._store.write("accept_create") as conn:
@@ -389,7 +389,7 @@ class WorkItemStore:
     def _close_conn(conn: Connection, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> None:
         """Close an open item on a caller-supplied ``conn`` — extracted from :meth:`close`
         so :meth:`delete_chunk_and_withdraw_hub_items` can fold the same write into its
-        own transaction (issue #364). No rowcount check: closing an item already closed,
+        own transaction. No rowcount check: closing an item already closed,
         or one that never existed, is a silent no-op here, exactly as :meth:`close` was
         before this extraction."""
         conn.execute(

@@ -1,4 +1,4 @@
-"""The mid-run marker-write capability authority (issue #230, phase 1) — unit tier.
+"""The mid-run marker-write capability authority — unit tier.
 
 A plain in-memory issue/verify/revoke seam, keyed by ``(chunk_id, node_id, epoch)`` —
 no store, no HTTP, no clock.

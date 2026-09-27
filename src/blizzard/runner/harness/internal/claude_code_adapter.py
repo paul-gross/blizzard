@@ -58,16 +58,16 @@ _NATIVE_PREFIX = "claude-"
 # also how a deployment reaches a native tier outside the ordinal.
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 
-# `--autocompact`'s own vocabulary shape (blizzard#343): a recognition check, not the
+# `--autocompact`'s own vocabulary shape: a recognition check, not the
 # CLI's own 100k-1M range (enforced CLI-side, never re-implemented here).
 _COMPACTION_WINDOW_RE = re.compile(r"auto|[0-9]+[kK]?")
 
-# The synthetic record's own reset-time phrasing (blizzard#594, the 2026-09-05 shape):
+# The synthetic record's own reset-time phrasing (the 2026-09-05 shape):
 # "resets 5:40pm (America/Chicago)" — a clock time in an IANA zone, never a duration.
 _RATE_LIMIT_RESET_RE = re.compile(r"resets\s+(\d{1,2}):(\d{2})\s*([ap]m)\s*\(([^)]+)\)", re.IGNORECASE)
 
 # An overloaded synthetic record's own text names the status or the provider's own error
-# name (blizzard#595) — never a generic 5xx: any other server error stays unclassified.
+# name — never a generic 5xx: any other server error stays unclassified.
 _OVERLOAD_TEXT_RE = re.compile(r"529|overloaded", re.IGNORECASE)
 
 
@@ -157,7 +157,7 @@ class ClaudeCodeAdapter:
         self._binary = binary
         self._settings_path = settings_path
         self._model = model
-        # The runner's own tier tables (issue #144, ``[models.aliases]`` /
+        # The runner's own tier tables (``[models.aliases]`` /
         # ``[effort.aliases]``), overriding this adapter's built-ins entry by entry.
         self._model_aliases = dict(model_aliases)
         self._effort_aliases = dict(effort_aliases)
@@ -176,7 +176,7 @@ class ClaudeCodeAdapter:
         # The pid-liveness seam (`bzh:pluggable-seams`); the Linux `/proc` reference binding
         # is the only production substitute, always injected (`bzh:dependency-injection`).
         self._process: IProcessProbe = process
-        # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings (D4).
+        # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings.
         self._launcher: IProcessLauncher = launcher
 
     def observe_version(self) -> str | None:
@@ -234,14 +234,14 @@ class ClaudeCodeAdapter:
         return None
 
     def resolvable_tier_ids(self) -> tuple[str, ...]:
-        """Every tier id this adapter can resolve (blizzard#433): the built-ins merged
+        """Every tier id this adapter can resolve: the built-ins merged
         with the runner's own ``[models.aliases]`` table, an overridden id appearing
         once — the same override-by-key precedence :meth:`_resolve_one_model` applies.
         Shared with OpenCode (``harness_shared.resolvable_tier_ids``)."""
         return harness_shared.resolvable_tier_ids(_BUILTIN_TIERS, self._model_aliases)
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
-        """``"auto"`` or a token-count spelling, else dropped and logged once (blizzard#343)."""
+        """``"auto"`` or a token-count spelling, else dropped and logged once."""
         if value is None:
             return None
         if _COMPACTION_WINDOW_RE.fullmatch(value):
@@ -265,9 +265,9 @@ class ClaudeCodeAdapter:
         if not preamble.environments:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
         # A resume reuses the original session id in place — forking is opt-in and never
-        # passed here — so `session_hint` is irrelevant on that path (issue #115).
+        # passed here — so `session_hint` is irrelevant on that path.
         session_id = resume_from or session_hint or ""
-        # The rule's one owner is `SpawnCwd` (issue #29). `environments` was checked
+        # The rule's one owner is `SpawnCwd`. `environments` was checked
         # non-empty above, so the fallback is always a real workdir here.
         workdir = SpawnCwd(preamble.workspace_root, preamble.environments[0].workdir).path
         cmd = [self._binary, "-p", "--output-format", "json"]
@@ -288,7 +288,7 @@ class ClaudeCodeAdapter:
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
         # The preamble is composed in the core; the adapter only concatenates it ahead of
-        # the envelope prompt (``bzh:deterministic-shell``, issue #17).
+        # the envelope prompt (``bzh:deterministic-shell``).
         cmd.append("\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part))
 
         env = self._spawn_env(envelope, preamble, session_id)
@@ -299,7 +299,7 @@ class ClaudeCodeAdapter:
             harness_shared.stdout_target(preamble.stderr_path) as stderr_file,
         ):
             try:
-                # F1: deferred — the caller's own `confirm_durable()` (right after ITS durable
+                # Deferred — the caller's own `confirm_durable()` (right after ITS durable
                 # provisional record lands) is what disarms this launch's parent-death signal.
                 launched = self._launcher.launch(
                     cmd,
@@ -314,7 +314,7 @@ class ClaudeCodeAdapter:
                 raise HarnessSpawnError(f"failed to spawn {self._binary} in {workdir}: {exc}") from exc
 
         _log.info("spawned worker", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=workdir)
-        # Already identified (D1) — phase two is instant. Left armed (F1): `Spawner.spawn`
+        # Already identified — phase two is instant. Left armed: `Spawner.spawn`
         # calls `confirm_durable()` right after its own durable provisional record lands.
         return WorkerHandle(
             session_id=session_id,
@@ -361,11 +361,11 @@ class ClaudeCodeAdapter:
             if preamble is not None
             else self._worker_env.variables
         )
-        # Detached (blizzard#443): the reply lands in `output_path`, never a pipe this
+        # Detached: the reply lands in `output_path`, never a pipe this
         # call waits on — the collect half reads it back once the process has exited.
         try:
             with open(output_path, "wb") as stdout_file:
-                # F1: deferred — the caller's own `confirm_durable()` (right after ITS durable
+                # Deferred — the caller's own `confirm_durable()` (right after ITS durable
                 # `record_elicitation_started`/`record_elicitation_relaunch` lands) disarms it.
                 launched = self._launcher.launch(
                     cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=subprocess.DEVNULL, defer_disarm=True
@@ -374,7 +374,7 @@ class ClaudeCodeAdapter:
             _log.error("elicitation launch failed", binary=self._binary, cwd=session_cwd, detail=str(exc))
             raise HarnessSpawnError(f"failed to launch {self._binary} in {session_cwd}: {exc}") from exc
         _log.info("elicitation launched", binary=self._binary, pid=launched.pid, session_id=session_id, cwd=session_cwd)
-        # F1: left armed — `Judgement._elicit`/`_relaunch` call `confirm_durable()` right after
+        # Left armed — `Judgement._elicit`/`_relaunch` call `confirm_durable()` right after
         # THEIR OWN durable `record_elicitation_started`/`record_elicitation_relaunch` lands.
         return WorkerHandle(
             session_id=session_id,
@@ -415,12 +415,12 @@ class ClaudeCodeAdapter:
         # the token plaintext is never persisted, so the caller re-mints it.
         env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
         # Injected per-lease file (epic #57); unset (``None``) inherits the runner's own.
-        # Deferred (F1, D4) like spawn/judge — `dormant.py::_wake` confirms after `record_spawn` lands.
+        # Deferred like spawn/judge — `dormant.py::_wake` confirms after `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
             launched = self._launcher.launch(
                 cmd, cwd=session_cwd, env=env, stdout=stdout_file, stderr=None, defer_disarm=True
             )
-        # `launched.pgid` is the launcher's own recorded group (D3) — carried to the
+        # `launched.pgid` is the launcher's own recorded group — carried to the
         # caller rather than left for it to assume `pgid == pid`.
         return ResumeHandle(
             pid=launched.pid,
@@ -438,7 +438,7 @@ class ClaudeCodeAdapter:
         effort: str | None = None,
         attended: bool = False,
     ) -> str:
-        # Asserted only for the ATTENDED composition (issue #258): the unattended string is
+        # Asserted only for the ATTENDED composition: the unattended string is
         # run in a bare terminal, so it stays at the interactive permission default.
         mode = self._permission_mode if attended else None
         parts = (("model", model), ("effort", effort), ("permission-mode", mode))
@@ -456,7 +456,7 @@ class ClaudeCodeAdapter:
         return harness_shared.text_after_choice_close(self._result_text(output)) or ""
 
     def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
-        # The envelope's own shape decides it, independent of `model` (issue #640): a
+        # The envelope's own shape decides it, independent of `model`: a
         # missing top-level model is a gap this binding has no per-session default for.
         del model
         envelope = ResultEnvelope.of(output)
@@ -556,7 +556,7 @@ class ClaudeCodeAdapter:
             _log.warning("harness usage model unavailable", expected_model=model, kind=kind)
         return UsageSample(
             kind=kind,
-            # Never the passed-in or configured default (issue #640): `"unknown"` lets a
+            # Never the passed-in or configured default: `"unknown"` lets a
             # caller tell "observed nothing" apart from "observed the fallback" — the same
             # `observed_model` derives, so the two never drift.
             model=resolved or "unknown",
@@ -570,7 +570,7 @@ class ClaudeCodeAdapter:
     def observed_model(self, lines: Sequence[str]) -> str | None:
         # The last assistant record's own `message.model` — `None` when no record ever
         # names one. Skipped rather than read as observed: a synthetic `isApiErrorMessage`
-        # record (a rate-limit or provider-overload placeholder, blizzard#594/#595) or a
+        # record (a rate-limit or provider-overload placeholder) or a
         # `"<synthetic>"` model literal, neither of which ever names a model that actually
         # ran; and a sidechain (subagent) record, which names a different session's model
         # than the one this generation's own usage is attributed to.
@@ -596,7 +596,7 @@ class ClaudeCodeAdapter:
         return observed
 
     def classify_usage_limit(self, output: str, lines: Sequence[str], now: datetime) -> UsageLimit | None:
-        # The signal is the synthetic transcript record (blizzard#594), never `output`:
+        # The signal is the synthetic transcript record, never `output`:
         # a limited invocation's own stdout carries no result envelope to read `is_error`
         # off in the first place, so corroborating against it would only narrow, never help.
         del output
@@ -617,7 +617,7 @@ class ClaudeCodeAdapter:
         return None
 
     def classify_provider_overload(self, output: str, lines: Sequence[str]) -> ProviderOverload | None:
-        # Only the LAST assistant record in the range decides (blizzard#595): a relaunched
+        # Only the LAST assistant record in the range decides: a relaunched
         # judge reuses its first judge boundary, so its own range can hold an earlier
         # overload record followed by a real reply — that generation completed, it did not
         # overload. `output`'s `-p` envelope shape on a 529 is unobserved, so it plays no
@@ -693,8 +693,8 @@ class ClaudeCodeAdapter:
     ) -> dict[str, str]:
         """The child env carrying this lease's worker identity: the allowlist plus the
         ``BLIZZARD_*`` vars a worker's CLI and its hooks read to reach the runner for
-        this lease. ``spawn``, ``resume_with_message``, and a takeover (via the seam,
-        issue #258) all build from this, so a daemon resume is as fully identified as a
+        this lease. ``spawn``, ``resume_with_message``, and a takeover (via the seam)
+        all build from this, so a daemon resume is as fully identified as a
         fresh one — ``--resume`` does not inherit the original spawn env."""
         return harness_shared.build_identity_env(
             preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation

@@ -1,4 +1,4 @@
-"""``GET /api/subscriptions`` (blizzard#504, component tier) — every declared
+"""``GET /api/subscriptions`` (component tier) — every declared
 subscription's own newest sampling attempt, reading the store directly with no fresh
 sample of its own."""
 

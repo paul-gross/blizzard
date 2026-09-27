@@ -1,5 +1,5 @@
 """Transcript-segment store: dialect-portable DDL, the codec round-trip, and the
-natural-key uniqueness the schema enforces (blizzard#247, Phase 1 — unit tier)."""
+natural-key uniqueness the schema enforces (unit tier)."""
 
 from __future__ import annotations
 
@@ -117,7 +117,7 @@ def test_index_projection_keeps_harness_identity_distinct_from_its_versions(tmp_
 
 
 def test_index_projection_accepts_an_opencode_harness_id_and_a_missing_one_alike(tmp_path: Path) -> None:
-    """D4: an OpenCode record's `harness_id` survives the round trip untouched, and an
+    """An OpenCode record's `harness_id` survives the round trip untouched, and an
     older runner's record shipping none lands as unknown origin, not rejected."""
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(hub_store_connections(engine))
@@ -182,7 +182,7 @@ def test_turn_content_round_trips_through_the_codec(tmp_path: Path) -> None:
 
 
 def test_turn_content_is_compressed_at_rest_not_stored_as_plaintext(tmp_path: Path) -> None:
-    """AC1/D10: the round-trip above cannot tell zlib from a no-op codec, so this reads
+    """The round-trip above cannot tell zlib from a no-op codec, so this reads
     the raw column — highly compressible turns must land far under their plaintext."""
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(hub_store_connections(engine))
@@ -219,7 +219,7 @@ def test_a_rejected_record_stores_no_content_or_codec(tmp_path: Path) -> None:
 
 
 def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
-    """D8: ``(segment_id, turn_range_start)`` is a schema-level unique constraint —
+    """``(segment_id, turn_range_start)`` is a schema-level unique constraint —
     a second insert at the same key must fail even if a caller forgot to check first."""
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(hub_store_connections(engine))
@@ -267,7 +267,7 @@ def test_update_to_accepted_transitions_a_rejected_row_in_place(tmp_path: Path) 
 
 
 def test_update_to_accepted_carries_the_re_offers_own_truncated_flag(tmp_path: Path) -> None:
-    """review F10: a natural-key re-offer must not keep the FIRST offer's flag — the worse,
+    """A natural-key re-offer must not keep the FIRST offer's flag — the worse,
     later offer's own truth wins, not a stale one."""
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(hub_store_connections(engine))
@@ -280,7 +280,7 @@ def test_update_to_accepted_carries_the_re_offers_own_truncated_flag(tmp_path: P
     assert content.record_truncated is False
 
 
-# --- lease reads (D2, issue #249) -----------------------------------------------
+# --- lease reads -----------------------------------------------
 
 
 def test_runner_id_for_lease_is_none_when_the_lease_holds_no_segments(tmp_path: Path) -> None:
@@ -378,11 +378,11 @@ def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_pat
     assert rows[0].content is None
     assert rows[0].byte_count == 1200
     assert rows[0].received_at == later
-    assert rows[0].record_truncated is True  # review F10: the re-offer's own flag, not the first's
+    assert rows[0].record_truncated is True  # The re-offer's own flag, not the first's
 
 
 def test_two_successive_still_rejected_offers_leave_only_the_latest_bytes_in_the_window(tmp_path: Path) -> None:
-    """blizzard#290: `byte_count` replaces rather than accumulates — accumulating would double-count
+    """`byte_count` replaces rather than accumulates — accumulating would double-count
     against `_chunk_stored_bytes_stmt` once a rejected row flips to accepted, so a second
     still-rejected offer must not leave the first's bytes in the runner's daily-rate window."""
     engine = _migrated_engine(tmp_path)

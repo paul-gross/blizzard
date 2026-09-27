@@ -1,4 +1,4 @@
-"""The runner-local chunk-detail pass-through proxy (issue #185) — route + forward shape.
+"""The runner-local chunk-detail pass-through proxy — route + forward shape.
 
 Proves the *runner's* half of pause/resume: the runner route over a real app, the hub
 reached through a stubbed ``httpx.Client``, and the 202/404/409 + 502-on-unreachable

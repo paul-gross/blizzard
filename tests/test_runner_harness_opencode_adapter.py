@@ -45,7 +45,7 @@ from tests.repo_files import repo_root
 from tests.runner_fakes import FakeProbe, make_envelope
 from tests.support_opencode_binary import worker_binary
 
-# The oldest committed corpus inside the admitted range (blizzard#438) — stays correct as corpora are added.
+# The oldest committed corpus inside the admitted range — stays correct as corpora are added.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions("opencode", ADMITTED_OPENCODE_RANGE)[0]
 _CORPUS_DIR = (
     repo_root() / "src" / "blizzard" / "runner" / "harness" / "contracts" / "opencode" / _AN_ADMITTED_OPENCODE_VERSION
@@ -73,7 +73,7 @@ def _jsonl(events: list[dict[str, Any]]) -> str:
 def _opencode_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mirrors ``test_runner_harness_adapter.py``'s fixture of the same shape: a unit
     test's fake spawn must not depend on whether ``opencode`` is really installed on this
-    machine's ``PATH`` — `_ensure_executable`'s `shutil.which` lookup (F1) runs before the
+    machine's ``PATH`` — `_ensure_executable`'s `shutil.which` lookup runs before the
     faked ``subprocess.Popen`` ever sees the call."""
     monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
 
@@ -96,7 +96,7 @@ def _preamble(workdir: str, *, stdout_path: str = "", stderr_path: str = "") -> 
 
 
 # --------------------------------------------------------------------------- #
-# The one command builder (D5): every non-interactive kind carries `--format json`.
+# The one command builder: every non-interactive kind carries `--format json`.
 
 
 @pytest.mark.unit
@@ -129,7 +129,7 @@ def test_resume_omits_model_and_carries_session() -> None:
 
 @pytest.mark.unit
 def test_judge_and_nudge_compose_the_same_shape_as_resume() -> None:
-    """NUDGE serves both a produces-nudge and a parked-answer delivery (review F14): the two
+    """NUDGE serves both a produces-nudge and a parked-answer delivery: the two
     are distinct CALLER intents with no OpenCode CLI-level difference, so there is no
     separate ANSWER kind to also exercise here — NUDGE already covers both."""
     builder = OpenCodeCommand("opencode")
@@ -148,7 +148,7 @@ def test_judge_and_nudge_compose_the_same_shape_as_resume() -> None:
 
 @pytest.mark.unit
 def test_takeover_argv_has_no_format_json_and_no_auto() -> None:
-    """Interactive takeover has no kind on `OpenCodeInvocationKind` at all (review F14) — it
+    """Interactive takeover has no kind on `OpenCodeInvocationKind` at all — it
     is composed by this wholly separate method, never through `OpenCodeCommand.build`."""
     argv = OpenCodeCommand("opencode").takeover_argv(session_id="ses_1", model="openai/gpt-5.6", variant="max")
     assert argv == ["opencode", "--session", "ses_1", "--model", "openai/gpt-5.6", "--variant", "max"]
@@ -227,7 +227,7 @@ def test_resolve_effort_of_none_is_none() -> None:
 
 @pytest.mark.unit
 def test_resolve_compaction_window_is_always_unsupported() -> None:
-    # D8: no numeric translation is ever invented, regardless of the value's shape.
+    # No numeric translation is ever invented, regardless of the value's shape.
     adapter = _adapter()
     assert adapter.resolve_compaction_window("auto") is None
     assert adapter.resolve_compaction_window("200000") is None
@@ -235,7 +235,7 @@ def test_resolve_compaction_window_is_always_unsupported() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `resolvable_tier_ids` (blizzard#433): the capability snapshot's own tier enumeration.
+# `resolvable_tier_ids`: the capability snapshot's own tier enumeration.
 
 
 @pytest.mark.unit
@@ -366,7 +366,7 @@ def test_fresh_spawn_reads_the_minted_session_id_from_stdout(tmp_path: Path) -> 
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
-    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
+    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
     handle = pending.await_identity(5.0)
 
     assert handle.session_id == "ses_minted_abc"
@@ -387,7 +387,7 @@ def test_fresh_spawn_never_passes_the_hint_as_session_id(tmp_path: Path) -> None
     pending = adapter.spawn(
         envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint-never-honored"
     )
-    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
+    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
     handle = pending.await_identity(5.0)
 
     assert handle.session_id == "ses_self_assigned"
@@ -399,7 +399,7 @@ def test_fresh_spawn_never_passes_the_hint_as_session_id(tmp_path: Path) -> None
 def test_fresh_spawn_writes_stderr_to_the_injected_path(tmp_path: Path) -> None:
     """``spawn`` honors ``preamble.stderr_path`` the same way Claude Code's binding does —
     every OpenCode failure event otherwise reports an empty stderr tail even though the
-    runner already allocated the file (blizzard#433)."""
+    runner already allocated the file."""
     binary = worker_binary(tmp_path, minted_session_id="ses_minted_abc", stderr_message="diagnostic-sentinel")
     workdir = tmp_path / "e1"
     workdir.mkdir()
@@ -413,7 +413,7 @@ def test_fresh_spawn_writes_stderr_to_the_injected_path(tmp_path: Path) -> None:
         _preamble(str(workdir), stdout_path=str(stdout_path), stderr_path=str(stderr_path)),
         session_hint="hint",
     )
-    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
+    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
     handle = pending.await_identity(5.0)
     os.waitpid(handle.pid, 0)
 
@@ -430,7 +430,7 @@ def test_fresh_spawn_raises_identity_error_on_malformed_first_record(tmp_path: P
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
-    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
+    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
 
     with pytest.raises(WorkerIdentityError):
         pending.await_identity(5.0)
@@ -446,7 +446,7 @@ def test_fresh_spawn_raises_identity_error_when_the_process_exits_first(tmp_path
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
-    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
+    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
 
     with pytest.raises(WorkerIdentityError):
         pending.await_identity(5.0)
@@ -500,7 +500,7 @@ def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_identity(tmp_path: Path) -> None:
-    """F7: a worker that flushed its identity record then exited fast is a SUCCESS — the
+    """A worker that flushed its identity record then exited fast is a SUCCESS — the
     valid record is checked before liveness, not after, so this must not raise even though
     the process is already dead by the time ``await_identity`` looks."""
     workdir = tmp_path / "e1"
@@ -594,7 +594,7 @@ def test_resume_spawn_never_performs_the_handshake(tmp_path: Path) -> None:
     pending = adapter.spawn(
         envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint=None, resume_from="ses_prior"
     )
-    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
+    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
 
     handle = pending.await_identity(0)  # already a `WorkerHandle` — trivial phase two
     assert handle.session_id == "ses_prior"
@@ -609,7 +609,7 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(tmp_p
     adapter = _adapter(binary=binary, process=LinuxProcessProbe())
 
     judge_handle = adapter.judge(str(workdir), "ses_recorded", "assess", str(workdir / "judge-output.json"))
-    judge_handle.confirm_durable()  # F1: real component tests stand in for `Judgement._elicit`'s own call
+    judge_handle.confirm_durable()  # real component tests stand in for `Judgement._elicit`'s own call
     os.waitpid(judge_handle.pid, 0)
     output = Path(workdir / "judge-output.json").read_text()
     assert adapter.parse_verdict(output) == "pass"
@@ -617,7 +617,7 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(tmp_p
     resumed = adapter.resume_with_message(
         str(workdir), "ses_recorded", "continue", stdout_path=str(workdir / "nudge.out")
     )
-    resumed.confirm_durable()  # F1: real component tests stand in for `dormant.py::_wake`'s own call
+    resumed.confirm_durable()  # real component tests stand in for `dormant.py::_wake`'s own call
     os.waitpid(resumed.pid, 0)
     assert (workdir / "nudge.out").exists()
 
@@ -632,11 +632,11 @@ def test_spawn_launches_through_the_process_launcher_with_its_own_group(tmp_path
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
-    pending.confirm_durable()  # F1: real component tests stand in for `Spawner.spawn`'s own call
+    pending.confirm_durable()  # real component tests stand in for `Spawner.spawn`'s own call
     handle = pending.await_identity(5.0)
 
     assert handle.pgid is not None
-    assert handle.pgid == handle.pid  # `start_new_session=True`'s own POSIX contract (D3)
+    assert handle.pgid == handle.pid  # `start_new_session=True`'s own POSIX contract
     os.waitpid(handle.pid, 0)
 
 
@@ -707,8 +707,8 @@ def test_spawn_with_resume_from_omits_model_and_carries_session(
 def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """F4: a resume gets the same D1/D4 ownership a fresh spawn or judge gets — the
-    launcher's own recorded start time (D3), and a real disarm signal, not
+    """A resume gets the same ownership a fresh spawn or judge gets — the
+    launcher's own recorded start time, and a real disarm signal, not
     `ResumeHandle`'s bare no-op default."""
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
@@ -1388,7 +1388,7 @@ def test_parse_usage_looks_a_model_up_once_however_many_zero_cost_steps_it_price
     assert catalog.lookups == 1
 
 
-# --- classify_usage_limit (blizzard#594) ------------------------------------
+# --- classify_usage_limit ------------------------------------
 
 
 @pytest.mark.unit
@@ -1449,7 +1449,7 @@ def test_classify_usage_limit_tolerates_malformed_capture() -> None:
     assert _adapter().classify_usage_limit("not json at all", [], now) is None
 
 
-# --- classify_provider_overload (blizzard#595) ------------------------------
+# --- classify_provider_overload ------------------------------
 
 
 @pytest.mark.unit

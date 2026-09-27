@@ -1,4 +1,4 @@
-"""``garden_deliver``'s ``main()`` (blizzard#393 Phase 4, unit tier) — the
+"""``garden_deliver``'s ``main()`` (unit tier) — the
 ``tests/test_land_scripts.py`` shape: a scripted ``land_common.forge_request`` double,
 env set through ``monkeypatch``, stdout/stderr asserted through ``capsys``."""
 

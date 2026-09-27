@@ -8,8 +8,8 @@ import { hubRunnersKey } from '../query-keys';
  * Hub `GET /api/runners` read — the fleet registry with each runner's derived
  * liveness (`online` vs the 5-min staleness threshold) and `paused` state,
  * through TanStack Query and the generated hub client (bzh:generated-client).
- * The live-update service re-reads this on `runner-changed`; the poll is a backstop
- * (issue #316), not the primary freshness path.
+ * The live-update service re-reads this on `runner-changed`; the poll is a backstop,
+ * not the primary freshness path.
  */
 export function injectHubRunnersQuery() {
   return injectQuery(() => ({

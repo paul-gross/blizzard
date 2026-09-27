@@ -1,6 +1,6 @@
-"""The edit/claim race is atomic (issue #120, component tier).
+"""The edit/claim race is atomic (component tier).
 
-Issue #120 widens ``EditService``'s admit set to also admit ``ready``, opening a window
+``EditService``'s admit set widens to also admit ``ready``, opening a window
 where a runner's claim lands against the same chunk concurrently — an unguarded pair is
 a torn read. These tests force the interleaving with a patched store call.
 """

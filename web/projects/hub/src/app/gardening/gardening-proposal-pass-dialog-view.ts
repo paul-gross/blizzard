@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { KitButton, KitDialog, KitTextInput } from 'fleet';
 
 /**
- * The Pass dialog's presentational view (Decision 5) — one required
+ * The Pass dialog's presentational view — one required
  * reason field and nothing else, `gardening-run-dialog-view.ts`'s own scaffold. No
  * query or client dependency: the container injects the mutation and maps its async
  * state into `submitting()`/`submitError()` (`bzh:frontend-container-presentational`).

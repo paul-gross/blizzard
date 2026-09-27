@@ -108,7 +108,7 @@ from blizzard.runner.transcripts.service import TranscriptService
 
 @dataclass(frozen=True)
 class Lane:
-    """One tenant of the three-tenant partition (issue #95) — a router set and the gate it
+    """One tenant of the three-tenant partition — a router set and the gate it
     mounts behind. Only the human web lane is session-gated, and that gate covers the served
     shell as well as the JSON API it reads; the other two cannot be gated, being respectively
     what *establishes* a session and what workers call over TCP where they cannot bounce."""
@@ -140,7 +140,7 @@ _UNGATED = (
     scope_router,
     analytics_router,
 )
-# The human web lane: the local panel's own reads and writes (issue #51), the runner's own
+# The human web lane: the local panel's own reads and writes, the runner's own
 # pause brake reachable with the hub down (#43), and the pass-throughs proxied to the hub.
 _HUMAN = (
     chunk_detail_router,
@@ -165,8 +165,8 @@ _HUMAN = (
 
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message (D3,
-    blizzard#317) — sent *after* uvicorn's own graceful-drain wait, so in the hosted daemon
+    """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
+    — sent *after* uvicorn's own graceful-drain wait, so in the hosted daemon
     ``EarlyShutdownServer.handle_exit`` (``cli.py``) is what actually frees a parked SSE
     response promptly. This hook is the only signal a wrapper-less composer gets — a plain
     ``TestClient``/``uvicorn.Server``, as the test suite uses."""
@@ -205,7 +205,7 @@ def create_app(
 
     Every store-backed seam is optional, so a store-free build is possible; those routes
     then answer 503 and ``/api/ready`` reports ``ready=false``. ``selftests`` is always
-    wired (issue #54); ``events`` (D2) defaults absent, leaving the route silent."""
+    wired; ``events`` defaults absent, leaving the route silent."""
     log = get_logger("blizzard.runner")
     resolved_harnesses: IHarnessRegistry = harnesses if harnesses is not None else HarnessRegistry({})
 
@@ -215,15 +215,15 @@ def create_app(
     # The seams below are None on the store-free app.
     app.state.workspace_provider = workspace_provider
     app.state.harnesses = resolved_harnesses
-    # The controller-facing narrowing of `runner_stores` (D1, D2, blizzard#412) — every
+    # The controller-facing narrowing of `runner_stores` — every
     # route resolves this; the write bundle itself is never stashed on `app.state`, so no
     # route can reach it — only used here, to derive this and the five single-concept
     # mutating services below.
     app.state.runner_read_stores = RunnerReadStores.of(runner_stores) if runner_stores is not None else None
-    # The SSE broker (D2) — `None` on every composer with no stream to feed, where
+    # The SSE broker — `None` on every composer with no stream to feed, where
     # :class:`~blizzard.foundation.events.stream.Stream` degrades cleanly.
     app.state.events = events
-    # Set on shutdown by `_lifespan` (D3); the stream route's live wait races it.
+    # Set on shutdown by `_lifespan`; the stream route's live wait races it.
     app.state.shutdown = asyncio.Event()
     # Unconditional: a stateless wrapper over the wall clock (``bzh:injected-clock``),
     # needed whether or not a store is wired.
@@ -236,7 +236,7 @@ def create_app(
     app.state.attachments = attachments
     app.state.git_commit_declarations = git_commit_declarations
     # Each single-concept, no cross-collaborator beyond its own write seam and the clock
-    # (D3, D4, blizzard#412) — built here, like `selftests` below, rather than requiring
+    # — built here, like `selftests` below, rather than requiring
     # every composer to repeat the derivation `runner_stores` already makes trivial.
     app.state.asks = asks or (AskService(runner_stores.asks, SystemClock(), events=events) if runner_stores else None)
     app.state.pause = pause or (
@@ -251,8 +251,8 @@ def create_app(
     app.state.workspace_prompts = workspace_prompts or (
         WorkspacePromptService(runner_stores.workspace_prompt, SystemClock()) if runner_stores else None
     )
-    # The adapter-drift canary (issue #54): wired unconditionally regardless of `runner_stores` —
-    # only `results` needs one, and stays `None` (no durable outcome) without it (blizzard#438).
+    # The adapter-drift canary: wired unconditionally regardless of `runner_stores` —
+    # only `results` needs one, and stays `None` (no durable outcome) without it.
     app.state.selftests = selftests or SelfTestService(
         harnesses=resolved_harnesses,
         scratch_git=SubprocessScratchGit(),
@@ -260,7 +260,7 @@ def create_app(
         clock=SystemClock(),
         results=runner_stores.selftest_results if runner_stores else None,
     )
-    # The runner's own health diagnostics (blizzard#438): `build_hosted_app` passes the one
+    # The runner's own health diagnostics: `build_hosted_app` passes the one
     # instance it also hands the loop (`HostedApp.harness_health`), so a dashboard read and
     # the loop's own registered availability can never disagree. A caller with no shared
     # instance to give (a standalone `create_app`, a unit test) falls back to a private one
@@ -274,7 +274,7 @@ def create_app(
             OPENCODE_HARNESS_ID: config.opencode_model_aliases,
         },
     )
-    # This default must **not** reach the network (issue #95) — pinned by
+    # This default must **not** reach the network — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
     hub_http_client = hub_http_client or httpx.Client(
         transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
@@ -293,7 +293,7 @@ def create_app(
     # A test binds a recording no-op here to prove the retry schedule without sleeping.
     app.state.hub_retry_delay = hub_retry_delay or time.sleep
     app.state.jti_cache = jti_cache
-    # The reverse-proxy trust set (issue #130), empty by default — so
+    # The reverse-proxy trust set, empty by default — so
     # `X-Forwarded-Proto` is ignored from every peer.
     app.state.trusted_proxies = TrustedProxies.parse(config.trusted_proxies)
     # Minted fresh at every daemon start, so a restart invalidates every live session
@@ -319,7 +319,7 @@ def create_app(
     Lane([Depends(require_human_api)], _HUMAN).mount(app)
 
     # The runner-served web app: the human web lane the middleware above gates
-    # (issue #95) — the only browser-facing surface this daemon serves.
+    # — the only browser-facing surface this daemon serves.
     Frontend.embedded("runner", app_name="blizzard-runner").mount(app)
 
     log.info("runner app created", db_url=config.db_url, readiness_wired=readiness is not None)
@@ -329,16 +329,16 @@ def create_app(
 @dataclass(frozen=True)
 class HostedApp:
     """The ``host`` composition root's return: the served app alongside the restart-resume
-    hook, both wired from the one object graph :func:`build_hosted_app` builds (D4) — no
+    hook, both wired from the one object graph :func:`build_hosted_app` builds — no
     caller wires a second engine, store bundle, clock, or process probe to reach either.
-    ``engine`` (D5, disposed by ``host`` on shutdown) is typed ``Engine``: this is a
+    ``engine`` (disposed by ``host`` on shutdown) is typed ``Engine``: this is a
     composition root, the one place besides ``runner/composition.py`` allowed to name it."""
 
     app: FastAPI
     resume: ResumeMarking
     engine: Engine
     #: The one `HarnessHealthCache` this process's `host` command hands to `PeriodicDriver`
-    #: too (blizzard#438) — one instance, not two independently-refreshing ones, so a
+    #: too — one instance, not two independently-refreshing ones, so a
     #: dashboard read and the availability actually registered to the hub can never disagree.
     harness_health: HarnessHealthCache
 
@@ -347,13 +347,13 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     """The ``host`` composition root: open the store and wire the readiness seam.
 
     Engine creation is connection-free, so this stays cheap; the connection is opened
-    lazily on the first ``/api/ready`` read. ``events`` (D2) is the process-wide broker
+    lazily on the first ``/api/ready`` read. ``events`` is the process-wide broker
     ``host`` shares with the loop's ``PeriodicDriver``; absent for every other caller.
 
-    Kept separate from the loop's own engine (``runner/loop/build.py::LoopWiring``, D4):
+    Kept separate from the loop's own engine (``runner/loop/build.py::LoopWiring``):
     every CLI verb is already its own process on the same store, so sqlite contention is
     between connections, not engines, and WAL plus ``busy_timeout`` handles that directly.
-    The one exception is ``harness_health`` (blizzard#438): built here, over this engine's
+    The one exception is ``harness_health``: built here, over this engine's
     own store, and handed back on :class:`HostedApp` so ``host`` can inject the same
     instance into the loop's own context instead of it building a second one."""
     engine = create_engine_from_url(config.db_url)
@@ -379,13 +379,13 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     leases = LocalLeaseService(
         stores=RunnerReadStores.of(runner_stores), clock=SystemClock(), process=LinuxProcessProbe()
     )
-    # The archived-transcript seam (blizzard#249, D4) needs its own authenticated client:
+    # The archived-transcript seam needs its own authenticated client:
     # `hub_http_client` below carries no auth headers (JWKS/hub-auth-mode reads only).
     archived_transcript_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
     archived_transcripts = HttpArchivedTranscriptRepository(archived_transcript_client)
     # The route-forward seam (`HubProxy`) needs its own authenticated client too — separate
     # from `hub_http_client` (no auth headers) and from `archived_transcript_client` (its own
-    # lifetime/timeout concerns, blizzard#249).
+    # lifetime/timeout concerns).
     hub_proxy_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
     transcripts = TranscriptService(
         leases=runner_stores.lease_record,
@@ -421,7 +421,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     requeue = RequeueService(runner_stores.requeue, SystemClock())
     attachments = AttachmentService(runner_stores.attachments, SystemClock(), tokens=runner_stores.tokens)
     # Takes the workspace provider too: a declaration is checked against the
-    # environment's repo manifest, which is the provider's to declare (issue #143).
+    # environment's repo manifest, which is the provider's to declare.
     git_commit_declarations = GitCommitDeclarationService(
         runner_stores.git_commit_declarations,
         SystemClock(),
@@ -430,7 +430,7 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         environments=runner_stores.environments,
     )
     jti_cache = JtiCacheRepository(connections, SystemClock())
-    # The real, network-reaching hub client — only `host` wires one (issue #95).
+    # The real, network-reaching hub client — only `host` wires one.
     hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
     app = create_app(
         config,

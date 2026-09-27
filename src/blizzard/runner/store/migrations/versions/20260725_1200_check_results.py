@@ -1,4 +1,4 @@
-"""runner-side check results + checks-ran guard — check_results, checks_ran (runner store tree, issue #114)
+"""runner-side check results + checks-ran guard — check_results, checks_ran (runner store tree)
 
 ``checks_ran`` is written AFTER the ``check_results`` rows: unset on recovery ⇒ re-run all.
 Revision ID: 20260725_1200_runner_check_results

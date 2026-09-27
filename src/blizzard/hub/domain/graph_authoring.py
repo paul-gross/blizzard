@@ -38,7 +38,7 @@ class GraphValidationError(Exception):
 
 
 class DefaultGraphRetired(Exception):
-    """Every minted graph named ``name`` is retired (issue #101).
+    """Every minted graph named ``name`` is retired.
 
     Distinct from "never minted", which still mints; this refuses to silently re-mint
     over an operator's deliberate brake."""
@@ -86,7 +86,7 @@ class Reification:
             nodes=[self._node(index, nd) for index, nd in enumerate(self.doc.nodes)],
             edges=[edge for index, nd in enumerate(self.doc.nodes) for edge in self._edges(index, nd)],
             created_at=self.created_at,
-            # A session declaration mints no id (issue #144): its authored name identifies
+            # A session declaration mints no id: its authored name identifies
             # it, and dict insertion order is the only source of authored ordering.
             sessions=list(self.doc.sessions.values()),
             # A graph artifact mints no id either — its authored name identifies it, and
@@ -168,7 +168,7 @@ class GraphMintService:
         return graph, warnings
 
     def _cross_graph_warnings(self, graph: Graph) -> list[str]:
-        """Late-bound resolvability of cross-graph targets (issue #90) — a **warning**,
+        """Late-bound resolvability of cross-graph targets — a **warning**,
         never an error: a ``graph:<name>`` target resolves by name at apply time, so a
         target not minted yet is legal. The one mint-time step touching the repository,
         which keeps :class:`Validator` pure."""
@@ -211,8 +211,8 @@ class GraphMintService:
 
         Idempotent by name. A ``None`` from ``get_enabled_by_name`` is ambiguous, so
         :meth:`~blizzard.hub.domain.graph.IReadGraphRepository.any_minted` disambiguates
-        (issue #101) — a cheap existence probe, not a full listing, to check membership
-        by name (blizzard#524 D6) — pinned by
+        — a cheap existence probe, not a full listing, to check membership
+        by name — pinned by
         tests/test_graph_lifecycle_api.py::test_retiring_every_version_of_the_default_graph_survives_a_restart"""
         existing = self._graphs.get_enabled_by_name(doc.name)
         if existing is not None:

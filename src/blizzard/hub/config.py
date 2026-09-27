@@ -31,19 +31,19 @@ ENV_PORT = "BZ_HUB_PORT"
 # identically by every verb, which all resolve through `load` (`bzh:sql-portable`).
 ENV_DB_URL = "BZ_HUB_DB_URL"
 
-# The runner-identity rollout brake (issue #86a) — `warn` logs a missing/invalid bearer
+# The runner-identity rollout brake — `warn` logs a missing/invalid bearer
 # token and proceeds; `enforce` rejects. Defaults to `warn` so tokens can enroll first.
 RUNNER_AUTH_WARN = "warn"
 RUNNER_AUTH_ENFORCE = "enforce"
 _KNOWN_RUNNER_AUTH_MODES = {RUNNER_AUTH_WARN, RUNNER_AUTH_ENFORCE}
 
-# The route-capability-token rollout brake (issue #84b), separate from `runner_auth_mode`
+# The route-capability-token rollout brake, separate from `runner_auth_mode`
 # so the two enforce independently — `warn` proceeds; `enforce` rejects before the fence.
 ROUTE_TOKEN_WARN = "warn"
 ROUTE_TOKEN_ENFORCE = "enforce"
 _KNOWN_ROUTE_TOKEN_MODES = {ROUTE_TOKEN_WARN, ROUTE_TOKEN_ENFORCE}
 
-# The produces-artifact rollout brake (issue #113), separate from the two above — `warn`
+# The produces-artifact rollout brake, separate from the two above — `warn`
 # logs a `produces:` name with no attachment and proceeds; `enforce` rejects it.
 PRODUCES_WARN = "warn"
 PRODUCES_ENFORCE = "enforce"
@@ -54,21 +54,21 @@ _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
 _KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
 _REQUIRED_WORK_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
 
-# The built-in, always-seated hub work source's reserved name (issue #357) — no
+# The built-in, always-seated hub work source's reserved name — no
 # `[[work_source]]` entry may claim it.
 RESERVED_HUB_SOURCE_NAME = "hub"
 
-# `[[work_source]]`'s pre-rename name (issue #55) — deliberately *not* aliased; pinned by
+# `[[work_source]]`'s pre-rename name — deliberately *not* aliased; pinned by
 # `test_config.py::test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key`.
 RENAMED_WORK_SOURCE_KEY = "pm_source"
 
-# The human-auth rollout knob (issue #91) — `none` (the default) resolves every request
+# The human-auth rollout knob — `none` (the default) resolves every request
 # to an implicit identity with no store read; `oauth` activates the session seam.
 AUTH_MODE_NONE = "none"
 AUTH_MODE_OAUTH = "oauth"
 _KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
 
-# `[[auth.oauth.provider]]` required keys — structural presence only (issue #91);
+# `[[auth.oauth.provider]]` required keys — structural presence only;
 # secret resolution and `type`/`issuer` validation happen where a provider is consumed.
 _REQUIRED_OAUTH_PROVIDER_KEYS = ("name", "type", "display_name", "client_id", "client_secret_env")
 
@@ -93,10 +93,10 @@ _WORK_SOURCE_EXAMPLE_COMMENT = """
 """
 
 # Mirrors `_WORK_SOURCE_EXAMPLE_COMMENT` — emitted when `[auth]` carries no configured
-# login provider, so the block stays discoverable under `mode = "none"` (issue #91).
+# login provider, so the block stays discoverable under `mode = "none"`.
 _AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT = """
 # Uncomment and edit to declare an OAuth login provider — consumed once `mode =
-# "oauth"` and a login mechanism exist (issue #92); parsed-and-carried here so the
+# "oauth"` and a login mechanism exist; parsed-and-carried here so the
 # config schema is stable ahead of that.
 #
 # [[auth.oauth.provider]]
@@ -159,7 +159,7 @@ class StoreUrl:
         return Path(url.database)
 
     def confine(self, root: Path) -> None:
-        """Refuse a sqlite path resolving outside ``root`` (issue #234) — a config carrying
+        """Refuse a sqlite path resolving outside ``root`` — a config carrying
         another runtime root's absolute store path would silently operate on that database
         once copied. A relative path resolves against the cwd, not ``root``, and is left alone."""
         path = self.path
@@ -186,7 +186,7 @@ class WorkSourceConfig:
     provider: str
     repo: str
     token_env: str
-    #: Opt into the forge-status label sweep (issue #179) — canonical instance only; two writers fight.
+    #: Opt into the forge-status label sweep — canonical instance only; two writers fight.
     annotate: bool = False
     api_base: str | None = None
     web_base: str | None = None
@@ -214,14 +214,14 @@ class WorkSourceConfig:
                 # A colon in a source name breaks the ingest-token grammar's first-colon split.
                 raise ConfigError(f"[[work_source]] name {name!r} must not contain ':'")
             if name == RESERVED_HUB_SOURCE_NAME:
-                # The built-in, always-seated source (issue #357) — a configured entry
+                # The built-in, always-seated source — a configured entry
                 # of the same name would collide with it.
                 raise ConfigError(f"[[work_source]] name {name!r} is reserved for the built-in hub source")
             if name in seen_names:
                 raise ConfigError(f"duplicate [[work_source]] name {name!r}")
             seen_names.add(name)
             if "close" in entry:
-                # blizzard#383: closure is unconditional now — the flag that used to opt a
+                # closure is unconditional now — the flag that used to opt a
                 # source into it is gone, not defaulted or silently ignored.
                 raise ConfigError(
                     f"[[work_source]] {name!r} still carries a close key; closing every "
@@ -261,7 +261,7 @@ class WorkSourceConfig:
 
 @dataclass(frozen=True)
 class OAuthProviderConfig:
-    """One configured OAuth login provider (issues #91, #92). ``client_secret_env``
+    """One configured OAuth login provider. ``client_secret_env``
     names the environment variable carrying the secret, never the secret itself.
     ``api_base`` overrides the provider's default host — ``github`` type only, an
     ``oidc`` provider's ``issuer`` already naming its own."""
@@ -311,7 +311,7 @@ class OAuthProviderConfig:
 
 @dataclass(frozen=True)
 class AuthConfig:
-    """Resolved ``[auth]`` config (issue #91) — the human-auth rollout knob.
+    """Resolved ``[auth]`` config — the human-auth rollout knob.
 
     ``mode`` defaults to :data:`AUTH_MODE_NONE`; ``superuser`` is a nullable email."""
 
@@ -338,7 +338,7 @@ class AuthConfig:
 
 @dataclass(frozen=True)
 class TranscriptCapsConfig:
-    """Resolved ``[transcripts]`` config (blizzard#338) — the ingest lane's three byte
+    """Resolved ``[transcripts]`` config — the ingest lane's three byte
     ceilings as OVERRIDES. ``None`` means "whatever the domain's default is", so this layer
     never restates a number the domain already owns (``bzh:one-prose-home``)."""
 
@@ -382,18 +382,19 @@ class HubConfig:
     runner_auth_mode: str = RUNNER_AUTH_WARN
     route_token_mode: str = ROUTE_TOKEN_WARN
     produces_mode: str = PRODUCES_WARN
-    #: Fleet-wide default for re-pinning a chunk to its graph name's newest mint (issue #164).
+    #: Fleet-wide default for re-pinning a chunk to its graph name's newest mint.
     follow_latest: bool = False
-    #: Forge-status sweep cadence in seconds (issue #179); consulted only when a source annotates.
+    #: Forge-status sweep cadence in seconds; consulted only when a source annotates.
     annotation_interval_seconds: int = 120
-    #: Instance-level forge-write posture for closing (blizzard#383) — false declines every
+    #: Instance-level forge-write posture for closing — false declines every
     #: configured source's closer (never the built-in hub source's, which writes no forge)
-    #: so a non-canonical hub can't close real items; true (the default) is unconditional.
+    #: so a non-canonical hub can't close real items; true (the default) is unconditional, so a
+    #: non-canonical hub must opt out explicitly against live forge writes.
     close_forge_writes_enabled: bool = True
     auth: AuthConfig = field(default_factory=AuthConfig)
-    #: Transcript ingest cap overrides (blizzard#338); every field None = the domain defaults.
+    #: Transcript ingest cap overrides; every field None = the domain defaults.
     transcripts: TranscriptCapsConfig = field(default_factory=TranscriptCapsConfig)
-    #: Reverse-proxy trust set (issue #130) — addresses or CIDRs whose forwarded headers are honored.
+    #: Reverse-proxy trust set — addresses or CIDRs whose forwarded headers are honored.
     trusted_proxies: tuple[str, ...] = ()
 
     @property
@@ -435,7 +436,7 @@ class HubConfig:
             ),
         )
         lines = [
-            "\n# Transcript ingest ceilings (blizzard#338), in bytes. Each is shown at its\n"
+            "\n# Transcript ingest ceilings, in bytes. Each is shown at its\n"
             "# default; uncomment to override. Widen these for a backfill window — a\n"
             "# `blizzard runner transcript reship` spends the per-chunk budget a SECOND time —\n"
             "# then restore them. `record_max_bytes` must stay at or ABOVE the runner's own\n"
@@ -451,7 +452,7 @@ class HubConfig:
     def to_toml(self) -> str:
         lines = ["# blizzard-hub runtime configuration (blizzard hub init)\n"]
         if self.db_url != self.default_db_url(self.root):
-            # The default is omitted rather than serialized absolute (issue #234): `load`
+            # The default is omitted rather than serialized absolute: `load`
             # re-derives it, so a copied runtime root stays self-contained.
             lines.append(f'db_url = "{self.db_url}"\n')
         lines += [
@@ -460,21 +461,21 @@ class HubConfig:
             f'runner_auth_mode = "{self.runner_auth_mode}"\n',
             f'route_token_mode = "{self.route_token_mode}"\n',
             f'produces_mode = "{self.produces_mode}"\n',
-            "\n# Follow-latest (issue #164): when true, a chunk re-pins to the newest enabled\n"
+            "\n# Follow-latest: when true, a chunk re-pins to the newest enabled\n"
             "# mint of its own graph's NAME at its next transition, so a workflow edit reaches\n"
             "# in-flight work without migrating each chunk by hand. A graph's own follow_latest\n"
             "# overrides this; false (the default) keeps every chunk on the mint it started on.\n",
             f"follow_latest = {str(self.follow_latest).lower()}\n",
-            "\n# Forge-status sweep cadence (issue #179), in seconds. Only consulted when at\n"
+            "\n# Forge-status sweep cadence, in seconds. Only consulted when at\n"
             "# least one [[work_source]] below sets annotate = true; a hub with none starts\n"
             "# no sweep loop regardless of this value.\n",
             f"annotation_interval_seconds = {self.annotation_interval_seconds}\n",
-            "\n# Forge-write posture for closing delivered work items (blizzard#383). true (the\n"
+            "\n# Forge-write posture for closing delivered work items. true (the\n"
             "# default) closes through every configured [[work_source]]; set false on a\n"
             "# non-canonical hub — dev, staging, or a restored snapshot — so it never writes to\n"
             "# a live forge repo. The built-in hub source is unaffected: it writes no forge.\n",
             f"close_forge_writes_enabled = {str(self.close_forge_writes_enabled).lower()}\n",
-            "\n# Reverse-proxy trust set (issue #130): proxy IPs/CIDRs whose forwarded\n"
+            "\n# Reverse-proxy trust set: proxy IPs/CIDRs whose forwarded\n"
             "# X-Forwarded-Proto/-For headers are honored (cookie Secure flag, login-throttle\n"
             "# key, auth-fact actor IP). Empty = ignore those headers from every peer.\n",
             f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n",

@@ -119,7 +119,7 @@ def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -
 
     promote = hub.client.post(f"/api/chunks/{chunk_id}/promote")
     assert promote.status_code == 202, promote.text
-    # The response is the transitioned chunk's summary (issue #104), not a bare
+    # The response is the transitioned chunk's summary, not a bare
     # `{"chunk_id": ...}` — same derived row `GET /api/chunks` carries.
     assert promote.json()["chunk_id"] == chunk_id
     assert promote.json()["status"] == "ready"
@@ -151,7 +151,7 @@ def test_live_pointer_reingest_is_409(tmp_path: Path) -> None:
 
 
 def test_a_paused_chunk_still_holds_its_pointer_live(tmp_path: Path) -> None:
-    """Pausing must not read as terminal (issue #46): ``_TERMINAL`` stays ``{stopped, done}``,
+    """Pausing must not read as terminal: ``_TERMINAL`` stays ``{stopped, done}``,
     since the live-pointer conflict is keyed on non-terminal — admitting ``paused`` would
     let a re-ingest mint a **second** chunk for the same issue."""
     hub = build_hub(tmp_path)
@@ -213,8 +213,8 @@ def test_resolver_picks_the_matching_source_when_two_are_configured(tmp_path: Pa
 
 
 def test_ingest_422s_when_no_configured_source_claims_the_token(tmp_path: Path) -> None:
-    """An explicitly empty registry is a legal, external-work-source-free hub (issue
-    #357): the built-in ``hub`` source is always seated, but it claims only ``hub:<n>``
+    """An explicitly empty registry is a legal, external-work-source-free hub:
+    the built-in ``hub`` source is always seated, but it claims only ``hub:<n>``
     tokens, so an unrelated pointer still 422s at ingest rather than resolving."""
     hub = build_hub(tmp_path, work_sources={})
 

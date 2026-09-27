@@ -1,9 +1,9 @@
-"""SQLAlchemy adapter for the routine repository seam (package-private, issue #389).
+"""SQLAlchemy adapter for the routine repository seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Name uniqueness
 is enforced by :class:`~blizzard.hub.domain.routines.RoutineAuthoring` before ``create``
-runs; ``uq_routines_name`` is a backstop only — D9's one caught library exception is D5's
-idempotent CAS, which this is not."""
+runs; ``uq_routines_name`` is a backstop only — a raised ``IntegrityError`` here propagates
+rather than being swallowed as an idempotent CAS, unlike other stores' patterns."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from blizzard.hub.store.schema import routine_lifecycle_facts, routines
 @dataclass(frozen=True)
 class ModelColumn:
     """``routines.default_model``'s column shape — a JSON ``list[str]``, the
-    ``chunks.default_model`` shape (issue #144). An empty preference list writes
+    ``chunks.default_model`` shape. An empty preference list writes
     ``NULL`` rather than ``"[]"``, so "express no preference" reads identically
     however the routine reached it."""
 

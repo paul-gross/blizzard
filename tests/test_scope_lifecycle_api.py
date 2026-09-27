@@ -1,4 +1,4 @@
-"""Scope routes — create, list, read, edit, retire, and enable (blizzard#389, component
+"""Scope routes — create, list, read, edit, retire, and enable (component
 tier). Proves the HTTP surface end to end: a malformed slug 422s naming the rejected
 value through both the create and edit routes, a re-create leaves the stored description
 untouched, and the retire/enable brake is reversible and idempotent — the

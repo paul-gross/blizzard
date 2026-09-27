@@ -1,4 +1,4 @@
-"""``GET /api/chunks`` — the bulk-read list path (component tier, blizzard#421).
+"""``GET /api/chunks`` — the bulk-read list path (component tier).
 
 Proves the route reads the fleet's facts and routes with one bulk query each, so the query
 count is unchanged as fleet size grows and never reaches `load_facts`/`route_of` at all."""
@@ -117,7 +117,7 @@ def test_list_chunks_calls_bulk_reads_and_never_load_facts_or_route_of(tmp_path:
 
 class _CountingWorkRefsStore(ChunkWorkRefsStore):
     """Counts calls to the pointer-liveness reads, so a test can pin that a fan-out
-    read never reaches the per-pointer `find_live_holder` (issue #421)."""
+    read never reaches the per-pointer `find_live_holder`."""
 
     def __init__(self, store: HubStoreConnections, clock: IClock, *, facts: ChunkFactsStore) -> None:
         super().__init__(store, clock, facts=facts)
@@ -160,7 +160,7 @@ def test_list_chunks_renders_work_refs_with_no_fact_load_or_live_holders_call(tm
 
 class _CountingGraphStore(GraphStore):
     """Counts calls to the fully-reifying `get`, so a test can pin that `list_chunks`
-    never reaches it (issue #421)."""
+    never reaches it."""
 
     def __init__(self, store: HubStoreConnections) -> None:
         super().__init__(store)
@@ -217,7 +217,7 @@ def test_list_chunks_query_count_is_independent_of_distinct_graph_pin_count(tmp_
     assert few_count == many_count
 
 
-# Keyset pagination (blizzard#526 D3/D4/D6).
+# Keyset pagination.
 
 
 def _delete_chunk(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
@@ -248,7 +248,7 @@ def _all_pages(hub, *, limit: int) -> list[dict]:  # type: ignore[no-untyped-def
 
 
 def test_sort_key_ties_paged_concatenation_matches_the_full_unpaginated_order(tmp_path: Path) -> None:
-    """`chunk_id desc` makes the sort total when `minted_at` ties (blizzard#526 D4);
+    """`chunk_id desc` makes the sort total when `minted_at` ties;
     paging at `limit=1` must reproduce a single large-limit read's order exactly."""
     hub = build_hub(tmp_path)
     with hub.engine.begin() as conn:
@@ -272,7 +272,7 @@ def test_sort_key_ties_paged_concatenation_matches_the_full_unpaginated_order(tm
 
 def test_ephemeral_only_window_still_pages_every_visible_chunk_exactly_once(tmp_path: Path) -> None:
     """A window landing entirely on grouped-away/deleted rows must retry with a doubled
-    window rather than short-paging (blizzard#526 D6): three deleted chunks sit ahead of
+    window rather than short-paging: three deleted chunks sit ahead of
     three live ones that a `limit=2` page must still surface."""
     hub = build_hub(tmp_path)
     with hub.engine.begin() as conn:
@@ -300,7 +300,7 @@ def test_ephemeral_only_window_still_pages_every_visible_chunk_exactly_once(tmp_
 
 
 def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path) -> None:
-    """D6: live-holder/blocked derivation reads the whole fleet though only the page's
+    """Live-holder/blocked derivation reads the whole fleet though only the page's
     own chunks render, so a marking must be identical whether its cause shares the page
     or not — forced here by putting every chunk on its own page (`limit=1`)."""
     hub = build_hub(tmp_path)

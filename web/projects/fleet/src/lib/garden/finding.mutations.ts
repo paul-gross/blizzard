@@ -21,7 +21,7 @@ import {
 import { hubFindingPrefixKey, hubFindingsBucketPrefixKey, hubFindingsKey } from '../query-keys';
 
 /** `POST /api/findings/{verb}` — the shared vars shape every human-driven exit and
- * `reopen` take (`FindingExitRequest`'s own D7 note: every finding named exits, or
+ * `reopen` take (`FindingExitRequest`'s own note: every finding named exits, or
  * reopens, together, one call, carrying the same required note). */
 export interface FindingExitVars {
   readonly findingIds: readonly string[];
@@ -29,7 +29,7 @@ export interface FindingExitVars {
 }
 
 /** `POST /api/findings/supersede` — {@link FindingExitVars} plus the absorbing
- * finding, `FindingSupersedeRequest`'s own D4 shape. */
+ * finding, `FindingSupersedeRequest`'s own shape. */
 export interface FindingSupersedeVars extends FindingExitVars {
   readonly supersededBy: string;
 }
@@ -61,7 +61,7 @@ function invalidateFindingCaches(queryClient: QueryClient): Promise<unknown> {
 /**
  * Records that the work answering a finding landed — `POST /api/findings/resolve`.
  * 404 for an unknown id, 422 for a blank note. A hand resolution names no garden
- * proposal — that attribution is Phase 3's own, delivery-triggered.
+ * proposal — that attribution is delivery-triggered.
  * {@link invalidateFindingCaches}'s own direct-invalidation shape.
  */
 export function injectResolveFindingsMutation() {
@@ -148,7 +148,7 @@ export function injectNotAFindingFindingsMutation() {
  * Withdraws every named finding as superseded by `supersededBy` — `POST
  * /api/findings/supersede`. 404 for an unknown id in either the named findings or
  * `supersededBy`, 422 for a blank note, a self-superseding id, or a `supersededBy`
- * that isn't itself live (`FindingSupersedeRequest`'s own D4 shape).
+ * that isn't itself live (`FindingSupersedeRequest`'s own shape).
  * {@link invalidateFindingCaches}'s own direct-invalidation shape.
  */
 export function injectSupersedeFindingsMutation() {

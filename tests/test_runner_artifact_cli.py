@@ -1,5 +1,5 @@
 """``blizzard runner artifact list|get|create|staged`` + the deprecated ``attach`` alias
-(unit tier, issues #127, #169): ``httpx`` stubbed, no live socket. The routes
+(unit tier): ``httpx`` stubbed, no live socket. The routes
 themselves are the component tier's ``test_runner_artifacts_api.py``. The verbs do not
 soft-fail: a rejected read/write must reach the worker as a non-zero exit.
 """
@@ -130,7 +130,7 @@ def test_list_content_flag_restores_the_full_raw_payload(monkeypatch: pytest.Mon
 
 @pytest.mark.unit
 def test_list_includes_staged_submissions_marked_as_such(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Issue #584: a worker listing its own node's artifacts must see what it just staged,
+    """A worker listing its own node's artifacts must see what it just staged,
     not just what has published into the envelope."""
     routes = {
         "artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD),
@@ -290,7 +290,7 @@ def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.unit
 def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A ``merged/<repo>`` delivery marker (issue #233) must reach the runner with the
+    """A ``merged/<repo>`` delivery marker must reach the runner with the
     slash preserved in the URL rather than treated as a second path segment."""
     calls: list[str] = []
 
@@ -438,7 +438,7 @@ class _NotFoundResponse:
 
 @pytest.mark.unit
 def test_get_names_artifact_staged_when_the_404d_name_is_staged(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Issue #584: a worker that submitted `X` and reads it straight back gets a legitimate
+    """A worker that submitted `X` and reads it straight back gets a legitimate
     404 on its own work — the not-found path must name `artifact staged`, not leave the
     worker to guess it exists from `--help`."""
 

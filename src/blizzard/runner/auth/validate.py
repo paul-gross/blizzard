@@ -1,8 +1,8 @@
-"""Verify a hub-signed federation JWT (issue #95).
+"""Verify a hub-signed federation JWT.
 
 ``kid``-selected signature verification against the cached hub JWKS, ``aud == this
 runner_id``, ``exp`` with ±30s leeway, and a replayed ``jti`` refused via the
-store-backed single-use cache (D4). Every failure mode collapses to one
+store-backed single-use cache. Every failure mode collapses to one
 :class:`FederationTokenError`, never leaking which."""
 
 from __future__ import annotations

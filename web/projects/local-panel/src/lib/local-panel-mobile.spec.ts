@@ -37,7 +37,7 @@ async function render(overrides: Record<string, unknown> = {}) {
       // LocalPanelMobile renders `ChunkCard` and `LocalAsks`/`LocalInfo`, all of
       // whose own reads need a TanStack Query context to construct at all.
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      // The detail screen's header links the chunk name to its route now (issue #318).
+      // The detail screen's header links the chunk name to its route now.
       provideRouter([]),
     ],
   }).compileComponents();

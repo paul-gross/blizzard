@@ -1,5 +1,5 @@
-"""The hub denies a claim on an unmet dependency, under the claim lock (blizzard#458,
-component tier).
+"""The hub denies a claim on an unmet dependency, under the claim lock (component
+tier).
 
 Mirrors the terminal denial's shape (``tests/test_route_claim.py``): a distinct 409 body,
 refused outright rather than lost to a race, re-derived fresh under the shared claim lock

@@ -23,11 +23,11 @@ class IReadLeaseSessionRepository(Protocol):
         """The chunk's most-recent session-bearing lease's ``session_id``, or ``None``.
 
         The newest lease for this chunk whose ``session_id`` is non-null, optionally
-        filtered to ``node_name`` (issue #115). ``None`` is the fresh-fallback signal."""
+        filtered to ``node_name``. ``None`` is the fresh-fallback signal."""
         ...
 
     def pool_head(self, chunk_id: str, session_name: str) -> PoolHead | None:
-        """The named session pool's current head for this chunk, or ``None`` (issue #144).
+        """The named session pool's current head for this chunk, or ``None``.
 
         The newest session-bearing lease whose ``lease_context.session_name`` matches;
         derived, never a column. **Runner-local**: a chunk reclaimed elsewhere mints fresh.
@@ -35,7 +35,7 @@ class IReadLeaseSessionRepository(Protocol):
         ...
 
     def session_invocation_count(self, session: SessionReference) -> int:
-        """How many harness invocations this session has recorded (issue #144).
+        """How many harness invocations this session has recorded.
 
         The signal behind a declared ``rotate.max_invocations`` — ``usage_facts`` rows
         across every lease that ran ``session_id``. **Harness invocations, not
@@ -43,7 +43,7 @@ class IReadLeaseSessionRepository(Protocol):
         ...
 
     def lease_for_session(self, session: SessionReference) -> LeaseRecord | None:
-        """The newest lease that ran ``session_id``, or ``None`` (issue #144).
+        """The newest lease that ran ``session_id``, or ``None``.
 
         Keyed on the *session*, which outlives the lease that minted it: several leases
         share one session id and the newest describes the running configuration."""
@@ -58,7 +58,7 @@ class IReadLeaseSessionRepository(Protocol):
         ...
 
     def session_preamble_fingerprint(self, session: SessionReference) -> PreambleFingerprint | None:
-        """The standing preamble prose this session was last sent, or ``None`` (issue #149).
+        """The standing preamble prose this session was last sent, or ``None``.
 
         The newest ``session_preamble_facts`` row for the session. ``None`` renders the
         full preamble — the safe direction, since an over-eager match would cost the
@@ -84,7 +84,7 @@ class IWriteLeaseSessionRepository(IReadLeaseSessionRepository, Protocol):
     def record_session_preamble(
         self, session: SessionReference, *, fingerprint: PreambleFingerprint, at: datetime
     ) -> None:
-        """Record what standing preamble prose this session was just sent (issue #149).
+        """Record what standing preamble prose this session was just sent.
 
         Append-only; the newest row is what the fingerprint read returns. The fact is
         *"this prose was sent to this session"*, not *"a spawn happened"*, and is written
@@ -93,7 +93,7 @@ class IWriteLeaseSessionRepository(IReadLeaseSessionRepository, Protocol):
 
 
 class LeaseSessionService:
-    """Composition-root-wired: the session store and the clock (D4, blizzard#412)."""
+    """Composition-root-wired: the session store and the clock."""
 
     def __init__(self, store: IWriteLeaseSessionRepository, clock: IClock) -> None:
         self._store = store

@@ -38,7 +38,7 @@ def _hub_schemas() -> dict[str, Any]:
 
 
 def test_git_commit_declaration_carries_no_forge_field() -> None:
-    """The declaration names no forge (issue #143): the origin it is verified against is
+    """The declaration names no forge: the origin it is verified against is
     read from the environment's repo manifest, never from the worker — re-adding the
     field re-opens the mismatch class the manifest lookup closed."""
     assert "forge" not in GitCommitDeclarationRequest.model_fields
@@ -65,7 +65,7 @@ def test_chunk_ingest_accepts_source_native_tokens_only() -> None:
 
 
 def test_chunk_history_view_requires_all_three_history_lists() -> None:
-    """The three fields are required, not defaulted to ``[]`` (issue #237): a hub-side
+    """The three fields are required, not defaulted to ``[]``: a hub-side
     rename must fail loudly here rather than decode as "no history yet"."""
     full = {"history": [], "migrations": [], "bounces": []}
     assert ChunkHistoryView.model_validate(full).bounces == []
@@ -76,7 +76,7 @@ def test_chunk_history_view_requires_all_three_history_lists() -> None:
 
 
 def test_graph_policy_request_follow_latest_carries_no_default() -> None:
-    """``follow_latest`` is required (issue #164): clearing the override is asked for by
+    """``follow_latest`` is required: clearing the override is asked for by
     naming ``null``, never done by an omitted field."""
     assert GraphPolicyRequest.model_fields["follow_latest"].is_required()
     with pytest.raises(ValidationError):
@@ -85,16 +85,16 @@ def test_graph_policy_request_follow_latest_carries_no_default() -> None:
 
 
 def test_chunk_detail_carries_no_transcript_field() -> None:
-    """Transcript content only ever leaves via the lazy per-segment reads (blizzard#247,
-    D12) — chunk detail's payload size must not grow with a chunk's stored transcript,
+    """Transcript content only ever leaves via the lazy per-segment reads
+    — chunk detail's payload size must not grow with a chunk's stored transcript,
     the anti-pattern named against ``hub/api/chunk_views.py``'s own ``_artifacts``."""
     assert "transcript" not in ChunkDetail.model_fields
     assert not [name for name in ChunkDetail.model_fields if "transcript" in name.lower()]
 
 
 def test_the_lease_history_route_still_answers_a_flat_history_row_view() -> None:
-    """The lease-scoped history route still answers a flat, fresh ``HistoryRowView`` (issue #237) — unwidened by
-    the chunk-detail proxy's own ``history`` field, which legitimately carries the board's own views (issue #314)."""
+    """The lease-scoped history route still answers a flat, fresh ``HistoryRowView`` — unwidened by
+    the chunk-detail proxy's own ``history`` field, which legitimately carries the board's own views."""
     spec = create_app_for_export().openapi()
     schemas = spec["components"]["schemas"]
     route = spec["paths"]["/api/leases/{lease_id}/history"]["get"]
@@ -148,7 +148,7 @@ def test_the_hub_spec_carries_no_mangled_schema_name() -> None:
 
 
 def test_the_runner_spec_serves_the_shared_segment_turn_shape_not_a_retired_turn_view() -> None:
-    """``TurnView`` is retired (blizzard#248 D1): the runner's lease-transcript route now
+    """``TurnView`` is retired: the runner's lease-transcript route now
     serves ``TurnSegmentView`` — the same turn shape the hub's segment-content route
     serves — so a regenerated client never grows a second, parallel turn model."""
     schemas = _runner_schemas()

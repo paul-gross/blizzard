@@ -1,7 +1,7 @@
-"""Draining the transcript lane's own outbound buffer (issue #246) — one or more records
-per ``push_transcripts`` batch (issue #522), in order, until one batch will not deliver or
-this tick's own bound is reached. Structurally apart from ``drain.py``'s ``OutboundDrain``
-(D3): its own FIFO, its own hub call, its own crash-point family — a transport failure here
+"""Draining the transcript lane's own outbound buffer — one or more records
+per ``push_transcripts`` batch, in order, until one batch will not deliver or
+this tick's own bound is reached. Structurally apart from ``drain.py``'s ``OutboundDrain``:
+its own FIFO, its own hub call, its own crash-point family — a transport failure here
 stops only this lane, never the fact lane's."""
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ _CP_BEFORE_SUBMIT = crashpoint("transcript.before-submit", "fact at head of the 
 _CP_AFTER_SUBMIT = crashpoint("transcript.after-submit.before-ack", "hub applied the fact; ack not recorded")
 
 #: The reason `_deliver_batch` marks on a hub-cap-rejected record — distinct from `transcript_pump.py`'s own.
-#: Public: the backfill (blizzard#250) reports a capped segment apart from a whole one.
+#: Public: the backfill reports a capped segment apart from a whole one.
 HUB_CAPPED = "hub_capped"
 
 #: Worse than every pump-side reason: unlike those, this one means the
@@ -60,10 +60,10 @@ _PUMP_BUDGET_FRACTION = 0.5
 
 @dataclass(frozen=True)
 class TranscriptDrain:
-    """The transcript lane's pump-then-flush — registered directly in ``tick`` (D3), never
+    """The transcript lane's pump-then-flush — registered directly in ``tick``, never
     chained to ``Pull``'s own ``OutboundDrain``. Bounded per run, one shared budget split
     between the pump and the flush below (the pump alone cannot starve the flush);
-    ships every closure's final marker regardless of ``[transcripts] ship`` (D4/D5)."""
+    ships every closure's final marker regardless of ``[transcripts] ship``."""
 
     ctx: LoopContext
 
@@ -158,7 +158,7 @@ class TranscriptDrain:
         for delta in deltas:
             if delta.seq in ack.capped:
                 # A cap rejection is not idempotency — surface it, but do not wedge the FIFO
-                # drain on a record the hub will never store in full: ack and move on (D6, D4).
+                # drain on a record the hub will never store in full: ack and move on.
                 _log.error("hub capped buffered transcript record", seq=delta.seq, segment_id=delta.segment_id)
                 # Never silent — the same segment-field/fact-lane pair the pump's own paths use.
                 changed = self.ctx.stores.transcript_ledger.mark_transcript_record_truncated(
@@ -185,7 +185,7 @@ class TranscriptDrain:
             return TranscriptSegmentRecord.model_validate({"seq": delta.seq, **json.loads(delta.payload)})
         segment = final_segments.get(delta.segment_id)
         if segment is None:
-            # A final marker's own segment row always exists (D1); a conditional rather than
+            # A final marker's own segment row always exists; a conditional rather than
             # an `assert`, which `python -O` strips into an opaque `AttributeError` below.
             raise RuntimeError(f"final transcript marker {delta.seq} has no segment row {delta.segment_id}")
         return _final_record(delta.seq, segment)

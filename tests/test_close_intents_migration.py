@@ -1,4 +1,4 @@
-"""The ``close_intents`` table create and its D7 back-fill (blizzard#383).
+"""The ``close_intents`` table create and its back-fill.
 
 The back-fill enqueues one pending intent per already-landed or hand-completed,
 non-ephemeral chunk's still-open work ref, narrowed to no source: an opted-in and a
@@ -68,7 +68,7 @@ def test_upgrade_creates_close_intents_and_backfills_the_source_agnostic_set(tmp
         conn.execute(insert(s.chunk_work_refs).values(chunk_id="ch_stopped_unlanded", source="opted", ref="3"))
         conn.execute(insert(s.chunk_stopped).values(chunk_id="ch_stopped_unlanded", stopped_at=_T1, stopped_by="test"))
 
-        # Hand-completed, never landed (D4) — operator_completed alone still enqueues.
+        # Hand-completed, never landed — operator_completed alone still enqueues.
         conn.execute(insert(s.chunk_work_refs).values(chunk_id="ch_hand_completed", source="opted", ref="4"))
         conn.execute(
             insert(s.chunk_completed).values(chunk_id="ch_hand_completed", completed_at=_T1, completed_by="op")

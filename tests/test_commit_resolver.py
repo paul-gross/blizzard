@@ -1,5 +1,5 @@
 """``GitHubCommitResolver`` — the real forge check behind `garden_delivery.CommitResolver`
-(blizzard#393 Phase 4, D2, unit tier). Stubs the ``httpx`` transport
+(unit tier). Stubs the ``httpx`` transport
 (``test_auth_oauth_factory.py``'s own ``httpx.MockTransport`` shape) — never a real
 network call, and never a raise, whatever the transport does."""
 

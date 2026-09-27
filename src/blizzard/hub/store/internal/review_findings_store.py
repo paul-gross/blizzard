@@ -1,8 +1,8 @@
-"""SQLAlchemy adapter for the review-findings-materialization seam (package-private,
-blizzard#582). All ``sqlalchemy`` usage is confined here (``bzh:dependency-
+"""SQLAlchemy adapter for the review-findings-materialization seam (package-private).
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-
 inversion``). One ``store.write`` transaction per :meth:`ReviewFindingsStore.deliver`
 call — every row a :class:`ReviewFindingsPlan` carries, plus any scope it names and its
-own idempotence marker, land together or not at all (D6)."""
+own idempotence marker, land together or not at all."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from blizzard.hub.domain.review_findings_materialize import (
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
 
-#: Keyed on `chunk_id` alone (D6): a chunk owes at most one review-findings delivery.
+#: Keyed on `chunk_id` alone: a chunk owes at most one review-findings delivery.
 _DELIVERED_MARKER_NAME = "review-findings-delivered"
 
 
@@ -49,7 +49,7 @@ class ReviewFindingsStore:
         savepoint, not the outer `deliver` transaction, so a concurrent mint of the same
         slug loses the race with an `IntegrityError` that rolls back only this nested
         write — the rest of the delivery still commits, first-write-wins like
-        `ScopeStore.ensure` (D2). Invisible on sqlite, which serializes writers."""
+        `ScopeStore.ensure`. Invisible on sqlite, which serializes writers."""
         existing = conn.execute(select(scopes.c.slug).where(scopes.c.slug == slug)).first()
         if existing is not None:
             return
@@ -96,7 +96,7 @@ class ReviewFindingsStore:
                             "kind": "add",
                             "recorded_at": plan.at,
                             "note": None,
-                            "finding_set_id": None,  # a review delta mints no finding set (D4)
+                            "finding_set_id": None,  # a review delta mints no finding set
                             "ref": fact.ref,
                         }
                         for fact in plan.facts

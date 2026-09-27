@@ -17,7 +17,7 @@ const ROUTED_DETAIL: ChunkDetail = {
   route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
 };
 
-// A not_ready chunk — the one window issue #27's graph edit is open.
+// A not_ready chunk — the one window the graph edit is open.
 const NOT_READY_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01ready000000000000000000000',
   graph_id: 'gr_default',

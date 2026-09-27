@@ -1,4 +1,4 @@
-"""``blizzard runner requeue`` (issue #53).
+"""``blizzard runner requeue``.
 
 Driven against a live daemon on a real unix socket: a real server, a real store, and
 the CLI wired together through the genuine ``build_hosted_app`` composition root — so

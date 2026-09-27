@@ -1,5 +1,5 @@
 """Every packaged graph's produces-declaring worker node instructs the CURRENT
-declaration CLI, kind-appropriate (unit tier, issue #113 Phase 6, issue #143 Phase 5).
+declaration CLI, kind-appropriate (unit tier).
 
 For every runner node in a packaged graph declaring a ``produces:`` name, asserts its
 prompt names the kind-appropriate verb — ``artifact create`` for an asset, ``artifact
@@ -91,7 +91,7 @@ def test_asset_producing_node_prompt_names_the_artifact_create_cli(graph_name: s
 def test_git_commit_producing_node_prompt_names_the_artifact_commit_cli(
     graph_name: str, node: NodeDoc, name: str
 ) -> None:
-    """The node's prompt names ``artifact commit`` (issue #143, Phase 3-5) — the runner
+    """The node's prompt names ``artifact commit`` — the runner
     only verifies, never infers or pushes, so an unnamed verb leaves coverage unmet."""
     text = _node_prompt_text(node)
     assert "artifact commit" in text, (
@@ -107,7 +107,7 @@ def test_git_commit_producing_node_prompt_names_the_artifact_commit_cli(
 )
 def test_no_packaged_prompt_names_the_deprecated_attach_alias(graph_name: str, doc: GraphDoc) -> None:
     """No packaged node prompt names the DEPRECATED ``blizzard runner attach`` alias
-    (issue #127) — a prompt reverting to it still works today, so nothing else would
+     — a prompt reverting to it still works today, so nothing else would
     catch the regression."""
     for node in doc.nodes:
         text = _node_prompt_text(node)

@@ -67,7 +67,7 @@ describe('LoginPage', () => {
   });
 
   it('resumes a hub-as-IdP authorize request handed in via the return_to query param', async () => {
-    // The multi-provider bounce (issue #128) lands the browser on /login?return_to=<the
+    // The multi-provider bounce lands the browser on /login?return_to=<the
     // pending authorize request>; each provider link must carry that request so
     // completing the dance resumes it.
     sessionStorage.setItem('fleet.auth.return-to', '/graphs/gr_1'); // a stale 401-path stash, must lose
@@ -81,7 +81,7 @@ describe('LoginPage', () => {
 
   it('ignores a non-authorize return_to query param and falls back to the stashed route', async () => {
     // A crafted /login?return_to=… that is not an /api/auth/authorize request is never
-    // honored (no open redirect / no arbitrary resume target, issue #128).
+    // honored (no open redirect / no arbitrary resume target).
     sessionStorage.setItem('fleet.auth.return-to', '/graphs/gr_1');
     const fixture = await mount([{ name: 'github', display_name: 'GitHub', type: 'github' }], {
       return_to: 'https://evil.example/steal',

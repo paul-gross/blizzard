@@ -15,7 +15,7 @@ import {
 import { runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from './query-keys';
 import { SessionRecovery } from './session-recovery';
 
-/** Cap on the stream's own re-arm attempts (blizzard#333 D3) — a no-session `401` the
+/** Cap on the stream's own re-arm attempts — a no-session `401` the
  * seam can classify definitively is never retried here (`SessionRecovery` already owns
  * that outcome); this bounds only the "session read itself failed" shape, the same
  * defect `SseService`'s terminal-401 contract was built to avoid: a session that will
@@ -27,7 +27,7 @@ export const STREAM_REARM_MAX_ATTEMPTS = 3;
  * A runner event that names a chunk stales that chunk's own detail key — the pass-
  * through pause fact (`runnerApi.ChunkDetail`) is hub-sourced, so no
  * runner event proves it directly, but a frame naming the chunk is the closest local
- * signal that something about it moved, and the key's own backstop (D7) closes the
+ * signal that something about it moved, and the key's own backstop closes the
  * rest. Every {@link RunnerEventPayload} shape that carries a `chunk_id` shares this.
  */
 function chunkDetailKeys(data: RunnerEventPayload): readonly (readonly unknown[])[] {
@@ -35,9 +35,9 @@ function chunkDetailKeys(data: RunnerEventPayload): readonly (readonly unknown[]
 }
 
 /**
- * The event → query-key invalidation registry (blizzard#317 Phase 4) — `local-panel`'s
+ * The event → query-key invalidation registry — `local-panel`'s
  * own instance of the pattern `fleet`'s `EVENT_INVALIDATION_REGISTRY` established
- * (`sse/fleet-live.ts`), not an extension of it (D10, `bzh:frontend-disjoint-diffs`):
+ * (`sse/fleet-live.ts`), not an extension of it (`bzh:frontend-disjoint-diffs`):
  * the event union type comes from `fleet`'s runner vocabulary
  * ({@link RunnerEventType}), but the query keys each kind maps to are
  * `local-panel`'s own, so a second, cross-daemon registry lives here rather than
@@ -47,7 +47,7 @@ function chunkDetailKeys(data: RunnerEventPayload): readonly (readonly unknown[]
  *
  * `GET /api/dashboard` ({@link runnerDashboardKey}) folds six of the panel's seven
  * local sections (`runner`, `environments`, `asks`, `escalations`, `takeovers`,
- * `facts`) into one read (issue #311), so every runner event kind stales it — each
+ * `facts`) into one read, so every runner event kind stales it — each
  * kind reports a change to exactly one of those sections. `lease-changed`
  * additionally moves the `runner.capacities.used` count that same `runner` section
  * reports (`RunnerStatusService.summary` counts active leases), and is the only kind
@@ -68,20 +68,20 @@ const RUNNER_EVENT_INVALIDATION_REGISTRY: Record<
 };
 
 /**
- * The panel's live-update spine (blizzard#317 Phase 4) — the runner-scoped
- * counterpart of `fleet`'s {@link "./fleet-live".FleetLiveUpdates} (D10). The
+ * The panel's live-update spine — the runner-scoped
+ * counterpart of `fleet`'s {@link "./fleet-live".FleetLiveUpdates}. The
  * coalescing dispatch and reconnect-then-re-GET gap recovery are
- * {@link LiveInvalidationSpine}'s (`review:F5`), configured here with
+ * {@link LiveInvalidationSpine}'s, configured here with
  * {@link RUNNER_EVENT_INVALIDATION_REGISTRY} — a lookup, never a hand-written `case`.
  *
- * D9: a stream `401` is terminal — `SseService` schedules no reconnect past one — and
+ * A stream `401` is terminal — `SseService` schedules no reconnect past one — and
  * is the one thing this service still handles itself, via the spine's `onAuthFailed`
  * hook: it calls {@link "./session-recovery".SessionRecovery.recoverFromUnauthenticated},
  * the same classify-and-bounce seam the response interceptor drives, so a session that
  * expires mid-stream routes through the one recovery path both callers share rather
  * than leaving a closed connection nothing acts on.
  *
- * blizzard#333 D2/D3: a `401` the seam cannot classify — the session read itself
+ * A `401` the seam cannot classify — the session read itself
  * failed, the daemon-restart shape — is worth another shot at the stream, since it
  * says nothing about whether the session is actually gone. That one outcome re-arms
  * the stream via {@link LiveInvalidationSpine.restart}, on `SseService`'s own
@@ -127,7 +127,7 @@ export class RunnerLiveUpdates {
   /** `true` once the stream closed on a `401` — a session that expired mid-stream,
    * mirroring `fleet`'s `FleetLiveUpdates.authFailed`. `false` before {@link start}
    * and for the whole life of a stream that never sees one; also `false` again once a
-   * bounded re-arm (D2/D3) opens a fresh attempt. */
+   * bounded re-arm opens a fresh attempt. */
   get authFailed(): Signal<boolean> {
     return this.spine.authFailed;
   }
@@ -141,8 +141,8 @@ export class RunnerLiveUpdates {
   }
 
   /** Classify the stream's `401` and, for the one outcome that is not a definitive
-   * answer — the session read itself failed — re-arm the stream on a bounded backoff
-   * (D2/D3). Every other outcome is already handled by `SessionRecovery` itself. */
+   * answer — the session read itself failed — re-arm the stream on a bounded backoff.
+   * Every other outcome is already handled by `SessionRecovery` itself. */
   private async handleAuthFailed(): Promise<void> {
     const outcome = await this.sessionRecovery.recoverFromUnauthenticated();
     if (outcome !== 'read-failed' || this.rearmAttempt >= STREAM_REARM_MAX_ATTEMPTS) return;

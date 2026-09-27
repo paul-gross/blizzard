@@ -1,4 +1,4 @@
-"""escalation wrapped takeover command (hub store tree, issue #251)
+"""escalation wrapped takeover command (hub store tree)
 
 Adds ``escalations.wrapped_takeover_command``, idempotently — a fresh store's create-all has it.
 Revision ID: 20260803_1000_hub_escalation_wrapped_takeover

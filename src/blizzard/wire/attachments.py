@@ -1,4 +1,4 @@
-"""Wire bodies for a worker's own artifact submissions (issues #113, #169):
+"""Wire bodies for a worker's own artifact submissions:
 ``AttachmentRequest``/``AttachmentResponse`` for the write, and ``StagedAttachment`` for the read-back
 of a node-step's staged, not-yet-published submissions."""
 
@@ -25,7 +25,7 @@ class AttachmentResponse(BaseModel):
 
 class StagedAttachment(BaseModel):
     """One of the lease's currently staged (not-yet-published) submissions —
-    ``GET /api/leases/{lease_id}/attachments`` (issue #169)."""
+    ``GET /api/leases/{lease_id}/attachments``."""
 
     name: str
     content: str

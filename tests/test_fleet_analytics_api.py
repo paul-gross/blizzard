@@ -1,5 +1,5 @@
 """``GET /api/fleet/chunks/{chunk_id}/analytics/...`` — a worker's own routine-run read
-of the six operator counts/spend summaries over a window it names (blizzard#545).
+of the six operator counts/spend summaries over a window it names.
 Component tier: each route renders the identical rows the matching operator route
 renders for the same window, reusing its own query criteria and response-shaping
 helpers rather than a second aggregation; ``since`` is required (422 unset); a chunk
@@ -106,7 +106,7 @@ def _tool_turn(index: int, name: str, input: dict[str, object], *, timestamp: st
 
 def _push_transcript(hub: HubHarness, *, chunk_id: str, node_id: str) -> None:
     spawn = _tool_turn(2, "Agent", {"subagent_type": "explorer"}, timestamp="2026-08-12T11:00:00Z")
-    # A sidechain under the spawn (blizzard#545's own agent-types row): a main-lane
+    # A sidechain under the spawn (the agent-types row): a main-lane
     # spawn's own `agent_type` column is unset (test_analytics_events_api.py's own
     # `test_counts_by_agent_type_is_empty_at_the_main_lane`); the count groups on the
     # enclosing sidechain's column instead.
@@ -236,7 +236,7 @@ def test_a_window_excluding_the_seed_returns_no_rows(tmp_path: Path, suffix: str
 
 @pytest.mark.parametrize("suffix", _COUNTS_ROUTES)
 def test_until_narrows_the_window(tmp_path: Path, suffix: str) -> None:
-    """`until` must reach the query, not just gate a 200 (blizzard#545 review F4): a
+    """`until` must reach the query, not just gate a 200: a
     window ending before the seed's later turns excludes the rows they alone produce,
     so deleting `until` from `AnalyticsWindow.scope` would turn this case red."""
     hub, chunk_id = _seeded_hub(tmp_path)
@@ -252,7 +252,7 @@ def test_until_narrows_the_window(tmp_path: Path, suffix: str) -> None:
 
 @pytest.mark.parametrize("suffix", _SPEND_ROUTES)
 def test_until_narrows_the_window_for_spend(tmp_path: Path, suffix: str) -> None:
-    """`until` narrows the spend rollups too (blizzard#545 review F4): a window ending
+    """`until` narrows the spend rollups too: a window ending
     before the second usage fact's `recorded_at` excludes the cost it alone adds."""
     hub = build_hub(tmp_path)
     chunk_id = _seed_chunk(hub)

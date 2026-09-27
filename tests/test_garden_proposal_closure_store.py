@@ -1,5 +1,5 @@
-"""``GardenProposalClosureStore`` and ``WorkItemStore.accept_create`` (component tier,
-blizzard#395). The pass and accept-declining-to-mint writes are idempotent per
+"""``GardenProposalClosureStore`` and ``WorkItemStore.accept_create`` (component tier).
+The pass and accept-declining-to-mint writes are idempotent per
 ``proposal_id`` at the store level — the second call of either writes nothing — and
 accept-with-mint atomically writes the closure, the item, and its resting chunk
 together, checked first so an already-closed proposal mints nothing a second time. The

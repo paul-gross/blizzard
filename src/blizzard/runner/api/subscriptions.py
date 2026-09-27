@@ -1,5 +1,5 @@
-"""The runner-local external-subscription-usage diagnostics — ``GET /api/subscriptions``
-(blizzard#504): every declared subscription's newest sampling attempt, and on a miss the
+"""The runner-local external-subscription-usage diagnostics — ``GET /api/subscriptions``:
+every declared subscription's newest sampling attempt, and on a miss the
 closed-set reason telling a lapsed credential ("log in again") from an unreachable endpoint
 or an unparseable response. Reads the store directly (``bzh:controller-read-only``),
 triggering no fresh sample of its own."""

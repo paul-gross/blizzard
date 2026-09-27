@@ -1,10 +1,10 @@
 """``blizzard runner chunk history`` — a worker's read of its own chunk's transition
-history (issue #237).
+history.
 
 Lease-scoped and token-authorized, then forwarded to the hub as the runner principal.
 ``503`` unwired, ``404`` unknown/closed lease, ``403`` bad token, ``502`` on a failed
 forward; authorization resolves before the hub is consulted. The merge into one
-kind-discriminated timeline is this route's own projection (D3, D4, plan: hold wire/ to
+kind-discriminated timeline is this route's own projection (plan: hold wire/ to
 its stated contract) — ``ChunkHistoryView`` stays a pydantic shape, never a projection."""
 
 from __future__ import annotations

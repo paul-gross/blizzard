@@ -1,6 +1,6 @@
-"""SQLAlchemy adapter for the garden-proposal repository seam (package-private,
-blizzard#390). All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``).
-The findings a proposal answers are a join over ``garden_proposal_findings`` (D7), never
+"""SQLAlchemy adapter for the garden-proposal repository seam (package-private).
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``).
+The findings a proposal answers are a join over ``garden_proposal_findings``, never
 a JSON column."""
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
 
-#: `list_page`'s cursor, already total: `(created_at, proposal_id)` (blizzard#526 D4).
+#: `list_page`'s cursor, already total: `(created_at, proposal_id)`.
 _CURSOR_ARITY = 2
 
 
@@ -196,8 +196,8 @@ class GardenProposalStore:
     def list_page(
         self, *, cursor: str | None = None, limit: int, origin: GardenProposalOrigin | None = None
     ) -> GardenProposalPage:
-        """`list_all`'s bounded sibling (blizzard#526 D4) — same total order, a SQL
-        keyset window. `origin` narrows in SQL, inside the window (blizzard#631). No
+        """`list_all`'s bounded sibling — same total order, a SQL
+        keyset window. `origin` narrows in SQL, inside the window. No
         post-read filter narrows a garden proposal the way findings' liveness does, so
         no top-up: one over-fetch-by-one window suffices."""
         if limit < 1:
@@ -235,7 +235,7 @@ class GardenProposalStore:
         proposal with no closure row still groups in (as `NULL`/`NULL`, `OPEN`'s own
         shape), folded through :func:`classify_proposal_count_bucket` in Python rather
         than a Python-side fold over ungrouped rows (`GardenRunStore._fact_counts_by_set`'s
-        own shape). Grouped by `(origin, routine_name, class_)` (blizzard#631): a
+        own shape). Grouped by `(origin, routine_name, class_)`: a
         routine named by both origins returns one row per origin."""
         c = garden_proposals.c
         closures_c = garden_proposal_closures.c

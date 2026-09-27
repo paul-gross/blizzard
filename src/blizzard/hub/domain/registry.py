@@ -2,7 +2,7 @@
 
 Three things derive over the registry rather than being stored: **liveness** (``last_seen_at`` against a
 staleness threshold, clock-relative so it is computed at read time), **paused** (the newest appended
-pause/resume fact), and **external subscription usage** (issue #218, independently by slug against its own
+pause/resume fact), and **external subscription usage** (independently by slug against its own
 wider threshold). ``token_hash`` is the one exception to facts-only: the row is already a mutable upsert."""
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ _log = get_logger("blizzard.hub.registry")
 #: Liveness staleness threshold — a chosen constant; a runner unheard-from for longer reads offline.
 STALE_AFTER = timedelta(minutes=5)
 
-#: External-subscription-usage staleness threshold (issue #218) — deliberately wider than
+#: External-subscription-usage staleness threshold — deliberately wider than
 #: :data:`STALE_AFTER`, since the sample rides a slower cadence than the liveness heartbeat.
 EXTERNAL_USAGE_STALE_AFTER = timedelta(minutes=15)
 
@@ -38,7 +38,7 @@ CREDENTIAL_LAPSED_CONDITION = CREDENTIAL_LAPSED_MISS_REASON
 
 @dataclass(frozen=True)
 class RunnerRegistration:
-    """A fleet-registry row with its two **derived** brakes (issue #43): ``hub_paused``, the fleet's own,
+    """A fleet-registry row with its two **derived** brakes: ``hub_paused``, the fleet's own,
     which a runner adheres to and which also refuses that runner's claim (#44); and ``locally_paused``,
     the runner's own, which the hub only reads. Either stops new claims, so a reader asking "is it
     claiming?" wants both. ``locally_paused_by``/``_reason`` populate only alongside a *true* brake."""
@@ -51,21 +51,21 @@ class RunnerRegistration:
     locally_paused: bool = False
     locally_paused_by: str | None = None
     locally_paused_reason: str | None = None
-    #: The enrolled bearer token's sha256 hex digest (issue #86a) — never the plaintext, which the
+    #: The enrolled bearer token's sha256 hex digest — never the plaintext, which the
     #: hub keeps no copy of. ``None`` for an unenrolled runner.
     token_hash: str | None = None
-    #: The runner's reported environment-pool size (issue #69), refreshed in place on each
+    #: The runner's reported environment-pool size, refreshed in place on each
     #: re-registration so a config change converges; ``None`` when none was reported.
     env_capacity: int | None = None
-    #: The runner's own browser-reachable base URL (issue #95) — ``None`` when never registered.
+    #: The runner's own browser-reachable base URL — ``None`` when never registered.
     public_url: str | None = None
-    #: The runner's allowed redirect URIs (issue #95) — the open-redirect guard a presented
+    #: The runner's allowed redirect URIs — the open-redirect guard a presented
     #: ``redirect_uri`` is exact-matched against. Empty for a runner that has registered none.
     redirect_uris: tuple[str, ...] = ()
-    #: Every declared subscription's newest reported sample, raw, one per slug (issue #218) —
+    #: Every declared subscription's newest reported sample, raw, one per slug —
     #: staleness is applied per slug at derive time, not here.
     subscription_usage: tuple[SubscriptionUsageRecord, ...] = ()
-    #: Every declared subscription's newest reported miss, one per slug (D7) — unioned with the samples at derive time.
+    #: Every declared subscription's newest reported miss, one per slug — unioned with the samples at derive time.
     subscription_usage_misses: tuple[SubscriptionUsageMissRecord, ...] = ()
     #: The runner's reported capability snapshot — every harness/tier it can execute right now.
     capabilities: tuple[RunnerCapability, ...] = ()
@@ -75,10 +75,10 @@ class RunnerRegistration:
 
 @dataclass(frozen=True)
 class RunnerCapability:
-    """One harness binding a registered runner reported it can execute (blizzard#433) —
+    """One harness binding a registered runner reported it can execute —
     the hub-domain mirror of the wire shape, kept import-free of it (``bzh:domain-core``).
     ``version`` is ``None`` when absent; ``default`` marks the runner's own default binding.
-    ``available`` (blizzard#438) defaults ``True`` so a runner asserting none still matches."""
+    ``available`` defaults ``True`` so a runner asserting none still matches."""
 
     harness_id: str
     version: str | None = None
@@ -117,7 +117,7 @@ class RunnerLiveness:
 
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageWindow:
-    """One rate-limit window's utilization, read back off ``runner_external_usage`` (issue #218). A
+    """One rate-limit window's utilization, read back off ``runner_external_usage``. A
     hub-domain-owned copy rather than a shared import: the hub domain depends on nothing under
     ``blizzard.runner`` (``bzh:domain-core``), so the shape is duplicated at the wire boundary the fact
     already crossed, not shared across it."""
@@ -130,7 +130,7 @@ class ExternalSubscriptionUsageWindow:
 
 @dataclass(frozen=True)
 class SubscriptionUsageRecord:
-    """One declared subscription's newest reported sample, raw (blizzard#436) —
+    """One declared subscription's newest reported sample, raw —
     staleness is applied per record at derive time, never here, so one dead sampler's
     record cannot blank a healthy sibling's. ``name`` is the declaration's own
     operator-facing label, reported alongside ``slug`` on the fact."""
@@ -143,7 +143,7 @@ class SubscriptionUsageRecord:
 
 @dataclass(frozen=True)
 class SubscriptionUsageMissRecord:
-    """One declared subscription's newest reported miss, raw (blizzard#504 D7) — staleness
+    """One declared subscription's newest reported miss, raw — staleness
     is applied at derive time, mirroring :class:`SubscriptionUsageRecord`. ``reason`` is the
     sampler's closed-set miss reason; no token, refresh token, or path ever crosses on a
     miss."""
@@ -165,7 +165,7 @@ class PerSubscriptionUsageView:
     name: str
     sampled_at: datetime | None
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
-    #: ``"credential_lapsed"`` when the newest miss outranks the newest sample (D7); ``None`` otherwise.
+    #: ``"credential_lapsed"`` when the newest miss outranks the newest sample; ``None`` otherwise.
     condition: str | None = None
     #: The slug's newest reported miss reason; ``None`` when it has none.
     miss_reason: str | None = None
@@ -276,7 +276,7 @@ class PerSubscriptionUsageView:
         sample: SubscriptionUsageRecord | None, miss: SubscriptionUsageMissRecord | None, *, now: datetime
     ) -> bool:
         """``True`` iff this slug's newest miss is a non-stale ``credential_lapsed`` newer
-        than its newest (or absent) sample — the one condition worth surfacing (D7)."""
+        than its newest (or absent) sample — the one condition worth surfacing."""
         if miss is None or miss.reason != CREDENTIAL_LAPSED_CONDITION:
             return False
         if sample is not None and as_utc(sample.sampled_at) >= as_utc(miss.missed_at):
@@ -291,14 +291,14 @@ class IReadRunnerRegistry(Protocol):
     def list_runners(self) -> list[RunnerRegistration]: ...
 
     def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
-        """The reverse, hash-indexed lookup a presented bearer token resolves through (issue #86a) — the
+        """The reverse, hash-indexed lookup a presented bearer token resolves through — the
         mirror image of every other read here, which key on ``runner_id``. A ``runner_id`` is not
         uniformly readable off a request, so a principal resolves from the token alone."""
         ...
 
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
         """Every ``runner-changed`` activity row off the fleet's two pause-family fact tables, at or
-        after ``since`` (issue #213); ``registered``/``heartbeat`` carry no fact table. On this seam,
+        after ``since``; ``registered``/``heartbeat`` carry no fact table. On this seam,
         not the chunk one (``bzh:repository-split``): a runner-pause fact names no chunk. Each table is
         read with its own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit``, never a full scan, so this
         returns up to ``2 * limit`` rows unsorted across the two; the caller merges and re-caps."""
@@ -336,22 +336,22 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> int:
         """Append a fleet pause/resume fact; ``hub_paused`` derives from the newest.
 
-        Returns the freshly-written ``runner_pause_facts.id`` (issue #213's activity-feed
+        Returns the freshly-written ``runner_pause_facts.id`` (the activity-feed's
         key) — always writes, never a no-op."""
         ...
 
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
     ) -> int:
-        """Land a runner-reported local pause/start fact; ``locally_paused`` derives (issue #43).
+        """Land a runner-reported local pause/start fact; ``locally_paused`` derives.
 
-        ``reason`` is the fact's own composed cause (issue #61) — ``None`` for a manual
+        ``reason`` is the fact's own composed cause — ``None`` for a manual
         pause/start, and always ``None`` on a start (a resume carries no reason). Returns
-        the freshly-written ``runner_local_pause_facts.id`` (issue #213's activity-feed key)."""
+        the freshly-written ``runner_local_pause_facts.id`` (the activity-feed's key)."""
         ...
 
     def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
-        """Overwrite the registration's bearer-token hash (issue #86a) — a rotation, not a fact append.
+        """Overwrite the registration's bearer-token hash — a rotation, not a fact append.
         Re-enrolling replaces the hash in place, so the prior token stops resolving immediately. ``at``
         is threaded from the injected clock (``bzh:injected-clock``) for signature symmetry with this
         seam's other writes; no rotation-audit column exists yet to stamp it into."""
@@ -360,7 +360,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     def record_external_usage(
         self, runner_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
     ) -> None:
-        """Upsert one declared subscription's newest sampled usage snapshot (issue #218), keyed on
+        """Upsert one declared subscription's newest sampled usage snapshot, keyed on
         ``(runner_id, slug)`` — refresh-in-place, not an append. ``sampled_at`` is the snapshot's own
         reported instant; ``at`` is the landing time (``bzh:injected-clock``). Never requires a known
         runner: a fact for one the registry has not seen lands anyway, and is read once it has."""
@@ -369,7 +369,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     def record_external_usage_miss(
         self, runner_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
     ) -> None:
-        """Upsert one declared subscription's newest reported miss (blizzard#504 D7), keyed on
+        """Upsert one declared subscription's newest reported miss, keyed on
         ``(runner_id, slug)`` — refresh-in-place, mirroring :meth:`record_external_usage`. The
         sample row is left untouched: this is a sibling table, not an overwrite of it."""
         ...
@@ -427,7 +427,7 @@ class FleetService:
 
     def set_paused(self, registration: RunnerRegistration, *, paused: bool, by: str) -> int:
         """Flip the fleet's brake for a registered runner, returning the freshly-written
-        ``runner_pause_facts.id`` (issue #213's activity-feed key). Takes the loaded
+        ``runner_pause_facts.id`` (the activity-feed's key). Takes the loaded
         registration (``bzh:domain-takes-objects``) — the edge resolves ``runner_id`` to
         it (404 if unknown) before calling this."""
         fact_id = self._registry.record_pause(registration.runner_id, paused=paused, at=self._clock.now(), by=by)
@@ -437,8 +437,8 @@ class FleetService:
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
     ) -> int:
-        """Land a runner's report that it paused or started *itself* (issue #43) — not a control: the
-        runner has already stopped claiming, and the hub cannot set this brake. ``reason`` (issue #61)
+        """Land a runner's report that it paused or started *itself* — not a control: the
+        runner has already stopped claiming, and the hub cannot set this brake. ``reason``
         carries the fact's own composed cause, ``None`` for a manual pause and always on a start. Unlike
         ``set_paused`` this does not require a known runner: the buffer replays an outage in FIFO order,
         so a pause can legitimately arrive before the registration that follows it."""
@@ -449,7 +449,7 @@ class FleetService:
     def record_external_usage(
         self, runner_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
     ) -> None:
-        """Land one declared subscription's reported usage sample (issue #218) —
+        """Land one declared subscription's reported usage sample —
         refresh-in-place per ``(runner_id, slug)``, mirroring :meth:`record_local_pause`'s
         no-known-runner-required acceptance: the fact rides the same outbound buffer, so
         it can legitimately arrive ahead of the registration that follows it."""
@@ -461,7 +461,7 @@ class FleetService:
     def record_external_usage_miss(
         self, runner_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
     ) -> None:
-        """Land one declared subscription's reported miss (blizzard#504 D7) — refresh-in-place
+        """Land one declared subscription's reported miss — refresh-in-place
         per ``(runner_id, slug)``, mirroring :meth:`record_external_usage`'s own
         no-known-runner-required acceptance."""
         self._registry.record_external_usage_miss(

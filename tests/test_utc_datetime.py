@@ -2,7 +2,7 @@
 
 ``UtcDateTime`` is exercised through a real sqlite engine, not its ``process_*`` hooks
 directly — sqlite's driver drops ``tzinfo`` on write, so only a round trip through a
-real connection would fail without the type (issue #28, ``bzh:utc-instants``)."""
+real connection would fail without the type (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 

@@ -34,7 +34,7 @@ REAPED = "reaped"
 FAILED = "failed"
 ESCALATED = "escalated"
 PARKED = "parked"  # a runner-config gate: the node-step completed, the chunk parks on a decision
-RELEASED = "released"  # the chunk was found reassigned/detached/unknown — abandon, no requeue (blizzard#9)
+RELEASED = "released"  # the chunk was found reassigned/detached/unknown — abandon, no requeue
 PREEMPTED = "preempted"  # an operator restart re-aimed the chunk (#370): envs and route kept
 
 # The owner-unresolvable escalation mint's own closure reason (store-only, never published).
@@ -52,7 +52,7 @@ _CP_ABANDON_AFTER_RELEASE = crashpoint(
     "abandon.after-release.before-closure", "environments released; the lease's closure not yet recorded"
 )
 
-# PAUSE — the per-chunk pause park (issue #46): interrupted, claim kept; RESUME's re-run re-signals only a live group.
+# PAUSE — the per-chunk pause park: interrupted, claim kept; RESUME's re-run re-signals only a live group.
 _CP_PAUSE_PARK_AFTER_INTERRUPT = crashpoint(
     "pause.after-interrupt.before-park", "paused worker interrupted; pause-park not yet durable"
 )
@@ -63,7 +63,7 @@ _CP_PREEMPT_AFTER_KILL = crashpoint(
     "preempt.after-kill.before-closure", "restarted chunk's worker killed; the preempted closure not yet durable"
 )
 
-#: The classification each :meth:`Attempt.fail` branch surfaces (issue #125). The
+#: The classification each :meth:`Attempt.fail` branch surfaces. The
 #: locally-paused defer branch surfaces nothing — a deferral is not an outcome.
 _ATTEMPT_FAILED: EventLogKind = "attempt-failed"
 _WORKER_LOST: EventLogKind = "worker-lost"
@@ -88,7 +88,7 @@ class Attempt:
     lease: LeaseRecord
 
     def _kill_process(self) -> None:
-        """Best-effort teardown of this lease's own worker process (D3) — the shared,
+        """Best-effort teardown of this lease's own worker process — the shared,
         liveness-checked, pgid-preferring kill (:func:`kill_owned_process`) every owned-process
         teardown in the runner loop reaches through, rather than each reimplementing its own
         liveness check."""
@@ -101,7 +101,7 @@ class Attempt:
         """Close a failed attempt, then requeue at the node or escalate per the budget.
 
         An escalation is a one-way door this tick's flush cannot retract, so the exhausted-retries
-        branch re-asks ownership first (blizzard#38) and defers while locally paused (issue #45);
+        branch re-asks ownership first and defers while locally paused;
         a retry whose owner this runner can no longer dispatch to escalates immediately instead."""
         lease = self.lease
         now = self.ctx.clock.now()
@@ -114,7 +114,7 @@ class Attempt:
         retried = self.ctx.stores.lease_record.attempt_count(lease.chunk_id, lease.node_id) - 1
         owner_block = self._owner_block()
         if retried < lease.retries_max and owner_block is None:
-            # Retry: enqueued ATOMICALLY with the closure it describes (issue #125).
+            # Retry: enqueued ATOMICALLY with the closure it describes.
             self.close(
                 reason,
                 now,
@@ -137,7 +137,7 @@ class Attempt:
             self.abandon(killed=True, via=via)
             return
         if self.ctx.stores.pause.local_paused(self.ctx.config.runner_id):
-            # Deliberate deferral, not a surfaced failure — emit nothing (issue #125).
+            # Deliberate deferral, not a surfaced failure — emit nothing.
             _log.info(
                 "escalation deferred — locally paused",
                 runner_id=self.ctx.config.runner_id,
@@ -164,7 +164,7 @@ class Attempt:
 
         The prior attempt's lease is already closed before this runs, so a 404 here leaves no
         active lease behind for any later sweep to clean up — the binding would be held
-        forever. It is therefore released here rather than retried (blizzard#9)."""
+        forever. It is therefore released here rather than retried."""
         lease = self.lease
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         if not bindings:
@@ -215,7 +215,7 @@ class Attempt:
         session = lease.session
         harness = self._resolve_harness(session, via="escalate") if session is not None else None
         if session is not None and bindings and harness is not None:
-            # Composed from the lease's own stamps (issue #144), so a takeover lands in exactly
+            # Composed from the lease's own stamps, so a takeover lands in exactly
             # the configuration the parked session ran with, never a fresh resolution.
             takeover = harness.resume_command(
                 SpawnCwd.of_session(self.ctx.config.workspace_root, bindings[0].workdir),
@@ -335,11 +335,11 @@ class Attempt:
         self.escalate(reason="no acceptable harness")
 
     def abandon(self, *, killed: bool = False, via: str) -> None:
-        """Release a chunk the hub reassigned, detached, or no longer knows about (blizzard#9) —
+        """Release a chunk the hub reassigned, detached, or no longer knows about —
         reached from restart-resume or a live tick.
 
         No epoch bump and no requeue — the work is not this runner's any more. The lease closes
-        ``released``, and any open ask park is retired alongside (blizzard#202)."""
+        ``released``, and any open ask park is retired alongside."""
         lease = self.lease
         now = self.ctx.clock.now()
         if not killed:
@@ -360,9 +360,9 @@ class Attempt:
         )
 
     def park_paused(self, *, via: str) -> None:
-        """Interrupt a paused chunk's worker and park its lease — the claim is **kept** (issue #46): the
-        inverse of :meth:`abandon`, nothing released, closed, bumped, or minted, no retry consumed. Multi-tick
-        (blizzard#627): this only SIGINTs the worker's and any in-flight elicitation's groups, then records the
+        """Interrupt a paused chunk's worker and park its lease — the claim is **kept**: the
+        inverse of :meth:`abandon`, nothing released, closed, bumped, or minted, no retry consumed. Multi-tick:
+        this only SIGINTs the worker's and any in-flight elicitation's groups, then records the
         park naming that elicitation; ``DormantSession.on_unpause`` finishes the teardown on later ticks — a
         survivor is SIGKILLed only past ``SHUTDOWN_DRAIN_DEADLINE`` from ``parked_at`` — so the envelope survives."""
         lease = self.lease
@@ -405,7 +405,7 @@ class Attempt:
         )
 
     def park_usage_limited(self) -> None:
-        """Park a lease whose exited generation was classified usage-limited (blizzard#594) —
+        """Park a lease whose exited generation was classified usage-limited —
         the same durable park :meth:`park_paused` records, minus the kill: the worker has
         already exited by the time a usage limit is classified, so there is nothing live to
         tear down, and any in-flight elicitation record is the caller's own to clear (its
@@ -483,7 +483,7 @@ class Attempt:
         Spawner(self.ctx).enter_node(lease.chunk_id, envelope, Environments(bindings).acquired, via="restart")
 
     def detached(self) -> bool:
-        """True iff the hub no longer routes this chunk here, or it is gone outright (blizzard#9).
+        """True iff the hub no longer routes this chunk here, or it is gone outright.
 
         Unreachable hub → ``False``: a transport failure is never read as a detach. A 404 is the
         one exception — terminal, not something to wait out."""
@@ -504,12 +504,12 @@ class Attempt:
         closure_reason: str | None = None,
     ) -> None:
         """Close this lease. An ``event`` lands in the outbound buffer in the same transaction
-        as the closure it describes (issue #125), so the two are never seen apart. Every
+        as the closure it describes, so the two are never seen apart. Every
         closure path funnels through here — the one place to pump this lease's own open
-        transcript segment(s) before ``record_closure`` finalizes them (issue #246).
+        transcript segment(s) before ``record_closure`` finalizes them.
         ``closure_reason`` overrides what is recorded, never the published cause."""
         self._pump_lease_before_close()
-        # Every open invocation boundary closes here too (blizzard#437 D11), BEFORE
+        # Every open invocation boundary closes here too, BEFORE
         # `record_closure` — a crash between the two just retries this idempotent path.
         self.ctx.stores.invocation_boundaries.close_boundaries_for_lease(
             self.lease.lease_id, reason=closure_reason if closure_reason is not None else reason, at=at
@@ -525,7 +525,7 @@ class Attempt:
         )
         if self.ctx.events is not None:
             lease_id = self.lease.lease_id
-            # `reason` IS the LeaseChangeCause vocabulary (D4) — enforced by `close`'s and
+            # `reason` IS the LeaseChangeCause vocabulary — enforced by `close`'s and
             # `fail`'s own parameter type now, not by a comment's claim about callers.
             self.ctx.events.publish_lease_changed(
                 lease_id,
@@ -533,7 +533,7 @@ class Attempt:
                 cause=reason,
             )
             if reason == ESCALATED:
-                # `open_escalations()`'s derivation (D4) — a closed-`escalated` lease not yet
+                # `open_escalations()`'s derivation — a closed-`escalated` lease not yet
                 # superseded — begins reading open at exactly this instant.
                 self.ctx.events.publish_escalation_changed(self.lease.chunk_id, cause="opened", lease_id=lease_id)
             if event_seq is not None:
@@ -547,7 +547,7 @@ class Attempt:
                 )
 
     def _kill_in_flight_elicitation(self) -> None:
-        """Closing a lease kills its in-flight elicitation, if any (blizzard#443, D7) — every
+        """Closing a lease kills its in-flight elicitation, if any — every
         closing path but park (fail, abandon, preempt) reaches here, so no path may leave a
         launched elicitation running against a lease nothing will ever collect. A pause park
         interrupts rather than kills, and leaves the elicitation standing for
@@ -558,7 +558,7 @@ class Attempt:
         elicitation = self.ctx.stores.elicitations.in_flight_elicitation(lease.lease_id, lease.epoch)
         if elicitation is None:
             return
-        # The shared, liveness-checked, pgid-preferring kill (D3) `_kill_process` above and
+        # The shared, liveness-checked, pgid-preferring kill `_kill_process` above and
         # takeover's own elicitation teardown both reach through — never a bare pid signal.
         kill_owned_process(
             self.ctx.process,
@@ -570,8 +570,8 @@ class Attempt:
         self.ctx.elicitation_files.cleanup(lease.lease_id, lease.epoch, through_attempt=elicitation.relaunch_count)
 
     def _pump_lease_before_close(self) -> None:
-        """D3's promise applies here too, weaker: exceptions never fail the closure,
-        but delay is bounded, not eliminated — ``deadline`` is checked only BETWEEN
+        """The same best-effort promise :meth:`_kill_process` makes applies here too, weaker:
+        exceptions never fail the closure, but delay is bounded, not eliminated — ``deadline`` is checked only BETWEEN
         ``_pump_one`` calls, so one in-flight read can run past ``PUMP_LEASE_MAX_SECONDS``,
         and it is minted fresh per call, so N closing leases pay it up to N times."""
         deadline = self.ctx.clock.now() + timedelta(seconds=PUMP_LEASE_MAX_SECONDS)
@@ -625,7 +625,7 @@ class Attempt:
         return detail
 
     def _event(self, kind: EventLogKind, message: str, reason: str, via: str, stderr_tail: str) -> dict[str, object]:
-        """The ``event.recorded`` payload one :meth:`fail` branch surfaces (issue #125)."""
+        """The ``event.recorded`` payload one :meth:`fail` branch surfaces."""
         return {
             "severity": EVENT_LOG_SEVERITY[kind],
             "kind": kind,

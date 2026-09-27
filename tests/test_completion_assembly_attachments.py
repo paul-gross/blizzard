@@ -1,4 +1,4 @@
-"""Completion assembly consumes durable attachments (issue #113, Phase 3).
+"""Completion assembly consumes durable attachments.
 
 Component tier: a real ``blizzard runner attach`` round trip feeds a real ADVANCE tick,
 proving the assembled completion against real internal collaborators end to end."""
@@ -104,8 +104,8 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
         worktree_git=FakeWorktreeGit(),
     )
 
-    # `review-diary` stays unattached, so the first exit resumes rather than judges (issue
-    # #422); the second, past the one-resume cap, falls through to judgement — launching
+    # `review-diary` stays unattached, so the first exit resumes rather than judges;
+    # the second, past the one-resume cap, falls through to judgement — launching
     # the detached elicitation; the third collects it.
     Advance(ctx).run()
     Advance(ctx).run()

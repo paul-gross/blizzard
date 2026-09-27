@@ -2,7 +2,7 @@
 
 A project missing the exclude runs a real-Chromium spec inside the merge gate *and*, since
 `structural-gate.js` scopes its real-timer sweep by the same filename, exempts it from that
-sweep at once — the pair the sweep exists to keep apart (issue #275).
+sweep at once — the pair the sweep exists to keep apart.
 """
 
 from __future__ import annotations

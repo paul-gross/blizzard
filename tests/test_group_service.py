@@ -1,5 +1,5 @@
 """GroupService (unit tier) — folding chunks into a survivor, carrying each folded
-chunk's dependency edges onto it (issue #460).
+chunk's dependency edges onto it.
 
 A fake stands in for each repository — only the methods :class:`GroupService` actually
 calls are meaningfully implemented; every other seam raises loudly if called. Mirrors
@@ -211,8 +211,8 @@ def test_two_targets_sharing_an_outside_edge_mint_only_once_across_the_fold() ->
 
 
 def test_two_targets_with_an_edge_between_them_reach_the_seam_in_one_fold_call() -> None:
-    """``chk_b`` depends on ``chk_a``, both folded into the same survivor (F4, issue
-    #460): every target's split reaches the seam in one ``record_fold`` call, so a real
+    """``chk_b`` depends on ``chk_a``, both folded into the same survivor:
+    every target's split reaches the seam in one ``record_fold`` call, so a real
     store can't let one target's row commit ahead of the other's edge release."""
     chunks = {"chk_survivor": _chunk("chk_survivor"), "chk_a": _chunk("chk_a"), "chk_b": _chunk("chk_b")}
     facts = {cid: _not_ready_facts() for cid in chunks}

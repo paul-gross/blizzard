@@ -1,5 +1,5 @@
-"""Unverified JWT expiry read, shared by the OpenAI sampler and renewer bindings
-(blizzard#504) — one parse, not two, for the same access token's ``exp`` claim."""
+"""Unverified JWT expiry read, shared by the OpenAI sampler and renewer bindings —
+one parse, not two, for the same access token's ``exp`` claim."""
 
 from __future__ import annotations
 

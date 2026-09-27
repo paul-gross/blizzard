@@ -103,7 +103,7 @@ from blizzard.runner.harness.internal.opencode_transcript import (
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 60.0
 # One concrete version this module's corpus/diagnostic fixtures are authored against — never the admission mechanism.
 PINNED_OPENCODE_VERSION = "1.18.25"
-# Currently >=1.18.25,<2.0 (blizzard#604) — the literal display; membership via `harness_shared.version_admitted`.
+# Currently >=1.18.25,<2.0 — the literal display; membership via `harness_shared.version_admitted`.
 ADMITTED_OPENCODE_RANGE_DISPLAY = ">=1.18.25,<2.0"
 ADMITTED_OPENCODE_RANGE: SpecifierSet = SpecifierSet(ADMITTED_OPENCODE_RANGE_DISPLAY)
 # At least one committed corpus must fall inside the admitted range — checked at `OpenCodeHealthProbe` construction.

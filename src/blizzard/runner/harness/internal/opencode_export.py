@@ -1,4 +1,4 @@
-"""The OpenCode ``export`` subprocess seam (blizzard#437).
+"""The OpenCode ``export`` subprocess seam.
 
 A bare, Landlock-free ``subprocess.run`` — this reads already-written session state, not
 untrusted agent code, so it owns none of ``opencode_process.py``'s diagnostic-only confinement

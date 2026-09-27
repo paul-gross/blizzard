@@ -158,7 +158,7 @@ class MessagePartCursor:
 
     def admit(self, records: Iterable[CursorRecord]) -> CursorRead:
         """Admit new identities and changed revisions, preserving current order; repeated
-        identities inside one export collapse to their last state. D1's bound: a mark absent
+        identities inside one export collapse to their last state. A mark absent
         from the current export is dropped only when this export ALSO carries a
         ``compaction`` part — real proof of pruning, since absence alone is indistinguishable
         from a transient read race and would silently re-admit retained history as "new"."""
@@ -201,7 +201,7 @@ def records_for_export(export: OpenCodeSessionExport) -> tuple[CursorRecord, ...
 def _is_compaction_record(record: CursorRecord) -> bool:
     """Whether ``record`` is a ``type: "compaction"`` part — the one signal ``admit`` trusts
     as proof that this tick's export reflects genuinely pruned history, never inferred from a
-    record's own age or size (D1)."""
+    record's own age or size."""
     return isinstance(record.payload, Mapping) and record.payload.get("type") == "compaction"
 
 

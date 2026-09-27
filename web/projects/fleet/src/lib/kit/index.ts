@@ -1,5 +1,5 @@
 /*
- * `kit/`'s sub-barrel (issue #82) — the presentational chrome family's public
+ * `kit/`'s sub-barrel — the presentational chrome family's public
  * surface, re-exported one line per feature from the root `public-api.ts`.
  */
 

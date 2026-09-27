@@ -1,4 +1,4 @@
-"""requeues — the operator's explicit hand-back after a human hold (issue #53)
+"""requeues — the operator's explicit hand-back after a human hold
 
 One brand-new table, no reshape: the runner tree declares no ForeignKeys at all.
 Revision ID: 20260717_2300_runner_requeues

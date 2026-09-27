@@ -26,8 +26,7 @@ const ALL_STATES = 'all';
 /** UI-only chip sentinels for the "every routine"/"every scope" chip — never sent to
  * the server and never stored in the URL, where `null` is what actually rides both
  * the URL and the API call. Routine names and scope slugs are operator-authored,
- * exactly like `class` below, so they carry the same collision-guarding prefix
- * (review:F1). */
+ * exactly like `class` below, so they carry the same collision-guarding prefix. */
 const ALL_ROUTINES = 'all';
 const ALL_SCOPES = 'all';
 
@@ -212,7 +211,7 @@ export function injectFindingsBucketFilters(): FindingsBucketFilters {
     url.patch({ state: value === ALL_STATES ? null : value });
   }
 
-  /** Narrowed by class and state (D3, client-side) and now also by the pending-and-
+  /** Narrowed by class and state (client-side) and now also by the pending-and-
    * hideable set below (`bzh:frontend-pending-override`) — but only inside the
    * `st !== null` branch: a concrete state chip is the only filter a pending triage
    * call could falsify, since "All states" already renders every finding regardless

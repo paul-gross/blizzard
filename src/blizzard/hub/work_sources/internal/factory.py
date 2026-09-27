@@ -58,7 +58,7 @@ class WorkSourceEntry:
         close_forge_writes_enabled: bool = True,
     ) -> WorkSourceRegistry:
         """One credentialed client + binding per configured source, plus the built-in
-        ``hub`` source (issue #357) — always seated, both an editor and a closer, neither
+        ``hub`` source — always seated, both an editor and a closer, neither
         opt-in. ``close_forge_writes_enabled=False`` seats no closer for a *configured*
         source (never the unaffected `hub` one) — see ``docs/deployment/work-sources.md``.
         A source's ``token_env`` naming an unset variable fails here, at boot."""

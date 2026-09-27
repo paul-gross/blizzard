@@ -70,7 +70,7 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path) -> None:
-    """Issue #55's runner-side alias — one handler, two routes. It answers identically to
+    """The runner-side alias — one handler, two routes. It answers identically to
     the canonical path *and* forwards to the hub's canonical `/work-items`: this runner is
     the newer half of any skew it is party to, so it never proxies the old path onward."""
     seen: list[str] = []
@@ -91,7 +91,7 @@ def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path) -> N
 
 @pytest.mark.component
 def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_path: Path) -> None:
-    """The forward carries the same bearer credential as the loop's own hub client (issue #86b)."""
+    """The forward carries the same bearer credential as the loop's own hub client."""
     seen_headers: list[httpx.Headers] = []
 
     def handler(request: httpx.Request) -> httpx.Response:

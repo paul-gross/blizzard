@@ -1,4 +1,4 @@
-"""Add the transcript invocation-boundary table (blizzard#437 D6/D11).
+"""Add the transcript invocation-boundary table.
 
 Revision ID: 20260918_1000_invocation_boundaries
 Revises: 20260917_1200_elicitation_process_group

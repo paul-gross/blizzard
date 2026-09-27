@@ -1,4 +1,4 @@
-"""The analytics events/counts routes (blizzard#255, Phase 3, component tier): the
+"""The analytics events/counts routes (component tier): the
 TRANSCRIPT_READ auth triad, a runner principal refused at every route, filters and
 paging over real derived events, and the four counts."""
 
@@ -198,7 +198,7 @@ def test_events_filters_by_time_range(tmp_path: Path) -> None:
 
 
 def test_events_filter_by_provenance(tmp_path: Path) -> None:
-    """blizzard#439 D6: harness_id/harness_version/model/effort narrow the events route,
+    """harness_id/harness_version/model/effort narrow the events route,
     and the response carries each dimension on every event."""
     hub = build_hub(tmp_path, auth_mode="oauth")
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
@@ -272,7 +272,7 @@ def test_events_422s_on_a_malformed_cursor(tmp_path: Path, cursor: str) -> None:
 
 
 def test_a_prior_extractor_version_finds_nothing_under_the_current_one(tmp_path: Path) -> None:
-    """D1: mixing versions double-counts the same occurrence — the current version is
+    """Mixing versions double-counts the same occurrence — the current version is
     the default, and an explicit stale one reads that version's own (empty) rows."""
     hub, token, _chunk_id = _seeded_hub(tmp_path)
 

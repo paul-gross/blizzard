@@ -1,5 +1,5 @@
 """worker git-commit declaration channel — one append-only row per declare call,
-latest-wins per ``(lease_id, repo)`` (runner store tree, issue #143)
+latest-wins per ``(lease_id, repo)`` (runner store tree)
 
 Revision ID: 20260722_1000_runner_git_commit_declarations
 Revises: 20260721_1500_runner_jwt_jti_seen

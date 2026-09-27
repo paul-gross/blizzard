@@ -2,7 +2,7 @@
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the window
 itself is applied in `src/blizzard/hub/domain/garden_sweeps.py`'s `compute_sweeps`
-(D6, ``bzh:sql-portable``)."""
+(``bzh:sql-portable``)."""
 
 from __future__ import annotations
 

@@ -12,8 +12,8 @@ let stub: RequestClientStub | undefined;
 afterEach(() => stub?.restore());
 
 /** A full `DashboardView` body, `asks.items` set to `asks` and every other section
- * its empty default — `LocalAsks` reads off the shared `/api/dashboard` poll
- * (issue #311), not a `/api/asks` route of its own. */
+ * its empty default — `LocalAsks` reads off the shared `/api/dashboard` poll,
+ * not a `/api/asks` route of its own. */
 function dashboardBody(asks: readonly runnerApi.AskView[]): runnerApi.DashboardView {
   return {
     runner: {

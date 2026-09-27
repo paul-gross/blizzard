@@ -1,6 +1,5 @@
 """Per-kind turn extraction: main-lane recognition, sidechain depth/agent-type
-attribution, and the dialect vocabulary's unknown-dialect fallback (blizzard#254,
-Phase 2 — unit tier)."""
+attribution, and the dialect vocabulary's unknown-dialect fallback (unit tier)."""
 
 from __future__ import annotations
 
@@ -77,7 +76,7 @@ def test_a_read_call_with_a_concrete_path_mints_a_file_read_event() -> None:
 
 
 def test_a_grep_call_mints_no_file_read_event() -> None:
-    """A pattern search is a different act (D5) — never a file_read."""
+    """A pattern search is a different act — never a file_read."""
     turns = [_tool_turn(0, "Grep", {"pattern": "TODO"})]
 
     events = extract_events(turns, normalizer_version=_DIALECT)
@@ -98,7 +97,7 @@ def test_a_skill_call_mints_a_skill_invocation_event() -> None:
 
 
 def test_an_agent_call_mints_an_agent_spawn_event() -> None:
-    """The Claude Code harness names the subagent-spawn tool ``Agent`` (blizzard#327)."""
+    """The Claude Code harness names the subagent-spawn tool ``Agent``."""
     turns = [_tool_turn(0, "Agent", {"subagent_type": "explorer", "prompt": "find X"})]
 
     events = extract_events(turns, normalizer_version=_DIALECT)
@@ -120,7 +119,7 @@ def test_an_agent_call_with_no_subagent_type_mints_no_event() -> None:
 
 @pytest.mark.parametrize("tool_name", ["TaskUpdate", "TaskCreate"])
 def test_a_non_spawn_tool_call_mints_no_agent_spawn_event(tool_name: str) -> None:
-    """Neighboring tool names never match the spawn gate (blizzard#327)."""
+    """Neighboring tool names never match the spawn gate."""
     turns = [_tool_turn(0, tool_name, {"subagent_type": "explorer"})]
 
     events = extract_events(turns, normalizer_version=_DIALECT)
@@ -134,7 +133,7 @@ def test_an_env_turn_mints_nothing() -> None:
     assert events == []
 
 
-# --- sidechain depth / nearest-enclosing agent type (D8) ---------------------
+# --- sidechain depth / nearest-enclosing agent type ---------------------
 
 
 def test_a_linked_sidechain_turn_carries_depth_one_and_its_own_agent_type() -> None:
@@ -157,7 +156,7 @@ def test_a_linked_sidechain_turn_carries_depth_one_and_its_own_agent_type() -> N
 
 
 def test_an_agent_call_nested_in_a_sidechain_mints_an_agent_spawn_event_at_depth_one() -> None:
-    """A spawn recognized from inside a sidechain, not just the main lane (blizzard#327)."""
+    """A spawn recognized from inside a sidechain, not just the main lane."""
     nested_spawn = _tool_turn(0, "Agent", {"subagent_type": "coder", "prompt": "implement"})
     outer_spawn = _tool_turn(
         0,
@@ -202,7 +201,7 @@ def test_a_nested_sidechain_turn_carries_depth_two_and_the_nearest_enclosing_age
 
 
 def test_an_unresolved_sidechain_turn_carries_depth_but_no_agent_type() -> None:
-    """D8: an unresolved link's own agent type is honestly ``None`` — never borrowed
+    """An unresolved link's own agent type is honestly ``None`` — never borrowed
     from an ancestor sidechain."""
     inner = _tool_turn(0, "Read", {"file_path": "orphan.py"})
     spawn = _tool_turn(
@@ -220,7 +219,7 @@ def test_an_unresolved_sidechain_turn_carries_depth_but_no_agent_type() -> None:
     assert reads[0].agent_type is None
 
 
-# --- dialect vocabulary (D9) --------------------------------------------------
+# --- dialect vocabulary --------------------------------------------------
 
 
 def test_an_unknown_dialect_derives_zero_events() -> None:
@@ -251,14 +250,14 @@ def test_a_malformed_normalizer_version_derives_zero_events() -> None:
     assert events == []
 
 
-# --- OpenCode dialect (blizzard#439) -------------------------------------------
+# --- OpenCode dialect -------------------------------------------
 
 _OPENCODE = "opencode-export/1"
 
 
 def test_opencode_task_call_mints_an_agent_spawn_event() -> None:
     """OpenCode's own child-agent-spawn tool is ``task``, its argument key
-    ``agent`` (D5, fixture-proven against ``contracts/opencode/1.18.25/child_session.json``)."""
+    ``agent`` (fixture-proven against ``contracts/opencode/1.18.25/child_session.json``)."""
     turns = [_tool_turn(0, "task", {"agent": "explorer", "prompt": "find X"})]
 
     events = extract_events(turns, normalizer_version=_OPENCODE)
@@ -279,7 +278,7 @@ def test_opencode_task_call_with_no_agent_key_mints_no_event() -> None:
 
 
 def test_opencode_has_no_file_read_or_skill_recognition_yet() -> None:
-    """The read and skill rows are a deliberate, visible hole (D5) — no fixture-proven
+    """The read and skill rows are a deliberate, visible hole — no fixture-proven
     tool name exists for either yet, so OpenCode registers spawn only."""
     turns = [
         _tool_turn(0, "read", {"filePath": "a.py"}),
@@ -314,7 +313,7 @@ def test_opencode_linked_child_spawn_carries_nested_depth_and_agent_type() -> No
 
 
 def test_opencode_unlinked_child_stays_analyzable_with_no_fabricated_spawn() -> None:
-    """D7: an unlinked OpenCode sidechain keeps its own agent type — the child's own,
+    """An unlinked OpenCode sidechain keeps its own agent type — the child's own,
     never an ancestor's — and produces no fabricated parent spawn event."""
     inner = _tool_turn(0, "task", {"agent": "coder", "prompt": "implement"})
     outer = _tool_turn(

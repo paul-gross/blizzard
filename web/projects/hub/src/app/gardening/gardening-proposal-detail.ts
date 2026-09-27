@@ -43,15 +43,15 @@ import { GardeningProposalPassDialog } from './gardening-proposal-pass-dialog';
  *
  * The selected proposal's own record already carries its full case and closure —
  * the one list read returns every `GardenProposalView` field, so this pane needs
- * no second by-id fetch of its own (Decision 1's client-side-filtering spirit
+ * no second by-id fetch of its own (the same client-side-filtering spirit
  * applied to selection too), and reaching for that same cache-keyed read is what
  * lets it resolve the routed proposal without a seam back to the list. Its
  * evidence is different: a proposal carries finding *ids* only, so this container
- * fans those out live through `injectHubFindingsQuery` (Decision 3), and, for an
+ * fans those out live through `injectHubFindingsQuery`, and, for an
  * accepted-and-minted proposal, resolves the linked work item through its
- * closure's `source`/`ref` pointer (Decision 4) via `injectHubWorkItemQuery`.
+ * closure's `source`/`ref` pointer via `injectHubWorkItemQuery`.
  *
- * Owns the two closing dialogs' own dialog-open signals (Decision 6: both verbs
+ * Owns the two closing dialogs' own dialog-open signals (both verbs
  * gate on `chunk:control`, resolved here through `injectMeQuery` +
  * `hasPermission` and forwarded to the panel as `canControl`).
  */

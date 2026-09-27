@@ -12,7 +12,7 @@ from blizzard.hub.domain.graph import Graph, IWriteGraphRepository
 
 
 class GraphLifecycleService:
-    """Set or clear a graph's retired brake without touching its immutable row (issue #101)."""
+    """Set or clear a graph's retired brake without touching its immutable row."""
 
     def __init__(self, *, graphs: IWriteGraphRepository, clock: IClock) -> None:
         self._graphs = graphs
@@ -35,7 +35,7 @@ class GraphLifecycleService:
         self._graphs.record_lifecycle(graph.graph_id, retired=False, at=self._clock.now(), by=by)
 
     def set_follow_latest(self, graph: Graph, *, follow_latest: bool | None, by: str) -> None:
-        """Append this graph's follow-latest policy — the tri-state (issue #164).
+        """Append this graph's follow-latest policy — the tri-state.
 
         ``None`` reverts to inheriting the configured default; clearing an override is an
         appended fact like any other (pinned by tests/test_follow_latest_policy.py).

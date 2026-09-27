@@ -1,4 +1,4 @@
-"""graph_sessions compaction window — the declared pool's `--autocompact` value (issue #343)
+"""graph_sessions compaction window — the declared pool's `--autocompact` value
 
 One guarded, nullable column on ``graph_sessions``: un-backfilled, so NULL declares none.
 Revision ID: 20260818_0900_hub_graph_sessions_compaction_window

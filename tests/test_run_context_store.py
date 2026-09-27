@@ -1,4 +1,4 @@
-"""``RunContextStore`` — the run-context repository (blizzard#393 Phase 1, component
+"""``RunContextStore`` — the run-context repository (component
 tier). Migrated-to-head sqlite-on-disk — the ``tests/test_garden_proposal_store.py``
 shape."""
 

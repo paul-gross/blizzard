@@ -5,12 +5,12 @@ import { localPauseMutationKey } from './mutation-keys';
 import { injectLocalPauseMutation, injectRunnerDashboardQuery, type LocalPauseVars } from './status.query';
 
 /**
- * The runner top bar's pause/unpause control (issue #133) — the local brake's
+ * The runner top bar's pause/unpause control — the local brake's
  * only mutation surface anywhere in the web UI; the CLI (`blizzard runner
  * pause`/`start`) is the other writer. Rendered in the shared
  * {@link BoardHeader}'s `[header-trailing]` slot beside {@link LocalIdentity}
  * and the header menu — the same composable region `local-panel-layout.ts`
- * already hosts a self-fetching mini-container in (issue #131's design).
+ * already hosts a self-fetching mini-container in.
  *
  * Reads `GET /api/runner`'s `pause` triad off the same
  * {@link injectRunnerDashboardQuery} every other rail on this panel already
@@ -88,7 +88,7 @@ export class LocalPauseControl {
   /** The hub's brake, as last mirrored by PULL — untouched by this control. */
   protected readonly hubPaused = computed<boolean>(() => this.dashboardQuery.data()?.runner?.pause?.hub ?? false);
 
-  /** The local brake's own reason (blizzard#594) — a usage limit, the spend ceiling, or
+  /** The local brake's own reason — a usage limit, the spend ceiling, or
    * `null` on a plain manual pause or while nothing overrides it (`overridePaused` names no
    * reason of its own, so a pending flip shows no stale reason until the real read catches
    * up). Read straight off `pause.local_reason`, never derived from `localPaused`'s own

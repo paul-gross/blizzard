@@ -76,8 +76,8 @@ describe('ChunkDetailPanel', () => {
     // wrapper changes nothing about that guarantee.
     expect(el.querySelector('[aria-label="Work item"]')).not.toBeNull();
     // The node-history and artifacts sections are labelled through their own visible
-    // heading (`aria-labelledby`) rather than a second, literal copy of its text
-    // (issue #205) — asserted through the reference rather than a duplicated string.
+    // heading (`aria-labelledby`) rather than a second, literal copy of its text —
+    // asserted through the reference rather than a duplicated string.
     expect(el.querySelector('[aria-labelledby="chunk-timeline-heading"]')).not.toBeNull();
     expect(el.querySelector('[aria-labelledby="chunk-artifacts-heading"]')).not.toBeNull();
 
@@ -236,7 +236,7 @@ describe('ChunkDetailPanel', () => {
   it('emits editGraph from the facts column', async () => {
     // `current_node_id: null` is what makes the fixture coherent: a chunk only moves
     // once claimed, so a `not_ready` one stands on no node — and the edit row is gated
-    // on both halves of `EditService`'s window, unclaimed and unmoved (issue #271).
+    // on both halves of `EditService`'s window, unclaimed and unmoved.
     const notReady: ChunkDetail = { ...ROUTED_DETAIL, status: 'not_ready', route: null, current_node_id: null };
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', notReady);
@@ -273,7 +273,7 @@ describe('ChunkDetailPanel', () => {
     expect(emitted).toEqual({ questionId: 'qn_01', answer: 'rest', chunkId: WAITING_QUESTION_DETAIL.chunk_id });
   });
 
-  // --- The shared action-error notice (issue #42) -----------------------------
+  // --- The shared action-error notice -----------------------------
   //
   // One notice serves every operator action in the dock (detach, pause, resume,
   // complete, graph/model edit) — it renders directly off `actionError`, between the

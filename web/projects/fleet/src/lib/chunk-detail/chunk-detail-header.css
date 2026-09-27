@@ -96,7 +96,7 @@ a.edge-ref:focus-visible {
    * its contents starting immediately after the title. Shrinking stays on (not
    * `flex: none`): a flex item that refuses to shrink never narrows below its content's
    * single-line width, so its own `flex-wrap` never gets a chance to fire and the row
-   * silently overflows `.d-head` instead (round 3 F4). `min-width: 0` lets it shrink
+   * silently overflows `.d-head` instead (round 3). `min-width: 0` lets it shrink
    * past its children's combined intrinsic width, same as `.d-title` beside it. */
   flex: 0 1 auto;
   margin-left: auto;
@@ -126,7 +126,7 @@ a.edge-ref:focus-visible {
   gap: 6px;
   min-width: 0;
 }
-/* The non-interactive "Claimed by <runner>" fact (issue #42) — plain text, no
+/* The non-interactive "Claimed by <runner>" fact — plain text, no
    "Route" label, replacing the old tag + runner id + inline Detach button now
    that Detach lives in the ⋯ menu. */
 .claimed {

@@ -5,7 +5,7 @@ import type { WorkItemAuthorView, WorkItemEntry } from '../api/hub';
 import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown } from '../kit';
 import type { Tone } from '../kit';
 
-/** A stated priority's badge tone (blizzard#362) — advice for the triaging human, never
+/** A stated priority's badge tone — advice for the triaging human, never
  * a queue position, so it borrows the shared urgency ladder rather than inventing one. */
 const PRIORITY_TONE: Record<string, Tone> = {
   high: 'needs',
@@ -24,7 +24,7 @@ const HUB_SOURCE_NAME = 'hub';
  * ticket name first (the thing worth reading, carrying the visual weight)
  * then the work ref to its right as `- source#ref`, an independently
  * clickable address. Each row's own header is the accordion trigger;
- * expanding it reveals the item's own idiom (blizzard#362) — a forge
+ * expanding it reveals the item's own idiom — a forge
  * pointer's title/body/messages, or a hub pointer's markdown body,
  * authorship line, and stated priority, discriminated by
  * {@link WorkItemEntry.source source} — the one field every entry carries
@@ -59,7 +59,7 @@ export class ChunkIssueList {
    * triad, one entry per pointer. */
   readonly items = input.required<readonly WorkItemEntry[]>();
 
-  /** The chunk detail route's own path segments, before a chunk id (blizzard#362) —
+  /** The chunk detail route's own path segments, before a chunk id —
    * lets a consumer outside the desktop board point a fleet author's chunk link
    * elsewhere without `fleet` hardcoding a hub route (`ChunkDetailHeader`'s own
    * `linkBase` follows the same convention). */
@@ -94,7 +94,7 @@ export class ChunkIssueList {
     return item.title?.trim() || '—';
   }
 
-  /** Which idiom an entry renders in (blizzard#362) — `source` discriminates, the one
+  /** Which idiom an entry renders in — `source` discriminates, the one
    * field every entry carries regardless of fetch outcome. `author` and `web_url` were
    * each tried first and each has a combination where it goes absent for a genuine hub
    * entry — `author` on any errored fetch, `web_url` once no live chunk holds the

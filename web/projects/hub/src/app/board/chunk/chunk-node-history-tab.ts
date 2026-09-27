@@ -35,10 +35,10 @@ const GRAPH_LINK_BASE: readonly string[] = ['/graphs'];
  * (the transcript/artifacts accordions), and still computes {@link hasSelection} itself
  * since the shell cannot derive a selection from content it does not own.
  *
- * D8: the join is exact `(node_id, epoch)` equality — {@link stepArtifacts} is already
+ * The join is exact `(node_id, epoch)` equality — {@link stepArtifacts} is already
  * filtered that way by the container ({@link filterArtifactsByStep}), never latest-by-node.
  *
- * D7: the artifact half rides {@link detail}, already resolved, and states its own empty
+ * The artifact half rides {@link detail}, already resolved, and states its own empty
  * case directly; the transcript half is query-gated through {@link KitAsyncState} via
  * {@link indexState}/{@link segmentState} — `[]` during the first fetch is indistinguishable
  * from a settled empty read without that gate.
@@ -68,7 +68,7 @@ export class ChunkNodeHistoryTab {
    * detail state. */
   readonly drilldown = input(false);
 
-  /** The selected step's own artifacts, already filtered by the container (D8: exact
+  /** The selected step's own artifacts, already filtered by the container (exact
    * `(node_id, epoch)`, never latest-by-node). */
   readonly stepArtifacts = input<readonly ArtifactView[]>([]);
 

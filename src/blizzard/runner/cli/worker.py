@@ -56,7 +56,7 @@ def chunk_group() -> None:
 
 @chunk_group.command("history")
 def chunk_history() -> None:
-    """Worker: read this chunk's own transition history as kind-discriminated JSON (issue #237) — the
+    """Worker: read this chunk's own transition history as kind-discriminated JSON — the
     merged, oldest-first timeline, one row per accepted transition, cross-graph migration, or delivery
     bounce, each carrying its own ``kind``. The in-flight node-step this call is part of is not
     there yet: a transition is recorded only once an attempt completes."""
@@ -69,7 +69,7 @@ def chunk_history() -> None:
 @click.option("--name", required=True, help="The `produces:` name this content is submitted for.")
 @click.pass_context
 def attach(ctx: click.Context, name: str) -> None:
-    """Deprecated alias for ``blizzard runner artifact create`` (issue #127).
+    """Deprecated alias for ``blizzard runner artifact create``.
 
     Kept working, hidden from ``--help``: it warns on stderr and delegates with identical behavior."""
     click.echo(
@@ -94,7 +94,7 @@ def work_items(chunk_id: str) -> None:
 @click.argument("chunk_id")
 @click.pass_context
 def pm_items(ctx: click.Context, chunk_id: str) -> None:
-    """Deprecated alias for ``blizzard runner work-items`` (issue #55).
+    """Deprecated alias for ``blizzard runner work-items``.
 
     Kept working, hidden from ``--help`` (pinned by
     tests/test_pin_runner_misc.py::test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item)."""

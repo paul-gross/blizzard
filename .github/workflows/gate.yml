@@ -119,3 +119,15 @@ jobs:
           cd web && npm run generate:client
           cd "$GITHUB_WORKSPACE" && git diff --exit-code -- web/ \
             || { echo "::error::generated API client is stale — regenerate and commit."; exit 1; }
+
+  process-ref-lint:
+    name: process-reference lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install mise + vale
+        uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.2
+      - name: process-reference prose lint (mise run process-ref-lint)
+        run: mise run process-ref-lint

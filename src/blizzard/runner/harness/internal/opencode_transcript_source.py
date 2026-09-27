@@ -1,4 +1,4 @@
-"""The OpenCode ``IHarnessTranscriptSource`` adapter (blizzard#437), the OpenCode analogue of
+"""The OpenCode ``IHarnessTranscriptSource`` adapter, the OpenCode analogue of
 ``claude_code_transcript.py`` — named apart from ``opencode_transcript.py`` (the compatibility
 proof's own identity-comparison module) to avoid colliding with it. Every call re-exports the
 whole root session; :class:`~.opencode_cursor.MessagePartCursor` turns that into an incremental
@@ -50,8 +50,8 @@ _EXPORT_ERRORS = (OpenCodeExportError, json.JSONDecodeError, OpenCodeShapeError)
 @dataclass(frozen=True)
 class _Position:
     """This source's own opaque :class:`TranscriptPosition` token: the identity cursor plus
-    which child sessions are already linked, kept apart from D1's own pruning bound — a
-    linked child is cross-session bookkeeping, never a compactable identity. A token minted
+    which child sessions are already linked, kept apart from the cursor's own pruning bound —
+    a linked child is cross-session bookkeeping, never a compactable identity. A token minted
     before this field existed decodes as ``linked_children=frozenset()``, never ``unreadable``."""
 
     cursor: MessagePartCursor
@@ -100,7 +100,7 @@ def _split_admissions(
     """Split ``admissions`` into the identities :func:`build_turns` should build fresh turns
     for, and the late-output patches for a tool part the cursor admits as ``"updated"`` — a
     previously-shipped call's pending state resolving to a result, patched onto the earlier
-    call rather than re-emitted as a second, full turn (review F3). A revision with no output
+    call rather than re-emitted as a second, full turn. A revision with no output
     yet (e.g. pending to running) ships nothing: nothing to build, nothing to patch."""
     admitted: set[MessagePartIdentity] = set()
     late_outputs: list[LateToolOutput] = []
@@ -130,17 +130,17 @@ class _ChildLinkResult:
 class OpenCodeTranscriptSource:
     """Exports and normalizes a session's transcript, resolving child sessions into sidechains
     (``bzh:dependency-injection`` — ``exporter`` already closes over the configured binary).
-    No confirmed signal distinguishes "no such session" from any other export failure (D2), so
+    No confirmed signal distinguishes "no such session" from any other export failure, so
     every export failure here reads as ``"unreadable"``, never a guessed ``"not_found"``."""
 
     def __init__(self, exporter: IOpenCodeExporter, error_factory: TranscriptErrorFactory) -> None:
         self._exporter = exporter
         self._errors = error_factory
-        self._memo: tuple[str, str] | None = None  # see `_fetch`/`_reuse_or_fetch` (review F17)
+        self._memo: tuple[str, str] | None = None  # see `_fetch`/`_reuse_or_fetch`
 
     def _fetch(self, session_id: str) -> str:
         """A genuinely fresh export, offered as the memo to the VERY NEXT
-        :meth:`_reuse_or_fetch` call for the same session (review F17). A raising fetch never
+        :meth:`_reuse_or_fetch` call for the same session. A raising fetch never
         reaches the write, so a failure can never poison a later read."""
         raw = self._exporter.export(session_id)
         self._memo = (session_id, raw)
@@ -168,13 +168,13 @@ class OpenCodeTranscriptSource:
             self._errors.from_io(exc, f"transcript cursor malformed: {session_id}", session_id=session_id)
             return self._unavailable(session_id, "unreadable")
 
-        export = self._export(session_id, recovered=False, fresh=True)  # never one tick stale (F17)
+        export = self._export(session_id, recovered=False, fresh=True)  # never one tick stale
         if export is None:
             return self._unavailable(session_id, "unreadable")
 
         records = records_for_export(export)
         parts_by_identity = _parts_by_identity(export.messages)
-        # Runs over the WHOLE export every tick, independent of cursor admission (F4): a
+        # Runs over the WHOLE export every tick, independent of cursor admission: a
         # child's export can fail or momentarily mismatch, and must stay visible and retryable.
         children = self._link_children(
             export, parts_by_identity=parts_by_identity, already_linked=position.linked_children
@@ -191,7 +191,7 @@ class OpenCodeTranscriptSource:
                 turns[index] = replace(turns[index], sidechain=sidechain)
             else:
                 # No turn for the spawning call this tick (already shipped earlier) — the
-                # pump's own cross-window agent-id route attaches it instead (blizzard#338).
+                # pump's own cross-window agent-id route attaches it instead.
                 unlinked_sidechains.append(replace(sidechain, link="unlinked"))
 
         next_position = _Position(read.cursor, position.linked_children | children.newly_linked)
@@ -257,7 +257,7 @@ class OpenCodeTranscriptSource:
 
     def tail_position(self, session_id: str, *, spawn_cwd: str | None) -> TranscriptPosition | None:
         del spawn_cwd
-        export = self._export(session_id, recovered=True, fresh=True)  # a boundary anchor (F17)
+        export = self._export(session_id, recovered=True, fresh=True)  # a boundary anchor
         if export is None:
             return None
         cursor = MessagePartCursor.start().admit(records_for_export(export)).cursor
@@ -316,7 +316,7 @@ class OpenCodeTranscriptSource:
                 continue
             sidechain = self._resolve_sidechain(parent_session_id=export.info.id, candidate=candidate)
             if sidechain is None:
-                # Visible, not lost (F4): a failure or `parentID` mismatch retries every
+                # Visible, not lost: a failure or `parentID` mismatch retries every
                 # tick, rather than being silently dropped the one time it is seen.
                 unresolved.append(
                     SidechainConversation(

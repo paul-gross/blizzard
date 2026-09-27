@@ -142,7 +142,7 @@ class SqlAlchemyRunnerStore(
     InvocationBoundaryStore,
     SelfTestResultStore,
 ):
-    """The flat, every-concept-at-once runner store — test support only (D3, blizzard#410):
+    """The flat, every-concept-at-once runner store — test support only:
     production composes the extracted concept adapters individually via
     :func:`~blizzard.runner.composition.build_stores`, never this class. Kept here because a
     test fixture wants one object standing in for every concept at once, structurally
@@ -178,7 +178,7 @@ class SqlAlchemyRunnerStore(
 
 
 def runner_store_errors() -> RunnerStoreErrorFactory:
-    """The runner-store seam (issue #413) every test's ``SqlAlchemyRunnerStore``
+    """The runner-store seam every test's ``SqlAlchemyRunnerStore``
     construction supplies — one helper so its call sites construct it identically."""
     return RunnerStoreErrorFactory(structlog.get_logger("test"))
 
@@ -270,7 +270,7 @@ def _create_all(md: MetaData, engine: object) -> None:
 
 def strip_transcript_segments(store: object) -> None:
     """Erase the segment ledger and its lane buffer — the pre-lane store shape the
-    blizzard#250 backfill exists for. Unreachable through the write API, whose only
+    backfill exists for. Unreachable through the write API, whose only
     session-id writer stamps a segment in the same transaction.
 
     ``store`` is typed loosely: any one field of a :func:`make_stores` bundle is, at
@@ -303,7 +303,7 @@ class StubbedBufferBytesStore:
 
 class CountingAttachmentStore:
     """A real store, wrapped to count ``attachments_for_lease`` (full content) and
-    ``attachment_names_for_lease`` (names only, Phase 3 hoist) calls separately — lets a
+    ``attachment_names_for_lease`` (names only, hoist) calls separately — lets a
     test assert the produces-coverage check reads only names while `_judged`'s asset
     harvest still reads full content, on the very same lease."""
 
@@ -334,27 +334,27 @@ def runner_invariant_violations(store: object) -> list[Violation]:
 class FakeHub:
     """A scriptable :class:`IHubClient`: canned queue/claim/apply/envelope/chunk.
 
-    ``down`` raises :class:`HubClientError`; ``not_found`` (blizzard#9) 404s `get_envelope`
+    ``down`` raises :class:`HubClientError`; ``not_found`` 404s `get_envelope`
     and omits the id from a `chunk_statuses` response.
     """
 
     def __init__(self, *, default_runner_id: str = "r1") -> None:
         # The runner id the unscripted `chunk_statuses` fallback's route reports as holding
-        # the chunk; `make_context` keeps this in sync with `LoopConfig.runner_id` (blizzard#38).
+        # the chunk; `make_context` keeps this in sync with `LoopConfig.runner_id`.
         self.default_runner_id = default_runner_id
         self.queue: list[QueuePeekEntry] = []
-        # A per-call scripted sequence (blizzard#433 D10): when set, each `peek_queue`
+        # A per-call scripted sequence: when set, each `peek_queue`
         # call pops its own response instead of reading the static `queue` above.
         self.queue_responses: list[list[QueuePeekEntry]] = []
-        self.peek_queue_calls = 0  # counts `peek_queue` calls (blizzard#459) — one per Fill.run()
-        # One entry per `peek_queue` call, naming the request it carried (blizzard#433
-        # Phase 3) — lets a test assert on the capabilities/policy the call site sends.
+        self.peek_queue_calls = 0  # counts `peek_queue` calls — one per Fill.run()
+        # One entry per `peek_queue` call, naming the request it carried —
+        # lets a test assert on the capabilities/policy the call site sends.
         self.peek_queue_requests: list[QueuePeekRequest] = []
         self.claim_outcome: RouteClaimOutcome | None = None
         self.apply_responses: list[ApplyResponse] = []
         self.envelopes: dict[str, NodeEnvelope] = {}
         self.chunks: dict[str, ChunkStatusView] = {}
-        # One entry per `chunk_statuses` call, naming the ids it requested (blizzard#521) —
+        # One entry per `chunk_statuses` call, naming the ids it requested —
         # lets a test assert on the per-tick batching the cache is built for.
         self.chunk_statuses_calls: list[list[str]] = []
         self.claims: list[RouteClaim] = []
@@ -367,33 +367,33 @@ class FakeHub:
         # on batching, distinct from `pushed`'s own flattened what-eventually-landed log.
         self.push_facts_calls: list[list[int]] = []
         # The transcript lane's own push log and mark — structurally separate from the
-        # fact lane's above (D3, issue #246).
+        # fact lane's above.
         self.transcripts_pushed: list[TranscriptSegmentRecord] = []
         self.transcript_high_water: dict[str, int] = {}
-        # One entry per `push_transcripts` call, naming the seqs it carried (issue #522).
+        # One entry per `push_transcripts` call, naming the seqs it carried.
         self.push_transcripts_calls: list[list[int]] = []
-        # Seqs to cap-reject-but-ack, scripted (review F8) — the real ingest service's own
-        # size/budget/rate rejection (blizzard#247), which no fake could otherwise surface to a test.
+        # Seqs to cap-reject-but-ack, scripted — the real ingest service's own
+        # size/budget/rate rejection, which no fake could otherwise surface to a test.
         self.reject_transcript_seqs: set[int] = set()
         self.questions: dict[str, QuestionView] = {}
         self.delivered: list[tuple[str, QuestionView]] = []
         self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
-        self.registered_capacities: list[int | None] = []  # env_capacity per register call (issue #69)
-        self.registered_urls: list[str | None] = []  # url per register call (issue #95)
-        self.registered_redirect_uris: list[tuple[str, ...]] = []  # redirect_uris per register call (issue #95)
-        # capabilities per register call (blizzard#433)
+        self.registered_capacities: list[int | None] = []  # env_capacity per register call
+        self.registered_urls: list[str | None] = []  # url per register call
+        self.registered_redirect_uris: list[tuple[str, ...]] = []  # redirect_uris per register call
+        # capabilities per register call
         self.registered_capabilities: list[tuple[RunnerCapability, ...]] = []
         # subscriptions per register call
         self.registered_subscriptions: list[tuple[RunnerSubscriptionDeclaration, ...]] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
-        # chunk ids `get_envelope` 404s for (blizzard#9); `chunk_statuses` never raises for
-        # one of these — it simply omits it from the returned mapping (blizzard#521).
+        # chunk ids `get_envelope` 404s for; `chunk_statuses` never raises for
+        # one of these — it simply omits it from the returned mapping.
         self.not_found: set[str] = set()
-        self.get_envelope_calls: list[str] = []  # chunk ids `get_envelope` was called for (Phase 3 hoist)
+        self.get_envelope_calls: list[str] = []  # chunk ids `get_envelope` was called for
         self.hub_advance_calls: list[str] = []  # chunk ids `hub_advance` was called for (#66)
         self.hub_advance_responses: dict[str, HubAdvanceResponse] = {}
-        self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for (issue #84b)
+        self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for
         self.rekey_responses: dict[str, str] = {}  # chunk_id -> the plaintext to hand back
 
     def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:
@@ -456,8 +456,8 @@ class FakeHub:
                 continue
             mark = record.seq
             if record.seq in self.reject_transcript_seqs:
-                # Cap-rejected-but-acked: the mark still advances past it (D6/blizzard#247's
-                # `TranscriptIngestService._apply` — every reachable outcome advances the mark).
+                # Cap-rejected-but-acked: the mark still advances past it
+                # (`TranscriptIngestService._apply` — every reachable outcome advances the mark).
                 capped.append(record.seq)
                 continue
             self.transcripts_pushed.append(record)
@@ -590,7 +590,7 @@ class FakeProvider:
 
 class FakeTranscriptSource:
     """A scriptable :class:`IHarnessTranscriptSource`: canned batches, raw lines, tail
-    positions, sizes, and context sizes by session id (blizzard#245) — unscripted reads as
+    positions, sizes, and context sizes by session id — unscripted reads as
     ``not_found``/*unmeasurable*. ``read_raw_lines`` ignores ``start``/``end``; script
     ``lines_by_session`` with the exact range-scoped lines a call should return."""
 
@@ -656,7 +656,7 @@ class FakeTranscriptSource:
 
 
 class FakeArchivedTranscriptRepository:
-    """A scriptable :class:`IReadArchivedTranscriptRepository` (blizzard#249) — one canned
+    """A scriptable :class:`IReadArchivedTranscriptRepository` — one canned
     :class:`ArchivedTranscript` per ``(chunk_id, node_id, epoch)`` key. An unscripted key
     reads as ``status="empty"``, so a test only names the leases it cares about."""
 
@@ -684,10 +684,10 @@ class StaticTranscriptRepositoryResolver:
 
 
 class FailingIdentityHandle:
-    """A genuine :class:`PendingWorkerHandle` (D1/D2) whose identity never arrives — every
+    """A genuine :class:`PendingWorkerHandle` whose identity never arrives — every
     other fake harness returns an already-identified :class:`WorkerHandle`, so this is the
     one way a test drives ``Spawner.spawn``'s ``WorkerIdentityError`` branch. OS facts are
-    recorded, never inferred (D3); ``confirm_durable`` counts its own calls."""
+    recorded, never inferred; ``confirm_durable`` counts its own calls."""
 
     def __init__(self, *, pid: int, process_start_time: str, pgid: int) -> None:
         self.pid = pid
@@ -705,7 +705,7 @@ class FailingIdentityHandle:
 class FakeHarness:
     """A scriptable :class:`IHarnessAdapter`: canned spawn handle + verdict.
 
-    ``usage`` is the blanket reply; ``usage_by_kind`` (issue #58) overrides it per kind.
+    ``usage`` is the blanket reply; ``usage_by_kind`` overrides it per kind.
     """
 
     def __init__(
@@ -734,15 +734,15 @@ class FakeHarness:
     ) -> None:
         self._handle = handle
         self.verdict = verdict
-        # Scripted (D1/D2): the first N `spawn` calls return a `FailingIdentityHandle`
+        # Scripted: the first N `spawn` calls return a `FailingIdentityHandle`
         # instead of an already-identified one; 0 (default) never fails, unchanged from before.
         self._identity_failures_remaining = identity_failures
         self.failing_identity_handles: list[FailingIdentityHandle] = []
-        # The detached elicitation's own (pid, start_time) (blizzard#443) — distinct from
+        # The detached elicitation's own (pid, start_time) — distinct from
         # `handle`'s worker pid by default, so a probe scripted around the worker's liveness
         # never accidentally also governs the elicitation's.
         self._judge_pid = judge_pid
-        # Defaults to `judge_pid` (D3): a real launch's pgid always equals its own pid;
+        # Defaults to `judge_pid`: a real launch's pgid always equals its own pid;
         # an explicit `judge_pgid=None` opts a test back into the "unset" shape.
         self._judge_pgid = judge_pgid if judge_pgid is not None else judge_pid
         self._judge_process_start_time = judge_process_start_time
@@ -751,7 +751,7 @@ class FakeHarness:
         # `self.verdict`/`self.usage`/`self.assessment` instead), but a collect pass must
         # find a non-empty, readable file to know the launch actually landed something.
         self.judge_output = judge_output
-        # `has_usable_output`'s scripted reply (blizzard#443 review, F7) — True by default so
+        # `has_usable_output`'s scripted reply — True by default so
         # every existing script's judged output reads as usable without opting in; a test
         # simulating a killed-mid-write elicitation sets this False instead of writing real
         # malformed JSON, since this fake's `parse_verdict`/`parse_usage` never inspect content.
@@ -765,40 +765,40 @@ class FakeHarness:
         # The envelope-less fallback's own reply — distinct from `usage` so a test can
         # script "no envelope, but the transcript sums to this" without the two colliding.
         self.transcript_usage = transcript_usage
-        # `observed_model`'s own scripted reply (blizzard#629) — `None` by default, so a
+        # `observed_model`'s own scripted reply — `None` by default, so a
         # test that doesn't care about the observation seam reads exactly as before.
         self._observed_model = observed_model
         self.observed_model_calls: list[tuple[str, ...]] = []
         self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
-        self.resume_froms: list[str | None] = []  # `resume_from` as seen by each spawn (issue #115)
+        self.resume_froms: list[str | None] = []  # `resume_from` as seen by each spawn
         self.judged: list[tuple[str, str, str]] = []
         self.judge_output_paths: list[str] = []  # one entry per judge (launch) call
         self.judge_preambles: list[WorkerPreamble | None] = []  # one entry per judge call
         self.resumed: list[tuple[str, str, str]] = []  # (session_cwd, session_id, message)
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
-        # Defaults to `resume_pid` (D3), mirroring `judge_pgid`: an explicit assignment
+        # Defaults to `resume_pid`, mirroring `judge_pgid`: an explicit assignment
         # opts a test into a resume whose real group differs from its pid.
         self.resume_pgid: int | None = None
-        # F1/F4: a resume launches deferred like a fresh spawn or judge — mirrors
+        # A resume launches deferred like a fresh spawn or judge — mirrors
         # `FailingIdentityHandle`'s own `confirm_durable`-counting shape.
         self.resume_process_start_time = resume_process_start_time
         self.resume_confirm_durable_calls = 0
-        # The (model, effort) each invocation was handed (issue #144) — one entry per
+        # The (model, effort) each invocation was handed — one entry per
         # call, for per-call-site assertions.
         self.spawn_model_effort: list[tuple[str | None, str | None]] = []
         self.judge_model_effort: list[tuple[str | None, str | None]] = []
         self.resume_models: list[str | None] = []
         self.resume_efforts: list[str | None] = []
-        # The compaction window each invocation was handed (blizzard#343) — one entry per
+        # The compaction window each invocation was handed — one entry per
         # call, mirroring the effort lists above.
         self.spawn_compaction_windows: list[str | None] = []
         self.judge_compaction_windows: list[str | None] = []
         self.resume_compaction_windows: list[str | None] = []
         self.usage_models: list[str | None] = []
-        # The (model, effort) each `resume_command` composition was handed (issue #144).
+        # The (model, effort) each `resume_command` composition was handed.
         self.resume_command_config: list[tuple[str | None, str | None]] = []
-        # Scripted `resolve_model`/`resolve_effort` replies (issue #144); default echoes
+        # Scripted `resolve_model`/`resolve_effort` replies; default echoes
         # the input verbatim for a test that doesn't care about resolution.
         self.resolved_model = "fake-model"
         # `resolve_model_strict`'s own scripted reply, independent of `resolved_model` above, so a
@@ -808,22 +808,22 @@ class FakeHarness:
         # Every `observe_version` call, counted: the real probe spawns the harness binary, so
         # a test can assert a tick hoists it rather than paying it per outbound call.
         self.version_probes = 0
-        # `resolvable_tier_ids`'s scripted reply (blizzard#433); default echoes a single
+        # `resolvable_tier_ids`'s scripted reply; default echoes a single
         # fake tier so a capability-snapshot test sees a non-empty list without opting in.
         self.tier_ids: tuple[str, ...] = ("fake-tier",)
         self.resolved_effort: str | None = None
         self.resolved_compaction_window: str | None = None
-        # Scriptable, not the null source (blizzard#245); defaults to an empty
+        # Scriptable, not the null source; defaults to an empty
         # `FakeTranscriptSource` (every session `not_found`, no lines, no size).
         self._transcript_source: IHarnessTranscriptSource = transcript_source or FakeTranscriptSource()
-        # Scripted `classify_usage_limit` reply (blizzard#594) — `None` (the default)
+        # Scripted `classify_usage_limit` reply — `None` (the default)
         # classifies every invocation as not usage-limited, unchanged from before this slice.
         # `usage_limit_from_call` (1-indexed) lets a test script a worker-generation exit as
         # unlimited but its later judge elicitation as limited, or vice versa.
         self.usage_limit = usage_limit
         self.usage_limit_from_call = usage_limit_from_call
         self.usage_limit_calls: list[tuple[str, tuple[str, ...]]] = []
-        # Scripted `classify_provider_overload` reply (blizzard#595) — `None` (the default)
+        # Scripted `classify_provider_overload` reply — `None` (the default)
         # classifies every invocation as not overloaded, mirroring `usage_limit` above.
         self.overload = overload
         self.overload_from_call = overload_from_call
@@ -851,10 +851,10 @@ class FakeHarness:
             )
             self.failing_identity_handles.append(failing)
             return failing
-        # Mirrors the real in-place adapter contract (issue #115): a resume continues
+        # Mirrors the real in-place adapter contract: a resume continues
         # under the SAME id given; a fresh spawn keeps the scripted-handle behavior.
         session_id = resume_from if resume_from is not None else self._handle.session_id
-        # A `WorkerHandle` IS a `PendingWorkerHandle` (D1) — already identified, since this
+        # A `WorkerHandle` IS a `PendingWorkerHandle` — already identified, since this
         # fake, like every real binding today, knows its session id at "launch".
         return WorkerHandle(
             session_id=session_id,
@@ -886,7 +886,7 @@ class FakeHarness:
         self.judge_output_paths.append(output_path)
         # The side effect fires at LAUNCH, before the handle is returned — a test wanting
         # "the worker asked instead of returning a verdict" scripts it here, same as before
-        # the launch/collect split (blizzard#443): the ask is recorded during the launch
+        # the launch/collect split: the ask is recorded during the launch
         # pass, and the collect half's file readback below is what parses `verdict` off it.
         if self._judge_side_effect is not None:
             self._judge_side_effect()
@@ -944,7 +944,7 @@ class FakeHarness:
         return f"cd {session_cwd} && claude --resume {session_id}{flags}"
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
-        # Mirrors the real adapter's shape (issue #258): BLIZZARD_* identity on top of an
+        # Mirrors the real adapter's shape: BLIZZARD_* identity on top of an
         # allowlisted-base stand-in, plus vars a takeover must NOT forward (TERM, a secret).
         return {
             "PATH": "/daemon/venv/bin:/usr/bin",
@@ -989,7 +989,7 @@ class FakeHarness:
         return self.assessment
 
     def needs_usage_transcript(self, output: str, *, model: str | None = None) -> bool:
-        # Mirrors a binding with no configured default of its own (blizzard#629 D4): an
+        # Mirrors a binding with no configured default of its own: an
         # unresolved `model` always needs the observation; a resolved one never does.
         del output
         return model is None
@@ -1058,7 +1058,7 @@ class TieredFakeHarness(FakeHarness):
 
 
 class FakeSubscriptionSampler:
-    """A scriptable :class:`ISubscriptionSampler` (blizzard#436): a canned snapshot reply,
+    """A scriptable :class:`ISubscriptionSampler`: a canned snapshot reply,
     or a scripted raise. ``sample_calls`` counts every call, for cadence asserts."""
 
     def __init__(
@@ -1087,7 +1087,7 @@ def _conforms_fake_subscription_sampler(x: FakeSubscriptionSampler) -> ISubscrip
 
 
 class FakeCredentialRenewer:
-    """A scriptable :class:`ICredentialRenewer` (blizzard#504): a canned outcome reply.
+    """A scriptable :class:`ICredentialRenewer`: a canned outcome reply.
     ``renew_calls`` counts every call, so a test can prove it was invoked before the
     sampler, and in what order relative to the cadence gate."""
 
@@ -1116,7 +1116,7 @@ class FakeProbe:
         self.killed: list[int] = []
         self.killed_groups: list[int] = []
         self.interrupted_groups: list[int] = []
-        # F14: every call, counted — a test proving a caller never re-probes a launcher's
+        # Every call, counted — a test proving a caller never re-probes a launcher's
         # own already-recorded start time (e.g. `dormant.py::_wake`) reads this directly.
         self.start_time_calls: list[int] = []
 
@@ -1164,7 +1164,7 @@ class FakeWorktreeGit:
 
 class FakeCheckRunner:
     """A scriptable :class:`~blizzard.runner.loop.checks.ICheckRunner`: canned outcomes
-    per command, records every call (issue #114).
+    per command, records every call.
 
     ``outcomes`` maps a command to its :class:`CheckOutcome`; unlisted returns ``default``."""
 
@@ -1198,9 +1198,9 @@ def make_context(
 
     ``chunk_views`` defaults to a fresh :class:`ReadThroughChunkViews` over ``hub`` — a step
     driven directly (not through ``tick()``) reads the hub on every ``get()``, exactly as
-    ``get_chunk`` did before the per-tick cache (blizzard#521)."""
+    ``get_chunk`` did before the per-tick cache."""
     resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
-    # Derived, not duplicated (blizzard#38): keeps the fake's unscripted `chunk_statuses`
+    # Derived, not duplicated: keeps the fake's unscripted `chunk_statuses`
     # route matching this context's actual runner_id.
     hub.default_runner_id = resolved_config.runner_id
     _hub: IHubClient = hub
@@ -1215,7 +1215,7 @@ def make_context(
     _check_runner: ICheckRunner = check_runner if check_runner is not None else FakeCheckRunner()
     _clock: IClock = clock if clock is not None else FixedClock(datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC))
     _files = WorkerStdoutFiles(resolved_config.worker_stdout_dir, store)
-    # Load-bearing (D4) — unlike `worker_stdout_dir`, never the empty-disables convention,
+    # Load-bearing — unlike `worker_stdout_dir`, never the empty-disables convention,
     # so an unset config falls back to a fresh throwaway directory rather than "" (which
     # would make every `FakeHarness.judge` write raise `IsADirectoryError`/`FileNotFoundError`).
     _elicitation_root = resolved_config.elicitation_output_dir or tempfile.mkdtemp(prefix="blizzard-elicit-")

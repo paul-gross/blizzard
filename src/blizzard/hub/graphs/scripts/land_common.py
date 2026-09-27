@@ -1,4 +1,4 @@
-"""What every land script is built from (issue #230).
+"""What every land script is built from.
 
 Pure stdlib, exactly like the scripts that import from here (``bzh:deterministic-shell``).
 :class:`LandRun` is one node visit — its :class:`ScriptEnv` and its marker channel, which
@@ -19,7 +19,7 @@ from typing import Any
 
 _HUB_USER = "blizzard-hub"
 
-# The mid-run marker callback's token header (issue #230) — a **delivery** credential,
+# The mid-run marker callback's token header — a **delivery** credential,
 # restated rather than imported to keep this package pure stdlib.
 _MARKER_TOKEN_HEADER = "X-Blizzard-Marker-Token"
 _ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
@@ -122,7 +122,7 @@ class MarkerWriteError(Exception):
 
 @dataclass(frozen=True)
 class MarkerWriter:
-    """The run's durable marker channel (issues #65, #230, #232), carrying its capability
+    """The run's durable marker channel, carrying its capability
     token as :data:`_MARKER_TOKEN_HEADER`. Constructing one reaches nothing — every failure
     mode, a missing ``callback_url`` included, surfaces on the write."""
 

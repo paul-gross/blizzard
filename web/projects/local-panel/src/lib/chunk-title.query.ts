@@ -20,7 +20,7 @@ async function fetchWorkItems(chunkId: string): Promise<runnerApi.WorkItemsView>
 /**
  * Runner `GET /api/chunks/{chunk_id}/work-items` read — the layered pass-through
  * (panel → its own runner → hub → vendor, with the hub's credentials) that
- * carries the issue title layered onto a lease row (issue #28). This is a strictly
+ * carries the issue title layered onto a lease row. This is a strictly
  * **severable, volatile** read, never the panel's critical path: the leases route
  * (`leases.query.ts`) is hub-free and this is not, so its failure must never touch
  * the leases read, the list, or any other row.
@@ -62,7 +62,7 @@ export function injectChunkTitleQuery(chunkId: () => string) {
 /**
  * Runner `GET /api/chunks/{chunk_id}/work-items` read — same endpoint as
  * {@link injectChunkTitleQuery}, but for the chunk detail route's Issues
- * section (issue #318), which renders a real loading/error/empty triad
+ * section, which renders a real loading/error/empty triad
  * ({@link ChunkIssuePane}'s `WorkItemsState`) rather than decoration a row
  * can silently drop. Mirrors `fleet`'s own `injectHubChunkWorkItemsQuery`
  * (`chunk-work-items.query.ts`) — default retry, a short 30s `staleTime`,

@@ -1,4 +1,4 @@
-"""The analytics events/counts routes against a real hub (blizzard#255, Phase 3): both
+"""The analytics events/counts routes against a real hub: both
 encodings serve the same derived events in the same order, and a JSON page bounded
 below the total result count still covers it exactly once via its cursor. Run with
 ``BLIZZARD_SERVICE=1``."""

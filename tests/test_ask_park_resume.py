@@ -214,7 +214,7 @@ def test_parked_lease_is_not_reaped_though_pid_reads_alive_and_stale(tmp_path): 
 
 
 def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  # type: ignore[no-untyped-def]
-    """issue #46: a pause-park on another lease must not disturb `unforwarded_ask`'s
+    """A pause-park on another lease must not disturb `unforwarded_ask`'s
     predicate — a NULL-poisoned NOT IN would silently stop forwarding fleet-wide if
     pause-parks shared the `park_facts` table; they live in their own table instead."""
     store = _store(tmp_path)
@@ -293,7 +293,7 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path, works
 
 
 def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(tmp_path):  # type: ignore[no-untyped-def]
-    """Issue #150: a worker answered past ``HEARTBEAT_STALENESS_THRESHOLD`` must
+    """A worker answered past ``HEARTBEAT_STALENESS_THRESHOLD`` must
     survive the very next REAP tick after resuming."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
@@ -346,7 +346,7 @@ def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(t
 
 
 def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(tmp_path):  # type: ignore[no-untyped-def]
-    """blizzard#202: the operator stops a chunk instead of answering its ask. The ask
+    """The operator stops a chunk instead of answering its ask. The ask
     must not read open forever after the chunk it belonged to is gone.
     """
     store = _store(tmp_path)

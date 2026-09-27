@@ -1,4 +1,4 @@
-"""``GET /api/leases/{id}/history`` and its pure projection, ``runner.api.history._rows`` (issue #237).
+"""``GET /api/leases/{id}/history`` and its pure projection, ``runner.api.history._rows``.
 
 Unit tier: ``_rows`` over a fixture — a bounced attempt that produced no artifact still
 becomes a row, a migration becomes its own row, and everything merges oldest-first.
@@ -285,7 +285,7 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) -> None:
-    """The worker-authorization resolver's other half (issue #291): once an open
+    """The worker-authorization resolver's other half: once an open
     takeover names the (now closed) reference lease, its re-minted token reaches
     this route the same as an ordinary active lease would."""
     app, store = _app_with_store(tmp_path)
@@ -338,7 +338,7 @@ def test_forwards_to_the_hub_chunk_detail_route_and_returns_merged_rows(tmp_path
 
 @pytest.mark.component
 def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -> None:
-    """The forward rides the runner principal's bearer (issue #86b) — the worker's own
+    """The forward rides the runner principal's bearer — the worker's own
     lease token never leaves the runner."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(

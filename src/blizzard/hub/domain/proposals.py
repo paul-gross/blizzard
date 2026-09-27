@@ -1,6 +1,6 @@
 """Proposed-work-item domain — a node-step's completion carrying proposed work items
-alongside its artifacts (D1, D2). Read by the delivery-materialization sweep
-(``blizzard.hub.domain.work_item_materialization``, blizzard#366)."""
+alongside its artifacts. Read by the delivery-materialization sweep
+(``blizzard.hub.domain.work_item_materialization``)."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class WorkItemProposalRow:
     """One proposed work item's flat storage row — riding a node-step's completion
-    (``create`` or ``update``, D1). ``data`` is the kind-shaped payload as JSON: ``create``
+    (``create`` or ``update``). ``data`` is the kind-shaped payload as JSON: ``create``
     carries ``{title, body, stated_priority}``, ``update`` carries ``{source, ref,
     evidence}``. ``ordinal`` is the authored-submission position (``graph_artifacts``-shaped).
-    ``runner_id`` is the proposing runner (D4) — ``None`` only for a row written before
+    ``runner_id`` is the proposing runner — ``None`` only for a row written before
     that column existed."""
 
     proposal_id: str

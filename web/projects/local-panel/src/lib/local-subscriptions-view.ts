@@ -5,7 +5,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * injects nothing. `ok` drives the row's tone (`null` = never sampled, `false` = miss),
  * carried alongside the already-composed {@link conditionLabel} rather than re-derived from it.
  * `renewalLabel` is `null` whenever this attempt carries no renewal outcome — no renewer
- * for this slug's provider (e.g. Anthropic), or its renewal was not due (blizzard#504 Phase 2). */
+ * for this slug's provider (e.g. Anthropic), or its renewal was not due. */
 export interface SubscriptionRow {
   readonly slug: string;
   readonly name: string;

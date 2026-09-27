@@ -14,7 +14,7 @@ import type { TextMeasurer } from './graph-layout';
  * **This file and `graph-diagram.ts`'s `styles` must change together.** Every font
  * string and tracking value below mirrors a `.node-name` / `.node-badge` / `.node-meta` /
  * `.edge-label` rule there; when they drift, boxes size to type the SVG does not draw,
- * which is exactly the class of bug issue #157 was. The e2e
+ * which overflows meta lines out of their boxes. The e2e
  * `test_diagram_geometry_matches_the_rendered_text` is the guard that catches the drift.
  */
 
@@ -26,7 +26,7 @@ import type { TextMeasurer } from './graph-layout';
  * resolved against no element and `var()` never substitutes: assigning
  * `'400 11px var(--mono, monospace)'` is silently rejected and `ctx.font` keeps its
  * `10px sans-serif` default, measuring every string far narrower than it renders
- * (issue #157 — meta lines overflowed their boxes by ~80%). The property has to be
+ * (meta lines overflowed their boxes by ~80%). The property has to be
  * dereferenced here and spliced into the shorthand literally.
  *
  * Falls back to bare `monospace` when the property is unset or the spliced shorthand

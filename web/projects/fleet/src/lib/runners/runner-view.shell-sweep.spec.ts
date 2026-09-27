@@ -18,7 +18,7 @@ async function loadDesignTokens(): Promise<void> {
 }
 
 /**
- * The runner registry's rate-limit pace bars (issue #218), the tooled half of
+ * The runner registry's rate-limit pace bars, the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method — a real,
  * headless-Chromium proof that the stacked utilization/elapsed pair genuinely stacks
  * (two distinct rows, not overlapping) and stays within the fleet panel's own width at
@@ -100,7 +100,7 @@ const SUBSCRIPTION_ROW: RunnerRow = {
   locally_paused: false,
   claims: [],
   used: 0,
-  // Two declared subscriptions sharing an identical "5h" window label (blizzard#478) —
+  // Two declared subscriptions sharing an identical "5h" window label —
   // the layout claim this sweep exists to prove is that the two groups stay visually
   // distinct rather than merging into one shared bar list.
   subscriptionPaces: [
@@ -182,7 +182,7 @@ const LAPSED_ROW: RunnerRow = {
   locally_paused: false,
   claims: [],
   used: 0,
-  // A miss-only row (blizzard#504 D7): no windows, and a lapsed credential in place of
+  // A miss-only row: no windows, and a lapsed credential in place of
   // the generic no-usage-windows report.
   subscriptionPaces: [
     {

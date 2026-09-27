@@ -1,5 +1,5 @@
-"""The runner-owned OpenCode plugin scaffold (execution spec, "Runner-owned plugin", D7 phase
-4) — content shape (unit) and its degrade-only effect on the adapter's parsed turn outcome
+"""The runner-owned OpenCode plugin scaffold (execution spec, "Runner-owned plugin")
+— content shape (unit) and its degrade-only effect on the adapter's parsed turn outcome
 (component). Its JS/TS *behavior* is proven structurally, not by running a JS engine (this
 repo's toolchain pins no node/bun): the generated source's shape — one ``try``/``catch`` per
 hook body — is the checkable surface, like ``config.py``'s scaffold is tested as text."""
@@ -144,7 +144,7 @@ def test_a_plugin_bearing_worker_config_does_not_change_the_adapters_parsed_turn
             worker_config_path=worker_config_path,
         )
         pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
-        pending.confirm_durable()  # F1: stands in for `Spawner.spawn`'s own call
+        pending.confirm_durable()  # stands in for `Spawner.spawn`'s own call
         handle = pending.await_identity(5.0)
         os.waitpid(handle.pid, 0)
         output = stdout_path.read_text()

@@ -1,4 +1,4 @@
-"""The boot-time provider-name-immutability check (component tier, issue #92).
+"""The boot-time provider-name-immutability check (component tier).
 
 ``build_hosted_app`` fails loud when a stored identity names a provider absent from
 ``[[auth.oauth.provider]]`` — a rename must not silently orphan identities. Runs

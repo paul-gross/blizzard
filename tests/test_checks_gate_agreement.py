@@ -1,4 +1,4 @@
-"""The hub backstop and the runner gate agree on the checks gate (component tier, issue #114).
+"""The hub backstop and the runner gate agree on the checks gate (component tier).
 
 Both sides call the one shared predicate ``ChecksGate.violated`` rather than each
 re-derive "is a gated choice red?" inline; this drives both real decision sites over

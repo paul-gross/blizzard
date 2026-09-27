@@ -4,15 +4,15 @@ import { formatAbsolute, formatWhen } from '../when';
 
 /** One judged node on the timeline: the node, the verdict that closed it, and where
  * that verdict routed the chunk — a transition re-read node-first for display. A
- * `migration` step (issue #90) is the same shape re-read as a graph-to-graph hop: its
+ * `migration` step is the same shape re-read as a graph-to-graph hop: its
  * `toName` is `to_graph/landed_node`, and `graphName` labels the graph the step happened
  * in so a two-graph history is legible. `sortKey` is the raw `recorded_at` used to weave
  * transitions and migrations into one chronological timeline. {@link when}'s full-datetime
- * tooltip text lives beside it as {@link whenTitle} (issue #175) — the row computes the
+ * tooltip text lives beside it as {@link whenTitle} — the row computes the
  * view-model text once rather than the template re-deriving it from a raw instant.
  *
  * {@link key} is this step's join key ({@link nodeStepKey} of its `(nodeId, epoch)`) —
- * `null` for a migration row, which cannot key that join (D1: synthetic `epoch: 0`,
+ * `null` for a migration row, which cannot key that join (synthetic `epoch: 0`,
  * nullable `nodeId`, and no artifact or transcript is ever stored under either). */
 export interface HistoryRow {
   readonly kind: 'transition' | 'migration';
@@ -56,7 +56,7 @@ const ACTIVE_VERBS: Partial<Record<ChunkStatus, { choice: string; label: string 
   paused: { choice: 'paused', label: 'paused' },
 };
 
-/** One history step's summed usage (issue #60) — every invocation (spawn/resume/judge)
+/** One history step's summed usage — every invocation (spawn/resume/judge)
  * recorded at that step's own `(from_node_id, epoch)`, folded into one tokens+cost
  * figure so the timeline reads one lap's cost per line. `costPartial` folds by the hub's
  * own rule: `src/blizzard/hub/domain/work.py`'s `UsageTotal`. */
@@ -68,15 +68,15 @@ export interface StepUsageTotal {
    * `costUsd` by {@link formatCost} for display, rather than rendered as a figure
    * of its own. */
   readonly estimatedCostUsd: number | null;
-  /** The step's own recorded harness identity (blizzard#441) — read off whichever of
+  /** The step's own recorded harness identity — read off whichever of
    * its own summed rows recorded one, newest first, never derived from `model`. `null`
    * when no row at this step recorded a stamp (a pre-provenance row, or none at all). */
   readonly harnessId: string | null;
 }
 
 /**
- * The chunk's node-history rows (issue #79), oldest-first: every judged transition plus
- * every cross-graph migration (issue #90), woven into one chronological list by
+ * The chunk's node-history rows, oldest-first: every judged transition plus
+ * every cross-graph migration, woven into one chronological list by
  * `recorded_at`. The single owner of this derivation (`canon:one-owner`, the same
  * precedent `sort-artifacts.ts`/`transcript-steps.ts` establish for their own lists) —
  * {@link ChunkTimeline} reads it rather than re-deriving it inline.
@@ -102,11 +102,11 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
       whenTitle: formatAbsolute(t.recorded_at),
       sortKey: t.recorded_at,
     }));
-  // Cross-graph migration steps (issue #90) — the chunk left `from_graph/from_node`
+  // Cross-graph migration steps — the chunk left `from_graph/from_node`
   // and re-queued at `to_graph/landed_node`, woven into the same timeline by time.
   const migrations: HistoryRow[] = (detail.migrations ?? []).map((m) => ({
     kind: 'migration' as const,
-    key: null, // D1: a migration's synthetic epoch/nullable nodeId cannot key the join.
+    key: null, // A migration's synthetic epoch/nullable nodeId cannot key the join.
     epoch: 0,
     nodeId: m.from_node_id,
     nodeName: m.from_node_name ?? m.from_node_id ?? '·',
@@ -122,7 +122,7 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
   return [...transitions, ...migrations].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 }
 
-/** Whether `rows` spans more than one graph (issue #90) — a chunk that migrated. When
+/** Whether `rows` spans more than one graph — a chunk that migrated. When
  * true the board labels each row with the graph it happened in; a single-graph chunk
  * shows no graph badge (it would be noise). A migration inherently crosses two graphs
  * (its target may not yet have its own row), so its presence alone qualifies. */
@@ -142,10 +142,10 @@ export function deriveMultiGraph(rows: readonly HistoryRow[]): boolean {
  * A landed transition already naming `(current_node_id, latest_epoch)` as its own
  * *destination* means `current_node_id` has moved on while `latest_epoch` (minted only
  * at the *next* lease's spawn) hasn't caught up yet — the same lag window
- * `deriveTranscriptSteps` guards against (`review:F3`). {@link ActiveRow.key} is `null`
+ * `deriveTranscriptSteps` guards against. {@link ActiveRow.key} is `null`
  * in that window rather than a key naming a step no artifact or transcript is ever
- * recorded under (`review:F11`). Matched by `(to_node_id, epoch)`, not epoch alone: a
- * migration (issue #90) can hand a fresh graph an epoch a previous graph's history
+ * recorded under. Matched by `(to_node_id, epoch)`, not epoch alone: a
+ * migration can hand a fresh graph an epoch a previous graph's history
  * already used, and that reuse is not this lag window.
  */
 export function deriveActiveRow(detail: ChunkDetail): ActiveRow | null {

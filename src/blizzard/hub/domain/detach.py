@@ -27,8 +27,8 @@ class DetachService:
         """Release the chunk's live route so it re-derives ``ready``.
 
         Raises :class:`NotRouted` if the chunk has no live route — there is nothing to
-        release. Returns the freshly-written ``route_released.id`` (issue #213's
-        activity-feed key)."""
+        release. Returns the freshly-written ``route_released.id`` (the
+        activity-feed's key)."""
         if self._route.route_of(chunk.chunk_id) is None:
             raise NotRouted(f"chunk {chunk.chunk_id} has no live route")
         return self._route.record_route_released(chunk.chunk_id, at=self._clock.now())

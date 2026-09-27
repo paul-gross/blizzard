@@ -71,7 +71,7 @@ def answer_question(
     """Answer a question first-write-wins; 409 carries the winning answer.
 
     ``answered_by`` is taken from the authenticated session identity, never the request
-    body's ``answered_by`` field — a spoofed value there is silently ignored (issue #91)."""
+    body's ``answered_by`` field — a spoofed value there is silently ignored."""
     pre_answer = services.chunks.questions.get_question(question_id)
     if pre_answer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")

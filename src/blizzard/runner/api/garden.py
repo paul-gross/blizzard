@@ -1,5 +1,5 @@
 """``GET /api/leases/{lease_id}/garden/findings`` and ``.../garden/proposals`` — a
-worker's own routine's live-plus-``delivered`` finding bucket (D4, D5, blizzard#583 D2)
+worker's own routine's live-plus-``delivered`` finding bucket
 and open garden-proposal docket. Lease-scoped and token-authorized, then forwarded to
 the hub as the runner principal — the shape ``runner/api/history.py`` already sets for a
 lease-token-authorized, hub-proxied node-scope read (``bzh:pluggable-seams``)."""

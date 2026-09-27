@@ -1,4 +1,4 @@
-"""The OpenCode usage-limit ``error`` run-event shape (blizzard#594 D6).
+"""The OpenCode usage-limit ``error`` run-event shape.
 
 No real usage-limited run exists on the machine this was captured on (its own retained
 worker stdout and ``~/.local/share/opencode/log/opencode.log`` carry no ``usage_limit``/

@@ -1,8 +1,8 @@
-"""``WorkItemStore`` — the hub-owned work item repository (issue #357, component tier).
+"""``WorkItemStore`` — the hub-owned work item repository (component tier).
 
 Exercises ``create_with_chunk``/``close``/``get`` through the read/write Protocol split
 (``bzh:repository-split``): every write is read back through the read variant alone.
-There is no chunkless filing path (blizzard#359) — a fixture here allocates a ref then
+There is no chunkless filing path — a fixture here allocates a ref then
 inserts item + chunk together, mirroring production's own two-step mint."""
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ def test_create_reads_back_open_with_no_closure(tmp_path: Path) -> None:
 
 def test_create_reads_back_a_fleet_authored_item_s_lineage(tmp_path: Path) -> None:
     """A fleet author's runner/chunk/node lineage round-trips through the JSON
-    ``author_payload`` (blizzard#362), same as a user author's ``user_id`` does."""
+    ``author_payload``, same as a user author's ``user_id`` does."""
     store = _store(tmp_path)
     author = WorkItemAuthor.fleet(runner_id="runner-local", chunk_id="ch_source", node_name="triage")
 
@@ -178,7 +178,7 @@ def test_edit_of_a_closed_item_is_a_no_op_and_returns_none(tmp_path: Path) -> No
 
 
 # --------------------------------------------------------------------------- #
-# ``create_with_chunk`` — the composite write (blizzard#359)
+# ``create_with_chunk`` — the composite write
 
 
 def test_create_with_chunk_inserts_the_item_and_the_chunk_rows_together(tmp_path: Path) -> None:

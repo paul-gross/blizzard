@@ -1,4 +1,4 @@
-"""The runner-local chunk-detail pass-through proxy — read, pause, resume (issue #185).
+"""The runner-local chunk-detail pass-through proxy — read, pause, resume.
 
 Read-only over its wiring (``bzh:controller-read-only``): all three routes forward to the
 hub URL the composition root resolved onto ``app.state.config``."""
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api", tags=["runner"])
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail)
 def get_chunk(chunk_id: str, request: Request) -> ChunkDetail:
-    """Forward a chunk's detail read to the hub — the whole aggregate (issue #314), including
+    """Forward a chunk's detail read to the hub — the whole aggregate, including
     transition history, artifacts, and the open escalation."""
     upstream = HubProxy.of(request, "chunk-detail").get(f"/api/fleet/chunks/{chunk_id}")
     return ChunkDetail.model_validate(upstream.json())
@@ -24,7 +24,7 @@ def get_chunk(chunk_id: str, request: Request) -> ChunkDetail:
 @router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def pause_chunk(chunk_id: str, request: Request) -> ChunkSummary:
     """Forward a chunk pause to the hub — interrupts the active worker, force-stopping it only if
-    it hasn't wound down within its grace period, and keeps the claim (issue #46). ``409`` when the
+    it hasn't wound down within its grace period, and keeps the claim. ``409`` when the
     chunk is not in a pausable state."""
     upstream = HubProxy.of(request, "chunk-detail").post(f"/api/fleet/chunks/{chunk_id}/pause")
     return ChunkSummary.model_validate(upstream.json())

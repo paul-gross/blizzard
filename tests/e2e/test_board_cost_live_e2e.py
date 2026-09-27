@@ -1,4 +1,4 @@
-"""Board cost/usage live-over-SSE e2e — the `test_board_cost_live_e2e` scenario of the standing e2e smoke (issue #60).
+"""Board cost/usage live-over-SSE e2e — the `test_board_cost_live_e2e` scenario of the standing e2e smoke.
 
 A real Chromium (Playwright) over the served board wired to a live hub, asserting
 cost/usage figures render end to end and update live with no reload when a
@@ -94,7 +94,7 @@ def _push_usage(
 
 
 def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_available: bool) -> None:
-    """Cost/usage renders on the board + chunk detail and updates live over SSE (issue #60)."""
+    """Cost/usage renders on the board + chunk detail and updates live over SSE."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     from playwright.sync_api import expect, sync_playwright

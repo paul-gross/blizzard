@@ -1,4 +1,4 @@
-"""The provider registry — configured providers keyed by name (issue #92).
+"""The provider registry — configured providers keyed by name.
 
 Built once at the composition root (``hub/auth/oauth/internal/factory.py``) from
 ``[[auth.oauth.provider]]``; ``hub/api/auth_login.py`` depends only on

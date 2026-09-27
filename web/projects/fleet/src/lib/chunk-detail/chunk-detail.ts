@@ -58,15 +58,15 @@ const PAUSE_OVERRIDE_TOTAL: Record<ChunkStatus, boolean> = {
  * detaching, pausing/resuming, completing, or editing the graph/model invalidates the
  * chunk and the fleet list, and the SSE stream corroborates. Every operator action's
  * 404/409 (422 for a blank model) is read off its mutation's `onError` and held in the
- * shared `actionError` for the panel to show — issue #42's "report, don't swallow"
- * requirement, which issue #46's pause/resume, issue #27's graph/model edits, and issue
- * #294's complete all follow rather than reinvent — and clears on the next attempt or the
+ * shared `actionError` for the panel to show — the "report, don't swallow"
+ * requirement, which pause/resume, graph/model edits, and complete all follow rather
+ * than reinvent — and clears on the next attempt or the
  * moment a different chunk opens. Answering has a **second** channel alongside it,
- * `actionOutcome` (issue #165): a lost first-write-wins race is not a failure to retry
+ * `actionOutcome`: a lost first-write-wins race is not a failure to retry
  * but news — someone else's answer landed — so it reads as an outcome naming the winner.
  * Both clear together in `beginAction`.
  *
- * **Delete** (D8, issue #364) breaks that shape: it makes the chunk cease to exist, so
+ * **Delete** breaks that shape: it makes the chunk cease to exist, so
  * `onDelete` doesn't just fold a failure into `actionError` — on success it emits
  * `dismiss` too, the same event the header's close button fires. The board binds
  * `dismiss` to clearing its own selection, so the dock closes instead of sitting on a
@@ -104,7 +104,7 @@ export class ChunkDetail {
   private readonly meQuery = injectMeQuery();
 
   /** Whether the current identity may pause/resume/detach or set the chunk's graph
-   * (`chunk:control` — issue #210). Withholds those controls in the panel below so a
+   * (`chunk:control`). Withholds those controls in the panel below so a
    * `guest` never sees a write it cannot make; `null`/pending resolves to `false`
    * (hidden until confirmed), the same convention `RunnerPanel`'s `canPause` set. */
   protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
@@ -211,12 +211,12 @@ export class ChunkDetail {
   protected readonly answerPending = computed(() => this.answerMutation.isPending());
 
   /** The open chunk's last operator-action failure, or `null`. Reset on every new
-   * attempt and whenever a different chunk opens (issue #42). Shared by every action
-   * in the dock — detach, pause, resume (issue #46), complete (issue #294). */
+   * attempt and whenever a different chunk opens. Shared by every action
+   * in the dock — detach, pause, resume, complete. */
   protected readonly actionError = signal<string | null>(null);
 
   /** The open chunk's last operator-action **outcome** — a non-failure result that still
-   * needs saying (issue #165). Today that is exactly one case: a lost answer race, where
+   * needs saying. Today that is exactly one case: a lost answer race, where
    * the hub's 409 carries the *winning* answer. It is a channel of its own rather than a
    * second use of {@link actionError} because the two read differently to an operator —
    * "someone beat you to it, here is what they said" is news, not a failure to retry. */
@@ -255,7 +255,7 @@ export class ChunkDetail {
    */
   protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.detailQuery, false));
 
-  /** The open chunk's related work items + fetch state for the Issue tab (issue #24). A failed
+  /** The open chunk's related work items + fetch state for the Issue tab. A failed
    * read (unreachable hub / no work-source) becomes `error` so the tab shows a visible notice. */
   protected readonly workItems = computed<WorkItemsState>(() => {
     if (this.chunkId() === null) return { status: 'loading', items: [] };
@@ -264,7 +264,7 @@ export class ChunkDetail {
 
   /** Answer an open question. A lost first-write-wins race comes back as a 409 whose body
    * is the *winning* answer, so it is reported as an outcome naming the winner rather than
-   * folded through `errorMessage()` into a generic failure (issue #165); any other failure
+   * folded through `errorMessage()` into a generic failure; any other failure
    * stays on the error channel. Either way the mutation re-reads the chunk, so the dock
    * settles showing the question answered with its trail. */
   protected onAnswer(event: AnswerQuestionEvent): void {
@@ -328,7 +328,7 @@ export class ChunkDetail {
     );
   }
 
-  /** Delete an unacquired chunk (D8, issue #364) — withdraws its hub item(s); there is
+  /** Delete an unacquired chunk — withdraws its hub item(s); there is
    * no undo. Unlike every other action here, success dismisses the dock: the chunk this
    * query is keyed to no longer exists, and `deleteMutation`'s own `onSettled` already
    * invalidates the fleet list, the ready queue, the backlog, and this chunk's own detail

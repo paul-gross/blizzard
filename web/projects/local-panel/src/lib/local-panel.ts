@@ -19,13 +19,13 @@ export interface MachineChunkRow {
 }
 
 /**
- * The runner's machine-local panel — the data-orchestration container
- * (issue #80). Owns the leases query plus the one shared
- * {@link injectRunnerDashboardQuery} (issue #311's composed `GET
+ * The runner's machine-local panel — the data-orchestration container.
+ * Owns the leases query plus the one shared
+ * {@link injectRunnerDashboardQuery} (the composed `GET
  * /api/dashboard` read, folding what were five separate query injections
  * here), the one derived-status fold ({@link deriveMachineChunkStatus}), and
  * the selection — which chunk is open, bound to the URL's `?chunk=` query
- * param so a link is shareable and a reload keeps its place (issue #99).
+ * param so a link is shareable and a reload keeps its place.
  * Every panel below it (via {@link LocalPanelLayout}) is presentational or
  * owns just its own read.
  *
@@ -35,7 +35,7 @@ export interface MachineChunkRow {
  * single source of truth — the panel derives its selection from the query params
  * and every click writes them back, never the reverse.
  *
- * Owns no header state (issue #325): the shared header's connection cell and
+ * Owns no header state: the shared header's connection cell and
  * live stat cells used to be folded here and threaded down as inputs to
  * {@link LocalPanelLayout}. Both the desktop header and the mobile titlebar
  * moved to the app root (`../../runner/src/app/nav/app-header.ts`,
@@ -57,11 +57,11 @@ export class LocalPanel {
    * three-column {@link LocalPanelLayout} unchanged; mobile renders
    * {@link LocalPanelMobile} instead, `@defer`-loaded so the desktop bundle
    * doesn't carry it. The persistent mobile bottom tab bar lives at the app
-   * root now (issue #313, `../../runner/src/app/nav/mobile-tab-bar.ts`), not
+   * root now (`../../runner/src/app/nav/mobile-tab-bar.ts`), not
    * here, so it survives navigating to `/events` where this component isn't
    * mounted at all. The viewport override itself lives behind each shell's
    * own header menu (`KitMenu`, mobile polish feedback item 5) — the app
-   * root's `AppHeader` and `MobileTitlebar` (issue #325), not this component
+   * root's `AppHeader` and `MobileTitlebar`, not this component
    * — rather than an always-visible strip above both. */
   protected readonly viewport = inject(ViewportService);
 
@@ -69,7 +69,7 @@ export class LocalPanel {
 
   protected readonly leasesQuery = injectRunnerLeasesQuery();
 
-  /** The panel's whole machine-local status read (issue #311) — `GET
+  /** The panel's whole machine-local status read — `GET
    * /api/dashboard`, the same 5s-polled query every other rail on this panel
    * injects; TanStack dedupes the N injections into one request. Replaces
    * what were five separate query injections here (asks, escalations,
@@ -90,7 +90,7 @@ export class LocalPanel {
   protected readonly leasesTriadState = computed(() => asyncState(this.leasesQuery, this.activeLeases().length === 0));
 
   /** The mobile chunks pane's async triad state — mobile renders the
-   * unfiltered {@link machineChunks} (issue #134 left mobile's own filter out
+   * unfiltered {@link machineChunks} (left mobile's own filter out
    * of scope), so this reads that list's emptiness, sharing the leases
    * query's loading/error state. */
   protected readonly chunksTriadState = computed(() => asyncState(this.leasesQuery, this.machineChunks().length === 0));
@@ -146,7 +146,7 @@ export class LocalPanel {
     return rows;
   });
 
-  /** The chunks list's "show all" filter state (issue #134) — plain UI state,
+  /** The chunks list's "show all" filter state — plain UI state,
    * unchecked by default. Client-side only: narrows what {@link visibleChunks}
    * renders, never the server-side `RECENT_LEASE_LIMIT`-bounded `/api/leases` read. */
   protected readonly showAllChunks = signal(false);
@@ -157,7 +157,7 @@ export class LocalPanel {
    * *derived* status (not raw lease state), so a closed lease with an open
    * escalation still shows as `NEEDS HUMAN`. Selection stays keyed off the
    * unfiltered {@link machineChunks}, so a hidden chunk is still deep-linkable.
-   * Desktop-only (issue #134) — {@link LocalPanelMobile} takes the unfiltered
+   * Desktop-only — {@link LocalPanelMobile} takes the unfiltered
    * list directly; mobile's own filter is out of scope here. */
   protected readonly visibleChunks = computed<MachineChunkRow[]>(() => {
     if (this.showAllChunks()) return this.machineChunks();
@@ -165,7 +165,7 @@ export class LocalPanel {
   });
 
   /** The open-ask count for the asks panel's header note — also read by the
-   * app root's own mobile tab bar (issue #313) off the same shared dashboard
+   * app root's own mobile tab bar off the same shared dashboard
    * query, folded independently there rather than through this component. */
   protected readonly openAskCount = computed(() => (this.dashboardQuery.data()?.asks?.items ?? []).length);
 

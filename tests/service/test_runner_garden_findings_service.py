@@ -1,4 +1,4 @@
-"""Runner service tier — the garden-findings proxy leg against a real mock hub (D5).
+"""Runner service tier — the garden-findings proxy leg against a real mock hub.
 
 The mock hub's own ``GET /api/fleet/chunks/{id}/garden/findings`` is what a real
 runner's ``GET /api/leases/{id}/garden/findings`` proxies to, over a real process
@@ -59,7 +59,7 @@ def _mint_lease(config: RunnerConfig, fenced: dict[str, str], runner_client: htt
 def test_a_workers_garden_findings_read_proxies_through_to_the_mock_hubs_bucket(tmp_path: Path) -> None:
     """A worker holding only a lease reads its live finding bucket through a real
     runner, hub-proxied to a real mock hub — no `BZ_HUB_URL`, no hub credential, in the
-    worker's own call at all. The bucket excludes the seeded non-live finding (D6)."""
+    worker's own call at all. The bucket excludes the seeded non-live finding."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
     fenced = _tick_env()

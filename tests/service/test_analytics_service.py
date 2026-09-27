@@ -1,4 +1,4 @@
-"""Transcript-event re-derive service tier (blizzard#254 D7) — ``POST
+"""Transcript-event re-derive service tier — ``POST
 /api/analytics/re-derive`` against a real hub: a segment-scoped force, and a
 chunk-scoped, bounded call that converges to ``remaining=0`` over repeated calls. Run
 with ``BLIZZARD_SERVICE=1``."""

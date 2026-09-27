@@ -4,7 +4,7 @@ import { KitButton } from 'fleet';
 import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername } from './auth.query';
 
 /**
- * The panel header's identity control (issue #129) — the signed-in hub username
+ * The panel header's identity control — the signed-in hub username
  * beside a logout button, off `GET /api/auth/session`. Rendered **only** under an
  * oauth-mode hub with a resolved session (`auth_enabled` and a `username`); under a
  * `none`-mode hub the surface is authless, so the query answers `auth_enabled: false`
@@ -18,14 +18,14 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername 
  * with the session now gone — deliberately: `session-recovery.ts`'s seam suspends
  * itself for the duration of this very logout (`runnerLogoutInFlight`), since the
  * session is clearing on purpose and this reload is the navigation for it. For every
- * *other* cause of session loss (issue #312, an expired session, a runner redeploy),
+ * *other* cause of session loss (an expired session, a runner redeploy),
  * that same moment-after window is the seam's own to cover instead.
  *
  * Two shapes, one owner of the session read and the logout call. The default
  * `control` shape is the header's own username-plus-button block. The `label`
  * shape drops the button and marks the host `role="presentation"`, for the one
  * place the block sits inside a `role="menu"` panel (the runner's mobile
- * titlebar menu, issue #161/#163): a `role="menu"` may only own menu items, and
+ * titlebar menu): a `role="menu"` may only own menu items, and
  * a plain `<button>` in there is unreachable — CDK's roving focus skips
  * non-`CdkMenuItem`s and `Tab` closes the menu rather than falling through to
  * it. The actionable half is a real `fleet-kit-menu-item` the panel's own

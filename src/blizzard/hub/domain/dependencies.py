@@ -1,9 +1,9 @@
-"""Chunk dependency edges — declare and release, under the shared claim lock (issue #456).
+"""Chunk dependency edges — declare and release, under the shared claim lock.
 
 A chunk names the chunks it depends on (``blizzard.hub.domain.chunks.dependencies``);
 declaring refuses a cycle and admits only in :data:`PRE_CLAIM_STATUSES`, release has no
 window. Both share ``ClaimService``/``EditService``/``RestartService``'s ``threading.Lock``
-(issue #120) — pinned by ``tests/test_dependency_race.py`` and ``tests/test_dependency_service_component.py``."""
+— pinned by ``tests/test_dependency_race.py`` and ``tests/test_dependency_service_component.py``."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ class PrerequisiteIsEphemeral(Exception):
     """A **declaration** named an ephemeral (grouped-away or deleted) prerequisite,
     raised by :class:`DependencyService` from a fresh ``is_ephemeral`` read taken under
     the shared claim lock — closing the race against every writer that shares the lock,
-    `GroupService` included as of issue #460. Release never raises it."""
+    `GroupService` included. Release never raises it."""
 
     def __init__(self, chunk_id: str) -> None:
         super().__init__(f"chunk {chunk_id} is ephemeral and cannot be named as a prerequisite")
@@ -67,7 +67,7 @@ class PrerequisiteIsEphemeral(Exception):
 
 class DependencyService:
     """Declare and release a dependency edge between two chunks — the operator's ``a
-    depends on b`` and its release (issue #456)."""
+    depends on b`` and its release."""
 
     def __init__(
         self,
@@ -82,7 +82,7 @@ class DependencyService:
         self._lifecycle = lifecycle
         self._dependencies = dependencies
         self._clock = clock
-        # The same lock ClaimService/EditService/RestartService already share (issue #120).
+        # The same lock ClaimService/EditService/RestartService already share.
         self._claim_lock = claim_lock
 
     def declare(self, dependent: Chunk, prerequisite: Chunk, *, by: str) -> DependencyEdge:
@@ -99,7 +99,7 @@ class DependencyService:
         if existing is not None:
             return existing
 
-        # A `None` load means gone under this lock (issue #456) — refuse rather than
+        # A `None` load means gone under this lock — refuse rather than
         # substitute a synthetic status, mirroring `DeleteService.delete`.
         facts = self._facts.load_facts(dependent.chunk_id)
         if facts is None:
@@ -109,7 +109,7 @@ class DependencyService:
             raise DependentNotEditable(dependent.chunk_id, status)
 
         # Re-derived under the same lock: closes the race against every writer holding it
-        # — delete and the fold both included (issue #460).
+        # — delete and the fold both included.
         if self._lifecycle.is_ephemeral(prerequisite.chunk_id):
             raise PrerequisiteIsEphemeral(prerequisite.chunk_id)
 
@@ -168,10 +168,10 @@ def derive_blocked_markings(
 
 @dataclass(frozen=True)
 class ChunkNeighbor:
-    """One neighbor at one hop of :func:`derive_chunk_neighborhood` (D3, D4, issue #462) —
+    """One neighbor at one hop of :func:`derive_chunk_neighborhood` —
     the neighbor's own id, its status where it resolved, and the edge's own satisfaction.
-    ``status`` is ``None`` only for the residual race a neighbor's facts fail to resolve
-    (D4); the edge is still drawn, unsatisfied, rather than dropped."""
+    ``status`` is ``None`` only for the residual race a neighbor's facts fail to resolve;
+    the edge is still drawn, unsatisfied, rather than dropped."""
 
     chunk_id: str
     status: ChunkStatus | None
@@ -180,7 +180,7 @@ class ChunkNeighbor:
 
 @dataclass(frozen=True)
 class ChunkNeighborhood:
-    """A chunk's standing edges one hop each way (issue #462)."""
+    """A chunk's standing edges one hop each way."""
 
     prerequisites: list[ChunkNeighbor]
     dependents: list[ChunkNeighbor]
@@ -189,7 +189,7 @@ class ChunkNeighborhood:
 def derive_chunk_neighborhood(
     chunk_id: str, edges: Iterable[DependencyEdge], statuses: Mapping[str, ChunkStatus]
 ) -> ChunkNeighborhood:
-    """A sibling of :func:`derive_blocked_markings` (D3, D4), answering a different question: every edge naming
+    """A sibling of :func:`derive_blocked_markings`, answering a different question: every edge naming
     ``chunk_id``, for a chunk at any status. ``edges`` must already be
     :meth:`~blizzard.hub.domain.chunks.dependencies.IReadChunkDependenciesRepository.standing_edges_for`'s own order,
     and ``statuses`` must carry ``chunk_id``'s own status. Full rule: `blizzard-context:/domain/work/statuses.md` §The
@@ -247,8 +247,8 @@ def would_close_a_cycle(standing: list[DependencyEdge], added: list[tuple[str, s
 
 @dataclass(frozen=True)
 class FoldEdgePlan:
-    """Per-target dependency-edge rewrite instructions for one fold (D3, D4, issue
-    #460): the release/mint pairing to apply inside each target's own atomic write,
+    """Per-target dependency-edge rewrite instructions for one fold: the release/mint
+    pairing to apply inside each target's own atomic write,
     plus the untouched remainder of ``standing`` the cycle check runs against."""
 
     release_by_target: dict[str, list[str]]
@@ -257,7 +257,7 @@ class FoldEdgePlan:
 
 
 def plan_fold(standing: list[DependencyEdge], survivor_id: str, folded_ids: list[str]) -> FoldEdgePlan:
-    """The dependency-edge side of folding ``folded_ids`` into ``survivor_id`` (D3): every standing edge naming a
+    """The dependency-edge side of folding ``folded_ids`` into ``survivor_id``: every standing edge naming a
     folded chunk in either role is released, and its remapped pair is minted unless it collapses to a self-edge or
     duplicates a pair already resulting. Raises nothing — the caller checks :func:`would_close_a_cycle` first. Full
     per-edge outcome table: `blizzard-context:/architecture/crash-correctness/hub.md` §A fold's edge rewrite."""

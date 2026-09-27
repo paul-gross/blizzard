@@ -1,4 +1,4 @@
-"""JSONL transcript record fixtures (issue #29, extended blizzard#245).
+"""JSONL transcript record fixtures.
 
 Mints individual record lines shaped like a real Claude Code session, reusable across
 the parser/normalizer and repository/source tests. These fixtures hand-author shapes
@@ -68,7 +68,7 @@ def assistant_usage(
 
 def rate_limit_record(*, text: str = "You've hit your session limit · resets 5:40pm (America/Chicago)") -> str:
     """The synthetic assistant record a Claude Code invocation writes in place of a model
-    reply once its subscription hits a usage limit (blizzard#594) — the verbatim
+    reply once its subscription hits a usage limit — the verbatim
     2026-09-05 shape: no result envelope, ``model: "<synthetic>"``, zeroed usage."""
     return _line(
         {
@@ -91,7 +91,7 @@ def rate_limit_record(*, text: str = "You've hit your session limit · resets 5:
 
 def overload_record(*, text: str = 'Overloaded: 529 {"type":"error","error":{"type":"overloaded_error"}}') -> str:
     """The synthetic assistant record a Claude Code invocation writes in place of a model
-    reply once the provider reports itself overloaded (blizzard#595) — the same
+    reply once the provider reports itself overloaded — the same
     no-result-envelope, zeroed-usage shape ``rate_limit_record`` uses, distinguished by
     ``error: "server_error"`` and text naming 529/Overloaded."""
     return _line(
@@ -154,7 +154,7 @@ def meta_record(text: str = "/context output") -> str:
 def sidechain_record(text: str = "subagent chatter") -> str:
     """An `isSidechain` record with no resolvable `parentUuid` chain, so the normalizer
     routes it to `unlinked_sidechains` — carried through as its own top-level
-    `"sidechain"` turn by the projection (blizzard#248 D2/D7)."""
+    `"sidechain"` turn by the projection."""
     content = [{"type": "text", "text": text}]
     return _line(
         {"type": "assistant", "message": {"role": "assistant", "content": content}, "isSidechain": True, "uuid": "s1"}

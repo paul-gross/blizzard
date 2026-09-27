@@ -5,7 +5,7 @@ import { formatAbsolute, formatWhen } from '../when';
 
 /**
  * The board's short-form timestamp with its full local date + time as a hover
- * tooltip (issue #175) — bundles {@link formatWhen}'s short text and
+ * tooltip — bundles {@link formatWhen}'s short text and
  * {@link formatAbsolute}'s title in one node, so a template-render call site reaches
  * both with one binding instead of hand-wiring a `title` beside it. The view-model
  * and split-render call sites {@link formatAbsolute} also serves render its title

@@ -50,8 +50,8 @@ import runnerManifestJson from '../../../../../../contracts/sse/runner/manifest.
 import runnerTakeoverChangedGolden from '../../../../../../contracts/sse/runner/takeover-changed.json';
 
 /**
- * The SSE frame shape contract — the board half of the hub scope (issue #235), and
- * (blizzard#317 Phase 2) the runner scope `local-panel` will consume from Phase 4 on.
+ * The SSE frame shape contract — the board half of the hub scope, and
+ * the runner scope `local-panel` will consume.
  * `contracts/sse/` is the single description of every frame kind's wire shape, one
  * self-contained scope per daemon; this spec and the Python suite at
  * `tests/test_sse_contract.py` read the same physical files. Moving a golden reddens
@@ -224,7 +224,7 @@ const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
   },
 };
 
-// ---- The runner scope (blizzard#317 Phase 2) ----------------------------------------
+// ---- The runner scope ----------------------------------------------------------------
 
 const RUNNER_GOLDENS: Readonly<Record<string, GoldenCases>> = {
   'lease-changed': runnerLeaseChangedGolden as GoldenCases,

@@ -95,7 +95,7 @@ async function render(
     providers: [
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      // The header's chunk id links to the detail route now (issue #318).
+      // The header's chunk id links to the detail route now.
       provideRouter([]),
     ],
   }).compileComponents();
@@ -108,8 +108,8 @@ async function render(
 /**
  * `MachineDetail`'s summary facts always render off the chunk's newest
  * attempt (the `leases` list's last entry) — per-attempt selection and the
- * transcript moved to the runner-local chunk detail route (issue #318,
- * `chunk-detail-page.spec.ts` covers that rendering contract now).
+ * transcript moved to the runner-local chunk detail route —
+ * `chunk-detail-page.spec.ts` covers that rendering contract now.
  */
 describe('MachineDetail summary facts', () => {
   let stub: RequestClientStub;
@@ -136,7 +136,7 @@ describe('MachineDetail summary facts', () => {
 });
 
 /**
- * The header shape (issue #185) — matches the hub board's own chunk-detail header:
+ * The header shape — matches the hub board's own chunk-detail header:
  * the full chunk id, work items as links, the derived state, a working Pause/Resume,
  * and a close button. Pause/Resume and the work-item links are the dock's own
  * severable read ({@link injectChunkDetailQuery}); these specs drive that read
@@ -263,7 +263,7 @@ describe('MachineDetail header', () => {
 });
 
 /**
- * Pause/Resume's own pending-disable and failure reporting (F6) — brought up to the
+ * Pause/Resume's own pending-disable and failure reporting — brought up to the
  * standard `fleet/chunk-detail/chunk-detail.ts`'s own `onPause`/`onResume`/
  * `actionError` set: the button that fired the mutation disables for its duration and
  * re-enables once it settles, and a rejected mutation renders inline rather than being
@@ -393,7 +393,7 @@ describe('MachineDetail Pause/Resume pending + failure', () => {
 });
 
 /**
- * The dock's panel chrome (issue #307) — it paints through `fleet-kit-panel`
+ * The dock's panel chrome — it paints through `fleet-kit-panel`
  * now, the same chrome every sibling region in `local-panel-layout.ts` wears,
  * rather than mounting bare. `MachineDetailHeader` projects into the panel's
  * own `fleetKitPanelHeader` slot, so exactly one header bar (`KitPanel`'s own `.p-hdr`)

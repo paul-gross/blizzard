@@ -4,7 +4,7 @@ import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, Viewp
 import { injectRunnerDashboardQuery, injectRunnerSessionQuery, LocalIdentity, signedInUsername } from 'local-panel';
 
 /**
- * The runner's mobile titlebar (issue #325) — hoisted out of
+ * The runner's mobile titlebar — hoisted out of
  * `LocalPanelMobile` (its old home) up to the app root (`../app.ts`), the
  * same shelf the hub's own {@link FleetMobileTitlebar} wrapper
  * (`hub/src/app/nav/mobile-titlebar.ts`) sits on. It used to render *inside*
@@ -12,7 +12,7 @@ import { injectRunnerDashboardQuery, injectRunnerSessionQuery, LocalIdentity, si
  * had no titlebar at all — mounted here instead, `AppShell` (`fleet`)
  * enforces it above the routed content on every route.
  *
- * A thin wrapper around the shared {@link FleetMobileTitlebar} (issue #92),
+ * A thin wrapper around the shared {@link FleetMobileTitlebar},
  * mirroring the hub's own wrapper in shape: this layer supplies the runner's
  * own hub-reachability read as the live signal and declares the shell menu's
  * panel (a `CdkMenu` cannot see items projected across an `<ng-content>`

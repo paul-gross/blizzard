@@ -1,4 +1,4 @@
-"""Packaged-graph reconciliation — mint only what changed (issue #146).
+"""Packaged-graph reconciliation — mint only what changed.
 
 Graphs live in the store, not on disk, so shipping a changed graph in a new wheel used to
 change nothing. Drives the real reconciler over a fixture "packaged set" — mint iff the

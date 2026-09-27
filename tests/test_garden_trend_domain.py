@@ -1,6 +1,6 @@
-"""``compute_trend`` (unit tier, blizzard#394 Phase 4) — the pure fold over a window's
-own facts into fixed-length periods, the outflow/withdrawn/reopened counts (D2), and the
-D5 introduced-age cut. No store, no clock — a plain list of ``TrendFact`` in, a
+"""``compute_trend`` (unit tier) — the pure fold over a window's
+own facts into fixed-length periods, the outflow/withdrawn/reopened counts, and the
+introduced-age cut. No store, no clock — a plain list of ``TrendFact`` in, a
 ``Trend`` out."""
 
 from __future__ import annotations

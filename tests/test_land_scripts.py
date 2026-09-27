@@ -21,7 +21,7 @@ _BRANCH = "feature-branch"
 _COMMIT = "sha1"
 _COMMITS = [{"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT}]
 
-# The mid-run marker callback (issue #230): every pushed/merged repo in these tests
+# The mid-run marker callback: every pushed/merged repo in these tests
 # records a marker, so every scripted forge double needs a response for it too.
 _CALLBACK_URL = "http://callback/hub-markers"
 _MARKER_TOKEN = "test-marker-token"
@@ -181,7 +181,7 @@ def _forge_with_state(
 ):
     """A double whose one already-open PR reads ``mergeable_state``. Records every call.
 
-    ``head_check_runs``/``base_check_runs`` (issue #232), when given, stub the head/base
+    ``head_check_runs``/``base_check_runs``, when given, stub the head/base
     check-runs routes; left unstubbed, a route raises ``KeyError``, so the degradation
     path reacts to the same real failure mode ``forge_request`` surfaces. Every
     ``head_check_runs`` entry also gets its own rerequest route stubbed, keyed by its
@@ -337,7 +337,7 @@ def test_clean_merge_body_requests_a_merge_commit(
     assert merge and merge[0]["merge_method"] == "merge"
 
 
-# land_pr_ci terminal CI check failure + CI-watch findings (issue #232): asserts the
+# land_pr_ci terminal CI check failure + CI-watch findings: asserts the
 # check-runs GETs, the `delivery-findings` marker write, and the authored `failure` edge.
 
 
@@ -778,7 +778,7 @@ def test_an_absent_expectation_signal_is_treated_as_expected(script, monkeypatch
     assert exc.value.code == 1
 
 
-# Durable marker writes (issue #230): `land_default`/`land_pr_ci` share the same
+# Durable marker writes: `land_default`/`land_pr_ci` share the same
 # PR-open-then-merge shape, exercised together via `_scripted_forge`/`_forge_with_state`.
 
 
@@ -891,7 +891,7 @@ def test_an_empty_callback_url_with_a_pending_repo_fails_instead_of_landing_sile
     assert "BZ_HUB_MARKER_CALLBACK_URL" in captured.err
 
 
-# land_pr_ci.Verdict + Findings (issue #232): a terminally-failed check run must
+# land_pr_ci.Verdict + Findings: a terminally-failed check run must
 # never be polled out to `poll_timeout` — pure, network-free objects.
 
 

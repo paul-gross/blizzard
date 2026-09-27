@@ -1,4 +1,4 @@
-"""The selftest-results migration (blizzard#438 — component tier): applies from
+"""The selftest-results migration (component tier): applies from
 an empty store to head, and survives a downgrade/upgrade roundtrip."""
 
 from __future__ import annotations

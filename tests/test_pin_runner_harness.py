@@ -1,4 +1,4 @@
-"""Pinning tests for comment-defended runner-harness decisions (issue #270).
+"""Pinning tests for comment-defended runner-harness decisions.
 
 Unit tier, alongside ``tests/test_runner_harness_adapter.py``'s coverage of the same
 adapter: each test here pins a decision whose only defence was prose.
@@ -17,7 +17,7 @@ from tests.runner_fakes import FakeProbe
 
 @pytest.mark.unit
 def test_an_unmapped_tier_alias_never_substitutes_downward(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Tier aliases are unordered roles, not an ordered scale (issue #144): an unmapped
+    """Tier aliases are unordered roles, not an ordered scale: an unmapped
     entry is unresolvable, not substituted with the next tier down."""
     monkeypatch.setattr(adapter_module, "_BUILTIN_TIERS", {"blizzard:advanced": "opus", "blizzard:basic": "sonnet"})
     probe = FakeProbe()

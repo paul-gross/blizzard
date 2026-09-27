@@ -1,4 +1,4 @@
-"""The chunk-facts repository seam — read-only, D2.
+"""The chunk-facts repository seam — read-only.
 
 ``load_facts``/``load_all_facts`` each project the union of every concept's fact tables for
 one chunk (or all chunks); the writes behind that projection are each concept seam's own, so
@@ -20,8 +20,8 @@ class IReadChunkFactsRepository(Protocol):
     def load_facts(self, chunk_id: str) -> ChunkFacts | None: ...
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         """Every non-ephemeral (non-grouped, non-deleted) chunk's complete
-        :class:`ChunkFacts`, keyed by chunk id — the fleet-summary bulk read (issue
-        #374). A bounded number of queries regardless of fleet size, unlike calling
+        :class:`ChunkFacts`, keyed by chunk id — the fleet-summary bulk read.
+        A bounded number of queries regardless of fleet size, unlike calling
         :meth:`load_facts` once per chunk; each value is exactly what :meth:`load_facts`
         would return for that chunk id."""
         ...
@@ -41,7 +41,7 @@ class IReadChunkFactsRepository(Protocol):
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts_for`'s status-only sibling — every id's :class:`ChunkFacts`, keyed
         by chunk id, reading only the fact families behind status, pause, latest epoch,
-        restart epochs, cost, and open decision (blizzard#521) rather than every family
+        restart epochs, cost, and open decision rather than every family
         `load_facts_for` loads. An id that doesn't exist or is ephemeral is silently
         dropped, the same as `load_facts_for`."""
         ...

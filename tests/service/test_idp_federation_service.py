@@ -1,5 +1,5 @@
 """The runner SSO federation JWT/JWKS wire leg — real hub + runner subprocesses, no
-browser (service tier, issue #95).
+browser (service tier).
 
 A real hub delivers a hub-signed token via ``response_mode=form_post`` to a real
 runner's callback, ending in a runner-domain session, over real localhost HTTP with no
@@ -93,12 +93,12 @@ def _federated_runner(
         runner_id=runner_id,
         public_urls=(public_url,),
         # A path that is never created — the sampler's missing-credentials soft failure
-        # trips before any request is built (issue #218).
+        # trips before any request is built.
         external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
     )
     config.config_path.write_text(config.to_toml())
 
-    # Registration (issue #95) carries this runner's own federation identity so the
+    # Registration carries this runner's own federation identity so the
     # hub's authorize endpoint will accept a bounce to it.
     reg_client = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0)
     try:
@@ -228,7 +228,7 @@ def test_key_rotation_is_picked_up_by_a_live_runner_with_no_restart(tmp_path: Pa
 
 
 def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path) -> None:
-    """Issue #128 — a hub with two configured providers hands an unauthenticated bounce
+    """A hub with two configured providers hands an unauthenticated bounce
     to the ``/login`` chooser; completing either provider's dance resumes the pending
     authorize request and ends in a runner-domain session."""
     bin_dir = require_stub_idp()

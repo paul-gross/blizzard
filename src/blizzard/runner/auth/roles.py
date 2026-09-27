@@ -1,4 +1,4 @@
-"""Runner-local role resolution, keyed by hub **username** (issue #95).
+"""Runner-local role resolution, keyed by hub **username**.
 
 Runner roles live **only** in ``blizzard-runner.toml``. Precedence: ``auth.superuser``
 wins outright, then a ``[auth.users]`` override, then ``hub_role_default``. **No

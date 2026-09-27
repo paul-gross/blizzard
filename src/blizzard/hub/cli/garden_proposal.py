@@ -1,5 +1,5 @@
-"""``blizzard hub garden-proposal`` — blizzard#390: read verbs over garden proposals,
-blizzard#395's two closing verbs (``pass``/``accept``), and blizzard#631's four
+"""``blizzard hub garden-proposal`` — read verbs over garden proposals,
+two closing verbs (``pass``/``accept``), and four
 operator-authoring verbs (``create``/``edit``/``attach``/``detach``)."""
 
 from __future__ import annotations

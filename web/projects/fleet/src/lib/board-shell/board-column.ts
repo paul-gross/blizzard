@@ -63,12 +63,12 @@ export class BoardColumn {
    * operator-reshapeable. */
   readonly reorderControls = input(false);
 
-  /** Whether the current identity may promote a backlog chunk (`chunk:control` —
-   * issue #210), forwarded to each {@link BoardCardComponent}. */
+  /** Whether the current identity may promote a backlog chunk (`chunk:control`),
+   * forwarded to each {@link BoardCardComponent}. */
   readonly canControl = input(false);
 
   /** Whether the current identity may reorder the ready queue and backlog
-   * (`queue:reorder` — issue #210), combined with {@link reorderControls} to
+   * (`queue:reorder`), combined with {@link reorderControls} to
    * arm this lane's drag-and-drop. */
   readonly canReorder = input(false);
 

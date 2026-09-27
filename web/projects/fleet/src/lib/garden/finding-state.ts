@@ -10,16 +10,16 @@ import type { Tone } from '../kit/tone';
  * `FindingView.live` is **not** this classification — it is a wire boolean set by
  * `derive_liveness` (`src/blizzard/hub/domain/findings.py:102-126`) as
  * `live = (state == "live")`, so a `gone`-flagged finding reads `live: false` on the
- * wire even though it has not exited (D8: a `gone` row stays open, tinted, and
+ * wire even though it has not exited (a `gone` row stays open, tinted, and
  * actionable until a person confirms it). Every helper below classifies off `state`
  * directly for exactly that reason.
  */
 
-/** The states the ground itself changed under (D2) — `EXIT_KINDS`'s outflow half
+/** The states the ground itself changed under — `EXIT_KINDS`'s outflow half
  * (`src/blizzard/hub/domain/findings.py:25-29`). */
 export const FINDING_OUTFLOW_STATES: readonly string[] = ['resolved', 'gone-confirmed'];
 
-/** The states a human judgment call withdrew (D2) — `EXIT_KINDS`'s withdrawn half,
+/** The states a human judgment call withdrew — `EXIT_KINDS`'s withdrawn half,
  * same lines: the ground didn't move, a person decided the finding doesn't merit
  * standing regardless. */
 export const FINDING_WITHDRAWN_STATES: readonly string[] = ['wont-fix', 'not-a-finding', 'superseded'];
@@ -31,7 +31,7 @@ export const FINDING_EXIT_STATES: readonly string[] = [...FINDING_OUTFLOW_STATES
 
 /** `FindingView.state`'s own closed set — `"live"`, `"gone"`, `"delivered"`, or one of
  * `EXIT_KINDS` (`src/blizzard/hub/domain/findings.py`'s own doc comment on the field).
- * `'live'`, `'gone'`, and `'delivered'` (all still open — blizzard#583 D1: `delivered`
+ * `'live'`, `'gone'`, and `'delivered'` (all still open — `delivered`
  * joins no `EXIT_KINDS` set) plus every exit state, derived from the same constants
  * above rather than a second hand-typed list, so this file stays the one place the
  * full vocabulary is spelled out. */
@@ -42,7 +42,7 @@ export function isFindingExited(state: string): boolean {
   return FINDING_EXIT_STATES.includes(state);
 }
 
-/** Whether `state` is `'gone'` — still open (D8: not counted as exited anywhere),
+/** Whether `state` is `'gone'` — still open (not counted as exited anywhere),
  * but flagged for review and rendered tinted. */
 export function isFindingGoneFlagged(state: string): boolean {
   return state === 'gone';
@@ -55,7 +55,7 @@ export function isFindingGoneFlagged(state: string): boolean {
  * than a per-state opinion: a still-open finding reads amber (`live`, the work left
  * to do) or amber-hi (`gone`, flagged and literally waiting on a person to confirm);
  * an outflow exit reads green, the ground having actually moved; a withdrawn exit
- * reads dim, since nothing changed but somebody's judgment. `delivered` (blizzard#583)
+ * reads dim, since nothing changed but somebody's judgment. `delivered`
  * reads `takeover`'s tone rather than borrowing `resolved`'s: it is a delivery's own
  * claim, not yet the routine's own confirmation that the ground moved — "something
  * else must happen before this continues" is exactly that wait. */
@@ -77,7 +77,7 @@ export function findingStateTone(state: string): Tone {
   return STATE_TONE[state] ?? 'idle';
 }
 
-/** A review-sourced finding's own severity (blizzard#582 D1) → badge tone.
+/** A review-sourced finding's own severity → badge tone.
  * `blocking` reads `needs`, the same red a human-blocked chunk reads — a blocking
  * finding is exactly that, something standing in the way until a person addresses
  * it. `should-fix` reads `waiting`, the same amber-hi a parked chunk reads: real,

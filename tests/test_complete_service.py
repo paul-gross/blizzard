@@ -1,4 +1,4 @@
-"""CompleteService (unit tier) — the operator's manual chunk completion (issue #294).
+"""CompleteService (unit tier) — the operator's manual chunk completion.
 
 A fake stands in for the lifecycle store — only ``record_completion`` is meaningfully
 implemented; every other seam raises loudly if called, mirroring ``StopService``'s own

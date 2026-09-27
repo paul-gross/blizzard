@@ -1,5 +1,5 @@
-"""``GET /api/leases/{id}/garden/findings`` — the lease-scoped, hub-proxying route (D5,
-component tier). Authorization mirrors ``tests/test_runner_chunk_history_api.py``'s own
+"""``GET /api/leases/{id}/garden/findings`` — the lease-scoped, hub-proxying route
+(component tier). Authorization mirrors ``tests/test_runner_chunk_history_api.py``'s own
 shape: the hub is never consulted for an unauthorized caller. The route itself carries
 no flag naming a routine or a scope — there is nothing here for a worker to point at
 another routine's bucket."""

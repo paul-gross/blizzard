@@ -91,8 +91,8 @@ class SessionResolver:
 
     def resumption(self, resume_from: SessionReference | None) -> ResumedSession | None:
         """The session this spawn resumes with its newest recorded lease, or ``None`` for a
-        fresh mint (blizzard#340). Empty matches the adapter's own predicate: a blank
-        ``resume_from`` is a brand-new session, never a lookup key (issue #149)."""
+        fresh mint. Empty matches the adapter's own predicate: a blank
+        ``resume_from`` is a brand-new session, never a lookup key."""
         if resume_from is None:
             return None
         return ResumedSession(session=resume_from, lease=self.leases.lease_for_session(resume_from))
@@ -100,7 +100,7 @@ class SessionResolver:
     def session_stamps(
         self, node: NodeConfig, resume: ResumedSession | None, *, harness_id: str
     ) -> tuple[str | None, str | None, str | None]:
-        """The (model, effort, compaction_window) this spawn runs under, and stamps (#144, blizzard#343).
+        """The (model, effort, compaction_window) this spawn runs under, and stamps (#144).
 
         **The stamp describes the session, not the preference.** A spawn that *resumes* inherits
         all three from the resumed session's own recorded lease, riding ``resume`` from
@@ -145,7 +145,7 @@ class SessionResolver:
     def _rotation_breach(
         self, head: PoolHead, node: NodeConfig, spawn_cwd: str | None
     ) -> tuple[str | None, UnknownHarnessError | UnavailableHarnessError | None]:
-        """Why this pool head must not be resumed, or ``None`` when it may be (issue #144),
+        """Why this pool head must not be resumed, or ``None`` when it may be,
         paired with the owner's own unresolvable exception. A head resumes only while every
         *readable* threshold is under bound and its model still matches; an unreadable signal,
         including an unresolvable transcript source, is never a breach — the owner's own
@@ -255,13 +255,13 @@ class HarnessSelector:
     is its only caller: a resume or a forced continuation never reaches selection at all."""
 
     harnesses: IHarnessRegistry
-    #: This runner's own cross-tick health cache (blizzard#438); ``None`` skips the health gate entirely.
+    #: This runner's own cross-tick health cache; ``None`` skips the health gate entirely.
     health: HarnessHealthCache | None = None
 
     def select(self, node: NodeConfig) -> HarnessSelection:
         """The earliest member of ``node.session_harnesses`` this runner can dispatch to, in
-        declared order — a member the registry cannot serve, or one health has withdrawn
-        (blizzard#438), is skipped and recorded. A single member skips the model check only
+        declared order — a member the registry cannot serve, or one health has withdrawn,
+        is skipped and recorded. A single member skips the model check only
         when nothing in ``node.session_model`` is an authored (``blizzard:``-namespaced) tier;
         an authored tier this harness cannot map is never silently substituted (worker-spawn.md)."""
         members = node.session_harnesses

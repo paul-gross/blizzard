@@ -1,4 +1,4 @@
-"""Comment/docstring density: per-root growth ratchet + per-block caps (issue #270).
+"""Comment/docstring density: per-root growth ratchet + per-block caps.
 
 measure [--write-baseline] ROOTS...  report (or record) per-root prose totals, including
                                       each file's `bzh:prose-budget` over-cap block count.

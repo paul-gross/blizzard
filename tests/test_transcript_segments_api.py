@@ -1,4 +1,4 @@
-"""Transcript-segment routes (blizzard#247, Phase 3, component tier): the fleet ingest
+"""Transcript-segment routes (component tier): the fleet ingest
 route's runner-ownership confinement, and the operator-plane read routes' auth triad."""
 
 from __future__ import annotations
@@ -243,11 +243,11 @@ def test_get_segment_404s_when_the_segment_belongs_to_a_different_chunk(tmp_path
     assert same_chunk.status_code == 200
 
 
-# --- truncation (D5/D6), the operator's only signal turns are missing --------------
+# --- truncation, the operator's only signal turns are missing --------------
 
 
 def test_a_cap_rejected_tail_is_visible_as_truncation_on_both_read_routes(tmp_path: Path) -> None:
-    # Configured, not monkeypatched (blizzard#338): `TranscriptCaps` binds its defaults at
+    # Configured, not monkeypatched: `TranscriptCaps` binds its defaults at
     # class creation, so rebinding the module constant no longer reaches the wired service.
     hub = build_hub(tmp_path, auth_mode="oauth", transcript_caps=TranscriptCaps(record_max_bytes=200))
     contributor = seed_user(hub, username="ada", role=Role.CONTRIBUTOR)
@@ -279,7 +279,7 @@ def test_a_cap_rejected_tail_is_visible_as_truncation_on_both_read_routes(tmp_pa
 def test_a_runner_declared_record_truncation_is_visible_on_both_read_routes_even_when_accepted(
     tmp_path: Path,
 ) -> None:
-    """review F5: the runner's own cap fallback ships an ACCEPTED record (no hub cap
+    """The runner's own cap fallback ships an ACCEPTED record (no hub cap
     trips) whose ``turns`` is empty while its claimed range isn't — distinct from the
     hub's own rejection above. Both must surface as ``truncated: true``."""
     hub = build_hub(tmp_path, auth_mode="oauth")
@@ -346,7 +346,7 @@ def test_the_index_route_carries_no_turn_content_at_any_size(tmp_path: Path) -> 
     assert body["segments"][0]["byte_count"] > 5000 * 50
 
 
-# --- the fleet lease-transcript read (D3, #249): both refusals under the hub's default ---
+# --- the fleet lease-transcript read (#249): both refusals under the hub's default ---
 # --- `RUNNER_AUTH_WARN`, where `assert_owns` is inert on both branches — refuse anyway. ---
 
 
@@ -454,7 +454,7 @@ def test_lease_transcript_read_500s_cleanly_on_a_fencing_invariant_violation(tmp
 
 
 def test_lease_transcript_read_renumbers_index_across_spawn_generations(tmp_path: Path) -> None:
-    """``index`` is producer-minted and generation-local (D9), so a two-generation lease
+    """``index`` is producer-minted and generation-local, so a two-generation lease
     concatenates two runs that each start at 0. Renumbering across the whole body keeps a
     consumer keying on it from collapsing two different turns."""
     hub = build_hub(tmp_path)
@@ -490,7 +490,7 @@ def test_lease_transcript_read_renumbers_index_across_spawn_generations(tmp_path
     assert [t["index"] for t in resp.json()["turns"]] == [0, 1, 2, 3]
 
 
-# --- the cross-window link handles (blizzard#338) ------------------------------------
+# --- the cross-window link handles ------------------------------------
 
 
 def _late_link_record(chunk_id: str, *, seq: int, turn_range_start: int, segment_id: str = "sg_1") -> dict:

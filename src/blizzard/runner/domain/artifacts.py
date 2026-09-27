@@ -1,4 +1,4 @@
-"""The graph-mint artifact-declaration repository seam (blizzard#410)."""
+"""The graph-mint artifact-declaration repository seam."""
 
 from __future__ import annotations
 

@@ -220,7 +220,7 @@ def test_equal_raw_session_ids_are_isolated_across_runner_session_repositories(t
 
 
 def test_transcript_segment_freezes_the_leases_own_resolved_model_and_effort(tmp_path: Path) -> None:
-    """blizzard#439 D3: the pair is read off `lease_context` at segment open, exactly as
+    """The pair is read off `lease_context` at segment open, exactly as
     `harness_id` already is — not re-resolved at send time."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     store.record_lease(

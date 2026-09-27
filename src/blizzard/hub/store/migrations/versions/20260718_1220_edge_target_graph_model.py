@@ -1,4 +1,4 @@
-"""cross-graph edge per-choice model override — add ``graph_edges.to_graph_model`` (hub store tree, issue #90)
+"""cross-graph edge per-choice model override — add ``graph_edges.to_graph_model`` (hub store tree)
 
 The target graph rides in ``to_node_name``; only the ``model:`` override needs a column.
 Revision ID: 20260718_1220_hub_edge_target_graph_model

@@ -1,4 +1,4 @@
-"""The provider subscription-sampling seam (blizzard#436, issue #218).
+"""The provider subscription-sampling seam.
 
 A **pluggable, provider-selected** external-system seam (``bzh:pluggable-seams``): each
 declared subscription is sampled through its own binding, selected by ``provider`` at
@@ -24,7 +24,7 @@ __all__ = [
     "SampleMissReason",
 ]
 
-# The Anthropic provider-sampler binding's own selector value (blizzard#436) — distinct
+# The Anthropic provider-sampler binding's own selector value — distinct
 # from a subscription declaration's `slug`, which identifies an operator's subscription.
 PROVIDER_ANTHROPIC = "anthropic"
 
@@ -57,7 +57,7 @@ class ExternalSubscriptionUsageSnapshot:
 
 
 class SampleMissReason(StrEnum):
-    """The closed set of reasons one sampling attempt produced nothing (blizzard#504):
+    """The closed set of reasons one sampling attempt produced nothing:
     ``CREDENTIAL_LAPSED``, a token past its own expiry or a 401; ``CREDENTIAL_UNREADABLE``, a
     missing, malformed, or incomplete credential file; ``ENDPOINT_UNREACHABLE``, any other
     non-2xx or a request-level failure; ``RESPONSE_UNPARSEABLE``, a 2xx body without windows."""
@@ -70,7 +70,7 @@ class SampleMissReason(StrEnum):
 
 @dataclass(frozen=True)
 class SampleMiss:
-    """One sampling attempt that produced nothing, with why (blizzard#504) — replaces a
+    """One sampling attempt that produced nothing, with why — replaces a
     bare ``None``, so a lapsed credential is distinguishable from an unreachable endpoint
     or an unparseable body at every surface that reads a sampler's result."""
 
@@ -81,7 +81,7 @@ class ISubscriptionSampler(Protocol):
     """One declared subscription's rate-limit sampler. Dumb: samples, never decides."""
 
     def sample(self) -> ExternalSubscriptionUsageSnapshot | SampleMiss:
-        """Sample this subscription's rate-limit utilization (issue #218).
+        """Sample this subscription's rate-limit utilization.
 
         A :class:`SampleMiss` means this attempt produced nothing — a bad credential, an
         unreachable endpoint, an unparseable response — carrying its own closed-set

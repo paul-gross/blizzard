@@ -6,7 +6,7 @@ import { hubFleetSpendKey } from '../query-keys';
 
 /**
  * Hub `GET /api/spend?since=&until=` read — the fleet-wide usage/cost total over a
- * caller-chosen window (issue #60, `until` added issue #183), through TanStack Query
+ * caller-chosen window, through TanStack Query
  * and the generated hub client. `since`/`until` are functions so the caller can
  * recompute them (e.g. local start-of-day rolling over) without re-wiring the query;
  * both ride in the query key so a new window is its own cache entry — `until` included,
@@ -14,7 +14,7 @@ import { hubFleetSpendKey } from '../query-keys';
  * `until` is omitted from the request when the accessor returns `undefined` — the
  * original open-ended tail.
  *
- * Relocated from `/api/fleet/spend` (issue #87): that prefix is now the
+ * Relocated from `/api/fleet/spend`: that prefix is now the
  * runner-authenticated fleet router, so the operator's anonymous spend read moved to
  * `/api/spend` to free the namespace.
  */

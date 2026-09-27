@@ -76,7 +76,7 @@ def routine_create(
 ) -> None:
     """Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.
 
-    DEFAULT_SCOPE_SLUG mints a fresh scope if unseen (D4). GRAPH_NAME must resolve to
+    DEFAULT_SCOPE_SLUG mints a fresh scope if unseen. GRAPH_NAME must resolve to
     an enabled graph."""
     resp = cli.send(
         "post",
@@ -112,7 +112,7 @@ def routine_list(cli: CliContext, include_retired: bool) -> None:
 @click.argument("routine_id")
 def routine_show(cli: CliContext, routine_id: str) -> None:
     """One routine's whole record — name, graph, default scope, model/effort defaults,
-    and its linked scopes (blizzard#488)."""
+    and its linked scopes."""
     resp = cli.get(
         f"/api/routines/{routine_id}", "GET /routines/{id}", on_status={404: f"unknown routine {routine_id}"}
     )
@@ -168,7 +168,7 @@ def routine_edit(
 
 @routine_group.group("scope")
 def routine_scope_group() -> None:
-    """Manage a routine's scope membership (blizzard#488): add, remove."""
+    """Manage a routine's scope membership: add, remove."""
 
 
 @routine_scope_group.command("add", cls=FleetCommand)
@@ -299,8 +299,7 @@ def routine_run(cli: CliContext, name: str, scope_slug: str | None, mode: str, n
 
 @dataclass(frozen=True)
 class TrendDetail:
-    """`routine trend`'s own render (blizzard#394) — per-period counts, then the
-    D5 age cut."""
+    """`routine trend`'s own render — per-period counts, then the age cut."""
 
     body: dict[str, Any]
 
@@ -322,7 +321,7 @@ class TrendDetail:
 
 
 def _utc_query_value(value: datetime) -> str:
-    """See `blizzard.cli.window.utc_query_value` (D6)."""
+    """See `blizzard.cli.window.utc_query_value`."""
     return iso_utc(value.astimezone(UTC))
 
 
@@ -335,7 +334,7 @@ def _utc_query_value(value: datetime) -> str:
     "introduced_boundary",
     required=True,
     type=click.DateTime(),
-    help="The D5 recent/older cut, in local time — a created finding's own introduced instant, not this window's.",
+    help="The recent/older cut, in local time — a created finding's own introduced instant, not this window's.",
 )
 @click.option("--period-days", "period_days", default=7, type=int, help="Each period's width, in days (default 7).")
 def routine_trend(
@@ -413,7 +412,7 @@ def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime)
 
 @dataclass(frozen=True)
 class ProposalCountsDetail:
-    """`routine proposal-counts`'s own render (blizzard#547) — one line per routine/class
+    """`routine proposal-counts`'s own render — one line per routine/class
     pair, `created` echoed as the open/passed/accepted-with-item/accepted-without-item sum."""
 
     body: dict[str, Any]

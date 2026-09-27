@@ -131,8 +131,8 @@ def test_runner_buffers_usage_facts_through_a_hub_outage_and_flushes_once(tmp_pa
         assert buffered, "no usage.recorded fact ever buffered (the worker did not run to completion)"
         assert _status(hub, chunk_id) != "done", "the chunk landed before the outage could be staged"
 
-        # blizzard#441 — the buffered payload carries the lease's own harness stamp
-        # (D4), stamped from the real spawn's own recorded identity, never fabricated.
+        # The buffered payload carries the lease's own harness stamp,
+        # stamped from the real spawn's own recorded identity, never fabricated.
         payloads = _pending_usage_payloads(config)
         assert payloads and payloads[0]["harness_id"] == "claude_code", payloads
 
@@ -217,7 +217,7 @@ def _usage_payload(
         "cache_create_tokens": 5,
         "cost_usd": cost_usd,
     }
-    # An N-1 runner (blizzard#441, A10) omits the provenance keys entirely, rather than
+    # An N-1 runner (A10) omits the provenance keys entirely, rather than
     # sending them explicitly null — the hub must ingest either shape identically.
     if harness_id is not None:
         payload["harness_id"] = harness_id
@@ -261,7 +261,7 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
 
         # Push three usage facts on the runner's store-and-forward endpoint: one carrying a
         # cost, one with cost absent (the envelope-less transcript-summation fallback), and
-        # one from a runner predating harness provenance (blizzard#441, A10) — no
+        # one from a runner predating harness provenance (A10) — no
         # provenance keys at all, never rejected and never defaulted.
         assert _push_usage(
             hub, runner_id="usage-pusher", seq=1, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=0.10)
@@ -286,7 +286,7 @@ def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_pat
         assert step["epoch"] == epoch
         assert step["input_tokens"] == 100
         assert step["cache_create_tokens"] == 5
-        # blizzard#441 — the pushed harness stamp reads back verbatim.
+        # The pushed harness stamp reads back verbatim.
         assert step["harness_id"] == "claude_code"
         assert step["harness_version"] == "1.2.3"
         # The N-1 runner's fact ingested with no provenance keys reads back null, never

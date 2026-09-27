@@ -1,4 +1,4 @@
-"""Transcript ingest policy (blizzard#247, Phase 2): lane idempotence, late tails,
+"""Transcript ingest policy: lane idempotence, late tails,
 ordering, the three independent caps, and truncation recording."""
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ def test_a_batch_straddling_the_mark_applies_only_whats_past_it(tmp_path: Path) 
 
 
 def test_a_re_offer_under_a_fresh_seq_dedupes_against_the_natural_key(tmp_path: Path) -> None:
-    """D8: a rebuilt buffer or a backfill resends the same ``(segment_id,
+    """A rebuilt buffer or a backfill resends the same ``(segment_id,
     turn_range_start)`` under a *later* lane seq, so the high-water mark cannot catch it
     — the natural key must, and without raising on the schema's unique constraint."""
     hub = build_hub(tmp_path)
@@ -157,7 +157,7 @@ def test_a_re_offer_of_a_previously_rejected_record_is_re_adjudicated_not_falsel
 
 
 def test_a_re_offer_that_accepts_refreshes_the_first_offers_identity_fields(tmp_path: Path) -> None:
-    """blizzard#290: re-adjudication is a refresh, not a partial update — the re-offer's own
+    """Re-adjudication is a refresh, not a partial update — the re-offer's own
     `final`/`turn_range_end` replace the original rejected offer's stale values, on both the
     stored row and the derived index row, not just the content."""
     hub = build_hub(tmp_path)
@@ -238,7 +238,7 @@ def test_an_oversized_record_is_rejected_acked_and_advances_the_high_water(tmp_p
 
     assert result.capped == [1]
     assert result.high_water == 1
-    # D6: the advance is *durable*, not just returned — a cap rejection must never be
+    # The advance is *durable*, not just returned — a cap rejection must never be
     # re-adjudicated on replay, so the mark has to survive the call that made it.
     assert store.high_water("r1") == 1
     # A replay must still report the cap outcome — a lost-ack retry (e.g. a runner crash
@@ -313,7 +313,7 @@ def test_a_cap_rejection_leaves_a_readable_truncation_mark_even_as_the_segments_
 
 class _FakeTranscriptStore:
     """A minimal :class:`IWriteTranscriptSegments` fake — no persistence, just the
-    counters the caps read — isolating Phase 2's byte-accounting rule from the real
+    counters the caps read — isolating the byte-accounting rule from the real
     store and its migrations."""
 
     def __init__(self) -> None:
@@ -361,7 +361,7 @@ class _FakeTranscriptStore:
 
     def insert_rejected(self, record: SegmentRecord, *, byte_count: int, reason: str, at: datetime) -> None:
         self.rejected.append((record, byte_count, reason))
-        self.runner_bytes += byte_count  # rejected bytes count toward the daily rate only (Phase 2 AC)
+        self.runner_bytes += byte_count  # rejected bytes count toward the daily rate only
 
     def update_to_accepted(self, record: SegmentRecord, *, byte_count: int, codec: str, at: datetime) -> None:
         key = (record.segment_id, record.turn_range_start)

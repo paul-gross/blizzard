@@ -1,5 +1,5 @@
 """PKCE (RFC 7636) S256 challenge/verifier — the CLI public client's mandatory
-proof-of-possession (issue #96, decision D6's ``client=cli``).
+proof-of-possession (``client=cli``).
 
 Dependency-free (``bzh:domain-core``), so both sides of the exchange derive the challenge
 from this one module and cannot drift.

@@ -6,14 +6,14 @@ import { ChunkRowView } from './chunk-row-view';
 import type { MachineChunkStatus } from './chunk-status';
 
 /**
- * One chunk on this machine — the machine-chunks list's card (issue #134)
+ * One chunk on this machine — the machine-chunks list's card
  * **container**: owns the per-row {@link injectChunkTitleQuery} work-item
  * enrichment read and hands its resolved items to the presentational
  * {@link ChunkRowView}, which owns the actual card markup
  * (`bzh:frontend-container-presentational`).
  *
  * The work-item enrichment is the same severable, volatile layering the old lease row
- * carried (issue #28, decision 1): one {@link injectChunkTitleQuery} per row,
+ * carried: one {@link injectChunkTitleQuery} per row,
  * read optimistically — every degraded case (hub down, no source, per-pointer
  * forge failure) collapses to "render nothing extra".
  */
@@ -39,7 +39,7 @@ export class ChunkRow {
 
   protected readonly chunkId = computed(() => this.lease().chunk_id);
 
-  /** The severable work-item read (issue #28, decision 1) — never branched on for pending/error. */
+  /** The severable work-item read — never branched on for pending/error. */
   protected readonly titleQuery = injectChunkTitleQuery(() => this.chunkId());
 
   protected readonly linkedItems = computed(() => this.titleQuery.data()?.items ?? []);

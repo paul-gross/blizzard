@@ -1,4 +1,4 @@
-"""The finding-delivered-state revision's CHECK-constraint widen (blizzard#583 Phase 1).
+"""The finding-delivered-state revision's CHECK-constraint widen.
 Seeded with a literal ``sa.Table`` shape rather than importing ``schema.py``, which now
 carries the widened constraint this revision adds — the ``test_finding_exits_migration.py``
 shape."""

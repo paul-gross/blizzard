@@ -15,13 +15,12 @@ cross-verb distinctions the help text does not draw.
 `chunk pause`, or the board's Pause control in the chunk detail dock, targets one chunk: on a live claim the runner
 interrupts that chunk's worker but keeps the claim — lease, route, epoch, held environments, and retry budget all
 survive; only the process ends. The worker gets a brief grace period to wind down on its own, the same one a graceful
-restart's drain gives, so it can still write its own usage record before exiting; only a survivor past that grace
-period is force-stopped, and the paused generation's usage is recorded when the chunk resumes, just as a drained
-worker's is. A pause never waits inside a tick: the park lands on the tick that discovers the pause, and the process
-is checked on the ticks after. Pause is
-also allowed on a still-unclaimed `ready` chunk, where it holds the chunk out of the queue: the chunk derives `paused`
-and FILL skips it until resumed. Pause is refused (409) on a `done`, `stopped`, or `delivering` chunk, and deliberately
-allowed on `waiting_on_human` and `needs_human` — it is a broad lever.
+restart's drain gives, so it can still write its own usage record before exiting; only a survivor past that grace period
+is force-stopped, and the paused generation's usage is recorded when the chunk resumes, just as a drained worker's is. A
+pause never waits inside a tick: the park lands on the tick that discovers the pause, and the process is checked on the
+ticks after. Pause is also allowed on a still-unclaimed `ready` chunk, where it holds the chunk out of the queue: the
+chunk derives `paused` and FILL skips it until resumed. Pause is refused (409) on a `done`, `stopped`, or `delivering`
+chunk, and deliberately allowed on `waiting_on_human` and `needs_human` — it is a broad lever.
 
 A pause-parked chunk still occupies an agent slot: FILL claims only into open slots, and a `chunk pause` deliberately
 keeps the lease active with environments held warm for the in-place resume, so a paused lease counts against
@@ -146,18 +145,18 @@ un-stop and no un-complete, so a chunk reading `done` by either path stays there
 ## Delete
 
 `chunk delete <chunk_id>` (`blizzard hub chunk delete <chunk_id> [--by] [--yes]`), the board's confirmed Delete control
-in the chunk dock's header's `⋯` overflow menu — beside Complete — on any `not_ready` or
-`ready` chunk, or `DELETE /api/chunks/{chunk_id}` (gated by `CHUNK_CONTROL` like every control verb here) — deletes a chunk gated on the same unacquired predicate `chunk group` requires of every
-chunk it folds away: `not_ready` or unclaimed `ready`.
+in the chunk dock's header's `⋯` overflow menu — beside Complete — on any `not_ready` or `ready` chunk, or
+`DELETE /api/chunks/{chunk_id}` (gated by `CHUNK_CONTROL` like every control verb here) — deletes a chunk gated on the
+same unacquired predicate `chunk group` requires of every chunk it folds away: `not_ready` or unclaimed `ready`.
 
 Delete is refused (409) at every other status, `paused` included. This is a status gate, not a claim-liveness one, so it
 differs from pause or stop's own guards: delete never asks whether a runner holds the chunk, only whether the chunk's
 own status sits in that unacquired set — a still-unclaimed chunk that has been paused is refused all the same, on status
 alone.
 
-Delete is also refused (409) when the chunk is a standing prerequisite for another chunk (issue #460) — the refusal
-names the dependents. Deleting a *dependent* chunk instead is unaffected: it still succeeds, and releases that chunk's
-own outgoing standing edges as part of the same delete write.
+Delete is also refused (409) when the chunk is a standing prerequisite for another chunk — the refusal names the
+dependents. Deleting a *dependent* chunk instead is unaffected: it still succeeds, and releases that chunk's own
+outgoing standing edges as part of the same delete write.
 
 A hub item and its chunk live and die together: deleting a chunk withdraws every open `hub:`-source pointer it holds —
 any `forge:`-source pointer on the same chunk survives untouched — and withdrawing a hub item deletes its unacquired

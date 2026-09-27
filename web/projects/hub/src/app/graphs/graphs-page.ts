@@ -5,7 +5,7 @@ import { GraphDetail, GraphExplorer } from 'fleet';
 import { map } from 'rxjs';
 
 /**
- * The `/graphs` route — the graph explorer (paul-gross/blizzard#70 phase 3): a
+ * The `/graphs` route — the graph explorer: a
  * master/detail layout with {@link GraphExplorer} (the name-grouped lineage list)
  * beside {@link GraphDetail} (the selected version's structure). Both `/graphs` and
  * `/graphs/:graphId` render this one component (see `app.routes.ts`) so the list

@@ -1,4 +1,4 @@
-"""The exhaustive three-plane route classification guard (issue #91).
+"""The exhaustive three-plane route classification guard.
 
 Every mounted route is asserted human (gated by ``require(<permission>)``), fleet
 (mounted under ``/api/fleet/*``, gated at router level), or public (no gate at all). The
@@ -42,11 +42,11 @@ _PUBLIC: set[tuple[str, str]] = {
     ("GET", "/api/auth/{name}/authorize"),
     ("GET", "/api/auth/{name}/callback"),
     ("POST", "/api/auth/logout"),
-    # The hub-as-IdP surface (issue #95) — `authorize` authenticates the browser
+    # The hub-as-IdP surface — `authorize` authenticates the browser
     # itself rather than being gated by one; `jwks.json` is public key material.
     ("GET", "/api/auth/authorize"),
     ("GET", "/api/auth/jwks.json"),
-    # The CLI's PKCE code exchange (issue #96) — there is no session yet at this
+    # The CLI's PKCE code exchange — there is no session yet at this
     # point, that is what this route mints.
     ("POST", "/api/auth/cli/token"),
 }
@@ -57,15 +57,15 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/events"): FLEET_VIEW,
     ("GET", "/api/activity"): FLEET_VIEW,
     ("POST", "/api/graphs"): GRAPH_EDIT,
-    # Reconciliation mints (issue #146), so it needs exactly what an explicit mint needs.
+    # Reconciliation mints, so it needs exactly what an explicit mint needs.
     ("POST", "/api/graphs/sync"): GRAPH_EDIT,
     ("GET", "/api/graphs"): FLEET_VIEW,
     ("GET", "/api/graphs/{graph_id}"): FLEET_VIEW,
     ("POST", "/api/graphs/{graph_id}/retire"): GRAPH_EDIT,
     ("POST", "/api/graphs/{graph_id}/enable"): GRAPH_EDIT,
-    # The follow-latest policy (issue #164) — a graph lifecycle write like retire/enable.
+    # The follow-latest policy — a graph lifecycle write like retire/enable.
     ("POST", "/api/graphs/{graph_id}/follow-latest"): GRAPH_EDIT,
-    # Scopes (blizzard#389) — reads take FLEET_VIEW, writes take GRAPH_EDIT (D8).
+    # Scopes — reads take FLEET_VIEW, writes take GRAPH_EDIT.
     ("POST", "/api/scopes"): GRAPH_EDIT,
     ("GET", "/api/scopes"): FLEET_VIEW,
     ("GET", "/api/scopes/{slug}"): FLEET_VIEW,
@@ -73,45 +73,45 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("PATCH", "/api/scopes/{slug}"): GRAPH_EDIT,
     ("POST", "/api/scopes/{slug}/retire"): GRAPH_EDIT,
     ("POST", "/api/scopes/{slug}/enable"): GRAPH_EDIT,
-    # Routines (blizzard#389) — reads take FLEET_VIEW, writes take GRAPH_EDIT (D8).
+    # Routines — reads take FLEET_VIEW, writes take GRAPH_EDIT.
     ("POST", "/api/routines"): GRAPH_EDIT,
     ("GET", "/api/routines"): FLEET_VIEW,
     ("GET", "/api/routines/{routine_id}"): FLEET_VIEW,
     ("PATCH", "/api/routines/{routine_id}"): GRAPH_EDIT,
     ("POST", "/api/routines/{routine_id}/retire"): GRAPH_EDIT,
     ("POST", "/api/routines/{routine_id}/enable"): GRAPH_EDIT,
-    ("GET", "/api/routines/trend"): FLEET_VIEW,  # blizzard#394 Phase 4
-    ("GET", "/api/routines/proposal-counts"): FLEET_VIEW,  # blizzard#547 Phase 2
+    ("GET", "/api/routines/trend"): FLEET_VIEW,  #
+    ("GET", "/api/routines/proposal-counts"): FLEET_VIEW,  #
     ("GET", "/api/routines/{routine_id}/sweeps"): FLEET_VIEW,
-    # A routine's scope membership (blizzard#488) — reads take FLEET_VIEW, writes take
-    # GRAPH_EDIT, the same split as scopes/routines themselves (D8).
+    # A routine's scope membership — reads take FLEET_VIEW, writes take
+    # GRAPH_EDIT, the same split as scopes/routines themselves.
     ("GET", "/api/routines/{routine_id}/scopes"): FLEET_VIEW,
     ("PUT", "/api/routines/{routine_id}/scopes/{scope_slug}"): GRAPH_EDIT,
     ("DELETE", "/api/routines/{routine_id}/scopes/{scope_slug}"): GRAPH_EDIT,
-    # Mint, ingest, and promote a run in one act (blizzard#392) — the same CHUNK_CONTROL
+    # Mint, ingest, and promote a run in one act — the same CHUNK_CONTROL
     # the acts it composes (ingest, promote) already require.
     ("POST", "/api/routines/{routine_id}/run"): CHUNK_CONTROL,
-    # The per-scope delta baseline a routine has swept (blizzard#399 D5) — a read, FLEET_VIEW.
+    # The per-scope delta baseline a routine has swept — a read, FLEET_VIEW.
     ("GET", "/api/routines/{routine_id}/baselines"): FLEET_VIEW,
-    # The run list and one run's own delta (blizzard#401) — reads, FLEET_VIEW.
+    # The run list and one run's own delta — reads, FLEET_VIEW.
     ("GET", "/api/runs"): FLEET_VIEW,
     ("GET", "/api/runs/{chunk_id}"): FLEET_VIEW,
-    # Findings and garden proposals (blizzard#390) — read-only routes, both FLEET_VIEW (D8).
+    # Findings and garden proposals — read-only routes, both FLEET_VIEW.
     ("GET", "/api/findings"): FLEET_VIEW,
     ("GET", "/api/findings/{finding_id}"): FLEET_VIEW,
     ("GET", "/api/garden-proposals"): FLEET_VIEW,
     ("GET", "/api/garden-proposals/{proposal_id}"): FLEET_VIEW,
-    # Closing a garden proposal (blizzard#395) — CHUNK_CONTROL, the same permission a
-    # not-chunk-scoped work-item write already carries (D8).
+    # Closing a garden proposal — CHUNK_CONTROL, the same permission a
+    # not-chunk-scoped work-item write already carries.
     ("POST", "/api/garden-proposals/{proposal_id}/pass"): CHUNK_CONTROL,
     ("POST", "/api/garden-proposals/{proposal_id}/accept"): CHUNK_CONTROL,
-    # Operator authoring — create/edit/attach/detach (blizzard#631) — the same
+    # Operator authoring — create/edit/attach/detach — the same
     # CHUNK_CONTROL pass/accept already carry.
     ("POST", "/api/garden-proposals"): CHUNK_CONTROL,
     ("PATCH", "/api/garden-proposals/{proposal_id}"): CHUNK_CONTROL,
     ("POST", "/api/garden-proposals/{proposal_id}/attach"): CHUNK_CONTROL,
     ("POST", "/api/garden-proposals/{proposal_id}/detach"): CHUNK_CONTROL,
-    # The human-driven exit verbs and `reopen` over findings (blizzard#394 Phase 2) — the
+    # The human-driven exit verbs and `reopen` over findings — the
     # same CHUNK_CONTROL a garden-proposal closure already carries.
     ("POST", "/api/findings/resolve"): CHUNK_CONTROL,
     ("POST", "/api/findings/confirm-gone"): CHUNK_CONTROL,
@@ -133,7 +133,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/chunks/{chunk_id}/stop"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/complete"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/promote"): CHUNK_CONTROL,
-    # Declare/release a dependency edge (issue #456) — the same CHUNK_CONTROL every
+    # Declare/release a dependency edge — the same CHUNK_CONTROL every
     # other chunk-control-plane verb here already carries.
     ("POST", "/api/chunks/{chunk_id}/dependencies"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/dependencies/release"): CHUNK_CONTROL,
@@ -165,24 +165,24 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/spend"): FLEET_VIEW,
     ("GET", "/api/users"): USER_MANAGE,
     ("POST", "/api/users/{user_id}/role"): USER_MANAGE,
-    # Key rotation (issue #95) — the same admin-tier permission the user-management
+    # Key rotation — the same admin-tier permission the user-management
     # API uses; no new permission is minted for this one verb.
     ("POST", "/api/auth/rotate-signing-key"): USER_MANAGE,
-    # Transcript-segment discovery/content reads (blizzard#247, D11) — above
+    # Transcript-segment discovery/content reads — above
     # FLEET_VIEW, since a transcript carries everything a worker saw.
     ("GET", "/api/chunks/{chunk_id}/transcripts"): TRANSCRIPT_READ,
     ("GET", "/api/chunks/{chunk_id}/transcripts/{segment_id}"): TRANSCRIPT_READ,
-    # Forced transcript-event re-derivation (blizzard#254 D7) — a mutation, above the
+    # Forced transcript-event re-derivation — a mutation, above the
     # read-only TRANSCRIPT_READ.
     ("POST", "/api/analytics/re-derive"): ANALYTICS_ADMIN,
-    # The read-only events/counts surfaces (blizzard#255 D2) — no grant of their own.
+    # The read-only events/counts surfaces — no grant of their own.
     ("GET", "/api/analytics/events"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/events/ndjson"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/counts/files"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/counts/skills"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/counts/agent-types"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/counts/nodes"): TRANSCRIPT_READ,
-    # The operational datasets (blizzard#256 D9) — durations, spend, outcomes — no
+    # The operational datasets — durations, spend, outcomes — no
     # grant of their own, strictly narrower than the FLEET_VIEW the same numbers
     # already sit behind at /api/spend and on every board card.
     ("GET", "/api/analytics/durations/nodes"): TRANSCRIPT_READ,
@@ -192,7 +192,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/analytics/spend/chunks"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/spend/chunks/ndjson"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/outcomes/nodes"): TRANSCRIPT_READ,
-    # The work-source item routes (blizzard#358) — the same two permissions the chunk
+    # The work-source item routes — the same two permissions the chunk
     # work-item read and its mutations already sit behind.
     ("GET", "/api/work-sources"): FLEET_VIEW,
     ("GET", "/api/work-sources/{source}/items"): FLEET_VIEW,
@@ -202,11 +202,11 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("DELETE", "/api/work-sources/{source}/items/{ref}"): CHUNK_CONTROL,
 }
 
-#: Fleet plane — every route mounted under ``/api/fleet/*`` (issue #87's own
-#: ``require_runner_principal``-at-router-level confinement); no per-route permission.
+#: Fleet plane — every route mounted under ``/api/fleet/*`` carries its own
+#: ``require_runner_principal``-at-router-level confinement; no per-route permission.
 _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/queue/peek"),
-    # The matched fleet peek (D7, blizzard#433 Phase 3) — a second verb on the same
+    # The matched fleet peek — a second verb on the same
     # path; the ``GET`` above stays for a previous-minor caller.
     ("POST", "/api/fleet/queue/peek"),
     ("GET", "/api/fleet/chunk-statuses"),
@@ -220,7 +220,7 @@ _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals"),
-    # A worker's own routine-run read of the counts/spend summaries (blizzard#545) — the
+    # A worker's own routine-run read of the counts/spend summaries — the
     # same operator-plane query criteria and response shaping, gated on the chunk's own
     # run context rather than operator credentials.
     ("GET", "/api/fleet/chunks/{chunk_id}/analytics/counts/files"),
@@ -243,11 +243,11 @@ _FLEET: set[tuple[str, str]] = {
     ("POST", "/api/fleet/runners"),
     ("POST", "/api/fleet/runners/{runner_id}/heartbeats"),
     ("GET", "/api/fleet/runners/{runner_id}"),
-    ("POST", "/api/fleet/transcripts"),  # the transcript lane's own push (blizzard#247, D7)
+    ("POST", "/api/fleet/transcripts"),  # the transcript lane's own push
     # A lease's own read-back of its shipped segments, confined by its own always-raising
-    # ownership check rather than `assert_owns` (blizzard#249, D3).
+    # ownership check rather than `assert_owns`.
     ("GET", "/api/fleet/chunks/{chunk_id}/transcript-segments"),
-    # blizzard's own published `ArtifactScope.SYSTEM` set (blizzard#391) — read-only,
+    # blizzard's own published `ArtifactScope.SYSTEM` set — read-only,
     # resolved live off the packaged set rather than any lease or chunk.
     ("GET", "/api/fleet/system-artifacts"),
     ("GET", "/api/fleet/system-artifacts/{name:path}"),
@@ -384,9 +384,9 @@ def test_public_routes_carry_no_permission_gate(tmp_path: Path) -> None:
 
 
 def test_fleet_routes_carry_the_runner_principal_gate_not_a_permission(tmp_path: Path) -> None:
-    """Every route named **fleet** is gated by ``require_runner_principal`` (issue
-    #87's own confinement) and carries no human ``require(<permission>)`` dependency —
-    the fleet plane is not human-permission-gated at all (issue #91's stated residue)."""
+    """Every route named **fleet** is gated by ``require_runner_principal``
+    and carries no human ``require(<permission>)`` dependency —
+    the fleet plane is not human-permission-gated at all."""
     by_key = _routes_by_key(build_hub(tmp_path).client.app)
     for key in _FLEET:
         route = by_key[key]

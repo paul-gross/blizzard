@@ -256,7 +256,7 @@ def test_real_winter_acquire_returns_clean_worktree_and_resets(tmp_path: Path) -
 @pytest.mark.skipif(_WINTER_SOURCE is None, reason="no enclosing winter workspace to clone the framework from")
 def test_real_winter_acquire_recovers_stale_feature_branch_tracking(tmp_path: Path) -> None:
     """A previous tenant leaves one repo connected to a feature branch that exists only
-    for it while its sibling sits unconnected (issue #16) — re-acquire must still
+    for it while its sibling sits unconnected — re-acquire must still
     succeed."""
     workspace = _make_workspace(tmp_path, repos=("toy-a", "toy-b"))
     _init_workspace_or_skip(workspace)

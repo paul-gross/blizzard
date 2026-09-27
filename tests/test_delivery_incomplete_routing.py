@@ -1,5 +1,5 @@
 """Retrospective's authored ``delivery-incomplete`` choice routes to ``resolve``, carrying
-the ``resolve.from-retrospective.md`` addendum (issue #238 AC4).
+the ``resolve.from-retrospective.md`` addendum (AC4).
 
 Mints the packaged advanced-development-workflow graph, seeding the chunk directly at
 ``retrospective``'s minted node id via a direct transition-fact insert.

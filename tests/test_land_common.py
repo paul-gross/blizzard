@@ -1,4 +1,4 @@
-"""``land_common``'s shared helpers — unit tier (issue #230).
+"""``land_common``'s shared helpers — unit tier.
 
 Exercises ``ScriptEnv`` and ``MarkerWriter`` directly, with
 no forge or script involved, proving the shared durable-write and env-diagnostic

@@ -1,5 +1,5 @@
-"""Garden-proposal routes (blizzard#390) — the read routes render a proposal's closure
-once one exists; the two closing writes are blizzard#395's own POST routes, both
+"""Garden-proposal routes — the read routes render a proposal's closure
+once one exists; the two closing writes are their own POST routes, both
 human-plane and gated on `CHUNK_CONTROL` — the same permission a not-chunk-scoped
 work-item write already carries."""
 
@@ -99,7 +99,7 @@ def _get_or_404(proposal_id: str, services: HubServices) -> GardenProposal:
 
 def _resolve_findings_or_422(finding_ids: list[str], services: HubServices) -> list[Finding]:
     """`IReadFindingRepository.get_many` resolved against `finding_ids`, preserving the
-    caller's order; 422s naming every id `get_many` dropped (blizzard#631) — the whole
+    caller's order; 422s naming every id `get_many` dropped — the whole
     call is refused, not the unknown ones alone."""
     found = services.findings.get_many(finding_ids)
     missing = sorted({fid for fid in finding_ids if fid not in found})
@@ -118,8 +118,8 @@ def list_garden_proposals(
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     origin: Annotated[GardenProposalOrigin | None, Query()] = None,
 ) -> GardenProposalsPageView:
-    """Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526
-    D3/D4). `origin` narrows to `routine-run` or `operator` proposals (blizzard#631)."""
+    """Every garden proposal, newest first, bounded and keyset-paginated.
+    `origin` narrows to `routine-run` or `operator` proposals."""
     try:
         page = services.garden_proposals.list_page(cursor=cursor, limit=limit, origin=origin)
     except MalformedCursor as exc:
@@ -231,7 +231,7 @@ def create_garden_proposal(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> GardenProposalView:
-    """Mint an operator-authored proposal (blizzard#631), naming `routine` when the
+    """Mint an operator-authored proposal, naming `routine` when the
     caller names one, else none. 422 for a blank title/class/body, an unknown routine,
     or an unknown, non-live, or duplicate finding id — the whole call is refused, nothing
     is linked."""
@@ -265,7 +265,7 @@ def create_garden_proposal(
 def edit_garden_proposal(
     proposal_id: str, request: GardenProposalEditRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> GardenProposalView:
-    """Replace the given fields of PROPOSAL_ID in place, all-or-nothing (blizzard#631)
+    """Replace the given fields of PROPOSAL_ID in place, all-or-nothing
     — works on either origin while open. 404 unknown proposal, 409 already closed,
     422 a blank title/class/body or an edit naming no field."""
     proposal = _get_or_404(proposal_id, services)
@@ -293,7 +293,7 @@ def attach_garden_proposal_findings(
     request: GardenProposalFindingsRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> GardenProposalView:
-    """Link the given finding ids to PROPOSAL_ID (blizzard#631) — works on either origin
+    """Link the given finding ids to PROPOSAL_ID — works on either origin
     while open. 404 unknown proposal, 409 already closed, 422 an unknown, non-live, or
     duplicate finding id, or one already linked to this proposal — the whole call is
     refused, nothing is linked."""
@@ -322,7 +322,7 @@ def detach_garden_proposal_findings(
     request: GardenProposalFindingsRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> GardenProposalView:
-    """Unlink the given finding ids from PROPOSAL_ID (blizzard#631) — works on either
+    """Unlink the given finding ids from PROPOSAL_ID — works on either
     origin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or
     one not linked to this proposal."""
     proposal = _get_or_404(proposal_id, services)

@@ -1,4 +1,4 @@
-"""The check-runner seam — the runner executes a node's ``checks:`` at worker exit (issue #114).
+"""The check-runner seam — the runner executes a node's ``checks:`` at worker exit.
 
 Running a declared check is deterministic-shell work (``bzh:deterministic-shell`` — no
 model call), reached only through this injected seam (``bzh:pluggable-seams``)."""
@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-# The per-check timeout a node applies when it authors no ``checks_timeout`` (issue #114).
+# The per-check timeout a node applies when it authors no ``checks_timeout``.
 # A timeout is a red check — a hung check must not wedge the tick forever.
 DEFAULT_CHECK_TIMEOUT: int = 600
 
@@ -18,7 +18,7 @@ class CheckOutcome:
     """One check command's runner-executed outcome.
 
     Exit 0 ⇒ passed; non-zero **and a timeout** ⇒ failed. ``output_tail`` is a bounded
-    tail of the combined output, kept runner-local (issue #114)."""
+    tail of the combined output, kept runner-local."""
 
     passed: bool
     output_tail: str

@@ -1,9 +1,9 @@
-"""Per-kind turn recognition (blizzard#254) — pure over turn objects, no store
+"""Per-kind turn recognition — pure over turn objects, no store
 or sweep (``bzh:domain-core``).
 
 An extractor recognizes calls per *dialect*, keyed on the segment's own
-``normalizer_version`` (D9); an unknown dialect derives zero events rather than
-guessing. Adding a kind is registering a new extractor (D5)."""
+``normalizer_version``; an unknown dialect derives zero events rather than
+guessing. Adding a kind is registering a new extractor."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from blizzard.hub.domain.analytics.dialects import DIALECTS
 from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
 from blizzard.wire.transcript_segment import TurnSegmentView
 
-#: Bumped when recognition changes — the sweep re-derives history, leaving earlier rows untouched (D5/D9).
+#: Bumped when recognition changes — the sweep re-derives history, leaving earlier rows untouched.
 EXTRACTOR_VERSION = "blizzard-analytics/4"
 
 
@@ -24,8 +24,8 @@ EXTRACTOR_VERSION = "blizzard-analytics/4"
 class ExtractedEvent:
     """One recognized occurrence, still payload-shaped as a plain mapping — the
     derivation service serializes it and stamps the node-step context this
-    layer never sees. ``subject``/``tool`` are the projection its extractor supplies
-    (blizzard#255 D1); ``subject`` is ``None`` for a kind with no natural one."""
+    layer never sees. ``subject``/``tool`` are the projection its extractor supplies;
+    ``subject`` is ``None`` for a kind with no natural one."""
 
     kind: str
     turn_path: str
@@ -41,8 +41,8 @@ class ExtractedEvent:
 class ITurnEventExtractor(Protocol):
     """One kind's recognizer. ``kind`` is a class-level constant. :meth:`recognize`
     returns every payload this turn mints, ``[]`` for none — including gating on which
-    tool name this turn's own dialect uses, since that can vary by dialect (blizzard#327);
-    :meth:`subject` reads that payload's own subject (blizzard#255 D1)."""
+    tool name this turn's own dialect uses, since that can vary by dialect;
+    :meth:`subject` reads that payload's own subject."""
 
     kind: str
 
@@ -58,7 +58,7 @@ def _resolve_call(turn: TurnSegmentView, *, normalizer_version: str, kind: str) 
     """This turn's own ``(tool_name, argument_value)`` for ``kind``, per the dialect
     named by ``normalizer_version`` — ``None`` when the turn doesn't match at all. The
     one recognition rule every extractor below shares; only the payload each builds
-    from the resolved pair differs (blizzard#439 D5)."""
+    from the resolved pair differs."""
     entry = DIALECTS.get(normalizer_version, {}).get(kind)
     if entry is None:
         return None
@@ -71,9 +71,9 @@ def _resolve_call(turn: TurnSegmentView, *, normalizer_version: str, kind: str) 
 
 
 class FileReadExtractor:
-    """A file-read call naming a concrete path it read (D5) — a pattern search
+    """A file-read call naming a concrete path it read — a pattern search
     (``Grep``/``Glob``) is a different act and is not one; which tool name and argument
-    key count as a file read is resolved per dialect, not fixed here (blizzard#327)."""
+    key count as a file read is resolved per dialect, not fixed here."""
 
     kind = KIND_FILE_READ
 
@@ -91,7 +91,7 @@ class FileReadExtractor:
 
 class SkillInvocationExtractor:
     """A skill-invocation call naming which skill it invoked — which tool name and
-    argument key count as one is resolved per dialect, not fixed here (blizzard#327)."""
+    argument key count as one is resolved per dialect, not fixed here."""
 
     kind = KIND_SKILL_INVOCATION
 
@@ -110,7 +110,7 @@ class SkillInvocationExtractor:
 class AgentSpawnExtractor:
     """A subagent-spawn call naming the subagent type it spawned — which tool name that
     is comes from the turn's own dialect (:data:`~blizzard.hub.domain.analytics.dialects.DIALECTS`),
-    since it is not the same across every harness (blizzard#327)."""
+    since it is not the same across every harness."""
 
     kind = KIND_AGENT_SPAWN
 
@@ -126,7 +126,7 @@ class AgentSpawnExtractor:
         return [{"agent_type": agent_type}]
 
 
-#: The registered set this build derives (D5) — appending a new extractor here is the
+#: The registered set this build derives — appending a new extractor here is the
 #: whole of "adding a kind."
 DEFAULT_EXTRACTORS: tuple[ITurnEventExtractor, ...] = (
     FileReadExtractor(),
@@ -153,8 +153,8 @@ def extract_events(
     normalizer_version: str,
     extractors: Sequence[ITurnEventExtractor] = DEFAULT_EXTRACTORS,
 ) -> list[ExtractedEvent]:
-    """Every extractor's recognized events across ``turns`` and every nested sidechain
-    (D8): depth 0 at the main lane, incrementing once per sidechain nesting level;
+    """Every extractor's recognized events across ``turns`` and every nested sidechain:
+    depth 0 at the main lane, incrementing once per sidechain nesting level;
     ``agent_type`` is the **nearest-enclosing** sidechain's own — never inherited past an
     unresolved link, which carries depth with no agent type rather than borrowing an
     ancestor's."""

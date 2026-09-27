@@ -1,7 +1,7 @@
-"""The per-tick chunk-status cache (blizzard#521) — ``tick()``'s own read hoist onto
+"""The per-tick chunk-status cache — ``tick()``'s own read hoist onto
 ``IHubClient.chunk_statuses``, proven at the seam :mod:`blizzard.runner.loop.chunk_status_cache`
-adds: one hub round-trip per distinct chunk id per tick, a write this same tick invalidates
-(D5), and an unknown id raising ``ChunkNotFoundError`` at every reader without a repeat read.
+adds: one hub round-trip per distinct chunk id per tick, a write this same tick invalidates,
+and an unknown id raising ``ChunkNotFoundError`` at every reader without a repeat read.
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ def test_tick_primes_every_touched_chunk_in_one_batch_call(tmp_path):  # type: i
     """One tick, five distinct touched chunks — an active lease, an open escalation, an
     open takeover, a held lease-less chunk, and a held chunk the hub no longer knows —
     costs exactly one ``chunk_statuses`` call naming all five, never a repeat read for any
-    one of them (blizzard#521's whole point)."""
+    one of them."""
     store = _store(tmp_path)
     _seed_active_lease(store, chunk="ch_lease", lease="lease_1", pid=100, start="start-100")
     _seed_escalated(store, chunk="ch_esc", lease="lease_2")
@@ -183,7 +183,7 @@ class _WriteReactingHub(FakeHub):
 
 
 def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type: ignore[no-untyped-def]
-    """Two of this tick's own writes, each invalidating the chunk it touched (D5) so a
+    """Two of this tick's own writes, each invalidating the chunk it touched so a
     later reader in the SAME tick sees the reaction rather than the primed, stale view:
     (a) PULL's fact-batch flush reaching FILL's interrupted-claim reconciler, and (b) PULL's
     completion flush reaching OutboundDrain's own spend-cap re-check."""
@@ -260,7 +260,7 @@ def test_tick_re_reads_a_chunk_once_after_its_own_write_lands(tmp_path):  # type
 
 
 def test_no_module_under_runner_loop_imports_chunk_detail() -> None:
-    """The migration's own acceptance criterion (blizzard#521): every one of the nine
+    """The migration's own acceptance criterion: every one of the nine
     per-chunk reads now goes through ``IChunkViews``/``ChunkStatusView``, never the full
     ``ChunkDetail`` aggregate."""
     loop_dir = repo_root() / "src" / "blizzard" / "runner" / "loop"

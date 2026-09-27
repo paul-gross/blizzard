@@ -1,4 +1,4 @@
-"""``blizzard runner finding list``/``get`` (unit tier, blizzard#397 Phase 2), mirroring
+"""``blizzard runner finding list``/``get`` (unit tier), mirroring
 ``tests/test_runner_garden_findings_cli.py``'s shape: ``httpx`` stubbed, no live socket.
 The route itself (authorization, hub forward, 403/404/503) is the component tier's
 ``tests/test_runner_finding_api.py``."""

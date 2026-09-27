@@ -46,7 +46,7 @@ class IReadLeaseLivenessRepository(Protocol):
     def latest_spawn(self, lease_id: str) -> datetime | None:
         """When this lease's newest process was spawned, or ``None`` if it never was.
 
-        The fallback half of the staleness baseline (issue #150). A lease outlives its
+        The fallback half of the staleness baseline. A lease outlives its
         processes, so the newest ``lease_spawns`` row is when the running worker started."""
         ...
 
@@ -64,17 +64,17 @@ class IReadLeaseLivenessRepository(Protocol):
         ...
 
     def lease_generation(self, lease_id: str) -> int:
-        """This lease's current spawn generation — the count of its ``lease_spawns`` rows
-        (issue #58): 1 at the initial spawn, incrementing at each resume that calls
+        """This lease's current spawn generation — the count of its ``lease_spawns`` rows:
+        1 at the initial spawn, incrementing at each resume that calls
         ``record_spawn`` again under this lease. Usage's idempotency co-key
         (:meth:`IWriteLeaseLivenessRepository.record_usage`) and its kind discriminator —
         generation 1 is a ``spawn``, every later generation a ``resume``."""
         ...
 
     def latest_spawn_harness_version(self, lease_id: str) -> str | None:
-        """The current generation's own recorded ``harness_version`` (blizzard#441) — the
-        newest ``lease_spawns`` row's own stamp, read as recorded and never re-resolved
-        (D4). ``None`` when the lease never spawned, or its newest generation recorded no
+        """The current generation's own recorded ``harness_version`` — the
+        newest ``lease_spawns`` row's own stamp, read as recorded and never re-resolved.
+        ``None`` when the lease never spawned, or its newest generation recorded no
         version — never a guess at what version is running now."""
         ...
 
@@ -87,7 +87,7 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         ...
 
     def prune_heartbeats(self, *, now: datetime) -> int:
-        """Compact heartbeats older than the store's own retention window (issue #520),
+        """Compact heartbeats older than the store's own retention window,
         keeping each lease's newest beat regardless of age — ``max(beat_at)`` per lease is
         unchanged, so :meth:`~IReadLeaseLivenessRepository.latest_heartbeat` answers
         identically before and after. Returns the number of rows pruned."""
@@ -106,9 +106,9 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
     ) -> None:
         """Fill a lease's spawn-return facts in one shot: pid, process start time, process
         group, session id — for identity known at spawn time (a fresh mint instead splits
-        this across :meth:`record_provisional_spawn`/:meth:`record_identified_spawn`, D1/D2).
+        this across :meth:`record_provisional_spawn`/:meth:`record_identified_spawn`).
         ``pgid`` defaults to ``None`` when the launch's owned group is unknown. ``spawned_at``
-        appends the lease's spawn generation, distinguishing this fact from a stale one (issue #13)."""
+        appends the lease's spawn generation, distinguishing this fact from a stale one."""
         ...
 
     def record_provisional_spawn(
@@ -121,7 +121,7 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         spawned_at: datetime,
         harness_id: str,
     ) -> None:
-        """Phase one of a two-phase spawn (D1/D2): durable BEFORE identity is known — the
+        """Phase one of a two-phase spawn: durable BEFORE identity is known — the
         launched process's pid, start time, and owned group, plus a new ``lease_spawns``
         generation row with no session id yet. The lease's own AUTHORITATIVE
         ``session_id``/``harness_id`` are untouched here; :meth:`record_identified_spawn`
@@ -136,14 +136,14 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
         identified_at: datetime,
         harness_version: str | None = None,
     ) -> None:
-        """Phase two (D1/D2): fill the open provisional generation's authoritative session
+        """Phase two: fill the open provisional generation's authoritative session
         id — the newest ``lease_spawns`` row for this lease with no ``session_id`` yet —
         and the lease's own ``session_id``/``harness_id``. Also opens/carries-forward the
         lease's transcript segment, mirroring :meth:`record_spawn`'s own segment handling."""
         ...
 
     def record_identity_failed(self, lease_id: str, *, at: datetime) -> None:
-        """A provisional generation's identity never arrived (D2): timeout, a malformed
+        """A provisional generation's identity never arrived: timeout, a malformed
         reply, or the process exiting first. Marks the newest still-open ``lease_spawns``
         row rather than leaving it ambiguously open forever; the lease's own ``session_id``
         stays ``None``, so REAP's ordinary "unspawned" recovery reaps it exactly as it would
@@ -152,7 +152,7 @@ class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
 
 
 class LeaseLivenessService:
-    """Composition-root-wired: the liveness store and the clock (D4, blizzard#412)."""
+    """Composition-root-wired: the liveness store and the clock."""
 
     def __init__(self, store: IWriteLeaseLivenessRepository, clock: IClock) -> None:
         self._store = store

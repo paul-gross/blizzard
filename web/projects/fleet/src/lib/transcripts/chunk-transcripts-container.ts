@@ -9,17 +9,17 @@ import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 import { injectChunkTranscriptSegmentQuery, injectChunkTranscriptsQuery, TranscriptFetchError } from './transcript-segments.query';
 
 /**
- * The Transcripts tab's own container (`bzh:frontend-container-presentational`,
- * `review:F1`) — owns its two queries (D8: the index on open, one segment's turns only
+ * The Transcripts tab's own container (`bzh:frontend-container-presentational`)
+ * — owns its two queries (the index on open, one segment's turns only
  * once opened) and maps their loading/error state, forwarding resolved data down to the
  * presentational {@link ChunkTranscriptsTab}, which carries the tab's markup and injects
- * nothing. Moved into `fleet` (runner-node-grouped-transcripts Phase 4) so both the hub
+ * nothing. Moved into `fleet` (runner-node-grouped-transcripts) so both the hub
  * and runner apps mount the identical component; {@link client}/{@link plane} are the seam
- * each app crosses to reach its own copy of the identically-shaped route (D5) — required
+ * each app crosses to reach its own copy of the identically-shaped route — required
  * inputs, never defaulted, so a mounting app states which plane it reads from rather than
  * this component guessing or branching on it.
  *
- * `:host { display: contents }` (`review:F1`, round-2 regression fix) — this component
+ * `:host { display: contents }` (round-2 regression fix) — this component
  * contributes no box of its own, so its single child (`fleet-chunk-transcripts-tab`)
  * becomes a direct flex item of the mounting page's own body the way it was before this
  * container existed. Without it, the tab's own `:host { flex: 1; min-height: 0 }`
@@ -37,16 +37,16 @@ import { injectChunkTranscriptSegmentQuery, injectChunkTranscriptsQuery, Transcr
   styleUrl: './chunk-transcripts-container.css',
 })
 export class ChunkTranscriptsContainer {
-  /** Which daemon's API this instance reads from (D5) — the hub app passes `hubClient`,
+  /** Which daemon's API this instance reads from — the hub app passes `hubClient`,
    * the runner app its own `runnerClient`; both generated clients share this structural
    * shape (`bzh:generated-client`). */
   readonly client = input.required<Client>();
 
-  /** Namespaces this instance's TanStack cache keys (D5) — see {@link client}'s own doc. */
+  /** Namespaces this instance's TanStack cache keys — see {@link client}'s own doc. */
   readonly plane = input.required<TranscriptPlane>();
 
   /** `ChunkPage.chunkId()`'s own type — nullable everywhere else that field is threaded
-   * (`review:F12`) — so the query's own `enabled: id !== null` stays the real gate
+   * — so the query's own `enabled: id !== null` stays the real gate
    * rather than a `?? ''` sentinel that could pass it with an empty id. */
   readonly chunkId = input.required<string | null>();
   readonly history = input.required<readonly TransitionView[]>();
@@ -69,7 +69,7 @@ export class ChunkTranscriptsContainer {
   );
 
   /** The selected segment's own `final`, resolved from the already-fetched index
-   * (`review:F2`) — `null` until the index names it, so the read below is never issued
+   * — `null` until the index names it, so the read below is never issued
    * against a placement that is only a guess. A segment the resolved index does not list
    * falls to `false`, the still-live placement, which is the safe way to be wrong. */
   protected readonly selectedSegmentFinal = computed<boolean | null>(() => {
@@ -77,7 +77,7 @@ export class ChunkTranscriptsContainer {
     return this.indexQuery.data()?.segments?.find((s) => s.segment_id === this.segmentId())?.final ?? false;
   });
 
-  /** One query, whose key placement (`review:F2`'s two keys) is chosen once finality is
+  /** One query, whose key placement (two keys) is chosen once finality is
    * actually known — `selectedSegmentFinal()`'s `null` holds it disabled until then, so the
    * segment is read once rather than once per placement. One instance, not one per
    * placement: two gated instances read the segment exactly as often, and only spread the

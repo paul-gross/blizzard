@@ -59,7 +59,7 @@ class Runtime:
             root.mkdir(parents=True, exist_ok=True)
 
             # An existing file is authoritative and the environment is discarded, so `scaffold` — which
-            # reads the environment and rejects a malformed value — must not run on that path (issue #287).
+            # reads the environment and rejects a malformed value — must not run on that path.
             scaffolding = not (root / CONFIG_FILENAME).exists()
             config = RunnerConfig.scaffold(root) if scaffolding else RunnerConfig.load(root)
             config.data_dir.mkdir(parents=True, exist_ok=True)
@@ -70,7 +70,7 @@ class Runtime:
             # Written idempotently: the content is versioned with the runner, so re-running
             # `init` refreshes it to head.
             (root / WORKER_SETTINGS_FILENAME).write_text(WorkerSettings.of().json)
-            # The runner-owned OpenCode plugin and permission document (D7), never inside a
+            # The runner-owned OpenCode plugin and permission document, never inside a
             # project repository; through `harness/`'s public surface, not `internal/` directly.
             worker_config_path = config.opencode_worker_config_path or str(root / OPENCODE_WORKER_CONFIG_FILENAME)
             scaffold_opencode_worker_config(root, Path(worker_config_path))

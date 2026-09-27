@@ -11,7 +11,7 @@ import { injectRunnerLeasesQuery } from './leases.query';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS } from './polling';
 import { injectRunnerDashboardQuery } from './status.query';
 
-/** A minimal host mounting all four D7-governed reads in one injection context —
+/** A minimal host mounting all four backstop-governed reads in one injection context —
  * `chunkId` is fixed `null` (unselected), the gating {@link injectChunkDetailQuery}
  * itself branches on. */
 @Component({
@@ -27,8 +27,8 @@ class PollingHost {
 }
 
 /**
- * D7's floors, proven together (blizzard#317 Phase 4): over an idle multi-minute
- * window with no SSE events at all, only the two reads D7 leaves on a timer
+ * The poll backstop's floors, proven together: over an idle multi-minute
+ * window with no SSE events at all, only the two reads the backstop leaves on a timer
  * (dashboard, leases) re-fire — session carries no `refetchInterval` at all
  * (removed), and chunk-detail's backstop is gated on a selection this host never
  * makes, so it never even issues its one initial read.
@@ -72,7 +72,7 @@ describe('the panel\'s D7 poll floors, idle and unselected', () => {
     // Dashboard and leases: the backstop kept firing.
     expect(stub.forRoute('/api/dashboard', 'GET').length).toBeGreaterThanOrEqual(3);
     expect(stub.forRoute('/api/leases', 'GET').length).toBeGreaterThanOrEqual(3);
-    // Session: removed (D7) — still just the one mount-time read.
+    // Session: removed — still just the one mount-time read.
     expect(stub.forRoute('/api/auth/session', 'GET')).toHaveLength(1);
     // Chunk-detail: disabled the whole time — never issued even its first read.
     expect(stub.requests.filter((r) => /^\/api\/chunks\//.test(r.path))).toHaveLength(0);

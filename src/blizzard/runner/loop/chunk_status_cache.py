@@ -1,4 +1,4 @@
-"""The per-tick chunk-status read seam (blizzard#521) — the batch projection every
+"""The per-tick chunk-status read seam — the batch projection every
 per-chunk read goes through, so a whole ``tick()`` costs at most one hub round-trip per
 distinct chunk id instead of one per read site.
 """
@@ -56,7 +56,7 @@ class ReadThroughChunkViews:
 @dataclass
 class MemoizingChunkViewCache:
     """One tick's own memoized view — every distinct chunk id read at most once, unless a
-    write this same tick invalidates it (D5).
+    write this same tick invalidates it.
 
     ``None`` in ``_cache`` means confirmed absent from the hub this tick — distinguished from
     "not yet read" (absent key), so a repeated ``get()`` on a genuinely-unknown id does not

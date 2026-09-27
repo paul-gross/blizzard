@@ -1,7 +1,7 @@
-"""The detached judgement-elicitation launch/collect shape (blizzard#443) — unit tier.
+"""The detached judgement-elicitation launch/collect shape — unit tier.
 
-Phase 1: a launch is one pass, a collect is a later one, and a still-running elicitation is
-passed over untouched. Phase 2: a lost elicitation relaunches without consuming a retry,
+A launch is one pass, a collect is a later one, and a still-running elicitation is
+passed over untouched. A lost elicitation relaunches without consuming a retry,
 abandons past its staleness bound, and every lease-closing path kills what it left running.
 """
 
@@ -106,7 +106,7 @@ def test_advance_launches_then_collects_across_two_passes(tmp_path):  # type: ig
 
 
 def test_a_started_record_write_that_raises_kills_the_still_unconfirmed_elicitation(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
-    """F1's mirror for a judge launch: a plain exception writing the durable
+    """The mirror for a judge launch: a plain exception writing the durable
     ``record_elicitation_started`` row must not leave the trampoline parked forever with
     nothing durable for `collect` to find — `Judgement._elicit` kills the group itself."""
     store = _store(tmp_path)
@@ -150,7 +150,7 @@ def test_collect_passes_over_a_still_running_elicitation(tmp_path):  # type: ign
 
     assert store.in_flight_elicitation("lease_1", 1) is not None
     assert store.pending_outbound() == []
-    # Phase 3 hoist: a live, still-pending elicitation collects nothing on this pass, so it
+    # Hoist: a live, still-pending elicitation collects nothing on this pass, so it
     # must never pay for `Judgement.of`'s envelope fetch — `collect` would early-return anyway.
     assert len(hub.get_envelope_calls) == envelope_calls_before
 
@@ -168,7 +168,7 @@ def test_lost_elicitation_relaunches_without_consuming_a_retry(tmp_path):  # typ
     elicitation = store.in_flight_elicitation("lease_1", 1)
     assert elicitation is not None
     assert elicitation.relaunch_count == 1
-    assert elicitation.first_launched_at == _NOW  # D5 — the baseline never resets
+    assert elicitation.first_launched_at == _NOW  # the baseline never resets
     # No retry consumed: still the one and only attempt for this lease/node.
     assert store.attempt_count("ch_1", "nd_build") == 1
 
@@ -192,7 +192,7 @@ def test_elicitation_past_staleness_bound_fails_the_attempt(tmp_path):  # type: 
 
 
 def test_a_hung_elicitation_past_staleness_fails_even_while_alive(tmp_path):  # type: ignore[no-untyped-def]
-    """review F6: staleness is checked before liveness, so a process that never exits is
+    """Staleness is checked before liveness, so a process that never exits is
     still bounded, not just a lost-and-empty one — a genuine hang cannot pin the lease
     forever."""
     store = _store(tmp_path)
@@ -216,10 +216,10 @@ def test_a_hung_elicitation_past_staleness_fails_even_while_alive(tmp_path):  # 
 
 
 def test_usage_limited_judge_elicitation_observed_past_staleness_still_pauses_not_fails(tmp_path):  # type: ignore[no-untyped-def]
-    """blizzard#594, review F1: an exited elicitation is classified for a usage limit AHEAD
+    """An exited elicitation is classified for a usage limit AHEAD
     of the staleness bound — a delayed tick or a runner outage that only gets around to
     observing the exit after the 15-minute bound must still pause, never fail the attempt,
-    exactly the regression D2 exists to prevent."""
+    exactly the regression this exists to prevent."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     limit = UsageLimit(resets_at=None, detail="You've hit your session limit")
@@ -241,7 +241,7 @@ def test_usage_limited_judge_elicitation_observed_past_staleness_still_pauses_no
 
 
 def test_a_judge_launch_records_its_own_process_group_and_is_group_killed(tmp_path):  # type: ignore[no-untyped-def]
-    """A judge launch's own process group (D3) is durable the moment it starts, and a lease
+    """A judge launch's own process group is durable the moment it starts, and a lease
     closing on top of it group-kills rather than merely killing the bare pid — the same
     ownership a fresh spawn or resume gets, reaching an elicitation's own descendants too."""
     store = _store(tmp_path)
@@ -264,7 +264,7 @@ def test_a_judge_launch_records_its_own_process_group_and_is_group_killed(tmp_pa
 
 
 def test_unusable_output_relaunches_without_consuming_a_retry(tmp_path):  # type: ignore[no-untyped-def]
-    """review F7: a process killed mid-write (an OOM, a `kill -9`) can leave a non-empty but
+    """A process killed mid-write (an OOM, a `kill -9`) can leave a non-empty but
     malformed reply — no result envelope at all — which is a lost elicitation exactly like
     an empty one, not a verdict-less reply that would consume a retry."""
     store = _store(tmp_path)
@@ -305,7 +305,7 @@ def test_closing_a_lease_kills_its_in_flight_elicitation(tmp_path):  # type: ign
 
 
 def test_pause_park_interrupts_the_in_flight_elicitation_and_the_later_unpause_clears_it_first(tmp_path):  # type: ignore[no-untyped-def]
-    """D6/D7 under blizzard#627: parking on an operator pause interrupts the elicitation
+    """Parking on an operator pause interrupts the elicitation
     rather than killing it, and names it on the park; once it has exited, the unpause
     clears the record before re-minting, so nothing is left in flight to race."""
     store = _store(tmp_path)

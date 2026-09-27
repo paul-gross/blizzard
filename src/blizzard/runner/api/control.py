@@ -1,4 +1,4 @@
-"""The runner-local control + summary endpoints on ``/api/runner`` (issue #43; ``GET`` issue #51).
+"""The runner-local control + summary endpoints on ``/api/runner``.
 
 Pause is *state on the runner singleton*, not a directive queue: pause/start facts append and
 the flag derives from the newest. This route owns only the **local** brake, reachable with the
@@ -37,7 +37,7 @@ class RunnerControlPatch(BaseModel):
 
 @router.patch("/runner", response_model=RunnerControlView)
 def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerControlView:
-    """Set this runner's own pause brake — it starts no new workers (issue #45).
+    """Set this runner's own pause brake — it starts no new workers.
 
     Independent of the hub's brake: it works with the hub unreachable, and neither reads nor
     writes the hub's flag. Every spawn site honors it, and escalation at an exhausted budget is
@@ -51,7 +51,7 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
 @router.get("/runner", response_model=RunnerStatusView)
 def get_runner(request: Request) -> RunnerStatusView:
     """The runner's machine-local summary: identity, pause states, capacities, hub
-    connectivity, last tick (issue #51).
+    connectivity, last tick.
 
     Derived entirely from local store facts plus the injected clock — no hub call, so it
     is truthful with the hub unreachable. An unwired service answers 503."""

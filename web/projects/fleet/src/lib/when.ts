@@ -1,5 +1,5 @@
 /**
- * The fleet-wide time-formatting layer (issue #81) — every absolute and
+ * The fleet-wide time-formatting layer — every absolute and
  * relative timestamp rendering resolves through here, so a "fix formatting"
  * change is one file instead of a scan across both libraries
  * (`bzh:frontend-formatters`).
@@ -45,7 +45,7 @@ export function formatWhen(iso: string, now: Date = new Date()): string {
 }
 
 /** The full local date + time behind a short {@link formatWhen}/
- * {@link formatLocalClockWithDay} stamp (issue #175) — a hover tooltip's text, so a
+ * {@link formatLocalClockWithDay} stamp — a hover tooltip's text, so a
  * board reader can always reach the precise instant a short form necessarily drops.
  * Local time, 24-hour clock, empty string for an absent or unparseable input — never
  * a caller-visible `title="Invalid Date"`. */
@@ -68,7 +68,7 @@ export interface LocalClockWithDay {
 
 /**
  * Local `HH:MM:SS` plus day context for a log-style read — the runner fact log
- * and transcript's shared instant shape (issue #136, `bzh:frontend-formatters`).
+ * and transcript's shared instant shape (`bzh:frontend-formatters`).
  * The time is always present; when the instant's local date isn't today, `day`
  * carries `Yesterday` or the `yyyy-mm-dd` date for the caller to render on the
  * line above. Unlike {@link formatWhen} (which drops the time for older dates
@@ -167,8 +167,8 @@ export function formatRefreshedAgo(deltaMs: number): string {
 }
 
 /** `YYYYMMDD` from an ISO instant, rendered in UTC — empty string for an absent or
- * unparseable input. The chunk-detail graph label's creation-date suffix (issue #102,
- * `fact-graph`'s `#<name>-<YYYYMMDD>` form). */
+ * unparseable input. The chunk-detail graph label's creation-date suffix
+ * (`fact-graph`'s `#<name>-<YYYYMMDD>` form). */
 export function formatUtcYmd(iso: string | null | undefined): string {
   if (iso === null || iso === undefined) return '';
   const ms = Date.parse(iso);

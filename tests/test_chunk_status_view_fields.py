@@ -1,5 +1,5 @@
 """``ChunkStatusView``/``ChunkDecisionStatusView`` are narrowed projections of
-``ChunkDetail``/``DecisionView`` (blizzard#521, unit tier) — every field they share with
+``ChunkDetail``/``DecisionView`` (unit tier) — every field they share with
 their full-aggregate counterpart must carry the identical type annotation, so a future
 edit to one cannot silently drift the other's shape."""
 

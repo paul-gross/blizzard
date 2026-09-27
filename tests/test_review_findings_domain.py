@@ -1,4 +1,4 @@
-"""Review-finding delivery validation (unit tier, blizzard#582 Phase 1) — the
+"""Review-finding delivery validation (unit tier) — the
 `record-findings` node's own shape check: a duplicate `ref`, a `deferred` entry marked
 `blocking`, and a malformed scope slug each raise `ReviewFindingsRejected`; a `deferred`
 entry missing a required field never reaches this validator, since `ReviewFindingDelta`
@@ -63,14 +63,14 @@ def test_parse_rejects_malformed_json() -> None:
 
 
 def test_parse_rejects_a_payload_with_no_entries_key() -> None:
-    """review:F1 — `{}` has no `entries` key at all and must be refused, not read as an
+    """`{}` has no `entries` key at all and must be refused, not read as an
     empty, `recorded` delta."""
     with pytest.raises(ReviewFindingsRejected, match="review-finding-delta"):
         parse_review_finding_delta("review-finding-delta", "{}")
 
 
 def test_parse_rejects_a_payload_shaped_around_the_wrong_top_level_key() -> None:
-    """review:F1 — a differently-named top-level key (here `findings`, the sibling
+    """A differently-named top-level key (here `findings`, the sibling
     garden format's own key) must not be silently ignored down to an empty delta."""
     with pytest.raises(ReviewFindingsRejected, match="review-finding-delta"):
         parse_review_finding_delta("review-finding-delta", '{"findings": [{"bogus": 1}]}')
@@ -116,7 +116,7 @@ def test_a_duplicate_ref_is_rejected() -> None:
 
 @pytest.mark.parametrize("missing", ["severity", "scope", "class", "locus", "summary"])
 def test_a_deferred_entry_missing_a_required_field_is_rejected(missing: str) -> None:
-    """review:F1/review:F8 — the wire model itself refuses a `deferred` entry missing a
+    """The wire model itself refuses a `deferred` entry missing a
     required field; there is no downstream domain check left to exercise."""
     payload: dict[str, Any] = {
         "ref": "F1",
@@ -158,7 +158,7 @@ def test_fixed_and_refuted_entries_carry_no_required_fields() -> None:
 
 
 def test_a_deferred_entry_with_an_unknown_extra_field_is_rejected() -> None:
-    """review:F1 — an unknown key on an otherwise well-formed entry is refused, not
+    """An unknown key on an otherwise well-formed entry is refused, not
     silently dropped."""
     payload = {
         "ref": "F1",

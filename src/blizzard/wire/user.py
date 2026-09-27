@@ -1,4 +1,4 @@
-"""Admin-page wire bodies — the user listing and role-assignment API (issue #94).
+"""Admin-page wire bodies — the user listing and role-assignment API.
 
 ``GET /api/users`` lists every hub-local account (username, display name, email,
 linked identities, role, created); ``POST /api/users/{id}/role`` assigns a role

@@ -1,4 +1,4 @@
-"""chunk_completed — an operator's manual chunk completion (issue #294, hub store tree).
+"""chunk_completed — an operator's manual chunk completion (hub store tree).
 One new table, ``checkfirst`` so a fresh ``base -> head`` and an upgrade converge.
 
 Revision ID: 20260818_2100_chunk_completed

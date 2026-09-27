@@ -1,5 +1,5 @@
-"""``transcript_segments.content_digest`` (blizzard#513 D1): backfilled from raw stored bytes
-with no decompression; carries forward any marker matching the retired whole-segment formula (D3).
+"""``transcript_segments.content_digest``: backfilled from raw stored bytes
+with no decompression; carries forward any marker matching the retired whole-segment formula.
 
 Revision ID: 20260913_1000_transcript_segments_content_digest
 Revises: 20260907_1000_event_log_runner_id_nullable
@@ -81,7 +81,7 @@ def _digests_fingerprint(digests: Sequence[str]) -> str:
 
 
 def _old_formula_fingerprint(rows: Sequence[sa.engine.Row]) -> str:
-    """Restates the pre-D1 whole-segment formula this revision retires — one hash over
+    """Restates the whole-segment formula this revision retires — one hash over
     every row's own ``(turn_range_start, rejected, content)`` in range order — so a
     still-valid marker can be told from a stale one before it is rewritten."""
     digest = hashlib.sha256()
@@ -183,6 +183,6 @@ def downgrade() -> None:
     bind = op.get_bind()
     if _column_info(bind) is None:
         return  # already the pre-reshape shape
-    # Markers are left as they are (D3).
+    # Markers are left as they are.
     with op.batch_alter_table(_SEGMENTS_TABLE) as batch:
         batch.drop_column("content_digest")

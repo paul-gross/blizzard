@@ -30,7 +30,7 @@ class EventLogService:
         at: datetime,
     ) -> int:
         """Append the row, then publish an ``event-logged`` frame keyed off the row it
-        just wrote (issue #213). Returns the freshly-written ``event_log.id``. Severity is
+        just wrote. Returns the freshly-written ``event_log.id``. Severity is
         derived from ``kind`` (a function of it, never paired independently)."""
         return self._record(
             severity=EVENT_LOG_SEVERITY[kind],

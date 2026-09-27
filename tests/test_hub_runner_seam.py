@@ -1,4 +1,4 @@
-"""The hub<->runner seam, end to end at the component tier (issue #38, slice 6).
+"""The hub<->runner seam, end to end at the component tier (slice 6).
 
 Slice 2 and slice 4 each mock the other side, so nothing yet proves the two halves
 agree on the wire. Drives the real hub app and real ``pull`` step in one process:

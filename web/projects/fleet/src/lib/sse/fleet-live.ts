@@ -19,7 +19,7 @@ export const HUB_EVENT_STREAM_URL = '/api/events/stream';
 
 /**
  * How long {@link LiveInvalidationSpine.dispatch} accumulates invalidation keys before
- * flushing them as one pass (issue #310). A burst of frames — a batch promote, a
+ * flushing them as one pass. A burst of frames — a batch promote, a
  * runner claiming several chunks — would otherwise fire one `invalidateQueries` call
  * per key per frame; this window lets the overlapping key sets from a burst collapse
  * into a single pass instead. 250ms: short enough that a quiet stream's lone event
@@ -40,15 +40,15 @@ export const HUB_EVENT_TYPES = [
   'event-logged',
 ] as const;
 
-/** A `chunk-changed` frame's payload (issue #212, issue #235). `chunk_id`/`status` are
+/** A `chunk-changed` frame's payload. `chunk_id`/`status` are
  * always present; every other field is present-when-meaningful — omitted, never
  * `null`, when it does not apply (a chunk that has never transitioned carries no
  * `prev_node`, an unclaimed chunk carries no `runner_id`), which is why each is
  * declared optional rather than required-but-sometimes-absent. `graph_id` rides the
  * wire but is never rendered — the Activity feed's block row stops at the transition and
- * runner lines. Exported (issue #235) so the SSE contract spec's `FRAME_FIELD_SPECS`
- * can key its required/optional descriptor off this interface directly. `by` (issue
- * #364) rides the `deleted` cause, mirroring {@link RunnerEvent.by}. */
+ * runner lines. Exported so the SSE contract spec's `FRAME_FIELD_SPECS`
+ * can key its required/optional descriptor off this interface directly. `by` rides
+ * the `deleted` cause, mirroring {@link RunnerEvent.by}. */
 export interface ChunkChanged {
   chunk_id: string;
   status: string;
@@ -60,24 +60,24 @@ export interface ChunkChanged {
   graph_id?: string;
   by?: string;
 }
-/** A `question-asked`/`question-answered` frame's payload. Exported (issue #235) —
+/** A `question-asked`/`question-answered` frame's payload. Exported —
  * see {@link ChunkChanged}. */
 export interface QuestionEvent {
   chunk_id: string;
   question_id: string;
 }
-/** A `decision-opened`/`decision-resolved` frame's payload. Exported (issue #235) —
+/** A `decision-opened`/`decision-resolved` frame's payload. Exported —
  * see {@link ChunkChanged}. */
 export interface DecisionEvent {
   chunk_id: string;
   decision_id: string;
 }
 /** A `runner-changed` frame's payload. `runner_id`/`kind` are always present — `kind`
- * names which registry change fired it (issue #151), one of {@link RunnerChangeKind},
+ * names which registry change fired it, one of {@link RunnerChangeKind},
  * but typed `string` here because {@link HubEventPayload} intersects these shapes and
  * `event-logged` carries a `kind` of its own, from an unrelated vocabulary. `by` rides
  * the four pause/resume kinds and `reason` the runner-local pair, both omitted
- * otherwise. Exported (issue #235) — see {@link ChunkChanged}. */
+ * otherwise. Exported — see {@link ChunkChanged}. */
 export interface RunnerEvent {
   runner_id: string;
   kind: string;
@@ -85,24 +85,24 @@ export interface RunnerEvent {
   reason?: string;
 }
 /** An `event-logged` frame's payload — an operational event landed (`GET
- * /api/events`'s wire shape, Phase 4). `chunk_id` is always present, `null` rather than
+ * /api/events`'s wire shape). `chunk_id` is always present, `null` rather than
  * omitted, for a runner-scoped event, and `runner_id` the same for a hub-authored one
  * (the broker's own shape) — unlike every other field on every other frame in this
  * module, both are required here, not optional, because the broker never omits either.
- * Exported (issue #235) — see {@link ChunkChanged}. */
+ * Exported — see {@link ChunkChanged}. */
 export interface EventLoggedEvent {
   severity: string;
   kind: string;
   chunk_id: string | null;
   runner_id: string | null;
 }
-/** The fact-identity stamp the hub puts on every frame (issue #213 Phase 2) — the
+/** The fact-identity stamp the hub puts on every frame — the
  * merge/dedup key a backfilled row and the live frame reporting the same underlying
- * fact share, so a consumer that reads both (the Activity feed's backfill, Phase 4) can
+ * fact share, so a consumer that reads both (the Activity feed's backfill) can
  * tell they are the same event rather than rendering it twice. Omitted on any frame
  * with no durable fact behind it (`queue-changed`, a `registered`/`heartbeat`
- * `runner-changed`, an idempotent no-op) or from a hub older than Phase 2. Exported
- * (issue #235) — see {@link ChunkChanged}. */
+ * `runner-changed`, an idempotent no-op) or from a hub that predates this stamp. Exported
+ * — see {@link ChunkChanged}. */
 export interface KeyedEvent {
   key?: string;
 }
@@ -133,7 +133,7 @@ export type RunnerChangeKind =
  * (`paused`, `resumed`, …) but not for these.
  *
  * The test is "this kind has no durable fact", never "this frame has no `key`" — `key`'s
- * absence is ambiguous (it also marks a frame from a hub older than issue #213 Phase 2,
+ * absence is ambiguous (it also marks a frame from a hub older than this stamp,
  * which the ring deliberately keeps) and is evidence only, not the predicate itself.
  * Dropping is scoped to the feed either way: {@link LiveInvalidationSpine.dispatch}
  * still invalidates on every dropped frame, keyed off `type` alone.
@@ -141,7 +141,7 @@ export type RunnerChangeKind =
 const NO_DURABLE_FACT_TYPES: ReadonlySet<string> = new Set<HubEventType>(['queue-changed']);
 
 /**
- * The `runner-changed` kinds the Activity feed drops (issue #151) — {@link
+ * The `runner-changed` kinds the Activity feed drops — {@link
  * NO_DURABLE_FACT_TYPES}'s rule applied within this one type. A runner re-registers on
  * every pull-loop cycle as its liveness heartbeat, so these two are the overwhelming
  * majority of all frames and carry no news an operator can act on — left in, they would
@@ -150,7 +150,7 @@ const NO_DURABLE_FACT_TYPES: ReadonlySet<string> = new Set<HubEventType>(['queue
  * feed: {@link LiveInvalidationSpine.dispatch} still invalidates on them, so the fleet
  * registry's liveness column keeps refreshing on every heartbeat exactly as before.
  *
- * `external-usage` (issue #218) is muted for a different reason: it is not an
+ * `external-usage` is muted for a different reason: it is not an
  * operator-visible activity-feed entry, and carries no `key` — there is no fact-table row
  * identity worth naming, only an advisory display field the fleet registry re-reads.
  */
@@ -170,7 +170,7 @@ function isLoggable(type: string, data: HubEventPayload): boolean {
 /** A chunk-changed frame invalidates the fleet list, the ready queue (a status flip
  * can add or remove a chunk from it), that chunk's own detail when the payload names
  * one, and the fleet spend-since read: usage rides the same fact a chunk-changed
- * reports (issue #60), so a chunk's derived cost total and the fleet-wide spend both
+ * reports, so a chunk's derived cost total and the fleet-wide spend both
  * derive from it — the prefix key closes every cached window. It also stales the
  * Events tab's feed: an escalation surfaces as a `chunk-changed` frame (status flips
  * to `needs_human`), and the feed unifies open escalations with logged events, so a
@@ -200,7 +200,7 @@ function chunkDecisionKeys(data: HubEventPayload): readonly (readonly unknown[])
 }
 
 /**
- * The event → query-key invalidation registry (issue #82) — the single place a live
+ * The event → query-key invalidation registry — the single place a live
  * event names what it stales, so wiring a new live feature into the SSE spine is
  * adding a row here, not a `case` in {@link LiveInvalidationSpine.dispatch}. Exhaustive
  * over {@link HubEventType} (a compile-time guard, same intent as `STATUS_LANE`): a
@@ -221,14 +221,14 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
 };
 
 /**
- * One event recorded for the Activity feed (issue #25): its stream arrival order
+ * One event recorded for the Activity feed: its stream arrival order
  * (`seq` — a stable, monotonic client key), its board vocabulary `type`, the parsed
  * `data`, and the client-side arrival time `at` (ms epoch; the hub frames carry no
  * timestamp of their own). Presentation — the human-readable summary — is the panel's.
  *
- * `key` rides `data.key` (issue #213 Phase 4) so the panel's backfill/live merge can
+ * `key` rides `data.key` so the panel's backfill/live merge can
  * dedupe a backfilled row against the live frame reporting the same fact without
- * reaching back into `data` itself. Absent on a frame from a hub older than Phase 2.
+ * reaching back into `data` itself. Absent on a frame from a hub that predates this stamp.
  */
 export interface LoggedEvent {
   readonly seq: number;
@@ -241,7 +241,7 @@ export interface LoggedEvent {
 /**
  * Recent-event ring cap for *this live tee alone* — matches the broker's history depth
  * (events/broker.py, `history=256`) so the ring never holds more than a fresh connect's
- * own replay tail could ever deliver. Since issue #213 Phase 4 this is no longer the
+ * own replay tail could ever deliver. This is no longer the
  * whole story for what the Activity feed panel renders: its container additionally
  * backfills on load from `GET /api/activity`, a separate, durable-store-backed source
  * this ring knows nothing about (`activity-panel.ts`'s `RENDER_LIMIT`, reconciled with
@@ -256,10 +256,10 @@ const LOG_LIMIT = 256;
  * {@link SseService} transport to the query cache — the one place SSE meets reads.
  *
  * The coalescing dispatch and reconnect-then-re-GET gap recovery are
- * {@link LiveInvalidationSpine}'s (`review:F5`), configured here with
+ * {@link LiveInvalidationSpine}'s, configured here with
  * {@link EVENT_INVALIDATION_REGISTRY} — see that registry's doc for what each event
  * type stales. What stays here is what only the hub's own service does: tee the same
- * event feed into {@link log}, a bounded ring the Activity feed panel renders (issue #25).
+ * event feed into {@link log}, a bounded ring the Activity feed panel renders.
  * Because the spine's `onFrame` hook records every frame before dispatch runs, the
  * broker's connect-time replay (its buffered history) lands in the log as backfill for
  * free. The tee is where the feed's noise floor is set — {@link isLoggable} mutes
@@ -290,7 +290,7 @@ export class FleetLiveUpdates {
     return this.spine.status;
   }
 
-  /** `true` once the stream closed on a `401` (issue #93) — a session that expired
+  /** `true` once the stream closed on a `401` — a session that expired
    * mid-stream. The app root watches this and routes to `/login`; `false` before
    * {@link start} and for the whole life of a stream that never sees one. */
   get authFailed(): Signal<boolean> {
@@ -298,7 +298,7 @@ export class FleetLiveUpdates {
   }
 
   /**
-   * The recent-event feed for the Activity feed (issue #25), oldest → newest, capped at
+   * The recent-event feed for the Activity feed, oldest → newest, capped at
    * {@link LOG_LIMIT} and excluding the muted frames ({@link isLoggable}). Empty before
    * {@link start}; the panel reverses it for display.
    */

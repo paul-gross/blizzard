@@ -1,7 +1,7 @@
 """Proposed work items through the apply path (component tier). A node-step's completion
 may carry proposed work items alongside its artifacts, gated by the node's own
-``proposes_work_items`` policy (D4, D6). Proposals ride exactly where artifacts are
-written — the ordinary transition and the migration lane alike (D2) — and are inert at
+``proposes_work_items`` policy. Proposals ride exactly where artifacts are
+written — the ordinary transition and the migration lane alike — and are inert at
 landing time (no ``work_items`` row, no envelope/view surface) until the delivery-
 materialization sweep reads one, once the chunk delivers (``tests/test_work_item_materialization.py``)."""
 
@@ -375,9 +375,9 @@ def test_the_refusal_holds_on_a_runner_config_gate_submission(tmp_path: Path) ->
 
 
 def test_the_refusal_holds_on_a_decision_id_resolving_completion(tmp_path: Path) -> None:
-    """A gate node can never declare ``proposes_work_items`` (D4) — so a resolving
+    """A gate node can never declare ``proposes_work_items`` — so a resolving
     transition out of it carrying proposals is refused before the gate-resolution
-    dispatch, which itself would silently ignore them (D2)."""
+    dispatch, which itself would silently ignore them."""
     hub = build_hub(tmp_path)
     chunk_id, nodes = _ingest(hub, _GATE_YAML)
     build_resp = _complete(hub, chunk_id, nodes["build"], choice="pass", artifacts=[_BUILD_ARTIFACT])
@@ -406,8 +406,8 @@ def test_the_refusal_holds_on_a_decision_id_resolving_completion(tmp_path: Path)
 
 def test_a_runner_config_gates_proposals_land_with_the_decision_not_its_resolution(tmp_path: Path) -> None:
     """Unlike the graph gate above, this parks a *worker-judged* node the policy is legal
-    on (D4), so the resolving completion isn't refused — but its proposals still don't
-    land: the decision's own submission is where they belong, same as its artifacts (D2)."""
+    on, so the resolving completion isn't refused — but its proposals still don't
+    land: the decision's own submission is where they belong, same as its artifacts."""
     hub = build_hub(tmp_path)
     chunk_id, nodes = _ingest(hub, _POLICY_YAML)
 
@@ -435,9 +435,9 @@ def test_a_runner_config_gates_proposals_land_with_the_decision_not_its_resoluti
 def test_the_gate_resolutions_migration_consult_also_drops_the_resolving_completions_proposals(
     tmp_path: Path,
 ) -> None:
-    """The migration-time consult fires from inside gate resolution too (issue #124) — its
+    """The migration-time consult fires from inside gate resolution too — its
     own dispatch fork must drop the resolving completion's proposals exactly like the
-    plain transition beside it, not just persist whatever it was handed (D2)."""
+    plain transition beside it, not just persist whatever it was handed."""
     hub = build_hub(tmp_path)
     chunk_id, nodes = _ingest(hub, _POLICY_YAML)
     triage = hub.client.post("/api/graphs", json={"definition_yaml": _TARGET_WITH_DELIVER_YAML})

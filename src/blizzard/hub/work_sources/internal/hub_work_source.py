@@ -1,4 +1,4 @@
-"""The built-in ``hub`` work source (issue #357) — always seated, no
+"""The built-in ``hub`` work source — always seated, no
 ``[[work_source]]`` stanza, no credential. Unlike every other binding, this one's own
 store is the item's system of record rather than a cache of an external one: nothing
 here is fetched from a forge.
@@ -34,7 +34,7 @@ from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceEr
 class HubWorkSource:
     """Vendor-native reader over the hub's own ``work_items`` table — the built-in
     binding seated outside the configured-entry walk (``bzh:dependency-injection``).
-    Implements ``IWorkEditor`` (blizzard#358) and ``IWorkCloser`` (issue #360) too,
+    Implements ``IWorkEditor`` and ``IWorkCloser`` too,
     both delegating their writes to ``edits``, the domain-layer write half."""
 
     def __init__(
@@ -88,8 +88,8 @@ class HubWorkSource:
     def close(self, pointer: WorkRef) -> None:
         """Mark the item ``delivered`` via ``edits.deliver`` — the only failure this
         raises is :class:`WorkItemGoneError`, for a ref with no item row. Then resolves
-        whichever garden-proposal findings `pointer` answers, if any (blizzard#394 Phase
-        3), safe to repeat: :meth:`GardenProposalDeliveryResolution.resolve_for_item`
+        whichever garden-proposal findings `pointer` answers, if any, safe to repeat:
+        :meth:`GardenProposalDeliveryResolution.resolve_for_item`
         gates on its own durable marker, not the item write's idempotency."""
         item = self._items.get(pointer.source, pointer.ref)
         if item is None:
@@ -147,8 +147,8 @@ def seat_hub_work_source(
     """Seats the built-in ``hub`` binding in place — reached from both
     :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
     ``tests/support.py::build_hub``: never absent, never configured. ``users``/``items``/
-    ``delete``/``resolution`` are the composition root's own instances (#362, #364,
-    blizzard#394), so every write path shares the same claim-locked instances."""
+    ``delete``/``resolution`` are the composition root's own instances (#362, #364),
+    so every write path shares the same claim-locked instances."""
     facts = ChunkFactsStore(store, clock)
     record = ChunkRecordStore(store, clock)
     work_refs = ChunkWorkRefsStore(store, clock, facts=facts)

@@ -35,7 +35,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     is_ephemeral_id,
 )
 
-#: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks (blizzard#526 D4).
+#: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
 _CURSOR_ARITY = 2
 
 
@@ -128,7 +128,7 @@ class ChunkRecordStore:
 
     def list_all(self) -> list[Chunk]:
         """Every non-ephemeral chunk, newest-minted first. Reads ``chunk_work_refs`` with
-        one bulk query grouped by chunk id in Python (issue #421) rather than a per-chunk
+        one bulk query grouped by chunk id in Python rather than a per-chunk
         query, the same shape the facts seam's ``load_all_facts`` reads its own tables in —
         so the list route's own chunk read is bounded regardless of fleet size too."""
         with self._store.read("list_all") as conn:
@@ -156,7 +156,7 @@ class ChunkRecordStore:
             ]
 
     def list_page(self, *, cursor: str | None = None, limit: int) -> ChunkPage:
-        """`list_all`'s bounded sibling (blizzard#526 D4): a SQL keyset window with
+        """`list_all`'s bounded sibling: a SQL keyset window with
         ephemeral chunks excluded in Python after the read, so a window landing wholly
         on ephemeral rows can come back short of `limit` live chunks. Each retry doubles
         the window rather than stopping there, so a `next_cursor` walk still sees every
@@ -215,15 +215,15 @@ class ChunkRecordStore:
             insert_chunk_rows(conn, chunk)
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
-        """Repin a not-ready or ready-unclaimed chunk to a different workflow graph (issue #27, #120)."""
+        """Repin a not-ready or ready-unclaimed chunk to a different workflow graph."""
         with self._store.write("set_graph") as conn:
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
 
     def set_defaults(
         self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
     ) -> None:
-        """Repin a not-ready or ready-unclaimed chunk's default model/effort/harnesses
-        (issues #27, #120, #144) — all three in one write; see
+        """Repin a not-ready or ready-unclaimed chunk's default model/effort/harnesses —
+        all three in one write; see
         :meth:`~blizzard.hub.domain.chunks.record.IWriteChunkRecordRepository.set_defaults`."""
         with self._store.write("set_defaults") as conn:
             conn.execute(
@@ -237,7 +237,7 @@ class ChunkRecordStore:
             )
 
     def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
-        """Set, overwrite, or clear a chunk's standing migration intent (issue #124).
+        """Set, overwrite, or clear a chunk's standing migration intent.
 
         A plain column overwrite, editable at any non-terminal status. The column
         carries no timestamp, so this write takes no ``at``."""

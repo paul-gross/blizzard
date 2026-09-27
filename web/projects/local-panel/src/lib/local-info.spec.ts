@@ -9,7 +9,7 @@ import { LocalInfo } from './local-info';
 
 /** The runner's own hub-link facts off `GET /api/dashboard`'s `runner` section —
  * hub-free, so it resolves even when the fleet-summary forward fails (`fleet_summary:
- * null`, issue #311), letting the strip render its degraded state while the rest of
+ * null`), letting the strip render its degraded state while the rest of
  * the panel stays lit. */
 const RUNNER_STATUS = {
   runner_id: 'runner-local',
@@ -98,7 +98,7 @@ describe('LocalInfo fleet-summary strip', () => {
 
   it('degrades to the last-known/dimmed state when the hub forward fails', async () => {
     // A hub outage is a 200 `/api/dashboard` read carrying `fleet_summary: null`
-    // (issue #311) — the strip dims and banners "last known", and the rest of the
+    // — the strip dims and banners "last known", and the rest of the
     // panel (hub-free) is unaffected.
     const { fixture, stub: s } = await render(null);
     stub = s;
@@ -114,7 +114,7 @@ describe('LocalInfo fleet-summary strip', () => {
   });
 
   it('keeps the prior counts, dimmed, when a later read of the same instance carries fleet_summary: null', async () => {
-    // The latch's own transition (issue #311): real counts land, then a hub blip
+    // The latch's own transition: real counts land, then a hub blip
     // resolves the same route with a null slot — the strip must degrade to the
     // *prior* counts, not blank to the never-loaded dashes above.
     let fleetSummary: runnerApi.FleetSummaryView | null = COUNTS;

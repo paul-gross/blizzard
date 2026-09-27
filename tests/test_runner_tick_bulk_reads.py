@@ -1,4 +1,4 @@
-"""The runner tick's bulk-read seams (hub:142) — REAP, FILL, ADVANCE, ContextSample, and
+"""The runner tick's bulk-read seams — REAP, FILL, ADVANCE, ContextSample, and
 ``backing_off_facts``, each collapsed from a per-lease/per-fact read to a plural keyed by
 the id set the caller already holds (`bzh:bulk-reconstitution`).
 
@@ -6,7 +6,7 @@ Two shapes per new plural: it matches its singular sibling and drops an unknown 
 own statement count is flat across a lowered ``BATCH_SIZE`` boundary. The tick tests drive a
 full ``tick(ctx)`` at N=1 and N=10 steady-state leases and pin the statement count equal —
 the test the work item calls out as mattering more than any single fix. The last section does
-the same for ``RunnerStatusService.escalations()`` (hub:143's runner-API read path)."""
+the same for ``RunnerStatusService.escalations()`` (runner-API read path)."""
 
 from __future__ import annotations
 
@@ -326,7 +326,7 @@ def test_a_full_tick_is_still_flat_at_n1_and_n10_with_transcript_shipping_on(tmp
     assert one == ten
 
 
-# --- RunnerStatusService.escalations() (hub:143) ---------------------------------------------
+# --- RunnerStatusService.escalations() ---------------------------------------------
 
 
 def _status_service(store: SqlAlchemyRunnerStore) -> RunnerStatusService:

@@ -1,4 +1,4 @@
-"""``blizzard hub chunk`` — issue #104: operator verbs over one chunk (ingest, inspect, edit, transition)."""
+"""``blizzard hub chunk`` — operator verbs over one chunk (ingest, inspect, edit, transition)."""
 
 from __future__ import annotations
 
@@ -186,7 +186,7 @@ def chunk_set(
     default_effort: str | None,
     default_harnesses: tuple[str, ...],
 ) -> None:
-    """Repin CHUNK's graph and/or default model/effort/harnesses in one call (issues #104, #144).
+    """Repin CHUNK's graph and/or default model/effort/harnesses in one call.
 
     A pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and
     applied all-or-nothing. At least one option is required; 409 for the defaults once
@@ -240,7 +240,7 @@ def chunk_promote(cli: CliContext, chunk_id: str) -> None:
 @click.argument("chunk_id")
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
-    """Pause CHUNK — the runner interrupts and parks the worker but keeps the claim (issue #46).
+    """Pause CHUNK — the runner interrupts and parks the worker but keeps the claim.
 
     The worker gets a brief grace period to wind down before being force-stopped if it hasn't
     already exited; its spend so far is recorded when it resumes. A pure client of the hub API:
@@ -262,7 +262,7 @@ def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
 @click.argument("chunk_id")
 @click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
 def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
-    """Resume a paused CHUNK — the runner resumes the parked worker in place (issue #46).
+    """Resume a paused CHUNK — the runner resumes the parked worker in place.
 
     A pure client of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming
     an unpaused chunk is a harmless no-op. 404 only when the chunk is unknown."""
@@ -366,7 +366,7 @@ def chunk_requeue(cli: CliContext, chunk_id: str) -> None:
 @click.argument("chunk_id")
 @click.option("--by", "by", default="operator", help="Who is stopping (recorded on the fact).")
 def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
-    """Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
+    """Terminally abandon CHUNK — the operator's last-resort verb.
 
     A pure client of ``POST /api/chunks/{id}/stop``. The chunk derives ``stopped`` and
     never re-derives ``ready``; any live route is released and any open escalation closed
@@ -384,7 +384,7 @@ def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
 @click.argument("chunk_id")
 @click.option("--by", "by", default="operator", help="Who is completing (recorded on the fact).")
 def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
-    """Manually complete CHUNK, from any non-``done`` status, including ``stopped`` (issue #294).
+    """Manually complete CHUNK, from any non-``done`` status, including ``stopped``.
     A pure client of ``POST /api/chunks/{id}/complete``. The chunk derives ``done``; any live
     route and held hub-exec slot are released in the same operation, and its work refs become
     eligible for closure. Idempotent — an already-``done`` chunk is a harmless no-op, never
@@ -414,7 +414,7 @@ def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
 )
 @click.option("--by", "by", default="operator", help="Who is restarting (recorded on the fact).")
 def chunk_restart(cli: CliContext, chunk_id: str, to_graph: str | None, node: str | None, by: str) -> None:
-    """Force CHUNK onto a node now, on a freshly minted session (issues #370, #371).
+    """Force CHUNK onto a node now, on a freshly minted session.
 
     A pure client of ``POST /api/chunks/{id}/restart``. The move has already happened when the call
     returns: the running attempt is torn down and re-entered, where ``migrate`` only records an
@@ -441,7 +441,7 @@ def chunk_restart(cli: CliContext, chunk_id: str, to_graph: str | None, node: st
 )
 @click.option("--cancel", is_flag=True, default=False, help="Clear the chunk's standing migration intent.")
 def chunk_migrate(cli: CliContext, chunk_id: str, to_graph: str | None, node: str | None, cancel: bool) -> None:
-    """Set, overwrite, or clear CHUNK's standing migration intent (issue #124).
+    """Set, overwrite, or clear CHUNK's standing migration intent.
 
     ``--node`` present selects ``forced``, absent selects ``auto``; ``--cancel`` clears
     a standing intent and conflicts with ``--to-graph``/``--node``. The intent is consulted
@@ -499,7 +499,7 @@ def chunk_group_cmd(cli: CliContext, chunk_id: str, merge_ids: tuple[str, ...]) 
 @click.option("--by", "by", default="operator", help="Who is deleting (recorded on the fact).")
 @click.option("--yes", is_flag=True, default=False, help="Skip the confirmation prompt.")
 def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
-    """Delete unacquired CHUNK, withdrawing every open hub item it holds (issue #364) — a
+    """Delete unacquired CHUNK, withdrawing every open hub item it holds — a
     pure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless
     ``--yes``. 409 when CHUNK is held, terminal, or a standing prerequisite for another
     chunk, which the response names; 404 only when CHUNK is unknown."""
@@ -545,7 +545,7 @@ def chunk_work_items(cli: CliContext, chunk_id: str) -> None:
 @chunk_group.command("pm", hidden=True, cls=FleetCommand)
 @click.argument("chunk_id")
 def chunk_pm(cli: CliContext, chunk_id: str) -> None:
-    """Deprecated alias for ``blizzard hub chunk work-items`` (issue #55)."""
+    """Deprecated alias for ``blizzard hub chunk work-items``."""
     click.echo(
         "warning: `blizzard hub chunk pm` is deprecated — use `blizzard hub chunk work-items`",
         err=True,

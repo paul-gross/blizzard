@@ -1,5 +1,5 @@
 """``blizzard runner attach`` — the verb's identity handling and rejection surfacing
-(unit tier, issue #113 Phase 2). ``httpx.post`` stubbed, no live socket.
+(unit tier). ``httpx.post`` stubbed, no live socket.
 
 Unlike the heartbeat/session-end hooks, ``attach`` does not soft-fail: a rejection
 must reach the worker as a non-zero exit so it learns the submission was not durable."""

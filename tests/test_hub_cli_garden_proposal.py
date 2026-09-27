@@ -1,5 +1,5 @@
 """``blizzard hub garden-proposal pass/accept`` (unit tier) — pure clients of the two
-closing routes, driven here with ``httpx`` stubbed (blizzard#395, the
+closing routes, driven here with ``httpx`` stubbed (the
 ``tests/test_hub_cli_item.py`` shape)."""
 
 from __future__ import annotations

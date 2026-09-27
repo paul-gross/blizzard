@@ -7,7 +7,7 @@ import type { RoutineBaselineView, ScopeView } from 'fleet';
 import { GardeningRunDialogView } from './gardening-run-dialog-view';
 
 /**
- * The gardening run dialog's own half of `web:shell-sweep` (blizzard#399 D6) — the
+ * The gardening run dialog's own half of `web:shell-sweep` — the
  * three fields' real layout at the widths the dialog is reachable at (a phone-width
  * routines page and the desktop board), which `KitDialog`'s own sweep
  * (`kit-dialog.shell-sweep.spec.ts`) does not cover: the scope field's radio rows

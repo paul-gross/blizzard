@@ -1,5 +1,5 @@
 """takeovers — the operator's interactive session over a parked chunk; two brand-new
-tables, reshaping none (issue #52)
+tables, reshaping none
 
 Revision ID: 20260717_2245_runner_takeovers
 Revises: 20260717_0446_runner_pause_parks

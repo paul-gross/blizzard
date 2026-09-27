@@ -1,7 +1,7 @@
-"""The transcript segment ledger repository seam (issue #246, blizzard#410).
+"""The transcript segment ledger repository seam.
 
 Local per-segment state, never shipped as-is — distinct from the wire's own
-``TranscriptSegmentRecord`` (blizzard#247) — plus the lane's own outbound buffer (D3),
+``TranscriptSegmentRecord`` — plus the lane's own outbound buffer,
 :class:`BufferedFact`'s counterpart."""
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ __all__ = [
 
 @dataclass(frozen=True)
 class TranscriptSegmentLedgerRow:
-    """One row of the transcript segment ledger (issue #246, D2) — local state, never shipped
-    as-is, and so named apart from the wire's own ``TranscriptSegmentRecord`` (blizzard#247).
+    """One row of the transcript segment ledger — local state, never shipped
+    as-is, and so named apart from the wire's own ``TranscriptSegmentRecord``.
     ``normalizer_version`` is never ``None``, starting at the source seam's "never ran"
     sentinel. ``truncated_reason``/``shipping_stopped_reason`` are independent: the former never latches."""
 
@@ -43,15 +43,15 @@ class TranscriptSegmentLedgerRow:
     harness_version: str | None
     truncated_reason: str | None
     shipping_stopped_reason: str | None
-    #: Set only on a re-ship (blizzard#250): the segment this one replaces on the hub.
+    #: Set only on a re-ship: the segment this one replaces on the hub.
     supersedes: str | None
     finalized_at: datetime | None
     stamped_at: datetime
     harness_id: str
-    #: Frozen at segment open from the lease's own resolved pair (blizzard#439 D3); ``None`` when unresolved.
+    #: Frozen at segment open from the lease's own resolved pair; ``None`` when unresolved.
     model: str | None
     effort: str | None
-    #: agent_id -> spawning `tool_use_id` (blizzard#338), accumulated across every window
+    #: agent_id -> spawning `tool_use_id`, accumulated across every window
     #: this segment has read; empty until one names a pair.
     agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
 
@@ -62,7 +62,7 @@ class TranscriptSegmentLedgerRow:
 
 @dataclass(frozen=True)
 class BufferedTranscriptDelta:
-    """One pending record in the transcript lane's own buffer (D3) — ``BufferedFact``'s
+    """One pending record in the transcript lane's own buffer — ``BufferedFact``'s
     counterpart. Non-final ``payload`` is a ``TranscriptSegmentRecord``'s fields (minus
     ``seq``/``runner_id``) as JSON; a final one is just ``{"segment_id": ...}``. ``final``
     mirrors the payload's own flag, driving ack-time keep-vs-delete."""
@@ -77,7 +77,7 @@ class BufferedTranscriptDelta:
 
 @dataclass(frozen=True)
 class TranscriptBackfillLease:
-    """One session-bearing lease the backfill may import (blizzard#250), with whether that
+    """One session-bearing lease the backfill may import, with whether that
     session already holds a segment. The dedupe key is the *session*: a pre-epic session
     resumed across leases left one merged file, which imports once."""
 
@@ -98,7 +98,7 @@ class IReadTranscriptLedgerRepository(Protocol):
     """Read-only transcript segment ledger queries (held by read-path edges)."""
 
     def transcript_segment(self, segment_id: str) -> TranscriptSegmentLedgerRow | None:
-        """The segment by id, or ``None`` — the pump and drain's per-segment read (issue #246)."""
+        """The segment by id, or ``None`` — the pump and drain's per-segment read."""
         ...
 
     def transcript_segments(self, segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentLedgerRow]:
@@ -107,7 +107,7 @@ class IReadTranscriptLedgerRepository(Protocol):
         ...
 
     def open_transcript_segments(self) -> list[TranscriptSegmentLedgerRow]:
-        """Segments with no final marker yet — the pump's per-tick work list (issue #246)."""
+        """Segments with no final marker yet — the pump's per-tick work list."""
         ...
 
     def open_transcript_segments_for_lease(self, lease_id: str) -> list[TranscriptSegmentLedgerRow]:
@@ -119,7 +119,7 @@ class IReadTranscriptLedgerRepository(Protocol):
 
     def transcript_segments_for_chunk(self, chunk_id: str) -> list[TranscriptSegmentLedgerRow]:
         """The chunk's segment ledger rows, oldest first, open or finalized alike — the
-        runner-plane's chunk-scoped segment index read (D6, runner-node-grouped-transcripts).
+        runner-plane's chunk-scoped segment index read (runner-node-grouped-transcripts).
         A chunk this store holds no lease for returns ``[]``."""
         ...
 
@@ -140,14 +140,14 @@ class IReadTranscriptLedgerRepository(Protocol):
 
     def has_unshipped_transcript_content(self, chunk_id: str) -> bool:
         """Whether this chunk holds an UNACKED **content** row in the transcript outbound
-        buffer (issue #249) — the "not yet acked by the hub" half of the panel's home
+        buffer — the "not yet acked by the hub" half of the panel's home
         selection. Final markers are excluded deliberately: a pending one carries no turns,
         so the hub's copy is already complete. An existence check, not
         :meth:`pending_transcript_outbound`'s payload-materializing list read."""
         ...
 
     def pending_transcript_outbound(self, *, limit: int | None = None) -> list[BufferedTranscriptDelta]:
-        """The unacked transcript buffer, FIFO by seq — the drain's own lane (D3).
+        """The unacked transcript buffer, FIFO by seq — the drain's own lane.
 
         ``limit`` bounds the query itself, not just what the caller iterates — a large
         backlog's full payload set (up to the per-record cap each) is otherwise materialized
@@ -156,7 +156,7 @@ class IReadTranscriptLedgerRepository(Protocol):
 
     def transcript_backfill_leases(self) -> list[TranscriptBackfillLease]:
         """Every lease that ever recorded a session id, oldest first — the backfill's work
-        list (blizzard#250). This store is the only source: the harness directory holds the
+        list. This store is the only source: the harness directory holds the
         operator's own sessions too, and a sweep of it could never tell them apart."""
         ...
 
@@ -165,7 +165,7 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
     """Read-write transcript segment ledger store — held only by the domain."""
 
     def mark_transcript_record_truncated(self, segment_id: str, *, reason: str, severity: int) -> bool:
-        """Note that one shipped record was shrunk in place (D4's per-record cap) —
+        """Note that one shipped record was shrunk in place under the per-record cap —
         informational only. Latches per ``(segment_id, reason)``: the SAME reason
         recurring never re-warns; a DIFFERENT one always does, regardless of what currently
         displays. ``severity`` ranks ``reason`` against this method's other callers — the
@@ -174,7 +174,7 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
 
     def stop_transcript_segment_shipping(self, segment_id: str, *, reason: str) -> bool:
         """Permanently stop shipping this segment's content — the per-chunk 64 MB budget
-        breached (D4). The only field :class:`TranscriptPump`'s guard reads; idempotent,
+        breached. The only field :class:`TranscriptPump`'s guard reads; idempotent,
         keeps its first reason. Returns whether this call actually set the field."""
         ...
 
@@ -199,7 +199,7 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         agent_tool_use_ids: dict[str, str] | None = None,
     ) -> list[int]:
         """Advance a segment's cursor/shipped counts/version stamp and atomically enqueue
-        ``len(payloads)`` buffer rows (issue #246) — ONE transaction, so a batch split
+        ``len(payloads)`` buffer rows — ONE transaction, so a batch split
         into several records still advances the cursor exactly once, and a crash loses
         neither the cursor advance nor any record. Returns their seqs, in payload order."""
         ...
@@ -216,7 +216,7 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         session: SessionReference,
         supersedes: str | None = None,
     ) -> str:
-        """Stamp a segment boundary outside a spawn and return its id (blizzard#250), cursor
+        """Stamp a segment boundary outside a spawn and return its id, cursor
         unset so the pump reads the session from the start. Every boundary the *live* lane
         stamps stays :meth:`~blizzard.runner.domain.leases.IWriteLeaseLivenessRepository.record_spawn`'s;
         this one is the backfill's alone. ``supersedes`` is the re-ship's own pointer at the
@@ -247,7 +247,7 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         ...
 
     def ack_transcript_outbound(self, seq: int, *, acked_at: datetime) -> None:
-        """Ack a buffered transcript row — the drain's own ack (D3). A ``delta`` row is
+        """Ack a buffered transcript row — the drain's own ack. A ``delta`` row is
         pruned outright (up to the per-record cap each, nothing reads one acked); a ``final`` row
         stays, marked acked — its own tiny row is the exactly-once receipt
         :class:`~blizzard.tools.invariants.TranscriptSegmentFinalizedExactlyOnce`
@@ -255,6 +255,6 @@ class IWriteTranscriptLedgerRepository(IReadTranscriptLedgerRepository, Protocol
         ...
 
     def ack_transcript_outbound_batch(self, seqs: list[int], *, acked_at: datetime) -> None:
-        """Ack every seq in ``seqs`` in one transaction (issue #522), same delta/final
+        """Ack every seq in ``seqs`` in one transaction, same delta/final
         split as :meth:`ack_transcript_outbound`."""
         ...

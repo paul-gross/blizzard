@@ -10,8 +10,8 @@ import { hubChunksKey } from '../query-keys';
  * node), through TanStack Query and the generated hub client.
  * Like the health read this is real plumbing: the request is the
  * openapi-ts SDK call (never hand-written fetch, bzh:generated-client) and it hits
- * the daemon the app is served from. The read is keyset-paginated on the hub
- * (blizzard#526); {@link drainPages} follows `next_cursor` to exhaustion so this
+ * the daemon the app is served from. The read is keyset-paginated on the hub;
+ * {@link drainPages} follows `next_cursor` to exhaustion so this
  * query still resolves the typed `ChunkSummary[]` whole. An empty fleet is an empty
  * array, not an error.
  */

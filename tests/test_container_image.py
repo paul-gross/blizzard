@@ -1,5 +1,5 @@
-"""The hub container image (``packaging/docker/``) — the static packaging contract
-(issue #188). No docker required — this is the docker-free static guard that catches
+"""The hub container image (``packaging/docker/``) — the static packaging contract.
+No docker required — this is the docker-free static guard that catches
 packaging rot even with no docker at all, in the default ``blizzard:unit-test`` tier.
 The image actually building and serving is ``blizzard:image-smoke``, local-only.
 """
@@ -88,7 +88,7 @@ def test_entrypoint_scaffolds_then_migrates_then_execs_host() -> None:
 def test_entrypoint_scaffolds_only_when_the_config_file_is_absent() -> None:
     """An unconditional `init` would migrate twice (once inside `init`, once via the
     entrypoint's own explicit `migrate` step) and blur the scaffold->migrate->host
-    ordering this file exists to keep literal (plan decision 2)."""
+    ordering this file exists to keep literal."""
     text = _entrypoint()
     assert re.search(r"if\s+\[\s*!\s*-f\s+\S*blizzard-hub\.toml\S*\s*\]", text), (
         "the `init` call must be behind a conditional on the config file's absence"

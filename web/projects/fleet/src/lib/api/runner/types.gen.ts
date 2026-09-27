@@ -7,7 +7,7 @@ export type ClientOptions = {
 /**
  * AnalyticsCountView
  *
- * One grouping key and how many events fell under it (blizzard#255). ``key`` names
+ * One grouping key and how many events fell under it. ``key`` names
  * whichever dimension this response is grouped by — a file path, a skill name, an
  * agent type, or a node id.
  */
@@ -297,7 +297,7 @@ export type AttachmentResponse = {
 /**
  * BlockedView
  *
- * A chunk's blocked marking (issue #457) — present iff a pre-claim dependent (``not_ready`` or
+ * A chunk's blocked marking — present iff a pre-claim dependent (``not_ready`` or
  * ``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.
  * Carried beside ``status``, never a status of its own; names the immediate prerequisite only, with
  * no transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at
@@ -361,7 +361,7 @@ export type CapacitiesView = {
 /**
  * ChunkDetail
  *
- * The whole chunk aggregate (issue #314): transition history, inline artifact
+ * The whole chunk aggregate: transition history, inline artifact
  * store, and the open escalation.
  */
 export type ChunkDetail = {
@@ -486,7 +486,7 @@ export type ChunkEscalationView = {
 /**
  * ChunkNeighborView
  *
- * One standing-edge neighbor, one hop away (issue #462). ``status`` is null only for
+ * One standing-edge neighbor, one hop away. ``status`` is null only for
  * the residual race a neighbor's facts fail to resolve — the edge is still drawn,
  * unsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive
  * scope this shares.
@@ -506,7 +506,7 @@ export type ChunkNeighborView = {
 /**
  * ChunkNeighborhoodView
  *
- * A chunk's standing dependency edges one hop each way (issue #462) — both
+ * A chunk's standing dependency edges one hop each way — both
  * ``prerequisites`` and ``dependents`` are always present as lists, empty rather than
  * null.
  */
@@ -533,7 +533,7 @@ export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'wa
  *
  * One row of the fleet chunk list — the derived status and current node. ``current_node_name`` is
  * the node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.
- * ``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a terminal chunk reads
+ * ``runner_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads
  * unrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.
  */
 export type ChunkSummary = {
@@ -632,7 +632,7 @@ export type ChunkUsageTotalView = {
 /**
  * ChunkUsageView
  *
- * One node-step's usage/cost telemetry (issue #59) — one harness invocation's tokens-by-class and
+ * One node-step's usage/cost telemetry — one harness invocation's tokens-by-class and
  * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was
  * recorded for this invocation — never fabricated. ``estimated_cost_usd`` is the runner's own reported
  * estimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.
@@ -865,8 +865,8 @@ export type EnvironmentListResponse = {
 /**
  * EnvironmentView
  *
- * One environment in the runner's configured pool — ``GET /api/environments``
- * (issue #106). ``chunk_id``/``held_since`` are present only while the environment
+ * One environment in the runner's configured pool — ``GET /api/environments``.
+ * ``chunk_id``/``held_since`` are present only while the environment
  * is currently bound; an unused pool environment carries both as ``None``.
  */
 export type EnvironmentView = {
@@ -999,8 +999,8 @@ export type FactView = {
  * FindingView
  *
  * A finding. `state` folds the newest fact's kind to `"live"` for
- * `add`/`observed`/`reopened` (blizzard#394); `note` is that fact's own note. `source`
- * is `"routine"` or `"review"` (blizzard#582 D1): a review-sourced finding carries no
+ * `add`/`observed`/`reopened`; `note` is that fact's own note. `source`
+ * is `"routine"` or `"review"`: a review-sourced finding carries no
  * `routine_name`, its own `severity`, and the `raised_by_chunk_id` that raised it.
  */
 export type FindingView = {
@@ -1111,7 +1111,7 @@ export type GardenProposalClosureKind = 'passed' | 'accepted';
 /**
  * GardenProposalClosureView
  *
- * How a garden proposal closed (blizzard#395) — a pass or an accept, either way
+ * How a garden proposal closed — a pass or an accept, either way
  * terminal.
  */
 export type GardenProposalClosureView = {
@@ -1150,7 +1150,7 @@ export type GardenProposalItemOutcome = 'minted' | 'declined';
 /**
  * GardenProposalOrigin
  *
- * Who authored a garden proposal (blizzard#631) — a mint-time fact, stored on
+ * Who authored a garden proposal — a mint-time fact, stored on
  * the row itself and never inferred from a null `routine_name`.
  */
 export type GardenProposalOrigin = 'routine-run' | 'operator';
@@ -1159,7 +1159,7 @@ export type GardenProposalOrigin = 'routine-run' | 'operator';
  * GardenProposalView
  *
  * A garden proposal, its closure carried alongside it once one exists.
- * `routine_name` is nullable — an operator-authored proposal (blizzard#631) may name
+ * `routine_name` is nullable — an operator-authored proposal may name
  * no routine; `created_by` is set only for one.
  */
 export type GardenProposalView = {
@@ -1204,7 +1204,7 @@ export type GardenProposalView = {
  *
  * A worker's explicit git-commit declaration for one repo it touched.
  *
- * Carries no forge (issue #143): the origin verified against is read from the environment's
+ * Carries no forge: the origin verified against is read from the environment's
  * repo manifest. ``environment_id`` is required once a chunk holds several.
  */
 export type GitCommitDeclarationRequest = {
@@ -1275,7 +1275,7 @@ export type HarnessHealthListResponse = {
 /**
  * HarnessHealthView
  *
- * One configured harness binding's own computed health (blizzard#438) —
+ * One configured harness binding's own computed health —
  * ``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of
  * ``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,
  * ``unmapped_tier``, or ``selftest_failure`` when unavailable; ``declared_degradation`` when
@@ -1412,7 +1412,7 @@ export type HubConnectivityView = {
 /**
  * IntendedMigrationView
  *
- * A chunk's standing migration intent (issue #124) — editable at any non-terminal status and
+ * A chunk's standing migration intent — editable at any non-terminal status and
  * consulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved
  * server-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``
  * mode's landing target, null for ``auto``, whose landing is derived at consult time.
@@ -1436,7 +1436,7 @@ export type IntendedMigrationView = {
 /**
  * LeaseListResponse
  *
- * Active leases, then recently-closed ones (issue #28/#29).
+ * Active leases, then recently-closed ones.
  */
 export type LeaseListResponse = {
     /**
@@ -1449,7 +1449,7 @@ export type LeaseListResponse = {
  * LeaseView
  *
  * One lease — active or recently-closed — with its joined binding facts and
- * derived state (issue #28; closed leases added issue #29).
+ * derived state.
  */
 export type LeaseView = {
     /**
@@ -1521,7 +1521,7 @@ export type LeaseView = {
 /**
  * MigrationMode
  *
- * How a chunk's intended migration fires at its next transition (issue #124).
+ * How a chunk's intended migration fires at its next transition.
  *
  * ``AUTO`` fires only when the transition's own destination node name also exists on
  * the target graph; ``FORCED`` fires unconditionally onto the intent's ``node_name``.
@@ -1531,7 +1531,7 @@ export type MigrationMode = 'auto' | 'forced';
 /**
  * MigrationView
  *
- * One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto
+ * One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto
  * ``landed_node`` in ``to_graph`` — its own step, never a transition. A transition-borne source ends
  * the attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the
  * re-pinned model, null when the chunk kept its own. ``source`` attributes it.
@@ -1603,7 +1603,7 @@ export type OpenTakeoverListResponse = {
  * OpenTakeoverView
  *
  * One open operator takeover — ``GET /api/takeovers``, the stranded-takeover
- * recovery surface (issue #52): the chunk it holds, the ``takeover_id`` an
+ * recovery surface: the chunk it holds, the ``takeover_id`` an
  * interrupted terminal never PATCHed closed, and how long it has been held.
  */
 export type OpenTakeoverView = {
@@ -1632,7 +1632,7 @@ export type OpenTakeoverView = {
  *
  * ``local_reason`` is the local brake's own reason — a usage limit, the spend ceiling, or
  * ``None`` on a plain operator pause — the runner-local mirror of the reason the hub already
- * shows for a runner's local pause (blizzard#594).
+ * shows for a runner's local pause.
  */
 export type PauseStateView = {
     /**
@@ -1656,7 +1656,7 @@ export type PauseStateView = {
 /**
  * PauseView
  *
- * An open pause on a chunk (issue #46) — who set it and when, present only while ``paused=True``
+ * An open pause on a chunk — who set it and when, present only while ``paused=True``
  * is the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated
  * statuses in the derivation order, so this is the only carrier of a pause on a gated chunk.
  */
@@ -1714,7 +1714,7 @@ export type PrView = {
  * A question row with its derived answer *and delivery* state.
  *
  * ``answered`` and the answer fields derive from the presence of the answer row;
- * ``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact (issue #165).
+ * ``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact.
  */
 export type QuestionView = {
     /**
@@ -1909,7 +1909,7 @@ export type RouteView = {
 /**
  * RunnerAuthSessionView
  *
- * An own-identity read (``GET /api/auth/session``, issue #129): whether the human surface is gated
+ * An own-identity read (``GET /api/auth/session``): whether the human surface is gated
  * at all, and if so the signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub, whose
  * surface is authless; ``username`` is ``None`` when gated but no valid session is presented.
  */
@@ -2121,7 +2121,7 @@ export type SidechainSegmentView = {
  * StagedAttachment
  *
  * One of the lease's currently staged (not-yet-published) submissions —
- * ``GET /api/leases/{lease_id}/attachments`` (issue #169).
+ * ``GET /api/leases/{lease_id}/attachments``.
  */
 export type StagedAttachment = {
     /**
@@ -2149,7 +2149,7 @@ export type SubscriptionListResponse = {
 /**
  * SubscriptionView
  *
- * One declared subscription's runner-local diagnostics (blizzard#504), served by
+ * One declared subscription's runner-local diagnostics, served by
  * ``GET /api/subscriptions``. Every field past ``provider`` is ``None`` until a first
  * attempt; ``miss_reason`` is the closed-set reason when ``ok`` is ``False``; ``renewal`` is
  * that attempt's own renewal outcome — ``renewed``, ``failed:<reason>``, or ``None``.
@@ -2205,7 +2205,7 @@ export type TakeoverEndResponse = {
  * TakeoverOpenResponse
  *
  * ``POST /chunks/{id}/takeovers`` — ``command`` is exec'd verbatim in ``workdir``.
- * ``env`` (issue #258) is the bounded takeover env — the lease's ``BLIZZARD_*`` identity
+ * ``env`` is the bounded takeover env — the lease's ``BLIZZARD_*`` identity
  * (including the re-minted lease token) plus ``PATH``/``HOME``, never the daemon's full
  * child env. It rides only this body; the ``command`` string stays printable-safe.
  */
@@ -2337,7 +2337,7 @@ export type TranscriptResponse = {
  * TranscriptSegmentContentView
  *
  * One segment's decompressed turns, concatenated across its stored records in
- * turn-range order — the lazy per-segment content read (D12).
+ * turn-range order — the lazy per-segment content read.
  */
 export type TranscriptSegmentContentView = {
     /**
@@ -2361,8 +2361,8 @@ export type TranscriptSegmentContentView = {
 /**
  * TranscriptSegmentIndexEntry
  *
- * One segment's metadata row (D12) — byte counts and completion state, never turn
- * content. ``truncated`` is true iff any record was cap-rejected (D5) OR the runner
+ * One segment's metadata row — byte counts and completion state, never turn
+ * content. ``truncated`` is true iff any record was cap-rejected OR the runner
  * itself declared ``record_truncated`` on one, so a consumer can tell an incomplete
  * segment from a short one without fetching it.
  */
@@ -2424,7 +2424,7 @@ export type TranscriptSegmentIndexEntry = {
 /**
  * TranscriptSegmentIndexView
  *
- * The per-chunk segment discovery read (D12) — unreachable content, only what a
+ * The per-chunk segment discovery read — unreachable content, only what a
  * caller needs to then ask for one segment's turns.
  */
 export type TranscriptSegmentIndexView = {
@@ -2444,7 +2444,7 @@ export type TranscriptSegmentIndexView = {
  * One accepted transition in a chunk's history: the edge a node-step took — origin node, the
  * judgement choice that routed it, destination — oldest first on the detail.
  * ``from_node_name``/``to_node_name`` are the nodes' human graph names, null when unresolvable.
- * ``graph_id``/``graph_name`` name the graph this step happened in (issue #90), both null on old rows.
+ * ``graph_id``/``graph_name`` name the graph this step happened in, both null on old rows.
  */
 export type TransitionView = {
     /**
@@ -2488,10 +2488,10 @@ export type TransitionView = {
 /**
  * TurnSegmentView
  *
- * One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted (D9),
+ * One normalized turn, carried in full. ``index`` is **segment-relative** and producer-minted,
  * stable across a segment's batches — EXCEPT under ``sidechain.turns``, where it restarts at 0 within
  * that one sidechain, and on a lease transcript read, where it numbers only the turns that read
- * returned and slides with the recency window (blizzard#248 D1). ``kind`` is closed.
+ * returned and slides with the recency window. ``kind`` is closed.
  */
 export type TurnSegmentView = {
     /**
@@ -2527,7 +2527,7 @@ export type TurnSegmentView = {
  *
  * A proposed update to an existing work item — its ``{source, ref}`` pointer plus
  * evidence to append. Unresolvable at apply time (a closed, withdrawn, or nonexistent
- * item) is recorded, not refused (D5) — resolving the pointer is left to materialization.
+ * item) is recorded, not refused — resolving the pointer is left to materialization.
  */
 export type UpdateWorkItemProposal = {
     /**
@@ -2579,7 +2579,7 @@ export type ValidationError = {
 /**
  * WorkItemAuthorView
  *
- * Who filed a hub-owned work item, legible for display (blizzard#362) — ``user_id``
+ * Who filed a hub-owned work item, legible for display — ``user_id``
  * and ``login`` set only for ``kind == "user"``; ``runner_id``/``chunk_id``/``node_name``
  * — the proposing runner, chunk, and node — set only for ``kind == "fleet"``.
  */
@@ -2614,7 +2614,7 @@ export type WorkItemAuthorView = {
  * WorkItemEntry
  *
  * One pointer's pass-through work item, vendor-native — title, body, comments, and,
- * only when the source has them to give (blizzard#362), ``author``/``stated_priority``.
+ * only when the source has them to give, ``author``/``stated_priority``.
  * ``label``/``web_url`` are the legible pointer label and browser address, both null when no
  * configured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``.
  */
@@ -2662,7 +2662,7 @@ export type WorkItemEntry = {
 /**
  * WorkItemPriority
  *
- * The three stated-priority values a create or edit may set (blizzard#358).
+ * The three stated-priority values a create or edit may set.
  */
 export type WorkItemPriority = 'low' | 'normal' | 'high';
 

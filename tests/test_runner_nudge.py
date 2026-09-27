@@ -1,4 +1,4 @@
-"""ADVANCE resumes a premature exit instead of judging it (issues #113, #143, #422).
+"""ADVANCE resumes a premature exit instead of judging it.
 
 A real ADVANCE tick against a tmp store and virtual clock, proving a step exiting with a
 required `produces:` name unattached is resumed, not judged, and that "at most one resume
@@ -95,7 +95,7 @@ class _AttachingOnResumeHarness(FakeHarness):
 class _DeclaringGitCommitOnResumeHarness(FakeHarness):
     """A :class:`FakeHarness` whose ``resume_with_message`` declares a git commit on the
     worker's behalf, standing in for a worker that pushes and declares in response to the
-    wake (issue #143 re-review)."""
+    wake."""
 
     def __init__(
         self,
@@ -191,7 +191,7 @@ def _seed_exited_lease(
 
 @pytest.mark.component
 def test_unmet_produces_exit_resumes_instead_of_being_judged(tmp_path: Path) -> None:
-    """Reconstructs the observed premature-exit shape (blizzard#422): a clean exit with an
+    """Reconstructs the observed premature-exit shape: a clean exit with an
     unattached required `produces:` name is resumed, not judged — no verdict elicited, no
     attempt failed, no `checks:` run, retry count and epoch untouched."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -494,7 +494,7 @@ def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
     ctx = replace(ctx, stores=replace(ctx.stores, attachments=attachments_store))  # type: ignore[arg-type]
 
     Advance(ctx).run()  # launches the detached elicitation — the produces-coverage check runs here
-    assert attachments_store.attachment_names_for_lease_calls == ["lease_r"]  # Phase 3 hoist: names only
+    assert attachments_store.attachment_names_for_lease_calls == ["lease_r"]  # names only
     assert attachments_store.attachments_for_lease_calls == []  # no content read for this check
 
     Advance(ctx).run()  # collects it — the fake pid reads dead by default; `_judged` harvests assets
@@ -514,7 +514,7 @@ def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_nudge_message_branches_on_kind_and_stays_harness_inert() -> None:
-    """`ProducesReconciler.nudge_message` (issue #143) names the kind-appropriate declaration verb
+    """`ProducesReconciler.nudge_message` names the kind-appropriate declaration verb
     per unmet spec, never the deprecated `attach` alias, and every rendered line is
     `#`-prefixed so the mock harness's prompt-is-program `exec` still sees a legal no-op."""
     missing = [

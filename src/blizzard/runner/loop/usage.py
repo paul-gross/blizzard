@@ -40,11 +40,11 @@ class UsageRecorder:
     workspace_root: str
     #: Required; every recorded session's owner resolves through this registry, with no single-harness fallback.
     harnesses: IHarnessRegistry
-    #: The generation's own boundary (blizzard#437) — the range-read fallback's start.
+    #: The generation's own boundary — the range-read fallback's start.
     invocation_boundaries: IReadInvocationBoundaryRepository
     #: The transcripts lane's on/off switch — ``False`` disables only the envelope-less usage fallback.
     transcripts_wired: bool = False
-    #: The SSE publish seam (D2, blizzard#317), typed against the Protocol
+    #: The SSE publish seam, typed against the Protocol
     #: (``bzh:dependency-inversion``); ``None`` on a loop-only caller, a no-op there.
     events: IRunnerEventPublisher | None = None
 
@@ -69,7 +69,7 @@ class UsageRecorder:
         needs_transcript = self.transcripts_wired and harness.needs_usage_transcript(judge_output, model=model)
         lines = self.judge_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
         if model is None and lines:
-            # blizzard#629: the lease asked for nothing, so ask the judge's own transcript
+            # The lease asked for nothing, so ask the judge's own transcript
             # range what actually ran — the same rule `_worker_sample` applies below.
             model = harness.observed_model(lines)
         judge_sample = harness.parse_usage(judge_output, "judge", model=model, transcript_lines=lines)
@@ -78,7 +78,7 @@ class UsageRecorder:
 
     def record_sample(self, lease: LeaseRecord, *, generation: int, sample: UsageSample) -> None:
         """Make one already-parsed sample durable against this lease's generation, stamped
-        with the lease's own recorded harness identity (blizzard#441, D4) — never a fresh
+        with the lease's own recorded harness identity — never a fresh
         resolution that may since have changed."""
         session = lease.session
         if session is not None:
@@ -123,7 +123,7 @@ class UsageRecorder:
         )
         lines = self.worker_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
         if model is None and lines:
-            # blizzard#629: the lease asked for nothing, so read the range once and observe what ran —
+            # The lease asked for nothing, so read the range once and observe what ran —
             # before `parse_usage`, which prices a model-less stdout envelope only off this `model`.
             model = harness.observed_model(lines)
         sample = harness.parse_usage(output, kind, model=model, transcript_lines=lines) if output else None
@@ -138,8 +138,8 @@ class UsageRecorder:
     def worker_transcript_lines(
         self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int
     ) -> list[str]:
-        """This generation's own worker-starting-to-judge-or-tail transcript range, raw
-        (blizzard#594) — the read half of :meth:`_worker_sample`'s own fallback, extracted
+        """This generation's own worker-starting-to-judge-or-tail transcript range,
+        raw — the read half of :meth:`_worker_sample`'s own fallback, extracted
         so a usage-limit classification reads the identical range a usage sum would sum."""
         session = lease.session
         if session is None or not self.transcripts_wired:
@@ -147,11 +147,11 @@ class UsageRecorder:
         boundary = self._worker_boundary(lease.lease_id, generation)
         if boundary is None:
             # No durable start for this exact generation: never charge the whole session to
-            # one generation (blizzard#437 Phase 4) — no boundary, no read.
+            # one generation — no boundary, no read.
             return []
         if boundary.start_unreadable:
             # A genuinely failed tail read must never silently read from zero, re-reading an
-            # earlier generation's already-recorded lines (F2/F10).
+            # earlier generation's already-recorded lines.
             return []
         return self._read_range(
             lease.lease_id, session, bindings, generation=generation, start=boundary, end_kind="judge"
@@ -160,7 +160,7 @@ class UsageRecorder:
     def judge_transcript_lines(
         self, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int
     ) -> list[str]:
-        """This generation's own judge-boundary-to-tail transcript range, raw (blizzard#594) —
+        """This generation's own judge-boundary-to-tail transcript range, raw —
         the judge's own turns, read the same way :meth:`worker_transcript_lines` reads the
         worker's; there is no boundary after a judge's own within one generation, so the
         end is always the tail."""
@@ -201,7 +201,7 @@ class UsageRecorder:
             end_boundary = self.invocation_boundaries.boundary(lease_id, generation, end_kind)
             if end_boundary is not None and end_boundary.start_unreadable:
                 # Its own start could not be read: falling back to "tail right now" risks the
-                # judge's own later turns bleeding into this range (F10) — skip it instead.
+                # judge's own later turns bleeding into this range — skip it instead.
                 return []
             if end_boundary is not None and end_boundary.start_position is not None:
                 end = TranscriptPosition(end_boundary.start_position)

@@ -109,8 +109,8 @@ export class GlanceView {
   readonly spend = input<FleetSpendView | null>(null);
   readonly spendState = input.required<KitAsyncStateValue>();
 
-  /** A spend total's full token count — every class summed (issue #59's
-   * `ChunkUsageTotalView`/`FleetSpendView` both carry the same four fields),
+  /** A spend total's full token count — every class summed
+   * (`ChunkUsageTotalView`/`FleetSpendView` both carry the same four fields),
    * matching `chunk-token-breakdown.ts`'s own fold. */
   protected totalTokens(s: FleetSpendView): number {
     return s.input_tokens + s.output_tokens + s.cache_read_tokens + s.cache_create_tokens;

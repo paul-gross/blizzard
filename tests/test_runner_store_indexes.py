@@ -1,4 +1,4 @@
-"""Runner-store read indexes (issue #520, component tier), mirroring
+"""Runner-store read indexes (component tier), mirroring
 ``tests/test_chunk_fact_table_indexes.py``'s shape: (a) five real reads each plan as an
 index search off their own captured statement, never a table scan; (b) a plan-capture sweep
 over a multi-tick loop run asserts no runner-store ``SELECT`` falls back to sqlite's own

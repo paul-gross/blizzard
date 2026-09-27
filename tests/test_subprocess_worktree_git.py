@@ -1,5 +1,5 @@
 """Component-tier proof that the real worktree-git adapter is immune to the
-detached-HEAD wedge (issue #143, Phase 6).
+detached-HEAD wedge.
 
 Drives the real ``git`` CLI against a worktree left in detached HEAD, and confirms
 ``verify`` neither reads nor cares about the worktree's own HEAD: it takes the origin
@@ -136,7 +136,7 @@ def test_verify_needs_no_working_directory_at_all(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_subprocess_worktree_git_has_no_push_or_head_inference_methods() -> None:
-    """Structural pin (issue #143, Phase 6): the push method and ``--abbrev-ref HEAD``
+    """Structural pin: the push method and ``--abbrev-ref HEAD``
     branch inference exist on neither the real adapter nor the ``IWorktreeGit`` Protocol
     — a re-introduction fails to typecheck and raises ``AttributeError`` when called."""
     adapter = SubprocessWorktreeGit()

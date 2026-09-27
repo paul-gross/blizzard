@@ -1,5 +1,5 @@
-"""The transition-time consult of a chunk's standing migration intent (issue #124,
-Phase 4), component tier over the real HTTP surface.
+"""The transition-time consult of a chunk's standing migration intent, component
+tier over the real HTTP surface.
 
 A claimed chunk's `PATCH .../intended_migration` sets the intent; an ordinary
 completion's transition either fires it (a `chunk_migrations` fact, re-pinned graph,
@@ -132,7 +132,7 @@ nodes:
           to: ship
 """
 
-# `deliver` (the auto-match name) is hub-executed (issue #111); `success` routes onward
+# `deliver` (the auto-match name) is hub-executed; `success` routes onward
 # to a non-terminal runner node so the retained route is what the test observes.
 _TARGET_HUB_YAML = """
 name: triage-hub

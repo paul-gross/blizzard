@@ -1,5 +1,5 @@
 """runner local pause reason — the local-pause fact's cause column, nullable so a manual
-pause and every pre-#61 row read back bare (hub store tree, issue #61)
+pause and every pre-#61 row read back bare (hub store tree)
 
 Revision ID: 20260718_0930_hub_runner_local_pause_reason
 Revises: 20260717_2330_hub_usage_facts

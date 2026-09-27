@@ -111,7 +111,7 @@ def test_basic_workspace_config_round_trip_and_provider_validation(tmp_path: Pat
 
 @pytest.mark.unit
 def test_workspace_prompt_defaults_empty_and_round_trips_inline(tmp_path: Path) -> None:
-    # Absent on a fresh scaffold — a table-only spawn (issue #17); a multi-line inline
+    # Absent on a fresh scaffold — a table-only spawn; a multi-line inline
     # prompt round-trips through to_toml (json-escaped basic string) intact.
     root = tmp_path / "runner"
     root.mkdir()
@@ -203,8 +203,8 @@ def test_workspace_prompt_env_seeds_scaffold(tmp_path: Path, monkeypatch: pytest
 
 @pytest.mark.unit
 def test_runner_prompt_defaults_empty_and_round_trips_inline(tmp_path: Path) -> None:
-    # Absent on a fresh scaffold — the baked DEFAULT_BLIZZARD_PREAMBLE is used instead
-    # (issue #103); a multi-line inline prompt round-trips through to_toml intact.
+    # Absent on a fresh scaffold — the baked DEFAULT_BLIZZARD_PREAMBLE is used instead;
+    # a multi-line inline prompt round-trips through to_toml intact.
     root = tmp_path / "runner"
     root.mkdir()
     scaffolded = RunnerConfig.scaffold(root)
@@ -260,7 +260,7 @@ def test_missing_runner_prompt_file_raises(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_transcripts_root_defaults_empty_and_round_trips(tmp_path: Path) -> None:
     # Empty on a fresh scaffold — resolved to ~/.claude/projects at the composition
-    # root (issue #29), never here; a configured value round-trips through to_toml.
+    # root, never here; a configured value round-trips through to_toml.
     root = tmp_path / "runner"
     root.mkdir()
     assert RunnerConfig.scaffold(root).transcripts_root == ""
@@ -281,7 +281,7 @@ def test_transcripts_root_env_seeds_scaffold(tmp_path: Path, monkeypatch: pytest
 
 @pytest.mark.unit
 def test_transcripts_ship_defaults_false(tmp_path: Path) -> None:
-    # Off by default (D5, issue #246) — a fresh scaffold ships no transcript content.
+    # Off by default — a fresh scaffold ships no transcript content.
     assert RunnerConfig.scaffold(tmp_path).transcripts_ship is False
 
 
@@ -315,7 +315,7 @@ def test_transcripts_ship_parses_from_a_hand_written_transcripts_table(tmp_path:
 
 @pytest.mark.unit
 def test_transcripts_ship_rejects_a_non_boolean_typo_rather_than_coercing_it(tmp_path: Path) -> None:
-    """review F10, blizzard#246: ``bool("false")`` is truthy — a typo'd string on the one
+    """``bool("false")`` is truthy — a typo'd string on the one
     switch gating the entire lane must not silently turn it ON."""
     from blizzard.runner.config import ConfigError
 
@@ -330,7 +330,7 @@ def test_transcripts_ship_rejects_a_non_boolean_typo_rather_than_coercing_it(tmp
 
 @pytest.mark.unit
 def test_worker_stdout_retention_days_defaults_to_fourteen(tmp_path: Path) -> None:
-    # issue #58 — long enough to investigate a stalled or rate-limited invocation days later.
+    # Long enough to investigate a stalled or rate-limited invocation days later.
     assert RunnerConfig.scaffold(tmp_path).worker_stdout_retention_days == 14
 
 
@@ -364,7 +364,7 @@ def test_worker_stdout_retention_days_parses_from_a_hand_written_table(tmp_path:
 
 @pytest.mark.unit
 def test_queue_strict_defaults_false(tmp_path: Path) -> None:
-    # Off by default (blizzard#459) — a fresh scaffold reaches past a marked head.
+    # Off by default — a fresh scaffold reaches past a marked head.
     assert RunnerConfig.scaffold(tmp_path).queue_strict is False
 
 
@@ -398,7 +398,7 @@ def test_queue_strict_parses_from_a_hand_written_queue_table(tmp_path: Path) -> 
 
 @pytest.mark.unit
 def test_queue_strict_rejects_a_non_boolean_typo_rather_than_coercing_it(tmp_path: Path) -> None:
-    """Mirrors ``transcripts.ship`` (review F10, blizzard#246): ``bool("false")`` is truthy —
+    """Mirrors ``transcripts.ship``: ``bool("false")`` is truthy —
     a typo'd string on this selection switch must not silently turn strictness on."""
     from blizzard.runner.config import ConfigError
 
@@ -413,7 +413,7 @@ def test_queue_strict_rejects_a_non_boolean_typo_rather_than_coercing_it(tmp_pat
 
 @pytest.mark.unit
 def test_chunk_cap_usd_defaults_absent(tmp_path: Path) -> None:
-    # No `[cost]` table at all on a fresh scaffold — absent means no cap (issue #61a).
+    # No `[cost]` table at all on a fresh scaffold — absent means no cap.
     assert RunnerConfig.scaffold(tmp_path).chunk_cap_usd is None
 
 
@@ -448,7 +448,7 @@ def test_chunk_cap_usd_parses_from_a_hand_written_cost_table(tmp_path: Path) -> 
 
 @pytest.mark.unit
 def test_runner_ceiling_usd_defaults_absent(tmp_path: Path) -> None:
-    # No `[cost]` table at all on a fresh scaffold — absent means no ceiling (issue #61b).
+    # No `[cost]` table at all on a fresh scaffold — absent means no ceiling.
     config = RunnerConfig.scaffold(tmp_path)
     assert config.runner_ceiling_usd is None
     assert config.runner_ceiling_window_hours == DEFAULT_RUNNER_CEILING_WINDOW_HOURS
@@ -505,7 +505,7 @@ def test_runner_ceiling_window_hours_defaults_when_ceiling_set_but_window_omitte
 @pytest.mark.unit
 def test_external_usage_credentials_path_defaults_none(tmp_path: Path) -> None:
     # No `[external_subscription_usage]` table at all — absent means the adapter's own
-    # real-credential-store default, not a scratch/disabled path (issue #218).
+    # real-credential-store default, not a scratch/disabled path.
     assert RunnerConfig.scaffold(tmp_path).external_usage_credentials_path is None
 
 
@@ -527,7 +527,7 @@ def test_external_usage_credentials_path_round_trips_through_to_toml_and_load(tm
 @pytest.mark.unit
 def test_claude_code_credentials_path_defaults_none(tmp_path: Path) -> None:
     # Absent means the health probe's own default (`~/.claude/.credentials.json`),
-    # distinct from `external_usage_credentials_path` (blizzard#438).
+    # distinct from `external_usage_credentials_path`.
     assert RunnerConfig.scaffold(tmp_path).claude_code_credentials_path is None
 
 
@@ -548,7 +548,7 @@ def test_claude_code_credentials_path_round_trips_through_to_toml_and_load(tmp_p
 
 @pytest.mark.unit
 def test_opencode_auth_path_defaults_none(tmp_path: Path) -> None:
-    # Absent means the health probe's own default discovery path (blizzard#438).
+    # Absent means the health probe's own default discovery path.
     assert RunnerConfig.scaffold(tmp_path).opencode_auth_path is None
 
 
@@ -570,7 +570,7 @@ def test_opencode_auth_path_round_trips_through_to_toml_and_load(tmp_path: Path)
 @pytest.mark.unit
 def test_worker_env_passthrough_defaults_absent(tmp_path: Path) -> None:
     # No `[worker]` table at all on a fresh scaffold — absent means no operator
-    # extension to the spawn-environment allowlist (issue #88).
+    # extension to the spawn-environment allowlist.
     assert RunnerConfig.scaffold(tmp_path).worker_env_passthrough == ()
 
 
@@ -752,7 +752,7 @@ def test_work_source_duplicate_name_raises(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_work_source_named_hub_raises(tmp_path: Path) -> None:
-    """``hub`` is reserved for the built-in, always-seated source (issue #357)."""
+    """``hub`` is reserved for the built-in, always-seated source."""
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
@@ -848,7 +848,7 @@ def test_work_source_annotate_non_bool_raises_naming_the_source(tmp_path: Path) 
 
 @pytest.mark.unit
 def test_a_leftover_close_key_fails_the_load_naming_the_removal(tmp_path: Path) -> None:
-    """blizzard#383: closure is unconditional now — a config still hand-carrying the
+    """Closure is unconditional now — a config still hand-carrying the
     retired `close` key fails fast, naming the removal, rather than silently parsing it
     away."""
     root = tmp_path / "hub"
@@ -888,7 +888,7 @@ def test_annotation_interval_seconds_absent_from_toml_defaults_to_120(tmp_path: 
 
 @pytest.mark.unit
 def test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key(tmp_path: Path) -> None:
-    """Issue #55's deliberate no-alias: a config still carrying the pre-rename
+    """Deliberate no-alias: a config still carrying the pre-rename
     `[[pm_source]]` key fails fast, naming the new key, rather than silently parsing as
     zero sources."""
     root = tmp_path / "hub"
@@ -916,7 +916,7 @@ def test_a_leftover_pm_source_block_fails_even_beside_a_valid_work_source(tmp_pa
 
 
 # --------------------------------------------------------------------------- #
-# `runner_auth_mode` — the runner-authentication rollout brake (issue #86a).
+# `runner_auth_mode` — the runner-authentication rollout brake.
 
 
 @pytest.mark.unit
@@ -956,7 +956,7 @@ def test_runner_auth_mode_unknown_value_raises(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `route_token_mode` — the route-capability-token rollout brake (issue #84b).
+# `route_token_mode` — the route-capability-token rollout brake.
 
 
 @pytest.mark.unit
@@ -1007,7 +1007,7 @@ def test_route_token_mode_enforces_independently_of_runner_auth_mode(tmp_path: P
 
 
 # --------------------------------------------------------------------------- #
-# `produces_mode` — the produces-artifact rollout brake (issue #113 phase 5).
+# `produces_mode` — the produces-artifact rollout brake.
 
 
 @pytest.mark.unit
@@ -1059,7 +1059,7 @@ def test_produces_mode_enforces_independently_of_the_other_modes(tmp_path: Path)
 
 
 # --------------------------------------------------------------------------- #
-# `token_env` / `hub_token` — the runner presents its bearer token (issue #86b).
+# `token_env` / `hub_token` — the runner presents its bearer token.
 
 
 @pytest.mark.unit
@@ -1116,7 +1116,7 @@ def test_token_env_absent_from_toml_defaults_to_bz_hub_token(tmp_path: Path) -> 
     assert RunnerConfig.load(root).token_env == "BZ_HUB_TOKEN"
 
 
-# --- trusted_proxies (issue #130) -------------------------------------------------
+# --- trusted_proxies -------------------------------------------------
 
 
 @pytest.mark.unit
@@ -1169,7 +1169,7 @@ def test_runner_trusted_proxies_rejects_a_malformed_entry(tmp_path: Path) -> Non
 
 
 # --------------------------------------------------------------------------- #
-# `follow_latest` — the fleet-wide auto-migration policy default (issue #164).
+# `follow_latest` — the fleet-wide auto-migration policy default.
 
 
 @pytest.mark.unit
@@ -1263,7 +1263,7 @@ def test_close_forge_writes_enabled_non_boolean_raises(tmp_path: Path, value: st
 
 
 # --------------------------------------------------------------------------- #
-# `BZ_HUB_DB_URL` / `BZ_HUB_HOST` / `BZ_HUB_PORT` — load-time env overrides (issue #187).
+# `BZ_HUB_DB_URL` / `BZ_HUB_HOST` / `BZ_HUB_PORT` — load-time env overrides.
 
 
 @pytest.mark.unit
@@ -1365,7 +1365,7 @@ def test_hub_db_url_honored_identically_by_host_and_migrate(tmp_path: Path, monk
     init_environment(root)  # scaffolds + migrates the default sqlite store
 
     # Inside root: an override pointing elsewhere is exactly what the --dir isolation
-    # guard (issue #234) exists to catch — see test_config.py's own guard tests below.
+    # guard exists to catch — see test_config.py's own guard tests below.
     override_url = f"sqlite:///{root / 'override.db'}"
     monkeypatch.setenv(HUB_ENV_DB_URL, override_url)
 
@@ -1377,7 +1377,7 @@ def test_hub_db_url_honored_identically_by_host_and_migrate(tmp_path: Path, monk
 
 
 # --------------------------------------------------------------------------- #
-# The db_url --dir isolation guard (issue #234).
+# The db_url --dir isolation guard.
 
 
 @pytest.mark.unit
@@ -1453,7 +1453,7 @@ def test_postgres_db_url_bypasses_the_guard(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_fresh_scaffold_omits_db_url_from_to_toml(tmp_path: Path) -> None:
-    # issue #234: a fresh scaffold's db_url is the resolved default, which `to_toml`
+    # A fresh scaffold's db_url is the resolved default, which `to_toml`
     # omits rather than serializing an absolute path a copied dir shouldn't carry.
     root = tmp_path / "hub"
     root.mkdir()
@@ -1472,7 +1472,7 @@ def test_load_falls_back_to_default_db_url_when_key_is_absent(tmp_path: Path) ->
 
 @pytest.mark.unit
 def test_a_freshly_scaffolded_dir_copied_elsewhere_re_derives_its_own_db_url(tmp_path: Path) -> None:
-    """Issue #234: `cp -r` a freshly-inited runtime dir and it is self-contained — the
+    """`cp -r` a freshly-inited runtime dir and it is self-contained — the
     copy's db_url points into the copy, not back at the original, with no
     `--allow-external-db` needed."""
     import shutil
@@ -1490,7 +1490,7 @@ def test_a_freshly_scaffolded_dir_copied_elsewhere_re_derives_its_own_db_url(tmp
     assert Path(copy_config.db_url.removeprefix("sqlite:///")).exists()
 
 
-# --- the lane's byte ceilings (blizzard#338) -----------------------------------------
+# --- the lane's byte ceilings -----------------------------------------
 
 
 @pytest.mark.unit
@@ -1564,7 +1564,7 @@ def test_a_transcript_cap_refuses_a_non_positive_or_non_integer_value(tmp_path: 
         RunnerConfig.load(root)
 
 
-# --- the hub's own ingest ceilings (blizzard#338) ------------------------------------
+# --- the hub's own ingest ceilings ------------------------------------
 
 
 @pytest.mark.unit
@@ -1629,7 +1629,7 @@ def test_a_hub_ingest_cap_refuses_a_non_positive_or_non_integer_value(tmp_path: 
 
 @pytest.mark.unit
 def test_the_configured_hub_caps_reach_the_wired_ingest_service(tmp_path: Path) -> None:
-    """The resolution seam itself (blizzard#338): a configured ceiling must reach the
+    """The resolution seam itself: a configured ceiling must reach the
     service, and an unconfigured one must fall back to the domain default rather than None."""
     from blizzard.hub.app import _transcript_caps
     from blizzard.hub.config import HubConfig, TranscriptCapsConfig
@@ -1648,7 +1648,7 @@ def test_the_configured_hub_caps_reach_the_wired_ingest_service(tmp_path: Path) 
 
 
 # --------------------------------------------------------------------------- #
-# `[[subscription]]` — declared provider subscriptions (blizzard#436).
+# `[[subscription]]` — declared provider subscriptions.
 
 
 @pytest.mark.unit
@@ -1797,7 +1797,7 @@ def test_an_empty_declaration_slug_raises(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_a_singular_subscription_table_raises_instead_of_silently_reading_as_zero(tmp_path: Path) -> None:
     # `[subscription]` (no doubled brackets) parses as a dict, not a list — a plausible
-    # typo that must not silently fall back to the legacy table (blizzard#436).
+    # typo that must not silently fall back to the legacy table.
     root = tmp_path / "runner"
     root.mkdir()
     (root / "blizzard-runner.toml").write_text(

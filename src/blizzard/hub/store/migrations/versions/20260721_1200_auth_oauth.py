@@ -1,4 +1,4 @@
-"""auth_state / auth_facts — the provider-login seam (issue #92, hub store tree). Created ``checkfirst``;
+"""auth_state / auth_facts — the provider-login seam (hub store tree). Created ``checkfirst``;
 ``auth_state`` is a frozen local literal, not a ``schema.py`` import (``bzh:frozen-revisions``).
 
 Revision ID: 20260721_1200_hub_auth_oauth

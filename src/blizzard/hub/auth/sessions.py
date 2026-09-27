@@ -1,5 +1,4 @@
-"""The session repository seam — read/write Protocols (issue #91,
-``bzh:repository-split``).
+"""The session repository seam — read/write Protocols (``bzh:repository-split``).
 
 Sessions are looked up by their **hashed** id; the write side is reserved for the
 service layer (``bzh:controller-read-only``).

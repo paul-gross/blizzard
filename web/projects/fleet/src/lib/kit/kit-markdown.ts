@@ -4,7 +4,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { parseMarkdown } from './markdown-parse';
 
 /**
- * A work-item body's bounded-subset markdown, rendered (blizzard#362) — headings,
+ * A work-item body's bounded-subset markdown, rendered — headings,
  * paragraphs, fenced/inline code, bullet/ordered lists, links, bold, and italic; anything
  * outside that subset renders as its literal source text. Presentational and input-only,
  * so a caller hands it raw text and nothing more (`bzh:frontend-kit-floor`).

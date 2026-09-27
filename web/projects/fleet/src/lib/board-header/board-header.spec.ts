@@ -65,7 +65,7 @@ describe('BoardHeader', () => {
     // so the two cannot drift apart; a lane added there appears in both or neither.
     const el = await render([]);
     const cells = [...el.querySelectorAll('[data-stat]')].map((c) => c.getAttribute('data-stat'));
-    // Ready is one of those lane cells now (issue #137), not a cell of its own
+    // Ready is one of those lane cells now, not a cell of its own
     // ahead of them — the board grew the READY column it counts.
     expect(cells).toEqual(['total', ...LANES.map((l) => l.key)]);
   });
@@ -251,7 +251,7 @@ describe('BoardHeader', () => {
   });
 
   /*
-   * The tiered collapse (issue #163). jsdom parses `@container` rules but never
+   * The tiered collapse. jsdom parses `@container` rules but never
    * evaluates them, so these resolve the component's own shipped rules at a
    * given container width through `resolveContainerStyle` rather than trusting
    * `getComputedStyle`, which would report the wide-tier value at every width.
@@ -342,7 +342,7 @@ describe('BoardHeader', () => {
       const strip = el.querySelector<HTMLElement>('[data-testid="board-header-stats"]')!;
       // `min-width: 0` + `overflow: hidden` is what lets the strip clip instead
       // of forcing the row wider than the viewport-locked shell. The outsized
-      // `flexShrink` (issue #171's shell sweep) makes the strip absorb the
+      // `flexShrink` (a shell sweep) makes the strip absorb the
       // *entire* deficit against `.trailing` before it gives up a pixel: at
       // equal shrink factors the two split it in proportion to their own
       // widths, and `.trailing`'s share — a handful of px in the narrow band

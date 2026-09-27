@@ -793,8 +793,8 @@ def test_configuration_probe_requires_a_terminal_configured_denial(tmp_path: Pat
 
 @pytest.mark.parametrize("version", ["1.18.25-beta.1", "1.18.25 extra"])
 def test_version_suffix_or_additional_output_blocks_before_scratch_creation(tmp_path: Path, version: str) -> None:
-    """A pre-release suffix stays excluded from the admitted range regardless (D2's
-    ``prereleases=False``), and multi-token ``--version`` output never even normalizes to a
+    """A pre-release suffix stays excluded from the admitted range regardless (the range
+    check's ``prereleases=False``), and multi-token ``--version`` output never even normalizes to a
     parseable version — both block before the scratch repository is ever created."""
     mock_opencode = _mock_opencode()
     probe, scratch = _probe(mock_opencode, tmp_path, version=version)

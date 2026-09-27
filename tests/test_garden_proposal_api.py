@@ -1,4 +1,4 @@
-"""Garden-proposal routes — the read half (blizzard#390, component tier).
+"""Garden-proposal routes — the read half (component tier).
 
 Seeded straight through ``GardenProposalStore`` since no route writes a proposal yet
 (passing/accepting is a sibling issue), the ``tests/test_finding_api.py`` shape."""
@@ -88,7 +88,7 @@ def test_get_unknown_id_is_404(tmp_path: Path) -> None:
     assert resp.status_code == 404, resp.text
 
 
-# --- paging: sort order and the limit/cursor contract (blizzard#526) --------------
+# --- paging: sort order and the limit/cursor contract --------------
 
 
 def test_paged_concatenation_matches_the_full_order_through_a_created_at_tie(tmp_path: Path) -> None:

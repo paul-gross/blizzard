@@ -1,6 +1,6 @@
 """The runner's SSO federation bounce end to end, over the app's own TestClient — ``GET
 /api/auth/login``, ``POST /api/auth/callback``, the three-tenant partition, the authless-under-none
-fallback (component tier, issue #95), and per-request declared-origin selection (issue #287)."""
+fallback (component tier), and per-request declared-origin selection."""
 
 from __future__ import annotations
 
@@ -129,7 +129,7 @@ def test_the_web_surface_bounces_to_login_when_the_hub_runs_an_idp_surface(tmp_p
 
 
 def test_the_worker_hook_lane_stays_ungated_over_tcp_even_with_the_idp_surface_active(tmp_path: Path) -> None:
-    """The worker-hook lane (issue #95) stays reachable with no SSO session even under
+    """The worker-hook lane stays reachable with no SSO session even under
     an oauth-mode hub, since workers call it over TCP and cannot SSO-bounce."""
     _private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
@@ -148,7 +148,7 @@ def test_the_human_lane_api_is_gated_401_over_tcp_under_oauth(tmp_path: Path) ->
 
 
 def test_the_human_lane_api_is_open_when_the_hub_runs_no_idp_surface(tmp_path: Path) -> None:
-    """Under a ``none``-mode hub the runner's human surface is authless (issue #95): the
+    """Under a ``none``-mode hub the runner's human surface is authless: the
     same reads reach their handler, never ``401``."""
     client = _build_app(tmp_path, oauth_enabled=False)
     for path in ("/api/facts", "/api/asks", "/api/environments", "/api/runner", "/api/leases"):
@@ -248,7 +248,7 @@ def _bounce_in(client: TestClient, private_key: object, *, jti: str) -> None:
 
 
 def test_logout_clears_the_session_and_the_next_visit_bounces(tmp_path: Path) -> None:
-    """`POST /api/auth/logout` clears the runner session cookie (issue #129): the served
+    """`POST /api/auth/logout` clears the runner session cookie: the served
     surface, reachable while the session was live, bounces to `GET /api/auth/login`
     again on the next visit, and the panel's JSON reads `401`."""
     private_key, jwk = _keypair()
@@ -283,7 +283,7 @@ def test_logout_is_a_harmless_no_op_without_a_session(tmp_path: Path) -> None:
 
 def test_session_read_reports_the_signed_in_username_under_oauth(tmp_path: Path) -> None:
     """`GET /api/auth/session` carries the hub username behind the panel's identity/
-    logout control (issue #129) once a session is established."""
+    logout control once a session is established."""
     private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
     _bounce_in(client, private_key, jti="jti-session-1")
@@ -312,7 +312,7 @@ def test_session_read_reports_authless_under_a_none_mode_hub(tmp_path: Path) -> 
     assert resp.json() == {"auth_enabled": False, "username": None}
 
 
-# --- forwarded-header trust behind a reverse proxy (issue #130) --------------------
+# --- forwarded-header trust behind a reverse proxy --------------------
 
 _PROXY_IP = "10.0.0.4"
 _DIRECT_IP = "203.0.113.9"
@@ -399,7 +399,7 @@ def test_bounce_cookies_stay_lax_on_a_plain_http_non_loopback_runner(tmp_path: P
     assert "secure" not in header
 
 
-# --- Multi-origin callback selection (issue #287) ------------------------------
+# --- Multi-origin callback selection ------------------------------
 
 _TAILNET = "https://tailnet.example:8431"
 _LOOPBACK = "http://127.0.0.1:8431"

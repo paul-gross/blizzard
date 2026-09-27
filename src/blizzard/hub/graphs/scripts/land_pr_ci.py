@@ -25,7 +25,7 @@ from blizzard.hub.graphs.scripts.land_common import (
 _LANDED = "landed"
 _CONFLICT = "conflict"
 _PENDING = "pending"
-# The graph's authored `failure` choice (issue #232) — printed as an outcome, unlike
+# The graph's authored `failure` choice — printed as an outcome, unlike
 # `_FAILED` below, which is an internal per-repo decision.
 _CI_FAILURE = "failure"
 # The graph's authored `inherited-failure` choice: every remaining check failure is
@@ -50,7 +50,7 @@ _BOUNCE = "bounce"  # dirty — a real content conflict, kick back to build
 _FAILED = "failed"  # a check run completed with a terminal conclusion — never re-poll
 
 # A completed check run in any of these is never going to turn green on its own, so
-# polling on out to `poll_timeout` only burns the slot (issue #232). `cancelled` is NOT
+# polling on out to `poll_timeout` only burns the slot. `cancelled` is NOT
 # one of these: a concurrency-group cancellation is not a failed job, and a check run's
 # payload alone cannot tell the two apart, so it is re-polled instead — bounded, same as
 # any other non-terminal status, by `poll_timeout`.
@@ -99,7 +99,7 @@ class Route:
 
 @dataclass(frozen=True)
 class Verdict:
-    """One ref's live check runs, classified (issue #232). ``None`` is a degraded read —
+    """One ref's live check runs, classified. ``None`` is a degraded read —
     it waits, exactly like a still-running one, and every malformed shape does too."""
 
     check_runs: list[dict[str, Any]] | None
@@ -120,7 +120,7 @@ class Verdict:
     @staticmethod
     def terminal(run: Any) -> bool:
         """Whether one run has completed in a conclusion no re-poll will turn green —
-        required or not, as the forge would have it (issue #232)."""
+        required or not, as the forge would have it."""
         return (
             isinstance(run, dict)
             and run.get("status") == "completed"
@@ -350,7 +350,7 @@ def _land() -> int:
                 continue
             if decision == _WAIT:
                 if verdict is not None:
-                    # The CI-watch case (issue #232), now also entered by a clean-but-not-
+                    # The CI-watch case, now also entered by a clean-but-not-
                     # green head: a degraded read falls through to the plain wait below.
                     if verdict.decision == _FAILED:
                         base = Verdict.of(run, pull.repo, run.base_branch)

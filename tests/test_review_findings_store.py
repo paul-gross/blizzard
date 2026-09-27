@@ -1,5 +1,5 @@
-"""``ReviewFindingsStore`` — the review-findings-materialization repository (blizzard#582
-Phase 1, component tier). Migrated-to-head sqlite-on-disk — the
+"""``ReviewFindingsStore`` — the review-findings-materialization repository
+(component tier). Migrated-to-head sqlite-on-disk — the
 ``tests/test_garden_delivery_store.py`` shape."""
 
 from __future__ import annotations
@@ -171,7 +171,7 @@ def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Two concurrent mints of the same brand-new scope is invisible on sqlite, which
-    serializes writers (review:F2) — forced here by spoofing the guard `select` after a
+    serializes writers — forced here by spoofing the guard `select` after a
     racing writer already committed it, so the insert collides for real."""
     store, engine = _store_and_engine(tmp_path)
     with engine.begin() as conn:
@@ -220,7 +220,7 @@ def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
 
 
 def test_deliver_from_a_fresh_node_and_epoch_is_still_already_recorded(tmp_path: Path) -> None:
-    """D6: the idempotence key is `chunk_id` alone, not `(chunk_id, node_id, epoch)` —
+    """The idempotence key is `chunk_id` alone, not `(chunk_id, node_id, epoch)` —
     unlike garden delivery, a fresh node/epoch visit for a chunk that already delivered
     stays a no-op."""
     store, engine = _store_and_engine(tmp_path)

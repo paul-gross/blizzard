@@ -2,7 +2,7 @@
   display: block;
   flex: 1;
   min-height: 0;
-  /* review:F2 — the four top-level `fleet-kit-async-state` states below render as
+  /* The four top-level `fleet-kit-async-state` states below render as
      direct children of this host with no wrapping element; `.status`'s
      `position: absolute` centers on the browser viewport with no positioned
      ancestor here, the way `.tx-view` below already provides one level down. */

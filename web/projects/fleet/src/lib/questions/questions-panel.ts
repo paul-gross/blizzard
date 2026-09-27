@@ -12,7 +12,7 @@ import { injectHubQuestionsQuery } from './questions.query';
  * only inside the chunk nobody has selected yet; clicking an ask opens its chunk,
  * where the answer is given.
  *
- * A container (issue #80): it owns the fleet-wide questions query through the
+ * A container: it owns the fleet-wide questions query through the
  * generated hub client (bzh:generated-client), and renders the presentational
  * {@link QuestionsPanelView}. The live-update service re-reads it on
  * `question-asked` / `question-answered`.

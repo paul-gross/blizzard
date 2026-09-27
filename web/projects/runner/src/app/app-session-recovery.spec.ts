@@ -10,7 +10,7 @@ import { vi } from 'vitest';
 import { App } from './app';
 import { routes } from './app.routes';
 
-/** A do-nothing EventSource so `RunnerLiveUpdates` (blizzard#317 Phase 4) can open
+/** A do-nothing EventSource so `RunnerLiveUpdates` can open
  * without a real stream — mirrors `app.spec.ts`'s own `FakeEventSource`. */
 class FakeEventSource {
   onopen: (() => void) | null = null;
@@ -47,7 +47,7 @@ async function setUp(route: (method: string, path: string) => unknown) {
   return {
     recovery,
     navigateSpy,
-    // blizzard#347: `async`, not because this teardown itself awaits anything,
+    // `async`, not because this teardown itself awaits anything,
     // but so `await`-ing it (below, and in `afterEach`) always gives the event
     // loop a turn before `sessionStorage.clear()` runs — the turn a 401 this
     // test never explicitly awaited (a concurrent query's own interceptor

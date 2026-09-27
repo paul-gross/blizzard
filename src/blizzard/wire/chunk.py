@@ -52,13 +52,13 @@ class ChunkIngestResponse(BaseModel):
 
 
 class ChunkDeleteRequest(BaseModel):
-    """Delete a chunk — records who deleted it (issue #364)."""
+    """Delete a chunk — records who deleted it."""
 
     by: str = "operator"
 
 
 class ChunkDeleteResponse(BaseModel):
-    """The result of one ``DELETE /chunks/{id}`` (issue #364) — the deleted chunk's own
+    """The result of one ``DELETE /chunks/{id}`` — the deleted chunk's own
     id, echoed back. Nothing richer: the chunk is gone from every read the instant this
     returns, with no fresh status left to derive a summary from."""
 
@@ -105,7 +105,7 @@ class ChunkUsageTotalView(BaseModel):
 
 
 class ChunkUsageView(BaseModel):
-    """One node-step's usage/cost telemetry (issue #59) — one harness invocation's tokens-by-class and
+    """One node-step's usage/cost telemetry — one harness invocation's tokens-by-class and
     cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was
     recorded for this invocation — never fabricated. ``estimated_cost_usd`` is the runner's own reported
     estimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported."""
@@ -119,7 +119,7 @@ class ChunkUsageView(BaseModel):
     cache_read_tokens: int
     cache_create_tokens: int
     cost_usd: float | None
-    #: The invocation's own recorded harness identity (blizzard#441) — ``None`` recorded
+    #: The invocation's own recorded harness identity — ``None`` recorded
     #: and un-backfilled, never a guess from ``model``.
     harness_id: str | None = None
     harness_version: str | None = None
@@ -129,7 +129,7 @@ class ChunkUsageView(BaseModel):
 class ChunkSummary(BaseModel):
     """One row of the fleet chunk list — the derived status and current node. ``current_node_name`` is
     the node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.
-    ``runner_id``/``environment_count`` are **in-progress-only** (issue #140): a terminal chunk reads
+    ``runner_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads
     unrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null."""
 
     chunk_id: str
@@ -138,27 +138,27 @@ class ChunkSummary(BaseModel):
     current_node_id: str | None
     current_node_name: str | None = None
     work_refs: list[WorkRefView] = []
-    # The chunk's default model preference and effort (issue #144) — what a surface declaring neither
+    # The chunk's default model preference and effort — what a surface declaring neither
     # inherits. Empty/None is the minted state and means *express no preference*, not "unknown".
     default_model: list[str] = []
     default_effort: str | None = None
     # The chunk's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
     runner_id: str | None = None
-    # The count of environments the chunk's live route holds (issue #69) — 0 when unrouted; a grouped
+    # The count of environments the chunk's live route holds — 0 when unrouted; a grouped
     # chunk counts them all, so a per-runner sum does not undercount.
     environment_count: int = 0
-    # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
+    # The chunk's derived usage/cost total — see ChunkUsageTotalView.
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
-    # The chunk's derived completion instant (issue #173) — null for every non-terminal status.
+    # The chunk's derived completion instant — null for every non-terminal status.
     completed_at: str | None = None
-    # The chunk's blocked marking (issue #457) — non-None only when it both waits on an
+    # The chunk's blocked marking — non-None only when it both waits on an
     # unmet prerequisite and this read derives it; null otherwise, regardless of block state.
     blocked: BlockedView | None = None
 
 
 class ChunksPageView(BaseModel):
-    """``GET /api/chunks``'s own bounded page (blizzard#526 D3/D4) — ``next_cursor`` is
+    """``GET /api/chunks``'s own bounded page — ``next_cursor`` is
     ``None`` exactly when this page is the last one."""
 
     chunks: list[ChunkSummary] = []
@@ -187,7 +187,7 @@ class TransitionView(BaseModel):
     """One accepted transition in a chunk's history: the edge a node-step took — origin node, the
     judgement choice that routed it, destination — oldest first on the detail.
     ``from_node_name``/``to_node_name`` are the nodes' human graph names, null when unresolvable.
-    ``graph_id``/``graph_name`` name the graph this step happened in (issue #90), both null on old rows."""
+    ``graph_id``/``graph_name`` name the graph this step happened in, both null on old rows."""
 
     from_node_id: str | None
     from_node_name: str | None = None
@@ -201,7 +201,7 @@ class TransitionView(BaseModel):
 
 
 class MigrationView(BaseModel):
-    """One cross-graph migration step (issue #90): the chunk was re-pinned from ``from_graph`` onto
+    """One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto
     ``landed_node`` in ``to_graph`` — its own step, never a transition. A transition-borne source ends
     the attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the
     re-pinned model, null when the chunk kept its own. ``source`` attributes it."""
@@ -241,7 +241,7 @@ class RestartView(BaseModel):
 
 
 class IntendedMigrationView(BaseModel):
-    """A chunk's standing migration intent (issue #124) — editable at any non-terminal status and
+    """A chunk's standing migration intent — editable at any non-terminal status and
     consulted, never applied eagerly, at the chunk's next transition. ``graph_name`` is resolved
     server-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``
     mode's landing target, null for ``auto``, whose landing is derived at consult time."""
@@ -253,7 +253,7 @@ class IntendedMigrationView(BaseModel):
 
 
 class IntendedMigrationPatch(BaseModel):
-    """The intended-migration value a ``ChunkPatchRequest`` carries (issue #124). ``to_graph`` is a
+    """The intended-migration value a ``ChunkPatchRequest`` carries. ``to_graph`` is a
     graph id, or a name resolved server-side to the newest enabled graph of that name at request time —
     the resolved **id** is stored. ``node`` present selects ``forced``, absent selects ``auto``; there
     is no separate ``mode`` field, so "node supplied under auto" is unrepresentable."""
@@ -337,7 +337,7 @@ class HubMarkerResponse(BaseModel):
 
 
 class GardenDeliveryRequest(BaseModel):
-    """The garden-delivery route's body (issue #393) — the delta and proposal artifact
+    """The garden-delivery route's body — the delta and proposal artifact
     names to deliver, each independently optional."""
 
     delta: list[str] = []
@@ -346,7 +346,7 @@ class GardenDeliveryRequest(BaseModel):
 
 class GardenDeliveryResponse(BaseModel):
     """The result of one garden delivery — ``recorded`` durably means it, materialized
-    now or replayed (issue #393); ``invalid`` carries the rejection reason in
+    now or replayed; ``invalid`` carries the rejection reason in
     ``detail``."""
 
     outcome: Literal["recorded", "invalid"]
@@ -354,7 +354,7 @@ class GardenDeliveryResponse(BaseModel):
 
 
 class ReviewFindingsDeliveryResponse(BaseModel):
-    """The result of one `record-findings` materialization (blizzard#582) — the
+    """The result of one `record-findings` materialization — the
     `GardenDeliveryResponse` shape: ``recorded`` durably means it, materialized now or
     replayed; ``invalid`` carries the rejection reason in ``detail``."""
 
@@ -363,20 +363,19 @@ class ReviewFindingsDeliveryResponse(BaseModel):
 
 
 class ChunkPauseRequest(BaseModel):
-    """Set or clear a chunk's operator pause brake — records who flipped it (issue #46)."""
+    """Set or clear a chunk's operator pause brake — records who flipped it."""
 
     by: str = "operator"
 
 
 class ChunkStopRequest(BaseModel):
-    """Terminally abandon a chunk — records who stopped it (issue #118)."""
+    """Terminally abandon a chunk — records who stopped it."""
 
     by: str = "operator"
 
 
 class ChunkCompleteRequest(BaseModel):
-    """Manually complete a chunk, from any non-``done`` status — records who completed it
-    (issue #294)."""
+    """Manually complete a chunk, from any non-``done`` status — records who completed it."""
 
     by: str = "operator"
 
@@ -393,7 +392,7 @@ class ChunkRestartRequest(BaseModel):
 
 
 class ChunkPatchRequest(BaseModel):
-    """The multi-field ``PATCH /chunks/{id}`` body (issue #124) — every field independently optional,
+    """The multi-field ``PATCH /chunks/{id}`` body — every field independently optional,
     applied all-or-nothing. ``graph_id``/``model`` mean "leave unchanged" whether omitted or explicitly
     ``null``. ``intended_migration`` *is* nullable, so omitted ("leave unchanged") stays distinguishable
     from explicit ``null`` ("clear it") by the key's presence in the body, never by its value."""
@@ -407,7 +406,7 @@ class ChunkPatchRequest(BaseModel):
 
 
 class ChunkPatchResponse(BaseModel):
-    """The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's
+    """The result of one ``PATCH /chunks/{id}`` — the chunk's
     editable build properties after the edit, carried together since a PATCH can apply more than
     one at once."""
 
@@ -420,7 +419,7 @@ class ChunkPatchResponse(BaseModel):
 
 
 class PauseView(BaseModel):
-    """An open pause on a chunk (issue #46) — who set it and when, present only while ``paused=True``
+    """An open pause on a chunk — who set it and when, present only while ``paused=True``
     is the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated
     statuses in the derivation order, so this is the only carrier of a pause on a gated chunk."""
 
@@ -429,7 +428,7 @@ class PauseView(BaseModel):
 
 
 class BlockedView(BaseModel):
-    """A chunk's blocked marking (issue #457) — present iff a pre-claim dependent (``not_ready`` or
+    """A chunk's blocked marking — present iff a pre-claim dependent (``not_ready`` or
     ``ready``) has a standing dependency edge naming a prerequisite that has not reached ``done``.
     Carried beside ``status``, never a status of its own; names the immediate prerequisite only, with
     no transitive walk to whatever it may itself wait on. Where several prerequisites are unmet at
@@ -441,7 +440,7 @@ class BlockedView(BaseModel):
 
 
 class ChunkNeighborView(BaseModel):
-    """One standing-edge neighbor, one hop away (issue #462). ``status`` is null only for
+    """One standing-edge neighbor, one hop away. ``status`` is null only for
     the residual race a neighbor's facts fail to resolve — the edge is still drawn,
     unsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive
     scope this shares."""
@@ -452,7 +451,7 @@ class ChunkNeighborView(BaseModel):
 
 
 class ChunkNeighborhoodView(BaseModel):
-    """A chunk's standing dependency edges one hop each way (issue #462) — both
+    """A chunk's standing dependency edges one hop each way — both
     ``prerequisites`` and ``dependents`` are always present as lists, empty rather than
     null."""
 
@@ -461,12 +460,12 @@ class ChunkNeighborhoodView(BaseModel):
 
 
 class ChunkDetail(BaseModel):
-    """The whole chunk aggregate (issue #314): transition history, inline artifact
+    """The whole chunk aggregate: transition history, inline artifact
     store, and the open escalation."""
 
     chunk_id: str
     graph_id: str
-    # The pinned graph's name and mint instant (issue #102) — `None` together iff the graph could not
+    # The pinned graph's name and mint instant — `None` together iff the graph could not
     # be resolved.
     graph_name: str | None = None
     graph_created_at: str | None = None
@@ -480,17 +479,17 @@ class ChunkDetail(BaseModel):
     default_effort: str | None = None
     # The chunk's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
-    # The chunk's standing migration intent (issue #124) — non-None iff an `auto` or `forced` intent
+    # The chunk's standing migration intent — non-None iff an `auto` or `forced` intent
     # is set. See IntendedMigrationView.
     intended_migration: IntendedMigrationView | None = None
     route: RouteView | None = None
-    # The operator's per-chunk pause brake (issue #46) — non-None iff currently paused, and carried
+    # The operator's per-chunk pause brake — non-None iff currently paused, and carried
     # independently of ``status`` so a gated-and-paused chunk stays legible (see PauseView).
     pause: PauseView | None = None
-    # The chunk's blocked marking (issue #457) — non-None only when it both waits on an
+    # The chunk's blocked marking — non-None only when it both waits on an
     # unmet prerequisite and this read derives it; null otherwise, regardless of block state.
     blocked: BlockedView | None = None
-    # The chunk's standing dependency edges one hop each way (issue #462) — always present,
+    # The chunk's standing dependency edges one hop each way — always present,
     # unlike ``blocked``; see ChunkNeighborhoodView.
     neighborhood: ChunkNeighborhoodView = Field(
         default_factory=lambda: ChunkNeighborhoodView(prerequisites=[], dependents=[])
@@ -499,21 +498,21 @@ class ChunkDetail(BaseModel):
     # yet-transitioned one.
     decision: DecisionView | None = None
     history: list[TransitionView] = []
-    # The chunk's cross-graph migration steps (issue #90), oldest first — interleaves with
+    # The chunk's cross-graph migration steps, oldest first — interleaves with
     # ``history`` by ``recorded_at``. Empty for a single-graph chunk.
     migrations: list[MigrationView] = []
-    # The chunk's operator restarts (issue #370), oldest first — who moved the chunk, from
+    # The chunk's operator restarts, oldest first — who moved the chunk, from
     # where, and to what.
     restarts: list[RestartView] = []
     artifacts: list[ArtifactView] = []
-    # The chunk's questions, oldest first — open *and* answered (issue #165), an answered one still
+    # The chunk's questions, oldest first — open *and* answered, an answered one still
     # carrying its return trail.
     questions: list[QuestionView] = []
     # True while delivery is parked on an open PR not yet merged — a `delivering` detail, not a
-    # distinct status (issue #67); derived on read, never engine-written.
+    # distinct status; derived on read, never engine-written.
     awaiting_external_merge: bool = False
     open_prs: list[PrView] = []
-    # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
+    # The chunk's derived usage/cost total — see ChunkUsageTotalView.
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     # Per-node-step usage history, oldest first.
     usage: list[ChunkUsageView] = []
@@ -530,7 +529,7 @@ class ChunkDetail(BaseModel):
 
 
 class ChunkDecisionStatusView(BaseModel):
-    """A live gate decision's identity and resolution (blizzard#521) — no ``choices``,
+    """A live gate decision's identity and resolution — no ``choices``,
     no ``docket``."""
 
     decision_id: str
@@ -541,15 +540,15 @@ class ChunkDecisionStatusView(BaseModel):
 
 
 class ChunkStatusView(BaseModel):
-    """One chunk's status, pause, latest epoch, restart epochs, cost, and open decision
-    (blizzard#521) — the slim batch projection ``GET /api/fleet/chunk-statuses`` returns."""
+    """One chunk's status, pause, latest epoch, restart epochs, cost, and open decision —
+    the slim batch projection ``GET /api/fleet/chunk-statuses`` returns."""
 
     chunk_id: str
     status: ChunkStatus
     route_runner_id: str | None = None
     pause: PauseView | None = None
     latest_epoch: int | None = None
-    # The chunk's operator restarts' epochs (issue #370), oldest first — mirrors
+    # The chunk's operator restarts' epochs, oldest first — mirrors
     # ``ChunkDetail.restarts``, narrowed to the one field.
     restart_epochs: list[int] = []
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
@@ -558,7 +557,7 @@ class ChunkStatusView(BaseModel):
 
 class WorkItemEntry(BaseModel):
     """One pointer's pass-through work item, vendor-native — title, body, comments, and,
-    only when the source has them to give (blizzard#362), ``author``/``stated_priority``.
+    only when the source has them to give, ``author``/``stated_priority``.
     ``label``/``web_url`` are the legible pointer label and browser address, both null when no
     configured source names ``source``; a per-pointer failure nulls ``title``/``body`` into ``error``."""
 
@@ -585,7 +584,7 @@ class WorkItemsView(BaseModel):
 
 
 class ChunkDependencyDeclareRequest(BaseModel):
-    """Declare that CHUNK depends on ``prerequisite_chunk_id`` (issue #456). Records who
+    """Declare that CHUNK depends on ``prerequisite_chunk_id``. Records who
     declared it."""
 
     prerequisite_chunk_id: str
@@ -593,7 +592,7 @@ class ChunkDependencyDeclareRequest(BaseModel):
 
 
 class ChunkDependencyReleaseRequest(BaseModel):
-    """Release CHUNK's standing dependency on ``prerequisite_chunk_id`` (issue #456),
+    """Release CHUNK's standing dependency on ``prerequisite_chunk_id``,
     addressed by the ordered pair rather than a minted edge id. Records who released it."""
 
     prerequisite_chunk_id: str
@@ -601,7 +600,7 @@ class ChunkDependencyReleaseRequest(BaseModel):
 
 
 class ChunkDependencyEdgeView(BaseModel):
-    """One declared dependency edge (issue #456) — the row a declare or release
+    """One declared dependency edge — the row a declare or release
     answers with. ``released_at``/``released_by`` are null while the edge stands."""
 
     dependency_id: str
@@ -615,7 +614,7 @@ class ChunkDependencyEdgeView(BaseModel):
 
 class DependentNotEditableView(BaseModel):
     """The 409 body: the dependent chunk has left its declarable window — no longer
-    ``not_ready`` or ``ready`` (issue #456)."""
+    ``not_ready`` or ``ready``."""
 
     chunk_id: str
     status: ChunkStatus
@@ -624,7 +623,7 @@ class DependentNotEditableView(BaseModel):
 
 class DependencyWouldCloseCycleView(BaseModel):
     """The 409 body: declaring this edge would close a cycle in the standing
-    dependency graph (issue #456) — a self-edge is among the cycle cases."""
+    dependency graph — a self-edge is among the cycle cases."""
 
     dependent_chunk_id: str
     prerequisite_chunk_id: str
@@ -632,8 +631,7 @@ class DependencyWouldCloseCycleView(BaseModel):
 
 
 class NoStandingDependencyView(BaseModel):
-    """The 409 body: the release named an ordered pair with no standing edge
-    (issue #456)."""
+    """The 409 body: the release named an ordered pair with no standing edge."""
 
     dependent_chunk_id: str
     prerequisite_chunk_id: str
@@ -641,8 +639,8 @@ class NoStandingDependencyView(BaseModel):
 
 
 class PrerequisiteIsEphemeralView(BaseModel):
-    """The 409 body: the named prerequisite is ephemeral — grouped-away or deleted
-    (issue #456) — and so not a legal prerequisite."""
+    """The 409 body: the named prerequisite is ephemeral — grouped-away or deleted —
+    and so not a legal prerequisite."""
 
     chunk_id: str
     detail: str = "prerequisite chunk is ephemeral and cannot be named as a prerequisite"

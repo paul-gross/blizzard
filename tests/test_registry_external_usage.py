@@ -1,5 +1,5 @@
 """:meth:`PerSubscriptionUsageView.every` — the read-side per-subscription staleness
-gate (issue #218, blizzard#436 phase 3).
+gate.
 
 Unit tier: the pure domain derivation in isolation, then its rendering through
 ``hub/api/runners.py``'s single ``runner_view`` — no store, no HTTP."""
@@ -62,7 +62,7 @@ def test_never_sampled_renders_none() -> None:
 
 
 def test_a_stale_or_failed_subscription_does_not_blank_a_healthy_sibling() -> None:
-    """One dead sampler must not blank a healthy one (blizzard#436 phase 3) — the plan's
+    """One dead sampler must not blank a healthy one — the plan's
     explicit staleness-is-per-subscription acceptance bar."""
     healthy = _record("anthropic", _NOW - timedelta(minutes=1))
     stale = _record("openai", _NOW - timedelta(minutes=16))
@@ -123,7 +123,7 @@ def _registration(
     )
 
 
-# blizzard#504 D7 — the `condition` derivation.
+# — the `condition` derivation.
 # --------------------------------------------------------------------------- #
 
 
@@ -181,7 +181,7 @@ def test_a_non_lapsed_miss_reason_with_no_sample_renders_nothing() -> None:
 
 def test_a_stale_miss_never_surfaces_the_condition() -> None:
     """A live lapsed slug re-reports every cadence; a decommissioned one ages out just
-    like a dead sample does (D7)."""
+    like a dead sample does."""
     miss = _miss("openai", _NOW - EXTERNAL_USAGE_STALE_AFTER - timedelta(minutes=1))
     assert PerSubscriptionUsageView.every(_registration(misses=(miss,)), now=_NOW) == ()
 

@@ -1,4 +1,4 @@
-"""The declare/release dependency routes over the HTTP surface (issue #456, Phase 3).
+"""The declare/release dependency routes over the HTTP surface.
 
 Proves the controller wires ``DependencyService`` correctly end to end: both verbs are
 ``CHUNK_CONTROL``-gated, each refusal answers 409 with a body carrying the ids and status
@@ -192,7 +192,7 @@ def test_release_is_admitted_when_the_prerequisite_was_since_deleted(tmp_path: P
 
 def test_declare_refuses_an_ephemeral_prerequisite_and_writes_nothing(tmp_path: Path) -> None:
     """A deleted chunk id resolves to nothing on the record seam but is ephemeral, not
-    never-minted (issue #456) — 409, not 404."""
+    never-minted — 409, not 404."""
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [_DEPENDENT], promote=False)
     prerequisite_id = ingest(hub, [_PREREQUISITE], promote=False)

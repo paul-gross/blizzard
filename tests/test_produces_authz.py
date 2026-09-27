@@ -1,4 +1,4 @@
-"""Produces-artifact authorization at the wired hub (component tier, issue #113 phase 5).
+"""Produces-artifact authorization at the wired hub (component tier).
 
 Proves the apply-path backstop: a completion declaring ``produces: [notes]`` is
 accepted under ``produces_mode=warn`` regardless of explicit attachment, and rejected

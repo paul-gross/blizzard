@@ -1,4 +1,4 @@
-"""Fleet-summary bucket fold — ``FleetSummary.of`` over derived statuses (issue #76).
+"""Fleet-summary bucket fold — ``FleetSummary.of`` over derived statuses.
 
 A pure fold of each chunk's status to four buckets (``bzh:domain-takes-objects``):
 ``running`` unions ``delivering``, ``waiting`` unions ``paused``, terminal statuses count

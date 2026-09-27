@@ -19,10 +19,11 @@ import { AppHeader } from './app-header';
  * authless to a 64-character one.
  *
  * Moved here from `local-panel`'s own `local-panel-layout.shell-sweep.spec.ts`
- * (issue #325) along with the header itself: this is the shell where issue
- * #163's actual defect lived — the identity block is the header's one
- * *content-dependent* width, so — unlike the hub shell's own sweep — identity
- * length is a real, load-bearing axis here, not a no-op one.
+ * along with the header itself: this is the shell where the identity block's
+ * variable width actually pushed the profile menu off-viewport — the identity
+ * block is the header's one *content-dependent* width, so — unlike the hub
+ * shell's own sweep — identity length is a real, load-bearing axis here, not
+ * a no-op one.
  *
  * Excluded from the default `ng test runner` run (`angular.json`'s
  * `test.exclude`) because it needs `--browsers=ChromiumHeadless`, not jsdom —
@@ -36,9 +37,9 @@ async function render(degradedConnection = false) {
     providers: [
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      // The detail dock's header links the chunk name to its route now (issue #318).
+      // The detail dock's header links the chunk name to its route now.
       provideRouter([]),
-      // `degraded` (blizzard#333) is the connection cell's longest string — a real
+      // `degraded` is the connection cell's longest string — a real
       // stand-in, not `RunnerLiveUpdates.start()`'d, since this sweep proves layout,
       // never the stream itself.
       ...(degradedConnection
@@ -109,10 +110,8 @@ describe('runner AppHeader shell sweep (web:shell-sweep, issue #163/#171/#325)',
 
           // Scoped to the header itself, not a whole page: this header's
           // consumer (the app root) also renders a nav strip and routed
-          // content beside it, out of this sweep's scope (issue #171's own
-          // Out of Scope — "the sweep targets the shared shells and their
-          // projected chrome") — what must never overflow is the header
-          // chrome the escape hatch lives in.
+          // content beside it, out of this sweep's scope — what must never
+          // overflow is the header chrome the escape hatch lives in.
           const header = root.querySelector<HTMLElement>('[data-testid="board-header"]')!;
           expect(
             header.scrollWidth,

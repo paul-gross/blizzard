@@ -31,7 +31,7 @@ export interface ScopePanelVm {
    * Retire/Enable predicts, already merged with the real {@link retired} where
    * nothing overrides it (`graph-detail-header.ts`'s own `renderedRetired`). */
   readonly renderedRetired: boolean;
-  /** Every routine linked to this scope, each marked whether it defaults here (D4)
+  /** Every routine linked to this scope, each marked whether it defaults here
    * — `null` while the relation read is still pending. */
   readonly relatedRoutines: readonly RelatedRoutineVm[] | null;
 }

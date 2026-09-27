@@ -118,7 +118,7 @@ def test_claim_route_409_is_conflict_not_error() -> None:
 
 @pytest.mark.unit
 def test_claim_route_409_with_a_status_field_is_a_terminal_denial_not_a_conflict() -> None:
-    """The two 409 shapes (issue #118) share a status code but not a body — a
+    """The two 409 shapes share a status code but not a body — a
     terminal denial carries ``status``, a race-loss conflict carries
     ``held_by_runner_id`` — and the adapter tells them apart on that field alone."""
 
@@ -135,7 +135,7 @@ def test_claim_route_409_with_a_status_field_is_a_terminal_denial_not_a_conflict
 
 @pytest.mark.unit
 def test_claim_route_409_with_a_prerequisite_chunk_id_field_is_a_dependency_denial_not_a_conflict() -> None:
-    """The third 409 shape (blizzard#458): a dependency denial carries
+    """The third 409 shape: a dependency denial carries
     ``prerequisite_chunk_id`` where a terminal denial carries ``status`` and a race-loss
     conflict carries ``held_by_runner_id`` — the adapter tells them apart on that field."""
 
@@ -160,7 +160,7 @@ def test_claim_route_409_with_a_prerequisite_chunk_id_field_is_a_dependency_deni
 
 @pytest.mark.unit
 def test_claim_route_409_with_an_incompatible_runner_id_field_is_an_incompatibility_denial_not_a_conflict() -> None:
-    """The fourth 409 shape (blizzard#433 D9), told apart from the other three by its
+    """The fourth 409 shape, told apart from the other three by its
     own ``incompatible_runner_id`` field rather than ``status``, ``prerequisite_chunk_id``,
     or ``held_by_runner_id``."""
 
@@ -186,7 +186,7 @@ def test_claim_route_409_with_an_incompatible_runner_id_field_is_an_incompatibil
 
 @pytest.mark.unit
 def test_claim_route_403_is_a_paused_denial_not_a_conflict() -> None:
-    """A distinct outcome from the 409 race loss (issue #44): the hub's registry has
+    """A distinct outcome from the 409 race loss: the hub's registry has
     this runner paused and refused the claim outright."""
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -216,8 +216,8 @@ def test_submit_completion_returns_apply_response() -> None:
 
 @pytest.mark.unit
 def test_push_transcripts_posts_to_its_own_route_not_events() -> None:
-    """The transcript lane posts to ``/transcripts``, never ``/events`` — D3's structural
-    separation, exercised at the wire (issue #246)."""
+    """The transcript lane posts to ``/transcripts``, never ``/events`` — its own structural
+    separation, exercised at the wire."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/fleet/transcripts"
@@ -248,7 +248,7 @@ def test_push_transcripts_posts_to_its_own_route_not_events() -> None:
 
 @pytest.mark.unit
 def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None:
-    """review F3, issue #246: `TranscriptDrain.run`'s own 5 s bound is meaningless while
+    """review `TranscriptDrain.run`'s own 5 s bound is meaningless while
     this call can run to the shared client's much longer default — it needs its own short
     override, distinct from every other route on this client."""
     seen_timeouts = []
@@ -329,7 +329,7 @@ def test_chunk_statuses_batches_across_the_query_param_limit(monkeypatch: pytest
 
 @pytest.mark.unit
 def test_chunk_statuses_omits_an_id_the_hub_does_not_know() -> None:
-    """The batch route never 404s (blizzard#521) — an unknown id is simply absent from
+    """The batch route never 404s — an unknown id is simply absent from
     the response, unlike the single-chunk-identified reads."""
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -350,7 +350,7 @@ def test_register_runner_posts_registration() -> None:
         return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
 
     _client(handler).register_runner("r1", "ws1", env_capacity=4)
-    # env_capacity (issue #69) rides the body; url/redirect_uris (issue #95),
+    # env_capacity rides the body; url/redirect_uris,
     # capabilities, and subscriptions default to null/empty when the caller omits them.
     assert seen == {
         "runner_id": "r1",
@@ -388,7 +388,7 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
 
 @pytest.mark.unit
 def test_register_runner_posts_its_own_federation_identity() -> None:
-    """``url``/``redirect_uris`` (issue #95) ride the registration body when given."""
+    """``url``/``redirect_uris`` ride the registration body when given."""
     seen: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:

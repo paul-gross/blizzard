@@ -1,6 +1,6 @@
-"""The garden-proposal candidate payload on the wire (unit tier, blizzard#390).
+"""The garden-proposal candidate payload on the wire (unit tier).
 
-``GardenProposalCandidate.findings`` is required and non-empty (D7): malformed input is
+``GardenProposalCandidate.findings`` is required and non-empty: malformed input is
 refused at the wire edge, mechanically, before any delivery logic ever sees it."""
 
 from __future__ import annotations

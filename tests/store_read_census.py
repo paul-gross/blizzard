@@ -1,4 +1,4 @@
-"""Read-method census for the store-read-index gate (blizzard#525).
+"""Read-method census for the store-read-index gate.
 
 Maps every reflected ``IRead*`` Protocol method to a recipe that exercises it against a production-wired,
 migrated-to-head store, seeded once per gate run entirely through each concept's own write Protocol
@@ -140,7 +140,7 @@ GRAPH_ID = "gr_1"
 class RunnerWorld:
     """The runner store's module-scoped seeded world — one instance built once
     (:func:`build_runner_world`) and driven by every recipe in :data:`RUNNER_CENSUS`. ``stores``/``read`` are the
-    same production-wired adapters, the latter narrowed to ``RunnerReadStores`` (D1) — recipes read through
+    same production-wired adapters, the latter narrowed to ``RunnerReadStores`` — recipes read through
     ``read``, the one collaborator every controller-facing caller resolves through in production."""
 
     engine: Engine
@@ -170,7 +170,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
     """Seed a migrated-to-head runner store through its own write Protocols, so every
     read method in :data:`RUNNER_CENSUS` reaches real, non-empty behavior — the store
     bundle comes from :func:`~blizzard.runner.composition.build_stores`, the production
-    wiring (D2), never a hand-rolled adapter or ``tests/runner_fakes.py``'s flat fake."""
+    wiring, never a hand-rolled adapter or ``tests/runner_fakes.py``'s flat fake."""
     stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("test")))
 
     chunk_1, chunk_2, chunk_3 = "ch_1", "ch_2", "ch_3"
@@ -253,7 +253,7 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         )
     )
     # Same session id as lease_1: a resume, which finalizes lease_1's still-open segment
-    # and opens a fresh one for lease_2 (``LeaseLivenessStore.record_spawn``'s own D1).
+    # and opens a fresh one for lease_2 (``LeaseLivenessStore.record_spawn``).
     stores.liveness.record_spawn(
         lease_2,
         pid=200,
@@ -843,7 +843,7 @@ def _tool_turn(index: int, name: str, tool_input: dict[str, object]) -> dict:
 class HubWorld:
     """The hub store's module-scoped seeded world — one instance built once
     (:func:`build_hub_world`) and driven by every recipe in :data:`HUB_CENSUS`. ``hub`` carries the production-wired
-    :class:`~tests.support.HubHarness` (D2); ``write`` is a second, write-typed :class:`ChunkStores` instance recipes
+    :class:`~tests.support.HubHarness`; ``write`` is a second, write-typed :class:`ChunkStores` instance recipes
     never read through, only seeding does (``hub.services.chunks`` is typed read-only, ``bzh:controller-read-only``)."""
 
     hub: HubHarness

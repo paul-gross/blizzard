@@ -1,4 +1,4 @@
-"""Chunk build-property edits — graph, defaults, intended migration (issues #27, #124).
+"""Chunk build-property edits — graph, defaults, intended migration.
 
 The fields do not share one admit set, so editability is validated **per field** — see
 :data:`_FIELD_WINDOW`. An edit is a plain column overwrite: ``bzh:facts-not-status``
@@ -35,7 +35,7 @@ UNSET: Final = UnsetType.TOKEN
 #: Closed at ``done``/``stopped`` — no future transition is left to consult the intent.
 _INTENDED_MIGRATION_WINDOW = frozenset(ChunkStatus) - frozenset({ChunkStatus.DONE, ChunkStatus.STOPPED})
 
-#: Per-field editable-status sets (issue #124), keyed by the same field names
+#: Per-field editable-status sets, keyed by the same field names
 #: :class:`ChunkEdit` carries.
 _FIELD_WINDOW: Final[dict[str, frozenset[ChunkStatus]]] = {
     "graph_id": PRE_CLAIM_STATUSES,
@@ -47,7 +47,7 @@ _FIELD_WINDOW: Final[dict[str, frozenset[ChunkStatus]]] = {
 
 
 class ChunkNotEditable(Exception):
-    """An edit supplied a field outside *that field's* editable window (issue #124).
+    """An edit supplied a field outside *that field's* editable window.
 
     Carries the offending ``field``: a mixed request is refused on any one of them."""
 
@@ -67,7 +67,7 @@ class ChunkAlreadyMoved(Exception):
 
 
 class TargetGraphRetired(Exception):
-    """A graph edit named a graph that has since been retired (issue #101)."""
+    """A graph edit named a graph that has since been retired."""
 
     def __init__(self, graph_id: str) -> None:
         super().__init__(f"graph {graph_id} is retired and cannot receive new work")
@@ -75,7 +75,7 @@ class TargetGraphRetired(Exception):
 
 
 class MigrationTargetIsCurrentPin(Exception):
-    """An intended migration's target graph is the chunk's own current pin (issue #124).
+    """An intended migration's target graph is the chunk's own current pin.
 
     A no-op intent, refused at request time rather than silently accepted."""
 
@@ -85,7 +85,7 @@ class MigrationTargetIsCurrentPin(Exception):
 
 
 class ForcedNodeUnknown(Exception):
-    """A ``forced`` intended migration named a node absent from its target graph (issue #124).
+    """A ``forced`` intended migration named a node absent from its target graph.
 
     Refused at request time — left unchecked, ``landing_node``'s entry-node fallback
     would silently reset the chunk to the target's entry node instead."""
@@ -98,7 +98,7 @@ class ForcedNodeUnknown(Exception):
 
 @dataclass(frozen=True)
 class ChunkEdit:
-    """The fields a single all-or-nothing edit request supplies (issue #124).
+    """The fields a single all-or-nothing edit request supplies.
 
     ``intended_migration`` and ``default_effort`` accept ``None`` to mean "clear it";
     an empty ``default_model``/``default_harnesses`` list is the same clear."""
@@ -111,8 +111,7 @@ class ChunkEdit:
 
 
 class EditService:
-    """Edit a chunk's graph, default model/effort, or intended-migration selection
-    (issues #27, #120, #124, #144)."""
+    """Edit a chunk's graph, default model/effort, or intended-migration selection."""
 
     def __init__(
         self,
@@ -125,11 +124,11 @@ class EditService:
         self._facts = facts
         self._record = record
         self._graphs = graphs
-        # The same lock ClaimService serializes its claim CAS with (issue #120).
+        # The same lock ClaimService serializes its claim CAS with.
         self._claim_lock = claim_lock
 
     def set_graph(self, chunk: Chunk, *, graph: Graph) -> None:
-        """Repin the chunk to ``graph`` — a thin wrapper over :meth:`edit` (issue #124)."""
+        """Repin the chunk to ``graph`` — a thin wrapper over :meth:`edit`."""
         self.edit(chunk, ChunkEdit(graph_id=graph.graph_id), graph_target=graph)
 
     def set_defaults(
@@ -141,7 +140,7 @@ class EditService:
         default_harnesses: list[str] | UnsetType = UNSET,
     ) -> None:
         """Repin the chunk's default model/effort/harnesses — a thin wrapper over
-        :meth:`edit` (issues #124, #144)."""
+        :meth:`edit`."""
         self.edit(
             chunk,
             ChunkEdit(
@@ -159,7 +158,7 @@ class EditService:
         graph_target: Graph | None = None,
         migration_target: Graph | None = None,
     ) -> None:
-        """Apply every field ``edit`` supplies, all-or-nothing (issue #124).
+        """Apply every field ``edit`` supplies, all-or-nothing.
 
         Under the shared claim lock, every supplied field is validated before anything is
         written, so a refusal writes nothing; each target graph is checked separately —
@@ -214,8 +213,8 @@ class EditService:
     def _require_valid_migration_target(
         self, chunk: Chunk, intended: IntendedMigration, target_graph: Graph | None
     ) -> None:
-        """The request-time semantic refusals for a non-``None`` intended migration
-        (issue #124 §5): a retired target, a target that is already the chunk's own
+        """The request-time semantic refusals for a non-``None`` intended migration:
+        a retired target, a target that is already the chunk's own
         pin, and — for ``forced`` — a named node absent from the target. Field-shape
         mismatches (``node_name`` with ``auto`` / missing with ``forced``) are the
         wire's concern, not this service's."""

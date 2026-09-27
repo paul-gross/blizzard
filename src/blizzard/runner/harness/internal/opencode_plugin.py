@@ -1,6 +1,6 @@
 """The runner-owned OpenCode plugin scaffold (execution spec, "Runner-owned plugin").
 
-Written beside the permission/plugin document ``opencode_worker_config.py`` writes (D7); its
+Written beside the permission/plugin document ``opencode_worker_config.py`` writes; its
 ``plugins`` entry names this file through :func:`plugin_reference`. Both jobs are degrade-only
 by construction: a plugin that never loads, or whose callback raises, must never change a
 turn's verdict, usage, or exit code — process liveness remains the sole correctness signal."""

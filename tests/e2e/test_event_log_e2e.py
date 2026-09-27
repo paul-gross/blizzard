@@ -1,8 +1,8 @@
-"""Operational event log — end to end (issue #125, Phase 5, e2e tier).
+"""Operational event log — end to end (e2e tier).
 
 A verdict-less exit exhausts the retry budget and escalates; a critical `worker-lost`
 event must read back off `GET /api/events` and arrive on the SSE spine. Skipped unless
-``BLIZZARD_E2E=1``. Browser coverage lives in the tests below (issue #213 for the rail).
+``BLIZZARD_E2E=1``. Browser coverage lives in the tests below.
 """
 
 from __future__ import annotations
@@ -276,9 +276,8 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
 def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
     tmp_path: Path, chromium_available: bool, narrow_viewport: ViewportSize
 ) -> None:
-    """Narrow-viewport fallback (issue #155) for the Events tab's time-first grid (issue
-    #153/#154): at ~390px width a long-message row stays a bounded height and the page
-    gains no horizontal scroll (issue #171's narrow-viewport tier rule)."""
+    """Narrow-viewport fallback for the Events tab's time-first grid: at ~390px width a
+    long-message row stays a bounded height and the page gains no horizontal scroll."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
     if not _HUB_BUNDLE.is_file():
@@ -334,7 +333,7 @@ def _rail_messages(page: Page) -> list[str]:
 
 
 def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: Path, chromium_available: bool) -> None:
-    """Activity feed rail backfill (issue #213): after a hub restart (fresh replay ring, same
+    """Activity feed rail backfill: after a hub restart (fresh replay ring, same
     on-disk store), a reload shows the same durable row count and chunk-ref set as before —
     proving `GET /api/activity` backfill, not leftover live replay."""
     if not chromium_available:

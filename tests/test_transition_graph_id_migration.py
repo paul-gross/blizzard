@@ -1,4 +1,4 @@
-"""The transition-graph-id revision — add ``transitions.graph_id`` + backfill (issue #90).
+"""The transition-graph-id revision — add ``transitions.graph_id`` + backfill.
 
 Exercises the backfill on a store migrated to the prior revision, seeded with
 pre-graph_id transitions across two chunks pinned to two graphs: each backfills to its

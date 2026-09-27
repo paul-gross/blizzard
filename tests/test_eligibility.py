@@ -153,7 +153,7 @@ def test_every_runner_node_on_the_walk_is_evaluated_but_a_hub_node_is_only_trave
     assert check.eligible is expect_eligible
 
 
-# --- Agreement with EffectiveSession.of's precedence (issue #144) ---
+# --- Agreement with EffectiveSession.of's precedence ---
 
 
 def test_a_declared_harness_set_outranks_the_chunk_default() -> None:
@@ -184,7 +184,7 @@ def test_a_bare_resume_lineage_takes_the_chunk_default_harnesses() -> None:
 
 
 def test_a_resume_node_name_target_takes_the_chunk_default_harnesses() -> None:
-    # `resume:<node>` (issue #115) names another node, not a `sessions:` pool member, so
+    # `resume:<node>` names another node, not a `sessions:` pool member, so
     # it carries no declaration of its own even though the graph declares an unrelated one.
     node = _node("code", session_source="build")
     chunk = _chunk(default_harnesses=["claude", "codex"])
@@ -213,7 +213,7 @@ def test_an_unconstrained_bare_lineage_is_unsatisfied_without_a_default_capabili
     assert not EligibilityCheck(_chunk(), graph, node, capabilities).eligible
 
 
-# --- An unavailable capability (blizzard#438) satisfies no lineage ---
+# --- An unavailable capability satisfies no lineage ---
 
 
 def test_a_named_harness_lineage_is_unsatisfied_by_an_unavailable_capability() -> None:

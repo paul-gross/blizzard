@@ -1,8 +1,8 @@
-"""Transcript wire bodies — ``GET /api/leases/{lease_id}/transcript`` (issue #29, blizzard#249).
+"""Transcript wire bodies — ``GET /api/leases/{lease_id}/transcript``.
 
 A turn's ``timestamp`` is an ISO-8601 string with an explicit UTC offset, never naive
 (``bzh:utc-instants``). ``available=False`` carries ``reason`` and an empty ``turns``.
-``TurnView`` is retired (blizzard#248 D1) for ``transcript_segment.py``'s ``TurnSegmentView``,
+``TurnView`` is retired for ``transcript_segment.py``'s ``TurnSegmentView``,
 the same shape reused across every transcript read path."""
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ class TranscriptResponse(BaseModel):
     reason: TranscriptUnavailable | None
     turns: list[TurnSegmentView] = []
     truncated: bool = False
-    #: Which side answered (D1) — always ``"local"`` for an open lease's read.
+    #: Which side answered — always ``"local"`` for an open lease's read.
     provenance: TranscriptProvenance = "local"
     #: Set only when a closed lease's hub could not be asked *and* local cannot answer
-    #: either (D1).
+    #: either.
     hub_unreachable: bool = False

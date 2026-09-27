@@ -1,4 +1,4 @@
-"""Transcript-segment service tier (blizzard#247, blizzard#249) — the real hub's fleet
+"""Transcript-segment service tier — the real hub's fleet
 ingest and lease-transcript-read routes driven from outside a running daemon. No
 runner-side counterpart exists yet (#246), so this drives ``POST /api/fleet/transcripts``
 and ``GET .../transcript-segments`` directly rather than through a mock-runner
@@ -97,7 +97,7 @@ def test_a_cap_rejected_record_re_offered_under_a_fresh_seq_is_re_adjudicated(tm
         assert entry["truncated"] is False
 
 
-# --- the lease-transcript read route (D2/D3, issue #249) ------------------------
+# --- the lease-transcript read route ------------------------
 
 
 def test_an_enrolled_runner_reads_back_the_lease_segments_it_shipped(tmp_path: Path) -> None:
@@ -129,7 +129,7 @@ def test_an_enrolled_runner_reads_back_the_lease_segments_it_shipped(tmp_path: P
 
 
 def test_the_mock_hubs_counterpart_route_round_trips_a_shipped_lease(tmp_path: Path) -> None:
-    """D6: the mock hub's retention and its own counterpart route, driven from the app
+    """The mock hub's retention and its own counterpart route, driven from the app
     side over real HTTP against a real ``blizzard-mock-hub`` subprocess."""
     bin_dir = require_mock_fleet()
     hub_port = _free_port()

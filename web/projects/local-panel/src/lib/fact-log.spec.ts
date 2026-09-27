@@ -13,7 +13,7 @@ afterEach(() => stub?.restore());
 
 /** A full `DashboardView` body, `facts.items` set to `facts` and every other
  * section its empty default — `FactLog` reads off the shared `/api/dashboard`
- * poll (issue #311), not a `/api/facts` route of its own. */
+ * poll, not a `/api/facts` route of its own. */
 function dashboardBody(facts: readonly runnerApi.FactView[]): runnerApi.DashboardView {
   return {
     runner: {

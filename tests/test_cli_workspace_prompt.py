@@ -2,7 +2,7 @@
 
 Drives the real verbs against a scaffolded runtime root: listing and showing the corpus,
 installing a sample as a local fork, diffing that fork for drift, and reporting which source
-layer 2 resolves from (issue #344).
+layer 2 resolves from.
 """
 
 from __future__ import annotations

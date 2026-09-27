@@ -1,8 +1,8 @@
-"""A routine's finding trend — the `GET /api/routines/trend` read view (blizzard#394).
+"""A routine's finding trend — the `GET /api/routines/trend` read view.
 
 Every count is a fold over the window's own `finding_facts`, never a stored rollup
 (`bzh:facts-not-status`); periods are fixed-length slices of `[since, until)`, and `age`
-is the D5 cut over the window's created findings against a caller-supplied boundary."""
+is the cut over the window's created findings against a caller-supplied boundary."""
 
 from __future__ import annotations
 

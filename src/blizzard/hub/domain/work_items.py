@@ -1,4 +1,4 @@
-"""Hub-owned work item editing (blizzard#358) plus delivery closure (issue #360) —
+"""Hub-owned work item editing plus delivery closure —
 create, in-place edit, withdraw, deliver.
 
 Holds the *write* work-item repository (``bzh:controller-read-only``), reached only through a
@@ -47,7 +47,7 @@ def prepare_mint(
     """The guard sequence every item-minting create path shares: allocate the ref,
     refuse a live holder, mint the resting chunk. Shared by :meth:`WorkItemEditService.create`,
     :meth:`WorkItemEditService.materialize_create`, and a routine run's own mint
-    (blizzard#392) — the last of these the only caller sourcing ``default_model``/
+    — the last of these the only caller sourcing ``default_model``/
     ``default_effort``/``default_harnesses`` from anywhere but ``mint_chunk``'s own empty-preference default."""
     ref = items.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
@@ -76,7 +76,7 @@ class WorkItemNotEditable(Exception):
 
 @dataclass(frozen=True)
 class WorkItemEdit:
-    """The fields a single all-or-nothing item edit request supplies (blizzard#358),
+    """The fields a single all-or-nothing item edit request supplies,
     the same sentinel shape :class:`~blizzard.hub.domain.edit.ChunkEdit` carries: a
     field absent from ``edit`` is left unchanged, distinct from an explicit clear."""
 
@@ -87,7 +87,7 @@ class WorkItemEdit:
 
 @dataclass(frozen=True)
 class CreatedWorkItem:
-    """The result of filing a hub-owned work item (blizzard#359) — the item plus the
+    """The result of filing a hub-owned work item — the item plus the
     id of the ``not_ready`` chunk its creation mints in the same transaction."""
 
     item: WorkItemRecord
@@ -96,7 +96,7 @@ class CreatedWorkItem:
 
 @dataclass(frozen=True)
 class WithdrawnWorkItem:
-    """The result of withdrawing a hub-owned work item (issue #364) — the item itself,
+    """The result of withdrawing a hub-owned work item — the item itself,
     plus the cascade-deleted holder chunk's id, its pre-delete status, and the fresh
     ``chunk_deleted.id`` when withdrawal cascaded into deleting an unacquired holder;
     all three ``None`` when it did not."""
@@ -120,7 +120,7 @@ class WorkItemHeldByLiveChunk(Exception):
 
 class WorkItemHeldByDependents(Exception):
     """Withdrawal cascaded into deleting an unacquired holder, but that holder is a
-    standing prerequisite for other chunks (issue #460) — names the edge, distinct from
+    standing prerequisite for other chunks — names the edge, distinct from
     :class:`WorkItemHeldByLiveChunk`, which names a live holder instead."""
 
     def __init__(self, pointer: WorkRef, chunk_id: str, dependent_chunk_ids: list[str]) -> None:
@@ -165,7 +165,7 @@ class WorkItemEditService:
         stated_priority: WorkItemPriority | None,
         graph: Graph,
     ) -> CreatedWorkItem:
-        """File the item and mint its resting chunk in one transaction (blizzard#359),
+        """File the item and mint its resting chunk in one transaction,
         pinned to ``graph``, holding the pointer this call itself allocates. Checks the
         allocated pointer for a live holder before minting: an out-of-band ingest of the
         same ref can pre-empt it, raising :class:`~blizzard.hub.domain.ingest.IngestConflict`
@@ -192,7 +192,7 @@ class WorkItemEditService:
         stated_priority: str | None,
         graph: Graph,
     ) -> bool:
-        """The materialization sweep's own ``create`` path (D1, D7, D8): :meth:`create`'s
+        """The materialization sweep's own ``create`` path: :meth:`create`'s
         guard sequence, always into the reserved hub source, landing through
         :meth:`~blizzard.hub.domain.work.IWriteWorkItemRepository.materialize_create` so
         the mint and the outcome fact are one transaction. Raises
@@ -223,7 +223,7 @@ class WorkItemEditService:
         reason: str | None,
         closed_by: str,
     ) -> CreatedWorkItem | None:
-        """A garden-proposal acceptance's mint path (blizzard#395): :meth:`create`'s
+        """A garden-proposal acceptance's mint path: :meth:`create`'s
         guard sequence into the reserved hub source, writing the item, its chunk, and
         the closure row on one connection. Raises
         :class:`~blizzard.hub.domain.ingest.IngestConflict` as :meth:`create` does;
@@ -270,8 +270,8 @@ class WorkItemEditService:
     def withdraw(self, item: WorkItemRecord, *, by: str) -> WithdrawnWorkItem:
         """Close ``item`` as withdrawn; raises :class:`WorkItemNotEditable` when already
         closed. An unacquired holder is deleted via
-        :class:`~blizzard.hub.domain.delete.DeleteService` instead of refusing (issue
-        #364); :class:`WorkItemHeldByLiveChunk` still raises for a runner- or human-held
+        :class:`~blizzard.hub.domain.delete.DeleteService` instead of refusing;
+        :class:`WorkItemHeldByLiveChunk` still raises for a runner- or human-held
         one. Names the cascade-deleted chunk, if any, for the caller's own delete frame."""
         self._require_open(item)
         holder = self._work_refs.find_live_holder(item.pointer)
@@ -296,8 +296,8 @@ class WorkItemEditService:
         )
 
     def deliver(self, item: WorkItemRecord) -> WorkItemRecord:
-        """Close ``item`` as delivered (issue #360) — the close-intent drainer's own
-        write path (blizzard#383). No business rule beyond the store's own idempotency
+        """Close ``item`` as delivered — the close-intent drainer's own
+        write path. No business rule beyond the store's own idempotency
         guard: a live chunk holding the pointer is the expected caller, not a conflict
         to block."""
         return self._items.close(item.source, item.ref, closure=WorkItemClosure.DELIVERED, at=self._clock.now())

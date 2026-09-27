@@ -1,5 +1,5 @@
 """Runner routes — the **operator** half of the fleet registry: list, read, pause,
-resume, and enroll (issue #87, #104). The runner-authenticated half is
+resume, and enroll. The runner-authenticated half is
 :mod:`blizzard.hub.api.fleet`, which reuses this module's :func:`runner_view`.
 
 Controllers stay read-only over the store (``bzh:controller-read-only``);
@@ -133,7 +133,7 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
 )
 def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RunnerEnrollmentResponse:
     """Mint (or rotate) ``runner_id``'s bearer token — the plaintext is returned once;
-    the store keeps only its sha256 hash from here on (issue #86a).
+    the store keeps only its sha256 hash from here on.
 
     Requires an existing registration (404 otherwise): enrollment is a deliberate act on
     a known runner, never a trust-on-first-use grant to an unregistered name."""

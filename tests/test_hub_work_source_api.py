@@ -1,8 +1,8 @@
 """``GET /chunks/{id}/work-items`` renders a hub-owned pointer through the unchanged
-handler (issue #357, component tier) — the built-in ``hub`` source needs no
+handler (component tier) — the built-in ``hub`` source needs no
 ``[[work_source]]`` to resolve at ingest or render at read.
 
-Also exercises the source-addressed editor routes (blizzard#358): ``/api/work-sources``
+Also exercises the source-addressed editor routes: ``/api/work-sources``
 and its ``{source}/items``/``{source}/items/{ref}`` children."""
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
 
 
 def test_a_hub_owned_pointer_ingests_and_renders_its_title_and_body(tmp_path: Path) -> None:
-    """Creation itself mints the item's chunk (blizzard#359) — no separate ingest call
+    """Creation itself mints the item's chunk — no separate ingest call
     needed to give ``GET /chunks/{id}/work-items`` a pointer to render."""
     hub = build_hub(tmp_path)
     created = hub.client.post(
@@ -133,7 +133,7 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
     assert patched.json()["body"] == "steps to repro"  # untouched field is preserved
 
     # The minted chunk is still not_ready — unacquired, not genuinely live — so
-    # withdrawal deletes it rather than refusing (issue #364, D3).
+    # withdrawal deletes it rather than refusing.
     withdrawn = hub.client.delete(f"/api/work-sources/hub/items/{ref}")
     assert withdrawn.status_code == 200, withdrawn.text
     assert withdrawn.json()["closure"] == "withdrawn"
@@ -144,7 +144,7 @@ def test_create_get_list_patch_and_withdraw_round_trip(tmp_path: Path) -> None:
 
 def test_list_work_items_resolves_liveness_with_one_bulk_call_regardless_of_item_count(tmp_path: Path) -> None:
     """``GET /api/work-sources/hub/items`` renders every item's ``web_url`` through one
-    bulk ``live_holders`` call, not once per item (issue #421)."""
+    bulk ``live_holders`` call, not once per item."""
     hub = build_hub(tmp_path)
     created = [
         hub.client.post("/api/work-sources/hub/items", json={"title": f"t{i}", "body": "b"}).json() for i in range(3)
@@ -218,7 +218,7 @@ def test_list_work_items_author_query_count_is_independent_of_item_count(tmp_pat
 
 
 # --------------------------------------------------------------------------- #
-# blizzard#359 — create mints its resting chunk, one transaction, no promotion
+# Create mints its resting chunk, one transaction, no promotion
 
 
 def test_create_mints_exactly_one_chunk_on_the_default_graph_holding_the_new_pointer(tmp_path: Path) -> None:
@@ -336,7 +336,7 @@ def test_a_blank_title_rejects_before_the_default_graph_is_resolved(tmp_path: Pa
 
 
 # --------------------------------------------------------------------------- #
-# D4 — the editor-presence gate: 404 unknown source, 409 no editor
+# The editor-presence gate: 404 unknown source, 409 no editor
 
 
 def test_unknown_source_is_404_on_every_source_addressed_route(tmp_path: Path) -> None:
@@ -360,7 +360,7 @@ def test_a_source_with_no_editor_is_409_on_every_source_addressed_route(tmp_path
 
 
 # --------------------------------------------------------------------------- #
-# D9 — an unallocated ref is 404
+# An unallocated ref is 404
 
 
 def test_an_unallocated_ref_is_404_on_get_patch_and_delete(tmp_path: Path) -> None:
@@ -372,7 +372,7 @@ def test_an_unallocated_ref_is_404_on_get_patch_and_delete(tmp_path: Path) -> No
 
 
 # --------------------------------------------------------------------------- #
-# D5 — a closed item refuses PATCH and DELETE alike
+# A closed item refuses PATCH and DELETE alike
 
 
 def test_patch_and_delete_of_an_already_withdrawn_item_are_409(tmp_path: Path) -> None:
@@ -401,9 +401,9 @@ def test_the_listing_route_threads_its_limit_and_refuses_one_out_of_range(tmp_pa
 
 
 def test_delete_deletes_an_unacquired_holder_and_returns_200(tmp_path: Path) -> None:
-    """D3 (issue #364): the freshly-minted holder is not_ready — unacquired, not
+    """The freshly-minted holder is not_ready — unacquired, not
     genuinely live — so DELETE succeeds immediately, publishing the same
-    chunk-changed/queue-changed pair a direct chunk delete does (blizzard#359)."""
+    chunk-changed/queue-changed pair a direct chunk delete does."""
     hub = build_hub(tmp_path)
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
     ref, chunk_id = created["ref"], created["chunk_id"]
@@ -422,13 +422,13 @@ def test_delete_deletes_an_unacquired_holder_and_returns_200(tmp_path: Path) -> 
     assert frame["chunk_id"] == chunk_id
     assert frame["cause"] == "deleted"
     assert frame["status"] == "not_ready"
-    assert frame["by"] == "operator"  # AUTH_MODE_NONE's implicit identity (issue #364)
+    assert frame["by"] == "operator"  # AUTH_MODE_NONE's implicit identity
     assert frame["key"].startswith("chunk_deleted:")
 
 
 def test_delete_is_409_while_an_acquired_chunk_holds_the_item_and_200_once_it_is_stopped(tmp_path: Path) -> None:
     """A claimed (running) holder is genuinely acquired — outside
-    ``PRE_CLAIM_STATUSES`` — so DELETE still refuses it, exactly as before (D3). A
+    ``PRE_CLAIM_STATUSES`` — so DELETE still refuses it, exactly as before. A
     terminal holder's own withdrawal is unaffected either way, deleting nothing."""
     hub = build_hub(tmp_path)
     created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
@@ -444,11 +444,11 @@ def test_delete_is_409_while_an_acquired_chunk_holds_the_item_and_200_once_it_is
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={}).status_code == 202
 
     assert hub.client.delete(f"/api/work-sources/hub/items/{ref}").status_code == 200
-    assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 200  # a terminal holder survives (D3)
+    assert hub.client.get(f"/api/chunks/{chunk_id}").status_code == 200  # a terminal holder survives
 
 
 # --------------------------------------------------------------------------- #
-# D6 — authorship is stamped from the session, never accepted from the body
+# Authorship is stamped from the session, never accepted from the body
 
 
 def test_create_stamps_the_caller_s_user_id_not_their_username(tmp_path: Path) -> None:
@@ -483,7 +483,7 @@ def test_create_carrying_a_client_supplied_author_is_422(tmp_path: Path) -> None
 
 
 # --------------------------------------------------------------------------- #
-# D7 — stated_priority is a validated enum, defaulting to normal
+# stated_priority is a validated enum, defaulting to normal
 
 
 def test_stated_priority_outside_the_three_values_is_422(tmp_path: Path) -> None:

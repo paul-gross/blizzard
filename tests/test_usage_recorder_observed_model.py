@@ -1,5 +1,5 @@
-"""``UsageRecorder`` prices an unpinned generation from the model its own transcript names
-(blizzard#629): the observation is asked for only when the lease stamped no model and the
+"""``UsageRecorder`` prices an unpinned generation from the model its own transcript names:
+the observation is asked for only when the lease stamped no model and the
 transcripts lane is wired, read once per generation, and handed into both the envelope
 parse and the transcript fallback — a pinned lease never pays for the read."""
 

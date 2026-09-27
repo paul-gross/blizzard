@@ -1,5 +1,5 @@
 """The ``oidc`` conformer — issuer discovery, code exchange, ``id_token`` signature
-verification (issue #92, package-private).
+verification (package-private).
 
 All ``httpx``/JWT usage is confined here (``bzh:dependency-inversion``). Discovery
 (the issuer's ``.well-known/openid-configuration``) is fetched lazily on first use

@@ -4,7 +4,7 @@ import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
 
 /** One rendered Activity feed row — the logged frame plus its display strings.
- * `detail` is the block row's second line (`chunk-changed` only, issue #212); every
+ * `detail` is the block row's second line (`chunk-changed` only); every
  * other event type leaves it unset and renders as the single-line row it always has. */
 export interface ActivityRow {
   readonly seq: number;
@@ -15,7 +15,7 @@ export interface ActivityRow {
 }
 
 /**
- * The Activity feed panel's presentational half (issue #213 Phase 4 — split from
+ * The Activity feed panel's presentational half (split from
  * `activity-panel.ts`, `bzh:frontend-container-presentational`) — a scrolling,
  * newest-first feed of recent fleet events with a running count.
  *

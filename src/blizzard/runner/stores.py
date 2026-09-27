@@ -1,9 +1,9 @@
-"""The runner-store bundles and umbrella Protocols (blizzard#410, blizzard#412, D4).
+"""The runner-store bundles and umbrella Protocols.
 
 ``RunnerStores`` is the frozen bundle of write-capable Protocol seams
 :mod:`~blizzard.runner.composition` builds, for a collaborator spanning several concepts.
 ``RunnerReadStores`` narrows it statically, one field per concept typed to its ``IRead*``
-twin, over the same adapter instances (D1) — the bundle every route resolves, so
+twin, over the same adapter instances — the bundle every route resolves, so
 ``bzh:controller-read-only`` holds at type-check time for the one collaborator every
 handler reaches through. ``IReadRunnerStore``/``IWriteRunnerStore`` compose every concept
 Protocol into one seam — no ``src/`` collaborator holds either directly, every one now
@@ -157,7 +157,7 @@ class RunnerReadStores:
     """The controller-facing runner-store bundle — every field typed to its concept's
     read Protocol only, so ``bzh:controller-read-only`` is enforced at type-check time for
     the one collaborator every route handler reaches through. Narrows statically over the
-    same adapter instances :func:`of` is given (D1) — it wraps nothing and opens no second
+    same adapter instances :func:`of` is given — it wraps nothing and opens no second
     connection."""
 
     lease_record: IReadLeaseRecordRepository
@@ -187,7 +187,7 @@ class RunnerReadStores:
     @classmethod
     def of(cls, stores: RunnerStores) -> RunnerReadStores:
         """Narrow ``stores`` to its read-only twin — every ``IWrite*`` field re-typed to its
-        ``IRead*`` twin over the same instance, never a second one (D1)."""
+        ``IRead*`` twin over the same instance, never a second one."""
         return cls(
             lease_record=stores.lease_record,
             session=stores.session,

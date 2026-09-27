@@ -52,7 +52,7 @@ def _seed_lease(store, *, lease_id: str, chunk_id: str, harness_id: str, pid: in
         session=SessionReference(harness_id, _SHARED_SESSION_ID),
         spawned_at=_NOW,
     )
-    # The generation-1 spawn's own worker-starting boundary (blizzard#437 Phase 4) — the
+    # The generation-1 spawn's own worker-starting boundary — the
     # range-read fallback needs one to recover past its own stdout envelope at all.
     store.record_boundary_open(
         lease_id=lease_id,

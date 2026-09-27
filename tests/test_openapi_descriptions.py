@@ -2,7 +2,7 @@
 
 The mechanical companion to ``bzh:comment-locality``'s wire-docstring clause: a description
 naming a UI surface, an internal Python symbol, or workspace path notation fails here
-rather than shipping as public API reference text (issue #278).
+rather than shipping as public API reference text.
 """
 
 from __future__ import annotations

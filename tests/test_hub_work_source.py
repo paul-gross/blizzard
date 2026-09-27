@@ -1,4 +1,4 @@
-"""``HubWorkSource`` — the built-in, always-seated work source (issue #357, component
+"""``HubWorkSource`` — the built-in, always-seated work source (component
 tier). Its "fetch" is a read of this hub's own durable store, not a forge round-trip;
 see ``tests/test_work_source.py`` for the pass-through (GitHub) binding's sibling proof.
 """
@@ -86,7 +86,7 @@ def _user(users: UserRepository, *, username: str) -> User:
 
 def _graph(engine: Engine) -> Graph:
     """A minimal graph a minted chunk can pin to — a seeded row for the FK,
-    ``create``'s own ``graph`` parameter needing only the id (blizzard#359)."""
+    ``create``'s own ``graph`` parameter needing only the id."""
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
     return Graph(graph_id="gr_1", name="g", entry_node_id="nd_1", nodes=[], edges=[], created_at=_T0)
@@ -135,7 +135,7 @@ def test_fetch_reads_an_open_item_s_title_and_body(tmp_path: Path) -> None:
 
 
 def test_fetch_resolves_a_user_author_s_login(tmp_path: Path) -> None:
-    """The one place a bare ``user_id`` is ever resolved to a login (blizzard#362)."""
+    """The one place a bare ``user_id`` is ever resolved to a login."""
     source, items, _, users, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     user = _user(users, username="alice")
@@ -250,7 +250,7 @@ def test_web_url_is_none_when_no_live_holder_is_supplied(tmp_path: Path) -> None
 
 
 # --------------------------------------------------------------------------- #
-# IWorkEditor (blizzard#358) — list/get/create/edit/withdraw
+# IWorkEditor — list/get/create/edit/withdraw
 
 
 def test_list_and_get_answer_the_full_record_for_open_and_withdrawn_items(tmp_path: Path) -> None:
@@ -308,7 +308,7 @@ def test_create_allocates_an_open_item(tmp_path: Path) -> None:
 
 
 def test_create_mints_a_not_ready_chunk_pinned_to_the_graph_and_holding_the_ref(tmp_path: Path) -> None:
-    """The composite write's own claim (blizzard#359): one chunk, on the passed graph,
+    """The composite write's own claim: one chunk, on the passed graph,
     holding exactly the pointer creation just allocated."""
     source, _, chunks, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
@@ -390,8 +390,8 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
 
 
 def test_withdraw_deletes_an_unacquired_holder_and_withdraws_the_item(tmp_path: Path) -> None:
-    """D3 (issue #364): a not_ready holder is unacquired, not genuinely live — withdraw
-    deletes it rather than refusing. Creation itself mints the holder (blizzard#359).
+    """A not_ready holder is unacquired, not genuinely live — withdraw
+    deletes it rather than refusing. Creation itself mints the holder.
     The cascade attributes the delete to the same actor the withdrawal itself carries."""
     source, _, chunks, _, engine, _ = _source(tmp_path)
     created = source.create(
@@ -415,7 +415,7 @@ def test_withdraw_deletes_an_unacquired_holder_and_withdraws_the_item(tmp_path: 
 def test_withdraw_of_an_item_the_cascade_already_closed_is_refused(tmp_path: Path) -> None:
     """A second withdrawal after the delete cascade already closed ``item`` hits
     ``_require_open``'s existing ``closed_at IS NULL`` guard — no second write
-    (blizzard#364, idempotent-by-guard)."""
+    (idempotent-by-guard)."""
     source, _, _, _, engine, _ = _source(tmp_path)
     created = source.create(
         title="t",
@@ -433,7 +433,7 @@ def test_withdraw_of_an_item_the_cascade_already_closed_is_refused(tmp_path: Pat
 
 def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Path) -> None:
     """A claimed (running) holder is genuinely acquired — outside
-    ``PRE_CLAIM_STATUSES`` — so withdraw still refuses it exactly as before (D3)."""
+    ``PRE_CLAIM_STATUSES`` — so withdraw still refuses it exactly as before."""
     source, _, chunks, _, engine, clock = _source(tmp_path)
     created = source.create(
         title="t",
@@ -497,11 +497,11 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
     withdrawn = source.withdraw(pointer, by="operator")
 
     assert withdrawn.item.closure == WorkItemClosure.WITHDRAWN
-    assert withdrawn.deleted_chunk_id is None  # a terminal holder is unaffected either way (D3)
+    assert withdrawn.deleted_chunk_id is None  # a terminal holder is unaffected either way
 
 
 # --------------------------------------------------------------------------- #
-# IWorkCloser — the built-in hub source needs no `close = true` opt-in (issue #360)
+# IWorkCloser — the built-in hub source needs no `close = true` opt-in
 
 
 def test_close_marks_an_open_item_delivered(tmp_path: Path) -> None:
@@ -571,7 +571,7 @@ def test_close_leaves_a_withdrawn_item_withdrawn(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# close()'s garden-proposal delivery resolution (blizzard#394 Phase 3)
+# close()'s garden-proposal delivery resolution
 
 
 def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str = "fin_1") -> str:
@@ -645,8 +645,7 @@ def test_close_delivers_the_accepted_proposals_live_finding_attributed_to_it(tmp
 
 def test_close_run_twice_appends_only_one_delivery(tmp_path: Path) -> None:
     """`close()` is safe to repeat — a redelivered close-intent drain sweep, or any
-    other retry, must not append a second `delivered` fact (blizzard#394 Phase 3,
-    blizzard#583)."""
+    other retry, must not append a second `delivered` fact."""
     source, items, _, _, engine, _ = _source(tmp_path)
     graph = _graph(engine)
     created = seed_work_item(

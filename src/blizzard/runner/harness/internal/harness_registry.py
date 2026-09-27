@@ -1,4 +1,4 @@
-"""The one neutral composition point over every coding harness the runner ships (D9).
+"""The one neutral composition point over every coding harness the runner ships.
 
 Claude Code's own construction stays here — this module's one approved wiring site,
 symmetric with OpenCode's own factory (`opencode_registry.build_opencode_binding`), so
@@ -29,17 +29,17 @@ _LAUNCH_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1, thread_
 
 def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
     """Build every configured harness binding once for one graph, over one shared probe/
-    launcher pair (D4) — the launcher's `_LAUNCH_EXECUTOR` is module-level and shared
+    launcher pair — the launcher's `_LAUNCH_EXECUTOR` is module-level and shared
     across every call, never rebuilt per call: a deferred-disarm child's `PR_SET_PDEATHSIG`
     parent is the thread that forked it, so a throwaway executor's teardown can kill a
-    just-launched, not-yet-scheduled child before it ever reads its confirm byte (F1)."""
+    just-launched, not-yet-scheduled child before it ever reads its confirm byte."""
     projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
     transcript_source = ClaudeCodeTranscriptSource(
         projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
     )
     process = LinuxProcessProbe()
     # Built and injected here (`bzh:dependency-injection`), not `ProcessLauncher`'s own
-    # module-level default — this composition root is the one place that belongs (D4).
+    # module-level default — this composition root is the one place that belongs.
     launcher = ProcessLauncher(process, executor=_LAUNCH_EXECUTOR)
     worker_env = config.worker_env
     adapter = ClaudeCodeAdapter(
@@ -63,7 +63,7 @@ def build_production_harness_registry(config: RunnerConfig) -> HarnessRegistry:
 
 def build_production_harness_health_probes(config: RunnerConfig) -> dict[str, IHarnessHealthProbe]:
     """Every configured harness binding's own :class:`~blizzard.runner.harness.adapter.
-    IHarnessHealthProbe` (blizzard#438), this module's own approved wiring site for the
+    IHarnessHealthProbe`, this module's own approved wiring site for the
     health-probe seam, symmetric with :func:`build_production_harness_registry`'s own
     adapter construction — the composition root reaches both only through this module."""
     return {

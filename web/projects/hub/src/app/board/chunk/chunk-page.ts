@@ -35,7 +35,7 @@ import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-
 import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
 
 /**
- * The chunk detail page (`/board/chunk/:chunkId`, issue #160) — reached from
+ * The chunk detail page (`/board/chunk/:chunkId`) — reached from
  * both the mobile board's rows and the desktop dock's artifact links, on
  * desktop as well as mobile. One shell serves both widths: `app.routes.ts`
  * forks the mobile/desktop board shell in the route table, and only there —
@@ -47,7 +47,7 @@ import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
  * the choice is a URL-held state of this one page, not a different page):
  * **General** — {@link ChunkGeneralTab}, everything this page showed before it
  * grew more tabs — **Node history** ({@link ChunkNodeHistoryContainer}), **Artifacts**,
- * and **Transcripts** (blizzard#248 Phase 2), the last hidden from the strip
+ * and **Transcripts**, the last hidden from the strip
  * without `transcript:read` ({@link canReadTranscripts}). A route makes any of
  * the four deep-linkable and back-button-navigable for free.
  *
@@ -57,7 +57,7 @@ import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
  * presentational component's job. The Node history and Transcripts tabs' own
  * queries stay off this container entirely — {@link ChunkNodeHistoryContainer} and
  * {@link ChunkTranscriptsContainer} each own theirs, mounted only inside their own
- * `@switch` branch below, which is what keeps them lazy (`review:F1`; split out
+ * `@switch` branch below, which is what keeps them lazy (split out
  * rather than folded in here to keep this file under `web:lint`'s line cap).
  *
  * Scope note, deliberate rather than an oversight: the dock's **destructive
@@ -139,7 +139,7 @@ export class ChunkPage {
     });
   }
 
-  /** The plane seam {@link ChunkTranscriptsContainer} crosses (D5, runner-node-grouped-
+  /** The plane seam {@link ChunkTranscriptsContainer} crosses (runner-node-grouped-
    * transcripts) — exposed as an instance field so the template can bind it; a plain
    * module import is not itself a template expression. */
   protected readonly hubClient = hubClient;
@@ -198,7 +198,7 @@ export class ChunkPage {
 
   /** A segment picked in the Transcripts tab writes its id back to the URL —
    * {@link ChunkTranscriptsContainer} forwards it straight to the presentational tab,
-   * a pure function of that param, never its own selection state (blizzard#248 D8). */
+   * a pure function of that param, never its own selection state. */
   protected onSelectTranscriptSegment(segmentId: string | null): void {
     if (this.mobile()) {
       if (segmentId === null) {
@@ -215,7 +215,7 @@ export class ChunkPage {
 
   /** A sidechain opened standalone in the Transcripts tab — nested under a tool call or
    * unlinked — writes its encoded `SidechainPath` back to the URL, so it is
-   * deep-linkable (blizzard#248 D7, `review:F4`). */
+   * deep-linkable. */
   protected onSelectTranscriptSidechain(path: string | null): void {
     if (this.mobile()) {
       this.focusRequest = {
@@ -233,8 +233,8 @@ export class ChunkPage {
   private readonly editGraphMutation = injectSetChunkGraphMutation();
   private readonly meQuery = injectMeQuery();
 
-  /** Whether the current identity may set the chunk's graph (`chunk:control` —
-   * issue #210). `null`/pending resolves to `false` (hidden until confirmed). */
+  /** Whether the current identity may set the chunk's graph (`chunk:control`).
+   * `null`/pending resolves to `false` (hidden until confirmed). */
   protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
 
   /** Whether the current identity may answer an open question (`question:answer`). */
@@ -252,7 +252,7 @@ export class ChunkPage {
   protected readonly answerPending = computed(() => this.answerMutation.isPending());
 
   /** Whether the current identity may read a chunk's stored transcript segments
-   * (`transcript:read`, blizzard#248 D9) — the Transcripts tab's own *option* is
+   * (`transcript:read`) — the Transcripts tab's own *option* is
    * hidden from the strip without it. A deep link still reaches
    * {@link ChunkTranscriptsContainer}, which renders the backend's 403 as its own state
    * rather than relying on this client-side check to be the only gate. */
@@ -271,14 +271,14 @@ export class ChunkPage {
   );
 
   /** The last operator-action failure on this chunk, or `null`. The desktop
-   * container holds the same signal for the same reason (issue #42's "report,
+   * container holds the same signal for the same reason ("report,
    * don't swallow"): without it a 404/409/422 is a tap that appears to do
    * nothing, which on a phone is the only feedback there is. Cleared on the next
    * attempt. */
   protected readonly actionError = signal<string | null>(null);
 
-  /** The last operator-action **outcome** — a non-failure result that still needs saying
-   * (issue #165): today, the winning answer a lost first-write-wins race returns. This
+  /** The last operator-action **outcome** — a non-failure result that still needs saying:
+   * today, the winning answer a lost first-write-wins race returns. This
    * page needs it at least as much as the desktop dock does — answering from a phone is
    * what it exists for, so it is the surface most likely to *lose* a race, and folding
    * that 409 through `errorMessage()` told the answerer their action failed while the

@@ -1,4 +1,4 @@
-"""in-flight judgement elicitations — the detached launch/collect record (blizzard#443)
+"""in-flight judgement elicitations — the detached launch/collect record
 
 Revision ID: 20260831_1000_runner_in_flight_elicitations
 Revises: 20260818_0900_runner_lease_compaction_window

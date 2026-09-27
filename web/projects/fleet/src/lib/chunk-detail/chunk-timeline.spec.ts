@@ -119,7 +119,7 @@ const NAMED_DETAIL: ChunkDetail = {
   artifacts: [],
 };
 
-// A chunk whose history spans two graphs (issue #90): a transition in the source graph,
+// A chunk whose history spans two graphs: a transition in the source graph,
 // then a cross-graph migration into the triage graph. Both sides carry resolved names,
 // so the timeline must not degrade any step to a raw `nd_`/`gr_` id.
 const TWO_GRAPH_DETAIL: ChunkDetail = {
@@ -490,7 +490,7 @@ describe('ChunkTimeline', () => {
     expect(migration.getAttribute('tabindex')).toBeNull();
     expect(migration.classList.contains('keyed')).toBe(false);
 
-    // REVIEW_FAIL_DETAIL's own active row lands in the review:F11 lag window (below) —
+    // REVIEW_FAIL_DETAIL's own active row lands in the lag window (below) —
     // a landed transition already claims (nd_build, epoch 2), so its own key is null too.
     const activeFixture = TestBed.createComponent(ChunkTimeline);
     activeFixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
@@ -615,7 +615,7 @@ describe('ChunkTimeline', () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     // TWO_GRAPH_DETAIL's own active row lands post-migration at a node no history
     // transition ever routed into — epoch reuse across the migration is not the lag
-    // window (review:F11's own doc comment on `deriveActiveRow`).
+    // window (`deriveActiveRow`'s own doc comment).
     fixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'running' });
     fixture.componentRef.setInput('activatable', true);
     const emitted: (string | null)[] = [];

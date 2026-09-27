@@ -1,4 +1,4 @@
-"""The ``/chunks/{id}/stop`` route over the HTTP surface (issue #118).
+"""The ``/chunks/{id}/stop`` route over the HTTP surface.
 
 Proves the controller wires stop correctly end to end: 202/404/409, the fact written,
 the route + hub-exec slot released, the events published, and that a stopped chunk

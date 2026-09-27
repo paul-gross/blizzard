@@ -1,4 +1,4 @@
-"""Mobile glance board — narrow-viewport browser e2e (blizzard#181, Phase 5).
+"""Mobile glance board — narrow-viewport browser e2e.
 
 At a real ~390px phone width (`bzh:narrow-viewport-tier-rule`), `/board` routes to the
 glance shell. Asserts the loading-vs-empty distinction (AC 4): while the chunks read is

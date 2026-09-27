@@ -1,4 +1,4 @@
-"""drop the unread node ``mode`` column (blizzard#52) — parsed, carried, and served, but never read
+"""drop the unread node ``mode`` column — parsed, carried, and served, but never read
 
 Revision ID: 20260907_0900_drop_node_mode
 Revises: 20260906_1130_routine_scopes_join

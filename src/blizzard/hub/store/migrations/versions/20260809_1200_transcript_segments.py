@@ -1,4 +1,4 @@
-"""transcript segments (blizzard#247, epic:transcripts, hub store tree) — the append-only
+"""transcript segments (epic:transcripts, hub store tree) — the append-only
 per-record transcript table and its lane's own high-water table. Creates both, ``checkfirst``.
 
 Revision ID: 20260809_1200_hub_transcript_segments

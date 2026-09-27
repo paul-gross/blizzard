@@ -1,4 +1,4 @@
-"""runner external subscription usage misses (blizzard#504 D7) — one refresh-in-place row per
+"""runner external subscription usage misses — one refresh-in-place row per
 ``(runner_id, slug)``, a sibling to ``runner_external_usage``; a frozen local literal (``bzh:frozen-revisions``).
 
 Revision ID: 20260922_1100_runner_external_usage_misses

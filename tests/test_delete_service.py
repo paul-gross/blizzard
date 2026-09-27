@@ -1,5 +1,5 @@
 """DeleteService (unit tier) — the operator's deletion of an unacquired chunk,
-withdrawing its hub items (issue #364).
+withdrawing its hub items.
 
 A fake stands in for each repository — only the methods :class:`DeleteService` actually
 calls are meaningfully implemented; every other seam raises loudly if called. Mirrors
@@ -214,11 +214,11 @@ def test_delete_names_the_chunk_and_status_in_its_refusal_message() -> None:
 
     assert "chk_1" in str(excinfo.value)
     assert "running" in str(excinfo.value)
-    assert "deletion" in str(excinfo.value)  # names deletion, not grouping (D2)
+    assert "deletion" in str(excinfo.value)  # names deletion, not grouping
 
 
 def test_delete_raises_chunk_not_found_for_an_already_gone_chunk() -> None:
-    """D5/idempotent-by-guard: a chunk already grouped or deleted away resolves to
+    """Idempotent-by-guard: a chunk already grouped or deleted away resolves to
     ``None`` from both ``get``/``load_facts`` — the guard raises before any write."""
     service, items = _service(None, None)
 
@@ -249,7 +249,7 @@ def _edge(dependent_chunk_id: str, prerequisite_chunk_id: str) -> DependencyEdge
 
 def test_delete_refuses_a_chunk_that_is_a_standing_prerequisite() -> None:
     """A chunk named as another's prerequisite by a standing edge cannot be deleted
-    (issue #460) — refused rather than orphaning the dependent's marking."""
+    — refused rather than orphaning the dependent's marking."""
     edges = [_edge("chk_dependent", "chk_1")]
     service, items = _service(_CHUNK, _not_ready_facts(), standing_edges=edges)
 

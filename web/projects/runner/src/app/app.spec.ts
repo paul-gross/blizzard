@@ -8,7 +8,7 @@ import { settle } from 'fleet/testing';
 import { App } from './app';
 import { routes } from './app.routes';
 
-/** A do-nothing EventSource so `RunnerLiveUpdates` (blizzard#317 Phase 4) can open
+/** A do-nothing EventSource so `RunnerLiveUpdates` can open
  * without a real stream — mirrors the hub app-root's own `FakeEventSource`. */
 class FakeEventSource {
   onopen: (() => void) | null = null;
@@ -26,7 +26,7 @@ describe('runner App', () => {
   const previousFetch = globalThis.fetch;
 
   beforeEach(async () => {
-    // The shell mounts `LocalPanel`, which now polls `GET /api/leases` (issue #28) —
+    // The shell mounts `LocalPanel`, which now polls `GET /api/leases` —
     // stub a minimal empty response so this shell-level test stays independent of
     // the local panel's own query behavior (covered by `local-panel`'s own specs).
     globalThis.fetch = (async () =>
@@ -40,10 +40,10 @@ describe('runner App', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        // `LocalPanel` now binds its selection to the URL's query params (issue #99),
+        // `LocalPanel` now binds its selection to the URL's query params,
         // so it injects the router — the shell test wires the real route table.
         provideRouter(routes),
-        // `App` now starts `RunnerLiveUpdates` unconditionally (blizzard#317 Phase 4) —
+        // `App` now starts `RunnerLiveUpdates` unconditionally —
         // a fake transport so the stream opens without ever reaching real `fetch`.
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],
@@ -68,7 +68,7 @@ describe('runner App', () => {
   });
 
   it('resolves a selection query-param URL through the redirect and still mounts the panel', async () => {
-    // The panel's selection rides in the URL's query params (issue #99). The
+    // The panel's selection rides in the URL's query params. The
     // `''` redirect (`app.routes.ts`) must carry it through to `/board` — a
     // deep-linked reload lands here. `navigateByUrl` resolves `true` only on a
     // successful match, so this proves the route table itself, not just that

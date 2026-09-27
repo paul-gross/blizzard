@@ -21,7 +21,7 @@ import { isRoutineBlocked } from './gardening-effective-graph';
  * The `/gardening/routines` sub-tab (`plans/garden/user-interface.md` §Declaring
  * and running a routine) — the routine list, beside a `<router-outlet>` holding
  * whichever routine the URL names (`gardening-routine-detail.ts`). Split off this
- * page's own combined routines-and-scopes surface (blizzard#399/#397); routines
+ * page's own combined routines-and-scopes surface; routines
  * and scopes are unrelated concepts that only used to share a tab.
  *
  * `gardening-scopes-page.ts`'s own parent-list/child-detail shape, for the same
@@ -30,7 +30,7 @@ import { isRoutineBlocked } from './gardening-effective-graph';
  *
  * A container: it injects the routine and graph queries and forwards plain view
  * models to the presentational {@link FleetRoutineList}, which injects no query of
- * its own. `blocked` (D7) is resolved per row off the same effective-graph lookup
+ * its own. `blocked` is resolved per row off the same effective-graph lookup
  * a run itself refuses on (`gardening-effective-graph.ts`), shared with the detail
  * pane that resolves it for the selected routine.
  */

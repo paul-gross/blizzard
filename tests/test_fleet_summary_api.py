@@ -1,4 +1,4 @@
-"""``GET /api/fleet/summary`` — the runner-panel fleet-pulse read (issue #76, component tier).
+"""``GET /api/fleet/summary`` — the runner-panel fleet-pulse read (component tier).
 
 Folds every chunk's derived status into the four bucket counts the machine panel's
 strip shows, never a stored column. Proves the route wires the live derivation to the

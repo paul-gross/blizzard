@@ -1,4 +1,4 @@
-"""Store-read-index gate allow-list (blizzard#525).
+"""Store-read-index gate allow-list.
 
 ``ROW_THRESHOLD`` bounds what a "deliberately unindexed" table's declared row bound may claim — an entry above it
 fails the gate's own hygiene check, not a measured runtime fact (sqlite's plan is row-count-independent without
@@ -41,7 +41,7 @@ class MethodScopedAllowance:
     reason: str
 
 
-# Points at schema.py's own "Deliberately unindexed (issue #520)" comment near `asks` (`bzh:one-prose-home`).
+# Points at schema.py's own "Deliberately unindexed" comment near `asks` (`bzh:one-prose-home`).
 _SCHEMA_520_REASON = (
     "schema.py's own 'Deliberately unindexed (issue #520)' comment beside `asks`: "
     "near-empty by design, so a scan beats an index's upkeep."
@@ -166,7 +166,7 @@ _SINGLETON_REASON = (
 )
 
 HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
-    # --- fleet-wide-by-design snapshot reads (issue #374) ------------------------------
+    # --- fleet-wide-by-design snapshot reads ------------------------------
     TableWideAllowance("chunk_bounces", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("chunk_completed", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("chunk_pause_facts", 200, _FLEET_SNAPSHOT_REASON),

@@ -1,5 +1,5 @@
 """An in-flight judgement elicitation — the detached process a launch starts and a
-later reconciliation pass collects, keyed ``(lease_id, epoch)`` (blizzard#443)."""
+later reconciliation pass collects, keyed ``(lease_id, epoch)``."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class ElicitationRecord:
     epoch: int
     pid: int | None
     process_start_time: str | None
-    pgid: int | None  # this launch's owned process group (D3); unset with `pid` alike
+    pgid: int | None  # this launch's owned process group; unset with `pid` alike
     output_path: str
     first_launched_at: datetime
     relaunch_count: int
@@ -43,7 +43,7 @@ class IReadElicitationRepository(Protocol):
         ...
 
     def in_flight_elicitation_lease_ids(self) -> set[str]:
-        """Every lease id with an in-flight elicitation record, regardless of epoch (D6): no
+        """Every lease id with an in-flight elicitation record, regardless of epoch: no
         path may re-mint or resume a lease while its elicitation is in flight, matching the
         already-established ``parked_lease_ids``/``pending_submission_lease_ids`` shape."""
         ...
@@ -60,7 +60,7 @@ class IWriteElicitationRepository(IReadElicitationRepository, Protocol):
     """Read-write in-flight-elicitation store — held only by the domain."""
 
     def record_elicitation_launch(self, lease_id: str, epoch: int, *, output_path: str, at: datetime) -> None:
-        """Durably record a fresh launch BEFORE the process starts (D1) —
+        """Durably record a fresh launch BEFORE the process starts —
         ``pid``/``process_start_time`` land via :meth:`record_elicitation_started` once
         ``Popen`` returns."""
         ...
@@ -68,18 +68,18 @@ class IWriteElicitationRepository(IReadElicitationRepository, Protocol):
     def record_elicitation_started(
         self, lease_id: str, epoch: int, *, pid: int, process_start_time: str, pgid: int | None = None
     ) -> None:
-        """Fill in the launched process's pid, start time, and owned group (D3) on
+        """Fill in the launched process's pid, start time, and owned group on
         ``Popen`` return — the same group-ownership fact a fresh spawn or resume records,
         so a lease closing mid-elicitation can group-kill it rather than a bare pid kill."""
         ...
 
     def record_elicitation_relaunch(self, lease_id: str, epoch: int, *, output_path: str) -> None:
-        """A lost answer's relaunch (D5): a fresh ``output_path`` and pid slot, ``relaunch_count``
+        """A lost answer's relaunch: a fresh ``output_path`` and pid slot, ``relaunch_count``
         incremented, ``first_launched_at`` left untouched — staleness is measured from the
         first launch and a relaunch never resets it."""
         ...
 
     def clear_elicitation(self, lease_id: str, epoch: int) -> None:
         """Retire the record once its verdict is collected, or once its lease closes out
-        from under it (D7)."""
+        from under it."""
         ...

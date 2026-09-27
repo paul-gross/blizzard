@@ -1,7 +1,7 @@
-"""The identity-spine migration — ``users``/``identities``/``sessions`` (issue #91).
+"""The identity-spine migration — ``users``/``identities``/``sessions``.
 
 The migration applies both to a fresh store and to an existing store already at the
-revision just before this one; the partial unique index on ``users.email`` (decision D2)
+revision just before this one; the partial unique index on ``users.email``
 is enforced by sqlite.
 """
 
@@ -70,7 +70,7 @@ def test_username_is_unique(tmp_path: Path) -> None:
 
 
 def test_email_is_unique_only_when_set(tmp_path: Path) -> None:
-    """Decision D2 — the partial unique index (``WHERE email IS NOT NULL``): two
+    """The partial unique index (``WHERE email IS NOT NULL``): two
     ``NULL`` emails coexist, a duplicate non-null email collides."""
     engine = _upgrade_existing_store_to_head(tmp_path)
     with engine.begin() as conn:

@@ -1,4 +1,4 @@
-"""Runner-store read indexes (issue #520): the heartbeat staleness probe, the outbound
+"""Runner-store read indexes: the heartbeat staleness probe, the outbound
 buffer's pending-fact reads, per-lease attachments, `HELD_BINDING`, external-usage-sample
 retention's per-slug lookup, and the per-chunk transcript-segment reads — plus
 `outbound_buffer`'s own `sqlite_autoincrement` fix, mirroring `transcript_outbound_buffer`'s

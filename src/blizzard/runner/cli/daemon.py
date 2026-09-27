@@ -13,7 +13,7 @@ import httpx
 from blizzard.cli.param_rank import ParamSource
 from blizzard.runner.config import RunnerConfig
 
-# A machine-local round trip (issue #43), so a hook-scale budget rather than the hub-client one.
+# A machine-local round trip, so a hook-scale budget rather than the hub-client one.
 LOCAL_CLIENT_TIMEOUT = 5.0
 
 

@@ -12,11 +12,11 @@ export const appConfig: ApplicationConfig = {
     provideZonelessChangeDetection(),
     provideTanStackQuery(new QueryClient()),
     // Panel selection (which chunk is open) lives in the URL's `?chunk=` query
-    // param so it is shareable and refresh-safe (issue #99); `LocalPanel` reads
+    // param so it is shareable and refresh-safe; `LocalPanel` reads
     // and writes it through the router. See `app.routes.ts` for the route table
-    // this now resolves against (issue #313).
+    // this now resolves against.
     provideRouter(routes),
-    // Session reacquisition on a 401 (issue #312) — the runner client's own
+    // Session reacquisition on a 401 — the runner client's own
     // interceptor, mirroring the hub app's `provideAuthInterceptor()`.
     provideSessionRecovery(),
   ],

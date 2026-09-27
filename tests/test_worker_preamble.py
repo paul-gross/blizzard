@@ -1,4 +1,4 @@
-"""The runner spawn-preamble renderer (issues #17, #103, #149, unit tier).
+"""The runner spawn-preamble renderer (unit tier).
 
 The pure three-layer composition the core hands the adapter as ``prompt_prefix``: the
 blizzard preamble, the operator's workspace prompt, and a machine-local info table. A
@@ -104,7 +104,7 @@ def test_multi_env_table_names_every_held_environment() -> None:
         "prose",
         [AcquiredEnvironment("r1", "/ws/r1"), AcquiredEnvironment("r2", "/ws/r2")],
     )
-    # Both held environments appear — never just the first (issue #17).
+    # Both held environments appear — never just the first.
     assert "| environment name | `r1` |" in out
     assert "| environment workdir | `/ws/r1` |" in out
     assert "| environment name | `r2` |" in out
@@ -132,7 +132,7 @@ def test_empty_workspace_prompt_omits_that_layer() -> None:
 def test_baked_default_used_when_runner_prompt_unset() -> None:
     out = _render("", [AcquiredEnvironment("r1", "/ws/r1")])
     assert out.startswith(DEFAULT_BLIZZARD_PREAMBLE)
-    # The command surface is a reference table (blizzard#341): one row per worker verb,
+    # The command surface is a reference table: one row per worker verb,
     # each pointing at its own `--help` for the detail the preamble no longer carries.
     assert "| `work-items <chunk-id>` |" in out
     assert "| `chunk history`" in out
@@ -148,7 +148,7 @@ def test_baked_default_used_when_runner_prompt_unset() -> None:
 
 @pytest.mark.unit
 def test_baked_default_opens_with_a_title_and_declares_its_scope() -> None:
-    # Issue #147: layer 1 is a titled document, not an untitled prose blob — and it says
+    # Layer 1 is a titled document, not an untitled prose blob — and it says
     # what it covers, so an operator's layer-2 prompt has no reason to re-establish it.
     out = _render("", [AcquiredEnvironment("r1", "/ws/r1")])
     assert out.startswith("# Blizzard fleet worker\n")
@@ -181,7 +181,7 @@ def test_runner_prompt_layers_ahead_of_workspace_prompt_ahead_of_table() -> None
     )
 
 
-# --- Issue #149: what a resumed spawn sends -----------------------------------------
+# --- What a resumed spawn sends -----------------------------------------
 
 
 @pytest.mark.unit
@@ -205,7 +205,7 @@ def test_resume_with_unchanged_standing_prose_collapses_both_layers() -> None:
 
 @pytest.mark.unit
 def test_same_node_resume_is_byte_identical_to_the_plain_collapse() -> None:
-    """blizzard#340: a resume by the node that produced the previous turn renders exactly
+    """A resume by the node that produced the previous turn renders exactly
     the notice a node-blind render always produced — the variant never leaks in."""
     prose = "Workspace-specific prose."
     prior = _fingerprint(prose, _ENVS, runner_prompt="Blizzard prose.")
@@ -217,7 +217,7 @@ def test_same_node_resume_is_byte_identical_to_the_plain_collapse() -> None:
 
 @pytest.mark.unit
 def test_cross_node_resume_names_both_nodes_and_keeps_the_layers_collapsed() -> None:
-    """blizzard#340: `build` resuming a session whose previous turn was `verify` — the
+    """`build` resuming a session whose previous turn was `verify` — the
     common shape when two nodes share a session pool. The role-change line leads; the
     standing layers still collapse rather than re-send."""
     prose = "Workspace-specific prose."
@@ -236,7 +236,7 @@ def test_cross_node_resume_names_both_nodes_and_keeps_the_layers_collapsed() -> 
 
 @pytest.mark.unit
 def test_cross_node_resume_with_no_workspace_prompt_still_announces_the_role_change() -> None:
-    """blizzard#340: a deployment with no layer 2 collapses to the blizzard-only line —
+    """A deployment with no layer 2 collapses to the blizzard-only line —
     which must not read as continuity either, so the role-change line rides it the same."""
     prior = _fingerprint("", _ENVS, runner_prompt="Blizzard prose.")
 
@@ -248,7 +248,7 @@ def test_cross_node_resume_with_no_workspace_prompt_still_announces_the_role_cha
 
 @pytest.mark.unit
 def test_resume_with_an_unknown_prior_node_falls_back_to_the_plain_collapse() -> None:
-    """blizzard#340: with no recorded node for the previous turn there is nothing to name,
+    """With no recorded node for the previous turn there is nothing to name,
     so the safe direction is the wording that claims only what is known."""
     prose = "Workspace-specific prose."
     prior = _fingerprint(prose, _ENVS, runner_prompt="Blizzard prose.")
@@ -260,7 +260,7 @@ def test_resume_with_an_unknown_prior_node_falls_back_to_the_plain_collapse() ->
 
 @pytest.mark.unit
 def test_a_changed_standing_layer_carries_the_role_change_line_too() -> None:
-    """blizzard#340 in the updated-notice path: the role-change line still leads the render
+    """In the updated-notice path: the role-change line still leads the render
     — ahead of the announcement, whose "what follows supersedes" scope covers the layers it
     introduces and not the role change."""
     prior = _fingerprint("Old policy.", _ENVS, runner_prompt="Blizzard prose.")
@@ -273,7 +273,7 @@ def test_a_changed_standing_layer_carries_the_role_change_line_too() -> None:
 
 @pytest.mark.unit
 def test_a_cross_node_resume_with_no_recorded_fingerprint_still_announces_the_role_change() -> None:
-    """blizzard#340 on the full-render path: a resume whose fingerprint was never recorded
+    """On the full-render path: a resume whose fingerprint was never recorded
     — a crash between the spawn and its fingerprint write — re-sends every layer, and a
     recorded prior node that differs still leads it with the role-change line."""
     prose = "Workspace-specific prose."

@@ -1,4 +1,4 @@
-"""The runner-owned process launcher (``ProcessLauncher``, D4): process-group ownership
+"""The runner-owned process launcher (``ProcessLauncher``): process-group ownership
 and the parent-death signal's thread scoping. ``PR_SET_PDEATHSIG`` tracks the death of the
 SPECIFIC OS thread that called it, not the process — a launcher forking directly from a
 tick-scoped thread would SIGKILL every worker the instant that thread exits, even
@@ -118,7 +118,7 @@ def _launch_in_a_throwaway_process(pid_file: str, *, confirm: bool) -> tuple[int
 
 @pytest.mark.unit
 def test_a_confirmed_deferred_launch_survives_the_launching_process_exiting(tmp_path: Any) -> None:
-    """F1: once the caller's durable record is down and confirms, the trampoline has
+    """Once the caller's durable record is down and confirms, the trampoline has
     disarmed itself — the launching process then exiting outright (a crash or graceful exit
     look alike to the OS) must no longer kill the child (`docs/deployment/recovery.md`)."""
     pid, pgid = _launch_in_a_throwaway_process(str(tmp_path / "pid"), confirm=True)
@@ -131,7 +131,7 @@ def test_a_confirmed_deferred_launch_survives_the_launching_process_exiting(tmp_
 
 @pytest.mark.unit
 def test_an_unconfirmed_deferred_launch_is_killed_when_the_launching_process_exits(tmp_path: Any) -> None:
-    """F1's inverse: the narrow pre-confirmation window still works — a launch nobody ever
+    """The inverse case: the narrow pre-confirmation window still works — a launch nobody ever
     confirms is still armed to its launching process, so that process's own exit (crash or
     graceful alike) still kills it outright, exactly as an un-deferred launch always has."""
     pid, pgid = _launch_in_a_throwaway_process(str(tmp_path / "pid"), confirm=False)
@@ -158,7 +158,7 @@ def _write_fd_of(launched: LaunchedProcess) -> int:
 
 @pytest.mark.unit
 def test_control_pipe_eof_with_no_confirm_byte_kills_the_trampoline_instead_of_exec(tmp_path: Any) -> None:
-    """F2: `os.read` returns `b""`, not an exception, on EOF — the trampoline must tell that
+    """`os.read` returns `b""`, not an exception, on EOF — the trampoline must tell that
     apart from a real confirm byte. This test's own process never exits, so the only signal
     reaching the trampoline is the pipe closing in-process, isolated from the PDEATHSIG race."""
     sentinel = tmp_path / "ran"

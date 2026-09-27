@@ -26,8 +26,7 @@ export class FactLogView {
     return formatLocalClockWithDay(fact.created_at);
   }
 
-  /** {@link clockInfo}'s full local date + time, for the stamp's hover tooltip
-   * (issue #175). */
+  /** {@link clockInfo}'s full local date + time, for the stamp's hover tooltip. */
   protected absolute(fact: runnerApi.FactView): string {
     return formatAbsolute(fact.created_at);
   }

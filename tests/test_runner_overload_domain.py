@@ -1,4 +1,4 @@
-"""Provider-overload backoff policy and closure — pure domain (blizzard#595).
+"""Provider-overload backoff policy and closure — pure domain.
 
 ``backoff_delay`` is a pure formula; ``backing_off_facts`` closes a fact against a lease's
 own current generation or elicitation launch instant, with no store of its own — both
@@ -43,7 +43,7 @@ def test_backoff_delay_caps_rather_than_keeps_doubling() -> None:
 
 @pytest.mark.unit
 def test_backoff_delay_never_reaches_the_cap_within_the_limit() -> None:
-    """The policy's own promise (D6): every ordinal short of the fall-through stays under
+    """The policy's own promise: every ordinal short of the fall-through stays under
     the cap, so the cap is dead code short of a future policy change to the limit."""
     for streak_ordinal in range(1, BACKOFF_LIMIT):
         assert backoff_delay(streak_ordinal) < timedelta(seconds=BACKOFF_CAP_SECONDS)
@@ -115,7 +115,7 @@ def test_a_worker_fact_stands_while_the_generation_is_unmoved() -> None:
 
 @pytest.mark.unit
 def test_a_worker_fact_closes_once_the_generation_moves_past_it() -> None:
-    """D7: no separate closing write — the recorded generation no longer matching the
+    """No separate closing write — the recorded generation no longer matching the
     lease's own current one is itself the closure, e.g. after this exact backoff's wake."""
     facts = _FakeOverloadReads([_worker_fact(generation=2, invocation_identity="2")])
     liveness = _FakeLeaseGeneration({"lease_1": 3})

@@ -1,4 +1,4 @@
-"""``routine_scopes`` (blizzard#488) — the many-to-many between a routine and its scopes,
+"""``routine_scopes`` — the many-to-many between a routine and its scopes,
 seeded from ``findings``/``finding_sets`` history plus each routine's own default.
 
 Revision ID: 20260906_1130_routine_scopes_join

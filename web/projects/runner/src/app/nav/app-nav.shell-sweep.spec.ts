@@ -6,7 +6,7 @@ import { page } from 'vitest/browser';
 import { AppNav } from './app-nav';
 
 /**
- * The runner shell's top tab strip (issue #313) — its own half of
+ * The runner shell's top tab strip — its own half of
  * `web:shell-sweep` (`blizzard-context:/verification/blizzard.md`
  * bzh:web-shell-sweep). `KitTabStrip`/`KitTab`'s chrome is unclamped flex
  * (no `@container` rule of its own), so this is a narrower proof than the

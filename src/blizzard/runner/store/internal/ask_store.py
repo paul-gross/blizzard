@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for the ask/park repository seam (package-private, blizzard#410).
+"""SQLAlchemy adapter for the ask/park repository seam (package-private).
 
 :meth:`AskStore.parked_lease_ids` takes the pause-park half of its answer from
 ``base.PAUSE_PARKED_LEASE_IDS``, the union both concepts' Protocols agree
@@ -66,7 +66,7 @@ class AskStore:
 
     def open_asks(self) -> list[AskRecord]:
         # An ask whose lease has closed is never open — a backstop independent of which
-        # path writes the retiring `park_resumes` row (blizzard#202).
+        # path writes the retiring `park_resumes` row.
         stmt = (
             select(asks)
             .where(asks.c.question_id.not_in(select(park_resumes.c.question_id)))

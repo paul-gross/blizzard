@@ -1,5 +1,5 @@
-"""finding_facts.finding_set_id — the delivered list a run-produced fact belongs to
-(blizzard#401 D1), nullable, no backfill, plus its supporting index.
+"""finding_facts.finding_set_id — the delivered list a run-produced fact belongs
+to, nullable, no backfill, plus its supporting index.
 
 Revision ID: 20260901_0900_finding_facts_finding_set_id
 Revises: 20260831_1100_gpc_item_index

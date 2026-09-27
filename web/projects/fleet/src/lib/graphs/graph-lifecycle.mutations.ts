@@ -5,7 +5,7 @@ import { enableGraphApiGraphsGraphIdEnablePost, retireGraphApiGraphsGraphIdRetir
 import { graphLifecycleMutationKey } from '../mutation-keys';
 import { hubGraphKey, hubGraphsKey } from '../query-keys';
 
-/** Retire or re-enable a graph's reversible lifecycle brake (issue #101): a retired
+/** Retire or re-enable a graph's reversible lifecycle brake: a retired
  * graph is excluded from name resolution and refuses new re-pins, but the `graphs`
  * row itself is never touched — the immutable definition survives unchanged. */
 export interface GraphLifecycleVars {

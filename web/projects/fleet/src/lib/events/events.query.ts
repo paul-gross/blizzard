@@ -24,14 +24,14 @@ export interface HubEventsFilters {
 }
 
 /**
- * Hub `GET /api/events` read — the operational event feed (Phase 4), through
+ * Hub `GET /api/events` read — the operational event feed, through
  * TanStack Query and the generated hub client (bzh:generated-client). `filters`
  * is a function so a caller-owned signal set recomputes it reactively; each
  * distinct filter combination rides in the query key, so it caches as its own
  * entry — same idiom as {@link injectHubFleetSpendQuery}'s `since` window.
  *
  * The live-update service re-reads this on `event-logged`, and on an
- * escalation-bearing `chunk-changed`; the poll is a backstop (issue #316), not the
+ * escalation-bearing `chunk-changed`; the poll is a backstop, not the
  * primary freshness path.
  */
 export function injectHubEventsQuery(filters: () => HubEventsFilters = () => ({})) {

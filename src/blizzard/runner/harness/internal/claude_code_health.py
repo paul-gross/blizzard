@@ -1,4 +1,4 @@
-"""The Claude Code health-probe binding (blizzard#438).
+"""The Claude Code health-probe binding.
 
 Standalone, mirroring :class:`~blizzard.runner.harness.internal.opencode_health.
 OpenCodeHealthProbe`: a narrow, separately-injected collaborator rather than a slice folded
@@ -17,11 +17,11 @@ from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import DEFAULT_CREDENTIALS_PATH
 
-# Currently >=2.1,<3.0, corpus-free (D1, blizzard#606): membership via `version_admitted` admits it alone.
+# Currently >=2.1,<3.0, corpus-free: membership via `version_admitted` admits it alone.
 ADMITTED_CLAUDE_CODE_RANGE_DISPLAY = ">=2.1,<3.0"
 ADMITTED_CLAUDE_CODE_RANGE: SpecifierSet = SpecifierSet(ADMITTED_CLAUDE_CODE_RANGE_DISPLAY)
 
-# Strips Claude Code's `--version` prefix/suffix off one line, keeping any pre-release suffix (blizzard#606).
+# Strips Claude Code's `--version` prefix/suffix off one line, keeping any pre-release suffix.
 _CLAUDE_CODE_VERSION_PATTERN = re.compile(
     r"^\s*(?:claude(?:\s+code)?(?:\s+version)?\s+)?(?:v)?"
     r"(?P<version>\d+\.\d+\.\d+(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
@@ -93,7 +93,7 @@ class ClaudeCodeHealthProbe:
         return normalize_claude_code_version(raw)
 
     def classifies_offline(self) -> bool:
-        # Claude Code declares no committed compatibility corpus (D1) — range membership
+        # Claude Code declares no committed compatibility corpus — range membership
         # alone admits it, so no observed version is ever run through `classify_offline`.
         return False
 

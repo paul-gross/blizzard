@@ -1,4 +1,4 @@
-"""The provider-login surface (issue #92) — providers, authorize, callback, logout.
+"""The provider-login surface — providers, authorize, callback, logout.
 
 Public plane throughout — no ``require(<permission>)``: an unauthenticated visitor must
 reach these to log in at all. Under ``auth.mode = "none"`` every route here is inert

@@ -1,5 +1,5 @@
 """``InvocationBoundaryStore`` — the durable transcript invocation-boundary ledger
-(blizzard#437 D6/D11, unit tier)."""
+(unit tier)."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def test_record_boundary_open_is_readable_back() -> None:
 
 def test_record_boundary_open_persists_start_unreadable() -> None:
     """``start_unreadable=True`` is durable and distinct from ``start_position is None``'s
-    fresh-session meaning (blizzard#437 F2/F10)."""
+    fresh-session meaning."""
     store = make_store("sqlite://")
     store.record_boundary_open(
         lease_id="lease_1",
@@ -69,7 +69,7 @@ def test_boundary_of_an_unopened_invocation_is_none() -> None:
 
 
 def test_record_boundary_open_is_idempotent_under_replay() -> None:
-    """Check-then-insert (D7): a replayed open for an already-open ``(lease, generation,
+    """Check-then-insert: a replayed open for an already-open ``(lease, generation,
     kind)`` writes nothing a second time — the original ``start_position`` survives."""
     store = make_store("sqlite://")
     store.record_boundary_open(
@@ -100,7 +100,7 @@ def test_record_boundary_open_is_idempotent_under_replay() -> None:
 
 def test_distinct_kinds_at_the_same_generation_coexist() -> None:
     """A nudge and the resume it triggers share one generation number but distinct kinds
-    (D5) — two rows, never a collision."""
+    — two rows, never a collision."""
     store = make_store("sqlite://")
     store.record_boundary_open(
         lease_id="lease_1",
@@ -152,7 +152,7 @@ def test_open_boundaries_for_lease_excludes_closed_rows() -> None:
 
 
 def test_advance_boundary_moves_an_open_boundarys_start_in_place() -> None:
-    """blizzard#594: a judge-usage-limit park's resume reuses the standing ``"judge"``
+    """A judge-usage-limit park's resume reuses the standing ``"judge"``
     boundary for its fresh elicitation, rather than opening a second row — ``advance_boundary``
     is the UPDATE that lets it move that row's own start forward, one row throughout."""
     store = make_store("sqlite://")

@@ -82,7 +82,7 @@ describe('injectRunnerLeasesQuery', () => {
   });
 
   it('re-reads GET /api/leases on the backstop interval — insurance under lease-changed, not the primary signal', async () => {
-    // Unlike the pre-blizzard#317 shape, the runner now has an event stream:
+    // Unlike the polling-only shape this replaced, the runner now has an event stream:
     // `lease-changed` (`runner-live-updates.ts`) is the primary freshness path, and
     // this interval is what closes the one gap no event marks — a lease gone quiet
     // without a further transition, whose `stale` flip depends on elapsed time, not

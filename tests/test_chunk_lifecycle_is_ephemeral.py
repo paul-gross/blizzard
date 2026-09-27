@@ -1,4 +1,4 @@
-"""``IReadChunkLifecycleRepository.is_ephemeral`` (issue #456, component tier) — the read
+"""``IReadChunkLifecycleRepository.is_ephemeral`` (component tier) — the read
 that tells a grouped-away or deleted chunk id apart from one never minted at all, since
 ``IReadChunkRecordRepository.get`` answers ``None`` for both."""
 

@@ -1,5 +1,5 @@
 """``IReadChunkFactsRepository.load_all_facts`` — the fleet-summary bulk read (component
-tier, issue #374).
+tier).
 
 Proves the bulk read derives the exact same status per chunk as ``load_facts`` called
 one chunk at a time, across a fixture spanning every derived status plus the edge
@@ -127,8 +127,8 @@ def _seed_fixture(store: ChunkStores, engine: Engine) -> None:
 
     _mint(store, "ch_paused")
     store.queue.record_promote("ch_paused", at=_T0)
-    # Newest-fact-wins (issue #46): paused, then resumed, then paused again — the tail
-    # (paused=True) must win, proving the explicit pause order_by (D4) round-trips.
+    # Newest-fact-wins: paused, then resumed, then paused again — the tail
+    # (paused=True) must win, proving the explicit pause order_by round-trips.
     store.lifecycle.record_pause("ch_paused", paused=True, by="op", at=_at(0))
     store.lifecycle.record_pause("ch_paused", paused=False, by="op", at=_at(1))
     store.lifecycle.record_pause("ch_paused", paused=True, by="op", at=_at(2))
@@ -163,7 +163,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine) -> None:
 
     # AC4: movement facts spanning two graphs — a transition on gr_1, then a migration
     # landing on gr_2's hub node. The executor for that landing must resolve against
-    # gr_2, not the chunk's gr_1 mint pin (issues #90, #111).
+    # gr_2, not the chunk's gr_1 mint pin.
     _mint(store, "ch_multigraph", graph_id="gr_1")
     store.queue.record_promote("ch_multigraph", at=_T0)
     store.movement.record_transition(
@@ -204,7 +204,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine) -> None:
         record_deleted_row(conn, "ch_deleted", by="op", at=_T0)
 
     # A kitchen-sink chunk exercising every remaining fact family ``load_facts`` reads,
-    # so the bulk read's completeness (D2) is proven, not merely asserted.
+    # so the bulk read's completeness is proven, not merely asserted.
     _mint(store, "ch_kitchen_sink")
     store.queue.record_promote("ch_kitchen_sink", at=_T0)
     store.route.record_lease("ch_kitchen_sink", epoch=1, runner_id="r", at=_T0)
@@ -300,7 +300,7 @@ def test_bulk_read_bucket_counts_match_the_per_chunk_fold(tmp_path: Path) -> Non
 
     via_bulk = FleetSummary.of(facts.status() for facts in store.facts.load_all_facts().values())
     # The pre-#374 shape ``FleetPulse.view()`` used, called out here as the equivalence
-    # baseline (D6) rather than imported from ``chunks.py``, since that call site is gone.
+    # baseline rather than imported from ``chunks.py``, since that call site is gone.
     via_per_chunk = FleetSummary.of(
         (store.facts.load_facts(c.chunk_id) or ChunkFacts(minted=True)).status() for c in store.record.list_all()
     )

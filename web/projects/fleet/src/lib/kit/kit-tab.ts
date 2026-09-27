@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 /**
- * The tab-strip chrome shared by every tab strip in the app (blizzard#203) —
+ * The tab-strip chrome shared by every tab strip in the app —
  * the main nav's routed tabs and {@link KitTabs}' page-local tabs alike: 32px
  * tall, `--header-lo` ground, one `--bezel` line closing the bottom.
  *

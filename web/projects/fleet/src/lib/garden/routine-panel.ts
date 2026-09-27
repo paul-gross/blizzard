@@ -9,7 +9,7 @@ import { KitPanel } from '../kit/kit-panel';
 import { KitProseBlock } from '../kit/kit-prose-block';
 import { FleetWhen } from '../when-display';
 
-/** The routine's own record (D1) — read-only: this panel ships no New/Edit
+/** The routine's own record — read-only: this panel ships no New/Edit
  * affordance. `RoutineView` also carries `routine_id`/`created_at`, neither
  * displayed here — identity is the list's own compact ref (`RoutineListRowVm`),
  * and `created_at` earns no row of its own on this record. */
@@ -21,7 +21,7 @@ export interface RoutineRecordVm {
   readonly defaultEffort: string | null;
 }
 
-/** One node of the effective graph's strategy — read-only prose (D5, D7). */
+/** One node of the effective graph's strategy — read-only prose. */
 export interface StrategyStepVm {
   readonly name: string;
   readonly prompt: string | null;
@@ -36,7 +36,7 @@ export interface TrendSummaryVm {
   readonly reopened: number;
 }
 
-/** One measurement inside the panel's window (D5) — opaque text, rendered as text,
+/** One measurement inside the panel's window — opaque text, rendered as text,
  * never parsed or plotted. */
 export interface MeasurementReadingVm {
   readonly scopeSlug: string;
@@ -44,7 +44,7 @@ export interface MeasurementReadingVm {
   readonly measurement: string;
 }
 
-/** One row of the last-swept table (D3, D4) — `producedAt`/`findingSetId` are `null`
+/** One row of the last-swept table — `producedAt`/`findingSetId` are `null`
  * for a scope this routine has never swept, rendered as "never". */
 export interface LastSweptRowVm {
   readonly scopeSlug: string;
@@ -60,7 +60,7 @@ export interface RelatedScopeVm {
   readonly isDefault: boolean;
 }
 
-/** The selected routine's whole panel view model (D1, D5, D7, D8) — plain data, no
+/** The selected routine's whole panel view model — plain data, no
  * query or wire type, so the presentational component and its spec never see one.
  * `blockedReason` alone carries blocked-ness: a non-`null` reason means blocked, so
  * there is no separate `blocked` flag that could disagree with it. */
@@ -73,7 +73,7 @@ export interface RoutinePanelVm {
   readonly lastSwept: readonly LastSweptRowVm[];
   readonly windowLabel: string;
   /** Every scope linked to this routine, each marked whether it is the routine's
-   * own default (D8) — `null` while the relation read is still pending, `trend`'s
+   * own default — `null` while the relation read is still pending, `trend`'s
    * own nullable-secondary-read shape. */
   readonly relatedScopes: readonly RelatedScopeVm[] | null;
   /** The routine's real, unoverridden lifecycle flag — which control
@@ -96,7 +96,7 @@ export interface RoutinePanelVm {
  * measurements, and last-swept table, all runtime observations rather than routine
  * definition; and **Strategy** — the effective graph's read-only prompts.
  * Presentational only: it renders exactly the view model it is handed and injects no
- * query (D1 ships no New/Edit affordance).
+ * query.
  *
  * The Routine panel is the one that always renders: it wraps its own body in
  * `fleet-kit-async-state`, so the loading/error/rest states read as a panel awaiting

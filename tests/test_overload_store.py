@@ -1,4 +1,4 @@
-"""The runner-side provider-overload backoff store (blizzard#595).
+"""The runner-side provider-overload backoff store.
 
 ``record_overload`` is check-then-insert, mirroring ``nudge_facts``; ``open_overload_facts``
 must read only the newest, un-reset fact per (lease, epoch) — a superseded or fallen-through

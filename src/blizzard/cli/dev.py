@@ -29,8 +29,7 @@ def dev() -> None:
     "allow_external_db",
     is_flag=True,
     default=False,
-    help="Proceed even if --hub-dir's config names a database outside that directory "
-    "(issue #234's --dir isolation guard).",
+    help="Proceed even if --hub-dir's config names a database outside that directory.",
 )
 def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None, allow_external_db: bool) -> None:
     """Assert both stores' durable invariants (``bzh:invariant-checker``).
@@ -48,7 +47,7 @@ def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None, allow_exte
         raise click.ClickException(str(exc)) from exc
     hub_db = hub_config.db_url if hub_config is not None else None
 
-    # A live operator is always well past any crash-recovery window (D3) — unlike the
+    # A live operator is always well past any crash-recovery window — unlike the
     # crash sweep's own "immediately after a kill" checkpoint.
     violations = Invariants(runner_db_url=runner_db, hub_db_url=hub_db).run(after_recovery=True)
     if not violations:

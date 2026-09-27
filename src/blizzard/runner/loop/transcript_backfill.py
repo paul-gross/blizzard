@@ -1,4 +1,4 @@
-"""Best-effort import of pre-lane worker transcripts (blizzard#250), plus the re-ship verb.
+"""Best-effort import of pre-lane worker transcripts, plus the re-ship verb.
 
 Walks the runner's own lease records — never the harness directory, which on a working
 machine is mostly the operator's own sessions — opens a segment per session still on disk,

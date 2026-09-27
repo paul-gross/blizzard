@@ -13,8 +13,8 @@ from blizzard.runner.cli.worker_call import WorkerCall
 
 @click.group("artifact")
 def artifact_group() -> None:
-    """Worker: read node-step, graph, and system artifacts; write this node-step's own (issue
-    #127). The lease binding is ambient: every verb acts on the worker's own lease, resolved
+    """Worker: read node-step, graph, and system artifacts; write this node-step's own.
+    The lease binding is ambient: every verb acts on the worker's own lease, resolved
     from the spawn environment — none takes a flag naming another chunk. ``--scope`` picks node
     scope, the graph mint's baked-in declarations, or blizzard's published system-artifact set.
     ``create`` *stages* a submission, published on completion (#169)."""
@@ -22,7 +22,7 @@ def artifact_group() -> None:
 
 @dataclass(frozen=True)
 class ArtifactEntry:
-    """One ``list``-view entry (issue #169) — every field but ``content``, which collapses to
+    """One ``list``-view entry — every field but ``content``, which collapses to
     its ``bytes`` length (``None`` when the artifact carries none, i.e. ``git_commit``).
     Carries ``scope`` (node/graph/system) like every other field."""
 
@@ -91,9 +91,9 @@ def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict]:
 def artifact_list(content: bool, scope: str | None) -> None:
     """Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,
     plus the graph mint's own baked-in declarations and blizzard's published system-artifact
-    set — ``--scope`` narrows to one. Content is elided by default (issue #169), since inlining
+    set — ``--scope`` narrows to one. Content is elided by default, since inlining
     every upstream asset's full text has overflowed tool output; ``--content`` restores it.
-    Also includes this node-step's own staged, not-yet-published submissions (issue #584),
+    Also includes this node-step's own staged, not-yet-published submissions,
     each carrying ``"staged": true`` — everything published carries ``"staged": false``."""
     worker = WorkerCall.of("artifact list")
     resp = worker.get(
@@ -134,8 +134,7 @@ def _is_not_found(exc: click.ClickException) -> bool:
     "--name",
     "name_opt",
     default=None,
-    help="Alias for the positional NAME, accepted since node prompts spell required artifacts "
-    "as `--name` (issue #584).",
+    help="Alias for the positional NAME, accepted since node prompts spell required artifacts as `--name`.",
 )
 @click.option(
     "--node",
@@ -174,7 +173,7 @@ def artifact_get(
     published until the node-step completes; a not-yet-published NAME 404s naming
     ``artifact staged`` instead. Read it back before completion with that verb.
 
-    NAME is passed literally: the CLI percent-encodes it itself (issue #233), slashes
+    NAME is passed literally: the CLI percent-encodes it itself, slashes
     included, so a slashed name (e.g. a ``merged/<owner>/<repo>`` delivery marker) is passed
     as-is, not pre-encoded."""
     name = name_opt if name_opt is not None else name_arg
@@ -228,7 +227,7 @@ def artifact_get(
 def artifact_create(name: str, scope: str | None) -> None:
     """Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node
     scope only. A submission *stages* the content, published into the envelope only on completion
-    (issue #169) — read it back with ``artifact staged``. Empty stdin and any rejection exit
+    — read it back with ``artifact staged``. Empty stdin and any rejection exit
     non-zero rather than silently losing the submission."""
     _refuse_read_only_scope("create", scope)
     worker = WorkerCall.of("artifact create")
@@ -264,8 +263,8 @@ def artifact_create(name: str, scope: str | None) -> None:
 )
 def artifact_staged(content: bool, scope: str | None) -> None:
     """Worker: list this node-step's own staged (not-yet-published) submissions, node scope only.
-    Read straight off the runner's own ``attachments`` record rather than the hub envelope (issue
-    #169), so a fresh ``artifact create`` shows up here immediately; ``--content`` gives the full
+    Read straight off the runner's own ``attachments`` record rather than the hub envelope,
+    so a fresh ``artifact create`` shows up here immediately; ``--content`` gives the full
     text."""
     _refuse_read_only_scope("staged", scope)
     worker = WorkerCall.of("artifact staged")
@@ -311,11 +310,11 @@ def artifact_staged(content: bool, scope: str | None) -> None:
     "a system artifact are both read-only.",
 )
 def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_sha: str, scope: str | None) -> None:
-    """Worker: durably declare a git-commit artifact for REPO (issue #143). Carries the ``git_commit``
+    """Worker: durably declare a git-commit artifact for REPO. Carries the ``git_commit``
     kind only — an asset is declared through ``artifact create``. Node scope only. Deliberately no
     ``--forge``: the origin comes from the environment's repo manifest (pinned by
     tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag). Echoes a
-    confirmation naming REPO, BRANCH, and the sha on success (issue #584) — a silent exit 0 was
+    confirmation naming REPO, BRANCH, and the sha on success — a silent exit 0 was
     indistinguishable from a no-op."""
     _refuse_read_only_scope("commit", scope)
     worker = WorkerCall.of("artifact commit")

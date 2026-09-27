@@ -339,7 +339,7 @@ _CLAUDE_SKILL_BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     # agent_spawn's Claude Code sibling kind (proven, `dialects.py`'s own
-    # `_CLAUDE_CODE_JSONL_2`) — never a read/skill mapping invented for OpenCode (D10).
+    # `_CLAUDE_CODE_JSONL_2`) — never a read/skill mapping invented for OpenCode.
     "tool_call('Skill', {'skill': 'wf-commit'}, output='ran the commit skill')\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
@@ -365,7 +365,7 @@ _OPENCODE_TASK_BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     # agent_spawn — the ONE proven OpenCode dialect entry (`dialects.py`'s own
-    # `_OPENCODE_EXPORT_1`, D5/D10) — no read/skill mapping invented here.
+    # `_OPENCODE_EXPORT_1`) — no read/skill mapping invented here.
     "tool_call('task', {'agent': 'reviewer'}, output='spawned a sub-agent')\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text("landed by the mock harness\\n")\n'
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'

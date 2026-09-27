@@ -1,5 +1,5 @@
-"""SQLAlchemy adapter for the routine_scopes join repository seam (package-private,
-blizzard#488). All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``).
+"""SQLAlchemy adapter for the routine_scopes join repository seam (package-private).
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``).
 ``link`` is idempotent over the composite primary key: a duplicate insert hits
 ``IntegrityError`` on the shared ``(routine_id, scope_slug)`` key and is swallowed as
 already-linked."""
@@ -43,7 +43,7 @@ class RoutineScopeStore:
             with self._store.write("link", expect=(IntegrityError,)) as conn:
                 conn.execute(insert(routine_scopes).values(routine_id=routine_id, scope_slug=scope_slug))
         except IntegrityError:
-            pass  # already linked — idempotent (D5's shape)
+            pass  # already linked — idempotent
 
     def unlink(self, routine_id: str, scope_slug: str) -> None:
         with self._store.write("unlink") as conn:

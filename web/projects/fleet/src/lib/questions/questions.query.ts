@@ -12,7 +12,7 @@ import { hubQuestionsKey } from '../query-keys';
  * rail must surface an ask on a chunk nobody has selected.
  *
  * The live-update service re-reads this on `question-asked` / `question-answered`;
- * the poll is a backstop (issue #316), not the primary freshness path.
+ * the poll is a backstop, not the primary freshness path.
  */
 export function injectHubQuestionsQuery() {
   return injectQuery(() => ({

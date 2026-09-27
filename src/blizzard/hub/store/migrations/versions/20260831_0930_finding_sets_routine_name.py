@@ -1,4 +1,4 @@
-"""finding_sets.routine_name — a set's own routine, by name (blizzard#392, D5). Non-null,
+"""finding_sets.routine_name — a set's own routine, by name. Non-null,
 server-defaulted; indexed alongside `scope_slug`, the pair a delta run's baseline reads by.
 
 Revision ID: 20260831_0930_finding_sets_routine_name

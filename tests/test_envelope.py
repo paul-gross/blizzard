@@ -128,7 +128,7 @@ def test_envelope_artifact_still_requires_node_name_and_epoch() -> None:
 
 def test_envelope_carries_session_source() -> None:
     # Mirrors target_graph beside the raw `to`: session_source is derived once at
-    # parse and carried verbatim onto the envelope's NodeConfig (issue #115).
+    # parse and carried verbatim onto the envelope's NodeConfig.
     node = replace(_node(), session_source="build")
     env = Envelope(chunk=_chunk(), graph=_graph(), node=node, artifacts=[], epoch=1).wire
     assert env.node.session == SessionMode.RESUME
@@ -148,7 +148,7 @@ def test_arrival_addendum_appends_to_the_pre_prompt() -> None:
 
 
 def test_required_artifacts_table_renders_name_and_kind_and_is_harness_inert() -> None:
-    """The procedurally-generated required-artifacts table (issue #143, Phase 5): one
+    """The procedurally-generated required-artifacts table: one
     `#`-prefixed line per `produces:` entry, naming its kind and the fleet-protocol
     declaration verb — inert to the mock harness's prompt-is-program `exec`."""
     node = replace(
@@ -203,7 +203,7 @@ def test_hub_node_has_no_judgement_prompt() -> None:
 
 
 def test_envelope_carries_checks_gating_fields() -> None:
-    """``checks_cwd``/``checks_timeout`` and a choice's ``requires_checks`` (issue #114)
+    """``checks_cwd``/``checks_timeout`` and a choice's ``requires_checks``
     ride the node envelope so the runner can execute + gate on them."""
     node = replace(
         _node(),
@@ -226,7 +226,7 @@ def test_envelope_checks_gating_fields_default_off() -> None:
     assert all(not c.requires_checks for c in env.node.choices)
 
 
-# --- The effective session declaration (issue #144) — precedence resolved hub-side ---
+# --- The effective session declaration — precedence resolved hub-side ---
 
 
 def _chunk_with_defaults(model: list[str], effort: str | None, harnesses: list[str] | None = None) -> Chunk:
@@ -295,7 +295,7 @@ def test_neither_a_declaration_nor_a_chunk_default_expresses_no_preference() -> 
 
 
 def test_a_node_name_session_target_carries_no_pool_but_still_the_chunk_default() -> None:
-    # `resume:<node>` (issue #115) resolves against node names, not the `sessions:` map,
+    # `resume:<node>` resolves against node names, not the `sessions:` map,
     # so it names no pool.
     node = replace(_node(), session_source="build")
     chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
@@ -350,7 +350,7 @@ def test_a_bare_resume_node_takes_the_chunk_default_harnesses() -> None:
 
 
 def test_a_node_name_session_target_takes_the_chunk_default_harnesses() -> None:
-    # `resume:<node>` names no pool (issue #115), so it falls straight to the chunk
+    # `resume:<node>` names no pool, so it falls straight to the chunk
     # default, same as the bare forms.
     node = replace(_node(), session_source="build")
     chunk = _chunk_with_defaults([], None, harnesses=["claude", "codex"])

@@ -1,4 +1,4 @@
-"""Provider-overload backoff — loop component tier (blizzard#595).
+"""Provider-overload backoff — loop component tier.
 
 A worker/judge exit an adapter classifies overloaded is not judged, spends no retry, and
 keeps its epoch: short of the streak limit, the lease backs off and wakes the same session
@@ -69,7 +69,7 @@ def _ctx(store, harness, *, clock=None):  # type: ignore[no-untyped-def]
     )
 
 
-# --- A single overload backs off (blizzard#595) -------------------------------
+# --- A single overload backs off -------------------------------
 
 
 def test_a_single_overload_backs_off_the_worker_generation_without_judging(tmp_path):  # type: ignore[no-untyped-def]
@@ -132,7 +132,7 @@ def test_a_backed_off_worker_wakes_the_same_lease_epoch_and_session_after_the_de
     assert store.attempt_count("ch_1", "nd_build") == 1  # still no retry consumed
 
 
-# --- Consecutive overloads escalate, then fall through (blizzard#595, D6) -----
+# --- Consecutive overloads escalate, then fall through -----
 
 
 def test_consecutive_overloads_double_the_backoff_delay_until_the_limit(tmp_path):  # type: ignore[no-untyped-def]
@@ -171,7 +171,7 @@ def test_consecutive_overloads_double_the_backoff_delay_until_the_limit(tmp_path
     assert store.attempt_count("ch_1", "nd_build") == 1  # the fall-through itself spends no retry either
 
 
-# --- A clean exit resets an open streak (blizzard#595, D5) --------------------
+# --- A clean exit resets an open streak --------------------
 
 
 def test_a_clean_exit_resets_an_open_streak_so_a_fresh_overload_starts_at_one(tmp_path):  # type: ignore[no-untyped-def]
@@ -205,13 +205,13 @@ def test_a_clean_exit_resets_an_open_streak_so_a_fresh_overload_starts_at_one(tm
     assert facts[0].streak_ordinal == 1
 
 
-# --- A judge elicitation's own overload (blizzard#595) -------------------------
+# --- A judge elicitation's own overload -------------------------
 
 
 def test_a_judge_elicitation_overload_backs_off_then_relaunches_a_fresh_elicitation(tmp_path):  # type: ignore[no-untyped-def]
     """The worker's own turn already finished before its verdict elicitation overloaded —
     the wake re-runs `Judgement`, launching a fresh elicitation, never the plain worker
-    wake message (mirrors the usage-limit judge park's own D2)."""
+    wake message (mirrors the usage-limit judge park's own handling)."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
     overload = ProviderOverload(detail="Overloaded: 529")

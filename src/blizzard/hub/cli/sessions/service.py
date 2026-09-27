@@ -1,4 +1,4 @@
-"""The CLI's session-write application service (hub:98, ``bzh:controller-read-only``) —
+"""The CLI's session-write application service (``bzh:controller-read-only``) —
 owns login's token save and logout's best-effort-revoke-then-always-delete ordering, so no
 click controller holds direct write access to the local session store."""
 
@@ -25,7 +25,7 @@ class SessionService:
         self._store.save(hub_url, token)
 
     def logout(self, hub_url: str, revoke: Callable[[], object]) -> None:
-        """``revoke`` is best-effort (issue #96) — the controller supplies it, and any
+        """``revoke`` is best-effort — the controller supplies it, and any
         failure from it must never skip the local delete."""
         with contextlib.suppress(Exception):  # best-effort hub revoke — the local delete must still happen
             revoke()

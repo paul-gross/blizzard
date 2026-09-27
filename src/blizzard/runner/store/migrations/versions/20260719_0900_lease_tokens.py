@@ -1,4 +1,4 @@
-"""lease capability token stash — ``lease_tokens`` (runner store tree, issue #113): one row per lease,
+"""lease capability token stash — ``lease_tokens`` (runner store tree): one row per lease,
 written at spawn. The plaintext rides the spawn env and is never persisted, only its sha256.
 
 Revision ID: 20260719_0900_runner_lease_tokens

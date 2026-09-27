@@ -39,8 +39,8 @@ import { GardeningRunDialog } from './gardening-run-dialog';
  * The selected routine's own detail — the right-hand child of
  * `/gardening/routines` (`gardening-routines-page.ts` owns the list beside it):
  * the record, its read-only strategy, its three health readings, and its
- * garden-proposal counts (blizzard#547). Mounted by both of that route's children,
- * so the bare one renders the panel's own "nothing selected" empty state. D1 ships
+ * garden-proposal counts. Mounted by both of that route's children,
+ * so the bare one renders the panel's own "nothing selected" empty state. It ships
  * no New/Edit affordance here.
  *
  * A container: it injects the routine, graph, trend, sweeps, scopes, and
@@ -49,7 +49,7 @@ import { GardeningRunDialog } from './gardening-run-dialog';
  * graph reads are the same cache-keyed queries the list beside it already holds, so
  * resolving the routed routine independently costs no second fetch. The scopes read
  * renders the routine's related scope set, each marked whether it is this routine's
- * own default (D8). The proposal-counts read feeds a separate presentational
+ * own default. The proposal-counts read feeds a separate presentational
  * component, {@link FleetRoutineProposalCounts}, gated on its own `asyncState`
  * independently of {@link panelState} (`bzh:frontend-empty-state-gated`).
  *
@@ -169,8 +169,7 @@ export class GardeningRoutineDetail {
   );
 
   /** The selected routine's related scopes, each marked whether it is the routine's
-   * own default (D8) — `null` until the routine-scopes read resolves
-   * (D5). */
+   * own default — `null` until the routine-scopes read resolves. */
   private readonly relatedScopes = computed<readonly RelatedScopeVm[] | null>(() => {
     const slugs = this.scopesQuery.data();
     const routine = this.selectedRoutine();
@@ -178,7 +177,7 @@ export class GardeningRoutineDetail {
     return slugs.map((slug) => ({ slug, isDefault: slug === routine.default_scope_slug }));
   });
 
-  /** The proposal-counts table's own rows (blizzard#547) — mapped off the read's
+  /** The proposal-counts table's own rows — mapped off the read's
    * `rows`, already scoped to the one selected routine by the query's own `routine`
    * filter. */
   protected readonly proposalCountsRows = computed<readonly ProposalCountsRowVm[]>(() =>
@@ -232,7 +231,7 @@ export class GardeningRoutineDetail {
     };
   });
 
-  /** Gates only on what the record and `blocked` (D7) need — `routinesQuery` to know
+  /** Gates only on what the record and `blocked` need — `routinesQuery` to know
    * there is a routine at all, `graphsQuery` to resolve `effectiveGraph`/`blocked`
    * without ever answering a graph-list failure as a confident "blocked". The record is
    * fully derivable from those two once resolved, so it is never held behind the
@@ -246,8 +245,8 @@ export class GardeningRoutineDetail {
     return 'ready';
   });
 
-  /** The routine currently running the dialog against — `null` closes it (blizzard#399
-   * D6). Only {@link FleetRoutinePanel}'s own `run` output ever sets it, so it can only
+  /** The routine currently running the dialog against — `null` closes it.
+   * Only {@link FleetRoutinePanel}'s own `run` output ever sets it, so it can only
    * ever name the already-selected, already-unblocked routine. */
   protected readonly runningRoutine = signal<RoutineView | null>(null);
 

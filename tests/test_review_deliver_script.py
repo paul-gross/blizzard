@@ -1,4 +1,4 @@
-"""``review_deliver``'s ``main()`` (blizzard#582 Phase 3, unit tier) — the
+"""``review_deliver``'s ``main()`` (unit tier) — the
 ``tests/test_garden_deliver_script.py`` shape, minus the ``--delta``/``--proposals`` seam
 that script needs and this route (the chunk's own newest artifact, read server-side)
 does not."""

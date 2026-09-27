@@ -11,7 +11,7 @@ import { MachineDetailHeader } from './machine-detail-header';
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
  * here so the dock never offers a Pause the server would answer with a 409 — the
  * same table `fleet/chunk-detail/chunk-detail-header.ts`'s own `NOT_PAUSABLE` pins
- * on the hub board's side of this same brake (issue #185). */
+ * on the hub board's side of this same brake. */
 const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'delivering']);
 
 /**
@@ -19,7 +19,7 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
  * the discovery mock's "machine detail" panel for the selected chunk: execution
  * facts *from this box only* (lease, session, pid, env, workdir, heartbeat), and
  * the escalation resume command when one is open. Per-attempt selection and the
- * transcript moved to the runner-local chunk detail route (issue #318) — the
+ * transcript moved to the runner-local chunk detail route — the
  * chunk name in the header links there now that one exists, a deliberate
  * replacement rather than a regression: it restores the design this dock's own
  * docstring used to describe as deferred ("no cross-view navigation yet").
@@ -29,7 +29,7 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
  * newest) — this dock owns no list read of its own.
  *
  * The header ({@link MachineDetailHeader}, a presentational sibling) matches the
- * hub board's own chunk-detail header shape (issue #185, the model at
+ * hub board's own chunk-detail header shape (the model at
  * `fleet/chunk-detail/chunk-detail-header.ts`). Unlike the rest of this dock's
  * facts (container-folded, "one owner"), the work-item links and the pause fact
  * are this dock's own severable enrichment — the same self-fetching shape
@@ -46,7 +46,7 @@ const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'deliver
  * container keeps only what `fleet-kit-panel`'s header-slot projection requires
  * of the template that mounts the panel, plus the query and the ticking clock.
  *
- * The dock paints its own panel chrome via {@link KitPanel} (issue #307) — the
+ * The dock paints its own panel chrome via {@link KitPanel} — the
  * same bezel/background every sibling region in `local-panel-layout.ts` wears —
  * rather than mounting bare. `KitPanel`'s header slot can only be filled
  * from the template that mounts the panel, so this container is the one place
@@ -77,7 +77,7 @@ export class MachineDetail {
    * status, and escalation all render off it. */
   protected readonly newestLease = computed<runnerApi.LeaseView | null>(() => this.leases().at(-1) ?? null);
 
-  /** Emitted when the operator dismisses the dock (issue #185) — the container
+  /** Emitted when the operator dismisses the dock — the container
    * clears the selection, mirroring the hub header's own `dismiss`. */
   readonly dismiss = output<void>();
 
@@ -85,7 +85,7 @@ export class MachineDetail {
   protected readonly chunkId = computed<string | null>(() => this.newestLease()?.chunk_id ?? null);
 
   /**
-   * The dock's own severable enrichment (issue #185) — the `ChunkDetail` read,
+   * The dock's own severable enrichment — the `ChunkDetail` read,
    * not container-folded: work-item links and the pause fact reach the header through
    * this, the same self-fetching shape `injectChunkTitleQuery` established for the
    * chunks list (`chunk-title.query.ts`, `chunk-row.ts`).
@@ -124,7 +124,7 @@ export class MachineDetail {
   protected readonly pausePending = computed<boolean>(() => this.pauseMutation.isPending());
 
   /** The dock's last Pause/Resume failure, or `null` — reset on every new attempt
-   * (issue #46's "report, don't swallow" requirement, the same shape
+   * (the "report, don't swallow" requirement, the same shape
    * {@link LocalPauseControl}'s own `error` follows for the top bar's pause toggle),
    * and whenever a different chunk is selected (mirrors `fleet/chunk-detail/
    * chunk-detail.ts`'s own `beginAction`, below), so a stale failure from a chunk

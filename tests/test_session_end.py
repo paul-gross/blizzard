@@ -68,7 +68,7 @@ def test_session_end_endpoint_records_the_fact(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_session_end_endpoint_replayed_after_closure_still_records(tmp_path: Path) -> None:
-    """D3: the closure-spanning resolution keeps tolerating a replay after the lease closed."""
+    """The closure-spanning resolution keeps tolerating a replay after the lease closed."""
     app, store = _runner_app_with_store(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)

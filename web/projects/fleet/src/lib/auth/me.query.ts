@@ -4,8 +4,8 @@ import { type MeResponse, meApiMeGet } from '../api/hub';
 import { hubMeKey } from '../query-keys';
 
 /**
- * `GET /api/me` — the resolved identity + its server-expanded permission set (issue
- * #93). This is the **one** place the client reads the current user; the
+ * `GET /api/me` — the resolved identity + its server-expanded permission set.
+ * This is the **one** place the client reads the current user; the
  * role → permission map itself is never re-typed here (`bzh:generated-client`'s
  * spirit applied to authz: the hub computes it, `/api/me` carries it).
  *

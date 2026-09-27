@@ -1,5 +1,5 @@
 """``ActivityFeed`` (unit tier) — the pure merge/sort/cap behind the board's
-Event log page-load backfill (issue #213). Built from already-loaded
+Event log page-load backfill. Built from already-loaded
 :class:`ActivityRow`/:class:`EventRow` literals — no store; the per-source bounded reads
 are exercised at the component tier (``tests/test_activity_feed_store.py``).
 """

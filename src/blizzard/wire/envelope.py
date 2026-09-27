@@ -15,7 +15,7 @@ from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 
-# The authored-tier prefix (issue #144) — unprefixed is a harness-native name, never guessed.
+# The authored-tier prefix — unprefixed is a harness-native name, never guessed.
 TIER_PREFIX = "blizzard:"
 
 
@@ -66,7 +66,7 @@ class EnvelopeChoice(BaseModel):
 
     name: str
     description: str
-    # Whether this choice is gated on green checks (issue #114); `False` leaves it ungated.
+    # Whether this choice is gated on green checks; `False` leaves it ungated.
     requires_checks: bool = False
 
 
@@ -77,9 +77,9 @@ class NodeConfig(BaseModel):
     node_name: str
     executor: Executor
     session: SessionMode
-    # The session reference target (issues #115, #144); ``None`` means bare ``resume`` or ``fresh``.
+    # The session reference target; ``None`` means bare ``resume`` or ``fresh``.
     session_source: str | None = None
-    # The declared pool this node-step belongs to (issue #144) — ``None`` for a node that names one by
+    # The declared pool this node-step belongs to — ``None`` for a node that names one by
     # node or bare, which carries no pool but still carries the chunk's defaults below.
     session_name: str | None = None
     # The prioritized model preference list and the effort, already merged — opaque preference strings
@@ -96,11 +96,11 @@ class NodeConfig(BaseModel):
     judged_by: JudgedBy
     checks: list[str] = []
     # Where this node's checks run, relative to the leased env's workdir, and the per-check
-    # timeout (issue #114).
+    # timeout.
     checks_cwd: str | None = None
     checks_timeout: int | None = None
     produces: list[ProducesEntry] = []
-    # Whether this node-step's completion may carry proposed work items (D4, D6).
+    # Whether this node-step's completion may carry proposed work items.
     proposes_work_items: bool = False
     retries_max: int | None = None
     choices: list[EnvelopeChoice] = []

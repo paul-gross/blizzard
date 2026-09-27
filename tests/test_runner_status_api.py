@@ -1,5 +1,5 @@
 """The runner-local machine-status routes — ``GET /runner`` / ``/environments`` /
-``/asks`` / ``/escalations`` (issue #51).
+``/asks`` / ``/escalations``.
 
 Exercised over a real store via TestClient. Hub-free but for the derived reachability
 read: every route's shape, its empty and unwired forms, and the derivation->wire
@@ -163,8 +163,7 @@ def test_pause_states_reported_apart_and_effective_is_the_or(tmp_path: Path) -> 
 @pytest.mark.component
 def test_pause_local_reason_surfaces_when_locally_paused_with_one(tmp_path: Path) -> None:
     """A reasoned local pause (a usage limit, the spend ceiling) reads its reason back on the
-    runner's own status wire — the local mirror of the hub's `RunnerView.locally_paused_reason`
-    (blizzard#594)."""
+    runner's own status wire — the local mirror of the hub's `RunnerView.locally_paused_reason`."""
     app, store = _app_with_status(tmp_path)
     store.record_local_pause(
         "runner-local",
@@ -253,7 +252,7 @@ def test_last_tick_reflects_daemon_liveness(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_environments_lists_every_pool_environment_held_or_not(tmp_path: Path) -> None:
-    """A mixed pool (issue #106): held slots carry their binding, unused slots carry
+    """A mixed pool: held slots carry their binding, unused slots carry
     neither — every configured environment surfaces, not only the held ones."""
     app, store = _app_with_status(tmp_path, env_pool=("e1", "e2", "e3"))
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
@@ -409,7 +408,7 @@ def test_an_answered_ask_does_not_appear(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_an_ask_whose_lease_closed_without_a_park_resume_does_not_appear(tmp_path: Path) -> None:
-    """blizzard#202's display-level backstop: an ask must never read open once its lease
+    """The display-level backstop: an ask must never read open once its lease
     has closed, regardless of which loop path retired the park fact."""
     app, store = _app_with_status(tmp_path)
     _seed_lease(store)
@@ -423,8 +422,8 @@ def test_an_ask_whose_lease_closed_without_a_park_resume_does_not_appear(tmp_pat
         asked_at=_NOW,
     )
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
-    # The lease closed with no matching `park_resumes` row — the exact leak shape blizzard#202
-    # describes for a non-happy-path ending (stopped/detached/abandoned).
+    # The lease closed with no matching `park_resumes` row — the exact leak shape for a
+    # non-happy-path ending (stopped/detached/abandoned).
     store.record_closure(
         lease_id="lease_1",
         chunk_id="ch_1",
@@ -481,7 +480,7 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         "epoch": 1,
         "closed_at": closed_at.isoformat(),
         "resume_command": "cd /ws/e1 && claude --resume sess-a",
-        # `_seed_lease` mints no session stamps (issue #144), so this escalation reads
+        # `_seed_lease` mints no session stamps, so this escalation reads
         # *unknown* on all three and renders the bare resume command.
         "session_name": None,
         "model": None,
@@ -493,8 +492,8 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
 
 @pytest.mark.component
 def test_an_escalated_leases_harness_version_reads_the_generations_own_recorded_stamp(tmp_path: Path) -> None:
-    """blizzard#441 — the escalation reports the escalated generation's own recorded
-    ``harness_version`` beside ``harness_id``, read never re-resolved (D4)."""
+    """The escalation reports the escalated generation's own recorded
+    ``harness_version`` beside ``harness_id``, read never re-resolved."""
     app, store = _app_with_status(tmp_path)
     _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
     store.record_spawn(
@@ -526,7 +525,7 @@ def test_an_escalated_leases_harness_version_reads_the_generations_own_recorded_
 def test_the_escalation_paste_string_carries_no_permission_mode_even_when_configured(
     tmp_path: Path, workspace_root: str, expected_cwd: str
 ) -> None:
-    """Pins the paste surface to the REAL adapter (issue #258 review): a human running
+    """Pins the paste surface to the REAL adapter: a human running
     ``resume_command`` in a bare terminal must stay at the interactive permission
     default — and from the session's own spawn cwd."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
@@ -605,7 +604,7 @@ def test_a_non_escalated_closure_does_not_appear(tmp_path: Path) -> None:
     assert resp.json()["items"] == []
 
 
-# --- GET /takeovers — the stranded-takeover recovery surface (issue #52) ---
+# --- GET /takeovers — the stranded-takeover recovery surface ---
 
 
 @pytest.mark.component
@@ -727,7 +726,7 @@ def test_facts_503_when_status_service_unwired(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_an_escalation_carries_the_parked_sessions_own_configuration(tmp_path: Path) -> None:
-    """Issue #144 — the escalation is a **read** of the lease's stamps, not a
+    """The escalation is a **read** of the lease's stamps, not a
     re-resolution, and its resume command lands the operator in the same configuration
     the parked session actually ran with."""
     app, store = _app_with_status(tmp_path)

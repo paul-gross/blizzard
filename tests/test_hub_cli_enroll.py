@@ -1,5 +1,5 @@
 """``blizzard hub runner enroll`` (unit tier) — a pure client of the enroll endpoint,
-driven here with ``httpx.post`` stubbed (issue #86a).
+driven here with ``httpx.post`` stubbed.
 """
 
 from __future__ import annotations

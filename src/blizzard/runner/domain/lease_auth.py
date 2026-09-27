@@ -1,4 +1,4 @@
-"""Lease-token authorization — the check a worker's attach call must pass first (issue #113).
+"""Lease-token authorization — the check a worker's attach call must pass first.
 
 :class:`LeaseToken` owns the mint and the constant-time check against its
 :class:`~blizzard.foundation.tokens.TokenHash` digest. There is no ``warn``/``enforce`` rollout

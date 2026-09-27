@@ -1,4 +1,4 @@
-"""Runner enrollment — hub-minted per-runner bearer tokens (issue #86a).
+"""Runner enrollment — hub-minted per-runner bearer tokens.
 
 ``enroll`` mints a token, persists only its sha256 hex hash, and returns the plaintext
 exactly once. Re-enrolling rotates in place, so the prior token stops resolving

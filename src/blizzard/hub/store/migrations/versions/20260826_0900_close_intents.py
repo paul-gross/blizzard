@@ -1,4 +1,4 @@
-"""close_intents — the durable close-intent outbox (blizzard#383). One new table.
+"""close_intents — the durable close-intent outbox. One new table.
 
 Revision ID: 20260826_0900_close_intents
 Revises: 20260825_1300_work_item_strikes

@@ -6,12 +6,12 @@ import { EventsView } from './events-view';
 import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from './events.query';
 
 /**
- * The Events tab's **container** (blizzard#125 Phase 4) — the board's operational
+ * The Events tab's **container** — the board's operational
  * event feed (`GET /api/events`), distinct from the right rail's {@link ActivityPanel}:
  * this reads the hub's own persisted, filterable event log (severity/runner/chunk
  * filters, capped only by `limit`), where the rail is an unfiltered recent-activity
  * view that merges a `GET /api/activity` backfill on load with the live SSE tee,
- * deduped by fact identity (issue #213 Phase 4) — no filters, no independent query
+ * deduped by fact identity — no filters, no independent query
  * of its own here.
  *
  * Owns the severity/runner/chunk filter state as signals and the reactive query
@@ -19,7 +19,7 @@ import { type EventSeverity, injectHubEventsQuery, narrowEventSeverity } from '.
  * `questions-panel.ts`: a standalone `fleet-`prefixed, OnPush container over the
  * generated hub client (bzh:generated-client) via TanStack Query. The live-update
  * service re-reads this on `event-logged` and on an escalation-bearing
- * `chunk-changed`; the poll is a backstop (issue #316), not the primary freshness path.
+ * `chunk-changed`; the poll is a backstop, not the primary freshness path.
  *
  * The runner and chunk filter axes are open sets, so their chip **universe** is
  * derived here (`runnerIds`/`chunkIds`) rather than in the view. It comes from a
@@ -70,7 +70,7 @@ export class EventsPanel {
    *
    * Falsy ids are stripped, mirroring the chunk side below: a projected escalation names
    * no runner, and an id-less row must not become a label-less chip whose `''` value
-   * collides with the "All" chip's own reset sentinel (issue #155). */
+   * collides with the "All" chip's own reset sentinel. */
   protected readonly runnerIds = computed(() =>
     this.filterUniverse(
       (this.optionsQuery.data() ?? []).map((e) => e.runner_id).filter((r): r is string => !!r),

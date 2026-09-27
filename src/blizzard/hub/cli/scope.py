@@ -1,4 +1,4 @@
-"""``blizzard hub scope`` — issue #389: operator verbs over scopes."""
+"""``blizzard hub scope`` — operator verbs over scopes."""
 
 from __future__ import annotations
 

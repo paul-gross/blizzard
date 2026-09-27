@@ -7,14 +7,14 @@ import { CdkMenu, CdkMenuTrigger } from '@angular/cdk/menu';
  * opens its {@link KitMenuPanel} in a CDK overlay, closing on an outside
  * click, `Escape`, or a triggered item.
  *
- * Built on `@angular/cdk/menu` (issue #161): the CDK is already a dependency,
+ * Built on `@angular/cdk/menu`: the CDK is already a dependency,
  * it is unstyled (so the token layer below applies untouched), and it carries
  * the menu semantics a home-grown popover lacks — roving focus, arrow-key
  * navigation, typeahead, and submenus.
  *
  * The trigger's own content is a `[trigger]`-selected projection, defaulting to
  * the classic `⋮` glyph — a caller wanting a different trigger (the shell's
- * profile menu projects {@link KitAvatar}, issue #132) marks its projected
+ * profile menu projects {@link KitAvatar}) marks its projected
  * element `trigger` rather than this component growing a variant input per
  * trigger shape. `aria-haspopup`/`aria-expanded` come from `CdkMenuTrigger`.
  *

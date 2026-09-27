@@ -1,4 +1,4 @@
-"""The analytics operational-datasets routes against a real hub (blizzard#256, Phase 5):
+"""The analytics operational-datasets routes against a real hub:
 durations, spend, and outcomes each reflect a real completed step over the packaged
 default graph's own entry node. Run with ``BLIZZARD_SERVICE=1``."""
 

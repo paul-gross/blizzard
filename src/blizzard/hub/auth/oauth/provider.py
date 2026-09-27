@@ -1,4 +1,4 @@
-"""``IOAuthProvider`` — the provider Protocol every conformer implements (issue #92).
+"""``IOAuthProvider`` — the provider Protocol every conformer implements.
 
 The seam owns the whole authorize/exchange dance (``bzh:pluggable-seams``,
 ``bzh:deterministic-shell``); ``httpx``, JWT, and provider wire shapes live behind it
