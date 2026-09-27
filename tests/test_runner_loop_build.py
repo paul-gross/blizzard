@@ -460,3 +460,27 @@ def test_resume_marking_on_startup_marks_via_its_injected_clock_and_probe(tmp_pa
 
     assert marked == 1
     assert store.resume_intent_lease_ids() == {"lease_1"}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("claude_code_enabled", "opencode_enabled", "expected"),
+    [(False, True, ("opencode",)), (True, False, ("claude_code",))],
+)
+def test_both_roots_boot_with_a_single_enabled_harness(
+    tmp_path: Path, claude_code_enabled: bool, opencode_enabled: bool, expected: tuple[str, ...]
+) -> None:
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_provider="basic",
+        workspace_root="scratch",
+        workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
+        claude_code_enabled=claude_code_enabled,
+        opencode_enabled=opencode_enabled,
+    )
+
+    build_hosted_app(config)
+    loop = LoopWiring(config, "", "").context(FakeHub())
+
+    assert loop.harnesses.known_harnesses == expected

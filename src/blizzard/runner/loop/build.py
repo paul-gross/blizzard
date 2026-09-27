@@ -26,7 +26,7 @@ from blizzard.runner.harness.internal.harness_registry import (
     build_production_harness_health_probes,
     build_production_harness_registry,
 )
-from blizzard.runner.loop.capability_snapshot import HarnessHealthCache, HarnessVersionCache
+from blizzard.runner.loop.capability_snapshot import HarnessHealthCache, HarnessVersionCache, default_harness_id
 from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
@@ -128,7 +128,9 @@ class LoopWiring:
         harnesses = build_production_harness_registry(config)
         # A startup guard: this composition's transcripts lane requires the default
         # harness's own binding to resolve one, not merely to be registered at all.
-        harnesses.transcript_source(CLAUDE_CODE_HARNESS_ID)
+        default_id = default_harness_id(harnesses)
+        if default_id is not None:
+            harnesses.transcript_source(default_id)
         _clock = SystemClock()
         health_cache = health_cache or HarnessHealthCache(
             clock=_clock,
