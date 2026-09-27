@@ -24,7 +24,12 @@ from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalItemOutcome,
 )
 from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
-from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalCounts, GardenProposalPage
+from blizzard.hub.domain.garden_proposals import (
+    GardenProposal,
+    GardenProposalCounts,
+    GardenProposalOrigin,
+    GardenProposalPage,
+)
 from blizzard.hub.domain.work import Chunk, WorkRef
 
 pytestmark = pytest.mark.unit
@@ -55,6 +60,7 @@ def _finding(finding_id: str, *, state: str = "live") -> Finding:
 def _proposal(proposal_id: str = "gprop_1", *, findings: list[str] | None = None) -> GardenProposal:
     return GardenProposal(
         proposal_id=proposal_id,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="t",
@@ -115,11 +121,18 @@ class _FakeProposals:
     def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
         raise NotImplementedError
 
-    def list_page(self, *, cursor: str | None = None, limit: int) -> GardenProposalPage:
+    def list_page(
+        self, *, cursor: str | None = None, limit: int, origin: GardenProposalOrigin | None = None
+    ) -> GardenProposalPage:
         raise NotImplementedError
 
     def counts_by_class(
-        self, *, since: datetime, until: datetime, routine_name: str | None = None
+        self,
+        *,
+        since: datetime,
+        until: datetime,
+        routine_name: str | None = None,
+        origin: GardenProposalOrigin | None = None,
     ) -> list[GardenProposalCounts]:
         raise NotImplementedError
 

@@ -2355,9 +2355,14 @@ export type GardenProposalAcceptResponse = {
      */
     created_at: string;
     /**
+     * Created By
+     */
+    created_by?: string | null;
+    /**
      * Findings
      */
     findings: Array<string>;
+    origin: GardenProposalOrigin;
     /**
      * Proposal Id
      */
@@ -2365,7 +2370,7 @@ export type GardenProposalAcceptResponse = {
     /**
      * Routine Name
      */
-    routine_name: string;
+    routine_name: string | null;
     /**
      * Title
      */
@@ -2414,7 +2419,9 @@ export type GardenProposalClosureView = {
 /**
  * GardenProposalCountsRowView
  *
- * One routine/class pair's garden-proposal counts over the requested window.
+ * One origin/routine/class triple's garden-proposal counts over the requested
+ * window (blizzard#631). `routine_name` is nullable for an operator-authored row
+ * naming no routine.
  */
 export type GardenProposalCountsRowView = {
     /**
@@ -2437,6 +2444,7 @@ export type GardenProposalCountsRowView = {
      * Open
      */
     open: number;
+    origin: GardenProposalOrigin;
     /**
      * Passed
      */
@@ -2444,16 +2452,18 @@ export type GardenProposalCountsRowView = {
     /**
      * Routine Name
      */
-    routine_name: string;
+    routine_name: string | null;
 };
 
 /**
  * GardenProposalCountsView
  *
  * `GET /api/routines/proposal-counts`'s own response — `routine` echoes the
- * optional filter, `None` when unfiltered.
+ * optional routine filter, `origin` the optional origin filter, each `None` when
+ * unfiltered.
  */
 export type GardenProposalCountsView = {
+    origin?: GardenProposalOrigin | null;
     /**
      * Routine
      */
@@ -2473,12 +2483,85 @@ export type GardenProposalCountsView = {
 };
 
 /**
+ * GardenProposalCreateRequest
+ *
+ * `POST /api/garden-proposals` (blizzard#631) — mints an operator-authored proposal.
+ * `routine` is optional; when given it must name an existing routine. `findings` may
+ * be empty.
+ */
+export type GardenProposalCreateRequest = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Class
+     */
+    class: string;
+    /**
+     * Findings
+     */
+    findings?: Array<string>;
+    /**
+     * Routine
+     */
+    routine?: string | null;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * GardenProposalEditRequest
+ *
+ * `PATCH /api/garden-proposals/{proposal_id}` (blizzard#631) — all-or-nothing
+ * over the given fields; a field absent from the request is left unchanged. Carries no
+ * `routine`: a proposal's routine is fixed at create.
+ */
+export type GardenProposalEditRequest = {
+    /**
+     * Body
+     */
+    body?: string | null;
+    /**
+     * Class
+     */
+    class?: string | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+};
+
+/**
+ * GardenProposalFindingsRequest
+ *
+ * `POST /api/garden-proposals/{proposal_id}/attach` and `.../detach` (blizzard#631)
+ * — the finding ids to link or unlink.
+ */
+export type GardenProposalFindingsRequest = {
+    /**
+     * Findings
+     */
+    findings: Array<string>;
+};
+
+/**
  * GardenProposalItemOutcome
  *
  * Whether an accepted proposal minted a work item — recorded positively rather than
  * inferred from an absent link, so a declined mint reads as a decision, not a gap.
  */
 export type GardenProposalItemOutcome = 'minted' | 'declined';
+
+/**
+ * GardenProposalOrigin
+ *
+ * Who authored a garden proposal (blizzard#631) — a mint-time fact, stored on
+ * the row itself and never inferred from a null `routine_name`.
+ */
+export type GardenProposalOrigin = 'routine-run' | 'operator';
 
 /**
  * GardenProposalPassRequest
@@ -2497,6 +2580,8 @@ export type GardenProposalPassRequest = {
  * GardenProposalView
  *
  * A garden proposal, its closure carried alongside it once one exists.
+ * `routine_name` is nullable — an operator-authored proposal (blizzard#631) may name
+ * no routine; `created_by` is set only for one.
  */
 export type GardenProposalView = {
     /**
@@ -2513,9 +2598,14 @@ export type GardenProposalView = {
      */
     created_at: string;
     /**
+     * Created By
+     */
+    created_by?: string | null;
+    /**
      * Findings
      */
     findings: Array<string>;
+    origin: GardenProposalOrigin;
     /**
      * Proposal Id
      */
@@ -2523,7 +2613,7 @@ export type GardenProposalView = {
     /**
      * Routine Name
      */
-    routine_name: string;
+    routine_name: string | null;
     /**
      * Title
      */
@@ -9021,6 +9111,10 @@ export type ListGardenProposalsApiGardenProposalsGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Origin
+         */
+        origin?: GardenProposalOrigin | null;
     };
     url: '/api/garden-proposals';
 };
@@ -9042,6 +9136,31 @@ export type ListGardenProposalsApiGardenProposalsGetResponses = {
 };
 
 export type ListGardenProposalsApiGardenProposalsGetResponse = ListGardenProposalsApiGardenProposalsGetResponses[keyof ListGardenProposalsApiGardenProposalsGetResponses];
+
+export type CreateGardenProposalApiGardenProposalsPostData = {
+    body: GardenProposalCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/garden-proposals';
+};
+
+export type CreateGardenProposalApiGardenProposalsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateGardenProposalApiGardenProposalsPostError = CreateGardenProposalApiGardenProposalsPostErrors[keyof CreateGardenProposalApiGardenProposalsPostErrors];
+
+export type CreateGardenProposalApiGardenProposalsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: GardenProposalView;
+};
+
+export type CreateGardenProposalApiGardenProposalsPostResponse = CreateGardenProposalApiGardenProposalsPostResponses[keyof CreateGardenProposalApiGardenProposalsPostResponses];
 
 export type GetGardenProposalApiGardenProposalsProposalIdGetData = {
     body?: never;
@@ -9073,6 +9192,36 @@ export type GetGardenProposalApiGardenProposalsProposalIdGetResponses = {
 
 export type GetGardenProposalApiGardenProposalsProposalIdGetResponse = GetGardenProposalApiGardenProposalsProposalIdGetResponses[keyof GetGardenProposalApiGardenProposalsProposalIdGetResponses];
 
+export type EditGardenProposalApiGardenProposalsProposalIdPatchData = {
+    body: GardenProposalEditRequest;
+    path: {
+        /**
+         * Proposal Id
+         */
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/garden-proposals/{proposal_id}';
+};
+
+export type EditGardenProposalApiGardenProposalsProposalIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EditGardenProposalApiGardenProposalsProposalIdPatchError = EditGardenProposalApiGardenProposalsProposalIdPatchErrors[keyof EditGardenProposalApiGardenProposalsProposalIdPatchErrors];
+
+export type EditGardenProposalApiGardenProposalsProposalIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalView;
+};
+
+export type EditGardenProposalApiGardenProposalsProposalIdPatchResponse = EditGardenProposalApiGardenProposalsProposalIdPatchResponses[keyof EditGardenProposalApiGardenProposalsProposalIdPatchResponses];
+
 export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostData = {
     body: GardenProposalAcceptRequest;
     path: {
@@ -9102,6 +9251,66 @@ export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses 
 };
 
 export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponse = AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses[keyof AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses];
+
+export type AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostData = {
+    body: GardenProposalFindingsRequest;
+    path: {
+        /**
+         * Proposal Id
+         */
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/garden-proposals/{proposal_id}/attach';
+};
+
+export type AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostError = AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostErrors[keyof AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostErrors];
+
+export type AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalView;
+};
+
+export type AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostResponse = AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostResponses[keyof AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostResponses];
+
+export type DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostData = {
+    body: GardenProposalFindingsRequest;
+    path: {
+        /**
+         * Proposal Id
+         */
+        proposal_id: string;
+    };
+    query?: never;
+    url: '/api/garden-proposals/{proposal_id}/detach';
+};
+
+export type DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostError = DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostErrors[keyof DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostErrors];
+
+export type DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GardenProposalView;
+};
+
+export type DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostResponse = DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostResponses[keyof DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostResponses];
 
 export type PassGardenProposalApiGardenProposalsProposalIdPassPostData = {
     body: GardenProposalPassRequest;
@@ -9598,6 +9807,10 @@ export type RoutineProposalCountsApiRoutinesProposalCountsGetData = {
          * Routine
          */
         routine?: string | null;
+        /**
+         * Origin
+         */
+        origin?: GardenProposalOrigin | null;
     };
     url: '/api/routines/proposal-counts';
 };

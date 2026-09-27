@@ -183,6 +183,7 @@ export class GardeningRoutineDetail {
    * filter. */
   protected readonly proposalCountsRows = computed<readonly ProposalCountsRowVm[]>(() =>
     (this.proposalCountsQuery.data()?.rows ?? []).map((row) => ({
+      origin: row.origin,
       proposalClass: row.class,
       created: row.created,
       open: row.open,

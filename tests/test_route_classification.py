@@ -105,6 +105,12 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     # not-chunk-scoped work-item write already carries (D8).
     ("POST", "/api/garden-proposals/{proposal_id}/pass"): CHUNK_CONTROL,
     ("POST", "/api/garden-proposals/{proposal_id}/accept"): CHUNK_CONTROL,
+    # Operator authoring — create/edit/attach/detach (blizzard#631) — the same
+    # CHUNK_CONTROL pass/accept already carry.
+    ("POST", "/api/garden-proposals"): CHUNK_CONTROL,
+    ("PATCH", "/api/garden-proposals/{proposal_id}"): CHUNK_CONTROL,
+    ("POST", "/api/garden-proposals/{proposal_id}/attach"): CHUNK_CONTROL,
+    ("POST", "/api/garden-proposals/{proposal_id}/detach"): CHUNK_CONTROL,
     # The human-driven exit verbs and `reopen` over findings (blizzard#394 Phase 2) — the
     # same CHUNK_CONTROL a garden-proposal closure already carries.
     ("POST", "/api/findings/resolve"): CHUNK_CONTROL,

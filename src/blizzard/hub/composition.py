@@ -589,7 +589,9 @@ def build_services(
         finding_exit=finding_exit,
         finding_sets=finding_set_store,
         garden_proposals=garden_proposal_store,
-        garden_proposal_authoring=GardenProposalAuthoring(proposals=garden_proposal_store, clock=clock),
+        garden_proposal_authoring=GardenProposalAuthoring(
+            proposals=garden_proposal_store, closures=garden_proposal_closure_store, clock=clock
+        ),
         garden_proposal_closures=garden_proposal_closure_store,
         garden_proposal_closure=GardenProposalClosureService(
             closures=garden_proposal_closure_store, items=materialization_edits, clock=clock

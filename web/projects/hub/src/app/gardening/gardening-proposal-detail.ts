@@ -23,6 +23,7 @@ import {
   type ProposalEvidenceRowVm,
   type ProposalEvidenceTriage,
   type ProposalEvidenceVerb,
+  type ProposalOriginVm,
   type ProposalPanelVm,
   type ProposalWorkItemVm,
 } from 'fleet';
@@ -129,12 +130,19 @@ export class GardeningProposalDetail {
     };
   }
 
+  private originVm(proposal: GardenProposalView): ProposalOriginVm {
+    if (proposal.origin === 'operator') {
+      return { kind: 'operator', createdBy: proposal.created_by!, routineName: proposal.routine_name };
+    }
+    return { kind: 'routine-run', routineName: proposal.routine_name! };
+  }
+
   protected readonly panelVm = computed<ProposalPanelVm | null>(() => {
     const proposal = this.selectedProposal();
     if (proposal === null) return null;
     return {
       proposalId: proposal.proposal_id,
-      routineName: proposal.routine_name,
+      origin: this.originVm(proposal),
       proposalClass: proposal.class,
       title: proposal.title,
       body: proposal.body,

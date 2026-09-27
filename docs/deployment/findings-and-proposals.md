@@ -66,9 +66,20 @@ child environment, the same shape the other `blizzard runner` reads on this page
 
 ## Garden proposals
 
-`blizzard hub garden-proposal list` and `show <proposal_id>` read every proposal, or one by id, each naming the findings
-it answers — the hub enforces no minimum, empty or not — and the closure it carries once one exists. Neither takes a
-filter yet.
+`blizzard hub garden-proposal list [--origin routine-run|operator]` and `show <proposal_id>` read every proposal, or one
+by id, each naming its `origin` — a **routine's run** or an **operator** — the findings it answers (the hub enforces no
+minimum, empty or not), and the closure it carries once one exists. An operator-authored row also carries `created_by`;
+`list --origin` narrows to one origin.
+
+A proposal can be authored directly, not only raised by a routine's own delivery: `blizzard hub garden-proposal create
+--title <text> --class <text> --body-file <path>|- [--routine <name>] [--finding <id>...]` mints an operator-authored
+proposal naming zero or more findings from any routines and scopes at once — a proposal carries no scope of its own —
+and an existing routine when `--routine` names one, or none at all. `edit <proposal_id> [--title <text>] [--class
+<text>] [--body-file <path>|-]` replaces the given fields in place, `attach <proposal_id> <finding_id>...` links more
+findings to it, and `detach <proposal_id> <finding_id>...` unlinks some — all three work on either origin while the
+proposal is still open, and each 409s once it carries a closure, since closure is terminal. `create`/`attach` refuse the
+whole call on an unknown, non-live, or duplicate finding id; `attach` also refuses one already linked to that same
+proposal, and `detach` one that is not linked — a finding may otherwise belong to more than one proposal at once.
 
 `blizzard hub garden-proposal pass <proposal_id> --reason <text>` records that the proposal was considered and declined,
 with a reason required.

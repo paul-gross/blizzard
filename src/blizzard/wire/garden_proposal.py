@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 
 
 class GardenProposalCandidate(BaseModel):
@@ -40,12 +41,16 @@ class GardenProposalClosureView(BaseModel):
 
 
 class GardenProposalView(BaseModel):
-    """A garden proposal, its closure carried alongside it once one exists."""
+    """A garden proposal, its closure carried alongside it once one exists.
+    `routine_name` is nullable — an operator-authored proposal (blizzard#631) may name
+    no routine; `created_by` is set only for one."""
 
     model_config = ConfigDict(populate_by_name=True)
 
     proposal_id: str
-    routine_name: str
+    origin: GardenProposalOrigin
+    routine_name: str | None
+    created_by: str | None = None
     class_: str = Field(alias="class")
     title: str
     body: str
@@ -91,3 +96,38 @@ class GardenProposalAcceptResponse(GardenProposalView):
     mint)."""
 
     chunk_id: str | None
+
+
+class GardenProposalCreateRequest(BaseModel):
+    """`POST /api/garden-proposals` (blizzard#631) — mints an operator-authored proposal.
+    `routine` is optional; when given it must name an existing routine. `findings` may
+    be empty."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    class_: str = Field(alias="class")
+    title: str
+    body: str
+    routine: str | None = None
+    findings: list[str] = Field(default_factory=list)
+
+
+class GardenProposalEditRequest(BaseModel):
+    """`PATCH /api/garden-proposals/{proposal_id}` (blizzard#631) — all-or-nothing
+    over the given fields; a field absent from the request is left unchanged. Carries no
+    `routine`: a proposal's routine is fixed at create."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    title: str | None = None
+    class_: str | None = Field(default=None, alias="class")
+    body: str | None = None
+
+
+class GardenProposalFindingsRequest(BaseModel):
+    """`POST /api/garden-proposals/{proposal_id}/attach` and `.../detach` (blizzard#631)
+    — the finding ids to link or unlink."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    findings: list[str]

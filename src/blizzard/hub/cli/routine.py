@@ -429,8 +429,8 @@ class ProposalCountsDetail:
             return
         for row in rows:
             yield (
-                f"  {row['routine_name']}  {row['class']}  created={row['created']}  open={row['open']}  "
-                f"passed={row['passed']}  accepted(item)={row['accepted_with_item']}  "
+                f"  {row['routine_name']}  {row['class']}  origin={row['origin']}  created={row['created']}  "
+                f"open={row['open']}  passed={row['passed']}  accepted(item)={row['accepted_with_item']}  "
                 f"accepted(no item)={row['accepted_without_item']}"
             )
 
@@ -439,13 +439,18 @@ class ProposalCountsDetail:
 @click.argument("name", required=False, default=None)
 @click.option("--since", required=True, type=click.DateTime(), help="The window's start, in local time.")
 @click.option("--until", required=True, type=click.DateTime(), help="The window's end, in local time (exclusive).")
-def routine_proposal_counts(cli: CliContext, name: str | None, since: datetime, until: datetime) -> None:
+@click.option("--origin", type=click.Choice(["routine-run", "operator"]), default=None, help="Narrow to one origin.")
+def routine_proposal_counts(
+    cli: CliContext, name: str | None, since: datetime, until: datetime, origin: str | None
+) -> None:
     """NAME's garden-proposal counts over --since/--until, split into open/passed/
     accepted-with-item/accepted-without-item per class, with created as their sum; omit
     NAME to see every routine's rows at once."""
     params = {"since": _utc_query_value(since), "until": _utc_query_value(until)}
     if name is not None:
         params["routine"] = name
+    if origin is not None:
+        params["origin"] = origin
     resp = cli.send("get", "/api/routines/proposal-counts", params=params)
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"proposal counts rejected: {cli.detail(resp, 'validation failed')}")

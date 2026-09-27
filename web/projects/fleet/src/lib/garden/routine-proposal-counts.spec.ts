@@ -4,8 +4,24 @@ import { TestBed } from '@angular/core/testing';
 import { FleetRoutineProposalCounts, type ProposalCountsRowVm } from './routine-proposal-counts';
 
 const ROWS: readonly ProposalCountsRowVm[] = [
-  { proposalClass: 'stale-docstring', created: 6, open: 2, passed: 1, acceptedWithItem: 3, acceptedWithoutItem: 0 },
-  { proposalClass: 'dead-code', created: 3, open: 0, passed: 2, acceptedWithItem: 0, acceptedWithoutItem: 1 },
+  {
+    origin: 'routine-run',
+    proposalClass: 'stale-docstring',
+    created: 6,
+    open: 2,
+    passed: 1,
+    acceptedWithItem: 3,
+    acceptedWithoutItem: 0,
+  },
+  {
+    origin: 'routine-run',
+    proposalClass: 'dead-code',
+    created: 3,
+    open: 0,
+    passed: 2,
+    acceptedWithItem: 0,
+    acceptedWithoutItem: 1,
+  },
 ];
 
 describe('FleetRoutineProposalCounts', () => {
@@ -37,13 +53,33 @@ describe('FleetRoutineProposalCounts', () => {
     const table = el.querySelector('[data-testid="gardening-routine-proposal-counts-table"]');
     expect(table?.tagName.toLowerCase()).toBe('table');
 
-    const staleRow = el.querySelector('[data-testid="gardening-routine-proposal-counts-stale-docstring"]');
+    const staleRow = el.querySelector('[data-testid="gardening-routine-proposal-counts-routine-run-stale-docstring"]');
     expect(staleRow?.textContent).toContain('stale-docstring');
     const staleCells = Array.from(staleRow?.querySelectorAll('td') ?? []).map((td) => td.textContent);
-    expect(staleCells).toEqual(['stale-docstring', '6', '2', '1', '3', '0']);
+    expect(staleCells).toEqual(['routine-run', 'stale-docstring', '6', '2', '1', '3', '0']);
 
-    const deadCodeRow = el.querySelector('[data-testid="gardening-routine-proposal-counts-dead-code"]');
+    const deadCodeRow = el.querySelector('[data-testid="gardening-routine-proposal-counts-routine-run-dead-code"]');
     expect(deadCodeRow?.textContent).toContain('dead-code');
+  });
+
+  it('renders a routine-run row and an operator row of the same class as two distinct rows (blizzard#631)', async () => {
+    const rows: readonly ProposalCountsRowVm[] = [
+      ...ROWS,
+      {
+        origin: 'operator',
+        proposalClass: 'stale-docstring',
+        created: 2,
+        open: 2,
+        passed: 0,
+        acceptedWithItem: 0,
+        acceptedWithoutItem: 0,
+      },
+    ];
+    const fixture = await mount({ rows });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-proposal-counts-routine-run-stale-docstring"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-routine-proposal-counts-operator-stale-docstring"]')).toBeTruthy();
   });
 
   it('renders the empty state through fleet-kit-async-state rather than a blank table', async () => {

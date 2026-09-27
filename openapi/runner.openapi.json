@@ -1863,8 +1863,17 @@
         "title": "GardenProposalItemOutcome",
         "type": "string"
       },
+      "GardenProposalOrigin": {
+        "description": "Who authored a garden proposal (blizzard#631) \u2014 a mint-time fact, stored on\nthe row itself and never inferred from a null `routine_name`.",
+        "enum": [
+          "routine-run",
+          "operator"
+        ],
+        "title": "GardenProposalOrigin",
+        "type": "string"
+      },
       "GardenProposalView": {
-        "description": "A garden proposal, its closure carried alongside it once one exists.",
+        "description": "A garden proposal, its closure carried alongside it once one exists.\n`routine_name` is nullable \u2014 an operator-authored proposal (blizzard#631) may name\nno routine; `created_by` is set only for one.",
         "properties": {
           "body": {
             "title": "Body",
@@ -1888,6 +1897,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
           "findings": {
             "items": {
               "type": "string"
@@ -1895,13 +1915,23 @@
             "title": "Findings",
             "type": "array"
           },
+          "origin": {
+            "$ref": "#/components/schemas/GardenProposalOrigin"
+          },
           "proposal_id": {
             "title": "Proposal Id",
             "type": "string"
           },
           "routine_name": {
-            "title": "Routine Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine Name"
           },
           "title": {
             "title": "Title",
@@ -1910,6 +1940,7 @@
         },
         "required": [
           "proposal_id",
+          "origin",
           "routine_name",
           "class",
           "title",

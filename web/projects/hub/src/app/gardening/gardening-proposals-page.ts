@@ -150,11 +150,13 @@ export class GardeningProposalsPage {
 
   /** Every routine present in the fetched data, alphabetized, each with an "All
    * routines" chip ahead of them — never a hardcoded vocabulary, mirroring
-   * {@link classChips}. */
+   * {@link classChips}. A routine-less operator-authored proposal (blizzard#631)
+   * contributes no chip of its own: `null` names no routine to filter by. */
   protected readonly routineChips = computed<readonly KitChipOption[]>(() => {
-    const routines = Array.from(new Set(this.proposals().map((p) => p.routine_name))).sort((a, b) =>
-      a.localeCompare(b),
-    );
+    const names = this.proposals()
+      .map((p) => p.routine_name)
+      .filter((name) => name !== null);
+    const routines = Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
     return [
       { value: ALL_ROUTINES, label: 'All routines', testid: 'gardening-proposal-routine-all' },
       ...routines.map((r) => ({

@@ -459,7 +459,15 @@ garden_proposals = Table(
     "garden_proposals",
     metadata,
     Column("proposal_id", String, primary_key=True),  # gprop_<ulid>
-    Column("routine_name", String, nullable=False),  # D5-shaped — named by the routine's own name
+    # `routine-run` (the routine's own run raised it) or `operator` (an operator
+    # authored it directly, blizzard#631) — a mint-time fact, fixed at insert and never
+    # inferred from a null `routine_name`.
+    Column("origin", String, nullable=False, server_default="routine-run"),
+    # Named by the routine's own name — required for `routine-run`, optional for
+    # `operator`. Nullable so an operator proposal citing no routine stores none.
+    Column("routine_name", String, nullable=True),
+    # The identity that authored an `operator` proposal — null for `routine-run`.
+    Column("created_by", String, nullable=True),
     Column("class", String, key="class_", nullable=False),  # the deployment's own taxonomy; opaque to the hub
     Column("title", String, nullable=False),
     Column("body", Text, nullable=False),
@@ -470,6 +478,13 @@ garden_proposals = Table(
     # `ForeignKey` — SQLite cannot drop an FK column.
     Column("source_artifact_id", String, nullable=True),
     Column("ref", String, nullable=True),
+    CheckConstraint("origin IN ('routine-run', 'operator')", name="ck_garden_proposals_origin"),
+    CheckConstraint(
+        "origin != 'routine-run' OR routine_name IS NOT NULL", name="ck_garden_proposals_routine_run_has_routine"
+    ),
+    CheckConstraint(
+        "origin != 'operator' OR created_by IS NOT NULL", name="ck_garden_proposals_operator_has_created_by"
+    ),
 )
 
 Index("ix_garden_proposals_routine_class", garden_proposals.c.routine_name, garden_proposals.c.class_)
@@ -495,9 +510,10 @@ Index("ix_garden_proposal_findings_finding_id", garden_proposal_findings.c.findi
 
 # --- Garden proposal closures (blizzard#395) --------------------------------------
 # The record both closing verbs leave — pass or accept. A durable fact, not a status
-# column on `garden_proposals` itself: the proposal carries no edit verb, so its closure
-# is terminal the moment it exists, and the unique `proposal_id` makes a second close
-# fail at the write rather than in a read-then-write gap.
+# column on `garden_proposals` itself: closing writes only this row, never a flag on the
+# mutable proposal (which does carry edit/attach/detach verbs while open, blizzard#631),
+# so closure is terminal the moment it exists, and the unique `proposal_id` makes a
+# second close fail at the write rather than in a read-then-write gap.
 
 garden_proposal_closures = Table(
     "garden_proposal_closures",

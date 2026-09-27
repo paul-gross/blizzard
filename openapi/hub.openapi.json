@@ -3733,6 +3733,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
           "findings": {
             "items": {
               "type": "string"
@@ -3740,13 +3751,23 @@
             "title": "Findings",
             "type": "array"
           },
+          "origin": {
+            "$ref": "#/components/schemas/GardenProposalOrigin"
+          },
           "proposal_id": {
             "title": "Proposal Id",
             "type": "string"
           },
           "routine_name": {
-            "title": "Routine Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine Name"
           },
           "title": {
             "title": "Title",
@@ -3755,6 +3776,7 @@
         },
         "required": [
           "proposal_id",
+          "origin",
           "routine_name",
           "class",
           "title",
@@ -3846,7 +3868,7 @@
         "type": "object"
       },
       "GardenProposalCountsRowView": {
-        "description": "One routine/class pair's garden-proposal counts over the requested window.",
+        "description": "One origin/routine/class triple's garden-proposal counts over the requested\nwindow (blizzard#631). `routine_name` is nullable for an operator-authored row\nnaming no routine.",
         "properties": {
           "accepted_with_item": {
             "title": "Accepted With Item",
@@ -3868,16 +3890,27 @@
             "title": "Open",
             "type": "integer"
           },
+          "origin": {
+            "$ref": "#/components/schemas/GardenProposalOrigin"
+          },
           "passed": {
             "title": "Passed",
             "type": "integer"
           },
           "routine_name": {
-            "title": "Routine Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine Name"
           }
         },
         "required": [
+          "origin",
           "routine_name",
           "class",
           "open",
@@ -3890,8 +3923,18 @@
         "type": "object"
       },
       "GardenProposalCountsView": {
-        "description": "`GET /api/routines/proposal-counts`'s own response \u2014 `routine` echoes the\noptional filter, `None` when unfiltered.",
+        "description": "`GET /api/routines/proposal-counts`'s own response \u2014 `routine` echoes the\noptional routine filter, `origin` the optional origin filter, each `None` when\nunfiltered.",
         "properties": {
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GardenProposalOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "routine": {
             "anyOf": [
               {
@@ -3928,6 +3971,108 @@
         "title": "GardenProposalCountsView",
         "type": "object"
       },
+      "GardenProposalCreateRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/garden-proposals` (blizzard#631) \u2014 mints an operator-authored proposal.\n`routine` is optional; when given it must name an existing routine. `findings` may\nbe empty.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "class": {
+            "title": "Class",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "routine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "class",
+          "title",
+          "body"
+        ],
+        "title": "GardenProposalCreateRequest",
+        "type": "object"
+      },
+      "GardenProposalEditRequest": {
+        "additionalProperties": false,
+        "description": "`PATCH /api/garden-proposals/{proposal_id}` (blizzard#631) \u2014 all-or-nothing\nover the given fields; a field absent from the request is left unchanged. Carries no\n`routine`: a proposal's routine is fixed at create.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "GardenProposalEditRequest",
+        "type": "object"
+      },
+      "GardenProposalFindingsRequest": {
+        "additionalProperties": false,
+        "description": "`POST /api/garden-proposals/{proposal_id}/attach` and `.../detach` (blizzard#631)\n\u2014 the finding ids to link or unlink.",
+        "properties": {
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "findings"
+        ],
+        "title": "GardenProposalFindingsRequest",
+        "type": "object"
+      },
       "GardenProposalItemOutcome": {
         "description": "Whether an accepted proposal minted a work item \u2014 recorded positively rather than\ninferred from an absent link, so a declined mint reads as a decision, not a gap.",
         "enum": [
@@ -3935,6 +4080,15 @@
           "declined"
         ],
         "title": "GardenProposalItemOutcome",
+        "type": "string"
+      },
+      "GardenProposalOrigin": {
+        "description": "Who authored a garden proposal (blizzard#631) \u2014 a mint-time fact, stored on\nthe row itself and never inferred from a null `routine_name`.",
+        "enum": [
+          "routine-run",
+          "operator"
+        ],
+        "title": "GardenProposalOrigin",
         "type": "string"
       },
       "GardenProposalPassRequest": {
@@ -3953,7 +4107,7 @@
         "type": "object"
       },
       "GardenProposalView": {
-        "description": "A garden proposal, its closure carried alongside it once one exists.",
+        "description": "A garden proposal, its closure carried alongside it once one exists.\n`routine_name` is nullable \u2014 an operator-authored proposal (blizzard#631) may name\nno routine; `created_by` is set only for one.",
         "properties": {
           "body": {
             "title": "Body",
@@ -3977,6 +4131,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
           "findings": {
             "items": {
               "type": "string"
@@ -3984,13 +4149,23 @@
             "title": "Findings",
             "type": "array"
           },
+          "origin": {
+            "$ref": "#/components/schemas/GardenProposalOrigin"
+          },
           "proposal_id": {
             "title": "Proposal Id",
             "type": "string"
           },
           "routine_name": {
-            "title": "Routine Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routine Name"
           },
           "title": {
             "title": "Title",
@@ -3999,6 +4174,7 @@
         },
         "required": [
           "proposal_id",
+          "origin",
           "routine_name",
           "class",
           "title",
@@ -15296,7 +15472,7 @@
     },
     "/api/garden-proposals": {
       "get": {
-        "description": "Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526 D3/D4).",
+        "description": "Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526\nD3/D4). `origin` narrows to `routine-run` or `operator` proposals (blizzard#631).",
         "operationId": "list_garden_proposals_api_garden_proposals_get",
         "parameters": [
           {
@@ -15326,6 +15502,22 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GardenProposalOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
           }
         ],
         "responses": {
@@ -15351,6 +15543,46 @@
           }
         },
         "summary": "List Garden Proposals",
+        "tags": [
+          "garden-proposals"
+        ]
+      },
+      "post": {
+        "description": "Mint an operator-authored proposal (blizzard#631), naming `routine` when the\ncaller names one, else none. 422 for a blank title/class/body, an unknown routine,\nor an unknown, non-live, or duplicate finding id \u2014 the whole call is refused, nothing\nis linked.",
+        "operationId": "create_garden_proposal_api_garden_proposals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Garden Proposal",
         "tags": [
           "garden-proposals"
         ]
@@ -15394,6 +15626,57 @@
           }
         },
         "summary": "Get Garden Proposal",
+        "tags": [
+          "garden-proposals"
+        ]
+      },
+      "patch": {
+        "description": "Replace the given fields of PROPOSAL_ID in place, all-or-nothing (blizzard#631)\n\u2014 works on either origin while open. 404 unknown proposal, 409 already closed,\n422 a blank title/class/body or an edit naming no field.",
+        "operationId": "edit_garden_proposal_api_garden_proposals__proposal_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Garden Proposal",
         "tags": [
           "garden-proposals"
         ]
@@ -15447,6 +15730,112 @@
           }
         },
         "summary": "Accept Garden Proposal",
+        "tags": [
+          "garden-proposals"
+        ]
+      }
+    },
+    "/api/garden-proposals/{proposal_id}/attach": {
+      "post": {
+        "description": "Link the given finding ids to PROPOSAL_ID (blizzard#631) \u2014 works on either origin\nwhile open. 404 unknown proposal, 409 already closed, 422 an unknown, non-live, or\nduplicate finding id, or one already linked to this proposal \u2014 the whole call is\nrefused, nothing is linked.",
+        "operationId": "attach_garden_proposal_findings_api_garden_proposals__proposal_id__attach_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalFindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Garden Proposal Findings",
+        "tags": [
+          "garden-proposals"
+        ]
+      }
+    },
+    "/api/garden-proposals/{proposal_id}/detach": {
+      "post": {
+        "description": "Unlink the given finding ids from PROPOSAL_ID (blizzard#631) \u2014 works on either\norigin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or\none not linked to this proposal.",
+        "operationId": "detach_garden_proposal_findings_api_garden_proposals__proposal_id__detach_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GardenProposalFindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GardenProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detach Garden Proposal Findings",
         "tags": [
           "garden-proposals"
         ]
@@ -16220,7 +16609,7 @@
     },
     "/api/routines/proposal-counts": {
       "get": {
-        "description": "Garden-proposal counts (blizzard#547) per routine and class over `[since,\nuntil)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum. `routine` narrows to one routine by name when given; 404 on\nan unknown one. 422 on a malformed instant or `until <= since`.",
+        "description": "Garden-proposal counts (blizzard#547) per origin, routine, and class over\n`[since, until)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum (blizzard#631). `routine` narrows to one routine's rows of\nboth origins when given; 404 on an unknown one. `origin` narrows to one origin. 422\non a malformed instant or `until <= since`.",
         "operationId": "routine_proposal_counts_api_routines_proposal_counts_get",
         "parameters": [
           {
@@ -16255,6 +16644,22 @@
                 }
               ],
               "title": "Routine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GardenProposalOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
             }
           }
         ],

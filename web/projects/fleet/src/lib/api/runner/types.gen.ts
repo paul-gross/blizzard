@@ -1148,9 +1148,19 @@ export type GardenProposalClosureView = {
 export type GardenProposalItemOutcome = 'minted' | 'declined';
 
 /**
+ * GardenProposalOrigin
+ *
+ * Who authored a garden proposal (blizzard#631) — a mint-time fact, stored on
+ * the row itself and never inferred from a null `routine_name`.
+ */
+export type GardenProposalOrigin = 'routine-run' | 'operator';
+
+/**
  * GardenProposalView
  *
  * A garden proposal, its closure carried alongside it once one exists.
+ * `routine_name` is nullable — an operator-authored proposal (blizzard#631) may name
+ * no routine; `created_by` is set only for one.
  */
 export type GardenProposalView = {
     /**
@@ -1167,9 +1177,14 @@ export type GardenProposalView = {
      */
     created_at: string;
     /**
+     * Created By
+     */
+    created_by?: string | null;
+    /**
      * Findings
      */
     findings: Array<string>;
+    origin: GardenProposalOrigin;
     /**
      * Proposal Id
      */
@@ -1177,7 +1192,7 @@ export type GardenProposalView = {
     /**
      * Routine Name
      */
-    routine_name: string;
+    routine_name: string | null;
     /**
      * Title
      */

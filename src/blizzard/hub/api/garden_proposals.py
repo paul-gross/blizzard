@@ -18,13 +18,26 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.edit import UNSET
+from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalAlreadyClosed,
     GardenProposalClosure,
     GardenProposalPassReasonRequired,
 )
 from blizzard.hub.domain.garden_proposal_resolution import resolve_proposal_findings
-from blizzard.hub.domain.garden_proposals import GardenProposal
+from blizzard.hub.domain.garden_proposals import (
+    DuplicateProposalFindingError,
+    GardenProposal,
+    GardenProposalBlankFieldError,
+    GardenProposalEdit,
+    GardenProposalEmptyEditError,
+    GardenProposalFindingAlreadyLinkedError,
+    GardenProposalFindingNotLinkedError,
+    GardenProposalFindingNotLiveError,
+    GardenProposalNotOpen,
+    GardenProposalOrigin,
+)
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
@@ -33,6 +46,9 @@ from blizzard.wire.garden_proposal import (
     GardenProposalAcceptRequest,
     GardenProposalAcceptResponse,
     GardenProposalClosureView,
+    GardenProposalCreateRequest,
+    GardenProposalEditRequest,
+    GardenProposalFindingsRequest,
     GardenProposalPassRequest,
     GardenProposalsPageView,
     GardenProposalView,
@@ -61,7 +77,9 @@ def garden_proposal_view(proposal: GardenProposal, closure: GardenProposalClosur
     return GardenProposalView.model_validate(
         {
             "proposal_id": proposal.proposal_id,
+            "origin": proposal.origin,
             "routine_name": proposal.routine_name,
+            "created_by": proposal.created_by,
             "class": proposal.class_,
             "title": proposal.title,
             "body": proposal.body,
@@ -79,15 +97,31 @@ def _get_or_404(proposal_id: str, services: HubServices) -> GardenProposal:
     return proposal
 
 
+def _resolve_findings_or_422(finding_ids: list[str], services: HubServices) -> list[Finding]:
+    """`IReadFindingRepository.get_many` resolved against `finding_ids`, preserving the
+    caller's order; 422s naming every id `get_many` dropped (blizzard#631) — the whole
+    call is refused, not the unknown ones alone."""
+    found = services.findings.get_many(finding_ids)
+    missing = sorted({fid for fid in finding_ids if fid not in found})
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"unknown finding id(s): {', '.join(missing)}",
+        )
+    return [found[fid] for fid in finding_ids]
+
+
 @router.get("/garden-proposals", response_model=GardenProposalsPageView, dependencies=[Depends(require(FLEET_VIEW))])
 def list_garden_proposals(
     services: Annotated[HubServices, Depends(get_services)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    origin: Annotated[GardenProposalOrigin | None, Query()] = None,
 ) -> GardenProposalsPageView:
-    """Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526 D3/D4)."""
+    """Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526
+    D3/D4). `origin` narrows to `routine-run` or `operator` proposals (blizzard#631)."""
     try:
-        page = services.garden_proposals.list_page(cursor=cursor, limit=limit)
+        page = services.garden_proposals.list_page(cursor=cursor, limit=limit, origin=origin)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
     closures = services.garden_proposal_closures.get_many([p.proposal_id for p in page.proposals])
@@ -185,3 +219,117 @@ def accept_garden_proposal(
     return GardenProposalAcceptResponse(
         **garden_proposal_view(proposal, accepted.closure).model_dump(), chunk_id=accepted.chunk_id
     )
+
+
+@router.post(
+    "/garden-proposals",
+    response_model=GardenProposalView,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_garden_proposal(
+    request: GardenProposalCreateRequest,
+    services: Annotated[HubServices, Depends(get_services)],
+    identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
+) -> GardenProposalView:
+    """Mint an operator-authored proposal (blizzard#631), naming `routine` when the
+    caller names one, else none. 422 for a blank title/class/body, an unknown routine,
+    or an unknown, non-live, or duplicate finding id — the whole call is refused, nothing
+    is linked."""
+    routine = None
+    if request.routine is not None:
+        routine = services.routines.get_by_name(request.routine)
+        if routine is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"unknown routine {request.routine!r}"
+            )
+    findings = _resolve_findings_or_422(request.findings, services)
+    try:
+        proposal = services.garden_proposal_authoring.create_operator(
+            created_by=identity.user_id,
+            routine=routine,
+            class_=request.class_,
+            title=request.title,
+            body=request.body,
+            findings=findings,
+        )
+    except (DuplicateProposalFindingError, GardenProposalFindingNotLiveError, GardenProposalBlankFieldError) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return garden_proposal_view(proposal, None)
+
+
+@router.patch(
+    "/garden-proposals/{proposal_id}",
+    response_model=GardenProposalView,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
+def edit_garden_proposal(
+    proposal_id: str, request: GardenProposalEditRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> GardenProposalView:
+    """Replace the given fields of PROPOSAL_ID in place, all-or-nothing (blizzard#631)
+    — works on either origin while open. 404 unknown proposal, 409 already closed,
+    422 a blank title/class/body or an edit naming no field."""
+    proposal = _get_or_404(proposal_id, services)
+    edit = GardenProposalEdit(
+        title=request.title if request.title is not None else UNSET,
+        class_=request.class_ if request.class_ is not None else UNSET,
+        body=request.body if request.body is not None else UNSET,
+    )
+    try:
+        updated = services.garden_proposal_authoring.edit(proposal, edit)
+    except (GardenProposalBlankFieldError, GardenProposalEmptyEditError) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except GardenProposalNotOpen as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return garden_proposal_view(updated, services.garden_proposal_closures.get(proposal_id))
+
+
+@router.post(
+    "/garden-proposals/{proposal_id}/attach",
+    response_model=GardenProposalView,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
+def attach_garden_proposal_findings(
+    proposal_id: str,
+    request: GardenProposalFindingsRequest,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> GardenProposalView:
+    """Link the given finding ids to PROPOSAL_ID (blizzard#631) — works on either origin
+    while open. 404 unknown proposal, 409 already closed, 422 an unknown, non-live, or
+    duplicate finding id, or one already linked to this proposal — the whole call is
+    refused, nothing is linked."""
+    proposal = _get_or_404(proposal_id, services)
+    findings = _resolve_findings_or_422(request.findings, services)
+    try:
+        updated = services.garden_proposal_authoring.attach(proposal, findings)
+    except (
+        DuplicateProposalFindingError,
+        GardenProposalFindingNotLiveError,
+        GardenProposalFindingAlreadyLinkedError,
+    ) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except GardenProposalNotOpen as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return garden_proposal_view(updated, services.garden_proposal_closures.get(proposal_id))
+
+
+@router.post(
+    "/garden-proposals/{proposal_id}/detach",
+    response_model=GardenProposalView,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
+def detach_garden_proposal_findings(
+    proposal_id: str,
+    request: GardenProposalFindingsRequest,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> GardenProposalView:
+    """Unlink the given finding ids from PROPOSAL_ID (blizzard#631) — works on either
+    origin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or
+    one not linked to this proposal."""
+    proposal = _get_or_404(proposal_id, services)
+    try:
+        updated = services.garden_proposal_authoring.detach(proposal, request.findings)
+    except (DuplicateProposalFindingError, GardenProposalFindingNotLinkedError) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except GardenProposalNotOpen as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return garden_proposal_view(updated, services.garden_proposal_closures.get(proposal_id))

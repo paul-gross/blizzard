@@ -12,7 +12,7 @@ import {
 
 const BASE_VM: ProposalPanelVm = {
   proposalId: 'gprop_01K4M2P3Q4R5S6T7U8V9W0X1Y2',
-  routineName: 'comments',
+  origin: { kind: 'routine-run', routineName: 'comments' },
   proposalClass: 'fix-the-source',
   title: 'Author a docstring standard',
   body: 'Seventeen modules narrate their own change history.',
@@ -100,6 +100,28 @@ describe('FleetProposalPanel', () => {
     const spans = Array.from(meta?.querySelectorAll('span') ?? []).map((s) => s.textContent?.trim());
     expect(spans).toEqual(['GP-X1Y2', 'fix-the-source', 'comments', '09:05']);
     expect(el.querySelector('.pp-ref')).toBeNull();
+  });
+
+  it('renders an operator-authored proposal as operator · <created_by>, plus its routine when one is named', async () => {
+    const fixture = await mount({
+      vm: { ...BASE_VM, origin: { kind: 'operator', createdBy: 'u_1', routineName: 'comments' } },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const meta = el.querySelector('[data-testid="gardening-proposal-case"] .pp-meta');
+    const spans = Array.from(meta?.querySelectorAll('span') ?? []).map((s) => s.textContent?.trim());
+    expect(spans).toEqual(['GP-X1Y2', 'fix-the-source', 'operator · u_1 · comments', '09:05']);
+  });
+
+  it('renders a routine-less operator-authored proposal as operator · <created_by> alone', async () => {
+    const fixture = await mount({
+      vm: { ...BASE_VM, origin: { kind: 'operator', createdBy: 'u_1', routineName: null } },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const meta = el.querySelector('[data-testid="gardening-proposal-case"] .pp-meta');
+    const spans = Array.from(meta?.querySelectorAll('span') ?? []).map((s) => s.textContent?.trim());
+    expect(spans).toEqual(['GP-X1Y2', 'fix-the-source', 'operator · u_1', '09:05']);
   });
 
   it('renders the body through the prose block', async () => {

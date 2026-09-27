@@ -96,12 +96,22 @@ def garden_stack(tmp_path: Path) -> Iterator[Garden]:
 
 
 def deliver(
-    g: Garden, ops: Sequence[dict[str, Any]], *, scope: str = _SCOPE, proposals: Sequence[dict[str, Any]] = ()
+    g: Garden,
+    ops: Sequence[dict[str, Any]],
+    *,
+    scope: str = _SCOPE,
+    proposals: Sequence[dict[str, Any]] = (),
+    routine_id: str | None = None,
 ) -> httpx.Response:
     """One routine run's whole delivery: mint the run, claim its entry node as the mock
     runner, submit the run's artifacts over the wire, then post the hub's own
-    garden-delivery route. Returns that route's response — ``recorded`` or ``invalid``."""
-    run = g.hub.post(f"/api/routines/{g.routine_id}/run", json={"scope_slug": scope, "mode": "full", "note": "sweep"})
+    garden-delivery route. Returns that route's response — ``recorded`` or ``invalid``.
+    ``routine_id`` defaults to ``g``'s own routine; a caller naming a second routine it
+    minted itself sweeps that one instead (blizzard#631)."""
+    run = g.hub.post(
+        f"/api/routines/{routine_id or g.routine_id}/run",
+        json={"scope_slug": scope, "mode": "full", "note": "sweep"},
+    )
     assert run.status_code == 201, run.text
     chunk_id = run.json()["chunk_id"]
     assert g.runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
@@ -577,6 +587,89 @@ def test_delivering_an_accepted_proposals_minted_item_closes_its_findings_to_del
 
         # Land the minted item's chunk the way a delivery does — a `merged/` marker, which
         # is what enqueues the close intent the hub's own drain then sweeps.
+        detail = g.hub.get(f"/api/chunks/{item_chunk}").json()
+        graph = g.hub.get(f"/api/graphs/{detail['graph_id']}").json()
+        marked = g.hub.post(
+            f"/api/chunks/{item_chunk}/hub-markers",
+            params={"node_id": graph["entry_node_id"], "epoch": 1},
+            json={"name": f"merged/{REPO_NAME}", "content": "landed"},
+        )
+        assert marked.status_code == 200, marked.text
+
+        assert poll_until(lambda: read_back(g, first)["state"] == "delivered", timeout=90.0), (
+            f"the close drain never closed the proposal's findings: {read_back(g, first)}"
+        )
+        for finding_id in (first, second):
+            row = read_back(g, finding_id)
+            assert row["state"] == "delivered", row
+            assert row["note"] == f"delivered by {pointer}", row
+
+
+def test_an_operator_proposal_over_two_routines_and_scopes_delivers_its_findings(tmp_path: Path) -> None:
+    """The Phase 3 end-to-end proof (blizzard#631): an operator proposal naming no
+    routine, over findings minted by two different routines in two different scopes,
+    created through the shipped ``blizzard hub`` binary. Accept and delivery close its
+    findings to ``delivered`` exactly as a routine-authored proposal's own do — this
+    chunk's own mint-through-delivery setup, `deliver`'s own second-routine seam
+    (blizzard#631)."""
+    with garden_stack(tmp_path) as g:
+        (first,) = seed(g, 1)
+
+        second_scope = "garden-svc-2"
+        created_scope = g.hub.post("/api/scopes", json={"slug": second_scope, "description": ""})
+        assert created_scope.status_code == 201, created_scope.text
+        second_routine_name = "garden-service-2"
+        created_routine = g.hub.post(
+            "/api/routines",
+            json={
+                "name": second_routine_name,
+                "graph_name": "garden-routine",
+                "default_scope_slug": second_scope,
+                "default_model": [],
+                "default_effort": None,
+            },
+        )
+        assert created_routine.status_code == 201, created_routine.text
+        second_routine_id = created_routine.json()["routine_id"]
+
+        recorded = deliver(g, [add_op("src/other.py:1")], scope=second_scope, routine_id=second_routine_id)
+        assert recorded.status_code == 200 and recorded.json()["outcome"] == "recorded", recorded.text
+        second_live = g.hub.get("/api/findings", params={"routine": second_routine_name, "scope": second_scope})
+        assert second_live.status_code == 200, second_live.text
+        second = second_live.json()["findings"][0]["finding_id"]
+
+        body_path = tmp_path / "body.md"
+        body_path.write_text("one response covering both findings")
+        created = cli(
+            g,
+            "hub",
+            "garden-proposal",
+            "create",
+            "--title",
+            "answer both weeds",
+            "--class",
+            "handoff",
+            "--body-file",
+            str(body_path),
+            "--finding",
+            first,
+            "--finding",
+            second,
+            "--json",
+        )
+        proposal = json.loads(created.stdout)
+        assert proposal["origin"] == "operator"
+        assert proposal["routine_name"] is None
+        assert sorted(proposal["findings"]) == sorted([first, second])
+
+        accepted = g.hub.post(f"/api/garden-proposals/{proposal['proposal_id']}/accept", json={"reason": "taking it"})
+        assert accepted.status_code == 200, accepted.text
+        item_chunk = accepted.json()["chunk_id"]
+        closure = accepted.json()["closure"]
+        assert closure["item_outcome"] == "minted", closure
+        pointer = f"{closure['source']}:{closure['ref']}"
+        assert read_back(g, first)["state"] == "live"  # accepting alone changes no finding's state
+
         detail = g.hub.get(f"/api/chunks/{item_chunk}").json()
         graph = g.hub.get(f"/api/graphs/{detail['graph_id']}").json()
         marked = g.hub.post(
