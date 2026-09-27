@@ -1,4 +1,4 @@
-"""Wire bodies for a worker's own artifact submissions (#169):
+"""Wire bodies for a worker's own artifact submissions:
 ``AttachmentRequest``/``AttachmentResponse`` for the write, and ``StagedAttachment`` for the read-back
 of a node-step's staged, not-yet-published submissions."""
 

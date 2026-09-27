@@ -85,9 +85,9 @@ class LoopConfig:
     #: the periodic `Retention` sweep prunes them — unrelated to release, which
     #: leaves them in place.
     worker_stdout_retention_days: int = 14
-    #: The per-chunk spend cap (issue #61a); ``None`` means no cap.
+    #: The per-chunk spend cap; ``None`` means no cap.
     chunk_cap_usd: float | None = None
-    #: The runner-wide spend ceiling (issue #61b); ``None`` means no ceiling.
+    #: The runner-wide spend ceiling; ``None`` means no ceiling.
     runner_ceiling_usd: float | None = None
     #: The runner ceiling's rolling window in hours; unused while the ceiling is ``None``.
     runner_ceiling_window_hours: float = 24.0

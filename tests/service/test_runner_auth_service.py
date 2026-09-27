@@ -1,4 +1,4 @@
-"""Runner presents its bearer token on every hub call — service tier (issue #86b).
+"""Runner presents its bearer token on every hub call — service tier.
 
 Every outbound ``httpx.Client`` and the work-items proxy fold in the same
 ``Authorization: Bearer`` header, assertable against a real mock-hub subprocess via

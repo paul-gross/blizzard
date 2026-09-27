@@ -1,5 +1,5 @@
-"""``harness/internal/claude_code_transcript.py`` — the transcript filesystem adapter
-. Unit tier, hermetic under ``tmp_path`` as ``projects_root``.
+"""``harness/internal/claude_code_transcript.py`` — the transcript filesystem adapter.
+Unit tier, hermetic under ``tmp_path`` as ``projects_root``.
 
 Covers forward incremental reads from a minted position, the shared batch-budget cap,
 and sidecar discovery/read I/O — the agent-id join itself is filesystem-free coverage
@@ -767,8 +767,8 @@ def test_a_fully_caught_up_sidecar_does_not_force_an_incomplete_batch_when_the_b
 def test_a_sidecar_record_wider_than_the_leftover_budget_survives_to_a_later_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """, observed at `turns_since`: a sidecar reads with whatever budget survives
-    the main file's read, which can be smaller than one record. That narrow window
+    """A sidecar reads with whatever budget survives the main file's read, observed
+    at `turns_since`, which can be smaller than one record. That narrow window
     must make zero progress and the record must arrive intact later, not be dropped."""
     project_dir = "-home-user-workspace"
     main_lines = [

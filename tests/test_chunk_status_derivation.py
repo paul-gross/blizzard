@@ -137,7 +137,7 @@ def test_same_instant_reclaim_still_derives_running() -> None:
     assert facts.status() is ChunkStatus.RUNNING
 
 
-# Route capability token derivation (issue #84a) — newest-fact-wins, as above.
+# Route capability token derivation — newest-fact-wins, as above.
 # --------------------------------------------------------------------------- #
 
 

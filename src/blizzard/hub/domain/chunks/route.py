@@ -39,7 +39,7 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
     """Read-write chunk-route access."""
 
     def record_route(self, route: Route, *, token_hash: str, at: datetime) -> str:
-        """Record the route **and** mint its capability token's fact, atomically (issue #84a).
+        """Record the route **and** mint its capability token's fact, atomically.
 
         ``token_hash`` is the sha256 digest of the plaintext token, already hashed by the
         caller (``bzh:domain-takes-objects``); the token fact lands in the same store
@@ -53,7 +53,7 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
         """Append a fresh :class:`RouteTokenMintedFact` for the chunk's route — the re-key
-        path (issue #84b). Never mutates the prior token fact (``bzh:facts-not-status``):
+        path. Never mutates the prior token fact (``bzh:facts-not-status``):
         :attr:`RouteHistory.newest_token` supersedes it with no separate revocation step."""
         ...
 

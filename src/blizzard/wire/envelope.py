@@ -77,7 +77,7 @@ class NodeConfig(BaseModel):
     node_name: str
     executor: Executor
     session: SessionMode
-    # The session reference target (#144); ``None`` means bare ``resume`` or ``fresh``.
+    # The session reference target; ``None`` means bare ``resume`` or ``fresh``.
     session_source: str | None = None
     # The declared pool this node-step belongs to — ``None`` for a node that names one by
     # node or bare, which carries no pool but still carries the chunk's defaults below.

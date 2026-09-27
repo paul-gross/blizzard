@@ -1,4 +1,4 @@
-"""Runner-bearer-token authentication at the hub's edge (issue #86a).
+"""Runner-bearer-token authentication at the hub's edge.
 
 A presented token resolves by sha256-hex-digest lookup against the stored hash column;
 that selection **is** the match, so no separate ``hmac.compare_digest`` is load-bearing.

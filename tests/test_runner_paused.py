@@ -1020,7 +1020,7 @@ def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ig
     assert lost_race == []  # the two outcomes are logged legibly apart, not conflated
 
 
-# Runner spend ceiling (issue #61b): the tick-level kill-switch over the same local brake.
+# Runner spend ceiling: the tick-level kill-switch over the same local brake.
 # --------------------------------------------------------------------------- #
 
 
@@ -1062,7 +1062,7 @@ def _record_usage(store, *, lease_id="lease_1", chunk_id="ch_1", cost, recorded_
 def test_ceiling_crossing_engages_the_local_brake_and_logs_ceiling_and_spend(tmp_path):  # type: ignore[no-untyped-def]
     """Crossing `runner_ceiling_usd` engages the SAME local pause brake `blizzard runner
     pause` sets, and the log line names both the configured ceiling and the spend that
-    tripped it (the escalation the plan calls for — issue #61b)."""
+    tripped it (the escalation the plan calls for)."""
     store = _store(tmp_path)
     _record_usage(store, cost=7.0, recorded_at=_NOW)
     ctx = make_context(
@@ -1162,7 +1162,7 @@ def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path)
 def test_ceiling_engages_once_no_thrash_on_later_ticks(tmp_path):  # type: ignore[no-untyped-def]
     """Once engaged, a later tick's check must neither re-engage nor re-log — engaging is a
     one-time transition, not a per-tick assertion, even while the window's sum stays over
-    the ceiling for as long as it holds (issue #61b's engage-once requirement)."""
+    the ceiling for as long as it holds (the engage-once requirement)."""
     store = _store(tmp_path)
     _record_usage(store, cost=7.0, recorded_at=_NOW)
     ctx = make_context(

@@ -1751,7 +1751,7 @@
         "type": "object"
       },
       "ChunkPatchResponse": {
-        "description": "The result of one ``PATCH /chunks/{id}`` (#144) \u2014 the chunk's\neditable build properties after the edit, carried together since a PATCH can apply more than\none at once.",
+        "description": "The result of one ``PATCH /chunks/{id}`` \u2014 the chunk's\neditable build properties after the edit, carried together since a PATCH can apply more than\none at once.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -6316,7 +6316,7 @@
         "type": "object"
       },
       "RouteClaimResponse": {
-        "description": "The winning claim's reply \u2014 the route, its first node envelope, and the\nroute's plaintext capability token (issue #84a), returned exactly once here.",
+        "description": "The winning claim's reply \u2014 the route, its first node envelope, and the\nroute's plaintext capability token, returned exactly once here.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -6357,7 +6357,7 @@
         "type": "object"
       },
       "RouteTokenRekeyResponse": {
-        "description": "A fresh plaintext route capability token for the chunk's live route (issue #84b),\nreturned exactly once here.",
+        "description": "A fresh plaintext route capability token for the chunk's live route,\nreturned exactly once here.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -6947,7 +6947,7 @@
         "type": "object"
       },
       "RunnerEnrollmentResponse": {
-        "description": "A freshly minted (or rotated) bearer token \u2014 issue #86a.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. A\nre-enroll rotates: the old token stops resolving the moment this response lands.",
+        "description": "A freshly minted (or rotated) bearer token.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. A\nre-enroll rotates: the old token stops resolving the moment this response lands.",
         "properties": {
           "runner_id": {
             "title": "Runner Id",
@@ -6966,7 +6966,7 @@
         "type": "object"
       },
       "RunnerFact": {
-        "description": "One buffered runner fact: its per-runner seq, its kind, and its payload.\n\n``payload`` is the kind-specific body, kept open so a new fact kind needs no wire change;\nevery chunk-scoped kind carries ``route_token`` (issue #84a), stamped at enqueue.",
+        "description": "One buffered runner fact: its per-runner seq, its kind, and its payload.\n\n``payload`` is the kind-specific body, kept open so a new fact kind needs no wire change;\nevery chunk-scoped kind carries ``route_token``, stamped at enqueue.",
         "properties": {
           "kind": {
             "title": "Kind",
@@ -7197,7 +7197,7 @@
         "type": "object"
       },
       "RunnerView": {
-        "description": "One fleet-registry row \u2014 derived liveness, both brakes, and advisory subscription usage.\n\nThe two brakes stay separate (#45): ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". Subscription usage is advisory.",
+        "description": "One fleet-registry row \u2014 derived liveness, both brakes, and advisory subscription usage.\n\nThe two brakes stay separate: ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". Subscription usage is advisory.",
         "properties": {
           "capabilities": {
             "default": [],
@@ -12648,7 +12648,7 @@
     "/api/chunks/{chunk_id}/pm-items": {
       "get": {
         "deprecated": true,
-        "description": "Deprecated since issue #55 \u2014 use `GET /chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.",
+        "description": "Deprecated: use `GET /chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.",
         "operationId": "get_pm_items_deprecated_alias_api_chunks__chunk_id__pm_items_get",
         "parameters": [
           {
@@ -14830,7 +14830,7 @@
     "/api/fleet/chunks/{chunk_id}/pm-items": {
       "get": {
         "deprecated": true,
-        "description": "Deprecated since issue #55 \u2014 use `GET /fleet/chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.",
+        "description": "Deprecated: use `GET /fleet/chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.",
         "operationId": "fleet_get_pm_items_deprecated_alias_api_fleet_chunks__chunk_id__pm_items_get",
         "parameters": [
           {
@@ -14916,7 +14916,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/route-token": {
       "post": {
-        "description": "Rotate the chunk's live route capability token (issue #84b) \u2014 the lost-plaintext recovery for a\nclaim whose response was never read back. Confined to the live route's own runner; this route\npresents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting.",
+        "description": "Rotate the chunk's live route capability token \u2014 the lost-plaintext recovery for a\nclaim whose response was never read back. Confined to the live route's own runner; this route\npresents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting.",
         "operationId": "rekey_route_token_api_fleet_chunks__chunk_id__route_token_post",
         "parameters": [
           {
@@ -17394,7 +17394,7 @@
     },
     "/api/runners/{runner_id}/enrollments": {
       "post": {
-        "description": "Mint (or rotate) ``runner_id``'s bearer token \u2014 the plaintext is returned once;\nthe store keeps only its sha256 hash from here on (issue #86a).\n\nRequires an existing registration (404 otherwise): enrollment is a deliberate act on\na known runner, never a trust-on-first-use grant to an unregistered name.",
+        "description": "Mint (or rotate) ``runner_id``'s bearer token \u2014 the plaintext is returned once;\nthe store keeps only its sha256 hash from here on.\n\nRequires an existing registration (404 otherwise): enrollment is a deliberate act on\na known runner, never a trust-on-first-use grant to an unregistered name.",
         "operationId": "enroll_runner_api_runners__runner_id__enrollments_post",
         "parameters": [
           {

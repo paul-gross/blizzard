@@ -31,7 +31,7 @@ from blizzard.wire.envelope import NodeEnvelope
 #: `secrets.token_urlsafe` byte count for the route capability token (43 URL-safe chars).
 _ROUTE_TOKEN_BYTES = 32
 
-# Crash point (``bzh:crash-point-registry``, issue #84b): the route and its capability-token
+# Crash point (``bzh:crash-point-registry``): the route and its capability-token
 # fact are durable, but the plaintext has not reached the runner; recovered by claim adoption.
 _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE = crashpoint(
     "claim.after-persist.before-response",
@@ -99,7 +99,7 @@ class ClaimDeniedIncompatible(Exception):
 @dataclass(frozen=True)
 class ClaimResult:
     """A won claim — the route fact, its first node envelope, and the route's plaintext
-    capability token (issue #84a). ``route_token`` is returned exactly once, here; only
+    capability token. ``route_token`` is returned exactly once, here; only
     its sha256 hash is persisted. ``route_id`` is the freshly-minted route
     id, which :class:`~blizzard.hub.domain.fleet.Route` itself does not carry."""
 
@@ -225,7 +225,7 @@ class ClaimService:
             environment_ids=list(environment_ids),
             created_at=now,
         )
-        # Minted fresh per acquisition (issue #84a): the plaintext is returned once and
+        # Minted fresh per acquisition: the plaintext is returned once and
         # never stored — only its sha256 hash lands, in the same write as record_route.
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         route_id = self._route.record_route(route, token_hash=TokenHash(route_token).hex, at=now)
@@ -257,7 +257,7 @@ class ClaimService:
         return None
 
     def rekey(self, route: Route) -> str:
-        """Rotate a live route's capability token (issue #84b) — the lost-plaintext
+        """Rotate a live route's capability token — the lost-plaintext
         recovery: a claim whose route-token response was never read back has no other
         way to learn it. Appends a new ``route_token_minted`` fact rather than mutating
         the prior one (``bzh:facts-not-status``); newest-fact-wins supersedes the old

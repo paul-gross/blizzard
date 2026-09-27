@@ -102,7 +102,7 @@ class GraphNodeView(BaseModel):
     name: str
     executor: Executor
     session: SessionMode
-    # The session reference target (#144): ``None`` for a bare reference,
+    # The session reference target: ``None`` for a bare reference,
     # otherwise the declared session or node name it targets. Read with ``session``.
     session_source: str | None = None
     judged_by: JudgedBy

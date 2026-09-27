@@ -180,7 +180,7 @@ def test_two_claims_on_different_chunks_mint_different_tokens(tmp_path: Path) ->
 
 
 def test_completion_carrying_the_claims_route_token_is_accepted(tmp_path: Path) -> None:
-    """Present-only in this phase (issue #84a): the hub does not yet reject on
+    """Present-only in this phase: the hub does not yet reject on
     a missing/mismatched token, but a completion carrying the claim's own token is
     accepted exactly as one without it — no behavior regression from adding the field."""
     hub = build_hub(tmp_path)

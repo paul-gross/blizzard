@@ -133,7 +133,7 @@ _CI_SUBSET = (
     "spawn.after-identity.before-session-record",
     "advance.after-buffer.before-flush",
     "flush.after-submit.before-ack",
-    # `claim.*` (issue #84b) is a boundary family within `_GENERIC_POINTS`; a family's lone
+    # `claim.*` is a boundary family within `_GENERIC_POINTS`; a family's lone
     # member is its own CI representative.
     "claim.after-persist.before-response",
     # `transcript.*`: reachable here with no dedicated scenario — every
@@ -336,7 +336,7 @@ def _ingest_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> s
     return chunk_id
 
 
-# `claim.*` fires inside the HUB (issue #84b) — the one `_GENERIC_POINTS` family that
+# `claim.*` fires inside the HUB — the one `_GENERIC_POINTS` family that
 # arms the hub rather than the runner; `test_kill9_at_crash_point` reads this to pick.
 _HUB_SIDE_GENERIC_PREFIXES = ("claim.",)
 

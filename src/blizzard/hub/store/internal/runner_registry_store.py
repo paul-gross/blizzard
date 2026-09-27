@@ -336,7 +336,7 @@ class RunnerRegistryStore:
 
     @staticmethod
     def _local_pause_detail(conn, runner_id: str) -> tuple[bool, str | None, str | None]:  # type: ignore[no-untyped-def]
-        """The runner's own brake plus its cause, off the newest fact (#61)."""
+        """The runner's own brake plus its cause, off the newest fact."""
         return RunnerRegistryStore._local_pause_detail_many(conn, [runner_id])[runner_id]
 
     @staticmethod

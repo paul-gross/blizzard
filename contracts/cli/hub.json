@@ -4349,7 +4349,7 @@
     "runner": {
       "commands": {
         "enroll": {
-          "help": "Mint (or rotate) RUNNER_ID's bearer token; prints the plaintext exactly once.\n\nA thin client of ``POST /runners/{id}/enrollments`` (issue #86a). Re-running\nrotates: the old token stops resolving immediately. RUNNER_ID must already be\nregistered at the hub (404 otherwise).",
+          "help": "Mint (or rotate) RUNNER_ID's bearer token; prints the plaintext exactly once.\n\nA thin client of ``POST /runners/{id}/enrollments``. Re-running\nrotates: the old token stops resolving immediately. RUNNER_ID must already be\nregistered at the hub (404 otherwise).",
           "params": [
             {
               "hidden": false,

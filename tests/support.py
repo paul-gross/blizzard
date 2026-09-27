@@ -957,7 +957,7 @@ def report_lease(
     """Report a runner-minted ``lease.minted`` fact through POST /events.
 
     A component test calls this first so the hub knows the chunk's latest epoch.
-    ``route_token`` (issue #84b) rides the payload; ``None`` omits it, matching a caller
+    ``route_token`` rides the payload; ``None`` omits it, matching a caller
     that never claimed under the plaintext."""
     payload: dict[str, object] = {"chunk_id": chunk_id, "epoch": epoch}
     if route_token is not None:

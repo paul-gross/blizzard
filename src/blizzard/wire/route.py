@@ -22,7 +22,7 @@ class RouteClaim(BaseModel):
 
 class RouteClaimResponse(BaseModel):
     """The winning claim's reply — the route, its first node envelope, and the
-    route's plaintext capability token (issue #84a), returned exactly once here."""
+    route's plaintext capability token, returned exactly once here."""
 
     chunk_id: str
     runner_id: str
@@ -83,7 +83,7 @@ class RouteClaimPausedDenial(BaseModel):
 
 
 class RouteTokenRekeyResponse(BaseModel):
-    """A fresh plaintext route capability token for the chunk's live route (issue #84b),
+    """A fresh plaintext route capability token for the chunk's live route,
     returned exactly once here."""
 
     chunk_id: str

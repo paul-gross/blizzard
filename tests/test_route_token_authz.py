@@ -1,4 +1,4 @@
-"""Route-token authorization at the wired hub (component tier, issue #84b).
+"""Route-token authorization at the wired hub (component tier).
 
 Proves the check — completions, decisions, and buffered facts are rejected under
 ``route_token_mode=enforce`` on a mismatched token or runner_id; release invalidates
@@ -187,7 +187,7 @@ def test_escalation_from_a_non_holder_is_rejected_under_enforce(tmp_path: Path) 
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] != "needs_human"
 
 
-# usage.recorded stays ungated — a deliberate exclusion (issue #84b DO-NOT-GATE)
+# usage.recorded stays ungated — a deliberate exclusion
 
 
 def test_usage_recorded_applies_without_a_token_even_under_enforce(tmp_path: Path) -> None:

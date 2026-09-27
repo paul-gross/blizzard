@@ -2,7 +2,7 @@
 own full wiring, exercised through ``HubServices.routine_run`` directly (no HTTP route
 yet; adds one). Covers full, delta with a baseline, delta downgraded, an
 override against a related scope, the routine's defaults reaching the chunk, the graph
-pin, and the promote — the acceptance list the plan's owes."""
+pin, and the promote — the acceptance list the plan owes."""
 
 from __future__ import annotations
 

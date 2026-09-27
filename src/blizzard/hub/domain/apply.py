@@ -234,7 +234,7 @@ class ApplyService:
                 return ApplyResult.hub_node_taken_replay()
             return ApplyResult.migrated_replay()
 
-        # Route-token authorization (issue #84b) — ordered ahead of the replay probe and the
+        # Route-token authorization — ordered ahead of the replay probe and the
         # epoch fence, so a post-release zombie's replay is rejected as a fresh one is.
         rejection = self._check_route_token(chunk, facts, submission, route_token_mode=route_token_mode)
         if rejection is not None:

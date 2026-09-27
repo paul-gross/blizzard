@@ -30,7 +30,7 @@ uv run pyright
 
 # --- Process-reference prose lint (bzh:comment-locality) ---------------------
 step "process-reference prose lint: vale --output=line ."
-vale --output=line .
+mise exec -- vale --output=line .
 
 # --- Structural gate (contracts/ast-grep/) -----------------------------------
 step "structural gate (blizzard:structural-gate): ast-grep scan"

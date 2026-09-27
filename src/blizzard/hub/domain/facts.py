@@ -46,7 +46,7 @@ from blizzard.wire.facts import (
 
 _log = get_logger("blizzard.hub.facts")
 
-# The chunk-scoped, fence-advancing kinds gated on intake (issue #84b): a fabricated one from a
+# The chunk-scoped, fence-advancing kinds gated on intake: a fabricated one from a
 # non-holder must not advance the fence or open a decision. Runner-scoped kinds are never gated.
 _ROUTE_TOKEN_GATED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
 
@@ -202,7 +202,7 @@ class FactIngestService:
                 continue
             ok, row_id = self._apply(batch.runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode)
             if not ok:
-                # A contract mismatch, not an idempotency skip (issue #84b): do not advance the mark
+                # A contract mismatch, not an idempotency skip: do not advance the mark
                 # past it, and name it in the ack.
                 rejected.append(fact.seq)
                 continue
@@ -278,7 +278,7 @@ class FactIngestService:
             return True, None
         if kind == USAGE_RECORDED:
             # No epoch fence and no route-token gate: trailing-epoch spend is real and attributed to its
-            # own epoch (issue #84b; pinned in tests/test_usage_facts_ingest.py, test_route_token_authz.py).
+            # own epoch (pinned in tests/test_usage_facts_ingest.py, test_route_token_authz.py).
             self._usage.record_usage(
                 fact.require_text("chunk_id"),
                 node_id=fact.require_text("node_id"),
@@ -366,8 +366,8 @@ class FactIngestService:
         return False, None
 
     def _route_token_ok(self, chunk_id: str, runner_id: str, fact: Payload, *, mode: str) -> bool:
-        """Route-token authorization for a chunk-scoped, fence-advancing fact (issue
-        #84b) — the buffered-push counterpart of ``apply.py``'s own check. A chunk the
+        """Route-token authorization for a chunk-scoped, fence-advancing fact — the
+        buffered-push counterpart of ``apply.py``'s own check. A chunk the
         hub has never minted (``load_facts`` returns ``None``, e.g. a malformed/stale
         payload) falls back to an empty :class:`ChunkFacts`, which
         :class:`RouteToken` already rejects as having no live route."""

@@ -1,5 +1,5 @@
 """The transcript route's domain read model — resolves a lease's transcript to
-a home per Decision 1. Holds only read-only seams (``bzh:repository-split``),
+a home. Holds only read-only seams (``bzh:repository-split``),
 so a controller may hold it directly (``bzh:controller-read-only``). ``leases.lease(lease_id)``
 spans closure — unlike ``active_lease`` — because a transcript outlives its lease. Local until
 acked, hub after (:meth:`TranscriptService.for_lease`); the runner-plane's
@@ -25,7 +25,7 @@ from blizzard.runner.transcripts.repository import (
 
 @dataclass(frozen=True)
 class ResolvedTranscript:
-    """A lease's transcript, resolved to a home per Decision 1. ``provenance`` and
+    """A lease's transcript, resolved to a home. ``provenance`` and
     ``hub_unreachable`` carry straight onto their wire-field namesakes
     (``wire.transcript.TranscriptResponse``, the fields' own doc home)."""
 
@@ -48,7 +48,7 @@ class ResolvedSegmentContent:
 
 
 class TranscriptService:
-    """Resolves a lease id to its transcript, per Decision 1's home-selection table —
+    """Resolves a lease id to its transcript, via its home-selection table —
     ``None`` iff no such lease ever existed."""
 
     def __init__(

@@ -238,7 +238,7 @@ def test_env_prep_failure_emits_a_command_failed(tmp_path):  # type: ignore[no-u
 
 
 class _VerifyFailsWorktreeGit(FakeWorktreeGit):
-    """A worktree git whose verify always raises — L(ii)'s catch site."""
+    """A worktree git whose verify always raises — the catch site that never re-raises."""
 
     def verify(self, origin_url: str, branch: str, commit: str) -> bool:
         raise WorktreeGitError("git ls-remote origin feat/x failed: remote rejected (no SSH_AUTH_SOCK)")
@@ -277,7 +277,7 @@ def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path):  # t
 
 
 class _SpawnFailsHarness(FakeHarness):
-    """A harness whose spawn fails to launch — L(iii)'s catch site."""
+    """A harness whose spawn fails to launch — the catch site that re-raises."""
 
     def spawn(
         self, envelope, preamble, session_hint, resume_from=None, *, model=None, effort=None, compaction_window=None

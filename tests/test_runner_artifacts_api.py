@@ -271,7 +271,7 @@ def test_list_forwards_to_the_hub_envelope_and_returns_both_kinds(tmp_path: Path
 
 @pytest.mark.component
 def test_list_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -> None:
-    """The forward rides the runner principal's bearer (issue #86b) — the worker's own
+    """The forward rides the runner principal's bearer — the worker's own
     lease token never leaves the runner."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(

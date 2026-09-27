@@ -91,7 +91,7 @@ def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path) -> N
 
 @pytest.mark.component
 def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_path: Path) -> None:
-    """The forward carries the same bearer credential as the loop's own hub client (issue #86b)."""
+    """The forward carries the same bearer credential as the loop's own hub client."""
     seen_headers: list[httpx.Headers] = []
 
     def handler(request: httpx.Request) -> httpx.Response:

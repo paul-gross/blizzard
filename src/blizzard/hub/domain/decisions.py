@@ -88,7 +88,7 @@ class DecisionService:
         if facts is None:
             return DecisionSubmitResult.failure(f"unknown chunk {chunk.chunk_id}")
 
-        # Route-token authorization (issue #84b): ahead of the idempotent-replay probe and
+        # Route-token authorization: ahead of the idempotent-replay probe and
         # the epoch fence, so a post-release zombie's replayed decision is rejected too.
         route = self._route.route_of(chunk.chunk_id)
         detail = RouteToken(

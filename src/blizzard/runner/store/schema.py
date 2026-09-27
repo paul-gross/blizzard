@@ -393,7 +393,7 @@ usage_facts = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- Route capability tokens (the runner's stash — issue #84a) ---------------
+# --- Route capability tokens (the runner's stash) ---------------
 # Only the *current* plaintext, one row per chunk: a fresh claim overwrites the prior.
 
 route_tokens = Table(

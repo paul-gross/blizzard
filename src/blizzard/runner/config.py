@@ -74,12 +74,12 @@ DEFAULT_OPENCODE_BINARY = "opencode"
 DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
-# The env var NAMING this runner's hub bearer token (issue #86b) — the toml round-trips the
+# The env var NAMING this runner's hub bearer token — the toml round-trips the
 # variable name only, never the secret.
 DEFAULT_TOKEN_ENV = "BZ_HUB_TOKEN"
 DEFAULT_ENV_POOL: tuple[str, ...] = ("e1",)
 DEFAULT_MAX_ENVIRONMENTS = 10
-# The runner-ceiling rolling window's default length (issue #61b) — a ceiling with no
+# The runner-ceiling rolling window's default length — a ceiling with no
 # declared window still needs one to sum over.
 DEFAULT_RUNNER_CEILING_WINDOW_HOURS = 24.0
 # How often the tick re-samples the harness's rate-limit windows — a
@@ -463,7 +463,7 @@ class RunnerConfig:
     hub_url: str = DEFAULT_HUB_URL
     runner_id: str = DEFAULT_RUNNER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID
-    #: Names the env var carrying the hub bearer token (issue #86b); :attr:`hub_token` is
+    #: Names the env var carrying the hub bearer token; :attr:`hub_token` is
     #: the resolved secret, and empty is a valid state.
     token_env: str = DEFAULT_TOKEN_ENV
     hub_token: str = ""
@@ -505,13 +505,13 @@ class RunnerConfig:
     #: off by default reaches past a marked head for the first unmarked
     #: entry, ``True`` holds at a marked head and yields no entry instead.
     queue_strict: bool = False
-    #: The per-chunk spend cap (issue #61a); ``None`` means no cap. A chunk reaching it
+    #: The per-chunk spend cap; ``None`` means no cap. A chunk reaching it
     #: parks ``needs_human`` at its next step boundary.
     chunk_cap_usd: float | None = None
-    #: The runner-wide spend ceiling (issue #61b); ``None`` means none. Crossing it engages
+    #: The runner-wide spend ceiling; ``None`` means none. Crossing it engages
     #: the local pause brake, and there is no auto-unpause once the window drops back under.
     runner_ceiling_usd: float | None = None
-    #: The runner ceiling's rolling window length in hours (issue #61b) — unused while
+    #: The runner ceiling's rolling window length in hours — unused while
     #: :attr:`runner_ceiling_usd` is ``None``.
     runner_ceiling_window_hours: float = DEFAULT_RUNNER_CEILING_WINDOW_HOURS
     #: The external-usage sample cadence in seconds — a diagnostic cadence,
@@ -715,7 +715,7 @@ class RunnerConfig:
         )
 
     def auth_headers(self) -> dict[str, str]:
-        """The outbound ``Authorization`` header every runner->hub call carries (issue #86b).
+        """The outbound ``Authorization`` header every runner->hub call carries.
 
         One credential path for every outbound call rather than a header built per call
         site. Empty when :attr:`hub_token` is unset: an unenrolled runner attaches
@@ -795,12 +795,12 @@ class RunnerConfig:
             "# non-loopback origin must be https fronted by a proxy. First is canonical. See the\n"
             '# "Runner-side federation" section of the deployment guide before changing this.\n'
             f"public_url = {public_url}\n"
-            "\n# Reverse-proxy trust set (issue #130): proxy IPs/CIDRs whose X-Forwarded-Proto is\n"
+            "\n# Reverse-proxy trust set: proxy IPs/CIDRs whose X-Forwarded-Proto is\n"
             "# honored when minting the SSO session cookie's Secure flag. Empty = header ignored.\n"
             "# Required for any https origin above, and the proxy must also pass the browser's\n"
             "# original Host through — selection reads it, and nginx replaces it by default.\n"
             f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n"
-            "\n# Names the env var carrying this runner's hub bearer token (issue #86b);\n"
+            "\n# Names the env var carrying this runner's hub bearer token;\n"
             "# the secret itself lives in the runtime env file, never here.\n"
             f'token_env = "{self.token_env}"\n'
             f'runner_id = "{self.runner_id}"\n'
@@ -825,30 +825,30 @@ class RunnerConfig:
             f'base_branch = "{self.base_branch}"\n'
             "\n# Human gates this runner imposes by node name; empty = none.\n"
             f"gates = [{gates}]\n"
-            "\n# The runner-owned workspace prompt prepended to a worker spawn (issue #17).\n"
+            "\n# The runner-owned workspace prompt prepended to a worker spawn.\n"
             "# `workspace_prompt` is inline text; `workspace_prompt_file` (a path) wins when set.\n"
             "# `workspace_prompt_package` names a sample shipped in the wheel and may not be\n"
-            "# combined with either (`blizzard runner prompt list` names them; issue #344).\n"
+            "# combined with either (`blizzard runner prompt list` names them).\n"
             "# Empty = table-only injection. Replace at runtime via PUT /api/workspace-prompt.\n"
             "# A resumed spawn re-sends this only when it changed, announced as updated.\n"
             f"workspace_prompt = {workspace_prompt}\n"
             f"workspace_prompt_file = {workspace_prompt_file}\n"
             f"workspace_prompt_package = {workspace_prompt_package}\n"
-            "\n# The operator's override of the baked-in blizzard preamble (issue #103) — layer 1\n"
+            "\n# The operator's override of the baked-in blizzard preamble — layer 1\n"
             "# of the spawn preamble, ahead of `workspace_prompt` above. `runner_prompt` is inline\n"
             "# text; `runner_prompt_file` (a path) wins when set. Empty = the baked default\n"
             "# (DEFAULT_BLIZZARD_PREAMBLE) is used instead; config/startup only, no runtime override.\n"
             f"runner_prompt = {runner_prompt}\n"
             f"runner_prompt_file = {runner_prompt_file}\n"
-            "\n# Where the coding harness writes session transcripts (issue #29);\n"
+            "\n# Where the coding harness writes session transcripts;\n"
             "# empty = ~/.claude/projects.\n"
             f'transcripts_root = "{self.transcripts_root}"\n'
-            "\n# The transcript outbound lane (issue #246) — off by default; the hub's own\n"
-            "# durable, compressed-at-rest segment store (issue #247) is already landed, so\n"
+            "\n# The transcript outbound lane — off by default; the hub's own\n"
+            "# durable, compressed-at-rest segment store is already landed, so\n"
             "# turning this on is a rollout decision, not a bandwidth-for-nothing one.\n"
             "[transcripts]\n"
             f"ship = {'true' if self.transcripts_ship else 'false'}\n"
-            "# This lane's own byte ceilings (blizzard#338), shown at their defaults;\n"
+            "# This lane's own byte ceilings, shown at their defaults;\n"
             "# uncomment to override. Widen `chunk_max_bytes` for a backfill window — a\n"
             "# `blizzard runner transcript reship` spends that budget a SECOND time over the\n"
             "# same chunk — then restore it. Keep `record_max_bytes` at or BELOW the hub's own\n"
@@ -856,12 +856,12 @@ class RunnerConfig:
             "# one, the pump merely shrinks them.\n"
             + _cap_line("record_max_bytes", self.transcript_record_max_bytes, TRANSCRIPT_RECORD_MAX_BYTES)
             + _cap_line("chunk_max_bytes", self.transcript_chunk_max_bytes, CHUNK_TRANSCRIPT_MAX_BYTES)
-            + "\n# This runner's selection over the peeked ready queue (blizzard#459); off by\n"
+            + "\n# This runner's selection over the peeked ready queue; off by\n"
             "# default reaches past a marked head for the first unmarked entry. `true` holds\n"
             "# at a marked head instead and idles rather than falling through.\n"
             "[queue]\n"
             f"strict = {'true' if self.queue_strict else 'false'}\n"
-            + "\n# How long (days) a worker's captured stdout/stderr (issue #58) survive after being\n"
+            + "\n# How long (days) a worker's captured stdout/stderr survive after being\n"
             "# written, before the periodic sweep prunes them. A released lease's files are NOT\n"
             "# deleted at release — only this age-based sweep removes them, both streams alike.\n"
             "# Look up one invocation's own output at\n"
@@ -900,7 +900,7 @@ class RunnerConfig:
             )
             + f"sample_interval_seconds = {self.context_sample_interval_seconds}\n"
             + "\n# How often (seconds) the tick re-samples the harness's own subscription rate-limit\n"
-            + "# windows (issue #218) — a diagnostic, best-effort read, not a spend control.\n"
+            + "# windows — a diagnostic, best-effort read, not a spend control.\n"
             + "[external_subscription_usage]\n"
             + f"sample_interval_seconds = {self.external_usage_sample_interval_seconds}\n"
             + (
@@ -908,7 +908,7 @@ class RunnerConfig:
                 if self.external_usage_credentials_path is not None
                 else '# credentials_path = "/path/to/.credentials.json"  # defaults to ~/.claude/.credentials.json\n'
             )
-            + "\n# Declared provider subscriptions (blizzard#436) — the join key everything\n"
+            + "\n# Declared provider subscriptions — the join key everything\n"
             + "# downstream keys on is `slug`, runner-unique and immutable once observed. Absent\n"
             + "# entirely (the default): the `[external_subscription_usage]` table above is the\n"
             + '# sole subscription, synthesized under the reserved slug "'
@@ -937,7 +937,7 @@ class RunnerConfig:
             + "# load. `runner host` warns at startup for any entry missing on disk, but still\n"
             + "# starts. Empty = the daemon's own PATH, unchanged.\n"
             + f"path_prepend = [{', '.join(f'"{p}"' for p in self.worker_path_prepend)}]\n"
-            + "\n# Runner-local role resolution, keyed by hub username (issue #95) — lives only here,\n"
+            + "\n# Runner-local role resolution, keyed by hub username — lives only here,\n"
             + '# never in the hub store/admin page. `hub_role_default` is "mirror" or a fixed cap\n'
             + '# ("contributor"/"guest"/"pending"); `superuser` names this runner\'s own sovereign.\n'
             + "[auth]\n"
@@ -945,7 +945,7 @@ class RunnerConfig:
             + f'hub_role_default = "{self.auth_hub_role_default}"\n'
             + "\n[auth.users]\n"
             + "".join(f'{username} = "{role}"\n' for username, role in self.auth_users)
-            + "\n# Model and effort tier aliases (issue #144) — how THIS runner's harness resolves the\n"
+            + "\n# Model and effort tier aliases — how THIS runner's harness resolves the\n"
             + "# harness-agnostic names a graph's `sessions:` declaration (or a chunk default) uses.\n"
             + "# The Claude Code adapter ships built-in defaults for the three standard tiers\n"
             + "# (blizzard:frontier/advanced/basic), so a zero-config runner needs no entry here;\n"
@@ -955,7 +955,7 @@ class RunnerConfig:
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.model_aliases)
             + "\n[effort.aliases]\n"
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.effort_aliases)
-            + "\n# The OpenCode binding's own configuration (D6) — fully independent of the flat\n"
+            + "\n# The OpenCode binding's own configuration — fully independent of the flat\n"
             + "# Claude Code fields above, which keep their existing meaning unchanged. OpenCode\n"
             + "# ships no built-in tier mapping, so an unmapped tier makes this binding unable to\n"
             + "# satisfy a session demanding it; a multi-harness selection skips it rather than\n"

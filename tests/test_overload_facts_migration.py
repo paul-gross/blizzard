@@ -1,4 +1,4 @@
-"""The provider-overload backoff fact-table migration (— component tier):
+"""The provider-overload backoff fact-table migration (component tier):
 applies from an empty store to head, and survives a downgrade/upgrade roundtrip."""
 
 from __future__ import annotations

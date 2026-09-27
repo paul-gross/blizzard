@@ -87,7 +87,7 @@ def _set_runner_pause(cli: CliContext, runner_id: str, *, verb: str, by: str) ->
 def runner_enroll(cli: CliContext, runner_id: str) -> None:
     """Mint (or rotate) RUNNER_ID's bearer token; prints the plaintext exactly once.
 
-    A thin client of ``POST /runners/{id}/enrollments`` (issue #86a). Re-running
+    A thin client of ``POST /runners/{id}/enrollments``. Re-running
     rotates: the old token stops resolving immediately. RUNNER_ID must already be
     registered at the hub (404 otherwise)."""
     resp = cli.post(

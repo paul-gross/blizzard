@@ -474,7 +474,7 @@ def test_a_registration_without_a_roster_keeps_the_legacy_path_over_the_wire(tmp
         assert hub.get("/api/runners/runner-no-roster").json()["subscriptions"] == []
 
 
-# --- Route-token authorization over the wire (issue #84b) ---
+# --- Route-token authorization over the wire ---
 # The mock-runner's stale/omit levers driving the real hub's enforce check.
 
 

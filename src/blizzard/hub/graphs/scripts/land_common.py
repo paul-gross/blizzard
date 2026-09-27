@@ -122,7 +122,7 @@ class MarkerWriteError(Exception):
 
 @dataclass(frozen=True)
 class MarkerWriter:
-    """The run's durable marker channel (#230, #232), carrying its capability
+    """The run's durable marker channel, carrying its capability
     token as :data:`_MARKER_TOKEN_HEADER`. Constructing one reaches nothing — every failure
     mode, a missing ``callback_url`` included, surfaces on the write."""
 

@@ -413,7 +413,7 @@ def test_queue_strict_rejects_a_non_boolean_typo_rather_than_coercing_it(tmp_pat
 
 @pytest.mark.unit
 def test_chunk_cap_usd_defaults_absent(tmp_path: Path) -> None:
-    # No `[cost]` table at all on a fresh scaffold — absent means no cap (issue #61a).
+    # No `[cost]` table at all on a fresh scaffold — absent means no cap.
     assert RunnerConfig.scaffold(tmp_path).chunk_cap_usd is None
 
 
@@ -448,7 +448,7 @@ def test_chunk_cap_usd_parses_from_a_hand_written_cost_table(tmp_path: Path) -> 
 
 @pytest.mark.unit
 def test_runner_ceiling_usd_defaults_absent(tmp_path: Path) -> None:
-    # No `[cost]` table at all on a fresh scaffold — absent means no ceiling (issue #61b).
+    # No `[cost]` table at all on a fresh scaffold — absent means no ceiling.
     config = RunnerConfig.scaffold(tmp_path)
     assert config.runner_ceiling_usd is None
     assert config.runner_ceiling_window_hours == DEFAULT_RUNNER_CEILING_WINDOW_HOURS
@@ -916,7 +916,7 @@ def test_a_leftover_pm_source_block_fails_even_beside_a_valid_work_source(tmp_pa
 
 
 # --------------------------------------------------------------------------- #
-# `runner_auth_mode` — the runner-authentication rollout brake (issue #86a).
+# `runner_auth_mode` — the runner-authentication rollout brake.
 
 
 @pytest.mark.unit
@@ -956,7 +956,7 @@ def test_runner_auth_mode_unknown_value_raises(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `route_token_mode` — the route-capability-token rollout brake (issue #84b).
+# `route_token_mode` — the route-capability-token rollout brake.
 
 
 @pytest.mark.unit
@@ -1059,7 +1059,7 @@ def test_produces_mode_enforces_independently_of_the_other_modes(tmp_path: Path)
 
 
 # --------------------------------------------------------------------------- #
-# `token_env` / `hub_token` — the runner presents its bearer token (issue #86b).
+# `token_env` / `hub_token` — the runner presents its bearer token.
 
 
 @pytest.mark.unit

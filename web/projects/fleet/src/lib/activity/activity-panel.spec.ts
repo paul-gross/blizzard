@@ -155,7 +155,7 @@ describe('ActivityPanel', () => {
     expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-1RJ1 review → build');
   });
 
-  // --- Delete's actor (D7a) -------------------------------------
+  // --- Delete's actor -------------------------------------
 
   it('renders a deleted-cause backfill row with its actor as line 2, in place of a runner', async () => {
     const fixture = await render([

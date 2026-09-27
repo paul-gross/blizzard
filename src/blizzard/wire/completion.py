@@ -148,6 +148,6 @@ class CompletionSubmission(BaseModel):
     # Set only on a gate-resolving transition. Its presence is what makes a transition
     # out of a human-judged node legal; without it the transition is rejected.
     decision_id: str | None = None
-    # The route capability token stamped at enqueue (issue #84a) — evidence the submitter
+    # The route capability token stamped at enqueue — evidence the submitter
     # still holds the chunk's live route. Optional: the hub does not reject on it.
     route_token: str | None = None

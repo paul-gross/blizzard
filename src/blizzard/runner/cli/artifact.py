@@ -134,8 +134,7 @@ def _is_not_found(exc: click.ClickException) -> bool:
     "--name",
     "name_opt",
     default=None,
-    help="Alias for the positional NAME, accepted since node prompts spell required artifacts "
-    "as `--name` (issue #584).",
+    help="Alias for the positional NAME, accepted since node prompts spell required artifacts as `--name`.",
 )
 @click.option(
     "--node",

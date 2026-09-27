@@ -260,7 +260,7 @@ class RouteReleasedFact:
 
 @dataclass(frozen=True)
 class RouteTokenMintedFact:
-    """A ``route_token_minted`` fact — the route capability token, hashed (issue #84a).
+    """A ``route_token_minted`` fact — the route capability token, hashed.
     Appended, never rewritten (``bzh:facts-not-status``). ``token_hash`` is the sha256
     hex digest only. ``seq`` shares the per-chunk counter :class:`RouteCreatedFact` uses,
     so it totally orders against a create/release even on a timestamp tie."""
@@ -1085,7 +1085,7 @@ class RouteHistory:
 
     @property
     def newest_token(self) -> RouteTokenMintedFact | None:
-        """The chunk's live route capability token, or ``None`` if unclaimed/released (issue #84a).
+        """The chunk's live route capability token, or ``None`` if unclaimed/released.
 
         The newest one minted at or after :attr:`newest`'s own ``seq`` — that lower bound
         alone scopes the search to the live acquisition. Newest-fact-wins is what makes a

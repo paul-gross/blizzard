@@ -1,5 +1,5 @@
 """hub-minted runner bearer tokens: the sha256 token_hash column plus a lookup index on
-it, since a presented token resolves to *its* runner (hub store tree, issue #86a)
+it, since a presented token resolves to *its* runner (hub store tree)
 
 Revision ID: 20260718_1130_hub_runner_token
 Revises: 20260718_0030_hub_node_poll

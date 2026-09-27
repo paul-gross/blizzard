@@ -1,4 +1,4 @@
-"""route capability token stash — route_tokens (runner store tree, issue #84a). One
+"""route capability token stash — route_tokens (runner store tree). One
 upserted row per chunk; the runner keeps no rotation history, only its current token.
 
 Revision ID: 20260718_1200_runner_route_tokens

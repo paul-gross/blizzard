@@ -1116,7 +1116,7 @@ export type ChunkPatchRequest = {
 /**
  * ChunkPatchResponse
  *
- * The result of one ``PATCH /chunks/{id}`` (#144) — the chunk's
+ * The result of one ``PATCH /chunks/{id}`` — the chunk's
  * editable build properties after the edit, carried together since a PATCH can apply more than
  * one at once.
  */
@@ -3984,7 +3984,7 @@ export type RouteClaim = {
  * RouteClaimResponse
  *
  * The winning claim's reply — the route, its first node envelope, and the
- * route's plaintext capability token (issue #84a), returned exactly once here.
+ * route's plaintext capability token, returned exactly once here.
  */
 export type RouteClaimResponse = {
     /**
@@ -4013,7 +4013,7 @@ export type RouteClaimResponse = {
 /**
  * RouteTokenRekeyResponse
  *
- * A fresh plaintext route capability token for the chunk's live route (issue #84b),
+ * A fresh plaintext route capability token for the chunk's live route,
  * returned exactly once here.
  */
 export type RouteTokenRekeyResponse = {
@@ -4418,7 +4418,7 @@ export type RunnerCapability = {
 /**
  * RunnerEnrollmentResponse
  *
- * A freshly minted (or rotated) bearer token — issue #86a.
+ * A freshly minted (or rotated) bearer token.
  *
  * ``token`` is the plaintext, visible only here — only its sha256 hash is kept. A
  * re-enroll rotates: the old token stops resolving the moment this response lands.
@@ -4440,7 +4440,7 @@ export type RunnerEnrollmentResponse = {
  * One buffered runner fact: its per-runner seq, its kind, and its payload.
  *
  * ``payload`` is the kind-specific body, kept open so a new fact kind needs no wire change;
- * every chunk-scoped kind carries ``route_token`` (issue #84a), stamped at enqueue.
+ * every chunk-scoped kind carries ``route_token``, stamped at enqueue.
  */
 export type RunnerFact = {
     /**
@@ -4612,7 +4612,7 @@ export type RunnerSubscriptionDeclaration = {
  *
  * One fleet-registry row — derived liveness, both brakes, and advisory subscription usage.
  *
- * The two brakes stay separate (#45): ``hub_paused`` is claims-only, while
+ * The two brakes stay separate: ``hub_paused`` is claims-only, while
  * ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory.
  */
 export type RunnerView = {

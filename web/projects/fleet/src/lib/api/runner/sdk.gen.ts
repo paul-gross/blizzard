@@ -80,7 +80,7 @@ export const pauseChunkApiChunksChunkIdPausePost = <ThrowOnError extends boolean
 /**
  * Deprecated alias for GET /chunks/{chunk_id}/work-items
  *
- * Deprecated since issue #55 — use `GET /chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.
+ * Deprecated: use `GET /chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.
  *
  * @deprecated
  */

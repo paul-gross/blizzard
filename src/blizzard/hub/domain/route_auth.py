@@ -1,4 +1,4 @@
-"""Route-token authorization (issue #84b) — does the caller of a chunk-scoped write or fence-advancing
+"""Route-token authorization — does the caller of a chunk-scoped write or fence-advancing
 fact hold the chunk's **currently-live** acquisition?
 
 A value over already-loaded values (``bzh:domain-takes-objects``), not a service. ``route_token_mode``

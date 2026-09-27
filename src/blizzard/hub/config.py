@@ -31,13 +31,13 @@ ENV_PORT = "BZ_HUB_PORT"
 # identically by every verb, which all resolve through `load` (`bzh:sql-portable`).
 ENV_DB_URL = "BZ_HUB_DB_URL"
 
-# The runner-identity rollout brake (issue #86a) — `warn` logs a missing/invalid bearer
+# The runner-identity rollout brake — `warn` logs a missing/invalid bearer
 # token and proceeds; `enforce` rejects. Defaults to `warn` so tokens can enroll first.
 RUNNER_AUTH_WARN = "warn"
 RUNNER_AUTH_ENFORCE = "enforce"
 _KNOWN_RUNNER_AUTH_MODES = {RUNNER_AUTH_WARN, RUNNER_AUTH_ENFORCE}
 
-# The route-capability-token rollout brake (issue #84b), separate from `runner_auth_mode`
+# The route-capability-token rollout brake, separate from `runner_auth_mode`
 # so the two enforce independently — `warn` proceeds; `enforce` rejects before the fence.
 ROUTE_TOKEN_WARN = "warn"
 ROUTE_TOKEN_ENFORCE = "enforce"
@@ -96,7 +96,7 @@ _WORK_SOURCE_EXAMPLE_COMMENT = """
 # login provider, so the block stays discoverable under `mode = "none"`.
 _AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT = """
 # Uncomment and edit to declare an OAuth login provider — consumed once `mode =
-# "oauth"` and a login mechanism exist (issue #92); parsed-and-carried here so the
+# "oauth"` and a login mechanism exist; parsed-and-carried here so the
 # config schema is stable ahead of that.
 #
 # [[auth.oauth.provider]]
@@ -389,6 +389,7 @@ class HubConfig:
     #: Instance-level forge-write posture for closing — false declines every
     #: configured source's closer (never the built-in hub source's, which writes no forge)
     #: so a non-canonical hub can't close real items; true (the default) is unconditional.
+    #: True by default so a non-canonical hub must opt out explicitly against live forge writes.
     close_forge_writes_enabled: bool = True
     auth: AuthConfig = field(default_factory=AuthConfig)
     #: Transcript ingest cap overrides; every field None = the domain defaults.
@@ -435,7 +436,7 @@ class HubConfig:
             ),
         )
         lines = [
-            "\n# Transcript ingest ceilings (blizzard#338), in bytes. Each is shown at its\n"
+            "\n# Transcript ingest ceilings, in bytes. Each is shown at its\n"
             "# default; uncomment to override. Widen these for a backfill window — a\n"
             "# `blizzard runner transcript reship` spends the per-chunk budget a SECOND time —\n"
             "# then restore them. `record_max_bytes` must stay at or ABOVE the runner's own\n"
@@ -460,21 +461,21 @@ class HubConfig:
             f'runner_auth_mode = "{self.runner_auth_mode}"\n',
             f'route_token_mode = "{self.route_token_mode}"\n',
             f'produces_mode = "{self.produces_mode}"\n',
-            "\n# Follow-latest (issue #164): when true, a chunk re-pins to the newest enabled\n"
+            "\n# Follow-latest: when true, a chunk re-pins to the newest enabled\n"
             "# mint of its own graph's NAME at its next transition, so a workflow edit reaches\n"
             "# in-flight work without migrating each chunk by hand. A graph's own follow_latest\n"
             "# overrides this; false (the default) keeps every chunk on the mint it started on.\n",
             f"follow_latest = {str(self.follow_latest).lower()}\n",
-            "\n# Forge-status sweep cadence (issue #179), in seconds. Only consulted when at\n"
+            "\n# Forge-status sweep cadence, in seconds. Only consulted when at\n"
             "# least one [[work_source]] below sets annotate = true; a hub with none starts\n"
             "# no sweep loop regardless of this value.\n",
             f"annotation_interval_seconds = {self.annotation_interval_seconds}\n",
-            "\n# Forge-write posture for closing delivered work items (blizzard#383). true (the\n"
+            "\n# Forge-write posture for closing delivered work items. true (the\n"
             "# default) closes through every configured [[work_source]]; set false on a\n"
             "# non-canonical hub — dev, staging, or a restored snapshot — so it never writes to\n"
             "# a live forge repo. The built-in hub source is unaffected: it writes no forge.\n",
             f"close_forge_writes_enabled = {str(self.close_forge_writes_enabled).lower()}\n",
-            "\n# Reverse-proxy trust set (issue #130): proxy IPs/CIDRs whose forwarded\n"
+            "\n# Reverse-proxy trust set: proxy IPs/CIDRs whose forwarded\n"
             "# X-Forwarded-Proto/-For headers are honored (cookie Secure flag, login-throttle\n"
             "# key, auth-fact actor IP). Empty = ignore those headers from every peer.\n",
             f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n",

@@ -1,4 +1,4 @@
-"""Lease wire bodies — the runner-local lease read (#29).
+"""Lease wire bodies — the runner-local lease read.
 
 ``closed_at``/``closure_reason`` are both ``None`` iff the lease is active, and ``state``
 carries a seventh ``"backing-off"`` value alongside ``"closed"``. Datetimes

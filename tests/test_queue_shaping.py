@@ -104,7 +104,7 @@ def test_paused_chunk_with_a_live_route_is_still_excluded_from_the_queue(tmp_pat
     _pause(tmp_path, hub, a)
     assert _peek_ids(hub) == [b]
     # Confirms this is the pause branch, not merely "running is already excluded":
-    # paused wins over running in the derivation precedence (D-067).
+    # paused wins over running in the derivation precedence.
     assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "paused"
 
 

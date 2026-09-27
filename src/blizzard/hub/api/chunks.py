@@ -808,7 +808,7 @@ router.add_api_route(
     name="get_pm_items_deprecated_alias",
     summary="Deprecated alias for GET /chunks/{chunk_id}/work-items",
     description=(
-        "Deprecated since issue #55 — use `GET /chunks/{chunk_id}/work-items`, which this "
+        "Deprecated: use `GET /chunks/{chunk_id}/work-items`, which this "
         "path aliases onto the identical handler and returns the identical view."
     ),
 )

@@ -4714,7 +4714,7 @@
     "/api/chunks/{chunk_id}/pm-items": {
       "get": {
         "deprecated": true,
-        "description": "Deprecated since issue #55 \u2014 use `GET /chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.",
+        "description": "Deprecated: use `GET /chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.",
         "operationId": "runner_get_pm_items_deprecated_alias_api_chunks__chunk_id__pm_items_get",
         "parameters": [
           {

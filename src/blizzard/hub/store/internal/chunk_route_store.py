@@ -136,7 +136,7 @@ class ChunkRouteStore:
             return int(row.seq) if row is not None else 0
 
     def record_route(self, route: Route, *, token_hash: str, at: datetime) -> str:
-        """Record the route and mint its capability token's fact, one transaction (issue #84a).
+        """Record the route and mint its capability token's fact, one transaction.
 
         The token fact is a second row on the same shared per-chunk seq counter
         (:func:`~blizzard.hub.store.internal.chunk_rows.next_route_seq`), allocated by its
@@ -175,7 +175,7 @@ class ChunkRouteStore:
             return int(key[0]) if key is not None else 0
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
-        """Append a fresh ``route_token_minted`` fact — the re-key path (issue #84b).
+        """Append a fresh ``route_token_minted`` fact — the re-key path.
         Same allocator as :meth:`record_route`'s own token fact, its own call rather
         than a fixed +1, so it stays correctly ordered against a concurrent
         create/release/re-key on this chunk."""

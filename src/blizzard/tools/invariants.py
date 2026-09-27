@@ -499,7 +499,7 @@ class EpochConsistentTransitions(QueryCheck):
 
 class RouteSeqUnique(QueryCheck):
     """Per-chunk route ``seq`` is unique across ``route_created`` + ``route_released`` +
-    ``route_token_minted`` combined (#84a)."""
+    ``route_token_minted`` combined."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []

@@ -35,7 +35,7 @@ export class ChunkCard {
 
   protected readonly chunkId = computed(() => this.lease().chunk_id);
 
-  /** The severable work-item read (decision 1) — never branched on for pending/error. */
+  /** The severable work-item read — never branched on for pending/error. */
   protected readonly titleQuery = injectChunkTitleQuery(() => this.chunkId());
 
   protected readonly linkedItems = computed(() => this.titleQuery.data()?.items ?? []);

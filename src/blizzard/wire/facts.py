@@ -76,7 +76,7 @@ class RunnerFact(BaseModel):
     """One buffered runner fact: its per-runner seq, its kind, and its payload.
 
     ``payload`` is the kind-specific body, kept open so a new fact kind needs no wire change;
-    every chunk-scoped kind carries ``route_token`` (issue #84a), stamped at enqueue."""
+    every chunk-scoped kind carries ``route_token``, stamped at enqueue."""
 
     seq: int
     kind: str

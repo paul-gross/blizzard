@@ -132,7 +132,7 @@ def _chunk_with_cost(  # type: ignore[no-untyped-def]
     route_runner_id="r1",
     epoch=1,
 ):
-    """A hub-derived ``ChunkStatusView`` carrying a scripted usage/cost total (issue #61a)."""
+    """A hub-derived ``ChunkStatusView`` carrying a scripted usage/cost total."""
     return ChunkStatusView(
         chunk_id=chunk_id,
         status=status,
@@ -939,7 +939,7 @@ def test_spawn_preamble_carries_lease_and_local_api(tmp_path):  # type: ignore[n
 
 @pytest.mark.unit
 def test_route_token_never_reaches_the_worker_preamble_or_prompt(tmp_path):  # type: ignore[no-untyped-def]
-    """Containment (issue #84a): the route token lives only in the runner store and
+    """Containment: the route token lives only in the runner store and
     stamped outbound payloads — never in ``WorkerPreamble``, so it can never reach the
     worker's environment or its rendered prompt."""
     store = _store(tmp_path)
@@ -993,7 +993,7 @@ def test_fill_reports_lease_mint_to_hub(tmp_path):  # type: ignore[no-untyped-de
 
 @pytest.mark.unit
 def test_fill_stashes_the_claims_route_token(tmp_path):  # type: ignore[no-untyped-def]
-    """A won claim's plaintext route token (issue #84a) is stashed locally, keyed by
+    """A won claim's plaintext route token is stashed locally, keyed by
     chunk — the read the store's own :meth:`route_token` serves back."""
     store = _store(tmp_path)
     hub = FakeHub()
@@ -1061,7 +1061,7 @@ def test_completion_and_decision_submissions_carry_the_stashed_route_token(tmp_p
 @pytest.mark.unit
 def test_same_runner_requeue_after_failure_reuses_the_same_route_token(tmp_path):  # type: ignore[no-untyped-def]
     """A same-runner requeue re-spawns under the route already held — no fresh claim —
-    so it must keep presenting the token that claim minted (issue #84a)."""
+    so it must keep presenting the token that claim minted."""
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
@@ -1621,8 +1621,8 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path)
     Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     # verify WAS called on the declaration, but the False verdict dropped it, so the
-    # buffered completion names no git-commit artifact. Verified twice ( — see
-    # the re-verification note on `test_advance_buffers_completion_...`): once in the
+    # buffered completion names no git-commit artifact. Verified twice — see the
+    # re-verification note on `test_advance_buffers_completion_...`: once in the
     # launch pass, once in the collect pass.
     assert wt.verified_calls == [
         ("file:///origins/toy-api.git", "e1", "abc123"),
@@ -1666,8 +1666,8 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):
     Advance(ctx).run()  # collects it — the fake pid reads dead by default
 
     # Only the read-only verify ran, over the worker's own declared branch — no branch
-    # was ever inferred off any local HEAD, detached or otherwise. Verified twice
-    # (— see the re-verification note on `test_advance_buffers_completion_...`).
+    # was ever inferred off any local HEAD, detached or otherwise. Verified twice —
+    # see the re-verification note on `test_advance_buffers_completion_...`.
     assert wt.verified_calls == [
         ("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef"),
         ("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef"),
@@ -3022,7 +3022,7 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path): 
     assert warned[0]["bound_envs"] == 0
 
 
-# Per-chunk spend cap (issue #61a)
+# Per-chunk spend cap
 
 
 def _cap_config(cap, runner_dir="/tmp/runner-dir"):  # type: ignore[no-untyped-def]
@@ -3567,8 +3567,8 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
     Advance(ctx).run()  # collects it — the fake pid reads dead by default
     Pull(ctx).run()
 
-    # Both envs' declarations were checked, in each of the launch and collect passes
-    # (— see the re-verification note on `test_advance_buffers_completion_...`).
+    # Both envs' declarations were checked, in each of the launch and collect passes —
+    # see the re-verification note on `test_advance_buffers_completion_...`.
     assert len(wt.verified_calls) == 4
     _chunk_id, submission = hub.completions[0]
     branches = sorted(a.branch_name or "" for a in submission.artifacts if a.kind is ArtifactKind.GIT_COMMIT)

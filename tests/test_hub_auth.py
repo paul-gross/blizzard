@@ -1,4 +1,4 @@
-"""``FleetRequest.assert_owns`` (unit tier) — per-route runner_id confinement (issue #86a).
+"""``FleetRequest.assert_owns`` (unit tier) — per-route runner_id confinement.
 
 Bearer-token resolution is exercised at component tier (``tests/test_runner_enrollment.py``)."""
 

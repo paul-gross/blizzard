@@ -1,6 +1,6 @@
 """Runner config's federation identity + local role knobs round-trip through ``to_toml``/``load``
  — ``public_url`` (its bare-string and multi-origin list forms, its derived
-``redirect_uris``, its load-time validation; ), ``[auth]``, and ``[auth.users]``."""
+``redirect_uris``, its load-time validation), ``[auth]``, and ``[auth.users]``."""
 
 from __future__ import annotations
 

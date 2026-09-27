@@ -39,7 +39,7 @@ class Identity:
 class Session:
     """A resolved session row — ``id_hash`` is the sha256 hex digest of the plaintext
     session id; the plaintext itself is never stored (mirrors
-    ``runner_registrations.token_hash``, issue #86a)."""
+    ``runner_registrations.token_hash``)."""
 
     id_hash: str
     user_id: str

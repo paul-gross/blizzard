@@ -123,7 +123,7 @@ class ReadyQueue:
             self.ctx.env_release.release_binding(chunk_id, acquired)  # someone else won — undo our binding
             return True
         _CP_AFTER_CLAIM.reached()
-        # Stash the won claim's plaintext route token (issue #84a) before spawning: every later
+        # Stash the won claim's plaintext route token before spawning: every later
         # reader takes it out of the store, never off `outcome.claimed` directly.
         self.ctx.stores.tokens.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
         Spawner(self.ctx).enter_node(chunk_id, outcome.claimed.envelope, acquired, via="fill")
@@ -347,7 +347,7 @@ class InterruptedClaims:
             return
         _log.info("re-claimed interrupted chunk — spawning current node", chunk_id=chunk_id)
         # A reclaim is a fresh claim, so its token overwrites whatever this chunk's row held
-        # before — a fresh claim always wins (issue #84a).
+        # before — a fresh claim always wins.
         self.ctx.stores.tokens.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
         Spawner(self.ctx).spawn(
             chunk_id, outcome.claimed.envelope, envs, via="reclaim", harness_id=self._latest_owner(chunk_id)

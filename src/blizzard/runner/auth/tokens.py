@@ -1,6 +1,6 @@
 """The lease- and route-token repository seam.
 
-Two independent capability tokens: a chunk's route claim token (issue #84a) and a
+Two independent capability tokens: a chunk's route claim token and a
 lease's attach capability token hash. Neither plaintext is
 persisted except the route token itself, which the runner alone ever presents."""
 
@@ -16,8 +16,8 @@ class IReadTokenRepository(Protocol):
     """Read-only token queries (held by read-path edges)."""
 
     def route_token(self, chunk_id: str) -> str | None:
-        """The chunk's stashed route capability token, or ``None`` if never claimed here
-        (issue #84a). Stamped onto every chunk-scoped outbound payload at enqueue.
+        """The chunk's stashed route capability token, or ``None`` if never claimed here.
+        Stamped onto every chunk-scoped outbound payload at enqueue.
         ``None`` is presented as an absent field, never fabricated."""
         ...
 
@@ -32,7 +32,7 @@ class IWriteTokenRepository(IReadTokenRepository, Protocol):
     """Read-write token store — held only by the domain."""
 
     def set_route_token(self, chunk_id: str, *, token: str, at: datetime) -> None:
-        """Stash a won claim's plaintext route token (upsert) — issue #84a.
+        """Stash a won claim's plaintext route token (upsert).
 
         Called on a won claim with the token the claim response returned once. A fresh
         claim overwrites a prior row for the same chunk."""

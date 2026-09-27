@@ -148,8 +148,7 @@
     display: none;
   }
   /* Yesterday's cell — a comparison figure — drops one tier earlier than
-     today's own, the same tier the per-lane stat strip yields at
-     (a judgment call, flagged here so review can overrule it cheaply). */
+     today's own, the same tier the per-lane stat strip yields at. */
   .spend-yesterday {
     display: none;
   }

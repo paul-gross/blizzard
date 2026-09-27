@@ -29,8 +29,7 @@ def dev() -> None:
     "allow_external_db",
     is_flag=True,
     default=False,
-    help="Proceed even if --hub-dir's config names a database outside that directory "
-    "(issue #234's --dir isolation guard).",
+    help="Proceed even if --hub-dir's config names a database outside that directory.",
 )
 def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None, allow_external_db: bool) -> None:
     """Assert both stores' durable invariants (``bzh:invariant-checker``).

@@ -1,5 +1,5 @@
 """``blizzard runner artifact list|get|create|staged`` + the deprecated ``attach`` alias
-(unit tier, #169): ``httpx`` stubbed, no live socket. The routes
+(unit tier): ``httpx`` stubbed, no live socket. The routes
 themselves are the component tier's ``test_runner_artifacts_api.py``. The verbs do not
 soft-fail: a rejected read/write must reach the worker as a non-zero exit.
 """

@@ -338,7 +338,7 @@ def test_forwards_to_the_hub_chunk_detail_route_and_returns_merged_rows(tmp_path
 
 @pytest.mark.component
 def test_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Path) -> None:
-    """The forward rides the runner principal's bearer (issue #86b) — the worker's own
+    """The forward rides the runner principal's bearer — the worker's own
     lease token never leaves the runner."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(

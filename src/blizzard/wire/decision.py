@@ -46,7 +46,7 @@ class DecisionSubmission(BaseModel):
     runner_id: str
     artifacts: list[SubmittedArtifact] = []
     proposals: list[WorkItemProposal] = []
-    # The route capability token stamped at enqueue (issue #84a) — see
+    # The route capability token stamped at enqueue — see
     # `wire.completion.CompletionSubmission.route_token`; present-only in this phase.
     route_token: str | None = None
 

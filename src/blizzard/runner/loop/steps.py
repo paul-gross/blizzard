@@ -111,7 +111,7 @@ class Step:
 
 
 class SpendCeiling(Step):
-    """The tick-level kill-switch (issue #61b) — first in the tick."""
+    """The tick-level kill-switch — first in the tick."""
 
     def run(self) -> None:
         """Engage the local pause brake once this runner's rolling-window spend reaches

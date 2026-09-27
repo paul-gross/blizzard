@@ -302,7 +302,7 @@ def _hub(
         ],
     )
     if route_token_mode is not None or produces_mode is not None or annotation_interval_seconds is not None:
-        # issue #84b / #113 / #179 — flags read once, at `host` startup: set before the
+        # Flags read once, at `host` startup: set before the
         # daemon starts, not mutable afterward.
         config = HubConfig.load(hub_dir)
         overrides: dict[str, object] = {}

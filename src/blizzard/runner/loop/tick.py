@@ -50,7 +50,7 @@ def tick(ctx: LoopContext) -> None:
         capabilities=TickCapabilities(ctx.harnesses, ctx.harness_versions, ctx.harness_health),
     )
     ctx.chunk_views.prime(_primed_chunk_ids(ctx))
-    # The spend-ceiling kill-switch (issue #61b) — first, so it brakes the same tick it fires in.
+    # The spend-ceiling kill-switch — first, so it brakes the same tick it fires in.
     SpendCeiling(ctx).run()
     Reap(ctx).run()  # startup recovery IS reap running early
     Resume(ctx).run()  # before ADVANCE — else a killed-mid-work worker reads as done

@@ -7,7 +7,7 @@ export interface ChunkChangeSummary {
   readonly transition: string;
   /** Line 2 — the runner shortname, e.g. `runner-local`, when the frame names one.
    * Falls back to the deleting actor (`data.by`) when the frame carries no runner and
-   * its `cause` is `'deleted'` (D7a): an unacquired chunk has no runner to
+   * its `cause` is `'deleted'`: an unacquired chunk has no runner to
    * name, but who deleted it is still worth the same line. Omitted on every other
    * unclaimed transition (a promote, a stop past the point the route released) — `by`
    * rides only the `deleted` cause today ({@link ChunkChanged.by}'s own docstring). */
@@ -32,7 +32,7 @@ export interface ChunkChangeSummary {
  * part of the rendered row.
  *
  * `runner` prefers `runner_id` when the frame names one; failing that, a `deleted`-cause
- * frame's `by` fills the same line (D7a) — Delete's actor, not a runner, but
+ * frame's `by` fills the same line — Delete's actor, not a runner, but
  * the same "who did this" line 2 the block already renders for a claimed transition.
  * Every other unclaimed transition still omits line 2 entirely, unchanged from before.
  */

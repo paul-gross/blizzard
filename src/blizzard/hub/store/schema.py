@@ -649,7 +649,7 @@ Index("ix_route_released_chunk_id", route_released.c.chunk_id)
 # rowid as a tie-break).
 Index("ix_route_released_released_at_id", route_released.c.released_at, route_released.c.id)
 
-# --- Route capability tokens (route_token_minted — issue #84a) ----------------
+# --- Route capability tokens (route_token_minted) ----------------
 # Only the sha256 digest is persisted; ``seq`` shares the per-chunk route counter.
 route_token_minted = Table(
     "route_token_minted",
@@ -1134,7 +1134,7 @@ runner_registrations = Table(
     Column("workspace_id", String, nullable=False),  # the per-runner workspace binding
     Column("registered_at", UtcDateTime, nullable=False),
     Column("last_seen_at", UtcDateTime, nullable=False),  # liveness derives from this
-    # The hub-minted bearer token's sha256 hex digest (issue #86a) — nullable (an
+    # The hub-minted bearer token's sha256 hex digest — nullable (an
     # unenrolled runner has none), indexed for the reverse token lookup.
     Column("token_hash", Text, nullable=True, index=True),
     # The runner's configured environment-pool size — nullable when the runner

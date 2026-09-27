@@ -406,7 +406,7 @@ class ChunkPatchRequest(BaseModel):
 
 
 class ChunkPatchResponse(BaseModel):
-    """The result of one ``PATCH /chunks/{id}`` (#144) — the chunk's
+    """The result of one ``PATCH /chunks/{id}`` — the chunk's
     editable build properties after the edit, carried together since a PATCH can apply more than
     one at once."""
 

@@ -393,7 +393,7 @@ class FakeHub:
         self.get_envelope_calls: list[str] = []  # chunk ids `get_envelope` was called for
         self.hub_advance_calls: list[str] = []  # chunk ids `hub_advance` was called for (#66)
         self.hub_advance_responses: dict[str, HubAdvanceResponse] = {}
-        self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for (issue #84b)
+        self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for
         self.rekey_responses: dict[str, str] = {}  # chunk_id -> the plaintext to hand back
 
     def peek_queue(self, request: QueuePeekRequest) -> QueuePeekResponse:

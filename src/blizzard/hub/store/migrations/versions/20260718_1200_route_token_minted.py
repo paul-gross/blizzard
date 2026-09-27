@@ -1,5 +1,5 @@
 """route capability token — creates the append-only ``route_token_minted`` fact table:
-one unguessable per-acquisition secret per claim (hub store tree, issue #84a)
+one unguessable per-acquisition secret per claim (hub store tree)
 
 Revision ID: 20260718_1200_hub_route_token_minted
 Revises: 20260718_1130_hub_runner_token

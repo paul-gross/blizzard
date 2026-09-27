@@ -2,7 +2,7 @@
 
 ``online`` and ``paused`` are **derived** — liveness from ``last_seen_at`` against the
 staleness threshold, paused from the newest pause fact.
-:class:`RunnerEnrollmentResponse` (issue #86a) is the one body that ever carries a
+:class:`RunnerEnrollmentResponse` is the one body that ever carries a
 runner's plaintext bearer token."""
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ class RunnerRegistrationResponse(BaseModel):
 
 
 class RunnerEnrollmentResponse(BaseModel):
-    """A freshly minted (or rotated) bearer token — issue #86a.
+    """A freshly minted (or rotated) bearer token.
 
     ``token`` is the plaintext, visible only here — only its sha256 hash is kept. A
     re-enroll rotates: the old token stops resolving the moment this response lands."""
@@ -104,7 +104,7 @@ class SubscriptionUsageView(BaseModel):
 class RunnerView(BaseModel):
     """One fleet-registry row — derived liveness, both brakes, and advisory subscription usage.
 
-    The two brakes stay separate (#45): ``hub_paused`` is claims-only, while
+    The two brakes stay separate: ``hub_paused`` is claims-only, while
     ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory."""
 
     runner_id: str

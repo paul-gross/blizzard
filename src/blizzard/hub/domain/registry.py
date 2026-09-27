@@ -51,7 +51,7 @@ class RunnerRegistration:
     locally_paused: bool = False
     locally_paused_by: str | None = None
     locally_paused_reason: str | None = None
-    #: The enrolled bearer token's sha256 hex digest (issue #86a) — never the plaintext, which the
+    #: The enrolled bearer token's sha256 hex digest — never the plaintext, which the
     #: hub keeps no copy of. ``None`` for an unenrolled runner.
     token_hash: str | None = None
     #: The runner's reported environment-pool size, refreshed in place on each
@@ -291,7 +291,7 @@ class IReadRunnerRegistry(Protocol):
     def list_runners(self) -> list[RunnerRegistration]: ...
 
     def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
-        """The reverse, hash-indexed lookup a presented bearer token resolves through (issue #86a) — the
+        """The reverse, hash-indexed lookup a presented bearer token resolves through — the
         mirror image of every other read here, which key on ``runner_id``. A ``runner_id`` is not
         uniformly readable off a request, so a principal resolves from the token alone."""
         ...
@@ -351,7 +351,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         ...
 
     def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
-        """Overwrite the registration's bearer-token hash (issue #86a) — a rotation, not a fact append.
+        """Overwrite the registration's bearer-token hash — a rotation, not a fact append.
         Re-enrolling replaces the hash in place, so the prior token stops resolving immediately. ``at``
         is threaded from the injected clock (``bzh:injected-clock``) for signature symmetry with this
         seam's other writes; no rotation-audit column exists yet to stamp it into."""

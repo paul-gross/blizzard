@@ -123,7 +123,7 @@ class HeldChunk:
             from_node_id=decision.node_id,
             artifacts=[],  # the decision's artifacts already landed
             decision_id=decision.decision_id,
-            # Not buffered, so stamped directly at submit (issue #84a).
+            # Not buffered, so stamped directly at submit.
             route_token=self.ctx.stores.tokens.route_token(self.chunk_id),
         )
         try:

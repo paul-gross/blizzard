@@ -34,7 +34,7 @@ _CP_AFTER_SUBMIT = crashpoint("flush.after-submit.before-ack", "hub applied the 
 _CP_AFTER_ACK = crashpoint("flush.after-ack.before-apply-response", "ack recorded; apply-response not consumed")
 _CP_AFTER_APPLY = crashpoint("flush.after-apply-response", "apply-response consumed; chunk continued in place")
 
-# The between-attempts boundary the per-chunk spend cap checks at (issue #61a): a crash here
+# The between-attempts boundary the per-chunk spend cap checks at: a crash here
 # leaves no active lease and no escalation, recovered by FILL's interrupted-claim reconcile.
 _CP_AFTER_CLOSURE = crashpoint(
     "advance.after-closure.before-cost-cap-check", "attempt closed; cap check and next-step decision not yet made"

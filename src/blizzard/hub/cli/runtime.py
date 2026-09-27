@@ -21,9 +21,7 @@ from blizzard.hub.runtime import ensure_current_revision, init_environment, migr
 ENV_HUB_DIR = "BZ_HUB_DIR"
 DEFAULT_DIR = "."
 
-_ALLOW_EXTERNAL_DB_HELP = (
-    "Proceed even if the config's db_url names a database outside this directory (issue #234's --dir isolation guard)."
-)
+_ALLOW_EXTERNAL_DB_HELP = "Proceed even if the config's db_url names a database outside this directory."
 
 
 @click.command()

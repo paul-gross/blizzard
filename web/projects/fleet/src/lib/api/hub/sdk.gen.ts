@@ -457,7 +457,7 @@ export const pauseChunkApiChunksChunkIdPausePost = <ThrowOnError extends boolean
 /**
  * Deprecated alias for GET /chunks/{chunk_id}/work-items
  *
- * Deprecated since issue #55 — use `GET /chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.
+ * Deprecated: use `GET /chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.
  *
  * @deprecated
  */
@@ -904,7 +904,7 @@ export const pauseChunkApiFleetChunksChunkIdPausePost = <ThrowOnError extends bo
 /**
  * Deprecated alias for GET /fleet/chunks/{chunk_id}/work-items
  *
- * Deprecated since issue #55 — use `GET /fleet/chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.
+ * Deprecated: use `GET /fleet/chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.
  *
  * @deprecated
  */
@@ -921,7 +921,7 @@ export const resumeChunkApiFleetChunksChunkIdResumePost = <ThrowOnError extends 
 /**
  * Rekey Route Token
  *
- * Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext recovery for a
+ * Rotate the chunk's live route capability token — the lost-plaintext recovery for a
  * claim whose response was never read back. Confined to the live route's own runner; this route
  * presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting.
  */
@@ -1580,7 +1580,7 @@ export const getRunnerApiRunnersRunnerIdGet = <ThrowOnError extends boolean = fa
  * Enroll Runner
  *
  * Mint (or rotate) ``runner_id``'s bearer token — the plaintext is returned once;
- * the store keeps only its sha256 hash from here on (issue #86a).
+ * the store keeps only its sha256 hash from here on.
  *
  * Requires an existing registration (404 otherwise): enrollment is a deliberate act on
  * a known runner, never a trust-on-first-use grant to an unregistered name.

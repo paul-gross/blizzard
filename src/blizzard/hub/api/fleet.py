@@ -132,7 +132,7 @@ class FleetRequest:
 
     def assert_owns(self, runner_id: str) -> None:
         """Reject a call whose declared ``runner_id`` differs from the resolved principal's
-        — only ever fires once a token *did* resolve, to some other runner (issue #86a)."""
+        — only ever fires once a token *did* resolve, to some other runner."""
         if self.principal is None or self.principal.runner_id == runner_id:
             return
         self.mode.refuse(
@@ -289,7 +289,7 @@ router.add_api_route(
     name="fleet_get_pm_items_deprecated_alias",
     summary="Deprecated alias for GET /fleet/chunks/{chunk_id}/work-items",
     description=(
-        "Deprecated since issue #55 — use `GET /fleet/chunks/{chunk_id}/work-items`, which "
+        "Deprecated: use `GET /fleet/chunks/{chunk_id}/work-items`, which "
         "this path aliases onto the identical handler and returns the identical view."
     ),
 )
@@ -669,7 +669,7 @@ def rekey_route_token(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RouteTokenRekeyResponse:
-    """Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext recovery for a
+    """Rotate the chunk's live route capability token — the lost-plaintext recovery for a
     claim whose response was never read back. Confined to the live route's own runner; this route
     presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting."""
     route = services.chunks.route.route_of(chunk_id)
