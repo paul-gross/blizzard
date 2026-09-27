@@ -287,9 +287,8 @@ def _candidate_graph_ids_stmt(criteria: OperationalCriteria) -> CompoundSelect[A
     """Every graph id the outcomes fold might index into — a candidate chunk's own pin,
     or a migration's ``to``/``from_graph_id`` (``resolve_attempt_failures``'s no-movement
     fallback can resolve via the latter) — as a correlated subquery, not a materialized
-    id list, mirroring
-    ``_candidate_chunk_ids_stmt``'s own reason: `graphs.graph_id` is a per-mint id, so an
-    unwindowed request binds one parameter per graph version any chunk has ever run."""
+    id list, mirroring ``_candidate_chunk_ids_stmt``'s own reason: `graphs.graph_id` is a
+    per-mint id, so an unwindowed request binds one parameter per graph version any chunk has ever run."""
     c, m = s.chunks, s.chunk_migrations
     chunk_ids = _candidate_chunk_ids_stmt(criteria)
     return union(

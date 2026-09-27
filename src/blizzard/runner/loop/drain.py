@@ -189,8 +189,7 @@ class OutboundDrain:
         self.ctx.stores.outbound.ack_outbound(fact.seq, acked_at=self.ctx.clock.now())
         if self.ctx.events is not None:
             # Re-announces the enqueue's own seq — the fact log's `acked_at` marker
-            # otherwise stays stale until the next backstop poll (the published event carries
-            # no acked state).
+            # otherwise stays stale until the next backstop poll; the published event carries no acked state.
             self.ctx.events.publish_fact_changed(
                 seq=fact.seq,
                 kind=fact.kind,
