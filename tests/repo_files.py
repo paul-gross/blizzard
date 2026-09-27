@@ -89,6 +89,16 @@ def install_repo_read_guard() -> None:
                     working_dir = (
                         Path(os.fsdecode(cwd)).resolve() if isinstance(cwd, (str, bytes, os.PathLike)) else Path.cwd()
                     )
+                    # Git's -C changes where its file arguments are resolved.
+                    if (
+                        isinstance(executable, (str, bytes))
+                        and Path(os.fsdecode(executable)).name == "git"
+                        and isinstance(argv, (list, tuple))
+                        and "-C" in argv
+                    ):
+                        index = argv.index("-C")
+                        if index + 1 < len(argv) and isinstance(argv[index + 1], (str, bytes, os.PathLike)):
+                            working_dir = (working_dir / os.fsdecode(argv[index + 1])).resolve()
                     candidates = [executable, *(argv if isinstance(argv, (list, tuple)) else ())]
                     if (
                         isinstance(executable, (str, bytes))
@@ -103,7 +113,7 @@ def install_repo_read_guard() -> None:
                         if isinstance(candidate, (str, bytes, Path)):
                             path = Path(os.fsdecode(candidate))
                             target = working_dir / path
-                            if path.is_absolute() or ("/" in os.fsdecode(candidate) and target.is_file()):
+                            if (path.is_absolute() and not target.is_dir()) or target.is_file():
                                 check_repo_read(target, copied)
                 return
             frame = frame.f_back

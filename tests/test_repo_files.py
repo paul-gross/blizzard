@@ -61,3 +61,16 @@ def test_shell_command_checks_repo_file_arguments(monkeypatch: pytest.MonkeyPatc
         subprocess.run("cat src/blizzard/static/README.md", shell=True, check=False)
     result = subprocess.run("cat openapi/hub.openapi.json", shell=True, check=False, capture_output=True)
     assert result.returncode == 0
+
+
+def test_subprocess_checks_bare_repo_file_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(repo_root())
+    # mutmut itself copies uv.lock, even though tests have not declared it.
+    for command in (["cat", "uv.lock"], "cat uv.lock"):
+        with pytest.raises(AssertionError, match="Unlisted repo-file read"):
+            subprocess.run(command, shell=isinstance(command, str), check=False)
+    if (repo_root() / "SECURITY.md").exists():
+        with pytest.raises(AssertionError, match="Unlisted repo-file read"):
+            subprocess.run(["cat", "SECURITY.md"], check=False)
+    result = subprocess.run(["cat", "README.md"], check=False, capture_output=True)
+    assert result.returncode == 0
