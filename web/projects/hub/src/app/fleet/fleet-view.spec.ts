@@ -124,6 +124,8 @@ describe('FleetView (mobile Fleet screen)', () => {
     expect(el.querySelector('[data-runner="rn_nocap"] [data-testid="mobile-fleet-runner-slot-bar"]')).toBeNull();
   });
 
+  const FRESH_PACE = { sampledAt: NOW, refreshedLabel: 'refreshed 0s ago', freshness: 'fresh' as const, missReason: null };
+
   it('renders one pace bar per folded subscription window', async () => {
     const fixture = TestBed.createComponent(FleetView);
     fixture.componentRef.setInput('state', 'ready');
@@ -133,10 +135,12 @@ describe('FleetView (mobile Fleet screen)', () => {
           {
             slug: 'anthropic-default',
             name: 'Anthropic (default)',
-            condition: null, paceBars: [
+            condition: null,
+            paceBars: [
               { window: '5h', utilizationPct: 40, elapsedPct: 20 },
               { window: '7d', utilizationPct: 70, elapsedPct: 55 },
             ],
+            ...FRESH_PACE,
           },
         ],
       }),
@@ -144,7 +148,7 @@ describe('FleetView (mobile Fleet screen)', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const bars = el.querySelectorAll('[data-testid="mobile-fleet-runner-pace-bar"]');
+    const bars = el.querySelectorAll('[data-testid="runner-pace-bar"]');
     expect(bars).toHaveLength(2);
     expect([...bars].map((b) => b.getAttribute('data-pace-window'))).toEqual(['5h', '7d']);
   });
@@ -155,8 +159,20 @@ describe('FleetView (mobile Fleet screen)', () => {
     fixture.componentRef.setInput('rows', [
       row('rn_multi', {
         subscriptionPaces: [
-          { slug: 'anthropic-default', name: 'Anthropic (default)', condition: null, paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }] },
-          { slug: 'anthropic-secondary', name: 'Anthropic (secondary)', condition: null, paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }] },
+          {
+            slug: 'anthropic-default',
+            name: 'Anthropic (default)',
+            condition: null,
+            paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }],
+            ...FRESH_PACE,
+          },
+          {
+            slug: 'anthropic-secondary',
+            name: 'Anthropic (secondary)',
+            condition: null,
+            paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }],
+            ...FRESH_PACE,
+          },
         ],
       }),
     ]);
@@ -171,9 +187,7 @@ describe('FleetView (mobile Fleet screen)', () => {
       'anthropic-secondary',
     ]);
     expect(
-      groups.map((group) =>
-        group.querySelector('[data-testid="mobile-fleet-runner-pace-bar"]')?.getAttribute('data-pace-window'),
-      ),
+      groups.map((group) => group.querySelector('[data-testid="runner-pace-bar"]')?.getAttribute('data-pace-window')),
     ).toEqual(['5h', '5h']);
   });
 
@@ -185,7 +199,7 @@ describe('FleetView (mobile Fleet screen)', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="mobile-fleet-runner-subscriptions"]')).toBeNull();
-    expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="mobile-fleet-runner-pace-bar"]')).toBeNull();
+    expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="runner-pace-bar"]')).toBeNull();
   });
 
   it('reports no usage windows for a subscription with a sampled empty window list', async () => {
@@ -193,15 +207,70 @@ describe('FleetView (mobile Fleet screen)', () => {
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_unsampled', {
-        subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', condition: null, paceBars: [] }],
+        subscriptionPaces: [
+          { slug: 'anthropic-default', name: 'Anthropic (default)', condition: null, paceBars: [], ...FRESH_PACE },
+        ],
       }),
     ]);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const unsampled = el.querySelector('[data-testid="mobile-fleet-runner-subscription-unsampled"]');
-    expect(unsampled?.textContent).toBe('NO USAGE WINDOWS REPORTED');
+    const unsampled = el.querySelector('[data-testid="subscription-pace-group-unsampled"]');
+    expect(unsampled?.textContent?.trim()).toBe('NO USAGE WINDOWS REPORTED');
     expect(unsampled?.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
+  });
+
+  it('reads "no sample yet" for a declared, never-sampled slug, naming its miss reason', async () => {
+    const fixture = TestBed.createComponent(FleetView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_never', {
+        subscriptionPaces: [
+          {
+            slug: 'probe',
+            name: 'Probe',
+            condition: null,
+            paceBars: [],
+            sampledAt: null,
+            refreshedLabel: null,
+            freshness: null,
+            missReason: 'endpoint_unreachable',
+          },
+        ],
+      }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const noSample = el.querySelector('[data-testid="subscription-pace-group-no-sample"]');
+    expect(noSample?.textContent?.trim()).toBe('NO SAMPLE YET — endpoint_unreachable');
+  });
+
+  it('renders the aging/stale refreshed label with its own data-freshness attribute', async () => {
+    const fixture = TestBed.createComponent(FleetView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_aging', {
+        subscriptionPaces: [
+          {
+            slug: 'anthropic-default',
+            name: 'Anthropic (default)',
+            condition: null,
+            paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 60 }],
+            sampledAt: NOW,
+            refreshedLabel: 'refreshed 30m ago',
+            freshness: 'aging',
+            missReason: null,
+          },
+        ],
+      }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const refreshed = el.querySelector('[data-testid="subscription-pace-group-refreshed"]');
+    expect(refreshed?.textContent?.trim()).toBe('refreshed 30m ago');
+    expect(refreshed?.getAttribute('data-freshness')).toBe('aging');
   });
 
   it('emits togglePause with the row when the pause/resume button is activated', async () => {

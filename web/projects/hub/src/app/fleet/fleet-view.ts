@@ -3,10 +3,10 @@ import {
   KitAsyncState,
   KitBadge,
   KitButton,
-  KitPaceBar,
   KitPanel,
   KitSlotBar,
   STATUS_TONE,
+  SubscriptionPaceGroup,
   formatSeenAgo,
   localPauseHint,
   runnerToggleHint,
@@ -26,7 +26,7 @@ import {
 @Component({
   selector: 'app-fleet-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitButton, KitPaceBar, KitPanel, KitSlotBar],
+  imports: [KitAsyncState, KitBadge, KitButton, KitPanel, KitSlotBar, SubscriptionPaceGroup],
   templateUrl: './fleet-view.html',
   styleUrl: './fleet-view.css',
 })

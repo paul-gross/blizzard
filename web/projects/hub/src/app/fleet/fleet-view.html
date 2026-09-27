@@ -73,32 +73,14 @@
             />
           }
 
-          <!-- Rate-limit pacing: one group per declared subscription. -->
+          <!-- Rate-limit pacing: one group per declared subscription, shared with the
+               desktop runner registry (blizzard#636 D10) — no inline copy here. -->
           @if (row.subscriptionPaces.length > 0) {
             <div class="paces" data-testid="mobile-fleet-runner-subscriptions">
-              @for (group of row.subscriptionPaces; track group.slug) {
-                <div class="pace-group" [attr.data-subscription-slug]="group.slug">
-                  <span class="pace-name" data-testid="mobile-fleet-runner-subscription-name">{{ group.name }}</span>
-                  @if (group.paceBars.length > 0) {
-                    @for (bar of group.paceBars; track bar.window) {
-                      <fleet-kit-pace-bar
-                        data-testid="mobile-fleet-runner-pace-bar"
-                        [attr.data-pace-window]="bar.window"
-                        [label]="bar.window"
-                        [utilizationPct]="bar.utilizationPct"
-                        [elapsedPct]="bar.elapsedPct"
-                      />
-                    }
-                  } @else {
-                    <span
-                      class="pace-unsampled"
-                      data-testid="mobile-fleet-runner-subscription-unsampled"
-                      [attr.aria-label]="group.name + ' sample reported no usage windows'"
-                      >NO USAGE WINDOWS REPORTED</span
-                    >
-                  }
-                </div>
-              }
+              <fleet-subscription-pace-group
+                [attr.data-runner-subscription-groups]="row.runner_id"
+                [subscriptionPaces]="row.subscriptionPaces"
+              />
             </div>
           }
 

@@ -5,6 +5,7 @@ import { compactRef } from '../compact-ref';
 import { injectHubChunksQuery } from '../chunks/chunks.query';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import { injectNowSignal } from '../now-signal';
+import { ageMs, formatRefreshedAgo } from '../when';
 import { asyncState } from '../query-state';
 import { injectHubRunnersQuery } from './runners.query';
 
@@ -27,6 +28,27 @@ export interface PaceBar {
   readonly elapsedPct: number;
 }
 
+/** The board's own age tiers for a declared subscription's last good sample
+ * (blizzard#636 D8) — `bzh:frontend-formatters`: one classifier, read by the fold
+ * below and by nothing else (not the template, the CSS, or the mobile view). */
+export type SubscriptionFreshness = 'fresh' | 'aging' | 'stale';
+
+/** `sampledAt` at or under this age is `'fresh'`. */
+export const FRESHNESS_AGING_AFTER_MS = 15 * 60_000;
+/** `sampledAt` at or under this age (and past {@link FRESHNESS_AGING_AFTER_MS}) is
+ * `'aging'`; past it, `'stale'`. */
+export const FRESHNESS_STALE_AFTER_MS = 60 * 60_000;
+
+/** Maps an exact age in ms to its display tier (blizzard#636 D8) — boundaries are
+ * measured on the exact `ageMs`, never on the rounded "refreshed … ago" label, so a
+ * sample at precisely 15m0s reads `'fresh'` even though its label already rounds to
+ * `15m`. */
+export function classifySubscriptionFreshness(sampleAgeMs: number): SubscriptionFreshness {
+  if (sampleAgeMs <= FRESHNESS_AGING_AFTER_MS) return 'fresh';
+  if (sampleAgeMs <= FRESHNESS_STALE_AFTER_MS) return 'aging';
+  return 'stale';
+}
+
 /** One reported subscription sample's pace bars, grouped under its slug and name. Two
  * subscriptions can share a window label (both report a `"5h"` window), so grouping
  * by slug is what keeps them distinct. */
@@ -37,6 +59,18 @@ export interface SubscriptionPace {
   /** `'credential_lapsed'` when the newest reported miss outranks the newest sample
    * (blizzard#504 D7); `null` otherwise. */
   readonly condition: string | null;
+  /** The last good sample's raw instant, or `null` when the slug has never been
+   * sampled (blizzard#636) — presence, not `paceBars.length`, is what tells a
+   * zero-window sample apart from no sample at all. */
+  readonly sampledAt: string | null;
+  /** "refreshed 5m ago" against {@link sampledAt}, or `null` alongside it. */
+  readonly refreshedLabel: string | null;
+  /** {@link sampledAt}'s age tier, or `null` alongside it — `null` too for a stamp
+   * unparseable or beyond {@link SKEW_TOLERANCE_MS} in the future
+   * (`bzh:utc-instants`): never a confident tier for a reading the clock can't trust. */
+  readonly freshness: SubscriptionFreshness | null;
+  /** The newest reported miss's own reason, or `null` when there is none. */
+  readonly missReason: string | null;
 }
 
 /** A registry row: the runner plus its claims and subscription pace groups, pre-folded
@@ -163,12 +197,20 @@ export function injectRunnerRows(): {
       const subscriptions = runner.subscriptions ?? [];
       grouped.set(
         runner.runner_id,
-        subscriptions.map((s) => ({
-          slug: s.slug,
-          name: s.name,
-          paceBars: toPaceBars(nowMs, s.windows),
-          condition: s.condition ?? null,
-        })),
+        subscriptions.map((s) => {
+          const sampledAt = s.sampled_at ?? null;
+          const delta = sampledAt === null ? null : ageMs(sampledAt, nowMs);
+          return {
+            slug: s.slug,
+            name: s.name,
+            paceBars: toPaceBars(nowMs, s.windows),
+            condition: s.condition ?? null,
+            sampledAt,
+            refreshedLabel: delta === null ? null : formatRefreshedAgo(delta),
+            freshness: delta === null ? null : classifySubscriptionFreshness(delta),
+            missReason: s.miss_reason ?? null,
+          };
+        }),
       );
     }
     return grouped;

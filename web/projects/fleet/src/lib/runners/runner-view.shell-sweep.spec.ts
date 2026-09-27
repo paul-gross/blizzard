@@ -1,9 +1,21 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import type { RunnerRow } from './runner-rows';
 import { RunnerPanelView } from './runner-view';
+
+/** The design tokens are a global stylesheet loaded via each app's build `styles`,
+ * never by a standalone component test (`design/hover-tint.shell-sweep.spec.ts`'s own
+ * precedent) — read the sheet's real text server-side and inject it as a `<style>`
+ * element, so the aging/stale `var(--amber)`/`var(--red)` colours this file's own
+ * D8/D9 case asserts actually resolve. */
+async function loadDesignTokens(): Promise<void> {
+  const css = await commands.readFile('projects/fleet/src/lib/design/tokens.css');
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+}
 
 /**
  * The runner registry's rate-limit pace bars (issue #218), the tooled half of
@@ -39,6 +51,10 @@ const ROW: RunnerRow = {
         { window: '7d', utilizationPct: 81, elapsedPct: 90 },
       ],
       condition: null,
+      sampledAt: NOW,
+      refreshedLabel: 'refreshed 0s ago',
+      freshness: 'fresh',
+      missReason: null,
     },
   ],
 };
@@ -66,6 +82,10 @@ const UNEQUAL_LABEL_ROW: RunnerRow = {
         { window: '30d', utilizationPct: 81, elapsedPct: 90 },
       ],
       condition: null,
+      sampledAt: NOW,
+      refreshedLabel: 'refreshed 0s ago',
+      freshness: 'fresh',
+      missReason: null,
     },
   ],
 };
@@ -92,12 +112,20 @@ const SUBSCRIPTION_ROW: RunnerRow = {
         { window: '7d', utilizationPct: 81, elapsedPct: 90 },
       ],
       condition: null,
+      sampledAt: NOW,
+      refreshedLabel: 'refreshed 0s ago',
+      freshness: 'fresh',
+      missReason: null,
     },
     {
       slug: 'anthropic-secondary',
       name: 'Anthropic (secondary)',
       paceBars: [{ window: '5h', utilizationPct: 15, elapsedPct: 5 }],
       condition: null,
+      sampledAt: NOW,
+      refreshedLabel: 'refreshed 0s ago',
+      freshness: 'fresh',
+      missReason: null,
     },
   ],
 };
@@ -130,7 +158,18 @@ const EMPTY_SAMPLE_ROW: RunnerRow = {
   locally_paused: false,
   claims: [],
   used: 0,
-  subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [], condition: null }],
+  subscriptionPaces: [
+    {
+      slug: 'anthropic-default',
+      name: 'Anthropic (default)',
+      paceBars: [],
+      condition: null,
+      sampledAt: NOW,
+      refreshedLabel: 'refreshed 0s ago',
+      freshness: 'fresh',
+      missReason: null,
+    },
+  ],
 };
 
 const LAPSED_ROW: RunnerRow = {
@@ -145,7 +184,65 @@ const LAPSED_ROW: RunnerRow = {
   used: 0,
   // A miss-only row (blizzard#504 D7): no windows, and a lapsed credential in place of
   // the generic no-usage-windows report.
-  subscriptionPaces: [{ slug: 'openai', name: 'OpenAI', paceBars: [], condition: 'credential_lapsed' }],
+  subscriptionPaces: [
+    {
+      slug: 'openai',
+      name: 'OpenAI',
+      paceBars: [],
+      condition: 'credential_lapsed',
+      sampledAt: null,
+      refreshedLabel: null,
+      freshness: null,
+      missReason: null,
+    },
+  ],
+};
+
+// blizzard#636 D8/D9/D11 — a runner declaring three slugs at each age tier plus a
+// never-sampled one with a long miss reason, the shape the aging/stale colour and
+// no-sample-yet claims are falsifiable against.
+const FRESHNESS_ROW: RunnerRow = {
+  runner_id: 'rn_freshness',
+  workspace_id: 'ws_a',
+  registered_at: NOW,
+  last_seen_at: NOW,
+  online: true,
+  hub_paused: false,
+  locally_paused: false,
+  claims: [],
+  used: 0,
+  subscriptionPaces: [
+    {
+      slug: 'aging',
+      name: 'Aging',
+      paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 60 }],
+      condition: null,
+      sampledAt: NOW,
+      refreshedLabel: 'refreshed 30m ago',
+      freshness: 'aging',
+      missReason: null,
+    },
+    {
+      slug: 'stale',
+      name: 'Stale',
+      paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 100 }],
+      condition: null,
+      sampledAt: NOW,
+      refreshedLabel: 'refreshed 2h ago',
+      freshness: 'stale',
+      missReason: null,
+    },
+    {
+      slug: 'never',
+      name: 'Never',
+      paceBars: [],
+      condition: null,
+      sampledAt: null,
+      refreshedLabel: null,
+      freshness: null,
+      missReason: 'this endpoint could not be reached over a genuinely long, wrapping miss reason string',
+    },
+  ],
 };
 
 async function render(rows: readonly RunnerRow[] = [ROW]) {
@@ -341,6 +438,48 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
       expect(root.querySelector('[data-testid="subscription-pace-group-unsampled"]')).toBeNull();
       const lapsed = root.querySelector<HTMLElement>('[data-testid="subscription-pace-group-lapsed"]')!;
       expect(lapsed.textContent?.trim()).toBe('credential lapsed — log in again on this runner');
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('computes distinguishable aging/stale colours and keeps a long miss reason inside the card at ~390px (blizzard#636 D8/D9/D11)', async () => {
+    await loadDesignTokens();
+    const fixture = await render([FRESHNESS_ROW]);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
+
+      const aging = root.querySelector<HTMLElement>('[data-subscription-slug="aging"] [data-testid="subscription-pace-group-refreshed"]')!;
+      const stale = root.querySelector<HTMLElement>('[data-subscription-slug="stale"] [data-testid="subscription-pace-group-refreshed"]')!;
+      expect(aging.textContent?.trim()).toBe('refreshed 30m ago');
+      expect(stale.textContent?.trim()).toBe('refreshed 2h ago');
+
+      // The warning (aging) and error (stale) tier colours are genuinely computed —
+      // distinct from each other and from plain body text, not just class names that
+      // happen to be present.
+      const agingColor = getComputedStyle(aging).color;
+      const staleColor = getComputedStyle(stale).color;
+      const bodyColor = getComputedStyle(root).color;
+      expect(agingColor).not.toBe(staleColor);
+      expect(agingColor).not.toBe(bodyColor);
+      expect(staleColor).not.toBe(bodyColor);
+
+      const never = root.querySelector<HTMLElement>('[data-subscription-slug="never"] [data-testid="subscription-pace-group-no-sample"]')!;
+      expect(never.textContent).toContain('NO SAMPLE YET');
+      expect(never.textContent).toContain('this endpoint could not be reached');
+      expect(never.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
+
+      expect(
+        panel.scrollWidth,
+        `panel overflows horizontally at 390px (${panel.scrollWidth} > ${panel.clientWidth})`,
+      ).toBeLessThanOrEqual(panel.clientWidth);
     } finally {
       root.remove();
     }

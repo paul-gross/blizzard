@@ -1,9 +1,21 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 import type { RunnerRow } from 'fleet';
 
 import { FleetView } from './fleet-view';
+
+/** The design tokens are a global stylesheet loaded via each app's build `styles`,
+ * never by a standalone component test (`design/hover-tint.shell-sweep.spec.ts`'s own
+ * precedent) — read the sheet's real text server-side and inject it as a `<style>`
+ * element, so the aging/stale `var(--amber)`/`var(--red)` colours this file's own
+ * D8/D9 case asserts actually resolve. */
+async function loadDesignTokens(): Promise<void> {
+  const css = await commands.readFile('projects/fleet/src/lib/design/tokens.css');
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+}
 
 /**
  * The mobile Fleet screen's runner cards (the tooled half of
@@ -41,10 +53,15 @@ const ROWS: readonly RunnerRow[] = [
       {
         slug: 'anthropic-default',
         name: 'Anthropic (default) — a genuinely long subscription display name',
-        condition: null, paceBars: [
+        condition: null,
+        paceBars: [
           { window: '5h', utilizationPct: 40, elapsedPct: 20 },
           { window: '7d', utilizationPct: 70, elapsedPct: 55 },
         ],
+        sampledAt: NOW,
+        refreshedLabel: 'refreshed 0s ago',
+        freshness: 'fresh',
+        missReason: null,
       },
     ],
   },
@@ -59,7 +76,63 @@ const ROWS: readonly RunnerRow[] = [
     locally_paused_reason: 'spend ceiling $5.00 reached over the trailing 24h (spend $7.00)',
     used: 0,
     claims: [],
-    subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', condition: null, paceBars: [] }],
+    subscriptionPaces: [
+      {
+        slug: 'anthropic-default',
+        name: 'Anthropic (default)',
+        condition: null,
+        paceBars: [],
+        sampledAt: NOW,
+        refreshedLabel: 'refreshed 0s ago',
+        freshness: 'fresh',
+        missReason: null,
+      },
+    ],
+  },
+  {
+    runner_id: 'rn_freshness',
+    workspace_id: 'ws_a',
+    registered_at: NOW,
+    last_seen_at: NOW,
+    online: true,
+    hub_paused: false,
+    locally_paused: false,
+    used: 0,
+    claims: [],
+    // blizzard#636 D8/D9/D11 — the aging/stale tier colours and a long-miss-reason
+    // "no sample yet" row, the shapes the mobile shell sweep must also prove.
+    subscriptionPaces: [
+      {
+        slug: 'aging',
+        name: 'Aging',
+        condition: null,
+        paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 60 }],
+        sampledAt: NOW,
+        refreshedLabel: 'refreshed 30m ago',
+        freshness: 'aging',
+        missReason: null,
+      },
+      {
+        slug: 'stale',
+        name: 'Stale',
+        condition: null,
+        paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 100 }],
+        sampledAt: NOW,
+        refreshedLabel: 'refreshed 2h ago',
+        freshness: 'stale',
+        missReason: null,
+      },
+      {
+        slug: 'never',
+        name: 'Never',
+        condition: null,
+        paceBars: [],
+        sampledAt: null,
+        refreshedLabel: null,
+        freshness: null,
+        missReason: 'this endpoint could not be reached over a genuinely long, wrapping miss reason string',
+      },
+    ],
   },
 ];
 
@@ -78,6 +151,7 @@ async function render() {
 
 describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
   it.each([390, 320])('stacks every runner card with no horizontal overflow at %ipx', async (width) => {
+    await loadDesignTokens();
     const pageErrors: string[] = [];
     const onError = (e: ErrorEvent) => pageErrors.push(e.message);
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
@@ -97,7 +171,7 @@ describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
       expect(panel).not.toBeNull();
 
       const cards = Array.from(root.querySelectorAll<HTMLElement>('[data-testid="mobile-fleet-runner"]'));
-      expect(cards).toHaveLength(2);
+      expect(cards).toHaveLength(3);
 
       const rects = cards.map((c) => c.getBoundingClientRect());
       for (let i = 1; i < rects.length; i++) {
@@ -119,12 +193,33 @@ describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
       const claim = root.querySelector<HTMLElement>('[data-runner="rn_online"] [data-testid="mobile-fleet-runner-claim"]')!;
       expect(claim.getBoundingClientRect().right).toBeLessThanOrEqual(cards[0].getBoundingClientRect().right + 1);
 
-      const subName = root.querySelector<HTMLElement>('[data-testid="mobile-fleet-runner-subscription-name"]')!;
+      const subName = root.querySelector<HTMLElement>('[data-testid="subscription-pace-group-name"]')!;
       expect(subName.getBoundingClientRect().right).toBeLessThanOrEqual(cards[0].getBoundingClientRect().right + 1);
 
-      const report = root.querySelector<HTMLElement>('[data-testid="mobile-fleet-runner-subscription-unsampled"]')!;
+      const report = root.querySelector<HTMLElement>('[data-testid="subscription-pace-group-unsampled"]')!;
       expect(report.textContent?.trim()).toBe('NO USAGE WINDOWS REPORTED');
       expect(report.getAttribute('aria-label')).toBe('Anthropic (default) sample reported no usage windows');
+
+      // blizzard#636 D8/D9/D11 — the aging/stale tier colours are genuinely computed
+      // and distinguishable, and a long miss reason on a never-sampled row still fits
+      // inside its card.
+      const agingCard = root.querySelector<HTMLElement>('[data-runner="rn_freshness"]')!;
+      const aging = agingCard.querySelector<HTMLElement>(
+        '[data-subscription-slug="aging"] [data-testid="subscription-pace-group-refreshed"]',
+      )!;
+      const stale = agingCard.querySelector<HTMLElement>(
+        '[data-subscription-slug="stale"] [data-testid="subscription-pace-group-refreshed"]',
+      )!;
+      const agingColor = getComputedStyle(aging).color;
+      const staleColor = getComputedStyle(stale).color;
+      expect(agingColor).not.toBe(staleColor);
+      expect(agingColor).not.toBe(getComputedStyle(root).color);
+
+      const never = agingCard.querySelector<HTMLElement>(
+        '[data-subscription-slug="never"] [data-testid="subscription-pace-group-no-sample"]',
+      )!;
+      expect(never.textContent).toContain('this endpoint could not be reached');
+      expect(never.getBoundingClientRect().right).toBeLessThanOrEqual(agingCard.getBoundingClientRect().right + 1);
 
       expect(
         panel.scrollWidth,

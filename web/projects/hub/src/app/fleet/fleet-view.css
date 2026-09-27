@@ -125,20 +125,6 @@
   flex-direction: column;
   gap: 6px;
 }
-.pace-group {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.pace-name {
-  color: var(--label);
-  font-size: var(--fs-label);
-  letter-spacing: 0.08em;
-}
-.pace-unsampled {
-  color: var(--label-dim);
-  font-size: var(--fs-label);
-}
 .foot {
   display: flex;
   align-items: center;
