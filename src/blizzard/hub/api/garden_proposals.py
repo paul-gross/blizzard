@@ -55,6 +55,14 @@ from blizzard.wire.garden_proposal import (
 router = APIRouter(prefix="/api", tags=["garden-proposals"], dependencies=[Depends(reject_runner_principal)])
 
 
+def _reject_if_closed(proposal_id: str, services: HubServices) -> None:
+    """409 before anything else — closure is terminal (blizzard#631 D3), so a request
+    that also carries its own finding- or field-level problem must still report the
+    closed proposal as the reason nothing happened, not that unrelated problem."""
+    if services.garden_proposal_closures.get(proposal_id) is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(GardenProposalNotOpen(proposal_id)))
+
+
 def closure_view(closure: GardenProposalClosure) -> GardenProposalClosureView:
     return GardenProposalClosureView(
         closure=closure.closure,
@@ -272,6 +280,7 @@ def edit_garden_proposal(
     D2) — works on either origin while open. 404 unknown proposal, 409 already closed,
     422 a blank title/class/body or an edit naming no field."""
     proposal = _get_or_404(proposal_id, services)
+    _reject_if_closed(proposal_id, services)
     if not request.model_fields_set:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="an edit must supply at least one field"
@@ -303,6 +312,7 @@ def attach_garden_proposal_findings(
     duplicate finding id, or one already linked to this proposal — the whole call is
     refused, nothing is linked."""
     proposal = _get_or_404(proposal_id, services)
+    _reject_if_closed(proposal_id, services)
     findings = _resolve_findings_or_422(request.findings, services)
     try:
         updated = services.garden_proposal_authoring.attach(proposal, findings)
@@ -331,6 +341,7 @@ def detach_garden_proposal_findings(
     origin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or
     one not linked to this proposal."""
     proposal = _get_or_404(proposal_id, services)
+    _reject_if_closed(proposal_id, services)
     try:
         updated = services.garden_proposal_authoring.detach(proposal, request.findings)
     except (DuplicateProposalFindingError, GardenProposalFindingNotLinkedError) as exc:
