@@ -4259,10 +4259,10 @@
    "total": 26
   },
   "blizzard/runner/harness/adapter.py": {
-   "comments": 12,
+   "comments": 13,
    "docstrings": 204,
    "over_cap": 5,
-   "total": 457
+   "total": 458
   },
   "blizzard/runner/harness/compatibility.py": {
    "comments": 7,
@@ -4334,7 +4334,7 @@
    "comments": 4,
    "docstrings": 53,
    "over_cap": 0,
-   "total": 216
+   "total": 218
   },
   "blizzard/runner/harness/internal/offline_compatibility.py": {
    "comments": 3,
@@ -4583,16 +4583,16 @@
    "total": 5
   },
   "blizzard/runner/loop/attempt.py": {
-   "comments": 67,
+   "comments": 69,
    "docstrings": 94,
    "over_cap": 6,
-   "total": 637
+   "total": 640
   },
   "blizzard/runner/loop/build.py": {
-   "comments": 32,
-   "docstrings": 54,
+   "comments": 36,
+   "docstrings": 58,
    "over_cap": 5,
-   "total": 373
+   "total": 398
   },
   "blizzard/runner/loop/capability_snapshot.py": {
    "comments": 6,
@@ -4619,10 +4619,10 @@
    "total": 379
   },
   "blizzard/runner/loop/context.py": {
-   "comments": 54,
+   "comments": 55,
    "docstrings": 29,
    "over_cap": 19,
-   "total": 230
+   "total": 233
   },
   "blizzard/runner/loop/dormant.py": {
    "comments": 70,
@@ -4742,7 +4742,7 @@
    "comments": 50,
    "docstrings": 46,
    "over_cap": 1,
-   "total": 489
+   "total": 491
   },
   "blizzard/runner/loop/steps.py": {
    "comments": 96,
@@ -4785,6 +4785,12 @@
    "docstrings": 35,
    "over_cap": 5,
    "total": 157
+  },
+  "blizzard/runner/loop/worker_scratch.py": {
+   "comments": 1,
+   "docstrings": 13,
+   "over_cap": 0,
+   "total": 64
   },
   "blizzard/runner/loop/worker_stdout.py": {
    "comments": 0,
@@ -5749,10 +5755,10 @@
    "total": 0
   },
   "conftest.py": {
-   "comments": 6,
+   "comments": 7,
    "docstrings": 24,
    "over_cap": 2,
-   "total": 120
+   "total": 125
   },
   "crash/__init__.py": {
    "comments": 0,
@@ -6006,6 +6012,12 @@
    "over_cap": 1,
    "total": 40
   },
+  "repo_files.py": {
+   "comments": 6,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 146
+  },
   "runner_event_census.py": {
    "comments": 20,
    "docstrings": 10,
@@ -6016,7 +6028,7 @@
    "comments": 114,
    "docstrings": 110,
    "over_cap": 11,
-   "total": 1381
+   "total": 1384
   },
   "service/__init__.py": {
    "comments": 0,
@@ -6268,7 +6280,7 @@
    "comments": 4,
    "docstrings": 20,
    "over_cap": 1,
-   "total": 90
+   "total": 89
   },
   "test_analytics_dialect_corpus_guard.py": {
    "comments": 1,
@@ -6790,7 +6802,7 @@
    "comments": 3,
    "docstrings": 5,
    "over_cap": 1,
-   "total": 57
+   "total": 58
   },
   "test_container_image.py": {
    "comments": 0,
@@ -7582,7 +7594,7 @@
    "comments": 18,
    "docstrings": 9,
    "over_cap": 0,
-   "total": 256
+   "total": 259
   },
   "test_hub_signing_service.py": {
    "comments": 8,
@@ -7708,7 +7720,7 @@
    "comments": 0,
    "docstrings": 0,
    "over_cap": 0,
-   "total": 46
+   "total": 47
   },
   "test_land_common.py": {
    "comments": 18,
@@ -7774,7 +7786,7 @@
    "comments": 20,
    "docstrings": 6,
    "over_cap": 2,
-   "total": 177
+   "total": 179
   },
   "test_migration_apply.py": {
    "comments": 61,
@@ -8039,6 +8051,12 @@
    "docstrings": 20,
    "over_cap": 0,
    "total": 115
+  },
+  "test_repo_files.py": {
+   "comments": 1,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 98
   },
   "test_repo_ref.py": {
    "comments": 7,
@@ -8434,7 +8452,7 @@
    "comments": 133,
    "docstrings": 47,
    "over_cap": 0,
-   "total": 2024
+   "total": 2056
   },
   "test_runner_harness_claude_code_normalizer.py": {
    "comments": 20,
@@ -8587,10 +8605,10 @@
    "total": 107
   },
   "test_runner_loop.py": {
-   "comments": 406,
-   "docstrings": 213,
+   "comments": 415,
+   "docstrings": 220,
    "over_cap": 6,
-   "total": 3750
+   "total": 3865
   },
   "test_runner_loop_build.py": {
    "comments": 5,
@@ -9040,7 +9058,7 @@
    "comments": 6,
    "docstrings": 13,
    "over_cap": 0,
-   "total": 130
+   "total": 132
   },
   "test_tick_subprocess_timeouts.py": {
    "comments": 1,
@@ -9299,6 +9317,12 @@
    "docstrings": 46,
    "over_cap": 0,
    "total": 460
+  },
+  "test_worker_scratch.py": {
+   "comments": 3,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 107
   },
   "test_worker_settings.py": {
    "comments": 0,

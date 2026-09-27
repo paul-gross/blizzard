@@ -53,6 +53,7 @@ class WorkerPreamble:
     stdout_path: str = ""  # per-lease stdout capture, outliving the process; empty discards
     stderr_path: str = ""  # per-lease stderr capture; empty discards
     lease_token: str = ""  # a per-spawn identity var, never a daemon secret
+    tmpdir: str = ""  # per-lease scratch directory (BLIZZARD_TMPDIR); empty disables it
 
 
 @dataclass(frozen=True)

@@ -373,6 +373,7 @@ class Spawner:
             lease_id=lease.lease_id,
             local_api_url=self.ctx.config.local_api_url,
             lease_token=lease_token,
+            tmpdir=self.ctx.worker_scratch.ensure(lease.lease_id),
         )
 
     def _mint(
@@ -486,4 +487,5 @@ class Spawner:
             stdout_path=self.ctx.worker_files.stdout_path(lease.lease_id, generation),
             stderr_path=self.ctx.worker_files.stderr_path(lease.lease_id, generation),
             lease_token=lease.token,
+            tmpdir=self.ctx.worker_scratch.ensure(lease.lease_id),
         )

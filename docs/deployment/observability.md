@@ -52,6 +52,14 @@ has gone wrong (a usage-limit hit, an interrupted worker, a premature exit). The
 periodic sweep prunes both streams once they age past `[worker_stdout] retention_days` in `blizzard-runner.toml`
 (default 14 days); a file inside the window is left alone regardless of its lease's own state.
 
+## Worker scratch directory
+
+Every worker session gets a private staging directory, under `worker-tmp/<lease_id>/` in the runner's own runtime
+directory, exported into the session as `BLIZZARD_TMPDIR`. Unlike `worker-stdout/`, it does not outlive the lease: the
+runner removes it once the lease closes, however that closure happened — a node transition, a reap, an escalation — and
+recreates it on every later spawn, resume, or judge of a lease that is still open. A directory left behind by a crash is
+swept the next time the runner starts.
+
 ## Reading the feed
 
 `GET /api/events` returns the log newest-and-most-severe first, filterable by severity, runner_id, chunk_id, and since,

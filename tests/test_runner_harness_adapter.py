@@ -571,6 +571,37 @@ def test_spawn_env_carries_the_lease_capability_token(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
+def test_spawn_env_carries_the_scratch_directory_when_the_preamble_names_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = _adapter(binary="claude")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+        tmpdir="/runner/worker-tmp/lease_1",
+    )
+
+    env = adapter._spawn_env(envelope, preamble, "sess-1")
+
+    assert env["BLIZZARD_TMPDIR"] == "/runner/worker-tmp/lease_1"
+
+
+@pytest.mark.unit
+def test_spawn_env_excludes_the_scratch_directory_when_the_preamble_names_none() -> None:
+    adapter = _adapter(binary="claude")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    env = adapter._spawn_env(envelope, preamble, "sess-1")
+
+    assert "BLIZZARD_TMPDIR" not in env
+
+
+@pytest.mark.unit
 def test_the_suites_worker_identity_strip_list_covers_every_var_the_adapter_can_inject() -> None:
     """The conftest strip-list agrees with every ``BLIZZARD_*`` var any adapter injection path
     can add, judge's elicitation marker included — add one to a path without adding it here
@@ -582,6 +613,7 @@ def test_the_suites_worker_identity_strip_list_covers_every_var_the_adapter_can_
         lease_id="lease_1",
         local_api_url="http://127.0.0.1:8431",
         lease_token="plaintext-lease-token",
+        tmpdir="/runner/worker-tmp/lease_1",
     )
 
     spawn_injected = {k for k in adapter._spawn_env(envelope, preamble, "sess-1") if k.startswith("BLIZZARD_")}

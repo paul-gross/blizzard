@@ -523,6 +523,9 @@ class Attempt:
             event_kind=EVENT_RECORDED if event else None,
             event_payload=json.dumps(event) if event else None,
         )
+        # After the closure commits, never before (decision: a crash between the two leaves at
+        # most an orphan the startup sweep collects, never a still-active lease's directory gone).
+        self.ctx.worker_scratch.remove(self.lease.lease_id)
         if self.ctx.events is not None:
             lease_id = self.lease.lease_id
             # `reason` IS the LeaseChangeCause vocabulary — enforced by `close`'s and
