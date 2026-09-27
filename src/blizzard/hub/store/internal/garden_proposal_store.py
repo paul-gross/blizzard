@@ -114,10 +114,18 @@ class GardenProposalStore:
         )
 
     def _open_check(self, conn: Any, proposal_id: str) -> bool:
-        """Whether `proposal_id` already carries a closure — called on the same `conn` a
-        caller's own write uses, so the check and the mutation share one transaction
-        (blizzard#631 D3): a closure racing in between either lands first (seen here) or
-        after (blocked by the writer's own isolation), never in the read-then-write gap."""
+        """Whether `proposal_id` already carries a closure. A bare `SELECT` here would
+        race a concurrent close landing on `garden_proposal_closures` — a different
+        table, so the two transactions never contend on the same row — so this first
+        locks the proposal's own row with the no-op `UPDATE` `next_route_seq` uses for
+        the same shape of hazard: whichever of a close or this write starts first holds
+        the row until it commits, and the other blocks and then re-reads fresh
+        (`tests/test_garden_proposal_closure_race.py`)."""
+        conn.execute(
+            garden_proposals.update()
+            .where(garden_proposals.c.proposal_id == proposal_id)
+            .values(proposal_id=proposal_id)
+        )
         already = conn.execute(
             select(garden_proposal_closures.c.id).where(garden_proposal_closures.c.proposal_id == proposal_id)
         ).first()
@@ -189,7 +197,7 @@ class GardenProposalStore:
         self, *, cursor: str | None = None, limit: int, origin: GardenProposalOrigin | None = None
     ) -> GardenProposalPage:
         """`list_all`'s bounded sibling (blizzard#526 D4) — same total order, a SQL
-        keyset window. `origin` narrows in SQL, inside the window (blizzard#631 D6). No
+        keyset window. `origin` narrows in SQL, inside the window (blizzard#631). No
         post-read filter narrows a garden proposal the way findings' liveness does, so
         no top-up: one over-fetch-by-one window suffices."""
         if limit < 1:
@@ -227,7 +235,7 @@ class GardenProposalStore:
         proposal with no closure row still groups in (as `NULL`/`NULL`, `OPEN`'s own
         shape), folded through :func:`classify_proposal_count_bucket` in Python rather
         than a Python-side fold over ungrouped rows (`GardenRunStore._fact_counts_by_set`'s
-        own shape). Grouped by `(origin, routine_name, class_)` (blizzard#631 D6): a
+        own shape). Grouped by `(origin, routine_name, class_)` (blizzard#631): a
         routine named by both origins returns one row per origin."""
         c = garden_proposals.c
         closures_c = garden_proposal_closures.c

@@ -1150,7 +1150,7 @@ export type GardenProposalItemOutcome = 'minted' | 'declined';
 /**
  * GardenProposalOrigin
  *
- * Who authored a garden proposal (blizzard#631 D1) — a mint-time fact, stored on
+ * Who authored a garden proposal (blizzard#631) — a mint-time fact, stored on
  * the row itself and never inferred from a null `routine_name`.
  */
 export type GardenProposalOrigin = 'routine-run' | 'operator';

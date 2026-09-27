@@ -2420,7 +2420,7 @@ export type GardenProposalClosureView = {
  * GardenProposalCountsRowView
  *
  * One origin/routine/class triple's garden-proposal counts over the requested
- * window (blizzard#631 D6). `routine_name` is nullable for an operator-authored row
+ * window (blizzard#631). `routine_name` is nullable for an operator-authored row
  * naming no routine.
  */
 export type GardenProposalCountsRowView = {
@@ -2515,7 +2515,7 @@ export type GardenProposalCreateRequest = {
 /**
  * GardenProposalEditRequest
  *
- * `PATCH /api/garden-proposals/{proposal_id}` (blizzard#631 D2) — all-or-nothing
+ * `PATCH /api/garden-proposals/{proposal_id}` (blizzard#631) — all-or-nothing
  * over the given fields; a field absent from the request is left unchanged. Carries no
  * `routine`: a proposal's routine is fixed at create.
  */
@@ -2558,7 +2558,7 @@ export type GardenProposalItemOutcome = 'minted' | 'declined';
 /**
  * GardenProposalOrigin
  *
- * Who authored a garden proposal (blizzard#631 D1) — a mint-time fact, stored on
+ * Who authored a garden proposal (blizzard#631) — a mint-time fact, stored on
  * the row itself and never inferred from a null `routine_name`.
  */
 export type GardenProposalOrigin = 'routine-run' | 'operator';

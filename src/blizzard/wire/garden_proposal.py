@@ -113,7 +113,7 @@ class GardenProposalCreateRequest(BaseModel):
 
 
 class GardenProposalEditRequest(BaseModel):
-    """`PATCH /api/garden-proposals/{proposal_id}` (blizzard#631 D2) — all-or-nothing
+    """`PATCH /api/garden-proposals/{proposal_id}` (blizzard#631) — all-or-nothing
     over the given fields; a field absent from the request is left unchanged. Carries no
     `routine`: a proposal's routine is fixed at create."""
 

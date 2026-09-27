@@ -1,7 +1,7 @@
 """Garden-proposal domain model (blizzard#390) —
 `blizzard-context:/domain/findings-and-proposals.md` owns what a proposal is and
 whether it needs a finding. Named `garden_proposals`/`GardenProposal` throughout —
-never the bare `proposal`/`Proposal` a work-item proposal already claims (D1)."""
+never the bare `proposal`/`Proposal` a work-item proposal already claims."""
 
 from __future__ import annotations
 
@@ -25,14 +25,14 @@ if TYPE_CHECKING:
 
 class DuplicateProposalFindingError(ValueError):
     """The same finding named more than once in one proposal's `findings`, or in one
-    `attach`/`detach` call (blizzard#631 D5)."""
+    `attach`/`detach` call (blizzard#631)."""
 
     def __init__(self, finding_id: str) -> None:
         super().__init__(f"finding {finding_id!r} named more than once")
 
 
 class GardenProposalFindingNotLiveError(ValueError):
-    """`create`/`attach` named a finding that is not live (blizzard#631 D5) — the whole
+    """`create`/`attach` named a finding that is not live (blizzard#631) — the whole
     call is refused, nothing links."""
 
     def __init__(self, finding_id: str) -> None:
@@ -41,7 +41,7 @@ class GardenProposalFindingNotLiveError(ValueError):
 
 
 class GardenProposalFindingAlreadyLinkedError(ValueError):
-    """`attach` named a finding already linked to *this* proposal (blizzard#631 D5) —
+    """`attach` named a finding already linked to *this* proposal (blizzard#631) —
     re-linking a finding already linked to *another* proposal, open or closed, is
     allowed."""
 
@@ -52,7 +52,7 @@ class GardenProposalFindingAlreadyLinkedError(ValueError):
 
 
 class GardenProposalFindingNotLinkedError(ValueError):
-    """`detach` named a finding not linked to this proposal (blizzard#631 D5)."""
+    """`detach` named a finding not linked to this proposal (blizzard#631)."""
 
     def __init__(self, proposal_id: str, finding_id: str) -> None:
         super().__init__(f"finding {finding_id!r} is not linked to proposal {proposal_id}")
@@ -60,9 +60,27 @@ class GardenProposalFindingNotLinkedError(ValueError):
         self.finding_id = finding_id
 
 
+class GardenProposalBlankFieldError(ValueError):
+    """`create`/`create_operator`/`edit` named a blank title, class, or body
+    (blizzard#631) — the whole call is refused."""
+
+    def __init__(self, field_name: str) -> None:
+        super().__init__(f"{field_name} must not be blank")
+        self.field_name = field_name
+
+
+class GardenProposalEmptyEditError(ValueError):
+    """An `edit` named no field — every one of `GardenProposalEdit`'s fields left
+    `UNSET` (blizzard#631)."""
+
+    def __init__(self, proposal_id: str) -> None:
+        super().__init__(f"edit of garden proposal {proposal_id} must supply at least one field")
+        self.proposal_id = proposal_id
+
+
 class GardenProposalNotOpen(Exception):
     """An `edit`, `attach`, or `detach` targeted a proposal that already carries a
-    closure — closure is terminal (blizzard#631 D3). Mirrors
+    closure — closure is terminal (blizzard#631). Mirrors
     `garden_proposal_closure.GardenProposalAlreadyClosed` in spirit, but is raised from
     here without importing it, which would cycle back through `GardenProposal`."""
 
@@ -72,7 +90,7 @@ class GardenProposalNotOpen(Exception):
 
 
 class GardenProposalOrigin(StrEnum):
-    """Who authored a garden proposal (blizzard#631 D1) — a mint-time fact, stored on
+    """Who authored a garden proposal (blizzard#631) — a mint-time fact, stored on
     the row itself and never inferred from a null `routine_name`."""
 
     ROUTINE_RUN = "routine-run"
@@ -88,8 +106,8 @@ class GardenProposal:
     title: str
     body: str
     created_at: datetime
-    created_by: str | None = None  # set only for `GardenProposalOrigin.OPERATOR` (D1)
-    findings: list[str] = field(default_factory=list)  # the finding ids this proposal answers (D7)
+    created_by: str | None = None  # set only for `GardenProposalOrigin.OPERATOR`
+    findings: list[str] = field(default_factory=list)  # the finding ids this proposal answers
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
@@ -98,7 +116,7 @@ class GardenProposal:
 @dataclass(frozen=True)
 class GardenProposalCounts:
     """One origin/routine/class triple's garden-proposal counts over a window
-    (blizzard#547, blizzard#631 D6): `open`, `passed`, `accepted_with_item`,
+    (blizzard#547, blizzard#631): `open`, `passed`, `accepted_with_item`,
     `accepted_without_item` — each a closure-state bucket. `created` is always their
     sum, derived rather than stored, so it can never disagree with the four it sums."""
 
@@ -138,7 +156,7 @@ class IReadGardenProposalRepository(Protocol):
         (blizzard#526 D4). ``cursor`` is a prior :attr:`GardenProposalPage.next_cursor`;
         any other raises :class:`~blizzard.hub.domain.pagination.MalformedCursor`.
         ``origin`` narrows to one origin when given, applied in SQL inside the keyset
-        window (blizzard#631 D6)."""
+        window (blizzard#631)."""
         ...
 
     def list_for_routine(self, routine_name: str) -> list[GardenProposal]:
@@ -146,7 +164,7 @@ class IReadGardenProposalRepository(Protocol):
         routine-narrowed sibling (mirrors `IReadFindingRepository.list_for_routine`). A
         proposal carries no scope column, so unlike a finding bucket this is never
         narrowed further. Includes an `operator`-origin proposal that names
-        `routine_name` (blizzard#631 D7)."""
+        `routine_name` (blizzard#631)."""
         ...
 
     def counts_by_class(
@@ -159,7 +177,7 @@ class IReadGardenProposalRepository(Protocol):
     ) -> list[GardenProposalCounts]:
         """Garden-proposal counts (blizzard#547) grouped by `(origin, routine_name,
         class_)`, over `[since, until)` on `created_at` — current closure state, not
-        closure time (blizzard#631 D6). `routine_name` narrows to one routine's rows of
+        closure time (blizzard#631). `routine_name` narrows to one routine's rows of
         both origins when given, else every routine; `origin` narrows to one origin,
         applied in SQL. Rows ordered `(origin, routine_name, class_)`."""
         ...
@@ -181,33 +199,33 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         findings: list[str],
         at: datetime,
     ) -> GardenProposal:
-        """Insert the proposal row and its `garden_proposal_findings` link rows (D7), in
-        one transaction. `findings` may be empty. `origin` defaults to `routine-run`,
+        """Insert the proposal row and its `garden_proposal_findings` link rows, in one
+        transaction. `findings` may be empty. `origin` defaults to `routine-run`,
         matching every caller predating operator authorship (blizzard#631)."""
         ...
 
     def edit(self, proposal_id: str, *, title: str, class_: str, body: str) -> GardenProposal | None:
-        """Replace `title`/`class_`/`body` in place (blizzard#631 D2, last-write-wins, no
-        edit-history table); `None` when `proposal_id` already carries a closure, checked
-        in the same write transaction as the update (D3)."""
+        """Replace `title`/`class_`/`body` in place (blizzard#631, last-write-wins, no
+        edit-history table); `None` when `proposal_id` already carries a closure. Locks
+        the proposal's own row before checking, so a close racing in cannot land in the
+        gap (`GardenProposalStore._open_check`)."""
         ...
 
     def attach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
-        """Link `finding_ids` to `proposal_id` (blizzard#631); `None` when already closed,
-        checked with the insert in one transaction (D3). `finding_ids` may be empty."""
+        """Link `finding_ids` to `proposal_id` (blizzard#631); `None` when already
+        closed, the same row-locked check `edit` uses. `finding_ids` may be empty."""
         ...
 
     def detach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
         """Unlink `finding_ids` from `proposal_id` (blizzard#631); `None` when already
-        closed, checked with the delete in one transaction (D3). `finding_ids` may be
-        empty."""
+        closed, the same row-locked check `edit` uses. `finding_ids` may be empty."""
         ...
 
 
 @dataclass(frozen=True)
 class GardenProposalEdit:
     """The fields a single all-or-nothing garden-proposal edit request supplies
-    (blizzard#631 D2), the same sentinel shape
+    (blizzard#631), the same sentinel shape
     :class:`~blizzard.hub.domain.work_items.WorkItemEdit` carries: a field absent from
     `edit` is left unchanged, distinct from an explicit clear (title/class_/body never
     accept `None` — they are never cleared, only replaced)."""
@@ -222,11 +240,19 @@ class GardenProposalAuthoring:
     objects (`bzh:domain-takes-objects`) — the domain seam that mints and mutates
     proposals outside delivery. `create` mints a `routine-run`-origin proposal;
     delivery's own materialization writes its own `routine-run` rows directly and never
-    calls this (blizzard#631 D1). `create_operator`/`edit`/`attach`/`detach` are the
-    operator-facing verbs (blizzard#631)."""
+    calls this. `create_operator`/`edit`/`attach`/`detach` are the operator-facing verbs
+    (blizzard#631). Every refusal — closed-first, then blank fields or findings — is
+    decided here, never left to a caller at the edge to enforce in the right order."""
 
-    def __init__(self, *, proposals: IWriteGardenProposalRepository, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        proposals: IWriteGardenProposalRepository,
+        closures: IReadGardenProposalClosureRepository,
+        clock: IClock,
+    ) -> None:
         self._proposals = proposals
+        self._closures = closures
         self._clock = clock
 
     def create(
@@ -255,11 +281,14 @@ class GardenProposalAuthoring:
         body: str,
         findings: Sequence[Finding],
     ) -> GardenProposal:
-        """Mint an operator-authored proposal (blizzard#631 D1), naming `routine.name`
+        """Mint an operator-authored proposal (blizzard#631), naming `routine.name`
         when the caller resolved one, else none — `routine`'s own existence is the
-        caller's own resolution, not checked here. Every named finding must be live and
-        named at most once (D5); the whole call is refused otherwise, nothing is
-        linked."""
+        caller's own resolution, not checked here. `title`/`class_`/`body` must not be
+        blank, and every named finding must be live and named at most once; the whole
+        call is refused otherwise, nothing is linked."""
+        title = self._stripped(title, "title")
+        class_ = self._stripped(class_, "class")
+        body = self._stripped(body, "body")
         finding_ids = self._checked_finding_ids(findings, require_live=True)
         return self._proposals.create(
             Id.mint(GARDEN_PROPOSAL_PREFIX, self._clock).value,
@@ -274,23 +303,32 @@ class GardenProposalAuthoring:
         )
 
     def edit(self, proposal: GardenProposal, edit: GardenProposalEdit) -> GardenProposal:
-        """Apply `edit`'s given fields to `proposal` in place (D2). Raises
-        :class:`GardenProposalNotOpen` when `proposal` already carries a closure,
-        re-checked by the store's own closed-then-write guard against a close racing in
-        between (D3) — works on either origin while open."""
-        title = proposal.title if edit.title is UNSET else edit.title
-        class_ = proposal.class_ if edit.class_ is UNSET else edit.class_
-        body = proposal.body if edit.body is UNSET else edit.body
+        """Apply `edit`'s given fields to `proposal` in place. Raises
+        :class:`GardenProposalNotOpen` first, ahead of any field problem, when `proposal`
+        already carries a closure — re-checked by the store's own row-locked guard
+        against a close racing in between — works on either origin while open. Raises
+        :class:`GardenProposalEmptyEditError` when every field is left `UNSET`, or
+        :class:`GardenProposalBlankFieldError` for a given field that is blank."""
+        if self._closures.get(proposal.proposal_id) is not None:
+            raise GardenProposalNotOpen(proposal.proposal_id)
+        if edit.title is UNSET and edit.class_ is UNSET and edit.body is UNSET:
+            raise GardenProposalEmptyEditError(proposal.proposal_id)
+        title = proposal.title if edit.title is UNSET else self._stripped(edit.title, "title")
+        class_ = proposal.class_ if edit.class_ is UNSET else self._stripped(edit.class_, "class")
+        body = proposal.body if edit.body is UNSET else self._stripped(edit.body, "body")
         updated = self._proposals.edit(proposal.proposal_id, title=title, class_=class_, body=body)
         if updated is None:
             raise GardenProposalNotOpen(proposal.proposal_id)
         return updated
 
     def attach(self, proposal: GardenProposal, findings: Sequence[Finding]) -> GardenProposal:
-        """Link `findings` to `proposal` (blizzard#631). Every named finding must be
-        live, named at most once, and not already linked to `proposal` (D5) — re-linking
-        a finding already linked to *another* proposal is allowed. Raises
-        :class:`GardenProposalNotOpen` when `proposal` already carries a closure (D3)."""
+        """Link `findings` to `proposal` (blizzard#631). Raises
+        :class:`GardenProposalNotOpen` first, ahead of any finding problem, when
+        `proposal` already carries a closure. Every named finding must be live, named at
+        most once, and not already linked to `proposal` — re-linking a finding already
+        linked to *another* proposal is allowed."""
+        if self._closures.get(proposal.proposal_id) is not None:
+            raise GardenProposalNotOpen(proposal.proposal_id)
         finding_ids = self._checked_finding_ids(findings, require_live=True)
         for finding_id in finding_ids:
             if finding_id in proposal.findings:
@@ -301,10 +339,12 @@ class GardenProposalAuthoring:
         return updated
 
     def detach(self, proposal: GardenProposal, finding_ids: Sequence[str]) -> GardenProposal:
-        """Unlink `finding_ids` from `proposal` (blizzard#631). Every named id must be
-        named at most once and currently linked to `proposal` (D5); liveness is not
-        required. Raises :class:`GardenProposalNotOpen` when `proposal` already carries a
-        closure (D3)."""
+        """Unlink `finding_ids` from `proposal` (blizzard#631). Raises
+        :class:`GardenProposalNotOpen` first, ahead of any finding problem, when
+        `proposal` already carries a closure. Every named id must be named at most once
+        and currently linked to `proposal`; liveness is not required."""
+        if self._closures.get(proposal.proposal_id) is not None:
+            raise GardenProposalNotOpen(proposal.proposal_id)
         seen: set[str] = set()
         for finding_id in finding_ids:
             if finding_id in seen:
@@ -316,6 +356,13 @@ class GardenProposalAuthoring:
         if updated is None:
             raise GardenProposalNotOpen(proposal.proposal_id)
         return updated
+
+    @staticmethod
+    def _stripped(value: str, field_name: str) -> str:
+        text = value.strip()
+        if not text:
+            raise GardenProposalBlankFieldError(field_name)
+        return text
 
     def _checked_finding_ids(self, findings: Sequence[Finding], *, require_live: bool) -> list[str]:
         finding_ids: list[str] = []

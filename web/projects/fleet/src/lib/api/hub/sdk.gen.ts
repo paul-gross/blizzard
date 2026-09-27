@@ -1095,7 +1095,7 @@ export const ingestTranscriptSegmentsApiFleetTranscriptsPost = <ThrowOnError ext
  * List Garden Proposals
  *
  * Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526
- * D3/D4). `origin` narrows to `routine-run` or `operator` proposals (blizzard#631 D6).
+ * D3/D4). `origin` narrows to `routine-run` or `operator` proposals (blizzard#631).
  */
 export const listGardenProposalsApiGardenProposalsGet = <ThrowOnError extends boolean = false>(options?: Options<ListGardenProposalsApiGardenProposalsGetData, ThrowOnError>): RequestResult<ListGardenProposalsApiGardenProposalsGetResponses, ListGardenProposalsApiGardenProposalsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListGardenProposalsApiGardenProposalsGetResponses, ListGardenProposalsApiGardenProposalsGetErrors, ThrowOnError>({ url: '/api/garden-proposals', ...options });
 
@@ -1126,8 +1126,8 @@ export const getGardenProposalApiGardenProposalsProposalIdGet = <ThrowOnError ex
 /**
  * Edit Garden Proposal
  *
- * Replace the given fields of PROPOSAL_ID in place, all-or-nothing (blizzard#631
- * D2) — works on either origin while open. 404 unknown proposal, 409 already closed,
+ * Replace the given fields of PROPOSAL_ID in place, all-or-nothing (blizzard#631)
+ * — works on either origin while open. 404 unknown proposal, 409 already closed,
  * 422 a blank title/class/body or an edit naming no field.
  */
 export const editGardenProposalApiGardenProposalsProposalIdPatch = <ThrowOnError extends boolean = false>(options: Options<EditGardenProposalApiGardenProposalsProposalIdPatchData, ThrowOnError>): RequestResult<EditGardenProposalApiGardenProposalsProposalIdPatchResponses, EditGardenProposalApiGardenProposalsProposalIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<EditGardenProposalApiGardenProposalsProposalIdPatchResponses, EditGardenProposalApiGardenProposalsProposalIdPatchErrors, ThrowOnError>({
@@ -1426,7 +1426,7 @@ export const createRoutineApiRoutinesPost = <ThrowOnError extends boolean = fals
  *
  * Garden-proposal counts (blizzard#547) per origin, routine, and class over
  * `[since, until)`, split into open/passed/accepted-with-item/accepted-without-item —
- * `created` is their sum (blizzard#631 D6). `routine` narrows to one routine's rows of
+ * `created` is their sum (blizzard#631). `routine` narrows to one routine's rows of
  * both origins when given; 404 on an unknown one. `origin` narrows to one origin. 422
  * on a malformed instant or `until <= since`.
  */

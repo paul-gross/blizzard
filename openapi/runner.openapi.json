@@ -1864,7 +1864,7 @@
         "type": "string"
       },
       "GardenProposalOrigin": {
-        "description": "Who authored a garden proposal (blizzard#631 D1) \u2014 a mint-time fact, stored on\nthe row itself and never inferred from a null `routine_name`.",
+        "description": "Who authored a garden proposal (blizzard#631) \u2014 a mint-time fact, stored on\nthe row itself and never inferred from a null `routine_name`.",
         "enum": [
           "routine-run",
           "operator"

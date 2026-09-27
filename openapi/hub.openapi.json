@@ -3868,7 +3868,7 @@
         "type": "object"
       },
       "GardenProposalCountsRowView": {
-        "description": "One origin/routine/class triple's garden-proposal counts over the requested\nwindow (blizzard#631 D6). `routine_name` is nullable for an operator-authored row\nnaming no routine.",
+        "description": "One origin/routine/class triple's garden-proposal counts over the requested\nwindow (blizzard#631). `routine_name` is nullable for an operator-authored row\nnaming no routine.",
         "properties": {
           "accepted_with_item": {
             "title": "Accepted With Item",
@@ -4016,7 +4016,7 @@
       },
       "GardenProposalEditRequest": {
         "additionalProperties": false,
-        "description": "`PATCH /api/garden-proposals/{proposal_id}` (blizzard#631 D2) \u2014 all-or-nothing\nover the given fields; a field absent from the request is left unchanged. Carries no\n`routine`: a proposal's routine is fixed at create.",
+        "description": "`PATCH /api/garden-proposals/{proposal_id}` (blizzard#631) \u2014 all-or-nothing\nover the given fields; a field absent from the request is left unchanged. Carries no\n`routine`: a proposal's routine is fixed at create.",
         "properties": {
           "body": {
             "anyOf": [
@@ -4083,7 +4083,7 @@
         "type": "string"
       },
       "GardenProposalOrigin": {
-        "description": "Who authored a garden proposal (blizzard#631 D1) \u2014 a mint-time fact, stored on\nthe row itself and never inferred from a null `routine_name`.",
+        "description": "Who authored a garden proposal (blizzard#631) \u2014 a mint-time fact, stored on\nthe row itself and never inferred from a null `routine_name`.",
         "enum": [
           "routine-run",
           "operator"
@@ -15472,7 +15472,7 @@
     },
     "/api/garden-proposals": {
       "get": {
-        "description": "Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526\nD3/D4). `origin` narrows to `routine-run` or `operator` proposals (blizzard#631 D6).",
+        "description": "Every garden proposal, newest first, bounded and keyset-paginated (blizzard#526\nD3/D4). `origin` narrows to `routine-run` or `operator` proposals (blizzard#631).",
         "operationId": "list_garden_proposals_api_garden_proposals_get",
         "parameters": [
           {
@@ -15631,7 +15631,7 @@
         ]
       },
       "patch": {
-        "description": "Replace the given fields of PROPOSAL_ID in place, all-or-nothing (blizzard#631\nD2) \u2014 works on either origin while open. 404 unknown proposal, 409 already closed,\n422 a blank title/class/body or an edit naming no field.",
+        "description": "Replace the given fields of PROPOSAL_ID in place, all-or-nothing (blizzard#631)\n\u2014 works on either origin while open. 404 unknown proposal, 409 already closed,\n422 a blank title/class/body or an edit naming no field.",
         "operationId": "edit_garden_proposal_api_garden_proposals__proposal_id__patch",
         "parameters": [
           {
@@ -16609,7 +16609,7 @@
     },
     "/api/routines/proposal-counts": {
       "get": {
-        "description": "Garden-proposal counts (blizzard#547) per origin, routine, and class over\n`[since, until)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum (blizzard#631 D6). `routine` narrows to one routine's rows of\nboth origins when given; 404 on an unknown one. `origin` narrows to one origin. 422\non a malformed instant or `until <= since`.",
+        "description": "Garden-proposal counts (blizzard#547) per origin, routine, and class over\n`[since, until)`, split into open/passed/accepted-with-item/accepted-without-item \u2014\n`created` is their sum (blizzard#631). `routine` narrows to one routine's rows of\nboth origins when given; 404 on an unknown one. `origin` narrows to one origin. 422\non a malformed instant or `until <= since`.",
         "operationId": "routine_proposal_counts_api_routines_proposal_counts_get",
         "parameters": [
           {

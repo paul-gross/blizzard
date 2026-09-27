@@ -461,12 +461,12 @@ garden_proposals = Table(
     Column("proposal_id", String, primary_key=True),  # gprop_<ulid>
     # `routine-run` (the routine's own run raised it) or `operator` (an operator
     # authored it directly, blizzard#631) — a mint-time fact, fixed at insert and never
-    # inferred from a null `routine_name` (D1).
+    # inferred from a null `routine_name`.
     Column("origin", String, nullable=False, server_default="routine-run"),
     # Named by the routine's own name — required for `routine-run`, optional for
-    # `operator` (D1). Nullable so an operator proposal citing no routine stores none.
+    # `operator`. Nullable so an operator proposal citing no routine stores none.
     Column("routine_name", String, nullable=True),
-    # The identity that authored an `operator` proposal — null for `routine-run` (D1).
+    # The identity that authored an `operator` proposal — null for `routine-run`.
     Column("created_by", String, nullable=True),
     Column("class", String, key="class_", nullable=False),  # the deployment's own taxonomy; opaque to the hub
     Column("title", String, nullable=False),

@@ -262,7 +262,7 @@ def routine_proposal_counts(
 ) -> GardenProposalCountsView:
     """Garden-proposal counts (blizzard#547) per origin, routine, and class over
     `[since, until)`, split into open/passed/accepted-with-item/accepted-without-item —
-    `created` is their sum (blizzard#631 D6). `routine` narrows to one routine's rows of
+    `created` is their sum (blizzard#631). `routine` narrows to one routine's rows of
     both origins when given; 404 on an unknown one. `origin` narrows to one origin. 422
     on a malformed instant or `until <= since`."""
     parsed_since = _parse_instant(since, field="since")

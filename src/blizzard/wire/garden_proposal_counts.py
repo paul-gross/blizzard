@@ -11,7 +11,7 @@ from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 
 class GardenProposalCountsRowView(BaseModel):
     """One origin/routine/class triple's garden-proposal counts over the requested
-    window (blizzard#631 D6). `routine_name` is nullable for an operator-authored row
+    window (blizzard#631). `routine_name` is nullable for an operator-authored row
     naming no routine."""
 
     model_config = ConfigDict(populate_by_name=True)
