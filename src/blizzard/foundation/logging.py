@@ -18,15 +18,8 @@ ENV_LOG_FORMAT = "BZ_LOG_FORMAT"
 
 
 class _LiveStderr:
-    """A file-like proxy that resolves ``sys.stderr`` on every write.
-
-    ``PrintLoggerFactory(file=sys.stderr)`` binds whatever stream ``sys.stderr`` is at
-    configure time, and ``cache_logger_on_first_use`` keeps that binding for the rest of
-    the process. Under pytest capture that stream is per-test, so a logger configured
-    once and reused across tests can end up writing to an earlier test's already-closed
-    stream. Resolving ``sys.stderr`` at write time instead means every write goes to
-    whichever stream currently holds that name.
-    """
+    """A file-like proxy resolving ``sys.stderr`` fresh on every write (pinned by
+    ``tests/test_logging.py::test_a_cached_logger_survives_a_replaced_stderr``)."""
 
     def write(self, message: str) -> None:
         sys.stderr.write(message)
