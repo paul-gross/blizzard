@@ -24,6 +24,16 @@ class RunnerCapability(BaseModel):
     available: bool = True
 
 
+class RunnerSubscriptionDeclaration(BaseModel):
+    """One provider subscription the runner declares at registration — the join key
+    everything else keys off. ``provider`` is stored but reaches no view; nothing reads
+    it there yet."""
+
+    slug: str
+    name: str
+    provider: str
+
+
 class RunnerRegistrationRequest(BaseModel):
     """Register a runner into the fleet — runner id + workspace binding.
 
@@ -41,6 +51,8 @@ class RunnerRegistrationRequest(BaseModel):
     redirect_uris: list[str] = []
     #: The runner's capability snapshot — every harness/tier it can execute right now.
     capabilities: list[RunnerCapability] = []
+    #: The declared subscription roster — ``None`` for no roster, ``[]`` for none declared.
+    subscriptions: list[RunnerSubscriptionDeclaration] | None = None
 
 
 class RunnerRegistrationResponse(BaseModel):
@@ -83,6 +95,10 @@ class SubscriptionUsageView(BaseModel):
     windows: list[ExternalSubscriptionUsageWindowView]
     #: ``"credential_lapsed"`` when the newest reported miss outranks the newest sample (D7); ``None`` otherwise.
     condition: str | None = None
+    #: The newest reported miss's own reason; ``None`` when there is none.
+    miss_reason: str | None = None
+    #: The newest reported miss's own instant; ``None`` alongside ``miss_reason``.
+    missed_at: str | None = None
 
 
 class RunnerView(BaseModel):
@@ -104,7 +120,7 @@ class RunnerView(BaseModel):
     locally_paused_reason: str | None = None
     # The configured environment-pool size — ``None`` when none was reported, never zero.
     env_capacity: int | None = None
-    # Every reported per-slug sample's own non-stale usage, empty when none was reported.
+    # One member per declared subscription; the age-gated fallback without a roster.
     subscriptions: list[SubscriptionUsageView] = []
     # The runner's reported capability snapshot — every harness/tier it can execute right now.
     capabilities: list[RunnerCapability] = []

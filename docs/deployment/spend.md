@@ -163,10 +163,18 @@ Two providers ship a sampler binding, selected by a declaration's `provider` key
 OAuth plan, and `openai`, reading a ChatGPT plan's Codex usage. A provider naming neither stays declared and unsampled
 rather than failing configuration, and no sample renders as an absent usage block on the board — never a fabricated
 zero. The hub tracks every declared subscription's own sample independently, keyed on slug: one subscription going stale
-or unsampled never blanks a sibling's. The runner panel renders a paced-window bar per sampled window, only when the
-runner has a non-stale sample to show. Both plans meter a 5h and a 7d window today, but only `anthropic` reads those two
+or unsampled never blanks a sibling's. Both plans meter a 5h and a 7d window today, but only `anthropic` reads those two
 as fixed: `openai` labels each window from the length its own response reports, so a plan metering differently is
 rendered as it comes rather than forced into that pair.
+
+Once a runner has declared its roster, the runner panel shows exactly one row per declared slug, whatever the age of
+its sample — the roster, not sample age, now decides what shows. Each row carries its last good sample labelled with
+its age, "refreshed &lt;age&gt; ago": styled normal up to fifteen minutes, amber past fifteen, red past an hour, and
+updated live on the board's own clock tick rather than only on a fresh read. A slug that has never produced a sample
+reads "no sample yet", naming its newest miss reason when one exists. Dropping a `[[subscription]]` block removes its
+row at the runner's next registration, even though its stored samples and misses persist. A runner that predates the
+roster (an older client, or one declaring none) keeps the prior behavior: its rows show only while sampled within the
+last fifteen minutes, the sole staleness gate that survives for it.
 
 Each binding reads the credential file its own vendor CLI writes: `~/.claude/.credentials.json` for `anthropic`,
 `~/.codex/auth.json` for `openai`, either overridable per declaration with `credentials_path`. **Blizzard never writes
@@ -187,8 +195,11 @@ read). Every reason surfaces on the runner: `blizzard runner status`, the runner
 below prints the reason in operator words. Every miss crosses to the hub the same way a sample does — reporting
 `{slug, name, missed_at, reason}`, never a token, a refresh token, or a path — but only `credential_lapsed` renders: a
 slug whose newest lapsed miss postdates its newest sample shows on the board as "credential lapsed — log in again on
-this runner" in place of its pace bars, ageing out under the same staleness gate a sample does. Any other reason leaves
-the board exactly as an unsampled slug leaves it today, even though the hub has stored it.
+this runner" in place of its pace bars. Its refreshed-age label and tier still render alongside the notice — they
+describe the last good sample, not the lapse — and once a runner has declared its roster the notice carries no age
+gate of its own: it stays until a fresh sample or a different miss reason supersedes it, rather than ageing out. Any
+other reason leaves the row reading "no sample yet" with that reason named, exactly as a never-sampled slug's, even
+though the hub has stored it.
 
 Credentials never leave the runner machine: the sample reads the runner's own local OAuth credential file, and only
 derived utilization percentages, window labels, and reset times cross the wire to the hub — the bearer token is never

@@ -131,6 +131,17 @@ export function ageMs(iso: string | null | undefined, now: number): number | nul
   return Math.max(0, delta);
 }
 
+/** Shared rounded s/m/h age derivation (`bzh:frontend-formatters`) — the one place
+ * {@link formatSeenAgo} and {@link formatRefreshedAgo} round a delta down to its
+ * unit, so the two "ago" labels can never drift apart on where a boundary falls. */
+function agoUnits(deltaMs: number): string {
+  const secondsAgo = Math.round(deltaMs / 1000);
+  if (secondsAgo < 60) return `${secondsAgo}s`;
+  const minutesAgo = Math.round(secondsAgo / 60);
+  if (minutesAgo < 60) return `${minutesAgo}m`;
+  return `${Math.round(minutesAgo / 60)}h`;
+}
+
 /**
  * A compact "seen 12s ago" liveness label from a last-seen instant — the hub
  * runner registry's rendering (`runner-view.ts`). `online` is the
@@ -141,11 +152,18 @@ export function ageMs(iso: string | null | undefined, now: number): number | nul
 export function formatSeenAgo(lastSeenAt: string, online: boolean, now: number = Date.now()): string {
   const delta = ageMs(lastSeenAt, now);
   if (delta === null) return online ? 'online' : 'offline';
-  const secondsAgo = Math.round(delta / 1000);
-  if (secondsAgo < 60) return `seen ${secondsAgo}s ago`;
-  const minutesAgo = Math.round(secondsAgo / 60);
-  if (minutesAgo < 60) return `seen ${minutesAgo}m ago`;
-  return `seen ${Math.round(minutesAgo / 60)}h ago`;
+  return `seen ${agoUnits(delta)} ago`;
+}
+
+/**
+ * "refreshed 30s ago" / "refreshed 10m ago" / "refreshed 2h ago" — a declared
+ * subscription's last-good-sample age label, sharing {@link formatSeenAgo}'s s/m/h
+ * derivation rather than a second copy. The caller
+ * passes an already-computed `deltaMs` (e.g. from {@link ageMs}) — the freshness
+ * tier and this label read the same age, so they can never disagree.
+ */
+export function formatRefreshedAgo(deltaMs: number): string {
+  return `refreshed ${agoUnits(deltaMs)} ago`;
 }
 
 /** `YYYYMMDD` from an ISO instant, rendered in UTC — empty string for an absent or

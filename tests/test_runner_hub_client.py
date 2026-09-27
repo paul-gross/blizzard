@@ -350,8 +350,8 @@ def test_register_runner_posts_registration() -> None:
         return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
 
     _client(handler).register_runner("r1", "ws1", env_capacity=4)
-    # env_capacity (issue #69) rides the body; url/redirect_uris (issue #95) and
-    # capabilities default to null/empty when the caller omits them.
+    # env_capacity (issue #69) rides the body; url/redirect_uris (issue #95),
+    # capabilities, and subscriptions default to null/empty when the caller omits them.
     assert seen == {
         "runner_id": "r1",
         "workspace_id": "ws1",
@@ -359,6 +359,7 @@ def test_register_runner_posts_registration() -> None:
         "url": None,
         "redirect_uris": [],
         "capabilities": [],
+        "subscriptions": [],
     }
 
 
@@ -381,6 +382,7 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
         "url": None,
         "redirect_uris": [],
         "capabilities": [],
+        "subscriptions": [],
     }
 
 

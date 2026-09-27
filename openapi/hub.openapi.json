@@ -7116,6 +7116,20 @@
             "title": "Runner Id",
             "type": "string"
           },
+          "subscriptions": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RunnerSubscriptionDeclaration"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscriptions"
+          },
           "url": {
             "anyOf": [
               {
@@ -7156,6 +7170,30 @@
           "first_registration"
         ],
         "title": "RunnerRegistrationResponse",
+        "type": "object"
+      },
+      "RunnerSubscriptionDeclaration": {
+        "description": "One provider subscription the runner declares at registration \u2014 the join key\neverything else keys off. ``provider`` is stored but reaches no view; nothing reads\nit there yet.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "provider"
+        ],
+        "title": "RunnerSubscriptionDeclaration",
         "type": "object"
       },
       "RunnerView": {
@@ -7584,6 +7622,28 @@
               }
             ],
             "title": "Condition"
+          },
+          "miss_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Miss Reason"
+          },
+          "missed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed At"
           },
           "name": {
             "title": "Name",
@@ -15192,7 +15252,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level (issue #86a); issue #95's optional\n``url``/``redirect_uris`` extension, and blizzard#433's ``capabilities`` snapshot,\nride the same authenticated write.",
+        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level (issue #86a); the ``subscriptions`` roster\nrides the same authenticated write. The hub never rejects a registration over its\nroster \u2014 it doubles as the heartbeat every tick.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {

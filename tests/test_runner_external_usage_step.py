@@ -60,7 +60,12 @@ def _resolved(
     renewer: FakeCredentialRenewer | None = None,
 ) -> ResolvedSubscription:
     return ResolvedSubscription(
-        slug=slug, name=slug.title(), sample_interval_seconds=interval_seconds, sampler=sampler, renewer=renewer
+        slug=slug,
+        name=slug.title(),
+        provider=slug,
+        sample_interval_seconds=interval_seconds,
+        sampler=sampler,
+        renewer=renewer,
     )
 
 

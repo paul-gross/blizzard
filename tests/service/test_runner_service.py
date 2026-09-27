@@ -27,7 +27,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
@@ -436,6 +436,26 @@ def _escalation_closure_reason(config: RunnerConfig, chunk_id: str) -> str | Non
         return None if row is None else str(row[0])
     finally:
         engine.dispose()
+
+
+def test_a_real_runners_registration_carries_every_declared_subscription(tmp_path: Path) -> None:
+    """The mock hub's view lists every slug the real runner declared, including one whose
+    provider binds no sampler."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(
+            config, subscriptions=(SubscriptionDeclaration(slug="probe", name="Probe", provider="none-such"),)
+        )
+
+        _drive(config, fenced, ticks=1)
+
+        view = hub.get(f"/api/fleet/runners/{config.runner_id}").json()["subscriptions"]
+        assert [s["slug"] for s in view] == ["probe"]
 
 
 def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:

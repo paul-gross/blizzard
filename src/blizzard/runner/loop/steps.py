@@ -54,6 +54,7 @@ from blizzard.wire.facts import (
     EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     ExternalSubscriptionUsageWindowFact,
 )
+from blizzard.wire.runner import RunnerSubscriptionDeclaration
 
 #: This module's public API — the loop steps it owns, in tick order.
 __all__ = [
@@ -363,6 +364,10 @@ class Pull(Step):
                 url=ctx.config.public_url or None,
                 redirect_uris=ctx.config.redirect_uris,
                 capabilities=ctx.capability_snapshot(),
+                subscriptions=tuple(
+                    RunnerSubscriptionDeclaration(slug=s.slug, name=s.name, provider=s.provider)
+                    for s in ctx.subscriptions
+                ),
             )
             paused = ctx.hub.fetch_runner_paused(ctx.config.runner_id)
         except HubClientError:

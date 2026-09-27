@@ -139,14 +139,14 @@ def test_a_miss_with_no_sample_renders_a_miss_only_lapsed_row() -> None:
     assert views[0].condition == CREDENTIAL_LAPSED_CONDITION
 
 
-def test_a_miss_newer_than_the_sample_supersedes_it_as_a_lapsed_row() -> None:
+def test_a_miss_newer_than_the_sample_sets_lapsed_over_the_surviving_sample() -> None:
     sample = _record("openai", _NOW - timedelta(minutes=10))
     miss = _miss("openai", _NOW - timedelta(minutes=1))
     views = PerSubscriptionUsageView.every(_registration(records=(sample,), misses=(miss,)), now=_NOW)
 
     assert len(views) == 1
-    assert views[0].sampled_at is None
-    assert views[0].windows == ()
+    assert views[0].sampled_at == sample.sampled_at
+    assert views[0].windows == sample.windows
     assert views[0].condition == CREDENTIAL_LAPSED_CONDITION
 
 
@@ -193,6 +193,20 @@ def test_a_stale_sample_with_a_stale_or_absent_lapsed_miss_drops_out_as_today() 
     stale_miss = _miss("openai", _NOW - EXTERNAL_USAGE_STALE_AFTER - timedelta(minutes=1))
     views = PerSubscriptionUsageView.every(_registration(records=(stale_sample,), misses=(stale_miss,)), now=_NOW)
     assert views == ()
+
+
+def test_a_lapsed_miss_over_a_stale_sample_preserves_the_surviving_sample() -> None:
+    """A stale sample outranked by a newer lapsed miss keeps its own fields, at parity with
+    the roster path's unconditional preserve — staleness gates membership, not a surviving
+    sample's fields once the slug is admitted by the lapsed miss."""
+    stale_sample = _record("openai", _NOW - timedelta(minutes=20))
+    lapsed_miss = _miss("openai", _NOW - timedelta(minutes=5))
+    views = PerSubscriptionUsageView.every(_registration(records=(stale_sample,), misses=(lapsed_miss,)), now=_NOW)
+
+    assert len(views) == 1
+    assert views[0].sampled_at == stale_sample.sampled_at
+    assert views[0].windows == stale_sample.windows
+    assert views[0].condition == CREDENTIAL_LAPSED_CONDITION
 
 
 def test_a_lapsed_sibling_does_not_blank_a_healthy_ones_view() -> None:

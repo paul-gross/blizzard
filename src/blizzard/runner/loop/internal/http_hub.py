@@ -31,7 +31,12 @@ from blizzard.wire.route import (
     RouteClaimTerminalDenial,
     RouteTokenRekeyResponse,
 )
-from blizzard.wire.runner import RunnerCapability, RunnerRegistrationRequest, RunnerView
+from blizzard.wire.runner import (
+    RunnerCapability,
+    RunnerRegistrationRequest,
+    RunnerSubscriptionDeclaration,
+    RunnerView,
+)
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch
 
 _log = get_logger("blizzard.runner.hub")
@@ -142,6 +147,7 @@ class HttpHubClient:
         url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
+        subscriptions: tuple[RunnerSubscriptionDeclaration, ...] = (),
     ) -> None:
         self._post(
             f"{_FLEET_API}/runners",
@@ -152,6 +158,7 @@ class HttpHubClient:
                 url=url,
                 redirect_uris=list(redirect_uris),
                 capabilities=list(capabilities),
+                subscriptions=list(subscriptions),
             ).model_dump(mode="json"),
         )
 

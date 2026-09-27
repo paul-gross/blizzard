@@ -16,6 +16,7 @@ from sqlalchemy import insert, select
 
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.registry import (
+    DeclaredSubscription,
     ExternalSubscriptionUsageWindow,
     IWriteRunnerRegistry,
     RunnerCapability,
@@ -139,6 +140,7 @@ class RunnerRegistryStore:
         public_url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
+        subscriptions: tuple[DeclaredSubscription, ...] | None = None,
         at: datetime,
     ) -> bool:
         # Written unconditionally on both branches, `None`/empty verbatim included: the
@@ -160,6 +162,13 @@ class RunnerRegistryStore:
             if capabilities
             else None
         )
+        # Unlike `capabilities`, an empty roster is kept distinct from an absent one:
+        # `None` means the runner reported no roster, `[]` means it declared none.
+        subscriptions_json = (
+            json.dumps([{"slug": d.slug, "name": d.name, "provider": d.provider} for d in subscriptions])
+            if subscriptions is not None
+            else None
+        )
         with self._store.write("upsert_registration") as conn:
             existing = conn.execute(
                 select(s.runner_registrations.c.runner_id).where(s.runner_registrations.c.runner_id == runner_id)
@@ -175,6 +184,7 @@ class RunnerRegistryStore:
                         public_url=public_url,
                         redirect_uris=redirect_uris_json,
                         capabilities=capabilities_json,
+                        subscriptions=subscriptions_json,
                     )
                 )
                 return True
@@ -188,6 +198,7 @@ class RunnerRegistryStore:
                     public_url=public_url,
                     redirect_uris=redirect_uris_json,
                     capabilities=capabilities_json,
+                    subscriptions=subscriptions_json,
                 )
             )
             return False
@@ -457,6 +468,16 @@ class RunnerRegistryStore:
             )
             for c in (json.loads(row.capabilities) if row.capabilities else [])
         )
+        # `NULL` (no roster reported) stays `None`; `"[]"` (an empty declared roster)
+        # decodes to `()`, not `None` — the absent/empty distinction is kept.
+        declared_subscriptions = (
+            tuple(
+                DeclaredSubscription(slug=d["slug"], name=d["name"], provider=d["provider"])
+                for d in json.loads(row.subscriptions)
+            )
+            if row.subscriptions is not None
+            else None
+        )
         return RunnerRegistration(
             runner_id=row.runner_id,
             workspace_id=row.workspace_id,
@@ -473,6 +494,7 @@ class RunnerRegistryStore:
             subscription_usage=subscription_usage,
             subscription_usage_misses=subscription_usage_misses,
             capabilities=capabilities,
+            declared_subscriptions=declared_subscriptions,
         )
 
     @staticmethod

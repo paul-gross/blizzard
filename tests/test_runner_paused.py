@@ -1567,7 +1567,12 @@ def test_usage_limit_reason_falls_back_to_the_sampled_resets_at(tmp_path):  # ty
         clock=FixedClock(_NOW),
         subscriptions=(
             ResolvedSubscription(
-                slug="anthropic", name="Anthropic", sample_interval_seconds=60, sampler=None, renewer=None
+                slug="anthropic",
+                name="Anthropic",
+                provider="anthropic",
+                sample_interval_seconds=60,
+                sampler=None,
+                renewer=None,
             ),
         ),
     )
@@ -1626,7 +1631,12 @@ def test_usage_limit_reason_fallback_skips_a_failed_samples_null_payload(tmp_pat
         clock=FixedClock(_NOW),
         subscriptions=(
             ResolvedSubscription(
-                slug="anthropic", name="Anthropic", sample_interval_seconds=60, sampler=None, renewer=None
+                slug="anthropic",
+                name="Anthropic",
+                provider="anthropic",
+                sample_interval_seconds=60,
+                sampler=None,
+                renewer=None,
             ),
         ),
     )

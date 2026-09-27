@@ -107,6 +107,8 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
                     for w in view.windows
                 ],
                 condition=view.condition,
+                miss_reason=view.miss_reason,
+                missed_at=iso_utc(view.missed_at) if view.missed_at is not None else None,
             )
             for view in PerSubscriptionUsageView.every(r, now=now)
         ],

@@ -233,6 +233,69 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert long_runner["workspace_id"] == "workspace-stress", long_runner
 
 
+def test_create_runner_seeds_a_declared_roster_that_reads_back_through_the_real_hub(tmp_path: Path) -> None:
+    """A declared roster (fresh slug, 2h-old slug, never-sampled slug with a miss) plus an
+    undeclared slug's own sample reads back through the real hub's ``GET /api/runners/{id}``
+    with no restart: one member per declared slug, the undeclared slug absent."""
+    bin_dir = _require_mock_data_binary()
+    hub_dir = tmp_path / "hub"
+    port = _free_port()
+    runner_id = "runner-roster-seed"
+
+    with _zero_work_source_hub(hub_dir, port) as hub:
+        _mock_data(
+            bin_dir,
+            "create",
+            "runner",
+            "--store",
+            "hub",
+            "--dir",
+            str(hub_dir),
+            "--runner-id",
+            runner_id,
+            "--subscription",
+            "fresh",
+            "Fresh",
+            "provider-a",
+            "--subscription",
+            "aged",
+            "Aged",
+            "provider-b",
+            "--subscription",
+            "never",
+            "Never",
+            "provider-c",
+            "--sample",
+            "fresh",
+            "60",
+            "--sample",
+            "aged",
+            "7200",
+            "--miss",
+            "never",
+            "0",
+            "endpoint_unreachable",
+            "--sample",
+            "retired",
+            "300",
+        )
+
+        resp = hub.get(f"/api/runners/{runner_id}")
+        assert resp.status_code == 200, resp.text
+        members = {s["slug"]: s for s in resp.json()["subscriptions"]}
+        assert set(members) == {"fresh", "aged", "never"}, sorted(members)
+
+        assert members["fresh"]["sampled_at"] is not None, members["fresh"]
+        assert members["fresh"]["condition"] is None, members["fresh"]
+
+        assert members["aged"]["sampled_at"] is not None, members["aged"]
+        assert members["aged"]["condition"] is None, members["aged"]
+
+        assert members["never"]["sampled_at"] is None, members["never"]
+        assert members["never"]["miss_reason"] == "endpoint_unreachable", members["never"]
+        assert members["never"]["missed_at"] is not None, members["never"]
+
+
 def test_create_garden_proposal_seeds_a_proposal_citing_no_findings(tmp_path: Path) -> None:
     """``create garden-proposal`` (blizzard#543) is the only seam that can land a garden
     proposal with no findings — the board's manual no-findings case needs one against a

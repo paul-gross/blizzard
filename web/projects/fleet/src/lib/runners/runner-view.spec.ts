@@ -132,6 +132,10 @@ describe('RunnerPanelView', () => {
               { window: '7d', utilizationPct: 70, elapsedPct: 55 },
             ],
             condition: null,
+            sampledAt: NOW,
+            refreshedLabel: 'refreshed 0s ago',
+            freshness: 'fresh',
+            missReason: null,
           },
         ],
       }),
@@ -166,7 +170,18 @@ describe('RunnerPanelView', () => {
     fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_empty_sample', {
-        subscriptionPaces: [{ slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [], condition: null }],
+        subscriptionPaces: [
+          {
+            slug: 'anthropic-default',
+            name: 'Anthropic (default)',
+            paceBars: [],
+            condition: null,
+            sampledAt: NOW,
+            refreshedLabel: 'refreshed 0s ago',
+            freshness: 'fresh',
+            missReason: null,
+          },
+        ],
       }),
     ]);
     await fixture.whenStable();
@@ -183,8 +198,26 @@ describe('RunnerPanelView', () => {
     fixture.componentRef.setInput('rows', [
       row('rn_multi', {
         subscriptionPaces: [
-          { slug: 'anthropic-default', name: 'Anthropic (default)', paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }], condition: null },
-          { slug: 'anthropic-secondary', name: 'Anthropic (secondary)', paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }], condition: null },
+          {
+            slug: 'anthropic-default',
+            name: 'Anthropic (default)',
+            paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }],
+            condition: null,
+            sampledAt: NOW,
+            refreshedLabel: 'refreshed 0s ago',
+            freshness: 'fresh',
+            missReason: null,
+          },
+          {
+            slug: 'anthropic-secondary',
+            name: 'Anthropic (secondary)',
+            paceBars: [{ window: '5h', utilizationPct: 90, elapsedPct: 55 }],
+            condition: null,
+            sampledAt: NOW,
+            refreshedLabel: 'refreshed 0s ago',
+            freshness: 'fresh',
+            missReason: null,
+          },
         ],
       }),
     ]);

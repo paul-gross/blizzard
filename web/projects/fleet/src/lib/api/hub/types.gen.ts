@@ -4559,6 +4559,10 @@ export type RunnerRegistrationRequest = {
      */
     runner_id: string;
     /**
+     * Subscriptions
+     */
+    subscriptions?: Array<RunnerSubscriptionDeclaration> | null;
+    /**
      * Url
      */
     url?: string | null;
@@ -4582,6 +4586,28 @@ export type RunnerRegistrationResponse = {
      * Runner Id
      */
     runner_id: string;
+};
+
+/**
+ * RunnerSubscriptionDeclaration
+ *
+ * One provider subscription the runner declares at registration — the join key
+ * everything else keys off. ``provider`` is stored but reaches no view; nothing reads
+ * it there yet.
+ */
+export type RunnerSubscriptionDeclaration = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Slug
+     */
+    slug: string;
 };
 
 /**
@@ -4848,6 +4874,14 @@ export type SubscriptionUsageView = {
      * Condition
      */
     condition?: string | null;
+    /**
+     * Miss Reason
+     */
+    miss_reason?: string | null;
+    /**
+     * Missed At
+     */
+    missed_at?: string | null;
     /**
      * Name
      */

@@ -4,6 +4,7 @@ import {
   formatClockTime,
   formatHeldFor,
   formatLocalClockWithDay,
+  formatRefreshedAgo,
   formatSeenAgo,
   formatUtcYmd,
   formatWhen,
@@ -170,6 +171,14 @@ describe('formatSeenAgo (bzh:utc-instants)', () => {
   it('falls through to online/offline for a stamp beyond skew tolerance, never a confident 0s', () => {
     expect(formatSeenAgo('2026-07-16T17:00:00.000Z', false, REF)).toBe('offline');
     expect(formatSeenAgo('2026-07-16T17:00:00.000Z', true, REF)).toBe('online');
+  });
+});
+
+describe('formatRefreshedAgo', () => {
+  it('shares formatSeenAgo\'s s/m/h derivation', () => {
+    expect(formatRefreshedAgo(5_000)).toBe('refreshed 5s ago');
+    expect(formatRefreshedAgo(30 * 60_000)).toBe('refreshed 30m ago');
+    expect(formatRefreshedAgo(3 * 60 * 60_000)).toBe('refreshed 3h ago');
   });
 });
 

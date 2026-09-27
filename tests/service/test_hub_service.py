@@ -365,7 +365,15 @@ def test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string
         assert invalid["response"]["rejected"] == [2]
 
         assert hub.get("/api/runners/runner-subscriptions").json()["subscriptions"] == [
-            {"slug": "openai", "name": "OpenAI", "sampled_at": sampled_at, "windows": [], "condition": None}
+            {
+                "slug": "openai",
+                "name": "OpenAI",
+                "sampled_at": sampled_at,
+                "windows": [],
+                "condition": None,
+                "miss_reason": None,
+                "missed_at": None,
+            }
         ]
 
 
@@ -394,8 +402,76 @@ def test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_w
         assert invalid["response"]["rejected"] == [2]
 
         assert hub.get("/api/runners/runner-lapsed").json()["subscriptions"] == [
-            {"slug": "openai", "name": "OpenAI", "sampled_at": None, "windows": [], "condition": "credential_lapsed"}
+            {
+                "slug": "openai",
+                "name": "OpenAI",
+                "sampled_at": None,
+                "windows": [],
+                "condition": "credential_lapsed",
+                "miss_reason": "credential_lapsed",
+                "missed_at": missed_at,
+            }
         ]
+
+
+def test_a_declared_roster_shows_a_never_sampled_member_over_the_wire(tmp_path: Path) -> None:
+    """A declared slug is a member whatever the age of its sample, including one that
+    has never sampled or missed at all."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port),
+        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-roster") as runner,
+    ):
+        reg = runner.post(
+            "/_drive/register",
+            json={"subscriptions": [{"slug": "probe", "name": "Probe", "provider": "none-such"}]},
+        ).json()
+        assert reg["status"] == 201, reg
+
+        view = hub.get("/api/runners/runner-roster").json()["subscriptions"]
+        assert view == [
+            {
+                "slug": "probe",
+                "name": "Probe",
+                "sampled_at": None,
+                "windows": [],
+                "condition": None,
+                "miss_reason": None,
+                "missed_at": None,
+            }
+        ]
+
+
+def test_reregistering_a_declared_roster_without_a_slug_removes_it_over_the_wire(tmp_path: Path) -> None:
+    """A slug dropped from the re-declared roster is no longer a member."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port),
+        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-roster-2") as runner,
+    ):
+        runner.post(
+            "/_drive/register",
+            json={"subscriptions": [{"slug": "probe", "name": "Probe", "provider": "none-such"}]},
+        )
+        assert len(hub.get("/api/runners/runner-roster-2").json()["subscriptions"]) == 1
+
+        runner.post("/_drive/register", json={"subscriptions": []})
+        assert hub.get("/api/runners/runner-roster-2").json()["subscriptions"] == []
+
+
+def test_a_registration_without_a_roster_keeps_the_legacy_path_over_the_wire(tmp_path: Path) -> None:
+    """A registration that never declares a roster reads exactly as the rosterless
+    fallback always has: a never-sampled slug is not a member at all."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port),
+        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
+        mock_runner(bin_dir, _free_port(), hub_port, runner_id="runner-no-roster") as runner,
+    ):
+        assert runner.post("/_drive/register").json()["status"] == 201
+        assert hub.get("/api/runners/runner-no-roster").json()["subscriptions"] == []
 
 
 # --- Route-token authorization over the wire (issue #84b) ---

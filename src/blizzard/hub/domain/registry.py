@@ -69,6 +69,8 @@ class RunnerRegistration:
     subscription_usage_misses: tuple[SubscriptionUsageMissRecord, ...] = ()
     #: The runner's reported capability snapshot — every harness/tier it can execute right now.
     capabilities: tuple[RunnerCapability, ...] = ()
+    #: The declared subscription roster — ``None`` for no roster, ``()`` for none declared.
+    declared_subscriptions: tuple[DeclaredSubscription, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +85,18 @@ class RunnerCapability:
     tiers: tuple[str, ...] = ()
     default: bool = False
     available: bool = True
+
+
+@dataclass(frozen=True)
+class DeclaredSubscription:
+    """One provider subscription a registered runner has declared — the hub-domain mirror
+    of the wire shape, kept import-free of it (``bzh:domain-core``). Its slug is the
+    roster's own membership key: declared, it is a member whatever the age of its
+    sample; dropped, it is not, though its reports persist."""
+
+    slug: str
+    name: str
+    provider: str
 
 
 @dataclass(frozen=True)
@@ -142,9 +156,10 @@ class SubscriptionUsageMissRecord:
 
 @dataclass(frozen=True)
 class PerSubscriptionUsageView:
-    """One subscription's usage, past its own staleness gate, carrying its identity
-    (blizzard#436). ``sampled_at`` is ``None`` for a miss-only row (blizzard#504 D7) —
-    ``condition`` carries the reason in that case, and ``windows`` is empty."""
+    """One subscription's usage view — one view per declared slug with a roster, or the
+    rosterless age-gated fallback without one. ``sampled_at`` is ``None`` with no surviving
+    sample. ``miss_reason``/``missed_at`` carry the slug's newest miss regardless of path,
+    whether or not it wins ``condition``."""
 
     slug: str
     name: str
@@ -152,40 +167,112 @@ class PerSubscriptionUsageView:
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
     #: ``"credential_lapsed"`` when the newest miss outranks the newest sample (D7); ``None`` otherwise.
     condition: str | None = None
+    #: The slug's newest reported miss reason; ``None`` when it has none.
+    miss_reason: str | None = None
+    #: The slug's newest reported miss instant; ``None`` alongside ``miss_reason``.
+    missed_at: datetime | None = None
 
     @classmethod
     def every(cls, registration: RunnerRegistration, *, now: datetime) -> tuple[PerSubscriptionUsageView, ...]:
-        """Every declared subscription's non-stale view, sorted by slug — a portable,
-        deterministic order (``bzh:sql-portable``) — over the **union** of sample and miss
-        rows per slug (blizzard#504 D7): a newest lapsed miss outranking its (or an absent)
-        sample renders as a miss-only row; a dead or stale subscription, or one with only
-        silent (non-lapsed) misses, is simply absent, never a reason to omit any other."""
+        """Every subscription's usage view, sorted by slug: a declared roster switches
+        membership from age-gated to roster-gated — every declared slug, whatever its
+        sample or miss age. With none declared, today's rule applies verbatim: sampled/missed
+        slugs gated by :data:`EXTERNAL_USAGE_STALE_AFTER`."""
         samples = {record.slug: record for record in registration.subscription_usage}
         misses = {record.slug: record for record in registration.subscription_usage_misses}
+        if registration.declared_subscriptions is not None:
+            return cls._roster_views(registration.declared_subscriptions, samples, misses)
+        return cls._rosterless_views(samples, misses, now=now)
+
+    @classmethod
+    def _roster_views(
+        cls,
+        roster: tuple[DeclaredSubscription, ...],
+        samples: dict[str, SubscriptionUsageRecord],
+        misses: dict[str, SubscriptionUsageMissRecord],
+    ) -> tuple[PerSubscriptionUsageView, ...]:
+        """The roster-gated membership rule — one view per declared slug, no age gate on
+        either the sample or the miss; a duplicate declared slug collapses, first wins."""
+        declared: dict[str, DeclaredSubscription] = {}
+        for declaration in roster:
+            declared.setdefault(declaration.slug, declaration)
+        views: list[PerSubscriptionUsageView] = []
+        for slug in sorted(declared):
+            declaration = declared[slug]
+            sample = samples.get(slug)
+            miss = misses.get(slug)
+            views.append(
+                cls(
+                    slug=slug,
+                    name=declaration.name,
+                    sampled_at=as_utc(sample.sampled_at) if sample is not None else None,
+                    windows=sample.windows if sample is not None else (),
+                    condition=CREDENTIAL_LAPSED_CONDITION if cls._roster_lapsed(sample, miss) else None,
+                    miss_reason=miss.reason if miss is not None else None,
+                    missed_at=as_utc(miss.missed_at) if miss is not None else None,
+                )
+            )
+        return tuple(views)
+
+    @classmethod
+    def _rosterless_views(
+        cls,
+        samples: dict[str, SubscriptionUsageRecord],
+        misses: dict[str, SubscriptionUsageMissRecord],
+        *,
+        now: datetime,
+    ) -> tuple[PerSubscriptionUsageView, ...]:
+        """The rosterless fallback — verbatim pre-declared-roster membership, over the
+        **union** of sample and miss rows per slug: a non-stale sample or a newest lapsed
+        miss outranking it (or an absent sample) admits the slug; a dead or stale
+        subscription with only silent (non-lapsed) misses is simply absent. Once admitted,
+        a surviving sample's fields are never blanked, stale or lapsed or not."""
         views: list[PerSubscriptionUsageView] = []
         for slug in sorted(set(samples) | set(misses)):
             sample = samples.get(slug)
             miss = misses.get(slug)
-            if cls._lapsed(sample, miss, now=now):
-                assert miss is not None  # _lapsed only returns True when miss is not None
-                views.append(
-                    cls(slug=slug, name=miss.name, sampled_at=None, windows=(), condition=CREDENTIAL_LAPSED_CONDITION)
-                )
+            lapsed = cls._rosterless_lapsed(sample, miss, now=now)
+            fresh_sample = sample is not None and not _usage_stale(sample.sampled_at, now=now)
+            if not lapsed and not fresh_sample:
                 continue
-            if sample is not None and not _usage_stale(sample.sampled_at, now=now):
+            if sample is not None:
                 views.append(
                     cls(
                         slug=slug,
                         name=sample.name,
                         sampled_at=as_utc(sample.sampled_at),
                         windows=sample.windows,
-                        condition=None,
+                        condition=CREDENTIAL_LAPSED_CONDITION if lapsed else None,
+                        miss_reason=miss.reason if miss is not None else None,
+                        missed_at=as_utc(miss.missed_at) if miss is not None else None,
+                    )
+                )
+            else:
+                assert miss is not None  # narrowed by `lapsed` — `sample is None` forced the `not fresh_sample` skip
+                views.append(
+                    cls(
+                        slug=slug,
+                        name=miss.name,
+                        sampled_at=None,
+                        windows=(),
+                        condition=CREDENTIAL_LAPSED_CONDITION,
+                        miss_reason=miss.reason,
+                        missed_at=as_utc(miss.missed_at),
                     )
                 )
         return tuple(views)
 
     @staticmethod
-    def _lapsed(
+    def _roster_lapsed(sample: SubscriptionUsageRecord | None, miss: SubscriptionUsageMissRecord | None) -> bool:
+        """``True`` iff this slug's newest miss is a ``credential_lapsed`` newer than its
+        newest (or absent) sample — no staleness gate on either operand: an offline runner
+        already reads offline on its own row, so age no longer retires this."""
+        if miss is None or miss.reason != CREDENTIAL_LAPSED_CONDITION:
+            return False
+        return sample is None or as_utc(sample.sampled_at) < as_utc(miss.missed_at)
+
+    @staticmethod
+    def _rosterless_lapsed(
         sample: SubscriptionUsageRecord | None, miss: SubscriptionUsageMissRecord | None, *, now: datetime
     ) -> bool:
         """``True`` iff this slug's newest miss is a non-stale ``credential_lapsed`` newer
@@ -230,13 +317,14 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         public_url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
+        subscriptions: tuple[DeclaredSubscription, ...] | None = None,
         at: datetime,
     ) -> bool:
         """Register a runner (idempotent upsert), refreshing ``last_seen_at``; returns True if the row
-        was newly created. ``env_capacity`` (issue #69), ``public_url``/``redirect_uris`` (issue #95), and
-        ``capabilities`` (blizzard#433) are written on **both** the insert and the refresh branch, so a
-        change converges on the next re-registration; an absent value is written verbatim, resetting the
-        stored field to null/empty."""
+        was newly created. ``env_capacity``, ``public_url``/``redirect_uris``, ``capabilities``, and
+        ``subscriptions`` are written on **both** branches, so a change converges on
+        re-registration; absent writes verbatim to null/empty. ``subscriptions`` alone keeps ``None``
+        vs ``()`` distinct, unlike ``capabilities``, which collapses both to null."""
         ...
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
@@ -304,12 +392,13 @@ class FleetService:
         public_url: str | None = None,
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
+        subscriptions: tuple[DeclaredSubscription, ...] | None = None,
     ) -> bool:
         """Register (or refresh) a runner; returns True on a first registration.
 
-        ``env_capacity``, ``public_url``/``redirect_uris``, and ``capabilities`` are the
-        runner's own reported facts, unconditionally overwritten on every (re-)registration;
-        absent values store as null/empty."""
+        ``env_capacity``, ``public_url``/``redirect_uris``, ``capabilities``, and
+        ``subscriptions`` are the runner's own reported facts, unconditionally overwritten
+        on every (re-)registration; absent values store as null/empty."""
         created = self._registry.upsert_registration(
             runner_id,
             workspace_id=workspace_id,
@@ -317,6 +406,7 @@ class FleetService:
             public_url=public_url,
             redirect_uris=redirect_uris,
             capabilities=capabilities,
+            subscriptions=subscriptions,
             at=self._clock.now(),
         )
         _log.info(
@@ -326,6 +416,7 @@ class FleetService:
             env_capacity=env_capacity,
             public_url=public_url,
             capabilities=[c.harness_id for c in capabilities],
+            subscriptions=None if subscriptions is None else [s.slug for s in subscriptions],
             first_time=created,
         )
         return created

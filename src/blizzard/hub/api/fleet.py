@@ -50,7 +50,7 @@ from blizzard.hub.domain.claim import (
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.garden_proposals import RoutineProposalState
 from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
-from blizzard.hub.domain.registry import RunnerCapability
+from blizzard.hub.domain.registry import DeclaredSubscription, RunnerCapability
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import (
     Chunk,
@@ -869,9 +869,9 @@ def register_runner(
 ) -> RunnerRegistrationResponse:
     """Register a runner — runner id + workspace binding; idempotent upsert.
 
-    Runner-auth is checked at the router level (issue #86a); issue #95's optional
-    ``url``/``redirect_uris`` extension, and blizzard#433's ``capabilities`` snapshot,
-    ride the same authenticated write."""
+    Runner-auth is checked at the router level (issue #86a); the ``subscriptions`` roster
+    rides the same authenticated write. The hub never rejects a registration over its
+    roster — it doubles as the heartbeat every tick."""
     fleet.assert_owns(request.runner_id)
     capabilities = tuple(
         RunnerCapability(
@@ -883,6 +883,11 @@ def register_runner(
         )
         for c in request.capabilities
     )
+    subscriptions = (
+        tuple(DeclaredSubscription(slug=d.slug, name=d.name, provider=d.provider) for d in request.subscriptions)
+        if request.subscriptions is not None
+        else None
+    )
     first = services.fleet.register(
         request.runner_id,
         request.workspace_id,
@@ -890,6 +895,7 @@ def register_runner(
         public_url=request.url,
         redirect_uris=tuple(request.redirect_uris),
         capabilities=capabilities,
+        subscriptions=subscriptions,
     )
     services.events.publish_runner_changed(request.runner_id, kind="registered")
     return RunnerRegistrationResponse(runner_id=request.runner_id, first_registration=first)

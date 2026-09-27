@@ -5,10 +5,17 @@ import type { SubscriptionPace } from './runner-rows';
 
 /**
  * The runner registry's per-subscription pace render (blizzard#478) — one group per
- * reported subscription, headed by its operator-facing name and keyed by slug, so two
+ * declared subscription, headed by its operator-facing name and keyed by slug, so two
  * subscriptions reporting identically labelled windows (both a `"5h"`) never merge into
  * one bar list. A sample with no folded {@link SubscriptionPace.paceBars} renders no
  * fabricated zero-utilization bar.
+ *
+ * Render precedence per group, in order: a lapsed credential shows
+ * its notice in place of the bars, even over a surviving last-good sample; otherwise a
+ * sample shows its bars, or "no usage windows" for one with zero; otherwise the group
+ * reads "no sample yet", naming the newest miss reason when there is one. The refreshed
+ * label and its age tier render whenever a last good sample exists, including under the
+ * lapsed notice.
  *
  * Presentational only.
  */
