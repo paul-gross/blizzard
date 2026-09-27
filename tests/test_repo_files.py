@@ -81,3 +81,11 @@ def test_combined_shell_flags_check_repo_file_arguments() -> None:
         subprocess.run(["bash", "-lc", "cat uv.lock"], cwd=repo_root(), capture_output=True)
     result = subprocess.run(["bash", "-lc", "cat README.md"], cwd=repo_root(), capture_output=True)
     assert result.returncode == 0
+
+
+@pytest.mark.parametrize("script", ["cat uv.lock;", "cat README.md && cat uv.lock", "cat uv.lock|wc -c"])
+def test_shell_operators_do_not_hide_unlisted_file_operands(script: str) -> None:
+    with pytest.raises(AssertionError, match=r"Unlisted repo-file read: uv\.lock"):
+        subprocess.run(["bash", "-lc", script], cwd=repo_root(), capture_output=True)
+    result = subprocess.run(["bash", "-lc", "cat README.md;"], cwd=repo_root(), capture_output=True)
+    assert result.returncode == 0

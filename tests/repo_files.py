@@ -117,7 +117,10 @@ def install_repo_read_guard() -> None:
                             ):
                                 script = argv[index + 1]
                                 if isinstance(script, (str, bytes)):
-                                    candidates.extend(shlex.split(os.fsdecode(script)))
+                                    # Split shell operators away from adjacent file operands.
+                                    tokens = shlex.shlex(os.fsdecode(script), posix=True, punctuation_chars=";&|()<>")
+                                    tokens.whitespace_split = True
+                                    candidates.extend(tokens)
                                 break
                     for candidate in candidates:
                         if isinstance(candidate, (str, bytes, Path)):
