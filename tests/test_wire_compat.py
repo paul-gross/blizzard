@@ -313,9 +313,8 @@ def test_property_added_to_request_only_forbid_schema_is_additive() -> None:
 
 
 def test_nested_schema_reachable_by_both_roles_keeps_both_roles() -> None:
-    # "Priority" is nested inside "Proposal", which is reached as a response by one operation
-    # and as a request by another. The reachability walk must give "Priority" both roles, not
-    # just whichever operation's walk reaches "Proposal" first.
+    # "Priority" nests inside "Proposal", reached as a response by one op and a request by
+    # another — the walk must give "Priority" both roles, not just whichever reaches it first.
     priority_base = {"type": "string", "enum": ["low", "high"]}
     priority_head = {"type": "string", "enum": ["low"]}
     proposal = {"type": "object", "properties": {"priority": _ref("Priority")}}
@@ -409,10 +408,8 @@ def test_check_history_passes_when_the_step_is_additive(tmp_path: Path) -> None:
 
 
 def test_check_history_recovers_once_an_unacknowledged_break_is_reverted(tmp_path: Path) -> None:
-    # An unacknowledged break can land on master outright (bypassing or predating the PR gate).
-    # Its subject can't be marked `!` after the fact, and rewriting pushed master history isn't
-    # an option — so the recovery path is a later commit that reverts it, making the net diff
-    # from the resolved baseline to HEAD additive again.
+    # An unacknowledged break landing on master can't be marked `!` after the fact and pushed
+    # history can't be rewritten — reverting it makes the net diff additive again.
     repo = _init_repo(tmp_path)
     base_commit = _commit_spec(repo, _spec({"/api/fleet/widgets": {"get": _op()}}), "chore: base")
     _commit_spec(repo, _spec({}), "feat: drop the widgets route")
