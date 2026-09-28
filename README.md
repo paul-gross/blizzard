@@ -83,8 +83,9 @@ engineer's agents show up on the same board.
   complete deployment rather than a demo mode. The same two daemons become a shared hub on a server with a runner on
   each engineer's laptop when you want that instead; nothing about the work changes shape in between.
 - **Intentionally modular, intentionally flexible to your proprietary needs.** Workspace, work source, and coding
-  harness are named interfaces with pluggable providers; delivery plugs in as the graph's own land step, and the human
-  channel is the built-in board. The reference stack is the first implementation, not a shortcut around them.
+  harness are named interfaces with pluggable providers; delivery and the human channel are built in, not pluggable —
+  "Interfaces and the reference stack" below says why. The reference stack is the first implementation, not a shortcut
+  around them.
 
 ## 📸 Screenshots
 
@@ -221,15 +222,15 @@ provider behind it, and the reference binding is the first implementation of the
 This is not a claim to have solved harness engineering, or to serve every part of it equally well. The aim is narrower:
 to solve one problem exceptionally well, and to stay replaceable everywhere else.
 
-| Seam               | What plugs in                                          | Reference binding                                                                         |
-| ------------------ | ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| **Workspace**      | Provides isolated, poly-repo execution environments    | Built-in worktrees or [winter](https://github.com/paul-gross/winter) feature environments |
-| **Work source**    | The system holding the backlog, ingested by item id    | GitHub issues                                                                             |
-| **Coding harness** | The agent that actually does the work                  | Claude Code                                                                               |
-| **Workflow**       | How work moves: graphs of nodes, judgements, and gates | Hub-defined YAML workflow graphs                                                          |
+| Seam               | What plugs in                                       | Reference binding                                                                         |
+| ------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Workspace**      | Provides isolated, poly-repo execution environments | Built-in worktrees or [winter](https://github.com/paul-gross/winter) feature environments |
+| **Work source**    | The system holding the backlog, ingested by item id | GitHub issues                                                                             |
+| **Coding harness** | The agent that actually does the work               | Claude Code                                                                               |
 
-Delivery and the human channel are not pluggable seams: delivery lands through the graph's own land step, calling the
-forge directly, and the human channel is the built-in mission-control board.
+Workflow, delivery, and the human channel are not pluggable seams: workflow is the YAML graph of nodes, judgements, and
+gates you author at the hub, not a swappable provider; delivery lands through the graph's own land step, calling the
+forge directly; and the human channel is the built-in mission-control board.
 
 Winter is the opinionated preference for the workspace, because it cuts both ways: a human uses it directly for
 efficient local development, and blizzard uses the same thing for efficient agent development. A winter feature

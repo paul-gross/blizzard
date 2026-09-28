@@ -187,7 +187,7 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
             for t in detail["history"]
         ), detail["history"]
 
-        # The forge reports the PR merged — the delivery seam ran under the target graph.
+        # The forge reports the PR merged — delivery's land step ran under the target graph.
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 

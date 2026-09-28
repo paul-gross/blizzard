@@ -99,7 +99,7 @@
           "file": "src/blizzard/hub/cli/chunk.py",
           "symbol": "chunk_ingest",
           "role": "allowed",
-          "reason": "This docstring IS the `blizzard hub chunk ingest --help` text — an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment/ survivor below."
+          "reason": "This docstring IS the `blizzard hub chunk ingest --help` text \u2014 an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment/ survivor below."
         }
       ]
     },
@@ -143,7 +143,7 @@
           "file": "src/blizzard/hub/api/fleet.py",
           "symbol": "rekey_route_token",
           "role": "allowed",
-          "reason": "This docstring generates into openapi/ and thence the generated client — a published surface with no source tree to point at; restated inline per one-prose-home.md's published-surface clause, the same structural cause as the chunk_ingest survivor."
+          "reason": "This docstring generates into openapi/ and thence the generated client \u2014 a published surface with no source tree to point at; restated inline per one-prose-home.md's published-surface clause, the same structural cause as the chunk_ingest survivor."
         }
       ]
     },
@@ -184,7 +184,7 @@
       ],
       "marker_acknowledgments": {
         "rejects what this one merely shrinks": "R1: 6 words, the runner-side constant's own phrasing of the ordering; distinct enough that no unrelated cap prose in-tree matches it.",
-        "loses its turns whole": "R2: 4 words, the phrasing both scaffolded config templates use for the hub-side consequence. blizzard#338 made both caps operator-settable, so the ordering now has to travel with the keys an operator is invited to edit: HubConfig._transcript_cap_lines and RunnerConfig.to_toml each restate it in the file they scaffold. Both are sanctioned under bzh:one-prose-home's published-surface clause — an operator reads blizzard-hub.toml / blizzard-runner.toml with no source tree to point at — and both are unobservable for the same structural reason named on federation-origin-declared-not-derived: the text lives inside string literals, which prose_spans.py does not extract, so a site entry reads as stale. Named here rather than dropped."
+        "loses its turns whole": "R2: 4 words, the phrasing both scaffolded config templates use for the hub-side consequence. blizzard#338 made both caps operator-settable, so the ordering now has to travel with the keys an operator is invited to edit: HubConfig._transcript_cap_lines and RunnerConfig.to_toml each restate it in the file they scaffold. Both are sanctioned under bzh:one-prose-home's published-surface clause \u2014 an operator reads blizzard-hub.toml / blizzard-runner.toml with no source tree to point at \u2014 and both are unobservable for the same structural reason named on federation-origin-declared-not-derived: the text lives inside string literals, which prose_spans.py does not extract, so a site entry reads as stale. Named here rather than dropped."
       },
       "sites": [
         {
@@ -202,7 +202,7 @@
     },
     {
       "id": "sse-keepalive-cadence-shared",
-      "statement": "Both daemons' SSE routes idle at the one shared keepalive cadence — neither the hub's nor the runner's route overrides DEFAULT_KEEPALIVE_SECONDS; the per-daemon difference is the reserved open-of-stream comment's text alone.",
+      "statement": "Both daemons' SSE routes idle at the one shared keepalive cadence \u2014 neither the hub's nor the runner's route overrides DEFAULT_KEEPALIVE_SECONDS; the per-daemon difference is the reserved open-of-stream comment's text alone.",
       "owner": "src/blizzard/foundation/events/stream.py#<module>",
       "owner_kind": "module",
       "owner_assert": {
@@ -213,8 +213,8 @@
         "keepalive adjacent"
       ],
       "marker_acknowledgments": {
-        "keepalive cadence": "R1: 2 words, kept short; markers match literal normalized bigrams, so this buys precision over recall — it catches a restatement using this exact phrasing, not any phrasing of the claim ('keepalive interval'/'keepalive period'/a bare figure would not fire it). Verified via a check --owners run to match only the owner in-tree, with no false positive observed.",
-        "keepalive adjacent": "R1: 2 words, the exact coinage of the contradicting restatement this fact was declared against (polling.ts's since-removed 'keepalive-adjacent guarantee' clause); kept so a re-introduction of that phrasing at an in-repo site (this sweep's roots are src/tests/docs/README.md/web/projects plus ../blizzard-mock/src) trips the sweep there. ../blizzard-context is only this sweep's --context-root, used to resolve owner citations, never walked for sites — a restatement there is outside this sweep's reach regardless of phrasing."
+        "keepalive cadence": "R1: 2 words, kept short; markers match literal normalized bigrams, so this buys precision over recall \u2014 it catches a restatement using this exact phrasing, not any phrasing of the claim ('keepalive interval'/'keepalive period'/a bare figure would not fire it). Verified via a check --owners run to match only the owner in-tree, with no false positive observed.",
+        "keepalive adjacent": "R1: 2 words, the exact coinage of the contradicting restatement this fact was declared against (polling.ts's since-removed 'keepalive-adjacent guarantee' clause); kept so a re-introduction of that phrasing at an in-repo site (this sweep's roots are src/tests/docs/README.md/web/projects plus ../blizzard-mock/src) trips the sweep there. ../blizzard-context is only this sweep's --context-root, used to resolve owner citations, never walked for sites \u2014 a restatement there is outside this sweep's reach regardless of phrasing."
       },
       "sites": [
         {
@@ -251,7 +251,7 @@
     },
     {
       "id": "chunk-delete-hub-item-pairing",
-      "statement": "A hub item and its chunk live and die together: deleting a chunk withdraws every open hub:-source pointer it holds (a forge:-source pointer on the same chunk survives untouched), and withdrawing a hub item deletes its unacquired holder chunk in the same stroke rather than refusing the withdrawal — a genuinely acquired, still-live holder still refuses it, and a terminal holder's withdrawal is unaffected either way.",
+      "statement": "A hub item and its chunk live and die together: deleting a chunk withdraws every open hub:-source pointer it holds (a forge:-source pointer on the same chunk survives untouched), and withdrawing a hub item deletes its unacquired holder chunk in the same stroke rather than refusing the withdrawal \u2014 a genuinely acquired, still-live holder still refuses it, and a terminal holder's withdrawal is unaffected either way.",
       "owner": "blizzard-context:/domain/work/chunk.md#deletion",
       "owner_kind": "domain",
       "owner_assert": {
@@ -291,19 +291,19 @@
           "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/plan-review.md",
           "symbol": "submit",
           "role": "allowed",
-          "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn — a reader with no blizzard source tree to resolve a path into — so the bound is restated at the point of submission. The in-prompt docket read that would fetch the full spec is a graph-scope read that can miss, so the pointer beneath the restatement must stay additive (bzh:graph-artifact-pointer-fallback)."
+          "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn \u2014 a reader with no blizzard source tree to resolve a path into \u2014 so the bound is restated at the point of submission. The in-prompt docket read that would fetch the full spec is a graph-scope read that can miss, so the pointer beneath the restatement must stay additive (bzh:graph-artifact-pointer-fallback)."
         },
         {
           "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/review.md",
           "symbol": "submit",
           "role": "allowed",
-          "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn — a reader with no blizzard source tree to resolve a path into — so the bound is restated at the point of submission. The in-prompt docket read that would fetch the full spec is a graph-scope read that can miss, so the pointer beneath the restatement must stay additive (bzh:graph-artifact-pointer-fallback)."
+          "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn \u2014 a reader with no blizzard source tree to resolve a path into \u2014 so the bound is restated at the point of submission. The in-prompt docket read that would fetch the full spec is a graph-scope read that can miss, so the pointer beneath the restatement must stay additive (bzh:graph-artifact-pointer-fallback)."
         }
       ]
     },
     {
       "id": "work-item-proposal-materializes-at-delivery",
-      "statement": "A node-step's proposed work items ride its completion inertly through the graph; once the chunk actually delivers, the hub materializes every accumulated proposal of that chunk, best-effort and eventually convergent, never blocking the delivery itself — a create mints a fleet-authored hub item resting on its own fresh not_ready chunk, an update appends its evidence to an open item and stamps its last-edit instant, and an unresolvable proposal (its target closed, withdrawn, gone, or sourced somewhere with no editor) is recorded with its reason rather than retried forever.",
+      "statement": "A node-step's proposed work items ride its completion inertly through the graph; once the chunk actually delivers, the hub materializes every accumulated proposal of that chunk, best-effort and eventually convergent, never blocking the delivery itself \u2014 a create mints a fleet-authored hub item resting on its own fresh not_ready chunk, an update appends its evidence to an open item and stamps its last-edit instant, and an unresolvable proposal (its target closed, withdrawn, gone, or sourced somewhere with no editor) is recorded with its reason rather than retried forever.",
       "owner": "blizzard-context:/domain/work/chunk.md#materialization",
       "owner_kind": "domain",
       "owner_assert": {
@@ -472,7 +472,7 @@
           "file": "src/blizzard/hub/system_artifacts/garden/proposal-format.md",
           "symbol": "the-proposal-a-run-submits",
           "role": "allowed",
-          "reason": "Published surface: this system artifact is validated directly against a garden routine's own delivered submission, and a routine author has no source tree to point at — the relaxed rule is restated plainly here rather than left as a bare pointer, the same structural cause as this registry's docs/deployment/ survivors."
+          "reason": "Published surface: this system artifact is validated directly against a garden routine's own delivered submission, and a routine author has no source tree to point at \u2014 the relaxed rule is restated plainly here rather than left as a bare pointer, the same structural cause as this registry's docs/deployment/ survivors."
         },
         {
           "file": "docs/deployment/findings-and-proposals.md",
@@ -484,7 +484,7 @@
           "file": "src/blizzard/hub/graphs/ideation/prompts/propose.md",
           "symbol": "shape",
           "role": "allowed",
-          "reason": "Authored prompt text that reaches a worker verbatim (`bzh:app-agnostic-graphs`): the worker has no source tree to point at, and the prompt's system-scope pointer at `garden/proposal-format` owes a restatement that carries the node-step on its own (`bzh:graph-artifact-pointer-fallback`), so the relaxed rule is restated plainly here rather than left as a bare pointer — the same structural cause as the proposal-format system artifact's own site."
+          "reason": "Authored prompt text that reaches a worker verbatim (`bzh:app-agnostic-graphs`): the worker has no source tree to point at, and the prompt's system-scope pointer at `garden/proposal-format` owes a restatement that carries the node-step on its own (`bzh:graph-artifact-pointer-fallback`), so the relaxed rule is restated plainly here rather than left as a bare pointer \u2014 the same structural cause as the proposal-format system artifact's own site."
         }
       ]
     },
@@ -548,6 +548,26 @@
           "symbol": "-how-it-works",
           "role": "allowed",
           "reason": "Public README delivery overview: its reader has no workspace context to resolve the workflow convention, so the behavior is stated inline."
+        }
+      ]
+    },
+    {
+      "id": "forge-owner-default-is-blizzard",
+      "statement": "BZ_FORGE_OWNER, unset, defaults to the literal owner \"blizzard\".",
+      "owner": "src/blizzard/hub/app.py#<module>",
+      "owner_kind": "module",
+      "owner_assert": {
+        "quote": "Defaults to \"blizzard\" when unset"
+      },
+      "markers": [
+        "defaulting to blizzard when unset"
+      ],
+      "sites": [
+        {
+          "file": "docs/deployment/install.md",
+          "symbol": "configuration-and-credentials",
+          "role": "allowed",
+          "reason": "Operator-facing deployment doc. The constant is the owner; this is the one place its literal default value is written in prose, for an operator configuring /etc/blizzard/hub.env."
         }
       ]
     }

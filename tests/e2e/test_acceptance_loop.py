@@ -415,7 +415,7 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
         # 4a. Fleet truth — the hub's facts derive the chunk done.
         assert status == "done", f"chunk did not reach done (last status {status!r})"
 
-        # 4b. The forge reports the PR merged (the delivery seam ran for real).
+        # 4b. The forge reports the PR merged (delivery's land step ran for real).
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert pulls, "no PR was opened at the forge"
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
