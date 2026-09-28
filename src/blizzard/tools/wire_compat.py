@@ -86,16 +86,19 @@ def _response_schema(op: dict) -> dict | None:
     return None
 
 
-def _collect_reachable(doc: dict, node: dict | None, role: str, roles: dict[str, set[str]], seen: set[str]) -> None:
+def _collect_reachable(
+    doc: dict, node: dict | None, role: str, roles: dict[str, set[str]], seen: set[tuple[str, str]]
+) -> None:
     if node is None:
         return
     ref = node.get("$ref")
     if ref:
         name = _ref_name(ref)
         roles.setdefault(name, set()).add(role)
-        if name in seen:
+        key = (name, role)
+        if key in seen:
             return
-        seen.add(name)
+        seen.add(key)
         _collect_reachable(doc, _schema_components(doc).get(name), role, roles, seen)
         return
     for sub in node.get("properties", {}).values():
@@ -108,9 +111,14 @@ def _collect_reachable(doc: dict, node: dict | None, role: str, roles: dict[str,
 
 
 def _reachable_schemas(doc: dict) -> dict[str, set[str]]:
-    """Component schema name -> the surface roles ("request", "response") that reach it."""
+    """Component schema name -> the surface roles ("request", "response") that reach it.
+
+    ``seen`` is keyed by (schema, role): a schema reached by both a request and a response
+    walk must have its descendants walked once per role, or a nested schema reached under
+    both roles only ever inherits whichever role's walk got there first.
+    """
     roles: dict[str, set[str]] = {}
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     for _path, _method, op in _surface_operations(doc):
         _collect_reachable(doc, _request_schema(op), "request", roles, seen)
         _collect_reachable(doc, _response_schema(op), "response", roles, seen)
@@ -124,11 +132,19 @@ def _type_signature(schema: dict) -> tuple | None:
     if "$ref" in schema:
         return ("$ref", schema["$ref"])
     t = schema.get("type")
-    if t is None:
+    if t is not None:
+        if isinstance(t, list):
+            return tuple(sorted(x for x in t if x != "null"))
+        return (t,)
+    # pydantic's `X | None` compiles to `anyOf: [{...X}, {type: "null"}]`, with no top-level
+    # `type` key at all — resolve the signature through the non-null member(s) so it lines up
+    # with a directly-typed nullable property's signature.
+    members = schema.get("anyOf") or schema.get("oneOf")
+    if not members:
         return None
-    if isinstance(t, list):
-        return tuple(sorted(x for x in t if x != "null"))
-    return (t,)
+    non_null = [m for m in members if m.get("type") != "null"]
+    signatures = tuple(sorted(_type_signature(m) or ("unknown",) for m in non_null))
+    return signatures[0] if len(signatures) == 1 else signatures
 
 
 def _is_nullable(schema: dict) -> bool:
@@ -202,11 +218,15 @@ def _diff_schema(
             if is_request:
                 violations.append(Violation(label, "request property type narrowed"))
 
-        if _is_nullable(bp) and not _is_nullable(hp):
-            if is_response:
-                violations.append(Violation(label, "response property stopped being nullable"))
-            if is_request:
-                violations.append(Violation(label, "request property dropped nullability"))
+        # Response direction: a property that was never null and starts being nullable breaks
+        # an old runner's non-Optional parse model. A response property *losing* nullability is
+        # safe — a runner tolerant of `None` still parses a value that is never `None`.
+        if is_response and not _is_nullable(bp) and _is_nullable(hp):
+            violations.append(Violation(label, "response property newly became nullable"))
+        # Request direction: a property that used to accept null and no longer does breaks a
+        # runner still sending `None` for it.
+        if is_request and _is_nullable(bp) and not _is_nullable(hp):
+            violations.append(Violation(label, "request property dropped nullability"))
 
         _diff_enum_and_union(label, bp, hp, is_request, is_response, violations)
 
@@ -329,10 +349,22 @@ def _is_acknowledged(prev: str, curr: str, cwd: Path) -> bool:
 
 def check_history(baseline_commit: str, cwd: Path, *, echo=click.echo) -> bool:
     """Walk ``baseline_commit..HEAD`` one first-parent step at a time; return True iff
-    every step is additive or its break is acknowledged by a ``!``-marked landing."""
+    every step is additive or its break is acknowledged by a ``!``-marked landing.
+
+    Checked net-first: if ``baseline_commit..HEAD`` is additive taken as a whole, the walk is
+    skipped even when an intermediate step was breaking — a later commit that reverts an
+    unacknowledged break (the only way to recover one that already landed on ``master``, since
+    rewriting pushed history is off the table) makes the net comparison clean again. The
+    per-step walk exists to attribute a *surviving* break to the landing that must acknowledge
+    it, not to punish history that no longer shows up in the spec at HEAD.
+    """
     steps = _first_parent_steps(baseline_commit, cwd)
     if not steps:
         echo(f"wire-compat: HEAD is already at baseline {baseline_commit[:9]}, nothing to check.")
+        return True
+
+    if not classify_spec_diff(_spec_at(baseline_commit, cwd), _spec_at(steps[-1], cwd)):
+        echo(f"wire-compat: net change since baseline {baseline_commit[:9]} is additive, nothing to check.")
         return True
 
     ok = True

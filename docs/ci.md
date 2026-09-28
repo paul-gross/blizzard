@@ -81,6 +81,14 @@ by a `!`-marked Conventional Commit subject on the commits that land it (`bzh:fl
 successful run is found. Its local equivalent is `uv run blizzard-wire-compat --baseline deployed`, run with the
 operator's own `gh` auth.
 
+It checks the net diff from the resolved baseline to `HEAD` first, and skips the per-step walk entirely when that net
+diff is additive — the per-step walk exists only to attribute a *surviving* break to the landing that must acknowledge
+it. This is the recovery path if an unacknowledged break ever lands on `master` outright (bypassing or predating the PR
+gate): since that landing is already pushed, its subject can't be marked `!` after the fact, and rewriting pushed
+`master` history is not an option. Push a following commit that reverts the break instead — once the net diff back to
+the last successful baseline is clean again, `wire-compat-deployed` passes and `edge` resumes advancing, with no
+history rewrite required.
+
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) runs the full suite — gate, service tier,
 the **full** crash sweep, and e2e — then builds the wheel with the embedded frontend, pushes a multi-arch
 (`linux/amd64` + `linux/arm64`) hub image to GHCR, and publishes a GitHub Release with the wheel attached. The Release

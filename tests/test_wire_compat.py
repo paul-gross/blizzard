@@ -126,14 +126,40 @@ def test_response_property_stops_being_required_is_breaking() -> None:
     )
 
 
-def test_response_property_stops_being_nullable_is_breaking() -> None:
+def test_response_property_stops_being_nullable_is_additive() -> None:
+    # Safe direction: a runner tolerant of `None` still parses a value that is never `None`.
     base, head = _response_widget_specs(
         {"type": "object", "properties": {"note": {"type": ["string", "null"]}}},
         {"type": "object", "properties": {"note": {"type": "string"}}},
     )
-    assert any(
-        "response property stopped being nullable" in v for v in _violation_texts(classify_spec_diff(base, head))
+    assert classify_spec_diff(base, head) == []
+
+
+def test_response_property_newly_becomes_nullable_is_breaking() -> None:
+    # Breaking direction: an old runner's non-Optional parse model rejects the new `null`.
+    base, head = _response_widget_specs(
+        {"type": "object", "properties": {"note": {"type": "string"}}},
+        {"type": "object", "properties": {"note": {"type": ["string", "null"]}}},
     )
+    assert any("response property newly became nullable" in v for v in _violation_texts(classify_spec_diff(base, head)))
+
+
+def test_response_property_type_changed_under_anyof_optional_is_breaking() -> None:
+    # pydantic's `X | None` compiles to `anyOf: [{...X}, {type: "null"}]`, with no top-level
+    # `type` key — the signature must still resolve through the non-null member.
+    base, head = _response_widget_specs(
+        {"type": "object", "properties": {"count": {"anyOf": [{"type": "string"}, {"type": "null"}]}}},
+        {"type": "object", "properties": {"count": {"anyOf": [{"type": "integer"}, {"type": "null"}]}}},
+    )
+    assert any("response property type changed" in v for v in _violation_texts(classify_spec_diff(base, head)))
+
+
+def test_response_property_same_anyof_optional_type_is_additive() -> None:
+    base, head = _response_widget_specs(
+        {"type": "object", "properties": {"count": {"anyOf": [{"type": "string"}, {"type": "null"}]}}},
+        {"type": "object", "properties": {"count": {"anyOf": [{"type": "string"}, {"type": "null"}]}}},
+    )
+    assert classify_spec_diff(base, head) == []
 
 
 def test_response_enum_gains_value_is_breaking() -> None:
@@ -286,6 +312,22 @@ def test_property_added_to_request_only_forbid_schema_is_additive() -> None:
     assert classify_spec_diff(base, head) == []
 
 
+def test_nested_schema_reachable_by_both_roles_keeps_both_roles() -> None:
+    # "Priority" is nested inside "Proposal", which is reached as a response by one operation
+    # and as a request by another. The reachability walk must give "Priority" both roles, not
+    # just whichever operation's walk reaches "Proposal" first.
+    priority_base = {"type": "string", "enum": ["low", "high"]}
+    priority_head = {"type": "string", "enum": ["low"]}
+    proposal = {"type": "object", "properties": {"priority": _ref("Priority")}}
+    paths = {
+        "/api/fleet/proposals": {"get": _op(response_schema=_ref("Proposal"))},
+        "/api/fleet/proposals/draft": {"post": _op(request_schema=_ref("Proposal"))},
+    }
+    base = _spec(paths, {"Proposal": proposal, "Priority": priority_base})
+    head = _spec(paths, {"Proposal": proposal, "Priority": priority_head})
+    assert any("request enum lost value" in v for v in _violation_texts(classify_spec_diff(base, head)))
+
+
 def test_component_schema_deleted_while_still_referenced_is_breaking() -> None:
     base = _spec(
         {"/api/fleet/widgets": {"get": _op(response_schema=_ref("Widget"))}},
@@ -363,6 +405,18 @@ def test_check_history_passes_when_the_step_is_additive(tmp_path: Path) -> None:
     _commit_spec(
         repo, _spec({"/api/fleet/widgets": {"get": _op()}, "/api/fleet/gadgets": {"get": _op()}}), "feat: add gadgets"
     )
+    assert check_history(base_commit, repo, echo=lambda *_: None) is True
+
+
+def test_check_history_recovers_once_an_unacknowledged_break_is_reverted(tmp_path: Path) -> None:
+    # An unacknowledged break can land on master outright (bypassing or predating the PR gate).
+    # Its subject can't be marked `!` after the fact, and rewriting pushed master history isn't
+    # an option — so the recovery path is a later commit that reverts it, making the net diff
+    # from the resolved baseline to HEAD additive again.
+    repo = _init_repo(tmp_path)
+    base_commit = _commit_spec(repo, _spec({"/api/fleet/widgets": {"get": _op()}}), "chore: base")
+    _commit_spec(repo, _spec({}), "feat: drop the widgets route")
+    _commit_spec(repo, _spec({"/api/fleet/widgets": {"get": _op()}}), "feat: restore the widgets route")
     assert check_history(base_commit, repo, echo=lambda *_: None) is True
 
 
