@@ -92,11 +92,13 @@ def test_grouped_reads_off_chunk_grouped(tmp_path: Path) -> None:
 
 def test_claimed_reads_off_route_created(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.route.record_route(
-        Route(chunk_id="ch_1", runner_id="runner-a", workspace_id="ws-a", environment_ids=[], created_at=_at(1)),
-        token_hash="deadbeef",
-        at=_at(1),
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.route.record_route_locked(
+            handle,
+            Route(chunk_id="ch_1", runner_id="runner-a", workspace_id="ws-a", environment_ids=[], created_at=_at(1)),
+            token_hash="deadbeef",
+            at=_at(1),
+        )
     row = _row_for(store, "claimed")
     assert row.chunk_id == "ch_1"
     assert row.runner_id == "runner-a"
@@ -258,7 +260,8 @@ def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
 
 def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.movement.record_requeue("ch_1", at=_at(1))
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.movement.record_requeue_locked(handle, "ch_1", at=_at(1))
     row = _row_for(store, "requeued")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -267,7 +270,8 @@ def test_requeued_reads_off_requeues(tmp_path: Path) -> None:
 
 def test_detached_reads_off_route_released(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.route.record_route_released("ch_1", at=_at(1))
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.route.record_route_released_locked(handle, "ch_1", at=_at(1))
     row = _row_for(store, "detached")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -295,7 +299,8 @@ def test_resumed_reads_off_chunk_pause_facts(tmp_path: Path) -> None:
 
 def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.lifecycle.record_stop("ch_1", by="alice", at=_at(1))
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_1", by="alice")
     row = _row_for(store, "stopped")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -304,7 +309,8 @@ def test_stopped_reads_off_chunk_stopped(tmp_path: Path) -> None:
 
 def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.lifecycle.record_completion("ch_1", by="alice", at=_at(1))
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.lifecycle.record_completion_locked(handle, "ch_1", by="alice")
     row = _row_for(store, "completed")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -313,7 +319,10 @@ def test_completed_reads_off_chunk_completed(tmp_path: Path) -> None:
 
 def test_restarted_reads_off_chunk_restarts(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.movement.record_restart("ch_1", from_node_id=None, to_node_id="nd_build", by="alice", at=_at(1))
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.movement.record_restart_locked(
+            handle, "ch_1", from_node_id=None, to_node_id="nd_build", by="alice", at=_at(1)
+        )
     row = _row_for(store, "restarted")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -361,8 +370,11 @@ def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path:
 def test_edited_produces_no_activity_row(tmp_path: Path) -> None:
     """No fact table backs ``edited`` — a deliberate exclusion, not a gap."""
     store, _ = _store(tmp_path)
-    store.record.set_graph("ch_1", graph_id="gr_2")
-    store.record.set_defaults("ch_1", default_model=["opus"], default_effort="high", default_harnesses=[])
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.record.set_graph_locked(handle, "ch_1", graph_id="gr_2")
+        store.record.set_defaults_locked(
+            handle, "ch_1", default_model=["opus"], default_effort="high", default_harnesses=[]
+        )
     rows = store.events.activity_facts_since(_T0, limit=50)
     assert all(r.cause != "edited" for r in rows)
 

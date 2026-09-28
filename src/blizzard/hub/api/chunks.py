@@ -43,7 +43,12 @@ from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.pause import ChunkNotPausable
-from blizzard.hub.domain.restart import ChunkNotRestartable, RestartCurrentNodeUnknown, RestartNodeUnknown
+from blizzard.hub.domain.restart import (
+    ChunkNotRestartable,
+    RestartCurrentNodeUnknown,
+    RestartGraphPinChanged,
+    RestartNodeUnknown,
+)
 from blizzard.hub.domain.review_findings import (
     ReviewFindingsRejected,
     parse_review_finding_delta,
@@ -467,7 +472,9 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        requeue_id = services.requeue.requeue(chunk, facts=ChunkFacts.or_default(change.facts))
+        requeue_id = services.requeue.requeue(chunk)
+    except ChunkNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except NotEscalated as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = change.publish(cause="requeued", key=f"requeues:{requeue_id}")
@@ -499,10 +506,13 @@ def restart_chunk(
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         restart_id = services.restart.restart(chunk, graph, node_name=request.node, by=request.by, to_graph=to_graph)
+    except ChunkNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (
         ChunkNotRestartable,
         RestartCurrentNodeUnknown,
         RestartNodeUnknown,
+        RestartGraphPinChanged,
         TargetGraphRetired,
         MigrationTargetIsCurrentPin,
     ) as exc:
@@ -596,7 +606,9 @@ def stop_chunk(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        stopped_id = services.stop.stop(chunk, facts=ChunkFacts.or_default(change.facts), by=request.by)
+        stopped_id = services.stop.stop(chunk, by=request.by)
+    except ChunkNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ChunkNotStoppable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = change.publish(cause="stopped", key=f"chunk_stopped:{stopped_id}")
@@ -622,7 +634,10 @@ def complete_chunk(
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
-    completed_id = services.complete.complete(chunk, facts=ChunkFacts.or_default(change.facts), by=request.by)
+    try:
+        completed_id = services.complete.complete(chunk, by=request.by)
+    except ChunkNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     key = f"chunk_completed:{completed_id}" if completed_id is not None else None
     facts = change.publish(cause="completed", key=key)
     services.events.publish_queue_changed()  # a completed chunk is never offered for claim again
@@ -671,6 +686,8 @@ def patch_chunk(
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         ChunkPatchBody(request, services).apply(chunk)
+    except ChunkNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (
         ChunkNotEditable,
         ChunkAlreadyMoved,

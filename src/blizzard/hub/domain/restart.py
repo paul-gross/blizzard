@@ -7,15 +7,14 @@ a standing intent — rides that one store write, so nothing survives it to re-p
 
 from __future__ import annotations
 
-import threading
-
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.edit import MigrationTargetIsCurrentPin, TargetGraphRetired
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository, Node
-from blizzard.hub.domain.work import Chunk, ChunkFacts
+from blizzard.hub.domain.work import Chunk
 
 #: The answer an open ask is consumed with. Fixed and toneless: the person who moved the
 #: chunk did not answer the question, they made it moot.
@@ -43,6 +42,23 @@ class RestartNodeUnknown(Exception):
         self.graph_id = graph_id
 
 
+class RestartGraphPinChanged(Exception):
+    """A same-graph restart's ``graph`` argument no longer matches the chunk's current
+    pin, re-derived under the row lock — a concurrent edit re-pinned it between the
+    caller's load and this lock. Refused rather than resolved against the stale graph
+    object the caller passed in: the caller must re-load and retry, naming ``to_graph``
+    explicitly if the move should follow the graph the chunk now stands on."""
+
+    def __init__(self, chunk_id: str, expected_graph_id: str, actual_graph_id: str) -> None:
+        super().__init__(
+            f"chunk {chunk_id}'s graph pin changed from {expected_graph_id} to {actual_graph_id} "
+            "since it was loaded; restart refused rather than resolved against the stale graph"
+        )
+        self.chunk_id = chunk_id
+        self.expected_graph_id = expected_graph_id
+        self.actual_graph_id = actual_graph_id
+
+
 class RestartCurrentNodeUnknown(Exception):
     """The chunk stands on a node its own pinned graph does not carry.
 
@@ -61,21 +77,21 @@ class RestartService:
     def __init__(
         self,
         *,
-        facts: IReadChunkFactsRepository,
         movement: IWriteChunkMovementRepository,
         graphs: IReadGraphRepository,
         clock: IClock,
-        claim_lock: threading.Lock,
+        exclusive: IChunkExclusiveWrites,
     ) -> None:
-        self._facts = facts
         self._movement = movement
         # Read for one thing only — whether a cross-graph target is retired. The
         # graphs themselves arrive resolved (``bzh:domain-takes-objects``).
         self._graphs = graphs
         self._clock = clock
-        # Shared with the claim and edit paths: this move reads the chunk's facts
-        # and then writes against them, the same read-then-write those two serialize on.
-        self._claim_lock = claim_lock
+        # The locked-transaction seam (``bzh:store-exclusive-write``) shared with the
+        # claim and edit paths: this move reads the chunk's facts and then writes against
+        # them, the same read-then-write those two serialize on — via the row lock now,
+        # never an in-process lock.
+        self._exclusive = exclusive
 
     def restart(
         self, chunk: Chunk, graph: Graph, *, node_name: str | None, by: str, to_graph: Graph | None = None
@@ -85,34 +101,45 @@ class RestartService:
         ``to_graph`` makes it the eager cross-graph move (#371): a migration fact for the re-pin and a
         restart fact for the clean re-entry, in one write. Takes the resolved graphs
         (``bzh:domain-takes-objects``); every refusal writes nothing. Returns the ``chunk_restarts.id``."""
-        with self._claim_lock:
-            return self._restart_locked(chunk, graph, node_name=node_name, by=by, to_graph=to_graph)
-
-    def _restart_locked(
-        self, chunk: Chunk, graph: Graph, *, node_name: str | None, by: str, to_graph: Graph | None
-    ) -> int:
-        facts = self._facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
-        status = facts.status()
-        if status in TERMINAL_STATUSES:
-            raise ChunkNotRestartable(chunk.chunk_id, status)
-        if to_graph is not None:
-            self._require_crossable(chunk, to_graph)
-        from_node_id = facts.current_node_id()
-        target = self._target(graph, to_graph, from_node_id, node_name)
-        decision = facts.open_decision()
-        # `record_restart` derives the fence epoch inside its own transaction — one above every
-        # prior attempt, so the displaced worker's completion is rejected (`bzh:epoch-fencing`).
-        return self._movement.record_restart(
-            chunk.chunk_id,
-            from_node_id=from_node_id,
-            to_node_id=target.node_id,
-            by=by,
-            at=self._clock.now(),
-            decision_id=decision.decision_id if decision is not None else None,
-            answered_question_ids=[q.question_id for q in facts.open_questions()],
-            answer=SUPERSEDED_ANSWER,
-            to_graph_id=to_graph.graph_id if to_graph is not None else None,
-        )
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            # A `None` load means gone under this lock — refuse rather than substitute a
+            # synthetic status, mirroring `DeleteService.delete`/`DependencyService.declare`.
+            facts = handle.facts(chunk.chunk_id)
+            if facts is None:
+                raise ChunkNotFound(chunk.chunk_id)
+            status = facts.status()
+            if status in TERMINAL_STATUSES:
+                raise ChunkNotRestartable(chunk.chunk_id, status)
+            # Re-read fresh under the lock: a concurrent edit that re-pinned ``graph_id``
+            # between the caller's own load and this lock must not have either branch
+            # below answered against a pin it already changed — the cross-graph branch's
+            # own check and the same-graph branch's comparison to the caller's ``graph``
+            # both need the locked-fresh value.
+            current = handle.record(chunk.chunk_id)
+            if current is None:
+                raise ChunkNotFound(chunk.chunk_id)
+            if to_graph is not None:
+                self._require_crossable(current, to_graph)
+            elif current.graph_id != graph.graph_id:
+                raise RestartGraphPinChanged(chunk.chunk_id, graph.graph_id, current.graph_id)
+            from_node_id = facts.current_node_id()
+            target = self._target(graph, to_graph, from_node_id, node_name)
+            decision = facts.open_decision()
+            # `record_restart_locked` derives the fence epoch inside its own transaction —
+            # one above every prior attempt, so the displaced worker's completion is
+            # rejected (`bzh:epoch-fencing`).
+            return self._movement.record_restart_locked(
+                handle,
+                chunk.chunk_id,
+                from_node_id=from_node_id,
+                to_node_id=target.node_id,
+                by=by,
+                at=self._clock.now(),
+                decision_id=decision.decision_id if decision is not None else None,
+                answered_question_ids=[q.question_id for q in facts.open_questions()],
+                answer=SUPERSEDED_ANSWER,
+                to_graph_id=to_graph.graph_id if to_graph is not None else None,
+            )
 
     def _require_crossable(self, chunk: Chunk, to_graph: Graph) -> None:
         """The cross-graph target's own refusals (#371) — the pair an intended migration's target

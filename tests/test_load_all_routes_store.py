@@ -19,8 +19,8 @@ pytestmark = pytest.mark.component
 
 
 def test_bulk_read_matches_per_chunk_route_of_across_the_fixture(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     bulk = store.route.load_all_routes()
 
@@ -39,8 +39,8 @@ def test_bulk_read_matches_per_chunk_route_of_across_the_fixture(tmp_path: Path)
 
 
 def test_bulk_read_includes_the_live_route_and_excludes_the_released_one(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     bulk = store.route.load_all_routes()
 
@@ -52,10 +52,10 @@ def test_bulk_read_includes_the_live_route_and_excludes_the_released_one(tmp_pat
 def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
-    small, small_engine = _store(tmp_path / "small")
+    small, small_engine, _ = _store(tmp_path / "small")
     _seed_route(small, "ch_a")
 
-    large, large_engine = _store(tmp_path / "large")
+    large, large_engine, _ = _store(tmp_path / "large")
     for i in range(40):
         _seed_route(large, f"ch_{i}")
 
@@ -69,8 +69,10 @@ def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> N
 def _seed_route(store: ChunkStores, chunk_id: str) -> None:
     store.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
     store.queue.record_promote(chunk_id, at=_T0)
-    store.route.record_route(
-        Route(chunk_id=chunk_id, runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=_T0),
-        token_hash=f"th_{chunk_id}",
-        at=_T0,
-    )
+    with store.exclusive.locked([chunk_id]) as handle:
+        store.route.record_route_locked(
+            handle,
+            Route(chunk_id=chunk_id, runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=_T0),
+            token_hash=f"th_{chunk_id}",
+            at=_T0,
+        )

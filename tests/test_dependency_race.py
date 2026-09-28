@@ -1,9 +1,10 @@
 """Two opposing dependency declarations racing resolve to exactly one commit
 (component tier).
 
-``DependencyService`` shares its ``threading.Lock`` with ``ClaimService``, ``EditService``,
-and ``RestartService``. These tests patch the store's write to pause mid-write,
-proving an opposing declaration blocks on that lock rather than racing underneath it."""
+``DependencyService`` and ``GroupService`` share a residual fleet-wide ``threading.Lock``
+— the cycle check a row lock alone cannot close (``bzh:store-exclusive-write``). These
+tests patch the store's locked write to pause mid-write, proving an opposing declaration
+or fold blocks on that lock rather than racing underneath it."""
 
 from __future__ import annotations
 
@@ -40,17 +41,17 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    real_declare = _writable_dependencies(hub).declare
+    real_declare_locked = _writable_dependencies(hub).declare_locked
 
-    def _blocking_declare(dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  # type: ignore[no-untyped-def]
+    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  # type: ignore[no-untyped-def]
         # Only the first declaration pauses — blocking both would pass even with the
         # shared lock removed (a surviving mutant, not a proof).
         if dependent_chunk_id == chunk_a:
             entered_write.set()
             assert release_write.wait(timeout=5), "test never released the first declaration's write"
-        return real_declare(dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+        return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
-    _writable_dependencies(hub).declare = _blocking_declare  # type: ignore[method-assign]
+    _writable_dependencies(hub).declare_locked = _blocking_declare_locked  # type: ignore[method-assign]
 
     first_result: dict[str, object] = {}
 
@@ -90,6 +91,89 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
     assert len(standing) == 1
     assert standing[0].dependent_chunk_id == chunk_a
     assert standing[0].prerequisite_chunk_id == chunk_b
+
+
+def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_the_row_lock(tmp_path: Path) -> None:
+    """``a`` depends on ``b`` and ``c`` depends on ``d``, declared concurrently — two
+    declares whose own row locks share no chunk id at all, since ``{a, b}`` and ``{c, d}``
+    are disjoint. Combined with two edges already standing (``b`` depends on ``c``, ``d``
+    depends on ``a``), the two new edges would close the four-chunk cycle
+    ``a -> b -> c -> d -> a``. Neither declare's own row lock names a chunk the other's
+    does, so on Postgres only the shared cycle lock closes this pair — the row lock
+    cannot. This test tier cannot isolate that contribution on its own, though: SQLite
+    admits one writer transaction at a time regardless of which rows it locks, so the
+    second declare blocks here even with the shared lock stubbed to a no-op — a probe
+    this test alone cannot distinguish from proof. What it does prove, tier-independent:
+    the shared lock is acquired before the write each declare's cycle check rests on, and
+    the correct edge (not a cycle) is the one left standing once both resolve — the
+    ordering and outcome an operator would see under either backend."""
+    hub = build_hub(tmp_path)
+    chunk_a = ingest(hub, [{"source": "default", "ref": "a"}], promote=False)
+    chunk_b = ingest(hub, [{"source": "default", "ref": "b"}], promote=False)
+    chunk_c = ingest(hub, [{"source": "default", "ref": "c"}], promote=False)
+    chunk_d = ingest(hub, [{"source": "default", "ref": "d"}], promote=False)
+    a = hub.services.chunks.record.get(chunk_a)
+    b = hub.services.chunks.record.get(chunk_b)
+    c = hub.services.chunks.record.get(chunk_c)
+    d = hub.services.chunks.record.get(chunk_d)
+    assert a is not None
+    assert b is not None
+    assert c is not None
+    assert d is not None
+    hub.services.dependencies.declare(b, c, by="user:alice")  # b depends on c, already standing
+    hub.services.dependencies.declare(d, a, by="user:alice")  # d depends on a, already standing
+
+    entered_write = threading.Event()
+    release_write = threading.Event()
+    real_declare_locked = _writable_dependencies(hub).declare_locked
+
+    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  # type: ignore[no-untyped-def]
+        # Only the first declaration pauses — blocking both would pass even with the
+        # shared lock removed (a surviving mutant, not a proof).
+        if dependent_chunk_id == chunk_a:
+            entered_write.set()
+            assert release_write.wait(timeout=5), "test never released the first declaration's write"
+        return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+
+    _writable_dependencies(hub).declare_locked = _blocking_declare_locked  # type: ignore[method-assign]
+
+    first_result: dict[str, object] = {}
+
+    def _declare_a_depends_on_b() -> None:
+        first_result["edge"] = hub.services.dependencies.declare(a, b, by="user:alice")
+
+    first_thread = threading.Thread(target=_declare_a_depends_on_b)
+    first_thread.start()
+    assert entered_write.wait(timeout=5), "the first declaration never reached its (patched) write"
+
+    second_result: dict[str, object] = {}
+
+    def _declare_c_depends_on_d() -> None:
+        try:
+            second_result["edge"] = hub.services.dependencies.declare(c, d, by="user:bob")
+        except DependencyWouldCloseCycle as exc:
+            second_result["refused"] = exc
+
+    second_thread = threading.Thread(target=_declare_c_depends_on_d)
+    second_thread.start()
+    second_thread.join(timeout=0.3)
+    assert second_thread.is_alive(), (
+        "the disjoint declaration completed while the first still held the shared lock — the row lock alone cannot "
+        "serialize two declares naming no chunk id in common"
+    )
+    # Nothing has landed yet — the first declaration's write is still paused.
+    assert len(hub.services.chunks.dependencies.list_standing_edges()) == 2
+
+    release_write.set()
+    first_thread.join(timeout=5)
+    second_thread.join(timeout=5)
+
+    assert "edge" in first_result, first_result
+    assert "refused" in second_result, second_result
+    assert isinstance(second_result["refused"], DependencyWouldCloseCycle)
+
+    standing = hub.services.chunks.dependencies.list_standing_edges()
+    assert len(standing) == 3  # the two pre-existing edges, plus a -> b; c -> d was refused
 
 
 def test_repeated_opposing_declaration_races_never_yield_two_standing_edges(tmp_path: Path) -> None:
@@ -151,14 +235,14 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    real_record_fold = _writable_dependencies(hub).record_fold
+    real_record_fold_locked = _writable_dependencies(hub).record_fold_locked
 
-    def _blocking_record_fold(targets, **kwargs):  # type: ignore[no-untyped-def]
+    def _blocking_record_fold_locked(handle, targets, **kwargs):  # type: ignore[no-untyped-def]
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
-        return real_record_fold(targets, **kwargs)
+        return real_record_fold_locked(handle, targets, **kwargs)
 
-    _writable_dependencies(hub).record_fold = _blocking_record_fold  # type: ignore[method-assign]
+    _writable_dependencies(hub).record_fold_locked = _blocking_record_fold_locked  # type: ignore[method-assign]
 
     fold_result: dict[str, object] = {}
 

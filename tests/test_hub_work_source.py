@@ -55,9 +55,7 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
     items = WorkItemStore(store)
     clock = FixedClock(_T0)
     chunks = chunk_stores(engine, clock)
-    delete = DeleteService(
-        facts=chunks.facts, items=items, clock=clock, claim_lock=threading.Lock(), dependencies=chunks.dependencies
-    )
+    delete = DeleteService(items=items, clock=clock, exclusive=chunks.exclusive, cycle_lock=threading.Lock())
     edits = WorkItemEditService(
         items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
     )
@@ -353,7 +351,7 @@ def test_edit_replaces_fields_and_stamps_edited_at_leaving_created_at_and_ref(tm
 
 
 def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
-    source, _, chunks, _, engine, clock = _source(tmp_path)
+    source, _, chunks, _, engine, _ = _source(tmp_path)
     created = source.create(
         title="t",
         body="b",
@@ -361,7 +359,8 @@ def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
         stated_priority=None,
         graph=_graph(engine),
     )
-    chunks.lifecycle.record_stop(created.chunk_id, by="operator", at=clock.instant)
+    with chunks.exclusive.locked([created.chunk_id]) as handle:
+        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator")
 
     withdrawn = source.withdraw(WorkRef(source="hub", ref=created.item.ref), by="operator")
 
@@ -371,7 +370,7 @@ def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
 
 
 def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
-    source, _, chunks, _, engine, clock = _source(tmp_path)
+    source, _, chunks, _, engine, _ = _source(tmp_path)
     created = source.create(
         title="t",
         body="b",
@@ -380,7 +379,8 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
         graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
-    chunks.lifecycle.record_stop(created.chunk_id, by="operator", at=clock.instant)
+    with chunks.exclusive.locked([created.chunk_id]) as handle:
+        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator")
     source.withdraw(pointer, by="operator")
 
     with pytest.raises(WorkItemNotEditable):
@@ -443,13 +443,19 @@ def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Pat
         graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
-    chunks.route.record_route(
-        Route(
-            chunk_id=created.chunk_id, runner_id="r1", workspace_id="w1", environment_ids=[], created_at=clock.instant
-        ),
-        token_hash="deadbeef",
-        at=clock.instant,
-    )
+    with chunks.exclusive.locked([created.chunk_id]) as handle:
+        chunks.route.record_route_locked(
+            handle,
+            Route(
+                chunk_id=created.chunk_id,
+                runner_id="r1",
+                workspace_id="w1",
+                environment_ids=[],
+                created_at=clock.instant,
+            ),
+            token_hash="deadbeef",
+            at=clock.instant,
+        )
 
     with pytest.raises(WorkItemHeldByLiveChunk) as excinfo:
         source.withdraw(pointer, by="operator")
@@ -474,7 +480,10 @@ def test_withdraw_is_refused_while_the_unacquired_holder_is_a_standing_prerequis
     # `DeleteService.delete`, not the live-holder refusal.
     dependent = Chunk(chunk_id="ch_dependent", graph_id=graph.graph_id, work_refs=[], minted_at=clock.instant)
     chunks.record.mint(dependent)
-    chunks.dependencies.declare(dependent.chunk_id, created.chunk_id, by="operator", at=clock.instant)
+    with chunks.exclusive.locked([dependent.chunk_id, created.chunk_id]) as handle:
+        chunks.dependencies.declare_locked(
+            handle, dependent.chunk_id, created.chunk_id, by="operator", at=clock.instant
+        )
 
     with pytest.raises(WorkItemHeldByDependents) as excinfo:
         source.withdraw(pointer, by="operator")
@@ -483,7 +492,7 @@ def test_withdraw_is_refused_while_the_unacquired_holder_is_a_standing_prerequis
 
 
 def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Path) -> None:
-    source, _, chunks, _, engine, clock = _source(tmp_path)
+    source, _, chunks, _, engine, _ = _source(tmp_path)
     created = source.create(
         title="t",
         body="b",
@@ -492,7 +501,8 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
         graph=_graph(engine),
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
-    chunks.lifecycle.record_stop(created.chunk_id, by="operator", at=clock.instant)
+    with chunks.exclusive.locked([created.chunk_id]) as handle:
+        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator")
 
     withdrawn = source.withdraw(pointer, by="operator")
 

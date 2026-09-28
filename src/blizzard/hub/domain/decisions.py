@@ -17,14 +17,16 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.route_auth import RouteToken
-from blizzard.hub.domain.work import Chunk, ChunkFacts, DecisionChoice, DecisionRow
+from blizzard.hub.domain.work import Chunk, DecisionChoice, DecisionRow
 from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -210,20 +212,32 @@ class RequeueService:
         *,
         movement: IWriteChunkMovementRepository,
         route: IWriteChunkRouteRepository,
+        exclusive: IChunkExclusiveWrites,
         clock: IClock,
     ) -> None:
         self._movement = movement
         self._route = route
+        # The locked-transaction seam (``bzh:store-exclusive-write``): the route release
+        # races claim's own ``route_of`` read, so it and the requeue fact it always
+        # accompanies both land inside the same row-locked transaction.
+        self._exclusive = exclusive
         self._clock = clock
 
-    def requeue(self, chunk: Chunk, *, facts: ChunkFacts) -> int:
+    def requeue(self, chunk: Chunk) -> int:
         """Supersede the open escalation and release the route so the chunk re-derives ready.
-        Takes the loaded chunk and its already-loaded ``facts`` (``bzh:domain-takes-objects``).
-        Raises :class:`NotEscalated` if the chunk is not ``needs_human``. Returns the
-        freshly-written ``requeues.id``."""
-        if facts.open_escalation() is None:
-            raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")
-        now = self._clock.now()
-        requeue_id = self._movement.record_requeue(chunk.chunk_id, at=now)  # supersedes the escalation
-        self._route.record_route_released(chunk.chunk_id, at=now)  # -> ready, re-leasable at its current node
-        return requeue_id
+        Takes the loaded chunk (``bzh:domain-takes-objects``). Raises :class:`NotEscalated`
+        if the chunk is not ``needs_human`` — re-derived fresh under the row lock
+        (``bzh:store-exclusive-write``), never from a pre-lock snapshot, so a concurrent
+        requeue (or superseding fact) cannot be raced past this guard. Raises
+        :class:`ChunkNotFound` for a chunk gone under the lock. Returns the freshly-written
+        ``requeues.id``."""
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            facts = handle.facts(chunk.chunk_id)
+            if facts is None:
+                raise ChunkNotFound(chunk.chunk_id)
+            if facts.open_escalation() is None:
+                raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")
+            now = self._clock.now()
+            requeue_id = self._movement.record_requeue_locked(handle, chunk.chunk_id, at=now)  # supersedes escalation
+            self._route.record_route_released_locked(handle, chunk.chunk_id, at=now)  # -> ready, re-leasable
+            return requeue_id

@@ -762,6 +762,43 @@ def test_duplicate_route_seq_across_tables_is_a_violation(tmp_path: Path) -> Non
     assert "hub:route-seq-unique" in slugs
 
 
+def test_two_live_routes_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.route_created).values(
+                route_id="rt_1", chunk_id="ch_1", runner_id="r_a", workspace_id="w", created_at=_NOW, seq=1
+            )
+        )
+        # A second `route_created` at a later seq with no `route_released` between the
+        # two — the gap `bzh:store-exclusive-write`'s row lock exists to close.
+        conn.execute(
+            insert(hub.route_created).values(
+                route_id="rt_2", chunk_id="ch_1", runner_id="r_b", workspace_id="w", created_at=_NOW, seq=2
+            )
+        )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:one-live-route-per-chunk" in slugs
+
+
+def test_a_released_route_followed_by_a_fresh_claim_is_not_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.route_created).values(
+                route_id="rt_1", chunk_id="ch_1", runner_id="r_a", workspace_id="w", created_at=_NOW, seq=1
+            )
+        )
+        conn.execute(insert(hub.route_released).values(chunk_id="ch_1", released_at=_NOW, seq=2))
+        conn.execute(
+            insert(hub.route_created).values(
+                route_id="rt_2", chunk_id="ch_1", runner_id="r_b", workspace_id="w", created_at=_NOW, seq=3
+            )
+        )
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:one-live-route-per-chunk" not in slugs
+
+
 def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:

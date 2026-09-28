@@ -14,6 +14,7 @@ from blizzard.hub.store.internal.chunk_delivery_store import ChunkDeliveryStore
 from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
 from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
+from blizzard.hub.store.internal.chunk_exclusive_store import ChunkExclusiveWrites
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
 from blizzard.hub.store.internal.chunk_lifecycle_store import ChunkLifecycleStore
@@ -24,16 +25,21 @@ from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 
 
 def build_chunk_stores(store: HubStoreConnections, clock: IClock) -> ChunkStores:
     """All chunk-seam adapters over one connection seam and clock. ``facts`` is built
-    first since ``record``/``work_refs``/``escalations`` each hold it as their own read
-    collaborator."""
+    first since ``record``/``work_refs``/``escalations``/``exclusive`` each hold it as
+    their own read collaborator; ``exclusive`` holds its own private ``RunnerRegistryStore``
+    — a second, harmless instance over the same connection seam, not the composition
+    root's shared one."""
     facts = ChunkFactsStore(store, clock)
+    record = ChunkRecordStore(store, clock)
+    dependencies = ChunkDependenciesStore(store, clock)
     return ChunkStores(
         facts=facts,
-        record=ChunkRecordStore(store, clock),
+        record=record,
         lifecycle=ChunkLifecycleStore(store, clock),
         work_refs=ChunkWorkRefsStore(store, clock, facts=facts),
         queue=ChunkQueueStore(store, clock),
@@ -47,5 +53,12 @@ def build_chunk_stores(store: HubStoreConnections, clock: IClock) -> ChunkStores
         usage=ChunkUsageStore(store, clock),
         delivery=ChunkDeliveryStore(store, clock),
         hub_exec=ChunkHubExecStore(store, clock),
-        dependencies=ChunkDependenciesStore(store, clock),
+        dependencies=dependencies,
+        exclusive=ChunkExclusiveWrites(
+            store,
+            facts=facts,
+            record=record,
+            dependencies=dependencies,
+            registry=RunnerRegistryStore(store),
+        ),
     )

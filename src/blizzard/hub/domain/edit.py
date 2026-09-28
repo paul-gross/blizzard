@@ -7,16 +7,16 @@ check-then-act over "does this chunk have a live route", so they share one lock 
 
 from __future__ import annotations
 
-import threading
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Final
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
-from blizzard.hub.domain.work import Chunk, ChunkFacts, IntendedMigration, MigrationMode
+from blizzard.hub.domain.work import Chunk, IntendedMigration, MigrationMode
 
 
 class UnsetType(Enum):
@@ -116,16 +116,15 @@ class EditService:
     def __init__(
         self,
         *,
-        facts: IReadChunkFactsRepository,
         record: IWriteChunkRecordRepository,
         graphs: IReadGraphRepository,
-        claim_lock: threading.Lock,
+        exclusive: IChunkExclusiveWrites,
     ) -> None:
-        self._facts = facts
         self._record = record
         self._graphs = graphs
-        # The same lock ClaimService serializes its claim CAS with.
-        self._claim_lock = claim_lock
+        # The locked-transaction seam (``bzh:store-exclusive-write``) ClaimService's own
+        # CAS shares — the same row lock, never an in-process lock.
+        self._exclusive = exclusive
 
     def set_graph(self, chunk: Chunk, *, graph: Graph) -> None:
         """Repin the chunk to ``graph`` — a thin wrapper over :meth:`edit`."""
@@ -160,8 +159,9 @@ class EditService:
     ) -> None:
         """Apply every field ``edit`` supplies, all-or-nothing.
 
-        Under the shared claim lock, every supplied field is validated before anything is
-        written, so a refusal writes nothing; each target graph is checked separately —
+        Under the shared row lock (``bzh:store-exclusive-write``), every supplied field is
+        validated before anything is written, so a refusal writes nothing; each target
+        graph is checked separately —
         tests/test_edit_service.py::test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target"""
         graph_id = edit.graph_id
         default_model = edit.default_model
@@ -169,9 +169,20 @@ class EditService:
         default_harnesses = edit.default_harnesses
         intended_migration = edit.intended_migration
 
-        with self._claim_lock:
-            facts = self._facts.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            # A `None` load means gone under this lock — refuse rather than substitute a
+            # synthetic status, mirroring `DeleteService.delete`/`DependencyService.declare`.
+            facts = handle.facts(chunk.chunk_id)
+            if facts is None:
+                raise ChunkNotFound(chunk.chunk_id)
             status = facts.status()
+            # Re-read fresh under the lock: a concurrent edit landing between the
+            # caller's own load and this lock must not have its write silently lost by
+            # the trio's carry-forward below, nor the pin check answered against a
+            # ``graph_id`` that edit already changed.
+            current = handle.record(chunk.chunk_id)
+            if current is None:
+                raise ChunkNotFound(chunk.chunk_id)
 
             if graph_id is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "graph_id")
@@ -192,23 +203,27 @@ class EditService:
             if intended_migration is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "intended_migration")
                 if intended_migration is not None:
-                    self._require_valid_migration_target(chunk, intended_migration, migration_target)
+                    self._require_valid_migration_target(current, intended_migration, migration_target)
 
             if graph_id is not UNSET:
-                self._record.set_graph(chunk.chunk_id, graph_id=graph_id)
+                self._record.set_graph_locked(handle, chunk.chunk_id, graph_id=graph_id)
             if default_model is not UNSET or default_effort is not UNSET or default_harnesses is not UNSET:
                 # One write for the trio, so an edit naming only one of them must carry
-                # the chunk's current value for the other two rather than clearing them.
-                self._record.set_defaults(
+                # the chunk's current value for the other two rather than clearing them
+                # — ``current``, re-read under the lock, not the caller's possibly-stale
+                # ``chunk``, so a concurrent single-field edit's own write is never
+                # overwritten back to what it looked like before that edit landed.
+                self._record.set_defaults_locked(
+                    handle,
                     chunk.chunk_id,
-                    default_model=list(chunk.default_model) if default_model is UNSET else default_model,
-                    default_effort=chunk.default_effort if default_effort is UNSET else default_effort,
-                    default_harnesses=list(chunk.default_harnesses)
+                    default_model=list(current.default_model) if default_model is UNSET else default_model,
+                    default_effort=current.default_effort if default_effort is UNSET else default_effort,
+                    default_harnesses=list(current.default_harnesses)
                     if default_harnesses is UNSET
                     else default_harnesses,
                 )
             if intended_migration is not UNSET:
-                self._record.set_intended_migration(chunk.chunk_id, intended=intended_migration)
+                self._record.set_intended_migration_locked(handle, chunk.chunk_id, intended=intended_migration)
 
     def _require_valid_migration_target(
         self, chunk: Chunk, intended: IntendedMigration, target_graph: Graph | None

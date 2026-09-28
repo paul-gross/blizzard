@@ -66,13 +66,13 @@ to say, §The neighborhood.
 
 A standing, unsatisfied dependency denies a claim on its dependent outright: `POST /api/fleet/routes` answers `409` with
 the marking's own body shape — `chunk_id` and `prerequisite_chunk_id`, distinct from the conflict, terminal, and
-incompatibility `409`s a claim can otherwise answer with — re-derived fresh under the claim lock rather than trusted
-from an earlier read, so a peek-then-claim race can never slip a blocked chunk through. A runner whose registered
-capabilities can no longer run every statically reachable node from the chunk's current position is denied the same way,
-with its own `409` naming `chunk_id` and `incompatible_runner_id` in place of the marking's `prerequisite_chunk_id` —
-re-derived fresh under the same lock, for the same reason: a capability change landing between a runner's peek and its
-claim is denied rather than raced. A registration carrying no capabilities at all is never checked against this denial,
-so a runner that has never asserted any never meets it.
+incompatibility `409`s a claim can otherwise answer with — re-derived fresh under the row lock the claim's whole
+check-then-act runs inside, rather than trusted from an earlier read, so a peek-then-claim race can never slip a blocked
+chunk through. A runner whose registered capabilities can no longer run every statically reachable node from the chunk's
+current position is denied the same way, with its own `409` naming `chunk_id` and `incompatible_runner_id` in place of
+the marking's `prerequisite_chunk_id` — re-derived fresh under the same row lock, for the same reason: a capability
+change landing between a runner's peek and its claim is denied rather than raced. A registration carrying no
+capabilities at all is never checked against this denial, so a runner that has never asserted any never meets it.
 
 A runner's own FILL step does not have to run into that denial to make progress. The legacy `GET /api/fleet/queue/peek`
 carries the marking on every entry it returns, and a runner filling from that unfiltered order reaches past a marked

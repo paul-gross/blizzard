@@ -522,6 +522,41 @@ class RouteSeqUnique(QueryCheck):
         return violations
 
 
+class OneLiveRoutePerChunk(QueryCheck):
+    """At most one live route per chunk — walking each chunk's ``route_created``/
+    ``route_released`` facts in ``(timestamp, seq)`` order (:class:`RouteHistory`'s own
+    tie-break), no ``route_created`` follows another with no ``route_released`` between.
+    ``bzh:store-exclusive-write``'s row lock is what keeps this true on Postgres."""
+
+    def run(self) -> list[Violation]:
+        events: dict[str, list[tuple[datetime, int, str]]] = {}
+        for row in self.conn.execute(
+            select(hub.route_created.c.chunk_id, hub.route_created.c.created_at, hub.route_created.c.seq)
+        ):
+            events.setdefault(row.chunk_id, []).append((row.created_at, row.seq, "created"))
+        for row in self.conn.execute(
+            select(hub.route_released.c.chunk_id, hub.route_released.c.released_at, hub.route_released.c.seq)
+        ):
+            events.setdefault(row.chunk_id, []).append((row.released_at, row.seq, "released"))
+        violations: list[Violation] = []
+        for chunk_id, chunk_events in events.items():
+            chunk_events.sort(key=lambda e: (e[0], e[1]))
+            live = False
+            for _, _, kind in chunk_events:
+                if kind == "created":
+                    if live:
+                        violations.append(
+                            Violation(
+                                "hub:one-live-route-per-chunk",
+                                f"chunk {chunk_id} has a route_created fact with no route_released before the next",
+                            )
+                        )
+                    live = True
+                else:
+                    live = False
+        return violations
+
+
 class PerRepoLandIdempotent(QueryCheck):
     """A redelivery skips already-landed repos, so a second landed fact is a double land."""
 
@@ -981,8 +1016,9 @@ class NoDuplicateStandingDependency(QueryCheck):
 class NoStandingDependencyOntoEphemeralChunk(QueryCheck):
     """A standing (unreleased) edge whose dependent or prerequisite is ephemeral (grouped away or deleted) — its FK
     still resolves, so the engine enforces nothing here. Design upholds this by construction now that
-    ``DeleteService`` and ``GroupService`` both share the claim lock; this check is the backstop that would catch a
-    regression, not a guard against a known-live gap."""
+    ``DeleteService`` and ``GroupService`` both hold their own row lock over the chunks they touch and share the
+    residual fleet-wide cycle lock; this check is the backstop that would catch a regression, not a guard against a
+    known-live gap."""
 
     def run(self) -> list[Violation]:
         ephemeral = {row[0] for row in self.conn.execute(select(hub.chunk_grouped.c.chunk_id))} | {
@@ -1022,6 +1058,7 @@ class HubInvariants:
                 OneTransitionPerNodeEpoch(conn),
                 EpochConsistentTransitions(conn),
                 RouteSeqUnique(conn),
+                OneLiveRoutePerChunk(conn),
                 PerRepoLandIdempotent(conn),
                 PerRepoMarkerIdempotent(conn),
                 PrOpenedIdempotent(conn),

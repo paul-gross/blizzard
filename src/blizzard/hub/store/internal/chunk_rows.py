@@ -14,9 +14,11 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol, cast
 
 from sqlalchemy import Connection, func, insert, select
 
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import (
@@ -269,7 +271,7 @@ def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # t
 def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
     """:meth:`~blizzard.hub.store.internal.chunk_route_store.ChunkRouteStore.route_of`'s
     query body, taking an already-open ``conn`` so a write transaction elsewhere (the
-    lifecycle adapter's own ``record_stop``/``record_completion``) can resolve the same
+    lifecycle adapter's own ``record_stop_locked``/``record_completion_locked``) can resolve the same
     question inside its own commit. Delegates the tie-break to
     :attr:`~blizzard.hub.domain.work.RouteHistory.newest`, so route liveness has exactly
     one answer at a same-instant tie."""
@@ -308,13 +310,41 @@ def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
     )
 
 
+def lock_chunk_row(conn: Connection, chunk_id: str) -> None:
+    """Take the chunk row's write lock, as the transaction's FIRST statement — a no-op
+    ``UPDATE`` on a row the caller already knows exists (``bzh:sql-portable``,
+    ``bzh:store-exclusive-write``; ``tests/test_route_seq_concurrency.py``). Takes
+    SQLite's single writer lock before any later read; on Postgres, queues a concurrent
+    locker of the same row. Every guard read a decision rests on must follow this call."""
+    conn.execute(s.chunks.update().where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
+
+
+class _LockedConnection(Protocol):
+    """The write token every ``*_locked`` store method needs — the real capability
+    :class:`ILockedChunkRead` deliberately does not expose to the domain layer, so a fake
+    handle satisfying that Protocol structurally still cannot satisfy this one too."""
+
+    conn: Connection
+
+
+def conn_of(handle: ILockedChunkRead) -> Connection:
+    """A ``*_locked`` write method's own recovery of the real connection behind a
+    domain-held :class:`ILockedChunkRead` handle — package-private; the domain layer
+    never imports this, and this module never imports the handle's concrete class back,
+    so the two sides stay acyclic. The one narrowly-typed cast this recovery needs: any
+    real handle a locked write method receives is a store-built
+    :class:`~blizzard.hub.store.internal.chunk_exclusive_store.LockedChunkTransaction`,
+    which satisfies :class:`_LockedConnection`; only a test fake missing ``conn``
+    entirely would fail it, and only at the point it is actually used."""
+    return cast(_LockedConnection, handle).conn
+
+
 def next_route_seq(conn: Connection, chunk_id: str) -> int:
     """One past the current max ``seq`` across ``route_created``, ``route_released``
     and ``route_token_minted`` for this chunk, so the triple is totally ordered even
-    when timestamps tie. Read-then-insert, so concurrent callers are serialized by a
-    no-op ``UPDATE`` on the chunk's own row — one portable write-lock statement for
-    both dialects (``bzh:sql-portable``; ``tests/test_route_seq_concurrency.py``)."""
-    conn.execute(s.chunks.update().where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
+    when timestamps tie. Read-then-insert, so concurrent callers are serialized by
+    :func:`lock_chunk_row` (``bzh:sql-portable``; ``tests/test_route_seq_concurrency.py``)."""
+    lock_chunk_row(conn, chunk_id)
     created_max = conn.execute(
         select(func.max(s.route_created.c.seq)).where(s.route_created.c.chunk_id == chunk_id)
     ).scalar()
@@ -358,7 +388,7 @@ def chunk_is_terminal(conn: Connection, chunk_id: str) -> bool:
     """Whether the chunk carries a terminal fact — ``chunk_stopped`` or
     ``chunk_completed`` — read on the caller's connection so this sits inside the same
     transaction as the write it fences. Terminal rejects every later state-advancing
-    write regardless of epoch (``bzh:epoch-fencing``): ``record_stop`` mints no epoch,
+    write regardless of epoch (``bzh:epoch-fencing``): ``record_stop_locked`` mints no epoch,
     so the epoch guard alone cannot catch a write arriving after a stop."""
     return row_exists(conn, s.chunk_stopped, chunk_id) or row_exists(conn, s.chunk_completed, chunk_id)
 

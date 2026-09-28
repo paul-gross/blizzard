@@ -14,13 +14,14 @@ from sqlalchemy import select
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository, resolve_live_holders
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
-from blizzard.hub.store.internal.chunk_rows import ephemeral_ids
+from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids
 
 
 class ChunkWorkRefsStore:
@@ -89,24 +90,27 @@ class ChunkWorkRefsStore:
         statuses = {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
         return resolve_live_holders(pairs, statuses)
 
-    def add_work_refs(self, chunk_id: str, pointers: list[WorkRef], *, at: datetime) -> None:
-        """Fold pointers into the survivor of a group, de-duped by (source, ref)."""
-        with self._store.write("add_work_refs") as conn:
-            existing = {
-                (p.source, p.ref)
-                for p in conn.execute(
-                    select(s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(
-                        s.chunk_work_refs.c.chunk_id == chunk_id
-                    )
-                ).all()
-            }
-            for pointer in pointers:
-                if (pointer.source, pointer.ref) in existing:
-                    continue
-                conn.execute(
-                    s.chunk_work_refs.insert().values(chunk_id=chunk_id, source=pointer.source, ref=pointer.ref)
+    def add_work_refs_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, pointers: list[WorkRef], *, at: datetime
+    ) -> None:
+        """Fold pointers into a group survivor, de-duped by (source, ref) (``bzh:store-exclusive-write``) —
+        the group fold's own write, on ``handle``'s already-locked connection."""
+        self._add_work_refs_conn(conn_of(handle), chunk_id, pointers)
+
+    def _add_work_refs_conn(self, conn, chunk_id: str, pointers: list[WorkRef]) -> None:  # type: ignore[no-untyped-def]
+        existing = {
+            (p.source, p.ref)
+            for p in conn.execute(
+                select(s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(
+                    s.chunk_work_refs.c.chunk_id == chunk_id
                 )
-                existing.add((pointer.source, pointer.ref))
+            ).all()
+        }
+        for pointer in pointers:
+            if (pointer.source, pointer.ref) in existing:
+                continue
+            conn.execute(s.chunk_work_refs.insert().values(chunk_id=chunk_id, source=pointer.source, ref=pointer.ref))
+            existing.add((pointer.source, pointer.ref))
 
 
 def _conforms_work_refs(x: ChunkWorkRefsStore) -> IWriteChunkWorkRefsRepository:

@@ -60,7 +60,7 @@ def _seed_node(conn: sa.Connection, graph_id: str, node_id: str, *, executor: st
     )
 
 
-def _store(tmp_path: Path) -> tuple[ChunkStores, Engine]:
+def _store(tmp_path: Path) -> tuple[ChunkStores, Engine, FixedClock]:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
@@ -69,14 +69,15 @@ def _store(tmp_path: Path) -> tuple[ChunkStores, Engine]:
         _seed_node(conn, "gr_1", "nd_g1_hub", executor="hub")
         _seed_node(conn, "gr_2", "nd_g2_runner", executor="runner")
         _seed_node(conn, "gr_2", "nd_g2_hub", executor="hub")
-    return chunk_stores(engine, FixedClock(_T0)), engine
+    clock = FixedClock(_T0)
+    return chunk_stores(engine, clock), engine, clock
 
 
 def _mint(store: ChunkStores, chunk_id: str, *, graph_id: str = "gr_1") -> None:
     store.record.mint(Chunk(chunk_id=chunk_id, graph_id=graph_id, work_refs=[], minted_at=_T0))
 
 
-def _seed_fixture(store: ChunkStores, engine: Engine) -> None:
+def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     """One chunk per derived status, plus the AC4 edge shapes and a kitchen-sink chunk
     touching every other fact family ``load_facts`` reads."""
     _mint(store, "ch_not_ready")  # a chunks-only row (AC4): derives NOT_READY
@@ -86,11 +87,13 @@ def _seed_fixture(store: ChunkStores, engine: Engine) -> None:
 
     _mint(store, "ch_running")
     store.queue.record_promote("ch_running", at=_T0)
-    store.route.record_route(
-        Route(chunk_id="ch_running", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=_T0),
-        token_hash="th_running",
-        at=_T0,
-    )
+    with store.exclusive.locked(["ch_running"]) as handle:
+        store.route.record_route_locked(
+            handle,
+            Route(chunk_id="ch_running", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=_T0),
+            token_hash="th_running",
+            at=_T0,
+        )
 
     _mint(store, "ch_delivering")
     store.queue.record_promote("ch_delivering", at=_T0)
@@ -135,16 +138,22 @@ def _seed_fixture(store: ChunkStores, engine: Engine) -> None:
 
     _mint(store, "ch_stopped")
     store.queue.record_promote("ch_stopped", at=_T0)
-    store.route.record_route(
-        Route(chunk_id="ch_stopped", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=_T0),
-        token_hash="th_stopped",
-        at=_T0,
-    )
-    store.lifecycle.record_stop("ch_stopped", by="op", at=_at(1))
+    with store.exclusive.locked(["ch_stopped"]) as handle:
+        store.route.record_route_locked(
+            handle,
+            Route(chunk_id="ch_stopped", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=_T0),
+            token_hash="th_stopped",
+            at=_T0,
+        )
+    clock.instant = _at(1)
+    with store.exclusive.locked(["ch_stopped"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_stopped", by="op")
 
     _mint(store, "ch_done_completed")
     store.queue.record_promote("ch_done_completed", at=_T0)
-    store.lifecycle.record_completion("ch_done_completed", by="op", at=_T0)
+    clock.instant = _T0
+    with store.exclusive.locked(["ch_done_completed"]) as handle:
+        store.lifecycle.record_completion_locked(handle, "ch_done_completed", by="op")
 
     _mint(store, "ch_done_terminal")
     store.queue.record_promote("ch_done_terminal", at=_T0)
@@ -208,14 +217,19 @@ def _seed_fixture(store: ChunkStores, engine: Engine) -> None:
     _mint(store, "ch_kitchen_sink")
     store.queue.record_promote("ch_kitchen_sink", at=_T0)
     store.route.record_lease("ch_kitchen_sink", epoch=1, runner_id="r", at=_T0)
-    store.route.record_route(
-        Route(chunk_id="ch_kitchen_sink", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=_T0),
-        token_hash="th_ks_1",
-        at=_T0,
-    )
+    with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
+        store.route.record_route_locked(
+            handle,
+            Route(
+                chunk_id="ch_kitchen_sink", runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=_T0
+            ),
+            token_hash="th_ks_1",
+            at=_T0,
+        )
     store.route.record_route_token("ch_kitchen_sink", token_hash="th_ks_2", at=_at(1))
-    store.route.record_route_released("ch_kitchen_sink", at=_at(2))
-    store.movement.record_requeue("ch_kitchen_sink", at=_at(2))
+    with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
+        store.route.record_route_released_locked(handle, "ch_kitchen_sink", at=_at(2))
+        store.movement.record_requeue_locked(handle, "ch_kitchen_sink", at=_at(2))
     store.usage.record_usage(
         "ch_kitchen_sink",
         node_id="nd_g1_runner",
@@ -246,9 +260,10 @@ def _seed_fixture(store: ChunkStores, engine: Engine) -> None:
         proposals=[],
     )
     store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_at(1))
-    store.movement.record_restart(
-        "ch_kitchen_sink", from_node_id="nd_g1_runner", to_node_id="nd_g1_runner", by="op", at=_at(3)
-    )
+    with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
+        store.movement.record_restart_locked(
+            handle, "ch_kitchen_sink", from_node_id="nd_g1_runner", to_node_id="nd_g1_runner", by="op", at=_at(3)
+        )
     with engine.begin() as conn:
         conn.execute(
             insert(s.delivery_pr_opened).values(
@@ -279,8 +294,8 @@ _LIVE_CHUNK_IDS = [
 
 
 def test_bulk_read_status_matches_per_chunk_load_facts_across_every_derived_status(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     bulk = store.facts.load_all_facts()
 
@@ -295,8 +310,8 @@ def test_bulk_read_status_matches_per_chunk_load_facts_across_every_derived_stat
 
 
 def test_bulk_read_bucket_counts_match_the_per_chunk_fold(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     via_bulk = FleetSummary.of(facts.status() for facts in store.facts.load_all_facts().values())
     # The pre-#374 shape ``FleetPulse.view()`` used, called out here as the equivalence
@@ -314,8 +329,8 @@ def test_bulk_read_bucket_counts_match_the_per_chunk_fold(tmp_path: Path) -> Non
 
 
 def test_bulk_read_excludes_the_chunks_only_chunk_from_every_bucket(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     summary = FleetSummary.of(facts.status() for facts in store.facts.load_all_facts().values())
 
@@ -326,8 +341,8 @@ def test_bulk_read_excludes_the_chunks_only_chunk_from_every_bucket(tmp_path: Pa
 def test_bulk_read_resolves_a_migrated_landing_node_against_its_own_graph(tmp_path: Path) -> None:
     """The multigraph chunk's landing node (``nd_g2_hub``) lives only in ``gr_2`` — a
     global, ungraphed executor lookup would silently default it to RUNNER."""
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     bulk = store.facts.load_all_facts()
 
@@ -340,8 +355,8 @@ def test_bulk_read_resolves_a_migrated_landing_node_against_its_own_graph(tmp_pa
 
 
 def test_ephemeral_ids_evaluated_at_most_once_per_bulk_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     calls = {"n": 0}
     original = chunk_rows_module.ephemeral_ids
@@ -362,11 +377,11 @@ def test_ephemeral_ids_evaluated_at_most_once_per_bulk_read(tmp_path: Path, monk
 def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
-    small, small_engine = _store(tmp_path / "small")
+    small, small_engine, _small_clock = _store(tmp_path / "small")
     small.record.mint(Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=_T0))
     small.queue.record_promote("ch_a", at=_T0)
 
-    large, large_engine = _store(tmp_path / "large")
+    large, large_engine, _large_clock = _store(tmp_path / "large")
     for i in range(40):
         large.record.mint(Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=_T0))
         large.queue.record_promote(f"ch_{i}", at=_T0)
@@ -419,8 +434,8 @@ def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(
 
 
 def test_load_facts_for_matches_per_id_load_facts(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     result = store.facts.load_facts_for(_LIVE_CHUNK_IDS)
 
@@ -430,8 +445,8 @@ def test_load_facts_for_matches_per_id_load_facts(tmp_path: Path) -> None:
 
 
 def test_load_facts_for_drops_ephemeral_and_unknown_ids(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     result = store.facts.load_facts_for(["ch_ready", "ch_grouped", "ch_deleted", "ch_never_minted"])
 
@@ -439,15 +454,15 @@ def test_load_facts_for_drops_ephemeral_and_unknown_ids(tmp_path: Path) -> None:
 
 
 def test_load_facts_for_of_no_ids_is_empty(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     assert store.facts.load_facts_for([]) == {}
 
 
 def test_load_all_statuses_matches_load_all_facts_status_across_every_derived_status(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     statuses = store.facts.load_all_statuses()
     bulk = store.facts.load_all_facts()
@@ -504,11 +519,11 @@ def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> Non
 def test_load_all_statuses_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
-    small, small_engine = _store(tmp_path / "small")
+    small, small_engine, _small_clock = _store(tmp_path / "small")
     small.record.mint(Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=_T0))
     small.queue.record_promote("ch_a", at=_T0)
 
-    large, large_engine = _store(tmp_path / "large")
+    large, large_engine, _large_clock = _store(tmp_path / "large")
     for i in range(40):
         large.record.mint(Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=_T0))
         large.queue.record_promote(f"ch_{i}", at=_T0)
@@ -521,8 +536,8 @@ def test_load_all_statuses_query_count_is_independent_of_fleet_size(tmp_path: Pa
 
 
 def test_load_all_statuses_reads_fewer_statements_than_load_all_facts(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _seed_fixture(store, engine)
+    store, engine, clock = _store(tmp_path)
+    _seed_fixture(store, engine, clock)
 
     statuses_count = count_queries(engine, store.facts.load_all_statuses)
     all_facts_count = count_queries(engine, store.facts.load_all_facts)
@@ -556,7 +571,7 @@ def test_load_facts_for_query_count_scales_with_batch_count_not_id_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
-    store, engine = _store(tmp_path)
+    store, engine, _clock = _store(tmp_path)
     ids = [f"ch_batch_{i}" for i in range(7)]  # 3 batches of size 3, 3, 1 under the lowered cap
     for chunk_id in ids:
         _seed_promoted_with_open_decision(store, chunk_id)

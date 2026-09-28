@@ -8,6 +8,8 @@ calls are meaningfully implemented; every other seam raises loudly if called. Mi
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -16,8 +18,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotGroupable, FoldWouldCloseCycle, GroupService
 from blizzard.hub.domain.work import Chunk, ChunkFacts, DependencyEdge, RouteCreatedFact, WorkRef
@@ -51,11 +52,13 @@ def _running_facts() -> ChunkFacts:
 
 @dataclass
 class _FakeWorkRefsRepo:
-    """Only ``add_work_refs`` is live — see module docstring."""
+    """Only ``add_work_refs_locked`` is live — see module docstring."""
 
     added: list[tuple[str, list[WorkRef]]] = field(default_factory=list)
 
-    def add_work_refs(self, chunk_id: str, pointers: list[WorkRef], *, at: datetime) -> None:
+    def add_work_refs_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, pointers: list[WorkRef], *, at: datetime
+    ) -> None:
         self.added.append((chunk_id, pointers))
 
     def __getattr__(self, name: str) -> Any:
@@ -64,7 +67,7 @@ class _FakeWorkRefsRepo:
 
 @dataclass
 class _FakeDependenciesRepo:
-    """Only ``list_standing_edges``/``record_fold`` are live — see module docstring."""
+    """Only ``list_standing_edges``/``record_fold_locked`` are live — see module docstring."""
 
     edges: list[DependencyEdge] = field(default_factory=list)
     folds: list[dict[str, Any]] = field(default_factory=list)
@@ -74,8 +77,9 @@ class _FakeDependenciesRepo:
     def list_standing_edges(self) -> list[DependencyEdge]:
         return self.edges
 
-    def record_fold(
+    def record_fold_locked(
         self,
+        handle: ILockedChunkRead,
         targets: list[FoldTarget],
         *,
         grouped_into: str,
@@ -129,6 +133,41 @@ class _FakeFactsRepo:
         raise NotImplementedError(f"GroupService should not touch facts.{name!r}")
 
 
+@dataclass
+class _FakeLockedChunkRead:
+    """Only ``record``/``facts``/``standing_edges`` are live — see module docstring."""
+
+    record_repo: _FakeRecordRepo
+    facts_repo: _FakeFactsRepo
+    dependencies_repo: _FakeDependenciesRepo
+
+    def record(self, chunk_id: str) -> Chunk | None:
+        return self.record_repo.get(chunk_id)
+
+    def facts(self, chunk_id: str) -> ChunkFacts | None:
+        return self.facts_repo.load_facts(chunk_id)
+
+    def standing_edges(self) -> list[DependencyEdge]:
+        return self.dependencies_repo.list_standing_edges()
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"GroupService should not touch handle.{name!r}")
+
+
+@dataclass
+class _FakeExclusiveWrites:
+    """``locked`` yields a :class:`_FakeLockedChunkRead` over the same fakes the
+    ``GroupService`` under test was built with."""
+
+    record_repo: _FakeRecordRepo
+    facts_repo: _FakeFactsRepo
+    dependencies_repo: _FakeDependenciesRepo
+
+    @contextmanager
+    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.record_repo, self.facts_repo, self.dependencies_repo))
+
+
 def _service(
     chunks: dict[str, Chunk],
     facts: dict[str, ChunkFacts],
@@ -138,13 +177,15 @@ def _service(
 ) -> tuple[GroupService, _FakeWorkRefsRepo, _FakeDependenciesRepo]:
     work_refs = _FakeWorkRefsRepo()
     dependencies = _FakeDependenciesRepo(edges=list(edges or []))
+    record_repo = _FakeRecordRepo(chunks=chunks)
+    facts_repo = _FakeFactsRepo(facts=facts)
+    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(record_repo, facts_repo, dependencies))
     service = GroupService(
         work_refs=cast(IWriteChunkWorkRefsRepository, work_refs),
         dependencies=cast(IWriteChunkDependenciesRepository, dependencies),
-        record=cast(IReadChunkRecordRepository, _FakeRecordRepo(chunks=chunks)),
-        facts=cast(IReadChunkFactsRepository, _FakeFactsRepo(facts=facts)),
+        exclusive=exclusive,
         clock=clock or FixedClock(instant=_T0),
-        claim_lock=threading.Lock(),
+        cycle_lock=threading.Lock(),
     )
     return service, work_refs, dependencies
 

@@ -14,10 +14,11 @@ from sqlalchemy import Connection, select, update
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import DEPENDENCY_EDGE_PREFIX, Id
 from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.work import DependencyEdge
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
+from blizzard.hub.store.internal.chunk_rows import conn_of, record_grouped_row_conn
 
 
 class ChunkDependenciesStore:
@@ -29,12 +30,18 @@ class ChunkDependenciesStore:
 
     def list_standing_edges(self) -> list[DependencyEdge]:
         with self._store.read("list_standing_edges") as conn:
-            rows = conn.execute(
-                select(s.chunk_dependencies)
-                .where(s.chunk_dependencies.c.released_at.is_(None))
-                # (declared_at, dependency_id) — an explicit total order (`bzh:sql-portable`).
-                .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
-            ).all()
+            return self.list_standing_edges_conn(conn)
+
+    def list_standing_edges_conn(self, conn: Connection) -> list[DependencyEdge]:
+        """`list_standing_edges`'s already-open-connection sibling — the
+        locked-transaction seam's own read (``bzh:store-exclusive-write``), resolved on
+        the caller's connection rather than a fresh one."""
+        rows = conn.execute(
+            select(s.chunk_dependencies)
+            .where(s.chunk_dependencies.c.released_at.is_(None))
+            # (declared_at, dependency_id) — an explicit total order (`bzh:sql-portable`).
+            .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
+        ).all()
         return [_edge(row) for row in rows]
 
     def standing_edge(self, dependent_chunk_id: str, prerequisite_chunk_id: str) -> DependencyEdge | None:
@@ -58,23 +65,28 @@ class ChunkDependenciesStore:
             ).all()
         return [_edge(row) for row in rows]
 
-    def declare(self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime) -> DependencyEdge:
-        """Mint a fresh standing edge — always a new row, never a revive of a released
-        one; see
-        :meth:`~blizzard.hub.domain.chunks.dependencies.IWriteChunkDependenciesRepository.declare`."""
+    def declare_locked(
+        self, handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+    ) -> DependencyEdge:
+        """Mint a fresh standing edge (``bzh:store-exclusive-write``) — the
+        dependency declare's own write, on ``handle``'s already-locked connection."""
+        return self._declare_conn(conn_of(handle), dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+
+    def _declare_conn(  # type: ignore[no-untyped-def]
+        self, conn, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+    ) -> DependencyEdge:
         dependency_id = Id.mint_at(DEPENDENCY_EDGE_PREFIX, at).value
-        with self._store.write("declare") as conn:
-            conn.execute(
-                s.chunk_dependencies.insert().values(
-                    dependency_id=dependency_id,
-                    dependent_chunk_id=dependent_chunk_id,
-                    prerequisite_chunk_id=prerequisite_chunk_id,
-                    declared_at=at,
-                    declared_by=by,
-                    released_at=None,
-                    released_by=None,
-                )
+        conn.execute(
+            s.chunk_dependencies.insert().values(
+                dependency_id=dependency_id,
+                dependent_chunk_id=dependent_chunk_id,
+                prerequisite_chunk_id=prerequisite_chunk_id,
+                declared_at=at,
+                declared_by=by,
+                released_at=None,
+                released_by=None,
             )
+        )
         return DependencyEdge(
             dependency_id=dependency_id,
             dependent_chunk_id=dependent_chunk_id,
@@ -108,43 +120,40 @@ class ChunkDependenciesStore:
             released_by=by,
         )
 
-    def record_fold(
-        self,
-        targets: list[FoldTarget],
-        *,
-        grouped_into: str,
-        by: str,
-        at: datetime,
+    def record_fold_locked(
+        self, handle: ILockedChunkRead, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
     ) -> dict[str, int]:
-        """Record every target's ``chunk.grouped`` row and rewrite its own release/mint
-        edges, all targets in one transaction so no target's row can
-        commit ahead of another's. ``mint`` never revives a released row, always a fresh
-        insert. Returns each target chunk id's freshly-inserted ``chunk_grouped.id``."""
+        """Record the group fold's edges and ``chunk.grouped`` rows (``bzh:store-exclusive-write``) —
+        the group fold's own write, on ``handle``'s already-locked connection."""
+        return self._record_fold_conn(conn_of(handle), targets, grouped_into=grouped_into, by=by, at=at)
+
+    def _record_fold_conn(  # type: ignore[no-untyped-def]
+        self, conn, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
+    ) -> dict[str, int]:
         grouped_ids: dict[str, int] = {}
-        with self._store.write("record_fold") as conn:
-            for target in targets:
-                grouped_ids[target.chunk_id] = record_grouped_row_conn(
-                    conn, target.chunk_id, grouped_into=grouped_into, at=at
+        for target in targets:
+            grouped_ids[target.chunk_id] = record_grouped_row_conn(
+                conn, target.chunk_id, grouped_into=grouped_into, at=at
+            )
+            if target.release:
+                conn.execute(
+                    update(s.chunk_dependencies)
+                    .where(s.chunk_dependencies.c.dependency_id.in_(target.release))
+                    .values(released_at=at, released_by=by)
                 )
-                if target.release:
-                    conn.execute(
-                        update(s.chunk_dependencies)
-                        .where(s.chunk_dependencies.c.dependency_id.in_(target.release))
-                        .values(released_at=at, released_by=by)
+            for dependent_chunk_id, prerequisite_chunk_id in target.mint:
+                dependency_id = Id.mint_at(DEPENDENCY_EDGE_PREFIX, at).value
+                conn.execute(
+                    s.chunk_dependencies.insert().values(
+                        dependency_id=dependency_id,
+                        dependent_chunk_id=dependent_chunk_id,
+                        prerequisite_chunk_id=prerequisite_chunk_id,
+                        declared_at=at,
+                        declared_by=by,
+                        released_at=None,
+                        released_by=None,
                     )
-                for dependent_chunk_id, prerequisite_chunk_id in target.mint:
-                    dependency_id = Id.mint_at(DEPENDENCY_EDGE_PREFIX, at).value
-                    conn.execute(
-                        s.chunk_dependencies.insert().values(
-                            dependency_id=dependency_id,
-                            dependent_chunk_id=dependent_chunk_id,
-                            prerequisite_chunk_id=prerequisite_chunk_id,
-                            declared_at=at,
-                            declared_by=by,
-                            released_at=None,
-                            released_by=None,
-                        )
-                    )
+                )
         return grouped_ids
 
 

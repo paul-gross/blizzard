@@ -8,8 +8,9 @@ live. Terminal and one-way: an already done or stopped chunk is refused."""
 from __future__ import annotations
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, ChunkFacts
 
 _REFUSED = frozenset({ChunkStatus.DONE, ChunkStatus.STOPPED})
@@ -27,17 +28,27 @@ class ChunkNotStoppable(Exception):
 class StopService:
     """Terminally abandon a chunk and release any route it holds — ``blizzard hub stop``."""
 
-    def __init__(self, *, lifecycle: IWriteChunkLifecycleRepository, clock: IClock) -> None:
+    def __init__(self, *, lifecycle: IWriteChunkLifecycleRepository, exclusive: IChunkExclusiveWrites) -> None:
         self._lifecycle = lifecycle
-        self._clock = clock
+        # The locked-transaction seam (``bzh:store-exclusive-write``): the terminal-status
+        # guard this stop refuses on is re-derived here, under the same row lock the write
+        # lands under, never trusted from a caller's pre-lock snapshot.
+        self._exclusive = exclusive
 
-    def stop(self, chunk: Chunk, *, facts: ChunkFacts, by: str) -> int:
+    def stop(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.stopped`` and release the chunk's live route (and any held hub-exec
-        slot), atomically. Takes the caller's already-loaded ``facts``
-        (``bzh:domain-takes-objects``). Raises :class:`ChunkNotStoppable` for a chunk
-        already done/stopped. Returns the id."""
-        self._require_stoppable(chunk.chunk_id, facts)
-        return self._lifecycle.record_stop(chunk.chunk_id, by=by, at=self._clock.now())
+        slot), atomically. Takes the loaded chunk (``bzh:domain-takes-objects``); the
+        terminal-status guard is re-derived fresh under the row lock
+        (``bzh:store-exclusive-write``), so a concurrent stop or completion cannot race
+        this one past a stale refusal. Raises :class:`ChunkNotStoppable` for a chunk
+        already done/stopped, :class:`ChunkNotFound` for one gone under the lock. Returns
+        the id. ``at`` is the store's own concern — stamped after its row lock, never here."""
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            facts = handle.facts(chunk.chunk_id)
+            if facts is None:
+                raise ChunkNotFound(chunk.chunk_id)
+            self._require_stoppable(chunk.chunk_id, facts)
+            return self._lifecycle.record_stop_locked(handle, chunk.chunk_id, by=by)
 
     def _require_stoppable(self, chunk_id: str, facts: ChunkFacts) -> None:
         status = facts.status()

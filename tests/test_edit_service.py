@@ -6,7 +6,8 @@ component tier (``tests/test_edit_claim_race.py``), not here."""
 
 from __future__ import annotations
 
-import threading
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -15,7 +16,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.edit import (
     UNSET,
@@ -27,6 +28,7 @@ from blizzard.hub.domain.edit import (
     MigrationTargetIsCurrentPin,
     TargetGraphRetired,
 )
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, IReadGraphRepository, Node
 from blizzard.hub.domain.work import (
     Chunk,
@@ -71,41 +73,86 @@ _TARGET_GRAPH_WITH_BUILD = make_graph(
 
 @dataclass
 class _FakeChunkRepo:
-    """Only ``load_facts``/``set_graph``/``set_defaults``/``set_intended_migration`` are
-    live; anything else is a bug. Not typed against its Protocols directly — callers
-    wrap an instance in :func:`_as_facts`/:func:`_as_record` instead."""
+    """Only ``read_facts``/``set_graph_locked``/``set_defaults_locked``/
+    ``set_intended_migration_locked`` are live; anything else is a bug. Not typed
+    against its Protocols directly — callers wrap an instance in
+    :func:`_as_record`/:func:`_as_exclusive` instead."""
 
     facts: ChunkFacts | None
+    #: The locked handle's own ``record`` read — defaults to the chunk under edit itself
+    #: (the ordinary, non-racing case); a test proving the stale-caller-vs-locked-read
+    #: distinction overrides it with a freshly-diverged record. ``None`` means gone under
+    #: the lock, matching a real handle's post-deletion/-fold answer.
+    current: Chunk | None = _CHUNK
     graphs_set: list[tuple[str, str]] = field(default_factory=list)
     defaults_set: list[tuple[str, list[str], str | None, list[str]]] = field(default_factory=list)
     intended_migrations_set: list[tuple[str, IntendedMigration | None]] = field(default_factory=list)
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def read_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts
 
-    def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
+    def read_record(self, chunk_id: str) -> Chunk | None:
+        return self.current
+
+    def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
         self.graphs_set.append((chunk_id, graph_id))
 
-    def set_defaults(
-        self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
+    def set_defaults_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        default_model: list[str],
+        default_effort: str | None,
+        default_harnesses: list[str],
     ) -> None:
         self.defaults_set.append((chunk_id, default_model, default_effort, default_harnesses))
 
-    def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
+    def set_intended_migration_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, intended: IntendedMigration | None
+    ) -> None:
         self.intended_migrations_set.append((chunk_id, intended))
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"EditService should not touch {name!r}")
 
 
-def _as_facts(repo: _FakeChunkRepo) -> IReadChunkFactsRepository:
-    """Assert the fake satisfies the Protocol EditService depends on (see module docstring)."""
-    return cast(IReadChunkFactsRepository, repo)
+@dataclass
+class _FakeLockedChunkRead:
+    """Only ``facts``/``record`` are live — see :class:`_FakeChunkRepo`'s own docstring."""
+
+    repo: _FakeChunkRepo
+
+    def facts(self, chunk_id: str) -> ChunkFacts | None:
+        return self.repo.read_facts(chunk_id)
+
+    def record(self, chunk_id: str) -> Chunk | None:
+        return self.repo.read_record(chunk_id)
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"EditService should not touch handle.{name!r}")
+
+
+@dataclass
+class _FakeExclusiveWrites:
+    """``locked`` yields a :class:`_FakeLockedChunkRead` over the same ``repo`` backing
+    the record write repository."""
+
+    repo: _FakeChunkRepo
+
+    @contextmanager
+    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.repo))
 
 
 def _as_record(repo: _FakeChunkRepo) -> IWriteChunkRecordRepository:
     """Assert the fake satisfies the Protocol EditService depends on (see module docstring)."""
     return cast(IWriteChunkRecordRepository, repo)
+
+
+def _as_exclusive(repo: _FakeChunkRepo) -> IChunkExclusiveWrites:
+    """Assert the fake satisfies the Protocol EditService depends on (see module docstring)."""
+    return cast(IChunkExclusiveWrites, _FakeExclusiveWrites(repo))
 
 
 @dataclass
@@ -127,14 +174,13 @@ def _as_read_graph_repo(repo: _FakeGraphRepo) -> IReadGraphRepository:
 
 
 def _service(repo: _FakeChunkRepo, graphs: _FakeGraphRepo | None = None) -> EditService:
-    """Build an ``EditService`` over ``repo`` with a fresh, single-test claim lock
-    (see module docstring — the shared-lock race is proven at the component tier).
+    """Build an ``EditService`` over ``repo`` with a fresh, single-test row lock (see
+    module docstring — the shared-lock race is proven at the component tier).
     ``graphs`` defaults to a fake reporting no graph retired."""
     return EditService(
-        facts=_as_facts(repo),
         record=_as_record(repo),
         graphs=_as_read_graph_repo(graphs or _FakeGraphRepo()),
-        claim_lock=threading.Lock(),
+        exclusive=_as_exclusive(repo),
     )
 
 
@@ -194,16 +240,6 @@ def test_set_graph_writes_on_a_not_ready_chunk() -> None:
     assert repo.graphs_set == [("chk_1", "gr_2")]
 
 
-def test_set_graph_on_a_chunk_with_no_facts_at_all_is_not_ready_and_writes() -> None:
-    # A freshly minted, un-hydrated chunk (no store row loaded yet) derives not_ready.
-    repo = _FakeChunkRepo(facts=None)
-    service = _service(repo)
-
-    service.set_graph(_CHUNK, graph=_TARGET_GRAPH)
-
-    assert repo.graphs_set == [("chk_1", "gr_2")]
-
-
 def test_set_defaults_writes_on_a_not_ready_chunk() -> None:
     repo = _FakeChunkRepo(facts=_not_ready_facts())
     service = _service(repo)
@@ -227,7 +263,7 @@ def test_set_defaults_also_writes_default_harnesses() -> None:
 def test_set_defaults_omitting_default_harnesses_leaves_it_at_its_current_value() -> None:
     """Omitted (the default) is UNSET, not a clear — distinct from an explicit ``[]``."""
     chunk = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0, default_harnesses=["claude_code"])
-    repo = _FakeChunkRepo(facts=_not_ready_facts())
+    repo = _FakeChunkRepo(facts=_not_ready_facts(), current=chunk)
     service = _service(repo)
 
     service.set_defaults(chunk, default_model=["blizzard:basic"], default_effort="medium")
@@ -300,25 +336,27 @@ def test_refusal_carries_the_offending_field_and_status_on_the_exception() -> No
     assert "default_model" in str(excinfo.value)
 
 
-def test_set_graph_holds_the_injected_lock_across_its_check_and_write() -> None:
-    """``EditService`` must take the lock it was constructed with around
+def test_set_graph_holds_the_locked_transaction_across_its_check_and_write() -> None:
+    """``EditService`` must take the row lock it was constructed with around
     its whole check-then-act, not a private one, so the composition root can serialize
     it against ``ClaimService``'s own CAS."""
     repo = _FakeChunkRepo(facts=_ready_facts())
     calls: list[str] = []
 
-    class _SpyLock:
-        def __enter__(self) -> None:
+    @dataclass
+    class _SpyExclusiveWrites:
+        @contextmanager
+        def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
             calls.append("acquire")
-
-        def __exit__(self, *exc: object) -> None:
-            calls.append("release")
+            try:
+                yield cast(ILockedChunkRead, _FakeLockedChunkRead(repo))
+            finally:
+                calls.append("release")
 
     service = EditService(
-        facts=_as_facts(repo),
         record=_as_record(repo),
         graphs=_as_read_graph_repo(_FakeGraphRepo()),
-        claim_lock=cast(threading.Lock, _SpyLock()),
+        exclusive=cast(IChunkExclusiveWrites, _SpyExclusiveWrites()),
     )
 
     service.set_graph(_CHUNK, graph=_TARGET_GRAPH)
@@ -470,6 +508,23 @@ def test_edit_intended_migration_refuses_a_target_equal_to_the_current_pin() -> 
     assert repo.intended_migrations_set == []
 
 
+def test_edit_intended_migration_pin_check_uses_the_locked_reads_graph_id_not_the_callers_stale_one() -> None:
+    """A concurrent edit that already re-pinned ``graph_id`` between the caller's own
+    load and this edit's lock must have the "target equals current pin" check answered
+    against the pin it landed, not the one the caller's stale ``chunk`` still carries."""
+    stale_chunk = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
+    fresh_record = Chunk(chunk_id="chk_1", graph_id="gr_2", work_refs=[], minted_at=_T0)
+    repo = _FakeChunkRepo(facts=_running_facts(), current=fresh_record)
+    service = _service(repo)
+    intent = IntendedMigration(mode=MigrationMode.AUTO, graph_id="gr_2", node_name=None)
+
+    with pytest.raises(MigrationTargetIsCurrentPin) as excinfo:
+        service.edit(stale_chunk, ChunkEdit(intended_migration=intent), migration_target=_TARGET_GRAPH)
+
+    assert excinfo.value.graph_id == "gr_2"
+    assert repo.intended_migrations_set == []
+
+
 def test_edit_intended_migration_forced_refuses_a_node_absent_from_the_target() -> None:
     repo = _FakeChunkRepo(facts=_running_facts())
     service = _service(repo)
@@ -551,12 +606,36 @@ def test_edit_naming_only_default_harnesses_leaves_the_other_two_defaults_at_the
         default_model=["blizzard:basic"],
         default_effort="medium",
     )
-    repo = _FakeChunkRepo(facts=_ready_facts())
+    repo = _FakeChunkRepo(facts=_ready_facts(), current=chunk)
     service = _service(repo)
 
     service.edit(chunk, ChunkEdit(default_harnesses=["claude_code"]))
 
     assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium", ["claude_code"])]
+
+
+def test_edit_naming_only_default_harnesses_carries_the_locked_reads_values_not_the_callers_stale_ones() -> None:
+    """A concurrent edit that already changed ``default_model``/``default_effort``
+    between the caller's own load and this edit's lock must not have that change
+    silently reverted by this trio write carrying the caller's stale snapshot instead
+    of the handle's own re-read."""
+    stale_chunk = Chunk(
+        chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0, default_model=["blizzard:basic"]
+    )
+    fresh_record = Chunk(
+        chunk_id="chk_1",
+        graph_id="gr_1",
+        work_refs=[],
+        minted_at=_T0,
+        default_model=["blizzard:opus"],
+        default_effort="high",
+    )
+    repo = _FakeChunkRepo(facts=_ready_facts(), current=fresh_record)
+    service = _service(repo)
+
+    service.edit(stale_chunk, ChunkEdit(default_harnesses=["claude_code"]))
+
+    assert repo.defaults_set == [("chk_1", ["blizzard:opus"], "high", ["claude_code"])]
 
 
 def test_edit_refuses_default_harnesses_once_claimed() -> None:
@@ -598,3 +677,15 @@ def test_edit_with_an_empty_chunk_edit_writes_nothing() -> None:
     assert repo.graphs_set == []
     assert repo.defaults_set == []
     assert repo.intended_migrations_set == []
+
+
+def test_edit_raises_chunk_not_found_for_a_chunk_gone_under_the_lock() -> None:
+    """A `None` load off the locked handle means gone under this lock — refuse rather
+    than substitute a synthetic status, mirroring `DeleteService.delete`."""
+    repo = _FakeChunkRepo(facts=None)
+    service = _service(repo)
+
+    with pytest.raises(ChunkNotFound):
+        service.edit(_CHUNK, ChunkEdit(default_effort="high"))
+
+    assert repo.defaults_set == []

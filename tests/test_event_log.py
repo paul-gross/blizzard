@@ -31,17 +31,18 @@ def _at(seconds: int) -> datetime:
     return _T0 + timedelta(seconds=seconds)
 
 
-def _store(tmp_path: Path) -> tuple[ChunkStores, Engine]:
+def _store(tmp_path: Path) -> tuple[ChunkStores, Engine, FixedClock]:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
         seed_chunk(conn, "ch_a", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_b", graph_id="gr_1", at=_T0)
-    return chunk_stores(engine, FixedClock(_T0)), engine
+    clock = FixedClock(_T0)
+    return chunk_stores(engine, clock), engine, clock
 
 
 def test_record_event_roundtrips_columns_and_json_detail(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
+    store, _, _clock = _store(tmp_path)
     store.events.record_event(
         severity="critical",
         kind="worker-lost",
@@ -67,7 +68,7 @@ def test_record_event_roundtrips_columns_and_json_detail(tmp_path: Path) -> None
 
 
 def test_runner_scoped_event_carries_no_chunk(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
+    store, _, _clock = _store(tmp_path)
     store.events.record_event(
         severity="warning",
         kind="command-failed",
@@ -86,7 +87,7 @@ def test_runner_scoped_event_carries_no_chunk(tmp_path: Path) -> None:
 
 
 def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
+    store, _, _clock = _store(tmp_path)
     store.events.record_event(
         severity="info",
         kind="attempt-abandoned",
@@ -133,7 +134,7 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
 
 
 def test_list_events_cap_keeps_the_most_severe_rows(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
+    store, _, _clock = _store(tmp_path)
     store.events.record_event(
         severity="critical",
         kind="worker-lost",
@@ -164,7 +165,7 @@ def test_list_events_cap_keeps_the_most_severe_rows(tmp_path: Path) -> None:
 
 
 def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
+    store, engine, clock = _store(tmp_path)
     with engine.begin() as conn:  # seed the requeue and stop cases' chunks
         seed_chunk(conn, "ch_c", graph_id="gr_1", at=_T0)
         seed_chunk(conn, "ch_d", graph_id="gr_1", at=_T0)
@@ -178,13 +179,18 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     store.route.record_lease("ch_b", epoch=2, runner_id="r1", at=_at(20))
     # ch_c: escalation then a LATER requeue -> superseded (closed).
     store.escalations.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=_at(10))
-    store.movement.record_requeue("ch_c", at=_at(20))
+    with store.exclusive.locked(["ch_c"]) as handle:
+        store.movement.record_requeue_locked(handle, "ch_c", at=_at(20))
     # ch_d: escalation then a LATER stop -> superseded (#292). This read feeds the critical
     # `needs-human` row in `GET /api/events`, so a stopped chunk must leave it.
     store.escalations.record_escalation("ch_d", epoch=1, takeover_command="cd d && resume", at=_at(10))
-    store.lifecycle.record_stop("ch_d", by="operator", at=_at(20))
+    clock.instant = _at(20)
+    with store.exclusive.locked(["ch_d"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_d", by="operator")
     # ch_e: stop then a LATER escalation -> still OPEN; supersession is ordered, not a flag.
-    store.lifecycle.record_stop("ch_e", by="operator", at=_at(10))
+    clock.instant = _at(10)
+    with store.exclusive.locked(["ch_e"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_e", by="operator")
     store.escalations.record_escalation("ch_e", epoch=1, takeover_command="cd e && resume", at=_at(20))
     # ch_f: escalation then the chunk REACHES DONE elsewhere -> superseded (#293). No later
     # lease is minted here, so completion is the only arm that can close it.

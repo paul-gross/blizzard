@@ -41,18 +41,24 @@ class RunnerRegistryStore:
 
     def get_runner(self, runner_id: str) -> RunnerRegistration | None:
         with self._store.read("get_runner") as conn:
-            row = conn.execute(
-                select(s.runner_registrations).where(s.runner_registrations.c.runner_id == runner_id)
-            ).one_or_none()
-            if row is None:
-                return None
-            return self._registration(
-                row,
-                self._paused(conn, runner_id),
-                self._local_pause_detail(conn, runner_id),
-                self._external_usage(conn, runner_id),
-                self._external_usage_misses(conn, runner_id),
-            )
+            return self.get_runner_conn(conn, runner_id)
+
+    def get_runner_conn(self, conn, runner_id: str) -> RunnerRegistration | None:  # type: ignore[no-untyped-def]
+        """`get_runner`'s already-open-connection sibling — the locked-transaction seam's
+        own read (``bzh:store-exclusive-write``), resolved on the caller's connection
+        rather than a fresh one."""
+        row = conn.execute(
+            select(s.runner_registrations).where(s.runner_registrations.c.runner_id == runner_id)
+        ).one_or_none()
+        if row is None:
+            return None
+        return self._registration(
+            row,
+            self._paused(conn, runner_id),
+            self._local_pause_detail(conn, runner_id),
+            self._external_usage(conn, runner_id),
+            self._external_usage_misses(conn, runner_id),
+        )
 
     def list_runners(self) -> list[RunnerRegistration]:
         with self._store.read("list_runners") as conn:

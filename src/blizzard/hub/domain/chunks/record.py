@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.work import Chunk, IntendedMigration
 
 
@@ -60,27 +61,39 @@ class IWriteChunkRecordRepository(IReadChunkRecordRepository, Protocol):
     """Read-write chunk-record access."""
 
     def mint(self, chunk: Chunk) -> None: ...
-    def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
-        """Repin a not-ready or ready-unclaimed chunk to a different workflow graph.
+    def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
+        """Repin a not-ready or ready-unclaimed chunk to a different workflow graph, on
+        ``handle``'s already-locked connection (``bzh:store-exclusive-write``).
 
         A plain column overwrite, not an append-only fact: ``graph_id`` was already a
-        mint-time column with no fact log behind it. The caller has already checked the
-        chunk is still unclaimed, under the claim lock."""
+        mint-time column with no fact log behind it."""
         ...
 
-    def set_defaults(
-        self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
+    def set_defaults_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        default_model: list[str],
+        default_effort: str | None,
+        default_harnesses: list[str],
     ) -> None:
-        """Repin a not-ready or ready-unclaimed chunk's default model/effort/harnesses
-        — see :meth:`set_graph`. All three together in one
-        write, never one at a time, so the trio cannot be left half-applied at a crash.
-        An empty list / ``None`` is a real value — *express no preference*, the minted
-        state — not "leave unchanged"."""
+        """Repin a not-ready or ready-unclaimed chunk's default model/effort/harnesses, on
+        ``handle``'s already-locked connection (``bzh:store-exclusive-write``).
+
+        All three together in one write, never one at a time, so the trio cannot be left
+        half-applied at a crash. An empty list / ``None`` is a real value — *express no
+        preference*, the minted state — not "leave unchanged"."""
         ...
 
-    def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
-        """Set, overwrite, or clear a chunk's standing migration intent.
-        A plain column overwrite, not an append-only fact — the same shape :meth:`set_graph`
-        carries. ``intended=None`` clears it; a non-``None`` value overwrites. Carries no
-        timestamp — the column records no ``at``, unlike this repository's other writes."""
+    def set_intended_migration_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, intended: IntendedMigration | None
+    ) -> None:
+        """Set, overwrite, or clear a chunk's standing migration intent, on ``handle``'s
+        already-locked connection (``bzh:store-exclusive-write``).
+
+        A plain column overwrite, not an append-only fact — the same shape
+        :meth:`set_graph_locked` carries. ``intended=None`` clears it; a non-``None`` value
+        overwrites. Carries no timestamp — the column records no ``at``, unlike this
+        repository's other writes."""
         ...
