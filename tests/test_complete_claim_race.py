@@ -8,6 +8,7 @@ with that check-then-act."""
 from __future__ import annotations
 
 import threading
+from datetime import timedelta
 from pathlib import Path
 from typing import cast
 
@@ -133,6 +134,10 @@ def test_a_completion_still_releases_the_route_a_claim_won_the_lock_to_create(tm
         "the completion completed while the claim still held the shared lock — not atomic"
     )
 
+    # Advance the clock while the completion is still blocked — a stale `at` computed
+    # before the wait would read this test's earlier instant; only a release stamped after
+    # the wait clears reads the advanced one, which the assertions below check for.
+    hub.clock.advance(timedelta(seconds=1))
     release_record.set()
     claim_thread.join(timeout=5)
     complete_thread.join(timeout=5)
@@ -143,3 +148,16 @@ def test_a_completion_still_releases_the_route_a_claim_won_the_lock_to_create(tm
     # The invariant this whole seam exists to keep: no chunk is both terminal and
     # carrying a route the release's timestamp lost the ordering race against.
     assert HubInvariants(create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")).run() == []
+
+    # Pin the mechanism directly: the release is stamped from the post-advance instant, not
+    # a stale pre-wait one — a stale `at` would equal the route's own `created_at` instead
+    # (this test's single un-advanced instant before the `advance()` above) and would sort
+    # no later than it, which is exactly the ordering `RouteHistory.newest` tie-breaks on.
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    assert facts is not None
+    assert len(facts.routes_created) == 1
+    assert len(facts.routes_released) == 1
+    created_at = facts.routes_created[0].created_at
+    released_at = facts.routes_released[0].released_at
+    assert released_at > created_at, (created_at, released_at)
+    assert released_at == hub.clock.now()

@@ -98,11 +98,15 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
     declares whose own row locks share no chunk id at all, since ``{a, b}`` and ``{c, d}``
     are disjoint. Combined with two edges already standing (``b`` depends on ``c``, ``d``
     depends on ``a``), the two new edges would close the four-chunk cycle
-    ``a -> b -> c -> d -> a``. The row lock cannot serialize this pair — neither
-    declare's own lock names a chunk the other's does — so only the shared cycle lock
-    closes it; unlike the opposing-declaration tests above, where the row lock alone
-    (both declares locking the same ``{a, b}``) would already serialize them even with
-    the shared lock removed."""
+    ``a -> b -> c -> d -> a``. Neither declare's own row lock names a chunk the other's
+    does, so on Postgres only the shared cycle lock closes this pair — the row lock
+    cannot. This test tier cannot isolate that contribution on its own, though: SQLite
+    admits one writer transaction at a time regardless of which rows it locks, so the
+    second declare blocks here even with the shared lock stubbed to a no-op — a probe
+    this test alone cannot distinguish from proof. What it does prove, tier-independent:
+    the shared lock is acquired before the write each declare's cycle check rests on, and
+    the correct edge (not a cycle) is the one left standing once both resolve — the
+    ordering and outcome an operator would see under either backend."""
     hub = build_hub(tmp_path)
     chunk_a = ingest(hub, [{"source": "default", "ref": "a"}], promote=False)
     chunk_b = ingest(hub, [{"source": "default", "ref": "b"}], promote=False)
