@@ -1,4 +1,1244 @@
 {
+ "../blizzard-mock/src": {
+  "blizzard_mock/__init__.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 5
+  },
+  "blizzard_mock/clock.py": {
+   "comments": 0,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 37
+  },
+  "blizzard_mock/fixture_workspace/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/fixture_workspace/cli.py": {
+   "comments": 1,
+   "docstrings": 12,
+   "over_cap": 0,
+   "total": 132
+  },
+  "blizzard_mock/fixture_workspace/config.py": {
+   "comments": 0,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 33
+  },
+  "blizzard_mock/fixture_workspace/errors.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 12
+  },
+  "blizzard_mock/fixture_workspace/internal/__init__.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 5
+  },
+  "blizzard_mock/fixture_workspace/internal/subprocess_git.py": {
+   "comments": 3,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 72
+  },
+  "blizzard_mock/fixture_workspace/internal/subprocess_winter.py": {
+   "comments": 1,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 53
+  },
+  "blizzard_mock/fixture_workspace/scratch.py": {
+   "comments": 0,
+   "docstrings": 13,
+   "over_cap": 0,
+   "total": 45
+  },
+  "blizzard_mock/fixture_workspace/seed.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 40
+  },
+  "blizzard_mock/fixture_workspace/service.py": {
+   "comments": 5,
+   "docstrings": 19,
+   "over_cap": 0,
+   "total": 161
+  },
+  "blizzard_mock/forge/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/forge/api/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/forge/api/deps.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 73
+  },
+  "blizzard_mock/forge/api/issues.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 99
+  },
+  "blizzard_mock/forge/api/labels.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 72
+  },
+  "blizzard_mock/forge/api/levers.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 82
+  },
+  "blizzard_mock/forge/api/middleware.py": {
+   "comments": 1,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 65
+  },
+  "blizzard_mock/forge/api/pulls.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 121
+  },
+  "blizzard_mock/forge/api/refs.py": {
+   "comments": 2,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 74
+  },
+  "blizzard_mock/forge/api/repos.py": {
+   "comments": 0,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 23
+  },
+  "blizzard_mock/forge/api/serialization.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 160
+  },
+  "blizzard_mock/forge/app.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 65
+  },
+  "blizzard_mock/forge/cli.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 37
+  },
+  "blizzard_mock/forge/config.py": {
+   "comments": 0,
+   "docstrings": 8,
+   "over_cap": 0,
+   "total": 48
+  },
+  "blizzard_mock/forge/domain/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/forge/domain/clock.py": {
+   "comments": 0,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 39
+  },
+  "blizzard_mock/forge/domain/errors.py": {
+   "comments": 0,
+   "docstrings": 25,
+   "over_cap": 0,
+   "total": 96
+  },
+  "blizzard_mock/forge/domain/git.py": {
+   "comments": 1,
+   "docstrings": 25,
+   "over_cap": 0,
+   "total": 80
+  },
+  "blizzard_mock/forge/domain/levers.py": {
+   "comments": 14,
+   "docstrings": 13,
+   "over_cap": 5,
+   "total": 113
+  },
+  "blizzard_mock/forge/domain/models.py": {
+   "comments": 4,
+   "docstrings": 24,
+   "over_cap": 2,
+   "total": 127
+  },
+  "blizzard_mock/forge/domain/service.py": {
+   "comments": 14,
+   "docstrings": 35,
+   "over_cap": 0,
+   "total": 465
+  },
+  "blizzard_mock/forge/domain/state.py": {
+   "comments": 0,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 39
+  },
+  "blizzard_mock/forge/internal/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/forge/internal/errors.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 28
+  },
+  "blizzard_mock/forge/internal/git_backend.py": {
+   "comments": 8,
+   "docstrings": 14,
+   "over_cap": 0,
+   "total": 217
+  },
+  "blizzard_mock/forge/internal/lever_store.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 42
+  },
+  "blizzard_mock/forge/internal/state_store.py": {
+   "comments": 2,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 90
+  },
+  "blizzard_mock/harness/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/harness/engine.py": {
+   "comments": 43,
+   "docstrings": 100,
+   "over_cap": 7,
+   "total": 605
+  },
+  "blizzard_mock/harness/facades/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/harness/facades/_codex_app_server.py": {
+   "comments": 4,
+   "docstrings": 21,
+   "over_cap": 0,
+   "total": 157
+  },
+  "blizzard_mock/harness/facades/_common.py": {
+   "comments": 3,
+   "docstrings": 15,
+   "over_cap": 1,
+   "total": 72
+  },
+  "blizzard_mock/harness/facades/_hooks.py": {
+   "comments": 8,
+   "docstrings": 28,
+   "over_cap": 3,
+   "total": 200
+  },
+  "blizzard_mock/harness/facades/_opencode_transcript.py": {
+   "comments": 14,
+   "docstrings": 24,
+   "over_cap": 0,
+   "total": 234
+  },
+  "blizzard_mock/harness/facades/_text.py": {
+   "comments": 0,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 31
+  },
+  "blizzard_mock/harness/facades/_transcript.py": {
+   "comments": 8,
+   "docstrings": 20,
+   "over_cap": 2,
+   "total": 106
+  },
+  "blizzard_mock/harness/facades/_usage.py": {
+   "comments": 6,
+   "docstrings": 16,
+   "over_cap": 3,
+   "total": 55
+  },
+  "blizzard_mock/harness/facades/claude_code.py": {
+   "comments": 14,
+   "docstrings": 18,
+   "over_cap": 0,
+   "total": 168
+  },
+  "blizzard_mock/harness/facades/codex.py": {
+   "comments": 2,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 115
+  },
+  "blizzard_mock/harness/facades/opencode.py": {
+   "comments": 16,
+   "docstrings": 45,
+   "over_cap": 0,
+   "total": 349
+  },
+  "blizzard_mock/harness/helpers.py": {
+   "comments": 2,
+   "docstrings": 75,
+   "over_cap": 1,
+   "total": 281
+  },
+  "blizzard_mock/harness/internal/__init__.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 5
+  },
+  "blizzard_mock/harness/internal/git.py": {
+   "comments": 0,
+   "docstrings": 13,
+   "over_cap": 0,
+   "total": 54
+  },
+  "blizzard_mock/harness/internal/logging.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 34
+  },
+  "blizzard_mock/harness/opencode_surface/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 8
+  },
+  "blizzard_mock/harness/opencode_surface/_baked.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 15
+  },
+  "blizzard_mock/harness/opencode_surface/cli.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 152
+  },
+  "blizzard_mock/harness/opencode_surface/domain/__init__.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 7
+  },
+  "blizzard_mock/harness/opencode_surface/domain/attach.py": {
+   "comments": 0,
+   "docstrings": 10,
+   "over_cap": 0,
+   "total": 31
+  },
+  "blizzard_mock/harness/opencode_surface/domain/configuration.py": {
+   "comments": 1,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 61
+  },
+  "blizzard_mock/harness/opencode_surface/domain/export.py": {
+   "comments": 1,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 161
+  },
+  "blizzard_mock/harness/opencode_surface/domain/permission.py": {
+   "comments": 3,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 82
+  },
+  "blizzard_mock/harness/opencode_surface/domain/process_control.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 19
+  },
+  "blizzard_mock/harness/opencode_surface/domain/run.py": {
+   "comments": 2,
+   "docstrings": 10,
+   "over_cap": 0,
+   "total": 104
+  },
+  "blizzard_mock/harness/opencode_surface/domain/security.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 31
+  },
+  "blizzard_mock/harness/opencode_surface/domain/serve.py": {
+   "comments": 0,
+   "docstrings": 13,
+   "over_cap": 0,
+   "total": 61
+  },
+  "blizzard_mock/harness/opencode_surface/domain/state.py": {
+   "comments": 0,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 37
+  },
+  "blizzard_mock/harness/opencode_surface/domain/version.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 8
+  },
+  "blizzard_mock/harness/opencode_surface/emit.py": {
+   "comments": 3,
+   "docstrings": 14,
+   "over_cap": 0,
+   "total": 86
+  },
+  "blizzard_mock/harness/opencode_surface/internal/__init__.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 5
+  },
+  "blizzard_mock/harness/opencode_surface/internal/attach_client.py": {
+   "comments": 1,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 62
+  },
+  "blizzard_mock/harness/opencode_surface/internal/auth.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 35
+  },
+  "blizzard_mock/harness/opencode_surface/internal/configuration.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 37
+  },
+  "blizzard_mock/harness/opencode_surface/internal/fs.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 11
+  },
+  "blizzard_mock/harness/opencode_surface/internal/git_proof.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 30
+  },
+  "blizzard_mock/harness/opencode_surface/internal/http_serve.py": {
+   "comments": 1,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 84
+  },
+  "blizzard_mock/harness/opencode_surface/internal/paths.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 18
+  },
+  "blizzard_mock/harness/opencode_surface/internal/security.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 11
+  },
+  "blizzard_mock/harness/opencode_surface/internal/state_store.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 26
+  },
+  "blizzard_mock/harness/opencode_surface/levers.py": {
+   "comments": 26,
+   "docstrings": 14,
+   "over_cap": 0,
+   "total": 119
+  },
+  "blizzard_mock/harness/session.py": {
+   "comments": 2,
+   "docstrings": 20,
+   "over_cap": 0,
+   "total": 98
+  },
+  "blizzard_mock/harness_identity.py": {
+   "comments": 2,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 13
+  },
+  "blizzard_mock/idp/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 8
+  },
+  "blizzard_mock/idp/api/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 1
+  },
+  "blizzard_mock/idp/api/deps.py": {
+   "comments": 2,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 14
+  },
+  "blizzard_mock/idp/api/github.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 84
+  },
+  "blizzard_mock/idp/api/levers.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 48
+  },
+  "blizzard_mock/idp/api/oidc.py": {
+   "comments": 0,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 73
+  },
+  "blizzard_mock/idp/app.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 31
+  },
+  "blizzard_mock/idp/cli.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 27
+  },
+  "blizzard_mock/idp/config.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 30
+  },
+  "blizzard_mock/idp/domain/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 1
+  },
+  "blizzard_mock/idp/domain/models.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 21
+  },
+  "blizzard_mock/idp/domain/signing.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 45
+  },
+  "blizzard_mock/idp/domain/state.py": {
+   "comments": 0,
+   "docstrings": 10,
+   "over_cap": 0,
+   "total": 50
+  },
+  "blizzard_mock/levers.py": {
+   "comments": 3,
+   "docstrings": 12,
+   "over_cap": 1,
+   "total": 84
+  },
+  "blizzard_mock/mock_data/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/mock_data/cli.py": {
+   "comments": 16,
+   "docstrings": 133,
+   "over_cap": 3,
+   "total": 1486
+  },
+  "blizzard_mock/mock_data/domain/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/mock_data/domain/facts.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 19
+  },
+  "blizzard_mock/mock_data/domain/hub/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/mock_data/domain/hub/artifact_seed.py": {
+   "comments": 3,
+   "docstrings": 14,
+   "over_cap": 0,
+   "total": 101
+  },
+  "blizzard_mock/mock_data/domain/hub/chunk_seed.py": {
+   "comments": 12,
+   "docstrings": 14,
+   "over_cap": 3,
+   "total": 285
+  },
+  "blizzard_mock/mock_data/domain/hub/escalation_seed.py": {
+   "comments": 7,
+   "docstrings": 12,
+   "over_cap": 3,
+   "total": 73
+  },
+  "blizzard_mock/mock_data/domain/hub/event_seed.py": {
+   "comments": 2,
+   "docstrings": 9,
+   "over_cap": 1,
+   "total": 62
+  },
+  "blizzard_mock/mock_data/domain/hub/garden_proposal_seed.py": {
+   "comments": 4,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 110
+  },
+  "blizzard_mock/mock_data/domain/hub/graph_seed.py": {
+   "comments": 5,
+   "docstrings": 25,
+   "over_cap": 1,
+   "total": 206
+  },
+  "blizzard_mock/mock_data/domain/hub/lease_seed.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 20
+  },
+  "blizzard_mock/mock_data/domain/hub/question_seed.py": {
+   "comments": 0,
+   "docstrings": 13,
+   "over_cap": 0,
+   "total": 99
+  },
+  "blizzard_mock/mock_data/domain/hub/runner_pause_seed.py": {
+   "comments": 0,
+   "docstrings": 10,
+   "over_cap": 0,
+   "total": 45
+  },
+  "blizzard_mock/mock_data/domain/hub/runner_subscription_seed.py": {
+   "comments": 0,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 72
+  },
+  "blizzard_mock/mock_data/domain/hub/scenario_seed.py": {
+   "comments": 17,
+   "docstrings": 27,
+   "over_cap": 6,
+   "total": 440
+  },
+  "blizzard_mock/mock_data/domain/hub/usage_seed.py": {
+   "comments": 2,
+   "docstrings": 8,
+   "over_cap": 1,
+   "total": 64
+  },
+  "blizzard_mock/mock_data/domain/ids.py": {
+   "comments": 4,
+   "docstrings": 9,
+   "over_cap": 1,
+   "total": 61
+  },
+  "blizzard_mock/mock_data/domain/runner/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/mock_data/domain/runner/ask_seed.py": {
+   "comments": 0,
+   "docstrings": 8,
+   "over_cap": 0,
+   "total": 57
+  },
+  "blizzard_mock/mock_data/domain/runner/env_binding_seed.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 19
+  },
+  "blizzard_mock/mock_data/domain/runner/lease_seed.py": {
+   "comments": 2,
+   "docstrings": 13,
+   "over_cap": 1,
+   "total": 102
+  },
+  "blizzard_mock/mock_data/domain/runner/local_pause_seed.py": {
+   "comments": 0,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 24
+  },
+  "blizzard_mock/mock_data/domain/runner/outbound_fact_seed.py": {
+   "comments": 1,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 41
+  },
+  "blizzard_mock/mock_data/domain/runner/scenario_seed.py": {
+   "comments": 5,
+   "docstrings": 18,
+   "over_cap": 0,
+   "total": 265
+  },
+  "blizzard_mock/mock_data/domain/runner/takeover_seed.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 42
+  },
+  "blizzard_mock/mock_data/domain/runner/transcript_segment_seed.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 64
+  },
+  "blizzard_mock/mock_data/domain/runner/usage_seed.py": {
+   "comments": 2,
+   "docstrings": 8,
+   "over_cap": 1,
+   "total": 64
+  },
+  "blizzard_mock/mock_data/domain/schema_contract.py": {
+   "comments": 0,
+   "docstrings": 23,
+   "over_cap": 0,
+   "total": 79
+  },
+  "blizzard_mock/mock_data/domain/seeding.py": {
+   "comments": 0,
+   "docstrings": 27,
+   "over_cap": 0,
+   "total": 72
+  },
+  "blizzard_mock/mock_data/domain/store_targets.py": {
+   "comments": 2,
+   "docstrings": 11,
+   "over_cap": 1,
+   "total": 38
+  },
+  "blizzard_mock/mock_data/internal/__init__.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 6
+  },
+  "blizzard_mock/mock_data/internal/reflected_store.py": {
+   "comments": 9,
+   "docstrings": 14,
+   "over_cap": 2,
+   "total": 148
+  },
+  "blizzard_mock/mock_data/internal/runtime_config.py": {
+   "comments": 0,
+   "docstrings": 18,
+   "over_cap": 1,
+   "total": 58
+  },
+  "blizzard_mock/mock_hub/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 0
+  },
+  "blizzard_mock/mock_hub/api/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 0
+  },
+  "blizzard_mock/mock_hub/api/control.py": {
+   "comments": 0,
+   "docstrings": 15,
+   "over_cap": 0,
+   "total": 123
+  },
+  "blizzard_mock/mock_hub/api/deps.py": {
+   "comments": 5,
+   "docstrings": 41,
+   "over_cap": 1,
+   "total": 226
+  },
+  "blizzard_mock/mock_hub/api/middleware.py": {
+   "comments": 6,
+   "docstrings": 15,
+   "over_cap": 1,
+   "total": 93
+  },
+  "blizzard_mock/mock_hub/api/routes.py": {
+   "comments": 8,
+   "docstrings": 42,
+   "over_cap": 2,
+   "total": 469
+  },
+  "blizzard_mock/mock_hub/app.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 55
+  },
+  "blizzard_mock/mock_hub/cli.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 28
+  },
+  "blizzard_mock/mock_hub/config.py": {
+   "comments": 1,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 35
+  },
+  "blizzard_mock/mock_hub/domain/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 0
+  },
+  "blizzard_mock/mock_hub/domain/capture.py": {
+   "comments": 0,
+   "docstrings": 8,
+   "over_cap": 0,
+   "total": 34
+  },
+  "blizzard_mock/mock_hub/domain/levers.py": {
+   "comments": 20,
+   "docstrings": 7,
+   "over_cap": 9,
+   "total": 65
+  },
+  "blizzard_mock/mock_hub/domain/matching.py": {
+   "comments": 1,
+   "docstrings": 29,
+   "over_cap": 0,
+   "total": 103
+  },
+  "blizzard_mock/mock_hub/domain/models.py": {
+   "comments": 32,
+   "docstrings": 72,
+   "over_cap": 12,
+   "total": 401
+  },
+  "blizzard_mock/mock_hub/domain/service.py": {
+   "comments": 52,
+   "docstrings": 179,
+   "over_cap": 5,
+   "total": 1308
+  },
+  "blizzard_mock/mock_hub/domain/state.py": {
+   "comments": 12,
+   "docstrings": 43,
+   "over_cap": 0,
+   "total": 180
+  },
+  "blizzard_mock/mock_hub/domain/wire.py": {
+   "comments": 17,
+   "docstrings": 47,
+   "over_cap": 5,
+   "total": 421
+  },
+  "blizzard_mock/mock_hub/internal/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 0
+  },
+  "blizzard_mock/mock_hub/internal/state_store.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 113
+  },
+  "blizzard_mock/mock_runner/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 0
+  },
+  "blizzard_mock/mock_runner/api/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 0
+  },
+  "blizzard_mock/mock_runner/api/routes.py": {
+   "comments": 1,
+   "docstrings": 13,
+   "over_cap": 0,
+   "total": 267
+  },
+  "blizzard_mock/mock_runner/app.py": {
+   "comments": 0,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 65
+  },
+  "blizzard_mock/mock_runner/cli.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 30
+  },
+  "blizzard_mock/mock_runner/config.py": {
+   "comments": 1,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 56
+  },
+  "blizzard_mock/mock_runner/domain/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 0
+  },
+  "blizzard_mock/mock_runner/domain/gateway.py": {
+   "comments": 17,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 68
+  },
+  "blizzard_mock/mock_runner/domain/levers.py": {
+   "comments": 17,
+   "docstrings": 7,
+   "over_cap": 8,
+   "total": 54
+  },
+  "blizzard_mock/mock_runner/domain/models.py": {
+   "comments": 11,
+   "docstrings": 66,
+   "over_cap": 3,
+   "total": 242
+  },
+  "blizzard_mock/mock_runner/domain/service.py": {
+   "comments": 21,
+   "docstrings": 73,
+   "over_cap": 1,
+   "total": 547
+  },
+  "blizzard_mock/mock_runner/internal/__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 0
+  },
+  "blizzard_mock/mock_runner/internal/httpx_gateway.py": {
+   "comments": 6,
+   "docstrings": 7,
+   "over_cap": 1,
+   "total": 113
+  }
+ },
+ "../blizzard-mock/tests": {
+  "__init__.py": {
+   "comments": 0,
+   "docstrings": 0,
+   "over_cap": 0,
+   "total": 0
+  },
+  "conftest.py": {
+   "comments": 0,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 25
+  },
+  "test_acceptance_loop_e2e.py": {
+   "comments": 24,
+   "docstrings": 38,
+   "over_cap": 4,
+   "total": 247
+  },
+  "test_codex_app_server.py": {
+   "comments": 9,
+   "docstrings": 8,
+   "over_cap": 0,
+   "total": 152
+  },
+  "test_fixture_workspace_smoke.py": {
+   "comments": 21,
+   "docstrings": 14,
+   "over_cap": 6,
+   "total": 228
+  },
+  "test_forge_smoke.py": {
+   "comments": 21,
+   "docstrings": 25,
+   "over_cap": 1,
+   "total": 677
+  },
+  "test_harness_hooks.py": {
+   "comments": 32,
+   "docstrings": 85,
+   "over_cap": 12,
+   "total": 661
+  },
+  "test_harness_smoke.py": {
+   "comments": 109,
+   "docstrings": 114,
+   "over_cap": 30,
+   "total": 1557
+  },
+  "test_idp.py": {
+   "comments": 10,
+   "docstrings": 7,
+   "over_cap": 1,
+   "total": 287
+  },
+  "test_mock_data_artifact_seed.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 203
+  },
+  "test_mock_data_chunk_seed.py": {
+   "comments": 7,
+   "docstrings": 24,
+   "over_cap": 2,
+   "total": 268
+  },
+  "test_mock_data_cli.py": {
+   "comments": 42,
+   "docstrings": 126,
+   "over_cap": 16,
+   "total": 3756
+  },
+  "test_mock_data_escalation_seed.py": {
+   "comments": 0,
+   "docstrings": 12,
+   "over_cap": 1,
+   "total": 95
+  },
+  "test_mock_data_event_seed.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 62
+  },
+  "test_mock_data_garden_proposal_seed.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 179
+  },
+  "test_mock_data_graph_seed.py": {
+   "comments": 1,
+   "docstrings": 9,
+   "over_cap": 1,
+   "total": 93
+  },
+  "test_mock_data_lease_seed.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 20
+  },
+  "test_mock_data_question_seed.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 91
+  },
+  "test_mock_data_reflected_store.py": {
+   "comments": 9,
+   "docstrings": 28,
+   "over_cap": 4,
+   "total": 246
+  },
+  "test_mock_data_runner_ask_seed.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 72
+  },
+  "test_mock_data_runner_env_binding_seed.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 24
+  },
+  "test_mock_data_runner_lease_seed.py": {
+   "comments": 0,
+   "docstrings": 8,
+   "over_cap": 0,
+   "total": 150
+  },
+  "test_mock_data_runner_local_pause_seed.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 31
+  },
+  "test_mock_data_runner_outbound_fact_seed.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 38
+  },
+  "test_mock_data_runner_pause_seed.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 44
+  },
+  "test_mock_data_runner_scenario_seed.py": {
+   "comments": 0,
+   "docstrings": 8,
+   "over_cap": 0,
+   "total": 141
+  },
+  "test_mock_data_runner_subscription_seed.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 51
+  },
+  "test_mock_data_runner_takeover_seed.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 69
+  },
+  "test_mock_data_runner_transcript_segment_seed.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 72
+  },
+  "test_mock_data_runner_usage_seed.py": {
+   "comments": 0,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 92
+  },
+  "test_mock_data_runtime_config.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 0,
+   "total": 67
+  },
+  "test_mock_data_scenario_seed.py": {
+   "comments": 15,
+   "docstrings": 22,
+   "over_cap": 2,
+   "total": 343
+  },
+  "test_mock_data_store_targets.py": {
+   "comments": 1,
+   "docstrings": 6,
+   "over_cap": 0,
+   "total": 34
+  },
+  "test_mock_data_usage_seed.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 122
+  },
+  "test_mock_hub.py": {
+   "comments": 103,
+   "docstrings": 171,
+   "over_cap": 15,
+   "total": 3236
+  },
+  "test_mock_runner.py": {
+   "comments": 28,
+   "docstrings": 66,
+   "over_cap": 4,
+   "total": 791
+  },
+  "test_opencode_cli_surface.py": {
+   "comments": 34,
+   "docstrings": 22,
+   "over_cap": 7,
+   "total": 358
+  },
+  "test_opencode_transcript_writer.py": {
+   "comments": 0,
+   "docstrings": 7,
+   "over_cap": 1,
+   "total": 131
+  },
+  "test_pin_mock.py": {
+   "comments": 18,
+   "docstrings": 27,
+   "over_cap": 7,
+   "total": 299
+  },
+  "test_real_runner_against_mock_hub.py": {
+   "comments": 12,
+   "docstrings": 11,
+   "over_cap": 1,
+   "total": 134
+  },
+  "test_smoke.py": {
+   "comments": 0,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 16
+  },
+  "test_wire_parity.py": {
+   "comments": 21,
+   "docstrings": 73,
+   "over_cap": 8,
+   "total": 490
+  }
+ },
  "src": {
   "blizzard/__init__.py": {
    "comments": 3,
@@ -6216,7 +7456,7 @@
    "comments": 4,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 72
+   "total": 75
   },
   "test_group_service.py": {
    "comments": 3,
@@ -6858,7 +8098,7 @@
    "comments": 4,
    "docstrings": 9,
    "over_cap": 0,
-   "total": 71
+   "total": 74
   },
   "test_restated_invariants.py": {
    "comments": 45,
