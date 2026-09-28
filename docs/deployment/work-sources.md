@@ -1,7 +1,7 @@
 # Work sources
 
 The hub reads every chunk's work item through a configured work source: a named, credentialed binding to one forge repo,
-declared as an `[[work_source]]` table in `blizzard-hub.toml`. Work sources are a separate seam from the delivery forge:
+declared as an `[[work_source]]` table in `blizzard-hub.toml`. Work sources are independent of delivery's forge access:
 `BZ_FORGE_URL`/`BZ_FORGE_TOKEN` control where a chunk's PR is opened and landed, `[[work_source]]` controls where its
 work item is read from, and each source carries its own credential rather than sharing the delivery forge's.
 

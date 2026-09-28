@@ -16,7 +16,8 @@
 
 ## Configuration and credentials
 
-The hub's delivery credentials (`BZ_FORGE_URL`, `BZ_FORGE_TOKEN`) go in `/etc/blizzard/hub.env`; its work sources are
+The hub's delivery credentials (`BZ_FORGE_URL`, `BZ_FORGE_TOKEN`) go in `/etc/blizzard/hub.env`, alongside
+`BZ_FORGE_OWNER` — the owner used to qualify a bare repo name, defaulting to `blizzard` when unset; its work sources are
 `[[work_source]]` blocks in `blizzard-hub.toml`, owned by [work-sources.md](./work-sources.md); the runner's workspace
 and harness bindings live in its own `blizzard-runner.toml` and carry no credentials.
 
