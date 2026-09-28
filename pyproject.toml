@@ -144,6 +144,7 @@ do_not_mutate = [
 # alike); scripts/mutation.py layers a per-scope test-selection on top via
 # pytest_add_cli_args_test_selection.
 pytest_add_cli_args = ["-m", "unit or component"]
+timeout_multiplier = 3
 also_copy = [
     "pyproject.toml",
     "openapi",
