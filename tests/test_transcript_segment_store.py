@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import zlib
 from datetime import UTC, datetime
 from pathlib import Path
@@ -146,6 +147,11 @@ def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:
         assert not [e for e in visitors.iterate(stmt) if isinstance(e, TextClause)], name
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="reads store_module.__file__'s own source; under mutmut that file also carries every "
+    "generated mutant body, which this sweep would wrongly hold to the same pattern",
+)
 def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> None:
     builders = {name for name in vars(store_module) if name.endswith("_stmt")}
     assert builders == set(_executed_statements())

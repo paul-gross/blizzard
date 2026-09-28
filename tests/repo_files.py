@@ -45,7 +45,7 @@ def check_repo_read(path: str | bytes | Path, copied: frozenset[Path] | None = N
         or (relative.suffix == ".py" and relative.parts[0] in {"src", "tests"})
         or relative.suffix == ".pyc"
         or "__pycache__" in relative.parts
-        or relative.parts[0] in {".venv", "mutants"}
+        or relative.parts[0] in {".venv", ".mutation-env", "mutants"}
     ):
         return
     # pyproject.toml is read to obtain this very inventory.
