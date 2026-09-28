@@ -110,12 +110,13 @@ def build_script(landed_file: str) -> str:
         f"repo = {REPO_NAME!r}\n"
         f"(pathlib.Path(repo) / {landed_file!r}).write_text('landed by the crash sweep\\n')\n"
         'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
-        "subprocess.run(\n"
-        '    ["git", "-C", repo,\n'
-        '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
-        '     "commit", "-m", "feat: land a change from the crash sweep"],\n'
-        "    check=True,\n"
-        ")\n"
+        'if subprocess.run(["git", "-C", repo, "diff", "--cached", "--quiet"]).returncode != 0:\n'
+        "    subprocess.run(\n"
+        '        ["git", "-C", repo,\n'
+        '         "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
+        '         "commit", "-m", "feat: land a change from the crash sweep"],\n'
+        "        check=True,\n"
+        "    )\n"
         "_branch = subprocess.run(\n"
         '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
         "    check=True, capture_output=True, text=True,\n"
