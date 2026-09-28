@@ -339,11 +339,12 @@ class HostedApp:
     owned_graph: RunnerProcess | None = None
 
     def close(self) -> None:
-        self.hub_http_client.close()
-        self.hub_proxy_client.close()
-        self.archived_transcript_client.close()
-        if self.owned_graph is not None:
-            self.owned_graph.close()
+        with contextlib.ExitStack() as closing:
+            if self.owned_graph is not None:
+                closing.callback(self.owned_graph.close)
+            closing.callback(self.archived_transcript_client.close)
+            closing.callback(self.hub_proxy_client.close)
+            closing.callback(self.hub_http_client.close)
 
 
 def build_hosted_app(
@@ -354,6 +355,17 @@ def build_hosted_app(
     The standalone entry builds a graph for its caller; ``host`` supplies its own
     graph so app and driver share the same stores, provider and harness registry."""
     graph = process_graph or build_runner_process(config, events=events)
+    with contextlib.ExitStack() as startup:
+        if process_graph is None:
+            startup.callback(graph.close)
+        hosted = _wire_hosted_app(config, graph, startup, owned_graph=graph if process_graph is None else None)
+        startup.pop_all()  # HostedApp.close now owns every registered resource.
+        return hosted
+
+
+def _wire_hosted_app(
+    config: RunnerConfig, graph: RunnerProcess, startup: contextlib.ExitStack, *, owned_graph: RunnerProcess | None
+) -> HostedApp:
     engine = graph.engine
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
@@ -370,12 +382,16 @@ def build_hosted_app(
     leases = LocalLeaseService(stores=RunnerReadStores.of(runner_stores), clock=clock, process=process)
     # The archived-transcript seam needs its own authenticated client:
     # `hub_http_client` below carries no auth headers (JWKS/hub-auth-mode reads only).
-    archived_transcript_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
+    archived_transcript_client = startup.enter_context(
+        httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
+    )
     archived_transcripts = HttpArchivedTranscriptRepository(archived_transcript_client)
     # The route-forward seam (`HubProxy`) needs its own authenticated client too — separate
     # from `hub_http_client` (no auth headers) and from `archived_transcript_client` (its own
     # lifetime/timeout concerns).
-    hub_proxy_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
+    hub_proxy_client = startup.enter_context(
+        httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
+    )
     transcripts = TranscriptService(
         leases=runner_stores.lease_record,
         transcript_ledger=runner_stores.transcript_ledger,
@@ -418,7 +434,7 @@ def build_hosted_app(
     )
     jti_cache = JtiCacheRepository(connections, clock)
     # The real, network-reaching hub client — only `host` wires one.
-    hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
+    hub_http_client = startup.enter_context(httpx.Client(base_url=config.hub_url, timeout=5.0))
     app = create_app(
         config,
         readiness=readiness,
@@ -449,7 +465,7 @@ def build_hosted_app(
         archived_transcript_client,
         hub_proxy_client,
         hub_http_client,
-        graph if process_graph is None else None,
+        owned_graph,
     )
 
 

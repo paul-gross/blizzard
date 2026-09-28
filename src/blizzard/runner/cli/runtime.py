@@ -113,39 +113,41 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
         f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
     )
 
-    # The shared early-shutdown wrapper: sets `app.state.shutdown` ahead of
-    # uvicorn's own drain, so `server.run()` returns and the `finally` below still runs.
-    server = build_early_shutdown_server(app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown)
-
-    # Installed before `server.run()`'s own `capture_signals()` window opens, so a signal in
-    # that gap still primes shutdown rather than being discarded; re-invoking it later is idempotent.
-    def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
-        server.handle_exit(signum, frame)
-
-    signal.signal(signal.SIGTERM, _handle_signal)
-    signal.signal(signal.SIGINT, _handle_signal)
-
-    # Ungraceful-restart recovery (#13): a `kill -9` never ran the graceful shutdown marker below, so
-    # sessions killed mid-work are marked here for the same startup RESUME the first tick runs.
-    resumable = hosted.resume.on_startup()
-    if resumable:
-        click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
-
-    driver.start()  # startup recovery is REAP running first inside the tick
+    started = False
     try:
+        # The shared early-shutdown wrapper sets the stream's shutdown signal
+        # ahead of uvicorn's drain. Bound sockets belong to this whole startup.
+        server = build_early_shutdown_server(
+            app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown
+        )
+
+        # Installed before `server.run()`'s own `capture_signals()` window opens.
+        def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
+            server.handle_exit(signum, frame)
+
+        signal.signal(signal.SIGTERM, _handle_signal)
+        signal.signal(signal.SIGINT, _handle_signal)
+
+        # Mark crash-orphaned sessions before the first reconciliation tick.
+        resumable = hosted.resume.on_startup()
+        if resumable:
+            click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
+
+        driver.start()  # startup recovery is REAP running first inside the tick
+        started = True
         server.run(sockets=sockets)
     finally:
-        # Stop the loop first so no in-flight tick races the marking: `stop()` blocks on the tick
-        # thread, so the loop is quiescent before every in-flight lease is marked.
-        driver.stop()
-        marked = hosted.resume.on_shutdown()
-        if marked:
-            click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
-        # uvicorn closes a pre-bound socket but does not unlink its file; leaving it would
-        # make the next start take the stale-corpse path in `Uds.bound` for nothing.
-        Uds(config.socket_path).unlink()
-        # Disposed last, once the resume marking's own store write is done: a
-        # gracefully stopped runner is a single-file store again.
+        try:
+            if started:
+                # Quiesce before marking; the spawner executor and engine outlive
+                # the drain and are closed by the outer host frame.
+                driver.stop()
+                marked = hosted.resume.on_shutdown()
+                if marked:
+                    click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
+        finally:
+            # uvicorn closes a pre-bound socket but does not unlink its file.
+            Uds(config.socket_path).unlink()
 
 
 @click.command("tick")

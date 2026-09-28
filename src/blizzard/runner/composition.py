@@ -77,8 +77,10 @@ class RunnerProcess:
     executor: ThreadPoolExecutor
 
     def close(self) -> None:
-        self.executor.shutdown(wait=True)
-        self.engine.dispose()
+        try:
+            self.executor.shutdown(wait=True)
+        finally:
+            self.engine.dispose()
 
 
 def build_runner_process(config: RunnerConfig, *, events: EventBroker | None = None) -> RunnerProcess:
@@ -107,8 +109,10 @@ def build_runner_process(config: RunnerConfig, *, events: EventBroker | None = N
         )
         return RunnerProcess(engine, stores, connections, provider, harnesses, clock, process, health, events, executor)
     except BaseException:
-        executor.shutdown(wait=True)
-        engine.dispose()
+        try:
+            executor.shutdown(wait=True)
+        finally:
+            engine.dispose()
         raise
 
 

@@ -10,8 +10,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 import pytest
 
+import blizzard.runner.app as runner_app
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.composition import build_runner_process
@@ -390,6 +392,49 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
     finally:
         hosted.close()
         graph.close()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("owned_graph", [True, False])
+def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owned_graph: bool
+) -> None:
+    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
+    graph = build_runner_process(config)
+    disposed: list[str] = []
+    real_dispose = graph.engine.dispose
+
+    def dispose() -> None:
+        disposed.append("engine")
+        real_dispose()
+
+    monkeypatch.setattr(graph.engine, "dispose", dispose)
+    monkeypatch.setattr(runner_app, "build_runner_process", lambda *_args, **_kwargs: graph)
+    original_client = httpx.Client
+    clients: list[httpx.Client] = []
+
+    def client(*args, **kwargs):  # type: ignore[no-untyped-def]
+        result = original_client(*args, **kwargs)
+        clients.append(result)
+        return result
+
+    def fail(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("app wiring failed")
+
+    monkeypatch.setattr(runner_app.httpx, "Client", client)
+    monkeypatch.setattr(runner_app, "create_app", fail)
+    try:
+        with pytest.raises(RuntimeError, match="app wiring failed"):
+            if owned_graph:
+                build_hosted_app(config)
+            else:
+                build_hosted_app(config, process_graph=graph)
+        assert len(clients) == 3
+        assert all(instance.is_closed for instance in clients)
+        assert disposed == (["engine"] if owned_graph else [])
+    finally:
+        if not owned_graph:
+            graph.close()
 
 
 @pytest.mark.unit
