@@ -5524,6 +5524,12 @@
    "over_cap": 0,
    "total": 49
   },
+  "blizzard/tools/wire_compat.py": {
+   "comments": 4,
+   "docstrings": 16,
+   "over_cap": 0,
+   "total": 393
+  },
   "blizzard/wire/__init__.py": {
    "comments": 0,
    "docstrings": 6,
@@ -9215,6 +9221,12 @@
    "docstrings": 6,
    "over_cap": 0,
    "total": 31
+  },
+  "test_wire_compat.py": {
+   "comments": 6,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 417
   },
   "test_wire_timestamps.py": {
    "comments": 1,

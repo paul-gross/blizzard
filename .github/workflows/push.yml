@@ -42,6 +42,30 @@ jobs:
     with:
       crash_sweep_ci: "1"
 
+  wire-compat-deployed:
+    name: hub↔runner wire compatibility (deployed baseline)
+    # Diffs every undeployed commit's openapi/hub.openapi.json against the spec the
+    # newest successful push.yml run published as edge — blocking dev-image (below)
+    # from ever publishing an unacknowledged break the hosted hub would receive
+    # (bzh:fleet-wire-additive, docs/versioning.md's hub↔runner skew window).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: wire compatibility against the last deployed edge (blizzard:wire-compat)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run blizzard-wire-compat --baseline deployed --repo paul-gross/blizzard
+
   dev-build:
     name: dev build wheel artifact
     needs: [gate]
@@ -107,8 +131,9 @@ jobs:
     # Needs dev-build (not just gate + upper-tiers) solely for its computed dev
     # version string (outputs.version, above) — do not "simplify" this away by
     # recomputing the version inline here, or the wheel and the image can drift
-    # apart on what "the dev version" means for the same commit.
-    needs: [gate, upper-tiers, dev-build]
+    # apart on what "the dev version" means for the same commit. wire-compat-deployed
+    # is needed so edge never advances past an unacknowledged wire break.
+    needs: [gate, upper-tiers, dev-build, wire-compat-deployed]
     runs-on: ubuntu-latest
     permissions:
       contents: read

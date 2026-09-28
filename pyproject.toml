@@ -86,6 +86,8 @@ blizzard-runner = "blizzard.runner.cli:runner"
 # openapi-ts client generation and CI's client-drift check both consume it
 # (bzh:generated-client).
 blizzard-export-openapi = "blizzard.tools.openapi:main"
+# Fails on a breaking change to the hub↔runner wire surface (bzh:fleet-wire-additive).
+blizzard-wire-compat = "blizzard.tools.wire_compat:main"
 
 [dependency-groups]
 dev = [

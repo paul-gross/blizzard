@@ -5,8 +5,8 @@
 # so an agent or human can reproduce the gate before pushing:
 #   ruff format --check · ruff check · pyright · process-reference prose lint ·
 #   structural gate (ast-grep scan + test) · pytest (unit + component) · OpenAPI
-#   spec drift · eslint · vitest · web structural gate · bundle composition ·
-#   generated-client drift
+#   spec drift · hub↔runner wire compatibility · eslint · vitest · web
+#   structural gate · bundle composition · generated-client drift
 #
 # Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps run live
 # against the Angular workspace at $WEB_DIR, guarded only so a checkout without
@@ -56,6 +56,10 @@ if ! git diff --quiet -- openapi/; then
   exit 1
 fi
 echo "OK: committed OpenAPI specs match the exporter."
+
+# --- hub↔runner wire compatibility (bzh:fleet-wire-additive) ---------------
+step "wire compatibility: mise run wire-compat"
+mise run wire-compat
 
 # --- Frontend: eslint + vitest + structural gate + generated-client drift ---
 # $WEB_DIR is the Angular workspace with `npm run lint` (eslint, including the
