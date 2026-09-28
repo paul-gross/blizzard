@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.app import build_hosted_app, create_app
+from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import (
     CONFIG_FILENAME,
     LEGACY_ANTHROPIC_SLUG,
@@ -367,6 +368,28 @@ def test_hosted_app_exposes_the_same_harness_health_cache_it_wires_into_create_a
     hosted = build_hosted_app(RunnerConfig.load(tmp_path))
 
     assert hosted.app.state.harness_health is hosted.harness_health
+
+
+@pytest.mark.unit
+def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(tmp_path: Path) -> None:
+    config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
+    graph = build_runner_process(config, events=EventBroker())
+    hosted = build_hosted_app(config, process_graph=graph)
+    try:
+        ctx = LoopWiring(config, "", "", graph.events, graph).context(FakeHub())
+        try:
+            assert hosted.app.state.workspace_provider is ctx.provider is graph.provider
+            assert hosted.app.state.harnesses is ctx.harnesses is graph.harnesses
+            assert hosted.app.state.harness_health is ctx.harness_health is graph.health
+            assert hosted.app.state.events is ctx.events is graph.events
+            assert hosted.app.state.clock is ctx.clock is hosted.resume.clock is graph.clock
+            assert hosted.resume.process is ctx.process is graph.process
+            assert ctx.stores is graph.stores
+        finally:
+            ctx.usage_http_client.close()
+    finally:
+        hosted.close()
+        graph.close()
 
 
 @pytest.mark.unit

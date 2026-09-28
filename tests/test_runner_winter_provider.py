@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -166,6 +167,59 @@ def test_acquire_refuses_all_or_nothing_when_pool_short(tmp_path: Path) -> None:
 def test_release_is_a_noop(tmp_path: Path) -> None:
     provider = _provider(str(tmp_path), ["e1"])
     provider.release("e1")  # never raises, cleaning defers to next acquire
+
+
+@pytest.mark.unit
+def test_reacquire_refreshes_manifest_even_after_failed_reset(tmp_path: Path) -> None:
+    (tmp_path / "e1").mkdir()
+    winter = _FakeWinter()
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=_FakeGit())
+
+    def membership(repo: str) -> None:
+        winter.worktrees = [{"kind": "worktree", "env": "e1", "repo": repo, "path": str(tmp_path / "e1" / repo)}]
+
+    membership("old")
+    assert [repo.name for repo in provider.repos("e1")] == ["old"]
+    membership("new")
+    provider.acquire("ch_1", 1, held_ids=[])
+    assert [repo.name for repo in provider.repos("e1")] == ["new"]
+    membership("latest")
+    winter.fail_on = ["provision", "e1"]
+    with pytest.raises(EnvironmentPreparationError):
+        provider.acquire("ch_2", 1, held_ids=[])
+    assert [repo.name for repo in provider.repos("e1")] == ["latest"]
+
+
+@pytest.mark.unit
+def test_manifest_read_waits_for_reset_before_caching(tmp_path: Path) -> None:
+    (tmp_path / "e1").mkdir()
+    entered = threading.Event()
+    resume = threading.Event()
+
+    class BlockingWinter(_FakeWinter):
+        def run(self, workspace_root: Path, args) -> None:  # type: ignore[no-untyped-def]
+            if list(args) == ["ws", "init", "e1"]:
+                entered.set()
+                assert resume.wait(timeout=5)
+            super().run(workspace_root, args)
+
+    winter = BlockingWinter()
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=_FakeGit())
+    names: list[str] = []
+    reset = threading.Thread(target=lambda: provider.acquire("ch_1", 1, held_ids=[]))
+    reset.start()
+    assert entered.wait(timeout=5)
+    read = threading.Thread(target=lambda: names.extend(repo.name for repo in provider.repos("e1")))
+    read.start()
+    try:
+        assert not winter.captures or ["ws", "worktrees", "--json"] not in winter.captures
+        winter.worktrees = [{"kind": "worktree", "env": "e1", "repo": "new", "path": str(tmp_path / "e1" / "new")}]
+    finally:
+        resume.set()
+        reset.join(timeout=5)
+        read.join(timeout=5)
+    assert not reset.is_alive() and not read.is_alive()
+    assert names == ["new"]
 
 
 # --- Component — the real winter CLI ---

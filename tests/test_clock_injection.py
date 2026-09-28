@@ -72,6 +72,7 @@ _CLOCK_COMPOSITION_ROOTS: dict[Path, str] = {
     _HUB_DIR / "app.py": "build_hosted_app — the hosted hub's composition root",
     _HUB_DIR / "composition.py": "build_services — the hub's fleet-service composition root",
     _RUNNER_DIR / "app.py": "build_hosted_app — the runner's served-app composition root",
+    _RUNNER_DIR / "composition.py": "build_runner_process — the runner's hosted process graph",
     _RUNNER_DIR / "loop" / "build.py": "LoopWiring.context — the loop's own composition root",
     _RUNNER_DIR / "cli" / "runtime.py": "a short-lived CLI process's own composition root",
     _RUNNER_DIR / "cli" / "external_usage.py": "a short-lived CLI process's own composition root",
@@ -89,7 +90,7 @@ def _system_clock_construction_lines(path: Path) -> list[int]:
 
 def test_system_clock_is_constructed_only_at_a_composition_root() -> None:
     """bzh:injected-clock / bzh:dependency-injection: ``SystemClock()`` is concrete wiring
-    — it may be constructed only at one of the six declared composition roots, never inside
+    — it may be constructed only at a declared composition root, never inside
     a collaborator it is handed down to."""
     violations: list[str] = []
     for path in sorted(_SRC_DIR.rglob("*.py")):

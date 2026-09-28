@@ -16,9 +16,9 @@ from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
-from blizzard.runner.app import build_hosted_app
+from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.composition import build_read_stores
+from blizzard.runner.composition import RunnerProcess, build_read_stores, build_runner_process
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
@@ -86,13 +86,24 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # One broker for the process: `host` is the one composer building both the
     # served app and the ticked loop, so every writer and the stream route share it.
     broker = EventBroker()
-    hosted = build_hosted_app(config, events=broker)
+    graph = build_runner_process(config, events=broker)
+    try:
+        hosted = build_hosted_app(config, process_graph=graph)
+        try:
+            _serve_host(config, graph, hosted)
+        finally:
+            hosted.close()
+    finally:
+        graph.close()
+
+
+def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -> None:
     app = hosted.app
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
     # `PeriodicDriver` resolves its prompt files on this thread, not in the loop thread: a
     # configured-but-missing prompt raises here, before any socket binds.
     with click_exception_on(ConfigError):
-        driver = PeriodicDriver(config, interval_seconds=interval, broker=broker, harness_health=hosted.harness_health)
+        driver = PeriodicDriver(config, interval_seconds=interval, process_graph=graph)
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
     # served by the single `Server` below, which keeps the shutdown path on one frame.
@@ -135,7 +146,6 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         Uds(config.socket_path).unlink()
         # Disposed last, once the resume marking's own store write is done: a
         # gracefully stopped runner is a single-file store again.
-        hosted.engine.dispose()
 
 
 @click.command("tick")

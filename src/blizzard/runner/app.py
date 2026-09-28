@@ -1,4 +1,4 @@
-"""Composition root — wire the runner and build its FastAPI app (``bzh:dependency-injection``).
+"""Wire the served runner app from the process graph (``bzh:dependency-injection``).
 
 The single place collaborators are constructed and injected. ``create_app`` does **not**
 open the store, which lets the OpenAPI exporter and unit tests build the app without a
@@ -21,10 +21,9 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
 from blizzard.foundation.web import Frontend
@@ -69,7 +68,7 @@ from blizzard.runner.auth.federation import router as auth_router
 from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
-from blizzard.runner.composition import build_stores_and_connections
+from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.asks import AskService
 from blizzard.runner.domain.attachments import AttachmentService
@@ -81,14 +80,10 @@ from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
-from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
-from blizzard.runner.harness.internal.harness_registry import (
-    build_production_harness_health_probes,
-    build_production_harness_registry,
-)
+from blizzard.runner.harness.internal.harness_registry import build_production_harness_health_probes
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.loop.build import ResumeMarking
@@ -97,7 +92,6 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
-from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
 from blizzard.runner.transcripts.internal.harness_transcript_repositories import HarnessTranscriptRepositories
 from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
@@ -200,6 +194,8 @@ def create_app(
     hub_retry_delay: Callable[[float], None] | None = None,
     jti_cache: IJtiCache | None = None,
     events: EventBroker | None = None,
+    clock: IClock | None = None,
+    process: LinuxProcessProbe | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -207,6 +203,8 @@ def create_app(
     then answer 503 and ``/api/ready`` reports ``ready=false``. ``selftests`` is always
     wired; ``events`` defaults absent, leaving the route silent."""
     log = get_logger("blizzard.runner")
+    clock = clock or SystemClock()
+    process = process or LinuxProcessProbe()
     resolved_harnesses: IHarnessRegistry = harnesses if harnesses is not None else HarnessRegistry({})
 
     app = FastAPI(title="blizzard-runner", version=__version__, lifespan=_lifespan)
@@ -227,7 +225,7 @@ def create_app(
     app.state.shutdown = asyncio.Event()
     # Unconditional: a stateless wrapper over the wall clock (``bzh:injected-clock``),
     # needed whether or not a store is wired.
-    app.state.clock = SystemClock()
+    app.state.clock = clock
     app.state.leases = leases
     app.state.transcripts = transcripts
     app.state.runner_status = runner_status
@@ -238,26 +236,24 @@ def create_app(
     # Each single-concept, no cross-collaborator beyond its own write seam and the clock
     # — built here, like `selftests` below, rather than requiring
     # every composer to repeat the derivation `runner_stores` already makes trivial.
-    app.state.asks = asks or (AskService(runner_stores.asks, SystemClock(), events=events) if runner_stores else None)
-    app.state.pause = pause or (
-        PauseService(runner_stores.pause, SystemClock(), events=events) if runner_stores else None
-    )
+    app.state.asks = asks or (AskService(runner_stores.asks, clock, events=events) if runner_stores else None)
+    app.state.pause = pause or (PauseService(runner_stores.pause, clock, events=events) if runner_stores else None)
     app.state.lease_liveness = lease_liveness or (
-        LeaseLivenessService(runner_stores.liveness, SystemClock()) if runner_stores else None
+        LeaseLivenessService(runner_stores.liveness, clock) if runner_stores else None
     )
     app.state.lease_sessions = lease_sessions or (
-        LeaseSessionService(runner_stores.session, SystemClock()) if runner_stores else None
+        LeaseSessionService(runner_stores.session, clock) if runner_stores else None
     )
     app.state.workspace_prompts = workspace_prompts or (
-        WorkspacePromptService(runner_stores.workspace_prompt, SystemClock()) if runner_stores else None
+        WorkspacePromptService(runner_stores.workspace_prompt, clock) if runner_stores else None
     )
     # The adapter-drift canary: wired unconditionally regardless of `runner_stores` —
     # only `results` needs one, and stays `None` (no durable outcome) without it.
     app.state.selftests = selftests or SelfTestService(
         harnesses=resolved_harnesses,
         scratch_git=SubprocessScratchGit(),
-        process=LinuxProcessProbe(),
-        clock=SystemClock(),
+        process=process,
+        clock=clock,
         results=runner_stores.selftest_results if runner_stores else None,
     )
     # The runner's own health diagnostics: `build_hosted_app` passes the one
@@ -266,7 +262,7 @@ def create_app(
     # instance to give (a standalone `create_app`, a unit test) falls back to a private one
     # that nothing ever refreshes but this route's own reads — never a live probe either way.
     app.state.harness_health = harness_health or HarnessHealthCache(
-        clock=SystemClock(),
+        clock=clock,
         probes=build_production_harness_health_probes(config),
         selftest_results=runner_stores.selftest_results if runner_stores else None,
         configured_tiers={
@@ -328,11 +324,7 @@ def create_app(
 
 @dataclass(frozen=True)
 class HostedApp:
-    """The ``host`` composition root's return: the served app alongside the restart-resume
-    hook, both wired from the one object graph :func:`build_hosted_app` builds — no
-    caller wires a second engine, store bundle, clock, or process probe to reach either.
-    ``engine`` (disposed by ``host`` on shutdown) is typed ``Engine``: this is a
-    composition root, the one place besides ``runner/composition.py`` allowed to name it."""
+    """The served app and restart-resume hook wired from one process graph."""
 
     app: FastAPI
     resume: ResumeMarking
@@ -341,44 +333,41 @@ class HostedApp:
     #: too — one instance, not two independently-refreshing ones, so a
     #: dashboard read and the availability actually registered to the hub can never disagree.
     harness_health: HarnessHealthCache
+    archived_transcript_client: httpx.Client
+    hub_proxy_client: httpx.Client
+    hub_http_client: httpx.Client
+    owned_graph: RunnerProcess | None = None
+
+    def close(self) -> None:
+        self.hub_http_client.close()
+        self.hub_proxy_client.close()
+        self.archived_transcript_client.close()
+        if self.owned_graph is not None:
+            self.owned_graph.close()
 
 
-def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None) -> HostedApp:
-    """The ``host`` composition root: open the store and wire the readiness seam.
+def build_hosted_app(
+    config: RunnerConfig, *, events: EventBroker | None = None, process_graph: RunnerProcess | None = None
+) -> HostedApp:
+    """Wire the served app and recovery hooks from the hosted process graph.
 
-    Engine creation is connection-free, so this stays cheap; the connection is opened
-    lazily on the first ``/api/ready`` read. ``events`` is the process-wide broker
-    ``host`` shares with the loop's ``PeriodicDriver``; absent for every other caller.
-
-    Kept separate from the loop's own engine (``runner/loop/build.py::LoopWiring``):
-    every CLI verb is already its own process on the same store, so sqlite contention is
-    between connections, not engines, and WAL plus ``busy_timeout`` handles that directly.
-    The one exception is ``harness_health``: built here, over this engine's
-    own store, and handed back on :class:`HostedApp` so ``host`` can inject the same
-    instance into the loop's own context instead of it building a second one."""
-    engine = create_engine_from_url(config.db_url)
+    The standalone entry builds a graph for its caller; ``host`` supplies its own
+    graph so app and driver share the same stores, provider and harness registry."""
+    graph = process_graph or build_runner_process(config, events=events)
+    engine = graph.engine
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
-    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
-    runner_stores, connections = build_stores_and_connections(engine, errors=errors)
-    harness_health = HarnessHealthCache(
-        clock=SystemClock(),
-        probes=build_production_harness_health_probes(config),
-        selftest_results=runner_stores.selftest_results,
-        configured_tiers={
-            CLAUDE_CODE_HARNESS_ID: config.model_aliases,
-            OPENCODE_HARNESS_ID: config.opencode_model_aliases,
-        },
-    )
-    workspace_provider: IWorkspaceProvider = build_workspace_provider(
-        config, held_ids=runner_stores.environments.held_environment_ids
-    )
-    harnesses = build_production_harness_registry(config)
+    runner_stores = graph.stores
+    connections = graph.connections
+    harness_health = graph.health
+    workspace_provider = graph.provider
+    harnesses = graph.harnesses
+    clock = graph.clock
+    process = graph.process
+    events = graph.events
     # ``stale_after`` is left at its default so the two readers never desync (#28).
-    leases = LocalLeaseService(
-        stores=RunnerReadStores.of(runner_stores), clock=SystemClock(), process=LinuxProcessProbe()
-    )
+    leases = LocalLeaseService(stores=RunnerReadStores.of(runner_stores), clock=clock, process=process)
     # The archived-transcript seam needs its own authenticated client:
     # `hub_http_client` below carries no auth headers (JWKS/hub-auth-mode reads only).
     archived_transcript_client = httpx.Client(base_url=config.hub_url, timeout=15.0, headers=config.auth_headers())
@@ -395,11 +384,9 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         archived=archived_transcripts,
         workspace_root=config.provider_workspace_root,
     )
-    # The clock/probe instances below are per-service: both are stateless, so a second
-    # instance is equivalent to sharing one.
     runner_status = RunnerStatusService(
         stores=RunnerReadStores.of(runner_stores),
-        clock=SystemClock(),
+        clock=clock,
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
@@ -410,26 +397,26 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
     )
     takeover = TakeoverService(
         runner_stores,
-        SystemClock(),
-        LinuxProcessProbe(),
+        clock,
+        process,
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
         harnesses=harnesses,
         workspace_root=config.provider_workspace_root,
         events=events,
     )
-    requeue = RequeueService(runner_stores.requeue, SystemClock())
-    attachments = AttachmentService(runner_stores.attachments, SystemClock(), tokens=runner_stores.tokens)
+    requeue = RequeueService(runner_stores.requeue, clock)
+    attachments = AttachmentService(runner_stores.attachments, clock, tokens=runner_stores.tokens)
     # Takes the workspace provider too: a declaration is checked against the
     # environment's repo manifest, which is the provider's to declare.
     git_commit_declarations = GitCommitDeclarationService(
         runner_stores.git_commit_declarations,
-        SystemClock(),
+        clock,
         workspace_provider,
         tokens=runner_stores.tokens,
         environments=runner_stores.environments,
     )
-    jti_cache = JtiCacheRepository(connections, SystemClock())
+    jti_cache = JtiCacheRepository(connections, clock)
     # The real, network-reaching hub client — only `host` wires one.
     hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
     app = create_app(
@@ -450,9 +437,20 @@ def build_hosted_app(config: RunnerConfig, *, events: EventBroker | None = None)
         hub_http_client=hub_http_client,
         hub_proxy_client=hub_proxy_client,
         events=events,
+        clock=clock,
+        process=process,
     )
-    resume = ResumeMarking(runner_stores, SystemClock(), LinuxProcessProbe())
-    return HostedApp(app=app, resume=resume, engine=engine, harness_health=harness_health)
+    resume = ResumeMarking(runner_stores, clock, process)
+    return HostedApp(
+        app,
+        resume,
+        engine,
+        harness_health,
+        archived_transcript_client,
+        hub_proxy_client,
+        hub_http_client,
+        graph if process_graph is None else None,
+    )
 
 
 def create_app_for_export() -> FastAPI:

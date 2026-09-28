@@ -1,8 +1,7 @@
-"""Composition root for the reconciliation loop (``bzh:dependency-injection``).
+"""Reconciliation-loop wiring (``bzh:dependency-injection``).
 
-The single place the loop's collaborators are constructed from resolved config and
-injected into a :class:`LoopContext`. Both :meth:`LoopWiring.tick_once` and
-:class:`PeriodicDriver` open the seam clients here and close them on exit."""
+The hosted driver receives the shared process graph. Standalone commands build
+their own graph and dispose it after their one pass."""
 
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.composition import build_stores
+from blizzard.runner.composition import RunnerProcess, build_runner_process, build_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.events.broker import EventBroker
@@ -88,9 +87,9 @@ class LoopWiring:
     config: RunnerConfig
     workspace_prompt: str
     runner_prompt: str
-    #: The SSE broker shared with the served app when one composer
-    #: builds both; ``None`` for a loop-only caller (``blizzard runner tick`` and siblings).
+    #: The SSE broker shared with the served app; absent on standalone commands.
     events: EventBroker | None = None
+    process_graph: RunnerProcess | None = None
 
     @classmethod
     def of(cls, config: RunnerConfig, *, broker: EventBroker | None = None) -> LoopWiring:
@@ -109,30 +108,29 @@ class LoopWiring:
         and the returned context's own ``usage_http_client`` — closed the same way,
         once the caller is done with the context.
 
-        Builds its own engine (kept separate from ``host``'s own) unless ``engine`` is
-        given — :class:`PeriodicDriver` passes its own so it can dispose it on thread exit
-        without threading it through :class:`LoopContext` for a step to see.
-        ``health_cache`` is the same exception ``engine`` is: ``host`` passes
-        the one instance it also gave the served app (``HostedApp.harness_health``), so a
-        dashboard read and the loop's own registered availability read one shared, single
-        source of truth rather than two independently-refreshing caches that can disagree.
+        The hosted driver shares its process graph with the served app. A direct
+        standalone context build can supply an engine and health cache for tests.
         ``sweep_worker_scratch`` runs the per-lease scratch directory's one-shot orphan sweep —
         ``True`` only from :class:`PeriodicDriver`'s own daemon-start build, ahead of its first
         tick, when no spawn can race it; every other caller (``tick_once`` and siblings, a build
         wired only to inspect it) leaves it off."""
         config = self.config
-        if engine is None:
-            engine = create_engine_from_url(config.db_url)
-        stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
-        provider = build_workspace_provider(config, held_ids=stores.environments.held_environment_ids)
-        harnesses = build_production_harness_registry(config)
+        graph = self.process_graph
+        if graph is None:
+            if engine is None:
+                engine = create_engine_from_url(config.db_url)
+            stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
+            provider = build_workspace_provider(config, held_ids=stores.environments.held_environment_ids)
+            harnesses = build_production_harness_registry(config)
+        else:
+            stores, provider, harnesses = graph.stores, graph.provider, graph.harnesses
         # A startup guard: this composition's transcripts lane requires the default
         # harness's own binding to resolve one, not merely to be registered at all.
         default_id = default_harness_id(harnesses)
         if default_id is not None:
             harnesses.transcript_source(default_id)
-        _clock = SystemClock()
-        health_cache = health_cache or HarnessHealthCache(
+        _clock = graph.clock if graph is not None else SystemClock()
+        health_cache = (graph.health if graph is not None else health_cache) or HarnessHealthCache(
             clock=_clock,
             probes=build_production_harness_health_probes(config),
             selftest_results=stores.selftest_results,
@@ -219,7 +217,7 @@ class LoopWiring:
             provider=provider,
             subscriptions=resolved_subscriptions,
             usage_http_client=usage_http_client,
-            process=LinuxProcessProbe(),
+            process=graph.process if graph is not None else LinuxProcessProbe(),
             worktree_git=SubprocessWorktreeGit(),
             # The check-runner seam — see `runner/loop/checks.py`.
             check_runner=SubprocessCheckRunner(worker_env=config.worker_env),
@@ -264,34 +262,49 @@ class LoopWiring:
     def tick_once(self) -> None:
         """Run one synchronous reconciliation tick — the CLI verb and e2e driver."""
         config = self.config
-        with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
-            ctx = self.context(HttpHubClient(client))
-            try:
-                tick(ctx)
-            finally:
-                ctx.usage_http_client.close()
+        graph = build_runner_process(config, events=self.events)
+        try:
+            with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
+                wiring = LoopWiring(config, self.workspace_prompt, self.runner_prompt, self.events, graph)
+                ctx = wiring.context(HttpHubClient(client))
+                try:
+                    tick(ctx)
+                finally:
+                    ctx.usage_http_client.close()
+        finally:
+            graph.close()
 
     def backfill_transcripts(self, *, dry_run: bool, limit: int | None = None) -> TranscriptBackfillReport:
         """Run one transcript-backfill pass — the operator verb's own entry,
         wired here rather than at the CLI so the composition root stays the one place a
         context is built."""
         config = self.config
-        with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
-            ctx = self.context(HttpHubClient(client))
-            try:
-                return TranscriptBackfill(ctx).run(dry_run=dry_run, limit=limit)
-            finally:
-                ctx.usage_http_client.close()
+        graph = build_runner_process(config, events=self.events)
+        try:
+            with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
+                wiring = LoopWiring(config, self.workspace_prompt, self.runner_prompt, self.events, graph)
+                ctx = wiring.context(HttpHubClient(client))
+                try:
+                    return TranscriptBackfill(ctx).run(dry_run=dry_run, limit=limit)
+                finally:
+                    ctx.usage_http_client.close()
+        finally:
+            graph.close()
 
     def reship_transcript(self, segment_id: str) -> TranscriptReshipReport:
         """Re-ship one already-imported segment — wired here for the reason above."""
         config = self.config
-        with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
-            ctx = self.context(HttpHubClient(client))
-            try:
-                return TranscriptBackfill(ctx).reship(segment_id)
-            finally:
-                ctx.usage_http_client.close()
+        graph = build_runner_process(config, events=self.events)
+        try:
+            with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
+                wiring = LoopWiring(config, self.workspace_prompt, self.runner_prompt, self.events, graph)
+                ctx = wiring.context(HttpHubClient(client))
+                try:
+                    return TranscriptBackfill(ctx).reship(segment_id)
+                finally:
+                    ctx.usage_http_client.close()
+        finally:
+            graph.close()
 
 
 @dataclass(frozen=True)
@@ -340,16 +353,20 @@ class PeriodicDriver:
         interval_seconds: float,
         broker: EventBroker | None = None,
         harness_health: HarnessHealthCache | None = None,
+        process_graph: RunnerProcess | None = None,
     ) -> None:
         # Wired eagerly on the constructing (``host``) thread so a missing prompt file
         # fails startup rather than the loop thread (`tests/test_runner_loop_build.py`).
         self._wiring = LoopWiring.of(config, broker=broker)
+        if process_graph is not None:
+            self._wiring = LoopWiring(
+                config, self._wiring.workspace_prompt, self._wiring.runner_prompt, process_graph.events, process_graph
+            )
         self._interval = interval_seconds
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="blizzard-runner-loop", daemon=True)
         self._client: httpx.Client | None = None
-        # `host`'s own shared instance (`HostedApp.harness_health`), so this
-        # loop's registered availability and the served app's diagnostics read one cache.
+        # Direct standalone driver construction can supply a health cache for tests.
         self._harness_health = harness_health
 
     def start(self) -> None:
@@ -373,10 +390,9 @@ class PeriodicDriver:
     def _run(self) -> None:
         config = self._wiring.config
         self._client = httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers())
-        # Built here, not inside `context()`, so this thread can dispose it on exit —
-        # a gracefully stopped runner is a single-file store again. Inside the `try` below,
-        # not before it: a raising `context()` call must still reach `finally`'s dispose.
-        engine = create_engine_from_url(config.db_url)
+        # A standalone driver owns its engine on this thread. The hosted driver
+        # uses the process graph's shared engine, disposed after recovery marking.
+        engine = None if self._wiring.process_graph is not None else create_engine_from_url(config.db_url)
         ctx: LoopContext | None = None
         try:
             ctx = self._wiring.context(
@@ -396,5 +412,6 @@ class PeriodicDriver:
             if ctx is not None:
                 ctx.usage_http_client.close()
             self._client.close()
-            engine.dispose()
+            if engine is not None:
+                engine.dispose()
             _log.info("reconciliation loop stopped", runner_id=config.runner_id)

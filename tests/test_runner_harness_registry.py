@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.app import create_app_for_export
+from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
@@ -131,10 +132,13 @@ def test_production_registry_injects_its_own_executor_not_the_module_default(tmp
     """`bzh:dependency-injection`: the one production composition root builds and injects
     its own long-lived executor explicitly, rather than falling back to
     ``ProcessLauncher``'s module-level default — that default backs tests only."""
-    registry = build_production_harness_registry(RunnerConfig(root=tmp_path, db_url="sqlite://"))
-
-    launcher = vars(registry.adapter(CLAUDE_CODE_HARNESS_ID))["_launcher"]
-    assert vars(launcher)["_executor"] is not _SPAWN_EXECUTOR
+    graph = build_runner_process(RunnerConfig(root=tmp_path, db_url="sqlite://"))
+    try:
+        launcher = vars(graph.harnesses.adapter(CLAUDE_CODE_HARNESS_ID))["_launcher"]
+        assert vars(launcher)["_executor"] is graph.executor
+        assert graph.executor is not _SPAWN_EXECUTOR
+    finally:
+        graph.close()
 
 
 @pytest.mark.unit
