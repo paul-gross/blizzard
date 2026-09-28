@@ -1,0 +1,20 @@
+id: bzh:store-exclusive-write
+valid:
+  # Not hub/ code — the rule is scoped to files, so this fixture is only meaningful
+  # as a rule-shape check: a non-threading import never matches regardless of scope.
+  - |
+    from __future__ import annotations
+
+    from sqlalchemy import Connection
+  # A queue import is a different module entirely, not a near-miss on the pattern text.
+  - |
+    import queue
+invalid:
+  # The exact shape every current holder of the residual dependency-graph lock carries —
+  # suppressed at each real site with `# ast-grep-ignore: bzh:store-exclusive-write`.
+  - |
+    import threading
+  - |
+    import threading
+
+    from dataclasses import dataclass

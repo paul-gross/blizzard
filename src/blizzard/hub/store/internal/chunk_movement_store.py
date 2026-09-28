@@ -19,6 +19,7 @@ from sqlalchemy import Connection, select, update
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import MIGRATION_PREFIX, Id
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import MigrationSource
@@ -27,6 +28,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_MODEL,
     MARKER_PREFIX,
+    conn_of,
     enqueue_close_intents,
     graph_id_of,
     insert_proposals,
@@ -213,44 +215,100 @@ class ChunkMovementStore:
         HERE rather than handed down — one above every prior attempt is a read-then-write only this
         transaction holds together (``bzh:epoch-fencing``)."""
         with self._store.write("record_restart") as conn:
-            epoch = latest_epoch(conn, chunk_id) + 1
-            for question_id in answered_question_ids:
-                already = conn.execute(
-                    select(s.question_answers.c.question_id).where(s.question_answers.c.question_id == question_id)
-                ).first()
-                if already is None:
-                    conn.execute(
-                        s.question_answers.insert().values(
-                            question_id=question_id, answer=answer, answered_by=by, answered_at=at
-                        )
-                    )
-            from_graph_id = graph_id_of(conn, chunk_id)
-            if to_graph_id is not None:
-                self._repin_by_restart(
-                    conn,
-                    chunk_id,
-                    from_node_id=from_node_id,
-                    from_graph_id=from_graph_id,
-                    to_graph_id=to_graph_id,
-                    landed_node_id=to_node_id,
-                    epoch=epoch,
-                    at=at,
-                )
-            result = conn.execute(
-                s.chunk_restarts.insert().values(
-                    chunk_id=chunk_id,
-                    graph_id=to_graph_id if to_graph_id is not None else from_graph_id,
-                    from_node_id=from_node_id,
-                    from_graph_id=from_graph_id if to_graph_id is not None else None,
-                    to_node_id=to_node_id,
-                    epoch=epoch,
-                    decision_id=decision_id,
-                    restarted_by=by,
-                    recorded_at=at,
-                )
+            return self._record_restart_conn(
+                conn,
+                chunk_id,
+                from_node_id=from_node_id,
+                to_node_id=to_node_id,
+                by=by,
+                at=at,
+                decision_id=decision_id,
+                answered_question_ids=answered_question_ids,
+                answer=answer,
+                to_graph_id=to_graph_id,
             )
-            key = result.inserted_primary_key
-            return int(key[0]) if key is not None else 0
+
+    def record_restart_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        to_node_id: str,
+        by: str,
+        at: datetime,
+        decision_id: str | None = None,
+        answered_question_ids: Sequence[str] = (),
+        answer: str = "",
+        to_graph_id: str | None = None,
+    ) -> int:
+        """`record_restart`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
+        the restart's own write, on ``handle``'s already-locked connection."""
+        return self._record_restart_conn(
+            conn_of(handle),
+            chunk_id,
+            from_node_id=from_node_id,
+            to_node_id=to_node_id,
+            by=by,
+            at=at,
+            decision_id=decision_id,
+            answered_question_ids=answered_question_ids,
+            answer=answer,
+            to_graph_id=to_graph_id,
+        )
+
+    def _record_restart_conn(  # type: ignore[no-untyped-def]
+        self,
+        conn,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        to_node_id: str,
+        by: str,
+        at: datetime,
+        decision_id: str | None,
+        answered_question_ids: Sequence[str],
+        answer: str,
+        to_graph_id: str | None,
+    ) -> int:
+        epoch = latest_epoch(conn, chunk_id) + 1
+        for question_id in answered_question_ids:
+            already = conn.execute(
+                select(s.question_answers.c.question_id).where(s.question_answers.c.question_id == question_id)
+            ).first()
+            if already is None:
+                conn.execute(
+                    s.question_answers.insert().values(
+                        question_id=question_id, answer=answer, answered_by=by, answered_at=at
+                    )
+                )
+        from_graph_id = graph_id_of(conn, chunk_id)
+        if to_graph_id is not None:
+            self._repin_by_restart(
+                conn,
+                chunk_id,
+                from_node_id=from_node_id,
+                from_graph_id=from_graph_id,
+                to_graph_id=to_graph_id,
+                landed_node_id=to_node_id,
+                epoch=epoch,
+                at=at,
+            )
+        result = conn.execute(
+            s.chunk_restarts.insert().values(
+                chunk_id=chunk_id,
+                graph_id=to_graph_id if to_graph_id is not None else from_graph_id,
+                from_node_id=from_node_id,
+                from_graph_id=from_graph_id if to_graph_id is not None else None,
+                to_node_id=to_node_id,
+                epoch=epoch,
+                decision_id=decision_id,
+                restarted_by=by,
+                recorded_at=at,
+            )
+        )
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
 
     def record_requeue(self, chunk_id: str, *, at: datetime) -> int:
         with self._store.write("record_requeue") as conn:

@@ -1,13 +1,16 @@
 """DependencyService (unit tier) — declaring and releasing a chunk dependency edge, under
-the shared claim lock.
+the shared row lock.
 
-A fake stands in for the dependencies store and the facts read seam — every unimplemented
-method raises loudly if called (``bzh:domain-core``). The lock's cross-declaration race
-atomicity is proven at the component tier (``tests/test_dependency_race.py``), not here."""
+A fake stands in for the dependencies store and the facts/lifecycle read seams — every
+unimplemented method raises loudly if called (``bzh:domain-core``). The lock's
+cross-declaration race atomicity is proven at the component tier
+(``tests/test_dependency_race.py``), not here."""
 
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -16,8 +19,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.lifecycle import IReadChunkLifecycleRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.dependencies import (
     DependencyService,
     DependencyWouldCloseCycle,
@@ -57,10 +59,6 @@ class _FakeFactsRepo:
         raise NotImplementedError(f"DependencyService should not touch {name!r}")
 
 
-def _as_facts(repo: _FakeFactsRepo) -> IReadChunkFactsRepository:
-    return cast(IReadChunkFactsRepository, repo)
-
-
 @dataclass
 class _FakeLifecycleRepo:
     """Only ``is_ephemeral`` is live; anything else is a bug (see module docstring).
@@ -77,10 +75,6 @@ class _FakeLifecycleRepo:
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"DependencyService should not touch {name!r}")
-
-
-def _as_lifecycle(repo: _FakeLifecycleRepo) -> IReadChunkLifecycleRepository:
-    return cast(IReadChunkLifecycleRepository, repo)
 
 
 @dataclass
@@ -117,6 +111,11 @@ class _FakeDependenciesRepo:
         self.standing.append(edge)
         return edge
 
+    def declare_locked(
+        self, handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+    ) -> DependencyEdge:
+        return self.declare(dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+
     def release(
         self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
     ) -> DependencyEdge | None:
@@ -144,6 +143,42 @@ def _as_dependencies(repo: _FakeDependenciesRepo) -> IWriteChunkDependenciesRepo
     return cast(IWriteChunkDependenciesRepository, repo)
 
 
+@dataclass
+class _FakeLockedChunkRead:
+    """Only ``facts``/``is_ephemeral``/``standing_edges`` are live — see module
+    docstring."""
+
+    facts_repo: _FakeFactsRepo
+    lifecycle_repo: _FakeLifecycleRepo
+    dependencies_repo: _FakeDependenciesRepo
+
+    def facts(self, chunk_id: str) -> ChunkFacts | None:
+        return self.facts_repo.load_facts(chunk_id)
+
+    def is_ephemeral(self, chunk_id: str) -> bool:
+        return self.lifecycle_repo.is_ephemeral(chunk_id)
+
+    def standing_edges(self) -> list[DependencyEdge]:
+        return self.dependencies_repo.list_standing_edges()
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"DependencyService should not touch handle.{name!r}")
+
+
+@dataclass
+class _FakeExclusiveWrites:
+    """``locked`` yields a :class:`_FakeLockedChunkRead` over the same fakes the
+    ``DependencyService`` under test was built with."""
+
+    facts_repo: _FakeFactsRepo
+    lifecycle_repo: _FakeLifecycleRepo
+    dependencies_repo: _FakeDependenciesRepo
+
+    @contextmanager
+    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.facts_repo, self.lifecycle_repo, self.dependencies_repo))
+
+
 def _not_ready_facts() -> ChunkFacts:
     return ChunkFacts(minted=True)
 
@@ -157,18 +192,18 @@ def _service(
     facts: _FakeFactsRepo | None = None,
     lifecycle: _FakeLifecycleRepo | None = None,
 ) -> tuple[DependencyService, _FakeFactsRepo]:
-    """Build a ``DependencyService`` over ``dependencies`` with a fresh, single-test claim
-    lock (the shared-lock race is proven at the component tier). ``facts`` defaults to a
-    not-ready dependent; ``lifecycle`` defaults to no chunk being ephemeral."""
+    """Build a ``DependencyService`` over ``dependencies`` with a fresh, single-test row
+    lock and cycle lock (the shared-lock race is proven at the component tier). ``facts``
+    defaults to a not-ready dependent; ``lifecycle`` defaults to no chunk being ephemeral."""
     facts_repo = facts or _FakeFactsRepo(facts=_not_ready_facts())
     lifecycle_repo = lifecycle or _FakeLifecycleRepo()
+    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts_repo, lifecycle_repo, dependencies))
     return (
         DependencyService(
-            facts=_as_facts(facts_repo),
-            lifecycle=_as_lifecycle(lifecycle_repo),
             dependencies=_as_dependencies(dependencies),
+            exclusive=exclusive,
             clock=FixedClock(instant=_T0),
-            claim_lock=threading.Lock(),
+            cycle_lock=threading.Lock(),
         ),
         facts_repo,
     )

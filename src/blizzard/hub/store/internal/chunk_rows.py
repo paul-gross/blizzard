@@ -308,13 +308,29 @@ def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
     )
 
 
+def lock_chunk_row(conn: Connection, chunk_id: str) -> None:
+    """Take the chunk row's write lock, as the transaction's FIRST statement — a no-op
+    ``UPDATE`` on a row the caller already knows exists (``bzh:sql-portable``,
+    ``bzh:store-exclusive-write``; ``tests/test_route_seq_concurrency.py``). Takes
+    SQLite's single writer lock before any later read; on Postgres, queues a concurrent
+    locker of the same row. Every guard read a decision rests on must follow this call."""
+    conn.execute(s.chunks.update().where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
+
+
+def conn_of(handle) -> Connection:  # type: ignore[no-untyped-def]
+    """A ``*_locked`` write method's own recovery of the real connection behind a
+    domain-held :class:`~blizzard.hub.domain.chunks.exclusive.ILockedChunkRead` handle —
+    package-private; the domain layer never imports this, and this module never imports
+    the handle's concrete class back, so the two sides stay acyclic."""
+    return handle.conn  # type: ignore[no-any-return]
+
+
 def next_route_seq(conn: Connection, chunk_id: str) -> int:
     """One past the current max ``seq`` across ``route_created``, ``route_released``
     and ``route_token_minted`` for this chunk, so the triple is totally ordered even
-    when timestamps tie. Read-then-insert, so concurrent callers are serialized by a
-    no-op ``UPDATE`` on the chunk's own row — one portable write-lock statement for
-    both dialects (``bzh:sql-portable``; ``tests/test_route_seq_concurrency.py``)."""
-    conn.execute(s.chunks.update().where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
+    when timestamps tie. Read-then-insert, so concurrent callers are serialized by
+    :func:`lock_chunk_row` (``bzh:sql-portable``; ``tests/test_route_seq_concurrency.py``)."""
+    lock_chunk_row(conn, chunk_id)
     created_max = conn.execute(
         select(func.max(s.route_created.c.seq)).where(s.route_created.c.chunk_id == chunk_id)
     ).scalar()

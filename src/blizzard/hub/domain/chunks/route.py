@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.fleet import Route
 
 
@@ -44,6 +45,12 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
         ``token_hash`` is the sha256 digest of the plaintext token, already hashed by the
         caller (``bzh:domain-takes-objects``); the token fact lands in the same store
         write, never as a column on the route fact. Returns the minted ``route_id``."""
+        ...
+
+    def record_route_locked(self, handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
+        """`record_route`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
+        the claim's own write, on ``handle``'s already-locked connection rather than a
+        fresh transaction."""
         ...
 
     def record_route_released(self, chunk_id: str, *, at: datetime) -> int:

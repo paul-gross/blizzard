@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.work import Chunk, IntendedMigration
 
 
@@ -68,6 +69,11 @@ class IWriteChunkRecordRepository(IReadChunkRecordRepository, Protocol):
         chunk is still unclaimed, under the claim lock."""
         ...
 
+    def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
+        """`set_graph`'s locked-transaction sibling (``bzh:store-exclusive-write``) — the
+        edit's own write, on ``handle``'s already-locked connection."""
+        ...
+
     def set_defaults(
         self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
     ) -> None:
@@ -78,9 +84,30 @@ class IWriteChunkRecordRepository(IReadChunkRecordRepository, Protocol):
         state — not "leave unchanged"."""
         ...
 
+    def set_defaults_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        default_model: list[str],
+        default_effort: str | None,
+        default_harnesses: list[str],
+    ) -> None:
+        """`set_defaults`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
+        the edit's own write, on ``handle``'s already-locked connection."""
+        ...
+
     def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
         """Set, overwrite, or clear a chunk's standing migration intent.
         A plain column overwrite, not an append-only fact — the same shape :meth:`set_graph`
         carries. ``intended=None`` clears it; a non-``None`` value overwrites. Carries no
         timestamp — the column records no ``at``, unlike this repository's other writes."""
+        ...
+
+    def set_intended_migration_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, intended: IntendedMigration | None
+    ) -> None:
+        """`set_intended_migration`'s locked-transaction sibling
+        (``bzh:store-exclusive-write``) — the edit's own write, on ``handle``'s
+        already-locked connection."""
         ...

@@ -20,7 +20,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import next_route_seq
+from blizzard.hub.store.internal.chunk_rows import lock_chunk_row, next_route_seq
 
 pytestmark = pytest.mark.unit
 
@@ -53,6 +53,23 @@ def test_next_route_seq_locks_the_chunk_row_for_update() -> None:
     assert len(conn.statements) == 4  # the lock, then the three per-table max reads
     lock_stmt = conn.statements[0]
     assert isinstance(lock_stmt, Update)  # a write, not a SELECT — see the allocator's own docstring for why
+    pg_sql = str(lock_stmt.compile(dialect=postgresql.dialect()))
+    sqlite_sql = str(lock_stmt.compile(dialect=sqlite.dialect()))
+    assert pg_sql.startswith("UPDATE chunks SET")
+    assert sqlite_sql.startswith("UPDATE chunks SET")
+
+
+def test_lock_chunk_row_compiles_to_the_same_row_scoped_statement_on_both_dialects() -> None:
+    """``bzh:store-exclusive-write``'s shared primitive — every locked writer besides
+    ``next_route_seq`` calls this directly, so its own compiled shape is pinned here
+    too, not only by way of the allocator's own statement-count assertion above."""
+    conn = _CapturingConn()
+
+    lock_chunk_row(conn, "ch_1")  # type: ignore[arg-type]
+
+    assert len(conn.statements) == 1
+    lock_stmt = conn.statements[0]
+    assert isinstance(lock_stmt, Update)
     pg_sql = str(lock_stmt.compile(dialect=postgresql.dialect()))
     sqlite_sql = str(lock_stmt.compile(dialect=sqlite.dialect()))
     assert pg_sql.startswith("UPDATE chunks SET")

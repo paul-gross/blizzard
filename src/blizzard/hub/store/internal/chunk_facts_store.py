@@ -119,6 +119,18 @@ class ChunkFactsStore:
             result = self._load(conn, [chunk_id])
         return result.get(chunk_id)
 
+    def load_facts_conn(self, conn, chunk_id: str) -> ChunkFacts | None:  # type: ignore[no-untyped-def]
+        """`load_facts`'s already-open-connection sibling — the locked-transaction seam's
+        own read (``bzh:store-exclusive-write``), resolved on the caller's connection
+        rather than a fresh one."""
+        return self._load(conn, [chunk_id]).get(chunk_id)
+
+    def load_facts_for_conn(self, conn, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:  # type: ignore[no-untyped-def]
+        """`load_facts_for`'s already-open-connection sibling — see :meth:`load_facts_conn`."""
+        if not chunk_ids:
+            return {}
+        return self._load(conn, chunk_ids)
+
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         """See :meth:`~blizzard.hub.domain.chunks.facts.IReadChunkFactsRepository.load_all_facts` —
         one bounded query per fact table across the whole store, grouped by

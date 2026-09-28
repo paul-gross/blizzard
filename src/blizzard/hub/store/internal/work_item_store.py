@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import (
@@ -32,6 +33,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_dependencies_store import release_outgoing_edges_conn
 from blizzard.hub.store.internal.chunk_rows import (
+    conn_of,
     insert_chunk_rows,
     insert_materialization_row,
     insert_promote_rows,
@@ -257,11 +259,24 @@ class WorkItemStore:
         :meth:`create_with_chunk`'s own atomicity shape. A ``forge:``-sourced pointer on the same chunk is left
         untouched. Returns the freshly-written ``chunk_deleted.id``."""
         with self._store.write("delete_chunk_and_withdraw_hub_items") as conn:
-            deleted_id = record_deleted_row(conn, chunk.chunk_id, by=by, at=at)
-            release_outgoing_edges_conn(conn, chunk.chunk_id, by=by, at=at)
-            for pointer in chunk.work_refs:
-                if pointer.source == RESERVED_HUB_SOURCE_NAME:
-                    self._close_conn(conn, pointer.source, pointer.ref, closure=WorkItemClosure.WITHDRAWN, at=at)
+            return self._delete_chunk_and_withdraw_hub_items_conn(conn, chunk, by=by, at=at)
+
+    def delete_chunk_and_withdraw_hub_items_locked(
+        self, handle: ILockedChunkRead, chunk: Chunk, *, by: str, at: datetime
+    ) -> int:
+        """`delete_chunk_and_withdraw_hub_items`'s locked-transaction sibling
+        (``bzh:store-exclusive-write``) — the delete's own write, on ``handle``'s
+        already-locked connection."""
+        return self._delete_chunk_and_withdraw_hub_items_conn(conn_of(handle), chunk, by=by, at=at)
+
+    def _delete_chunk_and_withdraw_hub_items_conn(
+        self, conn: Connection, chunk: Chunk, *, by: str, at: datetime
+    ) -> int:
+        deleted_id = record_deleted_row(conn, chunk.chunk_id, by=by, at=at)
+        release_outgoing_edges_conn(conn, chunk.chunk_id, by=by, at=at)
+        for pointer in chunk.work_refs:
+            if pointer.source == RESERVED_HUB_SOURCE_NAME:
+                self._close_conn(conn, pointer.source, pointer.ref, closure=WorkItemClosure.WITHDRAWN, at=at)
         return deleted_id
 
     def materialize_create(

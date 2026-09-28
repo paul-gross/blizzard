@@ -8,6 +8,9 @@ differ: grouping needs only an unheld chunk, while reordering ranks the
 from __future__ import annotations
 
 import math
+
+# The residual cycle-check lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
+# ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -18,7 +21,7 @@ from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
@@ -337,33 +340,33 @@ class GroupService:
         *,
         work_refs: IWriteChunkWorkRefsRepository,
         dependencies: IWriteChunkDependenciesRepository,
-        record: IReadChunkRecordRepository,
-        facts: IReadChunkFactsRepository,
+        exclusive: IChunkExclusiveWrites,
         clock: IClock,
-        claim_lock: threading.Lock,
+        cycle_lock: threading.Lock,
     ) -> None:
         self._work_refs = work_refs
         self._dependencies = dependencies
-        self._record = record
-        self._facts = facts
+        # The locked-transaction seam (``bzh:store-exclusive-write``) ClaimService's own
+        # CAS shares — the row lock over the survivor and every named merge id.
+        self._exclusive = exclusive
         self._clock = clock
-        # The same lock ClaimService/EditService/RestartService/DependencyService/DeleteService already share — closes
-        # the residual GroupService previously left open against a racing declare.
-        self._claim_lock = claim_lock
+        # The residual fleet-wide lock DependencyService's own cycle check also shares —
+        # closes the race a row lock over this fold's own chunks alone cannot.
+        self._cycle_lock = cycle_lock
 
     def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
         """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers
         and each folded chunk's standing dependency edges. Refused before any
         write when the result would close a cycle (:class:`FoldWouldCloseCycle`)."""
-        with self._claim_lock:
-            return self._group_locked(survivor_id, merge_ids)
+        with self._cycle_lock, self._exclusive.locked([survivor_id, *merge_ids]) as handle:
+            return self._group_locked(handle, survivor_id, merge_ids)
 
-    def _group_locked(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
-        survivor, survivor_status = self._require_unacquired_chunk(survivor_id)
-        targets = self._resolve_targets(survivor_id, merge_ids)
+    def _group_locked(self, handle: ILockedChunkRead, survivor_id: str, merge_ids: list[str]) -> GroupResult:
+        survivor, survivor_status = self._require_unacquired_chunk(handle, survivor_id)
+        targets = self._resolve_targets(handle, survivor_id, merge_ids)
         folded_ids = [t.chunk_id for t in targets]
 
-        standing = self._dependencies.list_standing_edges()
+        standing = handle.standing_edges()
         plan = plan_fold(standing, survivor_id, folded_ids)
         minted_pairs = [pair for cid in folded_ids for pair in plan.mint_by_target[cid]]
         if would_close_a_cycle(plan.remaining, minted_pairs):
@@ -371,7 +374,7 @@ class GroupService:
 
         now = self._clock.now()
         for target in targets:
-            self._work_refs.add_work_refs(survivor_id, target.work_refs, at=now)
+            self._work_refs.add_work_refs_locked(handle, survivor_id, target.work_refs, at=now)
 
         grouped_id: int | None = None
         if targets:
@@ -385,7 +388,9 @@ class GroupService:
             ]
             # One call, one transaction across every target — a target's
             # own row can never commit ahead of a sibling's edge release/mint.
-            grouped_ids = self._dependencies.record_fold(fold_targets, grouped_into=survivor_id, by=FOLD_ACTOR, at=now)
+            grouped_ids = self._dependencies.record_fold_locked(
+                handle, fold_targets, grouped_into=survivor_id, by=FOLD_ACTOR, at=now
+            )
             grouped_id = grouped_ids[targets[-1].chunk_id]
         _log.info(
             "chunks grouped",
@@ -394,24 +399,24 @@ class GroupService:
             merged=folded_ids,
             count=len(targets),
         )
-        merged = self._record.get(survivor_id)
+        merged = handle.record(survivor_id)
         return GroupResult(
             survivor=merged if merged is not None else survivor, status=survivor_status, grouped_id=grouped_id
         )
 
-    def _resolve_targets(self, survivor_id: str, merge_ids: list[str]) -> list[Chunk]:
+    def _resolve_targets(self, handle: ILockedChunkRead, survivor_id: str, merge_ids: list[str]) -> list[Chunk]:
         seen: set[str] = set()
         targets: list[Chunk] = []
         for merge_id in merge_ids:
             if merge_id == survivor_id or merge_id in seen:
                 continue  # self and duplicates are no-ops, not errors
             seen.add(merge_id)
-            targets.append(self._require_unacquired_chunk(merge_id)[0])
+            targets.append(self._require_unacquired_chunk(handle, merge_id)[0])
         return targets
 
-    def _require_unacquired_chunk(self, chunk_id: str) -> tuple[Chunk, ChunkStatus]:
-        chunk = self._record.get(chunk_id)
-        facts = self._facts.load_facts(chunk_id)
+    def _require_unacquired_chunk(self, handle: ILockedChunkRead, chunk_id: str) -> tuple[Chunk, ChunkStatus]:
+        chunk = handle.record(chunk_id)
+        facts = handle.facts(chunk_id)
         if chunk is None or facts is None:
             raise ChunkNotFound(chunk_id)
         status = facts.status()

@@ -19,6 +19,11 @@ hub is briefly unreachable. Each daemon owns its own embedded store; neither ope
 The units are [`packaging/systemd/`](../packaging/systemd/)'s `blizzard-hub.service` and `blizzard-runner.service`;
 under them both daemons survive a crash or reboot with nothing lost and nothing worked twice.
 
+Exactly one hub process serves a store at a time — never two `blizzard-hub host` instances, load-balanced or otherwise,
+against the same database. blizzard-context's
+[`architecture/system-shape/exclusive-writes.md`](https://github.com/paul-gross/blizzard-context/blob/master/architecture/system-shape/exclusive-writes.md)
+owns what that assumption still costs.
+
 ## Operator concerns
 
 ### Standing the machine up
@@ -52,13 +57,13 @@ under them both daemons survive a crash or reboot with nothing lost and nothing 
 
 ### Diagnostics
 
-| File                                                                             | When to read                                                                                                                                     |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| File                                                                             | When to read                                                                                                                                            |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`deployment/opencode-compatibility.md`](./deployment/opencode-compatibility.md) | You are running the OpenCode compatibility diagnostic against the runner's admitted version range, or admitting a new candidate version or corpus to it |
 
 ### Watching it
 
-| File                                                           | When to read                                                                                                           |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| File                                                           | When to read                                                                                                                                           |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`deployment/observability.md`](./deployment/observability.md) | A chunk is stuck and its status won't say why: the operational event log, the kiosk board for a wall screen, and a worker's raw captured stdout/stderr |
-| [`deployment/analytics.md`](./deployment/analytics.md)         | You are querying the event stream derived from shipped transcripts, or the duration/spend/outcome datasets built on it |
+| [`deployment/analytics.md`](./deployment/analytics.md)         | You are querying the event stream derived from shipped transcripts, or the duration/spend/outcome datasets built on it                                 |

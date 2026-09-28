@@ -5,7 +5,6 @@ see ``tests/test_work_source.py`` for the pass-through (GitHub) binding's siblin
 
 from __future__ import annotations
 
-import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -55,9 +54,7 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
     items = WorkItemStore(store)
     clock = FixedClock(_T0)
     chunks = chunk_stores(engine, clock)
-    delete = DeleteService(
-        facts=chunks.facts, items=items, clock=clock, claim_lock=threading.Lock(), dependencies=chunks.dependencies
-    )
+    delete = DeleteService(items=items, clock=clock, exclusive=chunks.exclusive)
     edits = WorkItemEditService(
         items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
     )

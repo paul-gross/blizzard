@@ -33,3 +33,15 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     contains `w`, `a`, or `x`, and the same shape via `$PATH.open($MODE)`. A read (`open(path)`, `open(path, "r")`,
     `path.read_text()`) is unmatched.
   - No exemption stands; nothing in `runner/subscriptions/` opens a credential file for writing today.
+
+- **`bzh:store-exclusive-write`** (`rules/store-exclusive-write.yml`) — an in-process lock in `hub/` cannot enforce an
+  exactly-one-wins decision once more than one hub process shares a store. The rule's own prose home is
+  `blizzard-context:/architecture/system-shape/exclusive-writes.md`; this file states none of that prose, only what the
+  rule mechanically checks.
+  - Scoped to `src/blizzard/hub/**` — the whole hub, not just its domain layer.
+  - Matches a bare `import threading` — an injected lock arrives constructed elsewhere, but every holder still imports
+    the module to type its own field, so the import is the one textual signal common to both shapes.
+  - Every current holder — `app.py`, `composition.py`, and the domain's `dependencies.py` and `queue.py`, each for the
+    one residual fleet-wide cycle-check lock a row lock cannot close — carries an `ast-grep-ignore` comment at its
+    import, reasoned at the site as recorded debt. `claim.py`, `edit.py`, `restart.py`, and `delete.py` migrated fully
+    onto the row lock and import `threading` no longer.

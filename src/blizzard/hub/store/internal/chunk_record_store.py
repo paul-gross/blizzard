@@ -17,6 +17,7 @@ from sqlalchemy import Select, and_, or_, select, update
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunks.record import ChunkPage, IWriteChunkRecordRepository
 from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.work import Chunk, IntendedMigration, WorkRef
@@ -28,6 +29,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_MODEL,
     INTENDED_MIGRATION,
     chunk_row,
+    conn_of,
     ephemeral_ids,
     ephemeral_ids_in,
     graph_id_of_batch,
@@ -74,10 +76,16 @@ class ChunkRecordStore:
 
     def get(self, chunk_id: str) -> Chunk | None:
         with self._store.read("get") as conn:
-            row = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
-            if row is None or is_ephemeral_id(conn, chunk_id):
-                return None  # a grouped-away or deleted chunk is ephemeral — gone from every read
-            return chunk_row(conn, row)
+            return self.get_conn(conn, chunk_id)
+
+    def get_conn(self, conn, chunk_id: str) -> Chunk | None:  # type: ignore[no-untyped-def]
+        """`get`'s already-open-connection sibling — the locked-transaction seam's own
+        read (``bzh:store-exclusive-write``), resolved on the caller's connection rather
+        than a fresh one."""
+        row = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
+        if row is None or is_ephemeral_id(conn, chunk_id):
+            return None  # a grouped-away or deleted chunk is ephemeral — gone from every read
+        return chunk_row(conn, row)
 
     def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
         """`get`'s batched sibling — every requested id's row plus its work refs
@@ -217,7 +225,15 @@ class ChunkRecordStore:
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph."""
         with self._store.write("set_graph") as conn:
-            conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
+            self._set_graph_conn(conn, chunk_id, graph_id=graph_id)
+
+    def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
+        """`set_graph`'s locked-transaction sibling (``bzh:store-exclusive-write``) — the
+        edit's own write, on ``handle``'s already-locked connection."""
+        self._set_graph_conn(conn_of(handle), chunk_id, graph_id=graph_id)
+
+    def _set_graph_conn(self, conn, chunk_id: str, *, graph_id: str) -> None:  # type: ignore[no-untyped-def]
+        conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
 
     def set_defaults(
         self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
@@ -226,15 +242,45 @@ class ChunkRecordStore:
         all three in one write; see
         :meth:`~blizzard.hub.domain.chunks.record.IWriteChunkRecordRepository.set_defaults`."""
         with self._store.write("set_defaults") as conn:
-            conn.execute(
-                update(s.chunks)
-                .where(s.chunks.c.chunk_id == chunk_id)
-                .values(
-                    default_model=DEFAULT_MODEL.encode(default_model),
-                    default_effort=default_effort,
-                    default_harnesses=DEFAULT_HARNESSES.encode(default_harnesses),
-                )
+            self._set_defaults_conn(
+                conn,
+                chunk_id,
+                default_model=default_model,
+                default_effort=default_effort,
+                default_harnesses=default_harnesses,
             )
+
+    def set_defaults_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        default_model: list[str],
+        default_effort: str | None,
+        default_harnesses: list[str],
+    ) -> None:
+        """`set_defaults`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
+        the edit's own write, on ``handle``'s already-locked connection."""
+        self._set_defaults_conn(
+            conn_of(handle),
+            chunk_id,
+            default_model=default_model,
+            default_effort=default_effort,
+            default_harnesses=default_harnesses,
+        )
+
+    def _set_defaults_conn(  # type: ignore[no-untyped-def]
+        self, conn, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
+    ) -> None:
+        conn.execute(
+            update(s.chunks)
+            .where(s.chunks.c.chunk_id == chunk_id)
+            .values(
+                default_model=DEFAULT_MODEL.encode(default_model),
+                default_effort=default_effort,
+                default_harnesses=DEFAULT_HARNESSES.encode(default_harnesses),
+            )
+        )
 
     def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
         """Set, overwrite, or clear a chunk's standing migration intent.
@@ -242,11 +288,22 @@ class ChunkRecordStore:
         A plain column overwrite, editable at any non-terminal status. The column
         carries no timestamp, so this write takes no ``at``."""
         with self._store.write("set_intended_migration") as conn:
-            conn.execute(
-                update(s.chunks)
-                .where(s.chunks.c.chunk_id == chunk_id)
-                .values(intended_migration=INTENDED_MIGRATION.encode(intended))
-            )
+            self._set_intended_migration_conn(conn, chunk_id, intended=intended)
+
+    def set_intended_migration_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, intended: IntendedMigration | None
+    ) -> None:
+        """`set_intended_migration`'s locked-transaction sibling
+        (``bzh:store-exclusive-write``) — the edit's own write, on ``handle``'s
+        already-locked connection."""
+        self._set_intended_migration_conn(conn_of(handle), chunk_id, intended=intended)
+
+    def _set_intended_migration_conn(self, conn, chunk_id: str, *, intended: IntendedMigration | None) -> None:  # type: ignore[no-untyped-def]
+        conn.execute(
+            update(s.chunks)
+            .where(s.chunks.c.chunk_id == chunk_id)
+            .values(intended_migration=INTENDED_MIGRATION.encode(intended))
+        )
 
 
 def _conforms_record(x: ChunkRecordStore) -> IWriteChunkRecordRepository:

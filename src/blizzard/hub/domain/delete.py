@@ -7,12 +7,9 @@ runner-held one."""
 
 from __future__ import annotations
 
-import threading
-
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesRepository
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, IWriteWorkItemRepository
 
@@ -51,28 +48,25 @@ class DeleteService:
     def __init__(
         self,
         *,
-        facts: IReadChunkFactsRepository,
         items: IWriteWorkItemRepository,
         clock: IClock,
-        claim_lock: threading.Lock,
-        dependencies: IReadChunkDependenciesRepository,
+        exclusive: IChunkExclusiveWrites,
     ) -> None:
-        self._facts = facts
         self._items = items
         self._clock = clock
-        # Shared with ClaimService/EditService/RestartService, so a claim
-        # can't land on a chunk this write is mid-way through deleting.
-        self._claim_lock = claim_lock
-        self._dependencies = dependencies
+        # The locked-transaction seam (``bzh:store-exclusive-write``) shared with
+        # ClaimService/EditService/RestartService, so a claim can't land on a chunk this
+        # write is mid-way through deleting.
+        self._exclusive = exclusive
 
     def delete(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.deleted`` and withdraw every open ``hub:``-source item
         ``chunk`` holds, atomically. Raises :class:`ChunkNotFound` for one already
         grouped or deleted, :class:`ChunkNotDeletable` for one held or terminal, and
         :class:`ChunkHasDependents` for one a standing prerequisite for another chunk
-        — every guard read taken fresh under the lock."""
-        with self._claim_lock:
-            facts = self._facts.load_facts(chunk.chunk_id)
+        — every guard read taken fresh under the row lock."""
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
             status = facts.status()
@@ -80,9 +74,9 @@ class DeleteService:
                 raise ChunkNotDeletable(chunk.chunk_id, status)
             dependent_chunk_ids = sorted(
                 edge.dependent_chunk_id
-                for edge in self._dependencies.list_standing_edges()
+                for edge in handle.standing_edges()
                 if edge.prerequisite_chunk_id == chunk.chunk_id
             )
             if dependent_chunk_ids:
                 raise ChunkHasDependents(chunk.chunk_id, dependent_chunk_ids)
-            return self._items.delete_chunk_and_withdraw_hub_items(chunk, by=by, at=self._clock.now())
+            return self._items.delete_chunk_and_withdraw_hub_items_locked(handle, chunk, by=by, at=self._clock.now())

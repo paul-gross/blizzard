@@ -11,7 +11,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
@@ -20,6 +20,11 @@ from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph
 from blizzard.hub.domain.proposals import WorkItemProposalRow
+
+if TYPE_CHECKING:
+    # Deferred: ``chunks.exclusive`` imports this module's own ``Chunk``/``ChunkFacts``/
+    # ``DependencyEdge`` — a runtime import here would cycle back.
+    from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 
 # --- Domain objects ---------------------------------------------------------
 
@@ -1387,6 +1392,14 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         (:class:`~blizzard.hub.domain.delete.DeleteService`). A ``forge:``
         pointer on the same chunk is left untouched. Returns the freshly-written
         ``chunk_deleted.id``."""
+        ...
+
+    def delete_chunk_and_withdraw_hub_items_locked(
+        self, handle: ILockedChunkRead, chunk: Chunk, *, by: str, at: datetime
+    ) -> int:
+        """`delete_chunk_and_withdraw_hub_items`'s locked-transaction sibling
+        (``bzh:store-exclusive-write``) — the delete's own write, on ``handle``'s
+        already-locked connection."""
         ...
 
     def materialize_create(

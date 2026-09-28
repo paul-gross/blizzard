@@ -6,7 +6,8 @@ component tier (``tests/test_edit_claim_race.py``), not here."""
 
 from __future__ import annotations
 
-import threading
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -15,7 +16,7 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.edit import (
     UNSET,
@@ -71,41 +72,75 @@ _TARGET_GRAPH_WITH_BUILD = make_graph(
 
 @dataclass
 class _FakeChunkRepo:
-    """Only ``load_facts``/``set_graph``/``set_defaults``/``set_intended_migration`` are
-    live; anything else is a bug. Not typed against its Protocols directly — callers
-    wrap an instance in :func:`_as_facts`/:func:`_as_record` instead."""
+    """Only ``read_facts``/``set_graph_locked``/``set_defaults_locked``/
+    ``set_intended_migration_locked`` are live; anything else is a bug. Not typed
+    against its Protocols directly — callers wrap an instance in
+    :func:`_as_record`/:func:`_as_exclusive` instead."""
 
     facts: ChunkFacts | None
     graphs_set: list[tuple[str, str]] = field(default_factory=list)
     defaults_set: list[tuple[str, list[str], str | None, list[str]]] = field(default_factory=list)
     intended_migrations_set: list[tuple[str, IntendedMigration | None]] = field(default_factory=list)
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def read_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts
 
-    def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
+    def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
         self.graphs_set.append((chunk_id, graph_id))
 
-    def set_defaults(
-        self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
+    def set_defaults_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        default_model: list[str],
+        default_effort: str | None,
+        default_harnesses: list[str],
     ) -> None:
         self.defaults_set.append((chunk_id, default_model, default_effort, default_harnesses))
 
-    def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
+    def set_intended_migration_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, intended: IntendedMigration | None
+    ) -> None:
         self.intended_migrations_set.append((chunk_id, intended))
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"EditService should not touch {name!r}")
 
 
-def _as_facts(repo: _FakeChunkRepo) -> IReadChunkFactsRepository:
-    """Assert the fake satisfies the Protocol EditService depends on (see module docstring)."""
-    return cast(IReadChunkFactsRepository, repo)
+@dataclass
+class _FakeLockedChunkRead:
+    """Only ``facts`` is live — see :class:`_FakeChunkRepo`'s own docstring."""
+
+    repo: _FakeChunkRepo
+
+    def facts(self, chunk_id: str) -> ChunkFacts | None:
+        return self.repo.read_facts(chunk_id)
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"EditService should not touch handle.{name!r}")
+
+
+@dataclass
+class _FakeExclusiveWrites:
+    """``locked`` yields a :class:`_FakeLockedChunkRead` over the same ``repo`` backing
+    the record write repository."""
+
+    repo: _FakeChunkRepo
+
+    @contextmanager
+    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.repo))
 
 
 def _as_record(repo: _FakeChunkRepo) -> IWriteChunkRecordRepository:
     """Assert the fake satisfies the Protocol EditService depends on (see module docstring)."""
     return cast(IWriteChunkRecordRepository, repo)
+
+
+def _as_exclusive(repo: _FakeChunkRepo) -> IChunkExclusiveWrites:
+    """Assert the fake satisfies the Protocol EditService depends on (see module docstring)."""
+    return cast(IChunkExclusiveWrites, _FakeExclusiveWrites(repo))
 
 
 @dataclass
@@ -127,14 +162,13 @@ def _as_read_graph_repo(repo: _FakeGraphRepo) -> IReadGraphRepository:
 
 
 def _service(repo: _FakeChunkRepo, graphs: _FakeGraphRepo | None = None) -> EditService:
-    """Build an ``EditService`` over ``repo`` with a fresh, single-test claim lock
-    (see module docstring — the shared-lock race is proven at the component tier).
+    """Build an ``EditService`` over ``repo`` with a fresh, single-test row lock (see
+    module docstring — the shared-lock race is proven at the component tier).
     ``graphs`` defaults to a fake reporting no graph retired."""
     return EditService(
-        facts=_as_facts(repo),
         record=_as_record(repo),
         graphs=_as_read_graph_repo(graphs or _FakeGraphRepo()),
-        claim_lock=threading.Lock(),
+        exclusive=_as_exclusive(repo),
     )
 
 
@@ -300,25 +334,27 @@ def test_refusal_carries_the_offending_field_and_status_on_the_exception() -> No
     assert "default_model" in str(excinfo.value)
 
 
-def test_set_graph_holds_the_injected_lock_across_its_check_and_write() -> None:
-    """``EditService`` must take the lock it was constructed with around
+def test_set_graph_holds_the_locked_transaction_across_its_check_and_write() -> None:
+    """``EditService`` must take the row lock it was constructed with around
     its whole check-then-act, not a private one, so the composition root can serialize
     it against ``ClaimService``'s own CAS."""
     repo = _FakeChunkRepo(facts=_ready_facts())
     calls: list[str] = []
 
-    class _SpyLock:
-        def __enter__(self) -> None:
+    @dataclass
+    class _SpyExclusiveWrites:
+        @contextmanager
+        def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
             calls.append("acquire")
-
-        def __exit__(self, *exc: object) -> None:
-            calls.append("release")
+            try:
+                yield cast(ILockedChunkRead, _FakeLockedChunkRead(repo))
+            finally:
+                calls.append("release")
 
     service = EditService(
-        facts=_as_facts(repo),
         record=_as_record(repo),
         graphs=_as_read_graph_repo(_FakeGraphRepo()),
-        claim_lock=cast(threading.Lock, _SpyLock()),
+        exclusive=cast(IChunkExclusiveWrites, _SpyExclusiveWrites()),
     )
 
     service.set_graph(_CHUNK, graph=_TARGET_GRAPH)

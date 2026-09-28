@@ -8,7 +8,6 @@ The load-facts → check-live-route → record-route sequence is an atomic CAS."
 from __future__ import annotations
 
 import secrets
-import threading
 from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
@@ -16,9 +15,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
-from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesRepository
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.eligibility import EligibilityCheck
 from blizzard.hub.domain.envelope import Envelope
@@ -116,27 +113,25 @@ class ClaimService:
         self,
         *,
         route: IWriteChunkRouteRepository,
-        record: IReadChunkRecordRepository,
-        facts: IReadChunkFactsRepository,
         artifacts: IReadChunkArtifactsRepository,
-        dependencies: IReadChunkDependenciesRepository,
         graphs: IReadGraphRepository,
         registry: IReadRunnerRegistry,
+        exclusive: IChunkExclusiveWrites,
         clock: IClock,
-        claim_lock: threading.Lock,
     ) -> None:
         self._route = route
-        self._record = record
-        self._facts = facts
         self._artifacts = artifacts
-        self._dependencies = dependencies
         # Re-resolves the chunk's graph fresh under the lock — see `_claim_locked`.
         self._graphs = graphs
+        # The pre-lock paused-runner peek only — every guard read inside the CAS itself
+        # goes through the locked handle instead (`_claim_locked`'s own re-fetch).
         self._registry = registry
+        # The locked-transaction seam (``bzh:store-exclusive-write``): the check-live-route
+        # → record-route CAS runs inside one row-locked write transaction, never an
+        # in-process lock, so it stays correct once more than one hub process shares the
+        # store.
+        self._exclusive = exclusive
         self._clock = clock
-        # Serializes the check-live-route → record-route CAS; shared with the edit path
-        # so a concurrent edit and claim resolve to exactly one winner.
-        self._claim_lock = claim_lock
 
     # runner_id resolves a paused-runner guard, a domain rule (bzh:domain-takes-objects).
     # ast-grep-ignore: bzh:domain-takes-objects
@@ -154,13 +149,14 @@ class ClaimService:
         registration = self._registry.get_runner(runner_id)
         if registration is not None and registration.hub_paused:
             raise ClaimDeniedPaused(runner_id=runner_id)
-        with self._claim_lock:
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
             return self._claim_locked(
-                chunk, graph, runner_id=runner_id, workspace_id=workspace_id, environment_ids=environment_ids
+                handle, chunk, graph, runner_id=runner_id, workspace_id=workspace_id, environment_ids=environment_ids
             )
 
     def _claim_locked(
         self,
+        handle: ILockedChunkRead,
         chunk: Chunk,
         graph: Graph,
         *,
@@ -168,13 +164,13 @@ class ClaimService:
         workspace_id: str,
         environment_ids: list[str],
     ) -> ClaimResult:
-        existing = self._route.route_of(chunk.chunk_id)
+        existing = handle.route_of(chunk.chunk_id)
         if existing is not None:
             raise ClaimConflict(held_by_runner_id=existing.runner_id)
 
         # Re-read the chunk under the lock: an edit that landed first may have
         # moved `graph_id`/`model` since the edge resolved the handed-in objects.
-        current = self._record.get(chunk.chunk_id)
+        current = handle.record(chunk.chunk_id)
         if current is None:  # pragma: no cover - the chunk cannot vanish mid-claim
             raise ClaimConflict(held_by_runner_id=runner_id)
         if current.graph_id != chunk.graph_id:
@@ -184,7 +180,7 @@ class ClaimService:
             graph = fresh_graph
         chunk = current
 
-        facts = self._facts.load_facts(chunk.chunk_id)
+        facts = handle.facts(chunk.chunk_id)
         # Re-derive status fresh under the claim lock: a stop landing between this
         # runner's peek and its claim POST is invisible to the peek.
         status = facts.status() if facts is not None else ChunkStatus.NOT_READY
@@ -194,7 +190,7 @@ class ClaimService:
         # Re-derived fresh under the same lock: a declared edge or a
         # prerequisite's completion landing after this runner's peek is invisible to the
         # peek, exactly as a terminal transition is.
-        unmet = self._unmet_prerequisite(chunk.chunk_id)
+        unmet = self._unmet_prerequisite(handle, chunk.chunk_id)
         if unmet is not None:
             raise ClaimDeniedDependency(chunk_id=chunk.chunk_id, prerequisite_chunk_id=unmet)
 
@@ -207,7 +203,7 @@ class ClaimService:
 
         # Re-fetched fresh under the lock, never the pre-lock read the
         # paused guard used: a capability change landing after this runner's peek must not race the claim.
-        registration = self._registry.get_runner(runner_id)
+        registration = handle.runner_registration(runner_id)
         if registration is not None and registration.capabilities:
             eligible = EligibilityCheck(chunk, graph, node, registration.capabilities).eligible
             if not eligible:
@@ -228,9 +224,11 @@ class ClaimService:
         # Minted fresh per acquisition: the plaintext is returned once and
         # never stored — only its sha256 hash lands, in the same write as record_route.
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
-        route_id = self._route.record_route(route, token_hash=TokenHash(route_token).hex, at=now)
+        route_id = self._route.record_route_locked(handle, route, token_hash=TokenHash(route_token).hex, at=now)
         _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
 
+        # Envelope assembly stays outside the locked transaction's read set — the
+        # artifact load is no part of the exactly-one-wins decision itself.
         envelope = Envelope(
             chunk=chunk,
             graph=graph,
@@ -241,14 +239,14 @@ class ClaimService:
         ).wire
         return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
 
-    def _unmet_prerequisite(self, chunk_id: str) -> str | None:
+    def _unmet_prerequisite(self, handle: ILockedChunkRead, chunk_id: str) -> str | None:
         """The earliest-declared standing edge naming ``chunk_id`` as dependent whose
         prerequisite has not reached ``done`` — ``None`` when every standing edge is met
         or the chunk carries none. Filters the full standing set rather than a targeted
         read, mirroring ``DependencyService``'s own cycle check, resolving every
-        prerequisite's facts with one bulk ``load_facts_for`` call rather than one per edge."""
-        edges = [e for e in self._dependencies.list_standing_edges() if e.dependent_chunk_id == chunk_id]
-        facts_by_id = self._facts.load_facts_for([edge.prerequisite_chunk_id for edge in edges])
+        prerequisite's facts with one bulk ``facts_for`` call rather than one per edge."""
+        edges = [e for e in handle.standing_edges() if e.dependent_chunk_id == chunk_id]
+        facts_by_id = handle.facts_for([edge.prerequisite_chunk_id for edge in edges])
         for edge in edges:
             prerequisite_facts = facts_by_id.get(edge.prerequisite_chunk_id)
             status = prerequisite_facts.status() if prerequisite_facts is not None else ChunkStatus.NOT_READY

@@ -14,13 +14,14 @@ from sqlalchemy import select
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import RouteCreatedFact, RouteHistory, RouteReleasedFact
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.batching import id_batches
-from blizzard.hub.store.internal.chunk_rows import next_route_seq, route_of_conn
+from blizzard.hub.store.internal.chunk_rows import conn_of, next_route_seq, route_of_conn
 
 _ROUTE_PREFIX = "route"
 
@@ -142,29 +143,38 @@ class ChunkRouteStore:
         (:func:`~blizzard.hub.store.internal.chunk_rows.next_route_seq`), allocated by its
         own call to the allocator, never a fixed +1. Returns the freshly-minted
         ``route_created.route_id``."""
-        route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
         with self._store.write("record_route") as conn:
-            conn.execute(
-                s.route_created.insert().values(
-                    route_id=route_id,
-                    chunk_id=route.chunk_id,
-                    runner_id=route.runner_id,
-                    workspace_id=route.workspace_id,
-                    created_at=at,
-                    seq=next_route_seq(conn, route.chunk_id),
-                )
+            return self._record_route_conn(conn, route, token_hash=token_hash, at=at)
+
+    def record_route_locked(self, handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
+        """`record_route`'s locked-transaction sibling — the claim's own write
+        (``bzh:store-exclusive-write``), on the connection its row lock was already taken
+        on, rather than a fresh transaction."""
+        return self._record_route_conn(conn_of(handle), route, token_hash=token_hash, at=at)
+
+    def _record_route_conn(self, conn, route: Route, *, token_hash: str, at: datetime) -> str:  # type: ignore[no-untyped-def]
+        route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
+        conn.execute(
+            s.route_created.insert().values(
+                route_id=route_id,
+                chunk_id=route.chunk_id,
+                runner_id=route.runner_id,
+                workspace_id=route.workspace_id,
+                created_at=at,
+                seq=next_route_seq(conn, route.chunk_id),
             )
-            for env_id in route.environment_ids:
-                conn.execute(s.route_environments.insert().values(route_id=route_id, environment_id=env_id))
-            conn.execute(
-                s.route_token_minted.insert().values(
-                    chunk_id=route.chunk_id,
-                    token_hash=token_hash,
-                    seq=next_route_seq(conn, route.chunk_id),
-                    minted_at=at,
-                )
+        )
+        for env_id in route.environment_ids:
+            conn.execute(s.route_environments.insert().values(route_id=route_id, environment_id=env_id))
+        conn.execute(
+            s.route_token_minted.insert().values(
+                chunk_id=route.chunk_id,
+                token_hash=token_hash,
+                seq=next_route_seq(conn, route.chunk_id),
+                minted_at=at,
             )
-            return route_id
+        )
+        return route_id
 
     def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
         with self._store.write("record_route_released") as conn:

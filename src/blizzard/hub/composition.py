@@ -8,6 +8,9 @@ every domain service's own narrow parameter alike — is the same instance built
 from __future__ import annotations
 
 import tempfile
+
+# Wires the residual cycle-check lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
+# ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -152,8 +155,9 @@ class HubServices:
     stop: StopService
     complete: CompleteService
     edit: EditService
-    #: Declare/release a dependency edge between two chunks — under the same
-    #: shared claim lock ``claim``/``edit``/``restart`` already take.
+    #: Declare/release a dependency edge between two chunks — declaring under the same
+    #: row lock ``claim``/``edit``/``restart``/``delete`` already take, plus a residual
+    #: fleet-wide lock the cycle check alone still needs.
     dependencies: DependencyService
     #: The unacquired-chunk delete/withdraw service — the composite write
     #: ``WorkItemEditService.withdraw`` also reaches through for an unacquired holder.
@@ -290,7 +294,7 @@ def build_services(
     *,
     events: EventBroker,
     work_sources: IWorkSourceRegistry,
-    claim_lock: threading.Lock,
+    cycle_lock: threading.Lock,
     work_item_store: WorkItemStore,
     delete: DeleteService,
     finding_store: FindingStore,
@@ -316,7 +320,7 @@ def build_services(
     """Construct and wire every fleet service over a migrated store engine.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
     (#65), left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``. ``claim_lock``/``work_item_store``/``delete``/``finding_store``/
+    ``oauth_providers``. ``cycle_lock``/``work_item_store``/``delete``/``finding_store``/
     ``finding_exit`` are required, not built here, so the built-in hub binding shares the
     same five."""
     clock = clock or SystemClock()
@@ -341,6 +345,7 @@ def build_services(
     chunk_delivery = chunk_stores.delivery
     chunk_hub_exec = chunk_stores.hub_exec
     chunk_dependencies = chunk_stores.dependencies
+    chunk_exclusive = chunk_stores.exclusive
     graph_store = GraphStore(store_connections)
     registry_store = RunnerRegistryStore(store_connections)
     transcript_store = TranscriptSegmentStore(store_connections)
@@ -457,14 +462,11 @@ def build_services(
         promote=PromoteService(record=chunk_record, queue=chunk_queue, clock=clock),
         claim=ClaimService(
             route=chunk_route,
-            record=chunk_record,
-            facts=chunk_facts,
             artifacts=chunk_artifacts,
-            dependencies=chunk_dependencies,
             graphs=graph_store,
             registry=registry_store,
+            exclusive=chunk_exclusive,
             clock=clock,
-            claim_lock=claim_lock,
         ),
         apply=ApplyService(
             facts=chunk_facts,
@@ -478,20 +480,17 @@ def build_services(
         ),
         decisions=DecisionService(facts=chunk_facts, route=chunk_route, decisions=chunk_decisions, clock=clock),
         requeue=RequeueService(movement=chunk_movement, route=chunk_route, clock=clock),
-        restart=RestartService(
-            facts=chunk_facts, movement=chunk_movement, graphs=graph_store, clock=clock, claim_lock=claim_lock
-        ),
+        restart=RestartService(movement=chunk_movement, graphs=graph_store, clock=clock, exclusive=chunk_exclusive),
         detach=DetachService(route=chunk_route, clock=clock),
         pause=PauseService(lifecycle=chunk_lifecycle, clock=clock),
         stop=StopService(lifecycle=chunk_lifecycle, clock=clock),
         complete=CompleteService(lifecycle=chunk_lifecycle, clock=clock),
-        edit=EditService(facts=chunk_facts, record=chunk_record, graphs=graph_store, claim_lock=claim_lock),
+        edit=EditService(record=chunk_record, graphs=graph_store, exclusive=chunk_exclusive),
         dependencies=DependencyService(
-            facts=chunk_facts,
-            lifecycle=chunk_lifecycle,
             dependencies=chunk_dependencies,
+            exclusive=chunk_exclusive,
             clock=clock,
-            claim_lock=claim_lock,
+            cycle_lock=cycle_lock,
         ),
         delete=delete,
         facts=FactIngestService(
@@ -513,10 +512,9 @@ def build_services(
         group=GroupService(
             work_refs=chunk_work_refs,
             dependencies=chunk_dependencies,
-            record=chunk_record,
-            facts=chunk_facts,
+            exclusive=chunk_exclusive,
             clock=clock,
-            claim_lock=claim_lock,
+            cycle_lock=cycle_lock,
         ),
         fleet=fleet,
         enrollment=enrollment,

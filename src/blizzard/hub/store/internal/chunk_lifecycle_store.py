@@ -17,6 +17,7 @@ from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     is_ephemeral_id,
+    lock_chunk_row,
     next_route_seq,
     route_of_conn,
 )
@@ -47,8 +48,11 @@ class ChunkLifecycleStore:
         held fleet-wide hub-exec slot — all in **one** transaction, so a
         ``kill -9`` cannot leave the chunk durably ``stopped`` with its route still live.
         The route check runs against this same connection (:func:`route_of_conn`), so
-        there is no read-then-write race. The slot release is unconditional."""
+        there is no read-then-write race. The row lock is taken first
+        (``bzh:store-exclusive-write``), before the route check, so a concurrent claim
+        cannot land between the two. The slot release is unconditional."""
         with self._store.write("record_stop") as conn:
+            lock_chunk_row(conn, chunk_id)
             result = conn.execute(s.chunk_stopped.insert().values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
             if route_of_conn(conn, chunk_id) is not None:
                 conn.execute(
@@ -69,8 +73,11 @@ class ChunkLifecycleStore:
         held fleet-wide hub-exec slot — all in **one** transaction, mirroring
         :meth:`record_stop`, so a ``kill -9`` cannot leave the chunk durably ``done`` with
         its route still live. The caller has already checked the chunk is not already
-        ``done`` — this always writes a fresh row."""
+        ``done`` — this always writes a fresh row. The row lock is taken first
+        (``bzh:store-exclusive-write``), before the route check, so a concurrent claim
+        cannot land between the two."""
         with self._store.write("record_completion") as conn:
+            lock_chunk_row(conn, chunk_id)
             result = conn.execute(
                 s.chunk_completed.insert().values(chunk_id=chunk_id, completed_at=at, completed_by=by)
             )

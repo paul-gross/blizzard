@@ -74,8 +74,6 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
-from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
@@ -616,16 +614,14 @@ def build_hub(
     closers: dict[str, IWorkCloser] = {}
     # Constructed once here, ahead of both the work-source registry and `build_services`
     # below — mirrors `build_hosted_app`'s own wiring.
-    claim_lock = threading.Lock()
+    cycle_lock = threading.Lock()
     store_connections = hub_store_connections(engine)
     user_store = UserRepository(store_connections, RepoErrorFactory(get_logger("blizzard.hub.auth")))
     work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
-        facts=ChunkFactsStore(store_connections, clock),
         items=work_item_store,
         clock=clock,
-        claim_lock=claim_lock,
-        dependencies=ChunkDependenciesStore(store_connections, clock),
+        exclusive=build_chunk_stores(store_connections, clock).exclusive,
     )
     finding_store = FindingStore(store_connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)
@@ -652,7 +648,7 @@ def build_hub(
         engine,
         events=events,
         work_sources=work_source_registry,
-        claim_lock=claim_lock,
+        cycle_lock=cycle_lock,
         work_item_store=work_item_store,
         delete=delete_service,
         finding_store=finding_store,

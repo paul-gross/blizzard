@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:store-exclusive-write
+language: Python
+severity: error
+message: >-
+  An in-process lock in hub/ cannot enforce an exactly-one-wins decision once more than
+  one hub process shares a store
+  (blizzard-context:/architecture/system-shape/exclusive-writes.md) — the locked write
+  transaction's own row lock is the one exclusivity mechanism that holds across
+  processes.
+files:
+  - src/blizzard/hub/**
+rule:
+  kind: import_statement
+  pattern: import threading

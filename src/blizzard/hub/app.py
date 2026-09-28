@@ -11,6 +11,9 @@ import asyncio
 import contextlib
 import os
 import random
+
+# The residual dependency-graph lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
+# ast-grep-ignore: bzh:store-exclusive-write
 import threading
 import time
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -64,8 +67,7 @@ from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
-from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -290,14 +292,12 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     user_store = UserRepository(store_connections, RepoErrorFactory(get_logger("blizzard.hub.auth")))
     # Constructed once here too, so the built-in hub binding and `build_services` below
     # share one `WorkItemStore`/`DeleteService`/lock rather than each building its own.
-    claim_lock = threading.Lock()
+    cycle_lock = threading.Lock()
     work_item_store = WorkItemStore(store_connections)
     delete_service = DeleteService(
-        facts=ChunkFactsStore(store_connections, clock),
         items=work_item_store,
         clock=clock,
-        claim_lock=claim_lock,
-        dependencies=ChunkDependenciesStore(store_connections, clock),
+        exclusive=build_chunk_stores(store_connections, clock).exclusive,
     )
     # Own instances, ahead of `build_services` below — mirrors `work_item_store`'s own
     # early construction: the built-in hub closer needs this seam
@@ -333,7 +333,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         engine,
         events=EventBroker(),
         work_sources=work_source_registry,
-        claim_lock=claim_lock,
+        cycle_lock=cycle_lock,
         work_item_store=work_item_store,
         delete=delete_service,
         finding_store=finding_store,

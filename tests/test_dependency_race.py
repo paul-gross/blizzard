@@ -1,9 +1,10 @@
 """Two opposing dependency declarations racing resolve to exactly one commit
 (component tier).
 
-``DependencyService`` shares its ``threading.Lock`` with ``ClaimService``, ``EditService``,
-and ``RestartService``. These tests patch the store's write to pause mid-write,
-proving an opposing declaration blocks on that lock rather than racing underneath it."""
+``DependencyService`` and ``GroupService`` share a residual fleet-wide ``threading.Lock``
+— the cycle check a row lock alone cannot close (``bzh:store-exclusive-write``). These
+tests patch the store's locked write to pause mid-write, proving an opposing declaration
+or fold blocks on that lock rather than racing underneath it."""
 
 from __future__ import annotations
 
@@ -40,17 +41,17 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    real_declare = _writable_dependencies(hub).declare
+    real_declare_locked = _writable_dependencies(hub).declare_locked
 
-    def _blocking_declare(dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  # type: ignore[no-untyped-def]
+    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  # type: ignore[no-untyped-def]
         # Only the first declaration pauses — blocking both would pass even with the
         # shared lock removed (a surviving mutant, not a proof).
         if dependent_chunk_id == chunk_a:
             entered_write.set()
             assert release_write.wait(timeout=5), "test never released the first declaration's write"
-        return real_declare(dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+        return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
-    _writable_dependencies(hub).declare = _blocking_declare  # type: ignore[method-assign]
+    _writable_dependencies(hub).declare_locked = _blocking_declare_locked  # type: ignore[method-assign]
 
     first_result: dict[str, object] = {}
 
@@ -151,14 +152,14 @@ def test_a_fold_and_a_racing_declare_naming_its_target_are_serialized_by_the_sha
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    real_record_fold = _writable_dependencies(hub).record_fold
+    real_record_fold_locked = _writable_dependencies(hub).record_fold_locked
 
-    def _blocking_record_fold(targets, **kwargs):  # type: ignore[no-untyped-def]
+    def _blocking_record_fold_locked(handle, targets, **kwargs):  # type: ignore[no-untyped-def]
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the fold's write"
-        return real_record_fold(targets, **kwargs)
+        return real_record_fold_locked(handle, targets, **kwargs)
 
-    _writable_dependencies(hub).record_fold = _blocking_record_fold  # type: ignore[method-assign]
+    _writable_dependencies(hub).record_fold_locked = _blocking_record_fold_locked  # type: ignore[method-assign]
 
     fold_result: dict[str, object] = {}
 

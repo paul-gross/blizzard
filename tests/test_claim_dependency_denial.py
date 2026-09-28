@@ -1,8 +1,8 @@
-"""The hub denies a claim on an unmet dependency, under the claim lock (component
+"""The hub denies a claim on an unmet dependency, under the row lock (component
 tier).
 
 Mirrors the terminal denial's shape (``tests/test_route_claim.py``): a distinct 409 body,
-refused outright rather than lost to a race, re-derived fresh under the shared claim lock
+refused outright rather than lost to a race, re-derived fresh under the shared row lock
 so a peek-then-claim window can never slip a blocked chunk through."""
 
 from __future__ import annotations
@@ -100,8 +100,9 @@ def test_claim_denied_the_instant_the_edge_is_declared_mid_tick(tmp_path: Path) 
     """The peek-then-claim race the acceptance criteria names directly: a runner peeked
     before the edge existed, but the claim re-derives the standing set fresh under the
     lock rather than trusting anything read before it — proven here by patching the
-    dependency store's write to pause, then racing the claim against it while it holds
-    the shared lock (mirrors ``tests/test_dependency_race.py``'s pattern)."""
+    dependency store's locked write to pause, then racing the claim against it while it
+    holds the row lock the two share (mirrors ``tests/test_dependency_race.py``'s
+    pattern)."""
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
@@ -111,14 +112,14 @@ def test_claim_denied_the_instant_the_edge_is_declared_mid_tick(tmp_path: Path) 
     entered_write = threading.Event()
     release_write = threading.Event()
     dependencies_store = cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
-    real_declare = dependencies_store.declare
+    real_declare_locked = dependencies_store.declare_locked
 
-    def _blocking_declare(dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  # type: ignore[no-untyped-def]
+    def _blocking_declare_locked(handle, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at):  # type: ignore[no-untyped-def]
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the declaration's write"
-        return real_declare(dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+        return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
-    dependencies_store.declare = _blocking_declare  # type: ignore[method-assign]
+    dependencies_store.declare_locked = _blocking_declare_locked  # type: ignore[method-assign]
 
     declare_thread = threading.Thread(
         target=lambda: hub.services.dependencies.declare(dependent, prerequisite, by="user:alice")

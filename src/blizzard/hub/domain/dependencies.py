@@ -1,12 +1,16 @@
-"""Chunk dependency edges — declare and release, under the shared claim lock.
+"""Chunk dependency edges — declare and release.
 
 A chunk names the chunks it depends on (``blizzard.hub.domain.chunks.dependencies``);
 declaring refuses a cycle and admits only in :data:`PRE_CLAIM_STATUSES`, release has no
-window. Both share ``ClaimService``/``EditService``/``RestartService``'s ``threading.Lock``
-— pinned by ``tests/test_dependency_race.py`` and ``tests/test_dependency_service_component.py``."""
+window. Declaring runs under the shared row lock (``bzh:store-exclusive-write``)
+``ClaimService``/``EditService``/``RestartService``/``DeleteService`` all take, plus a
+residual fleet-wide ``threading.Lock`` the cycle check alone still needs — pinned by
+``tests/test_dependency_race.py`` and ``tests/test_dependency_service_component.py``."""
 
 from __future__ import annotations
 
+# The residual cycle-check lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
+# ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -14,8 +18,7 @@ from dataclasses import dataclass
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.lifecycle import IReadChunkLifecycleRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, DependencyEdge
 
@@ -57,8 +60,8 @@ class NoStandingDependencyToRelease(Exception):
 class PrerequisiteIsEphemeral(Exception):
     """A **declaration** named an ephemeral (grouped-away or deleted) prerequisite,
     raised by :class:`DependencyService` from a fresh ``is_ephemeral`` read taken under
-    the shared claim lock — closing the race against every writer that shares the lock,
-    `GroupService` included. Release never raises it."""
+    the row lock — closing the race against every writer sharing it, `GroupService`
+    included. Release never raises it."""
 
     def __init__(self, chunk_id: str) -> None:
         super().__init__(f"chunk {chunk_id} is ephemeral and cannot be named as a prerequisite")
@@ -72,18 +75,20 @@ class DependencyService:
     def __init__(
         self,
         *,
-        facts: IReadChunkFactsRepository,
-        lifecycle: IReadChunkLifecycleRepository,
         dependencies: IWriteChunkDependenciesRepository,
+        exclusive: IChunkExclusiveWrites,
         clock: IClock,
-        claim_lock: threading.Lock,
+        cycle_lock: threading.Lock,
     ) -> None:
-        self._facts = facts
-        self._lifecycle = lifecycle
         self._dependencies = dependencies
+        # The locked-transaction seam (``bzh:store-exclusive-write``) ClaimService's own
+        # CAS shares — the row lock over the two named chunks.
+        self._exclusive = exclusive
         self._clock = clock
-        # The same lock ClaimService/EditService/RestartService already share.
-        self._claim_lock = claim_lock
+        # The residual fleet-wide lock GroupService also shares: row locks alone cannot
+        # close a race between two declares closing a cycle through chunks neither one
+        # names, so the cycle check itself still needs one lock over the whole graph.
+        self._cycle_lock = cycle_lock
 
     def declare(self, dependent: Chunk, prerequisite: Chunk, *, by: str) -> DependencyEdge:
         """Declare that ``dependent`` depends on ``prerequisite``.
@@ -91,17 +96,27 @@ class DependencyService:
         Idempotent: an already-standing pair is reported back rather than refused.
         Otherwise refuses, writing nothing, when ``dependent`` is gone or not
         :data:`PRE_CLAIM_STATUSES`, ``prerequisite`` is ephemeral, or it would close a cycle."""
-        with self._claim_lock:
-            return self._declare_locked(dependent, prerequisite, by=by)
+        with self._cycle_lock, self._exclusive.locked([dependent.chunk_id, prerequisite.chunk_id]) as handle:
+            return self._declare_locked(handle, dependent, prerequisite, by=by)
 
-    def _declare_locked(self, dependent: Chunk, prerequisite: Chunk, *, by: str) -> DependencyEdge:
-        existing = self._dependencies.standing_edge(dependent.chunk_id, prerequisite.chunk_id)
+    def _declare_locked(
+        self, handle: ILockedChunkRead, dependent: Chunk, prerequisite: Chunk, *, by: str
+    ) -> DependencyEdge:
+        standing = handle.standing_edges()
+        existing = next(
+            (
+                e
+                for e in standing
+                if e.dependent_chunk_id == dependent.chunk_id and e.prerequisite_chunk_id == prerequisite.chunk_id
+            ),
+            None,
+        )
         if existing is not None:
             return existing
 
         # A `None` load means gone under this lock — refuse rather than
         # substitute a synthetic status, mirroring `DeleteService.delete`.
-        facts = self._facts.load_facts(dependent.chunk_id)
+        facts = handle.facts(dependent.chunk_id)
         if facts is None:
             raise ChunkNotFound(dependent.chunk_id)
         status = facts.status()
@@ -110,14 +125,15 @@ class DependencyService:
 
         # Re-derived under the same lock: closes the race against every writer holding it
         # — delete and the fold both included.
-        if self._lifecycle.is_ephemeral(prerequisite.chunk_id):
+        if handle.is_ephemeral(prerequisite.chunk_id):
             raise PrerequisiteIsEphemeral(prerequisite.chunk_id)
 
-        standing = self._dependencies.list_standing_edges()
         if would_close_a_cycle(standing, [(dependent.chunk_id, prerequisite.chunk_id)]):
             raise DependencyWouldCloseCycle(dependent.chunk_id, prerequisite.chunk_id)
 
-        return self._dependencies.declare(dependent.chunk_id, prerequisite.chunk_id, by=by, at=self._clock.now())
+        return self._dependencies.declare_locked(
+            handle, dependent.chunk_id, prerequisite.chunk_id, by=by, at=self._clock.now()
+        )
 
     def release(self, edge: DependencyEdge, *, by: str) -> DependencyEdge:
         """Release ``edge``'s ``(dependent_chunk_id, prerequisite_chunk_id)`` pair — the
@@ -125,7 +141,7 @@ class DependencyService:
         itself, so a pair released then freshly re-declared releases the new edge,
         silently, in ``edge``'s place. Admitted whenever some edge stands for the pair
         (no status window); refuses, writing nothing, when none does."""
-        with self._claim_lock:
+        with self._cycle_lock:
             released = self._dependencies.release(
                 edge.dependent_chunk_id, edge.prerequisite_chunk_id, by=by, at=self._clock.now()
             )

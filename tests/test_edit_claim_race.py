@@ -2,7 +2,9 @@
 
 ``EditService``'s admit set widens to also admit ``ready``, opening a window
 where a runner's claim lands against the same chunk concurrently — an unguarded pair is
-a torn read. These tests force the interleaving with a patched store call.
+a torn read. ``EditService`` and ``ClaimService`` now serialize through the same locked
+row transaction (``bzh:store-exclusive-write``), not a shared in-process lock. These tests
+force the interleaving with a patched, already-locked store write.
 """
 
 from __future__ import annotations
@@ -84,14 +86,14 @@ def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(tmp_path: 
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    real_set_graph = _writable_record(hub).set_graph
+    real_set_graph_locked = _writable_record(hub).set_graph_locked
 
-    def _blocking_set_graph(cid: str, *, graph_id: str) -> None:
+    def _blocking_set_graph_locked(handle, cid: str, *, graph_id: str) -> None:  # type: ignore[no-untyped-def]
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the edit's write"
-        real_set_graph(cid, graph_id=graph_id)
+        real_set_graph_locked(handle, cid, graph_id=graph_id)
 
-    _writable_record(hub).set_graph = _blocking_set_graph  # type: ignore[method-assign]
+    _writable_record(hub).set_graph_locked = _blocking_set_graph_locked  # type: ignore[method-assign]
 
     edit_result: dict[str, int] = {}
 
@@ -143,14 +145,14 @@ def test_an_edit_is_refused_while_a_claim_holds_the_shared_lock_mid_route_creati
 
     entered_record = threading.Event()
     release_record = threading.Event()
-    real_record_route = _writable_route(hub).record_route
+    real_record_route_locked = _writable_route(hub).record_route_locked
 
-    def _blocking_record_route(route, *, token_hash, at):  # type: ignore[no-untyped-def]
+    def _blocking_record_route_locked(handle, route, *, token_hash, at):  # type: ignore[no-untyped-def]
         entered_record.set()
         assert release_record.wait(timeout=5), "test never released the claim's route record"
-        real_record_route(route, token_hash=token_hash, at=at)
+        return real_record_route_locked(handle, route, token_hash=token_hash, at=at)
 
-    _writable_route(hub).record_route = _blocking_record_route  # type: ignore[method-assign]
+    _writable_route(hub).record_route_locked = _blocking_record_route_locked  # type: ignore[method-assign]
 
     claim_result: dict[str, int] = {}
 
