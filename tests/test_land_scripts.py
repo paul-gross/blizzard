@@ -317,6 +317,11 @@ def test_clean_pr_waits_while_its_checks_are_still_pending(
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "pending"
     assert not any(url.endswith("/merge") for url in _urls(calls, "PUT")), "a clean-but-not-green PR must not merge"
+    assert any(
+        body is not None and body["name"] == f"delivery-pr/{_REPO}"
+        for method, url, body in calls
+        if method == "POST" and url == _CALLBACK_URL
+    ), "PR identity must be durable before the CI wait returns"
 
 
 def test_clean_merge_body_requests_a_merge_commit(
@@ -335,6 +340,13 @@ def test_clean_merge_body_requests_a_merge_commit(
     assert _last_line(capsys) == "landed"
     merge = [body for m, url, body in calls if m == "PUT" and url.endswith("/merge") and body is not None]
     assert merge and merge[0]["merge_method"] == "merge"
+    pr_marker = next(
+        i
+        for i, (_, url, body) in enumerate(calls)
+        if url == _CALLBACK_URL and body and body["name"].startswith("delivery-pr/")
+    )
+    merge_call = next(i for i, (method, url, _) in enumerate(calls) if method == "PUT" and url.endswith("/merge"))
+    assert pr_marker < merge_call
 
 
 # land_pr_ci terminal CI check failure + CI-watch findings: asserts the
@@ -532,16 +544,20 @@ def test_a_wait_path_findings_write_failure_degrades_to_a_plain_pending_not_a_bo
 ) -> None:
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
-    monkeypatch.setattr(
-        land_common,
-        "forge_request",
-        _forge_with_state(
-            calls,
-            mergeable_state="blocked",
-            head_check_runs=[_check_run("in_progress", None)],
-            marker_status=500,  # every delivery-findings write attempt fails
-        ),
+    fake = _forge_with_state(
+        calls,
+        mergeable_state="blocked",
+        head_check_runs=[_check_run("in_progress", None)],
+        marker_status=500,  # every delivery-findings write attempt fails
     )
+
+    def only_findings_fail(method: str, url: str, **kwargs: Any) -> tuple[int, Any]:
+        if url == _CALLBACK_URL and (kwargs.get("body") or {}).get("name", "").startswith("delivery-pr/"):
+            calls.append((method, url, kwargs.get("body")))
+            return 200, {"recorded": True}
+        return fake(method, url, **kwargs)
+
+    monkeypatch.setattr(land_common, "forge_request", only_findings_fail)
 
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "pending"  # a hub-side write hiccup must never bounce or crash
@@ -801,7 +817,7 @@ def test_the_marker_post_carries_the_token_header(monkeypatch: pytest.MonkeyPatc
 
     assert module.main() == 0
 
-    assert marker_headers == [{"X-Blizzard-Marker-Token": _MARKER_TOKEN}]
+    assert marker_headers == [{"X-Blizzard-Marker-Token": _MARKER_TOKEN}] * 2
 
 
 @pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["land_default", "land_pr_ci"])
@@ -832,7 +848,7 @@ def test_a_503_then_200_on_the_marker_write_retries_exactly_once_then_lands(
     assert module.main() == 0
 
     marker_calls = [c for c in calls if c[1] == _CALLBACK_URL]
-    assert len(marker_calls) == 2  # exactly one retry
+    assert len(marker_calls) == 3  # PR reference retries once; merged marker follows
     assert capsys.readouterr().out.strip().splitlines()[-1] == "landed"
 
 
@@ -1191,7 +1207,9 @@ def _pull_request_run(fake: Any) -> land_common.LandRun:
         base_branch="main",
         commits=[],
         already=set(),
-        markers=land_common.MarkerWriter(callback_url="", token="", request=fake),
+        markers=land_common.MarkerWriter(
+            callback_url="http://hub/markers", token="", request=lambda *args, **kwargs: (200, {})
+        ),
         request=fake,
     )
 

@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.delivery_read import DeliverySources
 
 
 class IReadChunkArtifactsRepository(Protocol):
@@ -14,6 +15,11 @@ class IReadChunkArtifactsRepository(Protocol):
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
         """Every artifact row of a chunk; the caller resolves latest-by-epoch."""
+        ...
+
+    def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
+        """Narrowed plural: only merged/PR/external-merge markers and historical
+        per-repo landing hashes and PR closures, batched by caller-supplied ids."""
         ...
 
     def latest_artifact(self, chunk_id: str, name: str) -> ArtifactRow | None:

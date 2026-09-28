@@ -28,6 +28,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunks.work_refs import resolve_live_holders
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable
+from blizzard.hub.domain.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.dependencies import ChunkNeighbor, derive_blocked_prerequisites, derive_chunk_neighborhood
 from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.edit import (
@@ -182,6 +183,9 @@ def list_chunks(
     # One priming call resolves the page's own pinned graphs' name/entry-node/node-names
     # up front — narrowed to the page, since nothing outside it is rendered.
     names.prime(chunk.graph_id for chunk in page.chunks)
+    # Unlike the fleet-wide status/holder reads above, delivery belongs only to
+    # rendered rows: one narrowed, batched read over this page's ids.
+    delivery_sources = services.chunks.artifacts.delivery_sources_for([chunk.chunk_id for chunk in page.chunks])
     # Derives from the chunks and statuses already loaded above, no further fact load.
     live_holders = resolve_live_holders(
         ((p, chunk.chunk_id) for chunk in all_chunks for p in chunk.work_refs), statuses
@@ -196,6 +200,10 @@ def list_chunks(
                 names,
                 live_holders,
                 blocked=blocked_view(markings.get(chunk.chunk_id)),
+                delivery=DeliveryRead.of(
+                    facts.get(chunk.chunk_id) or ChunkFacts(minted=True),
+                    delivery_sources.get(chunk.chunk_id, DeliverySources()),
+                ),
             ).summary()
             for chunk in page.chunks
         ],

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final
+from typing import Final, TypedDict
 
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
@@ -15,6 +15,7 @@ from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact
+from blizzard.hub.domain.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import Chunk, ChunkFacts, PauseFact, UsageTotal, WorkRef, holds_claim
 from blizzard.hub.work_sources.source import IWorkSource
@@ -29,6 +30,7 @@ from blizzard.wire.chunk import (
     ChunkUsageTotalView,
     ChunkUsageView,
     IntendedMigrationView,
+    LandedRepoView,
     MigrationView,
     PauseView,
     PendingView,
@@ -97,6 +99,14 @@ def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedV
     )
 
 
+class DeliveryWireFields(TypedDict):
+    open_prs: list[PrView]
+    closed_prs: list[PrView]
+    awaiting_external_merge: bool
+    landed_repos: list[LandedRepoView]
+    landed: bool
+
+
 @dataclass(frozen=True)
 class ChunkView:
     """One chunk read — the row, the facts every derived value comes from
@@ -119,6 +129,7 @@ class ChunkView:
     #: The chunk's standing-edge neighborhood — the caller's own
     #: already-derived value, the same shape ``blocked`` takes.
     neighborhood: ChunkNeighborhoodView | None = None
+    delivery: DeliveryRead | None = None
 
     @classmethod
     def of(
@@ -154,6 +165,7 @@ class ChunkView:
         names: GraphNames,
         live_holders: dict[WorkRef, str],
         blocked: BlockedView | None = None,
+        delivery: DeliveryRead | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
         already-fetched facts, route and pointer live-holders, skipping a per-chunk
@@ -167,7 +179,26 @@ class ChunkView:
             route=route,
             live_holders=live_holders,
             blocked=blocked,
+            delivery=delivery,
         )
+
+    def _delivery(self) -> DeliveryRead:
+        if self.delivery is not None:
+            return self.delivery
+        sources = self.services.chunks.artifacts.delivery_sources_for([self.chunk.chunk_id])
+        return DeliveryRead.of(self.facts, sources.get(self.chunk.chunk_id, DeliverySources()))
+
+    @staticmethod
+    def _delivery_fields(delivery: DeliveryRead) -> DeliveryWireFields:
+        return {
+            "open_prs": [PrView(repo=p.repo, number=p.number, url=p.url) for p in delivery.open_prs],
+            "closed_prs": [PrView(repo=p.repo, number=p.number, url=p.url) for p in delivery.closed_prs],
+            "awaiting_external_merge": delivery.awaiting_external_merge,
+            "landed_repos": [
+                LandedRepoView(repo=r.repo, commit_hash=r.commit_hash, url=r.url) for r in delivery.landed_repos
+            ],
+            "landed": delivery.landed,
+        }
 
     def _resolved_route(self) -> Route | None:
         """The chunk's route: the injected value if one was given, otherwise fetched lazily
@@ -210,6 +241,7 @@ class ChunkView:
             cost=self.usage_total(),
             completed_at=iso_utc(completed_at) if completed_at is not None else None,
             blocked=self.blocked,
+            **self._delivery_fields(self._delivery()),
         )
 
     def current_node(self) -> tuple[str | None, str | None]:
@@ -273,12 +305,10 @@ class ChunkView:
             restarts=history.restarts(),
             artifacts=self._artifacts(artifacts),
             questions=[question_view(q) for q in self.services.chunks.questions.load_questions(self.chunk.chunk_id)],
-            awaiting_external_merge=self.facts.awaiting_external_merge(),
-            open_prs=[PrView(repo=pr.repo, number=pr.number, url=pr.url) for pr in self.facts.pr_opened],
+            **self._delivery_fields(self._delivery()),
             cost=self.usage_total(),
             usage=self._usage_history(),
             pending=self._pending(),
-            landed=self.facts.has_landed_repos(artifacts),
             bounces=self._bounces(),
         )
 

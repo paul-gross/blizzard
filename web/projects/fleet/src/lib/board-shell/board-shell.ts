@@ -117,6 +117,9 @@ export class BoardShell {
         // the board is in it, so no extra read, and a blocker somehow absent from it
         // degrades to naming the ref alone.
         blockedOnStatus: chunk.blocked ? (statusById.get(chunk.blocked.prerequisite_chunk_id) ?? null) : null,
+        openPrs: chunk.open_prs ?? [],
+        landedRepos: chunk.landed_repos ?? [],
+        awaitingExternalMerge: chunk.awaiting_external_merge ?? false,
       });
     }
     // READY is ordered rather than listed: it is a queue, so its rank comes

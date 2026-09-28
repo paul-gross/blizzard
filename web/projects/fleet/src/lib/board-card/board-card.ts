@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import type { ChunkStatus } from '../api/hub';
+import type { ChunkStatus, LandedRepoView, PrView } from '../api/hub';
 import { STATUS_LANE } from '../chunk-lanes';
 import { compactRef } from '../compact-ref';
 import { formatCost, hasCostFigure } from '../cost-format';
@@ -46,6 +46,9 @@ export interface BoardCard {
    * board's own chunk list). Derived from the board's own chunk list rather than carried
    * on the wire directly. */
   readonly blockedOnStatus: ChunkStatus | null;
+  readonly openPrs?: readonly PrView[];
+  readonly landedRepos?: readonly LandedRepoView[];
+  readonly awaitingExternalMerge?: boolean;
 }
 
 /**

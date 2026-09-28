@@ -62,6 +62,39 @@ describe('BoardShell', () => {
       (card) => card.getAttribute('data-chunk') ?? '',
     );
 
+  it('maps the delivery projection to independent card links without selecting the chunk', async () => {
+    const fixture = await render([{
+      ...READY('delivery'),
+      status: 'delivering',
+      open_prs: [{ repo: 'widget', number: 42, url: 'https://forge.example/widget/pull/42' }],
+      landed_repos: [
+        { repo: 'service', commit_hash: 'abc123', url: 'https://forge.example/service/commit/abc123' },
+        { repo: 'local', commit_hash: 'def456', url: null },
+      ],
+      awaiting_external_merge: true,
+    }]);
+    const el = fixture.nativeElement as HTMLElement;
+    const selected: string[] = [];
+    fixture.componentInstance.selectChunk.subscribe((id) => selected.push(id));
+    const pr = el.querySelector<HTMLAnchorElement>('[data-testid="card-pr-link"]')!;
+    expect(pr.href).toBe('https://forge.example/widget/pull/42');
+    expect(pr.closest('button')).toBeNull();
+    expect(el.querySelector<HTMLAnchorElement>('[data-testid="card-landed-link"]')?.href).toBe('https://forge.example/service/commit/abc123');
+    expect(el.querySelector('[data-testid="card-landed-text"]')?.textContent).toContain('local def456');
+    expect(el.querySelector('[data-testid="card-merge-wait"]')?.textContent).toContain('Awaiting your merge');
+    pr.click();
+    expect(selected).toEqual([]);
+    el.querySelector<HTMLButtonElement>('.card-open')!.click();
+    expect(selected).toEqual([READY('delivery').chunk_id]);
+  });
+
+  it('does not mistake an auto-merging PR for a human merge wait', async () => {
+    const fixture = await render([{ ...READY('auto'), status: 'delivering', open_prs: [{ repo: 'widget', number: 7, url: 'https://forge.example/widget/pull/7' }] }]);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="card-pr-link"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="card-merge-wait"]')).toBeNull();
+  });
+
   it('renders the board shell with all six columns and an empty state', async () => {
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('state', 'empty');

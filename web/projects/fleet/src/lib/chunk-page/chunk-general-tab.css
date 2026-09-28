@@ -27,6 +27,9 @@ fleet-kit-panel.section {
     grid-column: 1;
     grid-row: 1;
   }
+  fleet-kit-panel[data-testid='section-delivery'] {
+    grid-column: 1 / -1;
+  }
   fleet-kit-panel[data-testid='section-issues'] {
     grid-column: 1;
     grid-row: 2;
