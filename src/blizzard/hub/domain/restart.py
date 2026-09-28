@@ -12,8 +12,9 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.edit import MigrationTargetIsCurrentPin, TargetGraphRetired
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository, Node
-from blizzard.hub.domain.work import Chunk, ChunkFacts
+from blizzard.hub.domain.work import Chunk
 
 #: The answer an open ask is consumed with. Fixed and toneless: the person who moved the
 #: chunk did not answer the question, they made it moot.
@@ -39,6 +40,23 @@ class RestartNodeUnknown(Exception):
         super().__init__(f"node {node_name!r} does not exist on graph {graph_id}")
         self.node_name = node_name
         self.graph_id = graph_id
+
+
+class RestartGraphPinChanged(Exception):
+    """A same-graph restart's ``graph`` argument no longer matches the chunk's current
+    pin, re-derived under the row lock — a concurrent edit re-pinned it between the
+    caller's load and this lock. Refused rather than resolved against the stale graph
+    object the caller passed in: the caller must re-load and retry, naming ``to_graph``
+    explicitly if the move should follow the graph the chunk now stands on."""
+
+    def __init__(self, chunk_id: str, expected_graph_id: str, actual_graph_id: str) -> None:
+        super().__init__(
+            f"chunk {chunk_id}'s graph pin changed from {expected_graph_id} to {actual_graph_id} "
+            "since it was loaded; restart refused rather than resolved against the stale graph"
+        )
+        self.chunk_id = chunk_id
+        self.expected_graph_id = expected_graph_id
+        self.actual_graph_id = actual_graph_id
 
 
 class RestartCurrentNodeUnknown(Exception):
@@ -84,16 +102,26 @@ class RestartService:
         restart fact for the clean re-entry, in one write. Takes the resolved graphs
         (``bzh:domain-takes-objects``); every refusal writes nothing. Returns the ``chunk_restarts.id``."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
-            facts = handle.facts(chunk.chunk_id) or ChunkFacts(minted=True)
+            # A `None` load means gone under this lock — refuse rather than substitute a
+            # synthetic status, mirroring `DeleteService.delete`/`DependencyService.declare`.
+            facts = handle.facts(chunk.chunk_id)
+            if facts is None:
+                raise ChunkNotFound(chunk.chunk_id)
             status = facts.status()
             if status in TERMINAL_STATUSES:
                 raise ChunkNotRestartable(chunk.chunk_id, status)
+            # Re-read fresh under the lock: a concurrent edit that re-pinned ``graph_id``
+            # between the caller's own load and this lock must not have either branch
+            # below answered against a pin it already changed — the cross-graph branch's
+            # own check and the same-graph branch's comparison to the caller's ``graph``
+            # both need the locked-fresh value.
+            current = handle.record(chunk.chunk_id)
+            if current is None:
+                raise ChunkNotFound(chunk.chunk_id)
             if to_graph is not None:
-                # Re-read fresh under the lock: a concurrent edit that re-pinned
-                # ``graph_id`` between the caller's own load and this lock must not have
-                # the pin check below answered against the value it already changed.
-                current = handle.record(chunk.chunk_id) or chunk
                 self._require_crossable(current, to_graph)
+            elif current.graph_id != graph.graph_id:
+                raise RestartGraphPinChanged(chunk.chunk_id, graph.graph_id, current.graph_id)
             from_node_id = facts.current_node_id()
             target = self._target(graph, to_graph, from_node_id, node_name)
             decision = facts.open_decision()

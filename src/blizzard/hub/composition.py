@@ -486,8 +486,8 @@ def build_services(
         restart=RestartService(movement=chunk_movement, graphs=graph_store, clock=clock, exclusive=chunk_exclusive),
         detach=DetachService(route=chunk_route, exclusive=chunk_exclusive, clock=clock),
         pause=PauseService(lifecycle=chunk_lifecycle, clock=clock),
-        stop=StopService(lifecycle=chunk_lifecycle),
-        complete=CompleteService(lifecycle=chunk_lifecycle),
+        stop=StopService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive),
+        complete=CompleteService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive),
         edit=EditService(record=chunk_record, graphs=graph_store, exclusive=chunk_exclusive),
         dependencies=DependencyService(
             dependencies=chunk_dependencies,

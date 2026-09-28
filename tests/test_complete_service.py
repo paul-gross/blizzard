@@ -1,14 +1,16 @@
 """CompleteService (unit tier) — the operator's manual chunk completion.
 
-A fake stands in for the lifecycle store — only ``record_completion`` is meaningfully
-implemented; every other seam raises loudly if called, mirroring ``StopService``'s own
-split, including the ``at`` timestamp: the store's own concern, stamped after its row
-lock (``bzh:store-exclusive-write``), never this layer's. ``facts`` is the caller's own
-already-loaded value now, so each test builds it directly rather than handing it to the
-service through a fake repo."""
+A fake stands in for the lifecycle store and the locked-transaction seam — only
+``record_completion_locked`` and the handle's ``facts`` read are meaningfully implemented;
+every other seam raises loudly if called, mirroring ``StopService``'s own split, including
+the ``at`` timestamp: the store's own concern, stamped after its row lock
+(``bzh:store-exclusive-write``), never this layer's. The already-``done`` guard is
+re-derived from the locked handle's own ``facts`` read, never a pre-lock snapshot."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -16,8 +18,10 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.node_steps import Executor
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.complete import CompleteService
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import Chunk, ChunkFacts, RouteCreatedFact, TransitionFact
 
@@ -29,12 +33,12 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 @dataclass
 class _FakeChunkRepo:
-    """Only ``record_completion`` is live — see module docstring."""
+    """Only ``record_completion_locked`` is live — see module docstring."""
 
     completed: list[tuple[str, str]] = field(default_factory=list)
     _next_id: int = 1
 
-    def record_completion(self, chunk_id: str, *, by: str) -> int:
+    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str) -> int:
         self.completed.append((chunk_id, by))
         fact_id = self._next_id
         self._next_id += 1
@@ -44,8 +48,31 @@ class _FakeChunkRepo:
         raise NotImplementedError(f"CompleteService should not touch {name!r}")
 
 
-def _as_lifecycle(repo: _FakeChunkRepo) -> IWriteChunkLifecycleRepository:
-    return cast(IWriteChunkLifecycleRepository, repo)
+@dataclass
+class _FakeLockedChunkRead:
+    chunk_facts: ChunkFacts | None
+
+    def facts(self, chunk_id: str) -> ChunkFacts | None:
+        return self.chunk_facts
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"CompleteService should not touch handle.{name!r}")
+
+
+@dataclass
+class _FakeExclusiveWrites:
+    chunk_facts: ChunkFacts | None
+
+    @contextmanager
+    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.chunk_facts))
+
+
+def _service(facts: ChunkFacts | None) -> tuple[CompleteService, _FakeChunkRepo]:
+    repo = _FakeChunkRepo()
+    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts))
+    service = CompleteService(lifecycle=cast(IWriteChunkLifecycleRepository, repo), exclusive=exclusive)
+    return service, repo
 
 
 def _not_ready_facts() -> ChunkFacts:
@@ -80,10 +107,9 @@ def _done_via_operator_completion_facts() -> ChunkFacts:
     ids=["not_ready", "running", "stopped"],
 )
 def test_complete_allows_every_non_done_status(facts_factory: object) -> None:
-    repo = _FakeChunkRepo()
-    service = CompleteService(lifecycle=_as_lifecycle(repo))
+    service, repo = _service(facts_factory())  # type: ignore[operator]
 
-    fact_id = service.complete(_CHUNK, facts=facts_factory(), by="operator")  # type: ignore[operator]
+    fact_id = service.complete(_CHUNK, by="operator")
 
     assert fact_id == 1
     assert repo.completed == [("chk_1", "operator")]
@@ -96,19 +122,28 @@ def test_complete_allows_every_non_done_status(facts_factory: object) -> None:
 )
 def test_complete_is_a_no_op_on_an_already_done_chunk(facts_factory: object) -> None:
     """Idempotent by no-op — no second fact, never refused."""
-    repo = _FakeChunkRepo()
-    service = CompleteService(lifecycle=_as_lifecycle(repo))
+    service, repo = _service(facts_factory())  # type: ignore[operator]
 
-    fact_id = service.complete(_CHUNK, facts=facts_factory(), by="operator")  # type: ignore[operator]
+    fact_id = service.complete(_CHUNK, by="operator")
 
     assert fact_id is None
     assert repo.completed == []
 
 
 def test_complete_records_who_completed_it() -> None:
-    repo = _FakeChunkRepo()
-    service = CompleteService(lifecycle=_as_lifecycle(repo))
+    service, repo = _service(_not_ready_facts())
 
-    service.complete(_CHUNK, facts=_not_ready_facts(), by="paul")
+    service.complete(_CHUNK, by="paul")
 
     assert repo.completed == [("chk_1", "paul")]
+
+
+def test_complete_raises_chunk_not_found_for_a_chunk_gone_under_the_lock() -> None:
+    """A `None` load off the locked handle means gone under this lock — refuse rather
+    than substitute a synthetic status, mirroring `DeleteService.delete`."""
+    service, repo = _service(None)
+
+    with pytest.raises(ChunkNotFound):
+        service.complete(_CHUNK, by="operator")
+
+    assert repo.completed == []

@@ -126,11 +126,13 @@ def _make_waiting_on_human(chunks: ChunkStores, chunk_id: str) -> None:
 
 
 def _make_stopped(chunks: ChunkStores, chunk_id: str) -> None:
-    chunks.lifecycle.record_stop(chunk_id, by="alice")
+    with chunks.exclusive.locked([chunk_id]) as handle:
+        chunks.lifecycle.record_stop_locked(handle, chunk_id, by="alice")
 
 
 def _make_done(chunks: ChunkStores, chunk_id: str) -> None:
-    chunks.lifecycle.record_completion(chunk_id, by="alice")
+    with chunks.exclusive.locked([chunk_id]) as handle:
+        chunks.lifecycle.record_completion_locked(handle, chunk_id, by="alice")
 
 
 @pytest.mark.parametrize(

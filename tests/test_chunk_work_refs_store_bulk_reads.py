@@ -54,7 +54,8 @@ def test_live_holders_matches_find_live_holder_across_live_ephemeral_terminal_an
 
     _mint(store, "ch_terminal", work_refs=[terminal_ref])
     store.queue.record_promote("ch_terminal", at=_T0)
-    store.lifecycle.record_completion("ch_terminal", by="op")
+    with store.exclusive.locked(["ch_terminal"]) as handle:
+        store.lifecycle.record_completion_locked(handle, "ch_terminal", by="op")
 
     pointers = [live_ref, grouped_ref, terminal_ref, absent_ref]
     result = store.work_refs.live_holders(pointers)
@@ -70,7 +71,8 @@ def test_live_holders_prefers_a_live_holder_over_an_earlier_terminal_one(tmp_pat
 
     _mint(store, "ch_a_terminal", work_refs=[shared_ref])
     store.queue.record_promote("ch_a_terminal", at=_T0)
-    store.lifecycle.record_completion("ch_a_terminal", by="op")
+    with store.exclusive.locked(["ch_a_terminal"]) as handle:
+        store.lifecycle.record_completion_locked(handle, "ch_a_terminal", by="op")
 
     _mint(store, "ch_b_live", work_refs=[shared_ref])
     store.queue.record_promote("ch_b_live", at=_T0)

@@ -185,10 +185,12 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     # `needs-human` row in `GET /api/events`, so a stopped chunk must leave it.
     store.escalations.record_escalation("ch_d", epoch=1, takeover_command="cd d && resume", at=_at(10))
     clock.instant = _at(20)
-    store.lifecycle.record_stop("ch_d", by="operator")
+    with store.exclusive.locked(["ch_d"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_d", by="operator")
     # ch_e: stop then a LATER escalation -> still OPEN; supersession is ordered, not a flag.
     clock.instant = _at(10)
-    store.lifecycle.record_stop("ch_e", by="operator")
+    with store.exclusive.locked(["ch_e"]) as handle:
+        store.lifecycle.record_stop_locked(handle, "ch_e", by="operator")
     store.escalations.record_escalation("ch_e", epoch=1, takeover_command="cd e && resume", at=_at(20))
     # ch_f: escalation then the chunk REACHES DONE elsewhere -> superseded (#293). No later
     # lease is minted here, so completion is the only arm that can close it.

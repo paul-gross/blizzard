@@ -28,6 +28,7 @@ from blizzard.hub.domain.edit import (
     MigrationTargetIsCurrentPin,
     TargetGraphRetired,
 )
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, IReadGraphRepository, Node
 from blizzard.hub.domain.work import (
     Chunk,
@@ -78,9 +79,11 @@ class _FakeChunkRepo:
     :func:`_as_record`/:func:`_as_exclusive` instead."""
 
     facts: ChunkFacts | None
-    #: The locked handle's own ``record`` read — ``None`` falls back to the caller's
-    #: ``chunk``, exactly matching a real handle's first-mint identity.
-    current: Chunk | None = None
+    #: The locked handle's own ``record`` read — defaults to the chunk under edit itself
+    #: (the ordinary, non-racing case); a test proving the stale-caller-vs-locked-read
+    #: distinction overrides it with a freshly-diverged record. ``None`` means gone under
+    #: the lock, matching a real handle's post-deletion/-fold answer.
+    current: Chunk | None = _CHUNK
     graphs_set: list[tuple[str, str]] = field(default_factory=list)
     defaults_set: list[tuple[str, list[str], str | None, list[str]]] = field(default_factory=list)
     intended_migrations_set: list[tuple[str, IntendedMigration | None]] = field(default_factory=list)
@@ -238,8 +241,9 @@ def test_set_graph_writes_on_a_not_ready_chunk() -> None:
 
 
 def test_set_graph_on_a_chunk_with_no_facts_at_all_is_not_ready_and_writes() -> None:
-    # A freshly minted, un-hydrated chunk (no store row loaded yet) derives not_ready.
-    repo = _FakeChunkRepo(facts=None)
+    # A freshly minted chunk with no fact-table rows anywhere derives not_ready — a real
+    # handle answers this an all-empty `ChunkFacts`, never `None` (`None` means gone).
+    repo = _FakeChunkRepo(facts=_not_ready_facts())
     service = _service(repo)
 
     service.set_graph(_CHUNK, graph=_TARGET_GRAPH)
@@ -270,7 +274,7 @@ def test_set_defaults_also_writes_default_harnesses() -> None:
 def test_set_defaults_omitting_default_harnesses_leaves_it_at_its_current_value() -> None:
     """Omitted (the default) is UNSET, not a clear — distinct from an explicit ``[]``."""
     chunk = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0, default_harnesses=["claude_code"])
-    repo = _FakeChunkRepo(facts=_not_ready_facts())
+    repo = _FakeChunkRepo(facts=_not_ready_facts(), current=chunk)
     service = _service(repo)
 
     service.set_defaults(chunk, default_model=["blizzard:basic"], default_effort="medium")
@@ -613,7 +617,7 @@ def test_edit_naming_only_default_harnesses_leaves_the_other_two_defaults_at_the
         default_model=["blizzard:basic"],
         default_effort="medium",
     )
-    repo = _FakeChunkRepo(facts=_ready_facts())
+    repo = _FakeChunkRepo(facts=_ready_facts(), current=chunk)
     service = _service(repo)
 
     service.edit(chunk, ChunkEdit(default_harnesses=["claude_code"]))
@@ -684,3 +688,15 @@ def test_edit_with_an_empty_chunk_edit_writes_nothing() -> None:
     assert repo.graphs_set == []
     assert repo.defaults_set == []
     assert repo.intended_migrations_set == []
+
+
+def test_edit_raises_chunk_not_found_for_a_chunk_gone_under_the_lock() -> None:
+    """A `None` load off the locked handle means gone under this lock — refuse rather
+    than substitute a synthetic status, mirroring `DeleteService.delete`."""
+    repo = _FakeChunkRepo(facts=None)
+    service = _service(repo)
+
+    with pytest.raises(ChunkNotFound):
+        service.edit(_CHUNK, ChunkEdit(default_effort="high"))
+
+    assert repo.defaults_set == []

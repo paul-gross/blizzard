@@ -15,7 +15,7 @@ from typing import cast
 import pytest
 
 from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
-from tests.support import HubHarness, build_hub, chunk_facts_of, count_queries, ingest
+from tests.support import HubHarness, build_hub, count_queries, ingest
 
 pytestmark = pytest.mark.component
 
@@ -56,9 +56,7 @@ def test_claim_allowed_once_the_prerequisite_reaches_done(tmp_path: Path) -> Non
     hub.services.dependencies.declare(_resolve(hub, dependent_id), _resolve(hub, prerequisite_id), by="user:alice")
     assert hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id)).status_code == 409
 
-    hub.services.complete.complete(
-        _resolve(hub, prerequisite_id), facts=chunk_facts_of(hub, prerequisite_id), by="user:alice"
-    )
+    hub.services.complete.complete(_resolve(hub, prerequisite_id), by="user:alice")
     resp = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id))
 
     assert resp.status_code == 201, resp.text
@@ -71,9 +69,7 @@ def test_claim_allowed_against_a_prerequisite_already_done_before_the_edge_decla
     hub = build_hub(tmp_path)
     dependent_id = ingest(hub, [{"source": "default", "ref": "dependent"}], promote=False)
     prerequisite_id = ingest(hub, [{"source": "default", "ref": "prereq"}], promote=False)
-    hub.services.complete.complete(
-        _resolve(hub, prerequisite_id), facts=chunk_facts_of(hub, prerequisite_id), by="user:alice"
-    )
+    hub.services.complete.complete(_resolve(hub, prerequisite_id), by="user:alice")
     hub.services.dependencies.declare(_resolve(hub, dependent_id), _resolve(hub, prerequisite_id), by="user:alice")
 
     resp = hub.client.post("/api/fleet/routes", json=_claim_body(dependent_id))
@@ -170,7 +166,7 @@ def _seed_unmet_dependent(hub: HubHarness, *, prerequisite_count: int) -> str:
         prereq_id = ingest(hub, [{"source": "default", "ref": f"prereq-{i}"}], promote=False)
         prereq = _resolve(hub, prereq_id)
         if i < prerequisite_count - 1:
-            hub.services.complete.complete(prereq, facts=chunk_facts_of(hub, prereq_id), by="user:alice")
+            hub.services.complete.complete(prereq, by="user:alice")
         hub.services.dependencies.declare(dependent, prereq, by="user:alice")
     return dependent_id
 

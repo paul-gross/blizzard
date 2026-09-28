@@ -8,22 +8,35 @@ no second fact and is never refused."""
 from __future__ import annotations
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
-from blizzard.hub.domain.work import Chunk, ChunkFacts
+from blizzard.hub.domain.errors import ChunkNotFound
+from blizzard.hub.domain.work import Chunk
 
 
 class CompleteService:
     """Manually complete a chunk, from any non-``done`` status — ``blizzard hub chunk done``."""
 
-    def __init__(self, *, lifecycle: IWriteChunkLifecycleRepository) -> None:
+    def __init__(self, *, lifecycle: IWriteChunkLifecycleRepository, exclusive: IChunkExclusiveWrites) -> None:
         self._lifecycle = lifecycle
+        # The locked-transaction seam (``bzh:store-exclusive-write``): the already-``done``
+        # guard this completion no-ops on is re-derived here, under the same row lock the
+        # write lands under, never trusted from a caller's pre-lock snapshot.
+        self._exclusive = exclusive
 
-    def complete(self, chunk: Chunk, *, facts: ChunkFacts, by: str) -> int | None:
+    def complete(self, chunk: Chunk, *, by: str) -> int | None:
         """Append ``chunk.completed`` and release the chunk's live route (and any held
-        hub-exec slot), atomically. Takes the caller's already-loaded ``facts``
-        (``bzh:domain-takes-objects``). A no-op on an already-``done`` chunk — returns
-        ``None``; otherwise the fresh ``chunk_completed.id``. ``at`` is the store's own
-        concern (``bzh:store-exclusive-write``) — stamped after its row lock, never here."""
-        if facts.status() is ChunkStatus.DONE:
-            return None
-        return self._lifecycle.record_completion(chunk.chunk_id, by=by)
+        hub-exec slot), atomically. Takes the loaded chunk (``bzh:domain-takes-objects``);
+        the already-``done`` guard is re-derived fresh under the row lock
+        (``bzh:store-exclusive-write``), so a concurrent completion cannot land a second
+        fact past a stale read. A no-op on an already-``done`` chunk — returns ``None``;
+        otherwise the fresh ``chunk_completed.id``. Raises :class:`ChunkNotFound` for a
+        chunk gone under the lock. ``at`` is the store's own concern — stamped after its
+        row lock, never here."""
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            facts = handle.facts(chunk.chunk_id)
+            if facts is None:
+                raise ChunkNotFound(chunk.chunk_id)
+            if facts.status() is ChunkStatus.DONE:
+                return None
+            return self._lifecycle.record_completion_locked(handle, chunk.chunk_id, by=by)

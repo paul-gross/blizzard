@@ -14,8 +14,9 @@ from typing import Final
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
-from blizzard.hub.domain.work import Chunk, ChunkFacts, IntendedMigration, MigrationMode
+from blizzard.hub.domain.work import Chunk, IntendedMigration, MigrationMode
 
 
 class UnsetType(Enum):
@@ -169,13 +170,19 @@ class EditService:
         intended_migration = edit.intended_migration
 
         with self._exclusive.locked([chunk.chunk_id]) as handle:
-            facts = handle.facts(chunk.chunk_id) or ChunkFacts(minted=True)
+            # A `None` load means gone under this lock — refuse rather than substitute a
+            # synthetic status, mirroring `DeleteService.delete`/`DependencyService.declare`.
+            facts = handle.facts(chunk.chunk_id)
+            if facts is None:
+                raise ChunkNotFound(chunk.chunk_id)
             status = facts.status()
             # Re-read fresh under the lock: a concurrent edit landing between the
             # caller's own load and this lock must not have its write silently lost by
             # the trio's carry-forward below, nor the pin check answered against a
             # ``graph_id`` that edit already changed.
-            current = handle.record(chunk.chunk_id) or chunk
+            current = handle.record(chunk.chunk_id)
+            if current is None:
+                raise ChunkNotFound(chunk.chunk_id)
 
             if graph_id is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "graph_id")

@@ -18,7 +18,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
-from blizzard.hub.domain.restart import SUPERSEDED_ANSWER
+from blizzard.hub.domain.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
 from blizzard.hub.domain.work import Movement, MovementKind
 from blizzard.tools.invariants import HubInvariants
 from tests.support import assert_all_timestamps_utc, build_hub, chunk_stores, emitted_events, ingest, report_lease
@@ -527,6 +527,30 @@ def test_a_cross_graph_restart_repins_the_chunk_and_lands_it_by_name(tmp_path) -
     assert detail["graph_id"] == target
     assert detail["current_node_name"] == "build"
     assert detail["latest_epoch"] == 3
+
+
+def test_a_same_graph_restart_refuses_a_graph_that_changed_since_the_caller_loaded_it(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A same-graph restart's ``graph`` argument is re-checked against the chunk's
+    current pin under the row lock (``bzh:store-exclusive-write``) — a concurrent edit's
+    re-pin, already landed by the time the restart takes the lock, must not have the
+    restart resolve ``node_name`` against the graph it no longer stands on."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
+    chunk_id = ingest(hub, [_POINTER])  # left unclaimed: `set_graph` admits pre-claim statuses only
+    stale_chunk = hub.services.chunks.record.get(chunk_id)
+    assert stale_chunk is not None
+    stale_graph = hub.services.graphs.get(stale_chunk.graph_id)
+    assert stale_graph is not None
+    target_id = _target_graph(hub)
+    target_graph = hub.services.graphs.get(target_id)
+    assert target_graph is not None
+    hub.services.edit.set_graph(stale_chunk, graph=target_graph)  # a concurrent edit re-pins it
+
+    with pytest.raises(RestartGraphPinChanged):
+        hub.services.restart.restart(stale_chunk, stale_graph, node_name=None, by="operator", to_graph=None)
+
+    # Refused writing nothing.
+    assert _detail(hub, chunk_id)["restarts"] == []
 
 
 def test_the_move_records_a_migration_fact_and_a_restart_fact(tmp_path) -> None:  # type: ignore[no-untyped-def]
