@@ -240,17 +240,6 @@ def test_set_graph_writes_on_a_not_ready_chunk() -> None:
     assert repo.graphs_set == [("chk_1", "gr_2")]
 
 
-def test_set_graph_on_a_chunk_with_no_facts_at_all_is_not_ready_and_writes() -> None:
-    # A freshly minted chunk with no fact-table rows anywhere derives not_ready — a real
-    # handle answers this an all-empty `ChunkFacts`, never `None` (`None` means gone).
-    repo = _FakeChunkRepo(facts=_not_ready_facts())
-    service = _service(repo)
-
-    service.set_graph(_CHUNK, graph=_TARGET_GRAPH)
-
-    assert repo.graphs_set == [("chk_1", "gr_2")]
-
-
 def test_set_defaults_writes_on_a_not_ready_chunk() -> None:
     repo = _FakeChunkRepo(facts=_not_ready_facts())
     service = _service(repo)

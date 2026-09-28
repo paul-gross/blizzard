@@ -75,10 +75,9 @@ def test_two_concurrent_completions_write_only_one_fact(tmp_path: Path) -> None:
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 
-def test_a_stop_racing_a_completion_never_lands_both_terminal_facts(tmp_path: Path) -> None:
-    """Whichever wins the row lock first commits its own terminal fact; the second,
-    re-deriving status fresh under the same lock, must see the winner's fact and never
-    land its own alongside it."""
+def test_a_stop_racing_a_completion_is_refused_once_the_completion_wins(tmp_path: Path) -> None:
+    """Whichever wins the row lock first commits its own terminal fact; a stop that loses
+    to a completion re-derives status under the lock, sees it, and is refused."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
     _claim_and_lease(hub, chunk_id)
@@ -92,9 +91,7 @@ def test_a_stop_racing_a_completion_never_lands_both_terminal_facts(tmp_path: Pa
 
     def complete() -> None:
         start.wait()
-        results["complete"] = hub.client.post(
-            f"/api/chunks/{chunk_id}/complete", json={"by": "operator"}
-        ).status_code
+        results["complete"] = hub.client.post(f"/api/chunks/{chunk_id}/complete", json={"by": "operator"}).status_code
 
     threads = [threading.Thread(target=stop), threading.Thread(target=complete)]
     for t in threads:
@@ -104,14 +101,12 @@ def test_a_stop_racing_a_completion_never_lands_both_terminal_facts(tmp_path: Pa
 
     facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
-    # `complete` never refuses (idempotent no-op), so `stop`'s own outcome alone tells
-    # apart the two orderings: it wins (202, and only `stopped` landed) or loses to a
-    # completion that got there first (409, and only `operator_completed` landed).
-    assert not (facts.stopped and facts.operator_completed), (
-        f"both terminal facts landed — the loser wrote past a stale guard: {facts}"
-    )
-    if results["stop"] == 202:
-        assert facts.stopped and not facts.operator_completed
+    # `complete` is admitted from `stopped` (any non-`done` status), so stop-then-complete
+    # legitimately lands both facts. What the row lock must rule out is a stop landing
+    # *after* a completion: a `409` stop means the completion won, and only it landed.
+    if results["stop"] == 409:
+        assert facts.operator_completed and not facts.stopped, (
+            f"the stop was refused yet landed its own fact past a completion: {facts}"
+        )
     else:
-        assert results["stop"] == 409
-        assert facts.operator_completed and not facts.stopped
+        assert results["stop"] == 202 and facts.stopped
