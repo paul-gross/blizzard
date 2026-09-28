@@ -104,6 +104,9 @@ SCOPES: dict[str, Scope] = {
 # Mirrors the committed [tool.mutmut].do_not_mutate migrations exclusion in pyproject.toml —
 # applied on top of every scope, so a scope row never has to restate it.
 MIGRATIONS_EXCLUSION = "src/blizzard/*/store/migrations/versions/*"
+# Copied into a sandbox and run by a bare interpreter, where mutmut's trampoline import cannot resolve.
+STANDALONE_SCRIPT_EXCLUSION = "src/blizzard/runner/harness/internal/opencode_tool_boundary.py"
+GLOBAL_EXCLUSIONS = (MIGRATIONS_EXCLUSION, STANDALONE_SCRIPT_EXCLUSION)
 TOOLS_PREFIX = "src/blizzard/tools/"
 
 
@@ -137,11 +140,11 @@ def _matches_any(rel_path: Path, patterns: Iterable[str]) -> bool:
 
 def _excluded_from_every_scope(rel_path: Path) -> bool:
     rel_str = rel_path.as_posix()
-    return rel_str.startswith(TOOLS_PREFIX) or fnmatch.fnmatch(rel_str, MIGRATIONS_EXCLUSION)
+    return rel_str.startswith(TOOLS_PREFIX) or any(fnmatch.fnmatch(rel_str, g) for g in GLOBAL_EXCLUSIONS)
 
 
 def files_for_scope(scope: Scope, paths: Iterable[Path]) -> set[Path]:
-    do_not_mutate = (MIGRATIONS_EXCLUSION, *scope.do_not_mutate)
+    do_not_mutate = (*GLOBAL_EXCLUSIONS, *scope.do_not_mutate)
     return {path for path in paths if _matches_any(path, scope.only_mutate) and not _matches_any(path, do_not_mutate)}
 
 
@@ -283,7 +286,7 @@ def config_override_for_scope(
 ) -> ConfigOverride:
     return ConfigOverride(
         only_mutate=list(scope.only_mutate),
-        do_not_mutate=[MIGRATIONS_EXCLUSION, *scope.do_not_mutate],
+        do_not_mutate=[*GLOBAL_EXCLUSIONS, *scope.do_not_mutate],
         pytest_add_cli_args_test_selection=selected_test_files(scope, tests_root, repo_root),
     )
 

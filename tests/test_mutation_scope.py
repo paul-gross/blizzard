@@ -167,7 +167,7 @@ def test_config_override_carries_the_scope_fields(tmp_path: Path) -> None:
     )
     override = m.config_override_for_scope(scope, tests_root, tmp_path)
     assert override.only_mutate == ["src/blizzard/hub/*"]
-    assert override.do_not_mutate == [m.MIGRATIONS_EXCLUSION, "src/blizzard/hub/cli/*"]
+    assert override.do_not_mutate == [*m.GLOBAL_EXCLUSIONS, "src/blizzard/hub/cli/*"]
     assert override.pytest_add_cli_args_test_selection == ["tests/test_hub.py"]
 
 

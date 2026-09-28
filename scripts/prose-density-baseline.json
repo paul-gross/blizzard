@@ -6044,7 +6044,7 @@
    "comments": 2,
    "docstrings": 5,
    "over_cap": 0,
-   "total": 81
+   "total": 87
   },
   "test_analytics_events_api.py": {
    "comments": 7,
@@ -6062,7 +6062,7 @@
    "comments": 4,
    "docstrings": 12,
    "over_cap": 0,
-   "total": 107
+   "total": 113
   },
   "test_analytics_outcomes_api.py": {
    "comments": 32,
@@ -7877,10 +7877,10 @@
    "total": 359
   },
   "test_route_classification.py": {
-   "comments": 62,
+   "comments": 64,
    "docstrings": 36,
    "over_cap": 3,
-   "total": 394
+   "total": 398
   },
   "test_route_permission_matrix.py": {
    "comments": 9,
@@ -8406,9 +8406,9 @@
   },
   "test_runner_process.py": {
    "comments": 13,
-   "docstrings": 20,
+   "docstrings": 21,
    "over_cap": 0,
-   "total": 213
+   "total": 217
   },
   "test_runner_process_launch.py": {
    "comments": 6,
@@ -8756,7 +8756,7 @@
    "comments": 3,
    "docstrings": 26,
    "over_cap": 0,
-   "total": 280
+   "total": 291
   },
   "test_subprocess_check_runner.py": {
    "comments": 3,
@@ -8840,7 +8840,7 @@
    "comments": 10,
    "docstrings": 24,
    "over_cap": 0,
-   "total": 672
+   "total": 678
   },
   "test_transcript_event_store_bulk_reads.py": {
    "comments": 7,
@@ -8882,7 +8882,7 @@
    "comments": 9,
    "docstrings": 24,
    "over_cap": 0,
-   "total": 396
+   "total": 402
   },
   "test_transcript_segments_api.py": {
    "comments": 20,

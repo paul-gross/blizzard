@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import os
 import pkgutil
 import shutil
 from collections.abc import Iterator
@@ -178,6 +179,11 @@ def test_allow_list_hygiene(store_case: _StoreCase) -> None:
             )
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="reflects every Protocol member via vars(cls); under mutmut that also carries each "
+    "method's generated __mutmut_* variants, which this census would wrongly hold to the same pattern",
+)
 def test_runner_census_is_exhaustive() -> None:
     reflected = _reflect_read_protocol_methods(runner_pkg)
     declared = set(RUNNER_CENSUS.keys()) | set(RUNNER_EXEMPTIONS.keys())
@@ -214,6 +220,11 @@ def test_runner_read_methods_never_scan_an_unallowed_table(runner_world: RunnerW
 # --- hub -------------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="reflects every Protocol member via vars(cls); under mutmut that also carries each "
+    "method's generated __mutmut_* variants, which this census would wrongly hold to the same pattern",
+)
 def test_hub_census_is_exhaustive() -> None:
     reflected = _reflect_read_protocol_methods(hub_pkg)
     declared = set(HUB_CENSUS.keys()) | set(HUB_EXEMPTIONS.keys())

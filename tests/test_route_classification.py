@@ -7,6 +7,7 @@ table is exhaustive both ways: every live route must appear, every entry must re
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -317,7 +318,10 @@ def _permission_of(call: object) -> Permission | None:
                 return cell.cell_contents
         return None
     if getattr(call, "__name__", None) == "require_marker_authority":
-        fallback = call.__globals__.get("_require_chunk_control")  # type: ignore[union-attr]
+        # By `__module__`, not `call.__globals__`: a mutmut trampoline keeps the former
+        # but its own `__globals__` (`functools.wraps` cannot rebind that).
+        module = sys.modules.get(getattr(call, "__module__", None))  # type: ignore[arg-type]
+        fallback = getattr(module, "_require_chunk_control", None)
         return _permission_of(fallback) if fallback is not None else None
     return None
 
