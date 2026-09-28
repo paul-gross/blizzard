@@ -72,6 +72,26 @@ jobs:
           git diff --exit-code -- openapi/ \
             || { echo "::error::OpenAPI specs under openapi/ are stale — run 'mise run export-openapi' and commit."; exit 1; }
 
+  wire-compat:
+    name: hub↔runner wire compatibility
+    # Attributes a break to the change that makes it, before it ever reaches master —
+    # the deployed-mode counterpart in push.yml guards edge itself (docs/versioning.md).
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The merge-base with origin/master can be arbitrarily far back; a shallow
+          # checkout may not include it.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: wire compatibility (blizzard:wire-compat)
+        run: uv run blizzard-wire-compat --baseline merge-base --against origin/master
+
   frontend:
     name: eslint + vitest + client drift
     runs-on: ubuntu-latest

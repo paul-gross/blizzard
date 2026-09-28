@@ -9,7 +9,8 @@ file is the in-repo operator reference for running it.
 
 [`.github/workflows/gate.yml`](../.github/workflows/gate.yml) is the reusable (`workflow_call`) merge gate, called by
 every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gate` ast-grep scan
-(`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, the `web/` frontend checks (eslint, vitest,
+(`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, hub↔runner wire compatibility against the PR's
+merge-base (`gate / hub↔runner wire compatibility`, PR-only — see below), the `web/` frontend checks (eslint, vitest,
 structural gate, generated-client drift), and the process-reference prose lint (`gate / process-reference lint`,
 `styles/Blizzard/ProcessReference.yml` against `.vale.ini`). Every gate check is seams-mocked and token-free, needing no
 real forge, no tokens, and no network beyond package installs.
@@ -26,8 +27,15 @@ vale --output=line .
 uv run ast-grep scan --error=unused-suppression .
 uv run pytest -n auto
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- openapi/
+uv run blizzard-wire-compat --baseline merge-base --against origin/master
 cd web && npm ci && npm run lint && npm run test && npm run structural-gate && npm run generate:client && cd .. && git diff --exit-code -- web/
 ```
+
+`blizzard:wire-compat` (`src/blizzard/tools/wire_compat.py`) fails on a breaking change to the declared hub↔runner wire
+surface — `bzh:fleet-wire-additive` owns what counts as breaking. The `gate.yml` job runs only when the triggering event
+is `pull_request` (`if: github.event_name == 'pull_request'`), diffing `HEAD` against its merge-base with
+`origin/master` so a break is attributed to the PR that makes it. `mise run wire-compat` reproduces it locally against
+the current branch's own merge-base.
 
 ## The upper tiers
 
@@ -59,10 +67,27 @@ The dev-build wheel is downloaded from its run with:
 gh run download --repo paul-gross/blizzard <run-id>
 ```
 
-The `dev-image` job needs `[gate, upper-tiers, dev-build]` — the tiers so the channel advances only on proven commits,
-and `dev-build` solely to reuse its computed dev version for the image's `org.opencontainers.image.version` annotation
-rather than recomputing it. Unlike the release fan-out, the dev tags and OCI annotations are inlined in the `dev-image`
-job — no branching logic to unit-test — and `tests/test_push_workflow.py` pins the job.
+The `dev-image` job needs `[gate, upper-tiers, dev-build, wire-compat-deployed]` — the tiers so the channel advances
+only on proven commits, `dev-build` solely to reuse its computed dev version for the image's
+`org.opencontainers.image.version` annotation rather than recomputing it, and `wire-compat-deployed` so `edge` never
+advances past an unacknowledged hub↔runner wire break. Unlike the release fan-out, the dev tags and OCI annotations
+are inlined in the `dev-image` job — no branching logic to unit-test — and `tests/test_push_workflow.py` pins the job.
+
+`wire-compat-deployed` diffs every commit since the newest successful `push.yml` run — resolved via
+`gh run list --workflow push.yml --branch master --status success --limit 1`, since that run's commit is what `edge`
+currently runs — against `HEAD`, one first-parent step at a time, failing on any step whose break is not acknowledged
+by a `!`-marked Conventional Commit subject on the commits that land it (`bzh:fleet-wire-additive`). It needs job-level
+`permissions: actions: read` to call `gh run list` with the workflow's own `GITHUB_TOKEN`; the job fails outright if no
+successful run is found. Its local equivalent is `uv run blizzard-wire-compat --baseline deployed`, run with the
+operator's own `gh` auth.
+
+It checks the net diff from the resolved baseline to `HEAD` first, and skips the per-step walk entirely when that net
+diff is additive — the per-step walk exists only to attribute a *surviving* break to the landing that must acknowledge
+it. This is the recovery path if an unacknowledged break ever lands on `master` outright (bypassing or predating the PR
+gate): since that landing is already pushed, its subject can't be marked `!` after the fact, and rewriting pushed
+`master` history is not an option. Push a following commit that reverts the break instead — once the net diff back to
+the last successful baseline is clean again, `wire-compat-deployed` passes and `edge` resumes advancing, with no
+history rewrite required.
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) runs the full suite — gate, service tier,
 the **full** crash sweep, and e2e — then builds the wheel with the embedded frontend, pushes a multi-arch
