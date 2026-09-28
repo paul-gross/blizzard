@@ -25,7 +25,11 @@ def _reachable_members(protocol: type) -> set[str]:
     """The callable, non-dunder members ``protocol`` requires, own or inherited — a
     concept Protocol's members reached through composition count the same as one
     declared directly on ``protocol``'s own class body."""
-    return {name for name in dir(protocol) if not name.startswith("_") and callable(getattr(protocol, name))}
+    return {
+        name
+        for name in dir(protocol)
+        if not name.startswith("_") and "__mutmut_" not in name and callable(getattr(protocol, name))
+    }
 
 
 def test_census_names_exactly_the_write_protocols_own_members() -> None:
