@@ -148,6 +148,7 @@ also_copy = [
     "scripts/prose_spans.py",
     "scripts/restated_invariants.py",
     "docs/deployment/transcripts.md",
+    "docs/deployment/install.md",
     "docs/deployment/chunk-operations/takeover.md",
     "docs/deployment/work-sources.md",
     "docs/deployment/human-auth.md",

@@ -165,7 +165,7 @@ def test_authored_landed_edge_runs_a_post_merge_node_after_landing(tmp_path: Pat
         # `landed` is informational (never a status): a done chunk that merged reads true.
         assert detail["landed"] is True
 
-        # The forge reports the PR merged — the delivery seam ran for real, before `verify`.
+        # The forge reports the PR merged — delivery's land step ran for real, before `verify`.
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 

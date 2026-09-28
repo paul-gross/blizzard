@@ -76,6 +76,7 @@ ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 # Qualifies a bare (worktree-name-only) delivery repo into the forge's ``owner/name`` coordinate.
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
+# Defaults to "blizzard" when unset, qualifying a bare repo name into that owner.
 DEFAULT_FORGE_OWNER = "blizzard"
 # The branch every PR/merge targets, so a PR's ``base`` resolves instead of 422-ing.
 ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
