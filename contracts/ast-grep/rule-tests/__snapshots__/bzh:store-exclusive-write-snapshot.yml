@@ -1,11 +1,48 @@
 id: bzh:store-exclusive-write
 snapshots:
   ? |
+    from threading import Lock
+  : labels:
+    - source: from threading import Lock
+      style: primary
+      start: 0
+      end: 26
+    - source: threading
+      style: secondary
+      start: 5
+      end: 14
+  ? |
+    from threading import Lock as ThreadLock
+  : labels:
+    - source: from threading import Lock as ThreadLock
+      style: primary
+      start: 0
+      end: 40
+    - source: threading
+      style: secondary
+      start: 5
+      end: 14
+  ? |
+    import os, threading
+  : labels:
+    - source: import os, threading
+      style: primary
+      start: 0
+      end: 20
+    - source: threading
+      style: secondary
+      start: 11
+      end: 20
+  ? |
     import threading
   : labels:
     - source: import threading
       style: primary
       start: 0
+      end: 16
+    - source: threading
+      style: secondary
+      start: 7
       end: 16
   ? |
     import threading
@@ -15,4 +52,19 @@ snapshots:
     - source: import threading
       style: primary
       start: 0
+      end: 16
+    - source: threading
+      style: secondary
+      start: 7
+      end: 16
+  ? |
+    import threading as th
+  : labels:
+    - source: import threading as th
+      style: primary
+      start: 0
+      end: 22
+    - source: threading
+      style: secondary
+      start: 7
       end: 16

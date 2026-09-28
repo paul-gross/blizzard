@@ -12,5 +12,14 @@ message: >-
 files:
   - src/blizzard/hub/**
 rule:
-  kind: import_statement
-  pattern: import threading
+  any:
+    - kind: import_statement
+      has:
+        kind: dotted_name
+        regex: ^threading$
+        stopBy: end
+    - kind: import_from_statement
+      has:
+        kind: dotted_name
+        regex: ^threading$
+        field: module_name

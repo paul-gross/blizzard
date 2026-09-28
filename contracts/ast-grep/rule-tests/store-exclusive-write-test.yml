@@ -9,6 +9,10 @@ valid:
   # A queue import is a different module entirely, not a near-miss on the pattern text.
   - |
     import queue
+  # A different module's `Lock` — the module name is what the rule matches, not the
+  # imported symbol's own name.
+  - |
+    from multiprocessing import Lock
 invalid:
   # The exact shape every current holder of the residual dependency-graph lock carries —
   # suppressed at each real site with `# ast-grep-ignore: bzh:store-exclusive-write`.
@@ -18,3 +22,15 @@ invalid:
     import threading
 
     from dataclasses import dataclass
+  # An aliased import — the module still resolves to `threading`.
+  - |
+    import threading as th
+  # A multi-name import — `threading` is a sibling, not the only name.
+  - |
+    import os, threading
+  # A `from`-import — the module still resolves to `threading`.
+  - |
+    from threading import Lock
+  # A `from`-import, aliased — same module, different bound name.
+  - |
+    from threading import Lock as ThreadLock

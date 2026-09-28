@@ -1016,8 +1016,9 @@ class NoDuplicateStandingDependency(QueryCheck):
 class NoStandingDependencyOntoEphemeralChunk(QueryCheck):
     """A standing (unreleased) edge whose dependent or prerequisite is ephemeral (grouped away or deleted) — its FK
     still resolves, so the engine enforces nothing here. Design upholds this by construction now that
-    ``DeleteService`` and ``GroupService`` both share the claim lock; this check is the backstop that would catch a
-    regression, not a guard against a known-live gap."""
+    ``DeleteService`` and ``GroupService`` both hold their own row lock over the chunks they touch and share the
+    residual fleet-wide cycle lock; this check is the backstop that would catch a regression, not a guard against a
+    known-live gap."""
 
     def run(self) -> list[Violation]:
         ephemeral = {row[0] for row in self.conn.execute(select(hub.chunk_grouped.c.chunk_id))} | {

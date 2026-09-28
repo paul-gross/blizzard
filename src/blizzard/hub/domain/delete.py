@@ -7,6 +7,10 @@ runner-held one."""
 
 from __future__ import annotations
 
+# The residual dependency-graph lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
+# ast-grep-ignore: bzh:store-exclusive-write
+import threading
+
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
@@ -51,6 +55,7 @@ class DeleteService:
         items: IWriteWorkItemRepository,
         clock: IClock,
         exclusive: IChunkExclusiveWrites,
+        cycle_lock: threading.Lock,
     ) -> None:
         self._items = items
         self._clock = clock
@@ -58,6 +63,10 @@ class DeleteService:
         # ClaimService/EditService/RestartService, so a claim can't land on a chunk this
         # write is mid-way through deleting.
         self._exclusive = exclusive
+        # The residual fleet-wide lock GroupService's own fold also shares: releasing this
+        # chunk's own outgoing edges races a concurrent fold rewriting the same edges onto a
+        # chunk neither one's row lock names — a row lock alone cannot close it.
+        self._cycle_lock = cycle_lock
 
     def delete(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.deleted`` and withdraw every open ``hub:``-source item
@@ -65,7 +74,7 @@ class DeleteService:
         grouped or deleted, :class:`ChunkNotDeletable` for one held or terminal, and
         :class:`ChunkHasDependents` for one a standing prerequisite for another chunk
         — every guard read taken fresh under the row lock."""
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
+        with self._cycle_lock, self._exclusive.locked([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
@@ -79,4 +88,10 @@ class DeleteService:
             )
             if dependent_chunk_ids:
                 raise ChunkHasDependents(chunk.chunk_id, dependent_chunk_ids)
-            return self._items.delete_chunk_and_withdraw_hub_items_locked(handle, chunk, by=by, at=self._clock.now())
+            # Re-read fresh under the lock: a fold that landed a work ref onto this chunk
+            # between the caller's own load and this lock must not have that ref survive
+            # withdrawal because the write below still carries the caller's stale list.
+            current = handle.record(chunk.chunk_id) or chunk
+            return self._items.delete_chunk_and_withdraw_hub_items_locked(
+                handle, current, by=by, at=self._clock.now()
+            )

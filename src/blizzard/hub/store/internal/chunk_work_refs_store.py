@@ -90,15 +90,10 @@ class ChunkWorkRefsStore:
         statuses = {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
         return resolve_live_holders(pairs, statuses)
 
-    def add_work_refs(self, chunk_id: str, pointers: list[WorkRef], *, at: datetime) -> None:
-        """Fold pointers into the survivor of a group, de-duped by (source, ref)."""
-        with self._store.write("add_work_refs") as conn:
-            self._add_work_refs_conn(conn, chunk_id, pointers)
-
     def add_work_refs_locked(
         self, handle: ILockedChunkRead, chunk_id: str, pointers: list[WorkRef], *, at: datetime
     ) -> None:
-        """`add_work_refs`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
+        """Fold pointers into a group survivor, de-duped by (source, ref) (``bzh:store-exclusive-write``) —
         the group fold's own write, on ``handle``'s already-locked connection."""
         self._add_work_refs_conn(conn_of(handle), chunk_id, pointers)
 

@@ -4,7 +4,7 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 (``bzh:facts-not-status``): every write appends a row that happened and status is
 derived. Timestamps arrive already stamped (``bzh:injected-clock``).
 
-``record_transition``, ``record_restart``, and ``record_migration`` are each one
+``record_transition`` and ``record_migration`` are each one
 transaction on one connection, unchanged by the seam carve — the shared row helpers below
 are plain function calls inside that same ``with self._store.write(...)`` block, never a
 second connection."""
@@ -196,38 +196,6 @@ class ChunkMovementStore:
                 enqueue_close_intents(conn, chunk_id, at=at)
             return resolved_migration_id
 
-    def record_restart(
-        self,
-        chunk_id: str,
-        *,
-        from_node_id: str | None,
-        to_node_id: str,
-        by: str,
-        at: datetime,
-        decision_id: str | None = None,
-        answered_question_ids: Sequence[str] = (),
-        answer: str = "",
-        to_graph_id: str | None = None,
-    ) -> int:
-        """Record the forced move and everything it consumes in **one** transaction (#370, #371),
-        so a ``kill -9`` cannot leave the chunk moved while an ask still parks it or a graph it no
-        longer runs still pins it; each answer keeps first-write-wins. The fence epoch is derived
-        HERE rather than handed down — one above every prior attempt is a read-then-write only this
-        transaction holds together (``bzh:epoch-fencing``)."""
-        with self._store.write("record_restart") as conn:
-            return self._record_restart_conn(
-                conn,
-                chunk_id,
-                from_node_id=from_node_id,
-                to_node_id=to_node_id,
-                by=by,
-                at=at,
-                decision_id=decision_id,
-                answered_question_ids=answered_question_ids,
-                answer=answer,
-                to_graph_id=to_graph_id,
-            )
-
     def record_restart_locked(
         self,
         handle: ILockedChunkRead,
@@ -242,7 +210,7 @@ class ChunkMovementStore:
         answer: str = "",
         to_graph_id: str | None = None,
     ) -> int:
-        """`record_restart`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
+        """Record the forced move and everything it consumes (``bzh:store-exclusive-write``) —
         the restart's own write, on ``handle``'s already-locked connection."""
         return self._record_restart_conn(
             conn_of(handle),
@@ -310,11 +278,11 @@ class ChunkMovementStore:
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
-    def record_requeue(self, chunk_id: str, *, at: datetime) -> int:
-        with self._store.write("record_requeue") as conn:
-            result = conn.execute(s.requeues.insert().values(chunk_id=chunk_id, requeued_at=at))
-            key = result.inserted_primary_key
-            return int(key[0]) if key is not None else 0
+    def record_requeue_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
+        conn = conn_of(handle)
+        result = conn.execute(s.requeues.insert().values(chunk_id=chunk_id, requeued_at=at))
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
 
     def _repin_by_restart(
         self,

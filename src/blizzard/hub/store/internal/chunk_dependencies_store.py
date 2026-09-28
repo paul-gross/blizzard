@@ -65,17 +65,10 @@ class ChunkDependenciesStore:
             ).all()
         return [_edge(row) for row in rows]
 
-    def declare(self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime) -> DependencyEdge:
-        """Mint a fresh standing edge — always a new row, never a revive of a released
-        one; see
-        :meth:`~blizzard.hub.domain.chunks.dependencies.IWriteChunkDependenciesRepository.declare`."""
-        with self._store.write("declare") as conn:
-            return self._declare_conn(conn, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
-
     def declare_locked(
         self, handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
     ) -> DependencyEdge:
-        """`declare`'s locked-transaction sibling (``bzh:store-exclusive-write``) — the
+        """Mint a fresh standing edge (``bzh:store-exclusive-write``) — the
         dependency declare's own write, on ``handle``'s already-locked connection."""
         return self._declare_conn(conn_of(handle), dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
@@ -127,25 +120,10 @@ class ChunkDependenciesStore:
             released_by=by,
         )
 
-    def record_fold(
-        self,
-        targets: list[FoldTarget],
-        *,
-        grouped_into: str,
-        by: str,
-        at: datetime,
-    ) -> dict[str, int]:
-        """Record every target's ``chunk.grouped`` row and rewrite its own release/mint
-        edges, all targets in one transaction so no target's row can
-        commit ahead of another's. ``mint`` never revives a released row, always a fresh
-        insert. Returns each target chunk id's freshly-inserted ``chunk_grouped.id``."""
-        with self._store.write("record_fold") as conn:
-            return self._record_fold_conn(conn, targets, grouped_into=grouped_into, by=by, at=at)
-
     def record_fold_locked(
         self, handle: ILockedChunkRead, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
     ) -> dict[str, int]:
-        """`record_fold`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
+        """Record the group fold's edges and ``chunk.grouped`` rows (``bzh:store-exclusive-write``) —
         the group fold's own write, on ``handle``'s already-locked connection."""
         return self._record_fold_conn(conn_of(handle), targets, grouped_into=grouped_into, by=by, at=at)
 

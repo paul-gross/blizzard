@@ -342,7 +342,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         artifacts=[],
         proposals=[_proposal_row(stopped_after_delivery, "wip_stopped_after")],
     )
-    chunks.lifecycle.record_stop(stopped_after_delivery, by="operator", at=_T0)
+    chunks.lifecycle.record_stop(stopped_after_delivery, by="operator")
 
     # Never delivered — parked mid-graph, no terminal transition.
     chunks.movement.record_transition(
@@ -371,7 +371,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         artifacts=[],
         proposals=[_proposal_row(hand_completed, "wip_hand")],
     )
-    chunks.lifecycle.record_completion(hand_completed, by="operator", at=_T0)
+    chunks.lifecycle.record_completion(hand_completed, by="operator")
 
     # Delivered, then grouped away — ephemeral now, excluded like a deleted chunk.
     chunks.movement.record_transition(

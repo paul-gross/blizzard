@@ -63,13 +63,9 @@ class IReadChunkWorkRefsRepository(Protocol):
 class IWriteChunkWorkRefsRepository(IReadChunkWorkRefsRepository, Protocol):
     """Read-write chunk-work-refs access."""
 
-    def add_work_refs(self, chunk_id: str, pointers: list[WorkRef], *, at: datetime) -> None:
-        """Fold work refs into a group survivor, de-duped by (source, ref)."""
-        ...
-
     def add_work_refs_locked(
         self, handle: ILockedChunkRead, chunk_id: str, pointers: list[WorkRef], *, at: datetime
     ) -> None:
-        """`add_work_refs`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
-        the group fold's own write, on ``handle``'s already-locked connection."""
+        """Fold work refs into a group survivor, de-duped by (source, ref), on ``handle``'s
+        already-locked connection (``bzh:store-exclusive-write``)."""
         ...

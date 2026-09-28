@@ -7,6 +7,7 @@ rendering, and the ``parse``/registry ``resolve`` that give it its production ca
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -63,6 +64,7 @@ def _work_deps(engine):  # type: ignore[no-untyped-def]
         items=work_item_store,
         clock=_clock(),
         exclusive=build_chunk_stores(store, _clock()).exclusive,
+        cycle_lock=threading.Lock(),
     )
     return work_item_store, delete
 

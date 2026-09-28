@@ -1476,8 +1476,14 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_dependency_prerequisite, "1018", at=_ht(78))
     _mint("ch_hub_dep_dependent_2", "1019", at=_ht(79))
     _mint("ch_hub_dep_prerequisite_2", "1020", at=_ht(80))
-    write.dependencies.declare(chunk_dependency_dependent, chunk_dependency_prerequisite, by="operator", at=_ht(81))
-    write.dependencies.declare("ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2", by="operator", at=_ht(82))
+    with write.exclusive.locked([chunk_dependency_dependent, chunk_dependency_prerequisite]) as handle:
+        write.dependencies.declare_locked(
+            handle, chunk_dependency_dependent, chunk_dependency_prerequisite, by="operator", at=_ht(81)
+        )
+    with write.exclusive.locked(["ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2"]) as handle:
+        write.dependencies.declare_locked(
+            handle, "ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2", by="operator", at=_ht(82)
+        )
 
     # --- lifecycle (ephemeral via a real fold) ---------------------------------------------------
     chunk_lifecycle_survivor = "ch_hub_lifecycle_survivor"
@@ -1491,31 +1497,35 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_route_b = "ch_hub_route_b"
     _mint(chunk_route_a, "1023", at=_ht(86))
     _mint(chunk_route_b, "1024", at=_ht(87))
-    write.route.record_route(
-        Route(
-            chunk_id=chunk_route_a,
-            runner_id=HUB_RUNNER_ID,
-            workspace_id="workspace-1",
-            environment_ids=["e1"],
-            created_at=_ht(88),
-        ),
-        token_hash="route-hash-a",
-        at=_ht(88),
-    )
+    with write.exclusive.locked([chunk_route_a]) as handle:
+        write.route.record_route_locked(
+            handle,
+            Route(
+                chunk_id=chunk_route_a,
+                runner_id=HUB_RUNNER_ID,
+                workspace_id="workspace-1",
+                environment_ids=["e1"],
+                created_at=_ht(88),
+            ),
+            token_hash="route-hash-a",
+            at=_ht(88),
+        )
     write.route.record_lease(chunk_route_a, epoch=1, runner_id=HUB_RUNNER_ID, at=_ht(89))
     write.route.set_runner_high_water(HUB_RUNNER_ID, seq=7, at=_ht(90))
     write.route.record_route_token(chunk_route_a, token_hash="route-hash-a2", at=_ht(91))
-    write.route.record_route(
-        Route(
-            chunk_id=chunk_route_b,
-            runner_id=HUB_RUNNER_ID_2,
-            workspace_id="workspace-2",
-            environment_ids=["e2"],
-            created_at=_ht(92),
-        ),
-        token_hash="route-hash-b",
-        at=_ht(92),
-    )
+    with write.exclusive.locked([chunk_route_b]) as handle:
+        write.route.record_route_locked(
+            handle,
+            Route(
+                chunk_id=chunk_route_b,
+                runner_id=HUB_RUNNER_ID_2,
+                workspace_id="workspace-2",
+                environment_ids=["e2"],
+                created_at=_ht(92),
+            ),
+            token_hash="route-hash-b",
+            at=_ht(92),
+        )
 
     # --- artifacts -------------------------------------------------------------------------------
     chunk_artifacts = "ch_hub_artifacts"
@@ -1542,7 +1552,10 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     # --- extra work ref -----------------------------------------------------------------------
     chunk_work_refs_extra = "ch_hub_work_refs_extra"
     _mint(chunk_work_refs_extra, "1026", at=_ht(96))
-    write.work_refs.add_work_refs(chunk_work_refs_extra, [WorkRef(source="secondary", ref="99")], at=_ht(97))
+    with write.exclusive.locked([chunk_work_refs_extra]) as handle:
+        write.work_refs.add_work_refs_locked(
+            handle, chunk_work_refs_extra, [WorkRef(source="secondary", ref="99")], at=_ht(97)
+        )
 
     # --- hub-owned work items ------------------------------------------------------------------
     work_item_1 = seed_work_item(

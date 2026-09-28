@@ -14,9 +14,11 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol, cast
 
 from sqlalchemy import Connection, func, insert, select
 
+from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import (
@@ -317,12 +319,24 @@ def lock_chunk_row(conn: Connection, chunk_id: str) -> None:
     conn.execute(s.chunks.update().where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
 
 
-def conn_of(handle) -> Connection:  # type: ignore[no-untyped-def]
+class _LockedConnection(Protocol):
+    """The write token every ``*_locked`` store method needs — the real capability
+    :class:`ILockedChunkRead` deliberately does not expose to the domain layer, so a fake
+    handle satisfying that Protocol structurally still cannot satisfy this one too."""
+
+    conn: Connection
+
+
+def conn_of(handle: ILockedChunkRead) -> Connection:
     """A ``*_locked`` write method's own recovery of the real connection behind a
-    domain-held :class:`~blizzard.hub.domain.chunks.exclusive.ILockedChunkRead` handle —
-    package-private; the domain layer never imports this, and this module never imports
-    the handle's concrete class back, so the two sides stay acyclic."""
-    return handle.conn  # type: ignore[no-any-return]
+    domain-held :class:`ILockedChunkRead` handle — package-private; the domain layer
+    never imports this, and this module never imports the handle's concrete class back,
+    so the two sides stay acyclic. The one narrowly-typed cast this recovery needs: any
+    real handle a locked write method receives is a store-built
+    :class:`~blizzard.hub.store.internal.chunk_exclusive_store.LockedChunkTransaction`,
+    which satisfies :class:`_LockedConnection`; only a test fake missing ``conn``
+    entirely would fail it, and only at the point it is actually used."""
+    return cast(_LockedConnection, handle).conn
 
 
 def next_route_seq(conn: Connection, chunk_id: str) -> int:

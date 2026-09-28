@@ -39,23 +39,20 @@ class IReadChunkRouteRepository(Protocol):
 class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
     """Read-write chunk-route access."""
 
-    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> str:
-        """Record the route **and** mint its capability token's fact, atomically.
+    def record_route_locked(self, handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
+        """Record the route **and** mint its capability token's fact, atomically, on
+        ``handle``'s already-locked connection (``bzh:store-exclusive-write``).
 
         ``token_hash`` is the sha256 digest of the plaintext token, already hashed by the
-        caller (``bzh:domain-takes-objects``); the token fact lands in the same store
-        write, never as a column on the route fact. Returns the minted ``route_id``."""
+        caller (``bzh:domain-takes-objects``); the token fact lands in the same write,
+        never as a column on the route fact. Returns the minted ``route_id``."""
         ...
 
-    def record_route_locked(self, handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
-        """`record_route`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
-        the claim's own write, on ``handle``'s already-locked connection rather than a
-        fresh transaction."""
-        ...
-
-    def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
-        """Append the ``route.released`` fact. Returns the freshly-written
-        ``route_released.id`` (the activity-feed's key)."""
+    def record_route_released_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
+        """Append the ``route.released`` fact, on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``) — detach and requeue race claim's own
+        ``route_of`` guard read exactly as the migrated writers do. Returns the
+        freshly-written ``route_released.id`` (the activity-feed's key)."""
         ...
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:

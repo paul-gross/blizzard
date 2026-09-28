@@ -618,10 +618,12 @@ def build_hub(
     store_connections = hub_store_connections(engine)
     user_store = UserRepository(store_connections, RepoErrorFactory(get_logger("blizzard.hub.auth")))
     work_item_store = WorkItemStore(store_connections)
+    built_chunk_stores = build_chunk_stores(store_connections, clock)
     delete_service = DeleteService(
         items=work_item_store,
         clock=clock,
-        exclusive=build_chunk_stores(store_connections, clock).exclusive,
+        exclusive=built_chunk_stores.exclusive,
+        cycle_lock=cycle_lock,
     )
     finding_store = FindingStore(store_connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)
@@ -667,6 +669,7 @@ def build_hub(
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=transcript_caps,
+        chunk_stores=built_chunk_stores,
         system_artifacts=system_artifacts,
     )
     app = create_app(config, services=services)

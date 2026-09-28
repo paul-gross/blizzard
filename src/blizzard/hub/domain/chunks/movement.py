@@ -80,26 +80,6 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         ``migration_id``, ``None`` on replay."""
         ...
 
-    def record_restart(
-        self,
-        chunk_id: str,
-        *,
-        from_node_id: str | None,
-        to_node_id: str,
-        by: str,
-        at: datetime,
-        decision_id: str | None = None,
-        answered_question_ids: Sequence[str] = (),
-        answer: str = "",
-        to_graph_id: str | None = None,
-    ) -> int:
-        """Record a ``chunk.restarted`` fact — an operator forced the chunk onto ``to_node_id``
-        (#370), at a fence epoch this call derives one above the chunk's newest. One transaction
-        with the answers it writes, the ``decision_id`` it names and — when ``to_graph_id`` is set
-        (#371) — the migration fact re-pinning the chunk there and the standing intent that clears
-        with it, so no crash leaves the move half-applied. Returns the ``chunk_restarts.id``."""
-        ...
-
     def record_restart_locked(
         self,
         handle: ILockedChunkRead,
@@ -114,12 +94,18 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         answer: str = "",
         to_graph_id: str | None = None,
     ) -> int:
-        """`record_restart`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
-        the restart's own write, on ``handle``'s already-locked connection."""
+        """Record a ``chunk.restarted`` fact — an operator forced the chunk onto ``to_node_id``,
+        at a fence epoch this call derives one above the chunk's newest — on ``handle``'s
+        already-locked connection (``bzh:store-exclusive-write``). One write with the
+        answers it writes, the ``decision_id`` it names and — when ``to_graph_id`` is set —
+        the migration fact re-pinning the chunk there and the standing intent that clears
+        with it, so no crash leaves the move half-applied. Returns the ``chunk_restarts.id``."""
         ...
 
-    def record_requeue(self, chunk_id: str, *, at: datetime) -> int:
-        """Record a ``requeue.recorded`` fact — supersedes an open escalation.
+    def record_requeue_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
+        """Record a ``requeue.recorded`` fact — supersedes an open escalation — on
+        ``handle``'s already-locked connection (``bzh:store-exclusive-write``), atomically
+        with the route release it always accompanies.
 
         Returns the freshly-written ``requeues.id`` (the activity-feed's key)."""
         ...

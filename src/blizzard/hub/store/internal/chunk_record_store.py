@@ -222,33 +222,13 @@ class ChunkRecordStore:
         with self._store.write("mint") as conn:
             insert_chunk_rows(conn, chunk)
 
-    def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
-        """Repin a not-ready or ready-unclaimed chunk to a different workflow graph."""
-        with self._store.write("set_graph") as conn:
-            self._set_graph_conn(conn, chunk_id, graph_id=graph_id)
-
     def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
-        """`set_graph`'s locked-transaction sibling (``bzh:store-exclusive-write``) — the
-        edit's own write, on ``handle``'s already-locked connection."""
+        """Repin a not-ready or ready-unclaimed chunk to a different workflow graph, on
+        ``handle``'s already-locked connection (``bzh:store-exclusive-write``)."""
         self._set_graph_conn(conn_of(handle), chunk_id, graph_id=graph_id)
 
     def _set_graph_conn(self, conn, chunk_id: str, *, graph_id: str) -> None:  # type: ignore[no-untyped-def]
         conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
-
-    def set_defaults(
-        self, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
-    ) -> None:
-        """Repin a not-ready or ready-unclaimed chunk's default model/effort/harnesses —
-        all three in one write; see
-        :meth:`~blizzard.hub.domain.chunks.record.IWriteChunkRecordRepository.set_defaults`."""
-        with self._store.write("set_defaults") as conn:
-            self._set_defaults_conn(
-                conn,
-                chunk_id,
-                default_model=default_model,
-                default_effort=default_effort,
-                default_harnesses=default_harnesses,
-            )
 
     def set_defaults_locked(
         self,
@@ -259,8 +239,9 @@ class ChunkRecordStore:
         default_effort: str | None,
         default_harnesses: list[str],
     ) -> None:
-        """`set_defaults`'s locked-transaction sibling (``bzh:store-exclusive-write``) —
-        the edit's own write, on ``handle``'s already-locked connection."""
+        """Repin a not-ready or ready-unclaimed chunk's default model/effort/harnesses —
+        all three in one write, on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``)."""
         self._set_defaults_conn(
             conn_of(handle),
             chunk_id,
@@ -282,20 +263,12 @@ class ChunkRecordStore:
             )
         )
 
-    def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
-        """Set, overwrite, or clear a chunk's standing migration intent.
-
-        A plain column overwrite, editable at any non-terminal status. The column
-        carries no timestamp, so this write takes no ``at``."""
-        with self._store.write("set_intended_migration") as conn:
-            self._set_intended_migration_conn(conn, chunk_id, intended=intended)
-
     def set_intended_migration_locked(
         self, handle: ILockedChunkRead, chunk_id: str, *, intended: IntendedMigration | None
     ) -> None:
-        """`set_intended_migration`'s locked-transaction sibling
-        (``bzh:store-exclusive-write``) — the edit's own write, on ``handle``'s
-        already-locked connection."""
+        """Set, overwrite, or clear a chunk's standing migration intent, on ``handle``'s
+        already-locked connection (``bzh:store-exclusive-write``). A plain column
+        overwrite, editable at any non-terminal status; the column carries no timestamp."""
         self._set_intended_migration_conn(conn_of(handle), chunk_id, intended=intended)
 
     def _set_intended_migration_conn(self, conn, chunk_id: str, *, intended: IntendedMigration | None) -> None:  # type: ignore[no-untyped-def]

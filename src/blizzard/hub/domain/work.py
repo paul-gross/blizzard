@@ -1386,20 +1386,14 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         """Record ``closed_at``/``closure`` on an open item, once."""
         ...
 
-    def delete_chunk_and_withdraw_hub_items(self, chunk: Chunk, *, by: str, at: datetime) -> int:
-        """Delete ``chunk`` — the ``chunk_deleted`` fact that makes it ephemeral — and
-        withdraw every open ``hub:``-source item it holds, atomically in one transaction
-        (:class:`~blizzard.hub.domain.delete.DeleteService`). A ``forge:``
-        pointer on the same chunk is left untouched. Returns the freshly-written
-        ``chunk_deleted.id``."""
-        ...
-
     def delete_chunk_and_withdraw_hub_items_locked(
         self, handle: ILockedChunkRead, chunk: Chunk, *, by: str, at: datetime
     ) -> int:
-        """`delete_chunk_and_withdraw_hub_items`'s locked-transaction sibling
-        (``bzh:store-exclusive-write``) — the delete's own write, on ``handle``'s
-        already-locked connection."""
+        """Delete ``chunk`` — the ``chunk_deleted`` fact that makes it ephemeral — and
+        withdraw every open ``hub:``-source item it holds, atomically on ``handle``'s
+        already-locked connection (``bzh:store-exclusive-write``;
+        :class:`~blizzard.hub.domain.delete.DeleteService`). A ``forge:`` pointer on the
+        same chunk is left untouched. Returns the freshly-written ``chunk_deleted.id``."""
         ...
 
     def materialize_create(

@@ -21,7 +21,7 @@ from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.restart import SUPERSEDED_ANSWER
 from blizzard.hub.domain.work import Movement, MovementKind
 from blizzard.tools.invariants import HubInvariants
-from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, ingest, report_lease
+from tests.support import assert_all_timestamps_utc, build_hub, chunk_stores, emitted_events, ingest, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -439,7 +439,8 @@ def test_restart_refuses_a_chunk_standing_on_a_node_its_graph_does_not_carry(tmp
     # HTTP edit path refuses for a moved chunk.
     pinned = _detail(hub, chunk_id)["graph_id"]
     other = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["graph_id"] != pinned)
-    cast(IWriteChunkRecordRepository, hub.services.chunks.record).set_graph(chunk_id, graph_id=other)
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        cast(IWriteChunkRecordRepository, hub.services.chunks.record).set_graph_locked(handle, chunk_id, graph_id=other)
 
     resp = _restart(hub, chunk_id)
 

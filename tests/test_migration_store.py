@@ -32,7 +32,7 @@ from blizzard.hub.domain.work import (
     TransitionFact,
 )
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import build_hub, chunk_stores, pointer_token, report_lease
 
 unit = pytest.mark.unit
 component = pytest.mark.component
@@ -351,18 +351,21 @@ def test_set_intended_migration_sets_overwrites_and_clears(tmp_path: Path) -> No
     assert pre is not None and pre.intended_migration is None  # unset by default
 
     auto = IntendedMigration(mode=MigrationMode.AUTO, graph_id="gr_target", node_name=None)
-    record.set_intended_migration(chunk_id, intended=auto)
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        record.set_intended_migration_locked(handle, chunk_id, intended=auto)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     assert chunk.intended_migration == auto  # round-trips through the store
 
     forced = IntendedMigration(mode=MigrationMode.FORCED, graph_id="gr_other", node_name="build")
-    record.set_intended_migration(chunk_id, intended=forced)
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        record.set_intended_migration_locked(handle, chunk_id, intended=forced)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     assert chunk.intended_migration == forced  # overwrite
 
-    record.set_intended_migration(chunk_id, intended=None)
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        record.set_intended_migration_locked(handle, chunk_id, intended=None)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     assert chunk.intended_migration is None  # clear
@@ -381,7 +384,8 @@ def test_record_migration_with_clear_intent_clears_the_intent_atomically(tmp_pat
     source_graph_id = pre_migration.graph_id
 
     intent = IntendedMigration(mode=MigrationMode.AUTO, graph_id=target_graph_id, node_name=None)
-    record.set_intended_migration(chunk_id, intended=intent)
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        record.set_intended_migration_locked(handle, chunk_id, intended=intent)
     armed = hub.services.chunks.record.get(chunk_id)
     assert armed is not None and armed.intended_migration == intent
 
@@ -424,7 +428,8 @@ def test_record_migration_without_clear_intent_leaves_a_set_intent_untouched(tmp
     source_graph_id = pre_migration.graph_id
 
     intent = IntendedMigration(mode=MigrationMode.FORCED, graph_id=target_graph_id, node_name="build")
-    record.set_intended_migration(chunk_id, intended=intent)
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        record.set_intended_migration_locked(handle, chunk_id, intended=intent)
 
     wrote = chunks.record_migration(
         chunk_id,
@@ -473,7 +478,8 @@ def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(t
     chunks = cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
     record = cast(IWriteChunkRecordRepository, hub.services.chunks.record)
     intent = IntendedMigration(mode=MigrationMode.FORCED, graph_id=target_graph_id, node_name="build")
-    record.set_intended_migration(chunk_id, intended=intent)
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        record.set_intended_migration_locked(handle, chunk_id, intended=intent)
 
     wrote = chunks.record_migration(
         chunk_id,

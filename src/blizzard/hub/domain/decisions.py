@@ -17,6 +17,7 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
@@ -210,10 +211,15 @@ class RequeueService:
         *,
         movement: IWriteChunkMovementRepository,
         route: IWriteChunkRouteRepository,
+        exclusive: IChunkExclusiveWrites,
         clock: IClock,
     ) -> None:
         self._movement = movement
         self._route = route
+        # The locked-transaction seam (``bzh:store-exclusive-write``): the route release
+        # races claim's own ``route_of`` read, so it and the requeue fact it always
+        # accompanies both land inside the same row-locked transaction.
+        self._exclusive = exclusive
         self._clock = clock
 
     def requeue(self, chunk: Chunk, *, facts: ChunkFacts) -> int:
@@ -223,7 +229,8 @@ class RequeueService:
         freshly-written ``requeues.id``."""
         if facts.open_escalation() is None:
             raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")
-        now = self._clock.now()
-        requeue_id = self._movement.record_requeue(chunk.chunk_id, at=now)  # supersedes the escalation
-        self._route.record_route_released(chunk.chunk_id, at=now)  # -> ready, re-leasable at its current node
-        return requeue_id
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            now = self._clock.now()
+            requeue_id = self._movement.record_requeue_locked(handle, chunk.chunk_id, at=now)  # supersedes escalation
+            self._route.record_route_released_locked(handle, chunk.chunk_id, at=now)  # -> ready, re-leasable
+            return requeue_id

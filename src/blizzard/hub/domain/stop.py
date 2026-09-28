@@ -8,7 +8,6 @@ live. Terminal and one-way: an already done or stopped chunk is refused."""
 from __future__ import annotations
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.work import Chunk, ChunkFacts
 
@@ -27,17 +26,17 @@ class ChunkNotStoppable(Exception):
 class StopService:
     """Terminally abandon a chunk and release any route it holds — ``blizzard hub stop``."""
 
-    def __init__(self, *, lifecycle: IWriteChunkLifecycleRepository, clock: IClock) -> None:
+    def __init__(self, *, lifecycle: IWriteChunkLifecycleRepository) -> None:
         self._lifecycle = lifecycle
-        self._clock = clock
 
     def stop(self, chunk: Chunk, *, facts: ChunkFacts, by: str) -> int:
         """Append ``chunk.stopped`` and release the chunk's live route (and any held hub-exec
         slot), atomically. Takes the caller's already-loaded ``facts``
         (``bzh:domain-takes-objects``). Raises :class:`ChunkNotStoppable` for a chunk
-        already done/stopped. Returns the id."""
+        already done/stopped. Returns the id. ``at`` is the store's own concern
+        (``bzh:store-exclusive-write``) — stamped after its row lock, never here."""
         self._require_stoppable(chunk.chunk_id, facts)
-        return self._lifecycle.record_stop(chunk.chunk_id, by=by, at=self._clock.now())
+        return self._lifecycle.record_stop(chunk.chunk_id, by=by)
 
     def _require_stoppable(self, chunk_id: str, facts: ChunkFacts) -> None:
         status = facts.status()

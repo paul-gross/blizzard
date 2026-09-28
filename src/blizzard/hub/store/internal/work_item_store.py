@@ -253,18 +253,10 @@ class WorkItemStore:
             ).one()
         return self._record(row)
 
-    def delete_chunk_and_withdraw_hub_items(self, chunk: Chunk, *, by: str, at: datetime) -> int:
-        """Insert ``chunk``'s ``chunk_deleted`` row, release its own standing outgoing dependency edges, and close
-        every open ``hub:``-source item it holds as withdrawn, on one ``engine.begin()`` connection — mirrors
-        :meth:`create_with_chunk`'s own atomicity shape. A ``forge:``-sourced pointer on the same chunk is left
-        untouched. Returns the freshly-written ``chunk_deleted.id``."""
-        with self._store.write("delete_chunk_and_withdraw_hub_items") as conn:
-            return self._delete_chunk_and_withdraw_hub_items_conn(conn, chunk, by=by, at=at)
-
     def delete_chunk_and_withdraw_hub_items_locked(
         self, handle: ILockedChunkRead, chunk: Chunk, *, by: str, at: datetime
     ) -> int:
-        """`delete_chunk_and_withdraw_hub_items`'s locked-transaction sibling
+        """Delete ``chunk`` and withdraw its open ``hub:`` items in one write
         (``bzh:store-exclusive-write``) — the delete's own write, on ``handle``'s
         already-locked connection."""
         return self._delete_chunk_and_withdraw_hub_items_conn(conn_of(handle), chunk, by=by, at=at)
@@ -403,7 +395,7 @@ class WorkItemStore:
     @staticmethod
     def _close_conn(conn: Connection, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> None:
         """Close an open item on a caller-supplied ``conn`` — extracted from :meth:`close`
-        so :meth:`delete_chunk_and_withdraw_hub_items` can fold the same write into its
+        so :meth:`delete_chunk_and_withdraw_hub_items_locked` can fold the same write into its
         own transaction. No rowcount check: closing an item already closed,
         or one that never existed, is a silent no-op here, exactly as :meth:`close` was
         before this extraction."""

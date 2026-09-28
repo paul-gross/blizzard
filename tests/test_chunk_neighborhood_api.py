@@ -17,7 +17,7 @@ from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepos
 from blizzard.hub.domain.work import ChunkFacts
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
-from tests.support import HubHarness, build_hub, count_queries, hub_store_connections, ingest
+from tests.support import HubHarness, build_hub, chunk_stores, count_queries, hub_store_connections, ingest
 
 pytestmark = pytest.mark.component
 
@@ -111,7 +111,8 @@ def test_a_neighbor_whose_facts_do_not_resolve_is_present_and_unsatisfied(tmp_pa
     hub = build_hub(tmp_path)
     subject_id = ingest(hub, [{"source": "default", "ref": "subject"}])
     dependencies = cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
-    dependencies.declare(subject_id, "chk_ghost", by="test", at=hub.clock.now())
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([subject_id, "chk_ghost"]) as handle:
+        dependencies.declare_locked(handle, subject_id, "chk_ghost", by="test", at=hub.clock.now())
 
     prerequisites = _detail(hub, subject_id)["neighborhood"]["prerequisites"]
 

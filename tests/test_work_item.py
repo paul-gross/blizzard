@@ -11,7 +11,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.source import WorkItem
-from tests.support import FakeWorkSource, build_hub, hub_store_connections, pointer_token, seed_work_item
+from tests.support import FakeWorkSource, build_hub, chunk_stores, hub_store_connections, pointer_token, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -129,7 +129,8 @@ def test_work_items_carries_a_hub_pointer_s_author_and_priority_beside_a_forge_p
     # — grow *that* chunk with the forge pointer to avoid re-holding it.
     chunk_id = work_refs.find_live_holder(WorkRef(source="hub", ref=hub_item.ref))
     assert chunk_id is not None
-    work_refs.add_work_refs(chunk_id, [WorkRef(source="widget", ref="42")], at=hub.clock.now())
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        work_refs.add_work_refs_locked(handle, chunk_id, [WorkRef(source="widget", ref="42")], at=hub.clock.now())
 
     entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}
 
@@ -183,7 +184,8 @@ def test_work_items_an_unresolvable_hub_pointer_still_carries_an_in_app_web_url(
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     hub_store = hub_store_connections(hub.engine)
     work_refs = ChunkWorkRefsStore(hub_store, hub.clock, facts=ChunkFactsStore(hub_store, hub.clock))
-    work_refs.add_work_refs(chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now())
+    with chunk_stores(hub.engine, hub.clock).exclusive.locked([chunk_id]) as handle:
+        work_refs.add_work_refs_locked(handle, chunk_id, [WorkRef(source="hub", ref="999")], at=hub.clock.now())
 
     entries = {e["source"]: e for e in hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]}
 

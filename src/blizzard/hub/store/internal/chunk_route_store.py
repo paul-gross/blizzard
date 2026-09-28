@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import Connection, select
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
@@ -136,18 +136,8 @@ class ChunkRouteStore:
             ).one_or_none()
             return int(row.seq) if row is not None else 0
 
-    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> str:
-        """Record the route and mint its capability token's fact, one transaction.
-
-        The token fact is a second row on the same shared per-chunk seq counter
-        (:func:`~blizzard.hub.store.internal.chunk_rows.next_route_seq`), allocated by its
-        own call to the allocator, never a fixed +1. Returns the freshly-minted
-        ``route_created.route_id``."""
-        with self._store.write("record_route") as conn:
-            return self._record_route_conn(conn, route, token_hash=token_hash, at=at)
-
     def record_route_locked(self, handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
-        """`record_route`'s locked-transaction sibling — the claim's own write
+        """The claim's own route-and-token write
         (``bzh:store-exclusive-write``), on the connection its row lock was already taken
         on, rather than a fresh transaction."""
         return self._record_route_conn(conn_of(handle), route, token_hash=token_hash, at=at)
@@ -176,17 +166,19 @@ class ChunkRouteStore:
         )
         return route_id
 
-    def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
-        with self._store.write("record_route_released") as conn:
-            result = conn.execute(
-                s.route_released.insert().values(chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id))
-            )
-            key = result.inserted_primary_key
-            return int(key[0]) if key is not None else 0
+    def record_route_released_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
+        return self._record_route_released_conn(conn_of(handle), chunk_id, at=at)
+
+    def _record_route_released_conn(self, conn: Connection, chunk_id: str, *, at: datetime) -> int:
+        result = conn.execute(
+            s.route_released.insert().values(chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id))
+        )
+        key = result.inserted_primary_key
+        return int(key[0]) if key is not None else 0
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
         """Append a fresh ``route_token_minted`` fact — the re-key path.
-        Same allocator as :meth:`record_route`'s own token fact, its own call rather
+        Same allocator as :meth:`record_route_locked`'s own token fact, its own call rather
         than a fixed +1, so it stays correctly ordered against a concurrent
         create/release/re-key on this chunk."""
         with self._store.write("record_route_token") as conn:

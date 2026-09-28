@@ -291,13 +291,16 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
     user_store = UserRepository(store_connections, RepoErrorFactory(get_logger("blizzard.hub.auth")))
     # Constructed once here too, so the built-in hub binding and `build_services` below
-    # share one `WorkItemStore`/`DeleteService`/lock rather than each building its own.
+    # share one `WorkItemStore`/`DeleteService`/lock/`ChunkStores` bundle rather than each
+    # building its own.
     cycle_lock = threading.Lock()
     work_item_store = WorkItemStore(store_connections)
+    chunk_stores = build_chunk_stores(store_connections, clock)
     delete_service = DeleteService(
         items=work_item_store,
         clock=clock,
-        exclusive=build_chunk_stores(store_connections, clock).exclusive,
+        exclusive=chunk_stores.exclusive,
+        cycle_lock=cycle_lock,
     )
     # Own instances, ahead of `build_services` below — mirrors `work_item_store`'s own
     # early construction: the built-in hub closer needs this seam
@@ -350,6 +353,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         signing_keys_dir=signing_keys_dir,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=_transcript_caps(config),
+        chunk_stores=chunk_stores,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).

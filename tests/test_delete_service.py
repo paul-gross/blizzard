@@ -7,6 +7,7 @@ calls are meaningfully implemented; every other seam raises loudly if called. Mi
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -31,6 +32,7 @@ from blizzard.hub.domain.work import (
     QuestionFact,
     RouteCreatedFact,
     TransitionFact,
+    WorkRef,
 )
 
 pytestmark = pytest.mark.unit
@@ -41,13 +43,19 @@ _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 @dataclass
 class _FakeLockedChunkRead:
-    """Only ``facts``/``standing_edges`` are live — see module docstring."""
+    """Only ``facts``/``record``/``standing_edges`` are live — see module docstring."""
 
     chunk_facts: ChunkFacts | None
     edges: list[DependencyEdge]
+    #: The locked handle's own ``record`` read — ``None`` falls back to the caller's
+    #: ``chunk``, exactly matching a real handle's first-mint identity.
+    current: Chunk | None = None
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.chunk_facts
+
+    def record(self, chunk_id: str) -> Chunk | None:
+        return self.current
 
     def standing_edges(self) -> list[DependencyEdge]:
         return self.edges
@@ -61,12 +69,14 @@ class _FakeItemsRepo:
     """Only ``delete_chunk_and_withdraw_hub_items_locked`` is live — see module docstring."""
 
     deleted: list[tuple[str, str, datetime]] = field(default_factory=list)
+    work_refs_seen: list[list[WorkRef]] = field(default_factory=list)
     _next_id: int = 1
 
     def delete_chunk_and_withdraw_hub_items_locked(
         self, handle: ILockedChunkRead, chunk: Chunk, *, by: str, at: datetime
     ) -> int:
         self.deleted.append((chunk.chunk_id, by, at))
+        self.work_refs_seen.append(chunk.work_refs)
         fact_id = self._next_id
         self._next_id += 1
         return fact_id
@@ -82,10 +92,11 @@ class _FakeExclusiveWrites:
 
     chunk_facts: ChunkFacts | None
     edges: list[DependencyEdge]
+    current: Chunk | None = None
 
     @contextmanager
     def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
-        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.chunk_facts, self.edges))
+        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.chunk_facts, self.edges, self.current))
 
 
 def _service(
@@ -93,13 +104,15 @@ def _service(
     *,
     clock: FixedClock | None = None,
     standing_edges: list[DependencyEdge] | None = None,
+    current: Chunk | None = None,
 ) -> tuple[DeleteService, _FakeItemsRepo]:
     items = _FakeItemsRepo()
-    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts, standing_edges or []))
+    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts, standing_edges or [], current))
     service = DeleteService(
         items=cast(IWriteWorkItemRepository, items),
         clock=clock or FixedClock(instant=_T0),
         exclusive=exclusive,
+        cycle_lock=threading.Lock(),
     )
     return service, items
 
@@ -282,3 +295,17 @@ def test_delete_succeeds_for_a_chunk_that_is_itself_a_dependent() -> None:
 
     assert fact_id == 1
     assert items.deleted == [("chk_1", "operator", _T0)]
+
+
+def test_delete_withdraws_the_locked_reads_work_refs_not_the_callers_stale_ones() -> None:
+    """A fold that landed a fresh work ref onto this chunk between the caller's own load
+    and this delete's lock must have that ref withdrawn too, not silently kept alive
+    because the write below still carried the caller's stale, pre-fold ``work_refs``."""
+    stale_chunk = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
+    fresh_ref = WorkRef(source="hub", ref="folded-in")
+    fresh_record = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[fresh_ref], minted_at=_T0)
+    service, items = _service(_not_ready_facts(), current=fresh_record)
+
+    service.delete(stale_chunk, by="operator")
+
+    assert items.work_refs_seen == [[fresh_ref]]

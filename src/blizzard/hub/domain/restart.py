@@ -89,7 +89,11 @@ class RestartService:
             if status in TERMINAL_STATUSES:
                 raise ChunkNotRestartable(chunk.chunk_id, status)
             if to_graph is not None:
-                self._require_crossable(chunk, to_graph)
+                # Re-read fresh under the lock: a concurrent edit that re-pinned
+                # ``graph_id`` between the caller's own load and this lock must not have
+                # the pin check below answered against the value it already changed.
+                current = handle.record(chunk.chunk_id) or chunk
+                self._require_crossable(current, to_graph)
             from_node_id = facts.current_node_id()
             target = self._target(graph, to_graph, from_node_id, node_name)
             decision = facts.open_decision()

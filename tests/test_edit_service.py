@@ -78,12 +78,18 @@ class _FakeChunkRepo:
     :func:`_as_record`/:func:`_as_exclusive` instead."""
 
     facts: ChunkFacts | None
+    #: The locked handle's own ``record`` read — ``None`` falls back to the caller's
+    #: ``chunk``, exactly matching a real handle's first-mint identity.
+    current: Chunk | None = None
     graphs_set: list[tuple[str, str]] = field(default_factory=list)
     defaults_set: list[tuple[str, list[str], str | None, list[str]]] = field(default_factory=list)
     intended_migrations_set: list[tuple[str, IntendedMigration | None]] = field(default_factory=list)
 
     def read_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts
+
+    def read_record(self, chunk_id: str) -> Chunk | None:
+        return self.current
 
     def set_graph_locked(self, handle: ILockedChunkRead, chunk_id: str, *, graph_id: str) -> None:
         self.graphs_set.append((chunk_id, graph_id))
@@ -110,12 +116,15 @@ class _FakeChunkRepo:
 
 @dataclass
 class _FakeLockedChunkRead:
-    """Only ``facts`` is live — see :class:`_FakeChunkRepo`'s own docstring."""
+    """Only ``facts``/``record`` are live — see :class:`_FakeChunkRepo`'s own docstring."""
 
     repo: _FakeChunkRepo
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.repo.read_facts(chunk_id)
+
+    def record(self, chunk_id: str) -> Chunk | None:
+        return self.repo.read_record(chunk_id)
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"EditService should not touch handle.{name!r}")
@@ -506,6 +515,23 @@ def test_edit_intended_migration_refuses_a_target_equal_to_the_current_pin() -> 
     assert repo.intended_migrations_set == []
 
 
+def test_edit_intended_migration_pin_check_uses_the_locked_reads_graph_id_not_the_callers_stale_one() -> None:
+    """A concurrent edit that already re-pinned ``graph_id`` between the caller's own
+    load and this edit's lock must have the "target equals current pin" check answered
+    against the pin it landed, not the one the caller's stale ``chunk`` still carries."""
+    stale_chunk = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
+    fresh_record = Chunk(chunk_id="chk_1", graph_id="gr_2", work_refs=[], minted_at=_T0)
+    repo = _FakeChunkRepo(facts=_running_facts(), current=fresh_record)
+    service = _service(repo)
+    intent = IntendedMigration(mode=MigrationMode.AUTO, graph_id="gr_2", node_name=None)
+
+    with pytest.raises(MigrationTargetIsCurrentPin) as excinfo:
+        service.edit(stale_chunk, ChunkEdit(intended_migration=intent), migration_target=_TARGET_GRAPH)
+
+    assert excinfo.value.graph_id == "gr_2"
+    assert repo.intended_migrations_set == []
+
+
 def test_edit_intended_migration_forced_refuses_a_node_absent_from_the_target() -> None:
     repo = _FakeChunkRepo(facts=_running_facts())
     service = _service(repo)
@@ -593,6 +619,30 @@ def test_edit_naming_only_default_harnesses_leaves_the_other_two_defaults_at_the
     service.edit(chunk, ChunkEdit(default_harnesses=["claude_code"]))
 
     assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium", ["claude_code"])]
+
+
+def test_edit_naming_only_default_harnesses_carries_the_locked_reads_values_not_the_callers_stale_ones() -> None:
+    """A concurrent edit that already changed ``default_model``/``default_effort``
+    between the caller's own load and this edit's lock must not have that change
+    silently reverted by this trio write carrying the caller's stale snapshot instead
+    of the handle's own re-read."""
+    stale_chunk = Chunk(
+        chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0, default_model=["blizzard:basic"]
+    )
+    fresh_record = Chunk(
+        chunk_id="chk_1",
+        graph_id="gr_1",
+        work_refs=[],
+        minted_at=_T0,
+        default_model=["blizzard:opus"],
+        default_effort="high",
+    )
+    repo = _FakeChunkRepo(facts=_ready_facts(), current=fresh_record)
+    service = _service(repo)
+
+    service.edit(stale_chunk, ChunkEdit(default_harnesses=["claude_code"]))
+
+    assert repo.defaults_set == [("chk_1", ["blizzard:opus"], "high", ["claude_code"])]
 
 
 def test_edit_refuses_default_harnesses_once_claimed() -> None:

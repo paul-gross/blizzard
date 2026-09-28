@@ -171,6 +171,11 @@ class EditService:
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id) or ChunkFacts(minted=True)
             status = facts.status()
+            # Re-read fresh under the lock: a concurrent edit landing between the
+            # caller's own load and this lock must not have its write silently lost by
+            # the trio's carry-forward below, nor the pin check answered against a
+            # ``graph_id`` that edit already changed.
+            current = handle.record(chunk.chunk_id) or chunk
 
             if graph_id is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "graph_id")
@@ -191,19 +196,22 @@ class EditService:
             if intended_migration is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "intended_migration")
                 if intended_migration is not None:
-                    self._require_valid_migration_target(chunk, intended_migration, migration_target)
+                    self._require_valid_migration_target(current, intended_migration, migration_target)
 
             if graph_id is not UNSET:
                 self._record.set_graph_locked(handle, chunk.chunk_id, graph_id=graph_id)
             if default_model is not UNSET or default_effort is not UNSET or default_harnesses is not UNSET:
                 # One write for the trio, so an edit naming only one of them must carry
-                # the chunk's current value for the other two rather than clearing them.
+                # the chunk's current value for the other two rather than clearing them
+                # — ``current``, re-read under the lock, not the caller's possibly-stale
+                # ``chunk``, so a concurrent single-field edit's own write is never
+                # overwritten back to what it looked like before that edit landed.
                 self._record.set_defaults_locked(
                     handle,
                     chunk.chunk_id,
-                    default_model=list(chunk.default_model) if default_model is UNSET else default_model,
-                    default_effort=chunk.default_effort if default_effort is UNSET else default_effort,
-                    default_harnesses=list(chunk.default_harnesses)
+                    default_model=list(current.default_model) if default_model is UNSET else default_model,
+                    default_effort=current.default_effort if default_effort is UNSET else default_effort,
+                    default_harnesses=list(current.default_harnesses)
                     if default_harnesses is UNSET
                     else default_harnesses,
                 )
