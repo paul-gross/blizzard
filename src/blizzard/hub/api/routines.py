@@ -582,7 +582,7 @@ def run_routine(
             mode=mode,
             note=request.note,
             author=WorkItemAuthor.user(identity.user_id),
-            statuses=services.chunks.facts.load_all_statuses(),
+            statuses=services.chunks.facts.load_live_statuses(),
         )
     except ScopeNotRelatedError as exc:
         raise HTTPException(

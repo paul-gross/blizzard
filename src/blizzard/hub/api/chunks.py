@@ -242,9 +242,10 @@ class FleetPulse:
     def view(self) -> FleetSummaryView:
         """Not a route of its own here. Derives each chunk's status the same way
         :func:`list_chunks` does, but yields only the four bucket integers, so the payload
-        is a fixed four numbers regardless of fleet size. Reads the fleet's facts with one
-        bulk query rather than fanning ``load_facts`` out per chunk."""
-        summary = FleetSummary.of(facts.status() for facts in self.services.chunks.facts.load_all_facts().values())
+        is a fixed four numbers regardless of fleet size. Reads only the live fleet's
+        statuses (``bzh:live-set-read``) with one bulk read rather than fanning
+        ``load_facts`` out per chunk — a terminal chunk counts toward no bucket."""
+        summary = FleetSummary.of(self.services.chunks.facts.load_live_statuses().values())
         return FleetSummaryView(
             ready=summary.ready,
             running=summary.running,
@@ -659,7 +660,7 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
-    statuses = services.chunks.facts.load_all_statuses()
+    statuses = services.chunks.facts.load_live_statuses()
     promoted_id = services.promote.promote(chunk, facts=ChunkFacts.or_default(change.facts), statuses=statuses)
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
     facts = change.publish(cause="promoted", key=key)

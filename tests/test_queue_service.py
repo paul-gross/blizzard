@@ -8,6 +8,7 @@ against a fake chunk repository (``bzh:repository-split``), zero store."""
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -95,10 +96,10 @@ class _FakeChunkRepo:
     def list_not_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.not_ready
 
-    def queue_positions(self) -> dict[str, float]:
+    def queue_positions(self, chunk_ids: Sequence[str]) -> dict[str, float]:
         return dict(self.positions)
 
-    def promoted_ats(self) -> dict[str, datetime]:
+    def promoted_ats(self, chunk_ids: Sequence[str]) -> dict[str, datetime]:
         return dict(self.promoted_ats_by_chunk)
 
     def record_queue_positions(self, positions: list[tuple[str, float]], *, at: datetime) -> None:

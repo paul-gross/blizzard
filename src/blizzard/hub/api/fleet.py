@@ -223,7 +223,7 @@ def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> Queue
     """The runner's FILL read — the whole ready-queue order: a filling runner needs every
     ready chunk in one read. Kept as-is for a previous-minor caller;
     ``POST /queue/peek`` below is the matched counterpart."""
-    statuses = services.chunks.facts.load_all_statuses()
+    statuses = services.chunks.facts.load_live_statuses()
     return queue_api.ReadyQueue.of(services, statuses).view
 
 
@@ -240,7 +240,7 @@ def peek_matched_queue(
     empty queue as an idle fleet."""
     if principal is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no resolvable runner token")
-    statuses = services.chunks.facts.load_all_statuses()
+    statuses = services.chunks.facts.load_live_statuses()
     return queue_api.MatchedPeek.of(services, statuses, request).view
 
 

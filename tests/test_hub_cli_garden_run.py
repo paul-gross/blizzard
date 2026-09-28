@@ -295,7 +295,7 @@ def test_run_list_and_show_work_end_to_end_against_a_real_app(tmp_path: Path, mo
         mode=RunMode.FULL,
         note=None,
         author=WorkItemAuthor.user("usr_1"),
-        statuses=hub.services.chunks.facts.load_all_statuses(),
+        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
     hub.clock.advance(timedelta(hours=1))
     _relay(hub, monkeypatch)

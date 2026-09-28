@@ -3,6 +3,7 @@ edges between chunks."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -22,9 +23,9 @@ class FoldTarget:
 
 
 class IReadChunkDependenciesRepository(Protocol):
-    """Read-only chunk-dependencies access. Answers three questions and no more: the
-    fleet's standing edges, the standing edge for one ordered pair, and one chunk's own
-    standing edges in either role."""
+    """Read-only chunk-dependencies access. Answers four questions and no more: the
+    fleet's standing edges, the standing edge for one ordered pair, one chunk's own
+    standing edges in either role, and the standing edges of a set of dependents."""
 
     def list_standing_edges(self) -> list[DependencyEdge]:
         """Every currently-unreleased edge across the fleet."""
@@ -34,6 +35,13 @@ class IReadChunkDependenciesRepository(Protocol):
         """The standing (unreleased) edge for this ordered pair, or ``None`` — at most
         one holds at a time, a domain-held invariant with no database constraint
         behind it (a released pair may carry other, released rows)."""
+        ...
+
+    def standing_edges_for_dependents(self, dependent_chunk_ids: Sequence[str]) -> list[DependencyEdge]:
+        """`list_standing_edges`'s narrowed sibling (`bzh:bulk-reconstitution`) — every
+        standing edge whose dependent is among ``dependent_chunk_ids``, bounded by those
+        dependents rather than the fleet's edge history. Same order as
+        :meth:`list_standing_edges`."""
         ...
 
     def standing_edges_for(self, chunk_id: str) -> list[DependencyEdge]:

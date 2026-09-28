@@ -1040,7 +1040,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
 
     # --- routine runs: garden_run/run_context's own source ---------------------------------
-    statuses = hub.services.chunks.facts.load_all_statuses()
+    statuses = hub.services.chunks.facts.load_live_statuses()
     run_1 = hub.services.routine_run.run(
         routine,
         scope=scope_a,
@@ -1049,7 +1049,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         author=WorkItemAuthor.user(user_1.user_id),
         statuses=statuses,
     )
-    statuses = hub.services.chunks.facts.load_all_statuses()
+    statuses = hub.services.chunks.facts.load_live_statuses()
     # A second run is all `runs_in_window`/`list_all` need (>=2 rows) — its own chunk is
     # never referenced by any recipe, so its return value is deliberately discarded.
     hub.services.routine_run.run(
@@ -1743,6 +1743,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkDependenciesRepository, "standing_edges_for"): lambda w: w.read.dependencies.standing_edges_for(
         w.chunk_dependency_dependent
     ),
+    (IReadChunkDependenciesRepository, "standing_edges_for_dependents"): lambda w: (
+        w.read.dependencies.standing_edges_for_dependents([w.chunk_dependency_dependent])
+    ),
     (IReadChunkEscalationsRepository, "list_open_escalations"): lambda w: w.read.escalations.list_open_escalations(),
     (IReadChunkEventsRepository, "list_events"): lambda w: w.read.events.list_events(),
     (IReadChunkEventsRepository, "activity_facts_since"): lambda w: w.read.events.activity_facts_since(
@@ -1756,7 +1759,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkFactsRepository, "load_facts_for"): lambda w: w.read.facts.load_facts_for(
         [w.chunk_ready_1, w.chunk_ready_2]
     ),
-    (IReadChunkFactsRepository, "load_all_statuses"): lambda w: w.read.facts.load_all_statuses(),
+    (IReadChunkFactsRepository, "load_live_statuses"): lambda w: w.read.facts.load_live_statuses(),
     (IReadChunkFactsRepository, "status_facts_for"): lambda w: w.read.facts.status_facts_for(
         [w.chunk_ready_1, w.chunk_ready_2]
     ),
@@ -1771,18 +1774,22 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkQuestionsRepository, "get_question"): lambda w: w.read.questions.get_question(w.question_1),
     (IReadChunkQuestionsRepository, "list_open_questions"): lambda w: w.read.questions.list_open_questions(),
     (IReadChunkQuestionsRepository, "load_questions"): lambda w: w.read.questions.load_questions(w.chunk_question),
-    (IReadChunkQueueRepository, "queue_positions"): lambda w: w.read.queue.queue_positions(),
-    (IReadChunkQueueRepository, "promoted_ats"): lambda w: w.read.queue.promoted_ats(),
+    (IReadChunkQueueRepository, "queue_positions"): lambda w: w.read.queue.queue_positions(
+        [w.chunk_ready_1, w.chunk_ready_2]
+    ),
+    (IReadChunkQueueRepository, "promoted_ats"): lambda w: w.read.queue.promoted_ats(
+        [w.chunk_ready_1, w.chunk_ready_2]
+    ),
     (IReadChunkRecordRepository, "get"): lambda w: w.read.record.get(w.chunk_ready_1),
     (IReadChunkRecordRepository, "get_many"): lambda w: w.read.record.get_many([w.chunk_ready_1, w.chunk_ready_2]),
     (IReadChunkRecordRepository, "graph_id_of_many"): lambda w: w.read.record.graph_id_of_many(
         [w.chunk_ready_1, w.chunk_ready_2]
     ),
     (IReadChunkRecordRepository, "list_ready"): lambda w: w.read.record.list_ready(
-        statuses=w.read.facts.load_all_statuses()
+        statuses=w.read.facts.load_live_statuses()
     ),
     (IReadChunkRecordRepository, "list_not_ready"): lambda w: w.read.record.list_not_ready(
-        statuses=w.read.facts.load_all_statuses()
+        statuses=w.read.facts.load_live_statuses()
     ),
     (IReadChunkRecordRepository, "list_all"): lambda w: w.read.record.list_all(),
     (IReadChunkRecordRepository, "list_page"): lambda w: w.read.record.list_page(limit=50),

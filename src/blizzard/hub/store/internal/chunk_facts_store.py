@@ -3,7 +3,7 @@
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
 (``bzh:facts-not-status``): every read below folds already-recorded rows; nothing derives
 a status column. Read-only (``blizzard-context/architecture/repository-access.md``):
-``load_facts``/``load_all_facts``/``load_facts_for``/``load_all_statuses`` each project
+``load_facts``/``load_all_facts``/``load_facts_for``/``load_live_statuses`` each project
 the union of every other seam's own writes, so this adapter has no write half.
 """
 
@@ -13,12 +13,13 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, exists, or_, select
 
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import (
     BounceFact,
     ChunkFacts,
@@ -107,6 +108,43 @@ def _rows(conn, table, batch: Sequence[str] | None, *columns):  # type: ignore[n
     return conn.execute(stmt).all()
 
 
+def _maybe_live():  # type: ignore[no-untyped-def]
+    """The ``chunks`` predicate that drops every chunk a terminal fact already settles, and
+    never one :meth:`ChunkFacts.status` would derive non-terminal. A stop, a completion, and
+    a closed PR are unconditional — none can be undone. A transition into the reserved
+    terminal holds only while it is strictly the newest movement across transitions,
+    migrations, and restarts (a later requeue-style movement supersedes it), so a tie keeps
+    the chunk in."""
+    chunk_id = s.chunks.c.chunk_id
+    terminal = s.transitions.alias("terminal_transition")
+    other = s.transitions.alias("other_transition")
+
+    def not_older(row):  # type: ignore[no-untyped-def]
+        return or_(
+            row.c.recorded_at > terminal.c.recorded_at,
+            and_(row.c.recorded_at == terminal.c.recorded_at, row.c.epoch >= terminal.c.epoch),
+        )
+
+    superseded = or_(
+        exists().where(
+            other.c.chunk_id == terminal.c.chunk_id,
+            other.c.transition_id != terminal.c.transition_id,
+            not_older(other),
+        ),
+        exists().where(s.chunk_migrations.c.chunk_id == terminal.c.chunk_id, not_older(s.chunk_migrations)),
+        exists().where(s.chunk_restarts.c.chunk_id == terminal.c.chunk_id, not_older(s.chunk_restarts)),
+    )
+    done_by_transition = exists().where(
+        terminal.c.chunk_id == chunk_id, terminal.c.to_node_id == RESERVED_TERMINAL, ~superseded
+    )
+    return and_(
+        ~exists().where(s.chunk_stopped.c.chunk_id == chunk_id),
+        ~exists().where(s.chunk_completed.c.chunk_id == chunk_id),
+        ~exists().where(s.delivery_pr_closed.c.chunk_id == chunk_id),
+        ~done_by_transition,
+    )
+
+
 class ChunkFactsStore:
     """Read-only chunk-facts adapter — the fleet's fact-derivation projection."""
 
@@ -163,15 +201,18 @@ class ChunkFactsStore:
         with self._store.read("status_facts_for") as conn:
             return self._load(conn, chunk_ids, families=_TICK_STATUS_FAMILIES)
 
-    def load_all_statuses(self) -> dict[str, ChunkStatus]:
-        """Every non-ephemeral chunk's derived :class:`ChunkStatus`, keyed by chunk id —
-        :meth:`load_all_facts`'s status-only projection, reading only the fact families
-        :meth:`ChunkFacts.status` actually reaches rather than every family
-        :meth:`load_all_facts` loads. Status derivation itself stays in ``domain/work.py``;
-        this only narrows which rows get read."""
-        with self._store.read("load_all_statuses") as conn:
-            facts_by_id = self._load(conn, None, families=_STATUS_FAMILIES)
-        return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
+    def load_live_statuses(self) -> dict[str, ChunkStatus]:
+        """Every non-ephemeral, non-terminal chunk's derived :class:`ChunkStatus`, keyed by
+        chunk id. The chunks a terminal fact already settles are excluded in the store
+        query (:func:`_maybe_live`), so the facts read and the per-chunk derivation track the
+        live fleet rather than every chunk ever minted. The prefilter is sound, not exact —
+        a terminal chunk it keeps is dropped by the derivation below. Status derivation
+        itself stays in ``domain/work.py``; this only narrows which rows get read."""
+        with self._store.read("load_live_statuses") as conn:
+            candidate_ids = [r.chunk_id for r in conn.execute(select(s.chunks.c.chunk_id).where(_maybe_live()))]
+            facts_by_id = self._load(conn, candidate_ids, families=_STATUS_FAMILIES)
+        statuses = {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
+        return {chunk_id: status for chunk_id, status in statuses.items() if status not in TERMINAL_STATUSES}
 
     def _load(
         self,

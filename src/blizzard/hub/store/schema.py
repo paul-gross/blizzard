@@ -1107,6 +1107,8 @@ queue_positions = Table(
     Column("position", Float, nullable=False),  # lower sorts earlier; newest fact per chunk wins
     Column("set_at", UtcDateTime, nullable=False),
 )
+# Live-set reads look positions up by candidate chunk id (`bzh:live-set-read`).
+Index("ix_queue_positions_chunk_id", queue_positions.c.chunk_id)
 
 # --- Queue shaping: grouping (chunk.grouped) -----------------------------------
 # A grouped chunk is EPHEMERAL: removed from every listing, deriving no status at all.

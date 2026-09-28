@@ -7,6 +7,7 @@ are meaningfully implemented; every other seam raises loudly if called
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -46,10 +47,10 @@ class _FakeChunkRepo:
     def list_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.ready
 
-    def queue_positions(self) -> dict[str, float]:
+    def queue_positions(self, chunk_ids: Sequence[str]) -> dict[str, float]:
         return self.positions
 
-    def promoted_ats(self) -> dict[str, datetime]:
+    def promoted_ats(self, chunk_ids: Sequence[str]) -> dict[str, datetime]:
         return self.promoted_ats_by_chunk
 
     def record_promote_with_tail_position(self, chunk_id: str, *, position: float, at: datetime) -> int | None:

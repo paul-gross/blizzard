@@ -188,10 +188,9 @@ class QueueService:
     def ordered(self, list_: QueueList, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """``list_``'s chunks in order — ascending by effective position, ``chunk_id``
         breaking a same-instant tie. ``statuses`` is the caller's own
-        already-derived fleet statuses (``load_all_statuses()``), never re-derived here."""
-        positions = self._queue.queue_positions()
-        promoted_ats = self._queue.promoted_ats()
+        already-derived live fleet statuses (``load_live_statuses()``), never re-derived here."""
         candidates = self._candidates(list_, statuses=statuses)
+        positions, promoted_ats = self._ranking_facts(candidates)
         return sorted(candidates, key=lambda c: (self._effective_position(c, positions, promoted_ats), c.chunk_id))
 
     def page(
@@ -209,9 +208,8 @@ class QueueService:
         :attr:`QueuePage.next_cursor`, else raising :class:`~blizzard.hub.domain.pagination.MalformedCursor`."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
-        positions = self._queue.queue_positions()
-        promoted_ats = self._queue.promoted_ats()
         candidates = self._candidates(list_, statuses=statuses)
+        positions, promoted_ats = self._ranking_facts(candidates)
         keyed = sorted((self._effective_position(c, positions, promoted_ats), c.chunk_id, c) for c in candidates)
         after = _decode_queue_cursor(cursor) if cursor is not None else None
         entries: list[QueueEntry] = []
@@ -254,9 +252,8 @@ class QueueService:
         representable doubles renormalizes via :meth:`replace_order`; ``statuses`` is
         the caller's own already-derived fleet statuses, reused as-is throughout."""
         write = self._write_fn(list_)
-        positions = self._queue.queue_positions()
-        promoted_ats = self._queue.promoted_ats()
         candidates = [c for c in self._candidates(list_, statuses=statuses) if c.chunk_id != chunk.chunk_id]
+        positions, promoted_ats = self._ranking_facts(candidates)
         ordered = sorted(candidates, key=lambda c: (self._effective_position(c, positions, promoted_ats), c.chunk_id))
 
         if after is None:
@@ -272,8 +269,7 @@ class QueueService:
                 if math.nextafter(after_pos, next_pos) >= next_pos:
                     renormalized = [*ordered[: after_index + 1], chunk, *ordered[after_index + 1 :]]
                     self.replace_order(list_, renormalized)
-                    positions = self._queue.queue_positions()
-                    promoted_ats = self._queue.promoted_ats()
+                    positions, promoted_ats = self._ranking_facts(candidates)
                     after_pos = self._effective_position(after, positions, promoted_ats)
                     next_pos = self._effective_position(next_chunk, positions, promoted_ats)
                 new_position = (after_pos + next_pos) / 2
@@ -304,6 +300,12 @@ class QueueService:
         if list_ is QueueList.READY:
             return self._record.list_ready(statuses=statuses)
         return self._record.list_not_ready(statuses=statuses)
+
+    def _ranking_facts(self, candidates: Sequence[Chunk]) -> tuple[dict[str, float], dict[str, datetime]]:
+        """The explicit positions and promotion instants of ``candidates`` alone — the
+        ranking inputs, read bounded by the candidate set (``bzh:live-set-read``)."""
+        chunk_ids = [c.chunk_id for c in candidates]
+        return self._queue.queue_positions(chunk_ids), self._queue.promoted_ats(chunk_ids)
 
     @staticmethod
     def _effective_position(chunk: Chunk, positions: dict[str, float], promoted_ats: dict[str, datetime]) -> float:
