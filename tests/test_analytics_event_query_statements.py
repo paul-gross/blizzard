@@ -5,6 +5,7 @@ tier)."""
 from __future__ import annotations
 
 import ast
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -65,6 +66,11 @@ def test_a_prefix_filter_compiles_to_a_dialect_independent_comparison() -> None:
         assert "like" not in sql.lower()
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="reads store_module.__file__'s own source; under mutmut that file also carries every "
+    "generated mutant body, which this sweep would wrongly hold to the same pattern",
+)
 def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> None:
     builders = {name for name in vars(store_module) if name.endswith("_stmt")}
     assert builders == set(_executed_statements())

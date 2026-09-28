@@ -109,6 +109,15 @@ dev = [
     # pinned exactly, since a rule's match set can shift across engine versions.
     "ast-grep-cli==0.45.3",
 ]
+# `mise run mutation` (blizzard:mutation) — never installed into .venv. mutmut pulls in
+# textual, and through it rich, which `uv run` would otherwise leave in the default
+# environment even after a single sync; the task runs it in its own project environment
+# instead (mise.toml). Pinned exactly, like ast-grep-cli: scripts/mutation.py overrides a
+# private mutmut.configuration.Config seam, and its config_fingerprint semantics, both of
+# which can shift between releases.
+mutation = [
+    "mutmut==3.8.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -125,11 +134,19 @@ markers = [
 ]
 
 [tool.mutmut]
-# If a fast-tier test reads a new non-Python repo file, add its path here.
+# If a test reads a new non-Python repo file, add its path here.
 # tests/repo_files.py guards reads (including during collection); Python files
-# in src/ and tests/ are already copied by mutmut. Before the first mutmut run,
-# run `uv run python -m tests.repo_files` to create destination parent dirs;
-# mutmut's native copy2 does not create parents for individual files.
+# in src/ and tests/ are already copied by mutmut. scripts/mutation.py creates
+# destination parent dirs itself (tests.repo_files.prepare_mutant_tree) before
+# the first mutmut run — no manual step needed.
+# scripts/mutation.py reads this list and layers each scope's own exclusions on top.
+do_not_mutate = [
+    "src/blizzard/*/store/migrations/versions/*",
+]
+# Applied to every mutmut-driven pytest invocation (stats collection and mutant runs
+# alike); scripts/mutation.py layers a per-scope test-selection on top via
+# pytest_add_cli_args_test_selection.
+pytest_add_cli_args = ["-m", "unit"]
 also_copy = [
     "pyproject.toml",
     "openapi",
@@ -147,6 +164,7 @@ also_copy = [
     # These test-loaded Python scripts live outside mutmut's src/ and tests/ copies.
     "scripts/prose_spans.py",
     "scripts/restated_invariants.py",
+    "scripts/mutation.py",
     "docs/deployment/transcripts.md",
     "docs/deployment/install.md",
     "docs/deployment/chunk-operations/takeover.md",

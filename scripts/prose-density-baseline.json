@@ -7830,6 +7830,12 @@
    "over_cap": 1,
    "total": 503
   },
+  "test_mutation_scope.py": {
+   "comments": 16,
+   "docstrings": 9,
+   "over_cap": 0,
+   "total": 573
+  },
   "test_no_duplicate_test_bodies.py": {
    "comments": 2,
    "docstrings": 10,
@@ -8167,10 +8173,10 @@
    "total": 359
   },
   "test_route_classification.py": {
-   "comments": 62,
+   "comments": 64,
    "docstrings": 36,
    "over_cap": 3,
-   "total": 394
+   "total": 398
   },
   "test_route_permission_matrix.py": {
    "comments": 9,
@@ -8696,9 +8702,9 @@
   },
   "test_runner_process.py": {
    "comments": 13,
-   "docstrings": 20,
+   "docstrings": 21,
    "over_cap": 0,
-   "total": 213
+   "total": 217
   },
   "test_runner_process_launch.py": {
    "comments": 6,
@@ -8944,7 +8950,7 @@
    "comments": 2,
    "docstrings": 17,
    "over_cap": 2,
-   "total": 58
+   "total": 62
   },
   "test_runners_api.py": {
    "comments": 1,
