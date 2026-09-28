@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+import blizzard.runner.harness.process_launch as process_launch
 from blizzard.runner.harness.process_launch import LaunchedProcess, ProcessLauncher, _ensure_executable
 from blizzard.runner.loop.process import LinuxProcessProbe
 
@@ -127,6 +128,34 @@ def test_a_confirmed_deferred_launch_survives_the_launching_process_exiting(tmp_
     finally:
         os.killpg(pgid, signal.SIGKILL)
         _reap(pid)
+
+
+@pytest.mark.unit
+def test_confirm_waits_for_child_disarm_before_a_standalone_tick_retires_its_spawner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Force the scheduler window that a short-lived tick otherwise races: a
+    # confirm byte arrives, then the trampoline pauses before clearing PDEATHSIG.
+    trampoline = process_launch._TRAMPOLINE_SOURCE.replace(
+        "if _libc.prctl(1, 0, 0, 0, 0) != 0:",
+        "import time; time.sleep(0.25)\nif _libc.prctl(1, 0, 0, 0, 0) != 0:",
+    )
+    monkeypatch.setattr(process_launch, "_TRAMPOLINE_SOURCE", trampoline)
+    executor = ThreadPoolExecutor(max_workers=1)
+    launched = ProcessLauncher(LinuxProcessProbe(), executor=executor).launch(
+        ["sleep", "30"], cwd=None, env=dict(os.environ), stdout=None, stderr=None, defer_disarm=True
+    )
+    try:
+        started = time.monotonic()
+        launched.confirm_durable()
+        assert time.monotonic() - started >= 0.2
+        executor.shutdown(wait=True)  # the standalone graph closes right here
+        assert _is_alive(launched.pid), "spawner retirement killed a durably confirmed worker"
+    finally:
+        executor.shutdown(wait=True)
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(launched.pgid, signal.SIGKILL)
+        _reap(launched.pid)
 
 
 @pytest.mark.unit

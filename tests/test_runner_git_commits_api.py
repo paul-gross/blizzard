@@ -15,12 +15,16 @@ from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.app import create_app
+from blizzard.runner.app import build_hosted_app, create_app
+from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from tests.runner_fakes import FakeProvider, make_store, make_stores
+from blizzard.runner.loop.build import LoopWiring
+from tests.runner_fakes import FakeHub, FakeProvider, make_store, make_stores
+from tests.test_runner_winter_provider import _FakeGit, _FakeWinter
 
 _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -277,3 +281,57 @@ def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -
     assert set(declarations) == {("e1", "toy-api"), ("e2", "toy-api")}
     assert declarations[("e1", "toy-api")].commit == "aaa111"
     assert declarations[("e2", "toy-api")].commit == "bbb222"
+
+
+@pytest.mark.component
+def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import blizzard.runner.composition as composition
+
+    db_url = f"sqlite:///{tmp_path / 'runner.db'}"
+    store = make_store(db_url)
+    config = RunnerConfig(root=tmp_path, db_url=db_url, workspace_root=str(tmp_path), workspace_envs=("e1",))
+    (tmp_path / "e1").mkdir()
+    winter = _FakeWinter()
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=_FakeGit())
+    monkeypatch.setattr(composition, "build_workspace_provider", lambda *_args, **_kwargs: provider)
+
+    def membership(repo: str) -> None:
+        winter.worktrees = [{"kind": "worktree", "env": "e1", "repo": repo, "path": str(tmp_path / "e1" / repo)}]
+
+    membership("old")
+    graph = build_runner_process(config)
+    hosted = build_hosted_app(config, process_graph=graph)
+    try:
+        loop = LoopWiring(config, "", "", process_graph=graph).context(FakeHub())
+        try:
+            assert hosted.app.state.workspace_provider is loop.provider is provider
+            loop.provider.acquire("ch_1", 1, held_ids=[])
+            _seed_lease(store)
+            headers = {"X-Blizzard-Lease-Token": _TOKEN}
+            with TestClient(hosted.app) as client:
+                assert client.get("/api/health").status_code == 200
+                old = client.post("/api/leases/lease_1/git-commits", json={**_BODY, "repo": "old"}, headers=headers)
+                assert old.status_code == 200, old.text
+
+                store.record_closure(
+                    lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+                )
+                membership("new")
+                loop.provider.acquire("ch_2", 1, held_ids=[])
+                _seed_lease(store, lease_id="lease_2", chunk_id="ch_2")
+                accepted = client.post(
+                    "/api/leases/lease_2/git-commits", json={**_BODY, "repo": "new"}, headers=headers
+                )
+                removed = client.post("/api/leases/lease_2/git-commits", json={**_BODY, "repo": "old"}, headers=headers)
+                assert accepted.status_code == 200, accepted.text
+                assert removed.status_code == 400, removed.text
+                assert "new" in removed.json()["detail"]
+            assert ("e1", "new") in store.git_commit_declarations_for_lease("lease_2")
+            assert ("e1", "old") not in store.git_commit_declarations_for_lease("lease_2")
+        finally:
+            loop.usage_http_client.close()
+    finally:
+        hosted.close()
+        graph.close()

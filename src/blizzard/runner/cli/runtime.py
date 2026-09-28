@@ -16,9 +16,9 @@ from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
-from blizzard.runner.app import build_hosted_app
+from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.composition import build_read_stores
+from blizzard.runner.composition import RunnerProcess, build_read_stores, build_runner_process
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
@@ -86,13 +86,24 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # One broker for the process: `host` is the one composer building both the
     # served app and the ticked loop, so every writer and the stream route share it.
     broker = EventBroker()
-    hosted = build_hosted_app(config, events=broker)
+    graph = build_runner_process(config, events=broker)
+    try:
+        hosted = build_hosted_app(config, process_graph=graph)
+        try:
+            _serve_host(config, graph, hosted)
+        finally:
+            hosted.close()
+    finally:
+        graph.close()
+
+
+def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -> None:
     app = hosted.app
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
     # `PeriodicDriver` resolves its prompt files on this thread, not in the loop thread: a
     # configured-but-missing prompt raises here, before any socket binds.
     with click_exception_on(ConfigError):
-        driver = PeriodicDriver(config, interval_seconds=interval, broker=broker, harness_health=hosted.harness_health)
+        driver = PeriodicDriver(config, interval_seconds=interval, process_graph=graph)
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
     # served by the single `Server` below, which keeps the shutdown path on one frame.
@@ -102,40 +113,41 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
     )
 
-    # The shared early-shutdown wrapper: sets `app.state.shutdown` ahead of
-    # uvicorn's own drain, so `server.run()` returns and the `finally` below still runs.
-    server = build_early_shutdown_server(app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown)
-
-    # Installed before `server.run()`'s own `capture_signals()` window opens, so a signal in
-    # that gap still primes shutdown rather than being discarded; re-invoking it later is idempotent.
-    def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
-        server.handle_exit(signum, frame)
-
-    signal.signal(signal.SIGTERM, _handle_signal)
-    signal.signal(signal.SIGINT, _handle_signal)
-
-    # Ungraceful-restart recovery (#13): a `kill -9` never ran the graceful shutdown marker below, so
-    # sessions killed mid-work are marked here for the same startup RESUME the first tick runs.
-    resumable = hosted.resume.on_startup()
-    if resumable:
-        click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
-
-    driver.start()  # startup recovery is REAP running first inside the tick
+    started = False
     try:
+        # The shared early-shutdown wrapper sets the stream's shutdown signal
+        # ahead of uvicorn's drain. Bound sockets belong to this whole startup.
+        server = build_early_shutdown_server(
+            app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown
+        )
+
+        # Installed before `server.run()`'s own `capture_signals()` window opens.
+        def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
+            server.handle_exit(signum, frame)
+
+        signal.signal(signal.SIGTERM, _handle_signal)
+        signal.signal(signal.SIGINT, _handle_signal)
+
+        # Mark crash-orphaned sessions before the first reconciliation tick.
+        resumable = hosted.resume.on_startup()
+        if resumable:
+            click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
+
+        driver.start()  # startup recovery is REAP running first inside the tick
+        started = True
         server.run(sockets=sockets)
     finally:
-        # Stop the loop first so no in-flight tick races the marking: `stop()` blocks on the tick
-        # thread, so the loop is quiescent before every in-flight lease is marked.
-        driver.stop()
-        marked = hosted.resume.on_shutdown()
-        if marked:
-            click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
-        # uvicorn closes a pre-bound socket but does not unlink its file; leaving it would
-        # make the next start take the stale-corpse path in `Uds.bound` for nothing.
-        Uds(config.socket_path).unlink()
-        # Disposed last, once the resume marking's own store write is done: a
-        # gracefully stopped runner is a single-file store again.
-        hosted.engine.dispose()
+        try:
+            if started:
+                # Quiesce before marking; the spawner executor and engine outlive
+                # the drain and are closed by the outer host frame.
+                driver.stop()
+                marked = hosted.resume.on_shutdown()
+                if marked:
+                    click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
+        finally:
+            # uvicorn closes a pre-bound socket but does not unlink its file.
+            Uds(config.socket_path).unlink()
 
 
 @click.command("tick")

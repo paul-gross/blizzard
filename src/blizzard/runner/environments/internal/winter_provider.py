@@ -8,6 +8,7 @@ half-reset env; ``release`` marks nothing, since cleaning defers to the next acq
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
@@ -63,11 +64,18 @@ class WinterWorkspaceProvider:
         self._git = git if git is not None else SubprocessEnvGit()
         self._ready = False
         self._service_bound: bool | None = None
+        # Manifest reads cannot overlap a reset: the served API and the loop use
+        # this same provider from different threads.
+        self._lock = threading.RLock()
         # Per-env repo manifests, memoized: a miss costs a `winter` invocation plus a git
         # call per repo. `_prepare` is the one place an entry is dropped.
         self._repos: dict[str, list[RepoBinding]] = {}
 
     def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
+        with self._lock:
+            return self._acquire(chunk_id, count, held_ids)
+
+    def _acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
         free = [env for env in self._pool if env not in set(held_ids)]
         if len(free) < count:
             raise WorkspaceAcquisitionError(
@@ -101,6 +109,10 @@ class WinterWorkspaceProvider:
         The layout is *read*, never derived. Narrowing to ``kind == "worktree"`` drops the
         standalone clones: only the env's own worktree is the worker's to touch, and each
         ``origin_url`` is read from it rather than from the caller's enclosing repo."""
+        with self._lock:
+            return self._repos_for(environment_id)
+
+    def _repos_for(self, environment_id: str) -> list[RepoBinding]:
         cached = self._repos.get(environment_id)
         if cached is not None:
             return list(cached)
@@ -124,9 +136,15 @@ class WinterWorkspaceProvider:
 
     def _prepare(self, env: str) -> Path:
         """Reset-on-acquire: return the env fully reset to base and working."""
-        # The reset can add or remove worktrees (a membership reconcile materializes a
-        # newly-declared repo), so any memoized manifest for this env is now a guess.
+        # Clear before and after, including on failure: an in-flight reset may
+        # change membership even when a later preparation step raises.
         self._repos.pop(env, None)
+        try:
+            return self._reset(env)
+        finally:
+            self._repos.pop(env, None)
+
+    def _reset(self, env: str) -> Path:
         workdir = self._workspace_root / env
         run = self._winter.run
         root = self._workspace_root

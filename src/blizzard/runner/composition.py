@@ -1,4 +1,4 @@
-"""The runner-store composition root.
+"""The runner process and store composition root.
 
 The only module under ``src/`` that names a concrete ``runner/store/internal/`` adapter,
 asserted by
@@ -9,8 +9,26 @@ Mirrors :func:`blizzard.hub.composition.build_services`."""
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+
 from sqlalchemy import Engine
 
+from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.environments.factory import build_workspace_provider
+from blizzard.runner.environments.provider import IWorkspaceProvider
+from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
+from blizzard.runner.harness.internal.harness_registry import (
+    build_production_harness_health_probes,
+    build_production_harness_registry,
+)
+from blizzard.runner.harness.registry import HarnessRegistry
+from blizzard.runner.loop.capability_snapshot import HarnessHealthCache, default_harness_id
+from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
@@ -37,6 +55,65 @@ from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLed
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.internal.workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.stores import RunnerReadStores, RunnerStores
+
+
+@dataclass(frozen=True)
+class RunnerProcess:
+    """One owner for the hosted app, loop and recovery hooks' shared collaborators.
+
+    Close after the loop has stopped and resume marking has drained workers: the
+    spawner thread is the kernel parent of children awaiting durable confirmation.
+    """
+
+    engine: Engine
+    stores: RunnerStores
+    connections: RunnerStoreConnections
+    provider: IWorkspaceProvider
+    harnesses: HarnessRegistry
+    clock: SystemClock
+    process: LinuxProcessProbe
+    health: HarnessHealthCache
+    events: EventBroker | None
+    executor: ThreadPoolExecutor
+
+    def close(self) -> None:
+        try:
+            self.executor.shutdown(wait=True)
+        finally:
+            self.engine.dispose()
+
+
+def build_runner_process(config: RunnerConfig, *, events: EventBroker | None = None) -> RunnerProcess:
+    """Construct the process-scoped graph; dispose partial resources on failure."""
+    engine = create_engine_from_url(config.db_url)
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
+    try:
+        stores, connections = build_stores_and_connections(
+            engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+        )
+        clock = SystemClock()
+        process = LinuxProcessProbe()
+        provider = build_workspace_provider(config, held_ids=stores.environments.held_environment_ids)
+        harnesses = build_production_harness_registry(config, executor=executor, process=process)
+        default_id = default_harness_id(harnesses)
+        if default_id is not None:
+            harnesses.transcript_source(default_id)
+        health = HarnessHealthCache(
+            clock=clock,
+            probes=build_production_harness_health_probes(config),
+            selftest_results=stores.selftest_results,
+            configured_tiers={
+                CLAUDE_CODE_HARNESS_ID: config.model_aliases,
+                OPENCODE_HARNESS_ID: config.opencode_model_aliases,
+            },
+        )
+        return RunnerProcess(engine, stores, connections, provider, harnesses, clock, process, health, events, executor)
+    except BaseException:
+        try:
+            executor.shutdown(wait=True)
+        finally:
+            engine.dispose()
+        raise
 
 
 def build_stores(engine: Engine, *, errors: RunnerStoreErrorFactory) -> RunnerStores:

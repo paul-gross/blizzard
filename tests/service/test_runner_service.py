@@ -60,7 +60,7 @@ from tests.service.support import (
     transcript_segment_record,
     transcript_segment_turn,
 )
-from tests.support import daemon_log_sink, parse_sse_frames
+from tests.support import daemon_log_sink, parse_sse_frames, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -1044,6 +1044,10 @@ def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_
         with contextlib.suppress(httpx.HTTPError), client.stream("GET", "/api/events/stream") as resp:
             assert resp.status_code == 200
             next(resp.iter_text())  # block for the reserved comment — the subscriber is live
+            # The loop's first pass can be sampling an external subscription; the
+            # shutdown contract joins that tick before returning. Isolate the SSE
+            # drain from the independent, timeout-bounded startup tick.
+            assert poll_until(lambda: '"tick end"' in read_daemon_log(log), timeout=15.0)
 
             proc.send_signal(signal.SIGTERM)
             try:

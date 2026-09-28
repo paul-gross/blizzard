@@ -2,13 +2,14 @@
 ``spawn``/``resume_with_message``/``judge`` goes through :class:`ProcessLauncher`, never a bare
 ``subprocess.Popen``, so a child always gets its own group and a parent-death signal
 (``bzh:deterministic-shell``). ``defer_disarm=True`` holds the real binary behind a
-trampoline until ``confirm_durable()`` disarms it."""
+trampoline until ``confirm_durable()`` receives its disarm acknowledgement."""
 
 from __future__ import annotations
 
 import ctypes
 import errno
 import os
+import select
 import shutil
 import signal
 import subprocess
@@ -22,6 +23,7 @@ from blizzard.runner.loop.process import IProcessProbe
 
 # ``man 2 prctl`` — arms the child's own death signal (the trampoline clears it with a literal 0).
 _PR_SET_PDEATHSIG = 1
+_DISARM_TIMEOUT_SECONDS = 10.0
 
 # Handle and symbol both resolved at import, never post-fork: the dynamic linker deadlocks forked children.
 _LIBC = ctypes.CDLL(None, use_errno=True)
@@ -45,7 +47,8 @@ _TRAMPOLINE_SOURCE = """
 import ctypes, os, sys
 _libc = ctypes.CDLL(None, use_errno=True)
 control_fd = int(sys.argv[1])
-argv = sys.argv[2:]
+ack_fd = int(sys.argv[2])
+argv = sys.argv[3:]
 # os.read returns b"" on EOF rather than raising, so it is checked explicitly: only a
 # real confirm byte disarms and execs; EOF (the launcher died before confirming) exits
 # here, still armed, rather than racing PR_SET_PDEATHSIG's own SIGKILL to decide it.
@@ -53,7 +56,12 @@ confirmed = os.read(control_fd, 1) == b"1"
 os.close(control_fd)
 if not confirmed:
     os._exit(1)
-_libc.prctl(1, 0, 0, 0, 0)
+if _libc.prctl(1, 0, 0, 0, 0) != 0:
+    os._exit(1)
+# The launcher may retire its spawner thread once it reads this acknowledgement:
+# the kernel has already cleared the parent-death signal on this child.
+os.write(ack_fd, b"1")
+os.close(ack_fd)
 os.execvp(argv[0], argv)
 """
 
@@ -63,7 +71,8 @@ class LaunchedProcess:
     """The OS facts known the instant a child exists — before any identity is known.
     ``pgid`` is recorded, not inferred at kill time: ``start_new_session=True`` makes
     the child a fresh session-and-group leader, so its pgid equals its own pid.
-    ``confirm_durable`` is the trampoline's disarm signal — a no-op unless ``defer_disarm=True``."""
+    ``confirm_durable`` waits for the trampoline to disarm — a no-op unless
+    ``defer_disarm=True``."""
 
     pid: int
     pgid: int
@@ -122,20 +131,30 @@ class ProcessLauncher:
         _ensure_executable(argv[0], cwd=cwd, env=env)
         # `pass_fds` inherits only the trampoline's own read end — `argv` never sees it.
         read_fd, write_fd = os.pipe()
+        ack_read_fd, ack_write_fd = os.pipe()
         try:
-            proc = self._launch_process(
-                [sys.executable, "-c", _TRAMPOLINE_SOURCE, str(read_fd), *argv],
-                cwd=cwd,
-                env=env,
-                stdout=stdout,
-                stderr=stderr,
-                pass_fds=(read_fd,),
-            )
-        finally:
-            os.close(read_fd)  # the parent's own copy; the child kept its own across the fork
+            try:
+                proc = self._launch_process(
+                    [sys.executable, "-c", _TRAMPOLINE_SOURCE, str(read_fd), str(ack_write_fd), *argv],
+                    cwd=cwd,
+                    env=env,
+                    stdout=stdout,
+                    stderr=stderr,
+                    pass_fds=(read_fd, ack_write_fd),
+                )
+            finally:
+                os.close(read_fd)  # the child's copies survive the fork
+                os.close(ack_write_fd)
+        except BaseException:
+            os.close(write_fd)
+            os.close(ack_read_fd)
+            raise
         start_time = self._process.start_time(proc.pid) or ""
         return LaunchedProcess(
-            pid=proc.pid, pgid=proc.pid, process_start_time=start_time, confirm_durable=_confirm_once(write_fd)
+            pid=proc.pid,
+            pgid=proc.pid,
+            process_start_time=start_time,
+            confirm_durable=_confirm_once(write_fd, ack_read_fd),
         )
 
     def _launch(
@@ -199,10 +218,10 @@ def _ensure_executable(argv0: str, *, cwd: str | None, env: dict[str, str]) -> N
     raise FileNotFoundError(errno.ENOENT, "No such file or directory", argv0)
 
 
-def _confirm_once(write_fd: int) -> Callable[[], None]:
+def _confirm_once(write_fd: int, ack_read_fd: int) -> Callable[[], None]:
     """One single-use disarm closure per launch: writes the trampoline's go-byte, then
-    closes the write end — a second call is a harmless no-op rather than a write against a
-    possibly-reused fd number."""
+    closes the write end, and waits for the child's disarm acknowledgement before the
+    spawner thread may be retired. A second call is a harmless no-op."""
     sent = False
 
     def confirm_durable() -> None:
@@ -216,6 +235,15 @@ def _confirm_once(write_fd: int) -> Callable[[], None]:
             pass  # the trampoline (or its exec'd successor) is already gone — nothing to tell
         finally:
             os.close(write_fd)
+        try:
+            ready, _, _ = select.select([ack_read_fd], [], [], _DISARM_TIMEOUT_SECONDS)
+            if not ready:
+                raise TimeoutError("worker trampoline did not confirm parent-death disarm")
+            # EOF means the child exited before disarm; it cannot be killed by
+            # retirement of the spawner thread. A live child sends b"1".
+            os.read(ack_read_fd, 1)
+        finally:
+            os.close(ack_read_fd)
 
     return confirm_durable
 
