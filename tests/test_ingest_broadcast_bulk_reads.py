@@ -355,9 +355,9 @@ def test_escalation_route_query_count_is_unaffected(tmp_path: Path) -> None:
 def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) -> None:
     """``DELETE /api/chunks/{id}``'s degrade branch (the gone-chunk read ``ChunkFrameState``
     skips ``from_graph``/route reads for, same as ``ChunkChanged.publish`` did) issues the
-    same pinned statement count as before this refactor, plus one: the row lock
-    ``DeleteService`` now takes first, inside its own write transaction
-    (``bzh:store-exclusive-write``)."""
+    same pinned statement count as before this refactor, plus the row lock
+    ``DeleteService`` now takes first inside its own write transaction and its fresh
+    re-read of the chunk under that lock (``bzh:store-exclusive-write``)."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "del"}], promote=False)
 
@@ -365,4 +365,4 @@ def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) 
         resp = hub.client.request("DELETE", f"/api/chunks/{chunk_id}", json={})
         assert resp.status_code == 202, resp.text
 
-    assert count_queries(hub.engine, call) == 68
+    assert count_queries(hub.engine, call) == 72

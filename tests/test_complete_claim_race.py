@@ -129,7 +129,9 @@ def test_a_completion_still_releases_the_route_a_claim_won_the_lock_to_create(tm
     complete_thread = threading.Thread(target=_complete)
     complete_thread.start()
     complete_thread.join(timeout=0.3)
-    assert complete_thread.is_alive(), "the completion completed while the claim still held the shared lock — not atomic"
+    assert complete_thread.is_alive(), (
+        "the completion completed while the claim still held the shared lock — not atomic"
+    )
 
     release_record.set()
     claim_thread.join(timeout=5)

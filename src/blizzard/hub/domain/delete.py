@@ -92,6 +92,4 @@ class DeleteService:
             # between the caller's own load and this lock must not have that ref survive
             # withdrawal because the write below still carries the caller's stale list.
             current = handle.record(chunk.chunk_id) or chunk
-            return self._items.delete_chunk_and_withdraw_hub_items_locked(
-                handle, current, by=by, at=self._clock.now()
-            )
+            return self._items.delete_chunk_and_withdraw_hub_items_locked(handle, current, by=by, at=self._clock.now())
