@@ -22,6 +22,7 @@ from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
@@ -56,17 +57,26 @@ def _users(engine):  # type: ignore[no-untyped-def]
 
 
 def _work_deps(engine):  # type: ignore[no-untyped-def]
-    """The work-item store and delete-cascade wiring every ``WorkSourceEntry.registry``
-    call needs to seat the built-in ``hub`` source's editor."""
+    """The work-item store and edit service every ``WorkSourceEntry.registry`` call
+    needs to seat the built-in ``hub`` source's editor."""
     store = hub_store_connections(engine)
     work_item_store = WorkItemStore(store)
+    chunks = build_chunk_stores(store, _clock())
     delete = DeleteService(
         items=work_item_store,
         clock=_clock(),
-        exclusive=build_chunk_stores(store, _clock()).exclusive,
+        exclusive=chunks.exclusive,
         cycle_lock=threading.Lock(),
     )
-    return work_item_store, delete
+    edits = WorkItemEditService(
+        items=work_item_store,
+        work_refs=chunks.work_refs,
+        record=chunks.record,
+        facts=chunks.facts,
+        clock=_clock(),
+        delete=delete,
+    )
+    return work_item_store, edits
 
 
 def _resolution(engine):  # type: ignore[no-untyped-def]
@@ -190,14 +200,12 @@ def test_factory_derives_web_base_by_stripping_the_api_host_prefix(
     """Public GitHub: ``api.github.com`` -> ``github.com`` (strip the ``api.`` host)."""
     monkeypatch.setenv("_TEST_TOKEN_A", "token-a")
     engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
+    work_item_store, edits = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         [WorkSourceConfig(name="blizzard", provider="github", repo="paul-gross/blizzard", token_env="_TEST_TOKEN_A")],
-        hub_store_connections(engine),
-        _clock(),
         users=_users(engine),
         work_item_store=work_item_store,
-        delete=delete,
+        edits=edits,
         resolution=_resolution(engine),
     )
     source = registry.get("blizzard")
@@ -212,7 +220,7 @@ def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(
     """A GHE install: ``git.corp.internal/api/v3`` -> ``git.corp.internal`` (strip ``/api/v3``)."""
     monkeypatch.setenv("_TEST_TOKEN_GHE", "ghe-token")
     engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
+    work_item_store, edits = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         [
             WorkSourceConfig(
@@ -223,11 +231,9 @@ def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(
                 api_base="https://git.corp.internal/api/v3",
             )
         ],
-        hub_store_connections(engine),
-        _clock(),
         users=_users(engine),
         work_item_store=work_item_store,
-        delete=delete,
+        edits=edits,
         resolution=_resolution(engine),
     )
     source = registry.get("internal")
@@ -246,14 +252,12 @@ def test_factory_gives_each_source_its_own_credentialed_client(monkeypatch: pyte
         WorkSourceConfig(name="two", provider="github", repo="acme/two", token_env="_TEST_TOKEN_TWO"),
     ]
     engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
+    work_item_store, edits = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         sources,
-        hub_store_connections(engine),
-        _clock(),
         users=_users(engine),
         work_item_store=work_item_store,
-        delete=delete,
+        edits=edits,
         resolution=_resolution(engine),
     )
     assert sorted(registry.names()) == ["hub", "one", "two"]
@@ -272,14 +276,12 @@ def test_factory_fails_at_boot_naming_the_unset_token_variable(tmp_path: Path) -
     sources = [WorkSourceConfig(name="one", provider="github", repo="acme/one", token_env="_DEFINITELY_UNSET_TOKEN")]
     engine = _engine(tmp_path)
     with pytest.raises(ConfigError, match="_DEFINITELY_UNSET_TOKEN"):
-        work_item_store, delete = _work_deps(engine)
+        work_item_store, edits = _work_deps(engine)
         WorkSourceEntry.registry(
             sources,
-            hub_store_connections(engine),
-            _clock(),
             users=_users(engine),
             work_item_store=work_item_store,
-            delete=delete,
+            edits=edits,
             resolution=_resolution(engine),
         )
 
@@ -288,14 +290,12 @@ def test_factory_over_an_empty_source_list_still_seats_the_built_in_hub_source(t
     """Zero ``[[work_source]]`` entries is a legal, non-empty registry:
     the built-in ``hub`` source is always seated, with no config and no credential."""
     engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
+    work_item_store, edits = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         [],
-        hub_store_connections(engine),
-        _clock(),
         users=_users(engine),
         work_item_store=work_item_store,
-        delete=delete,
+        edits=edits,
         resolution=_resolution(engine),
     )
     assert registry.names() == ["hub"]
@@ -549,14 +549,12 @@ def test_factory_builds_no_annotator_for_a_non_opted_in_source(monkeypatch: pyte
     source has no entry in the annotator map at all."""
     monkeypatch.setenv("_TEST_TOKEN_NOT_OPTED", "token")
     engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
+    work_item_store, edits = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         [WorkSourceConfig(name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_NOT_OPTED")],
-        hub_store_connections(engine),
-        _clock(),
         users=_users(engine),
         work_item_store=work_item_store,
-        delete=delete,
+        edits=edits,
         resolution=_resolution(engine),
     )
     assert registry.get("widget") is not None
@@ -567,18 +565,16 @@ def test_factory_builds_no_annotator_for_a_non_opted_in_source(monkeypatch: pyte
 def test_factory_builds_an_annotator_for_an_opted_in_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("_TEST_TOKEN_OPTED", "token")
     engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
+    work_item_store, edits = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         [
             WorkSourceConfig(
                 name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_OPTED", annotate=True
             )
         ],
-        hub_store_connections(engine),
-        _clock(),
         users=_users(engine),
         work_item_store=work_item_store,
-        delete=delete,
+        edits=edits,
         resolution=_resolution(engine),
     )
     annotator = registry.annotator("widget")
@@ -657,14 +653,12 @@ def test_registry_closer_returns_the_bound_closer() -> None:
 def test_factory_builds_a_closer_for_every_configured_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("_TEST_TOKEN_CLOSE", "token")
     engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
+    work_item_store, edits = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         [WorkSourceConfig(name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_CLOSE")],
-        hub_store_connections(engine),
-        _clock(),
         users=_users(engine),
         work_item_store=work_item_store,
-        delete=delete,
+        edits=edits,
         resolution=_resolution(engine),
     )
     closer = registry.closer("widget")
@@ -676,14 +670,12 @@ def test_factory_seats_the_hub_closer_with_zero_configured_sources(tmp_path: Pat
     """The built-in ``hub`` source needs no ``[[work_source]]`` stanza at all to be
     seated as a closer."""
     engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
+    work_item_store, edits = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         [],
-        hub_store_connections(engine),
-        _clock(),
         users=_users(engine),
         work_item_store=work_item_store,
-        delete=delete,
+        edits=edits,
         resolution=_resolution(engine),
     )
 
@@ -702,14 +694,12 @@ def test_factory_seats_no_configured_closer_when_forge_writes_are_disabled(
 ) -> None:
     monkeypatch.setenv("_TEST_TOKEN_DECLINE", "token")
     engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
+    work_item_store, edits = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         [WorkSourceConfig(name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_DECLINE")],
-        hub_store_connections(engine),
-        _clock(),
         users=_users(engine),
         work_item_store=work_item_store,
-        delete=delete,
+        edits=edits,
         resolution=_resolution(engine),
         close_forge_writes_enabled=False,
     )
@@ -720,14 +710,12 @@ def test_factory_seats_no_configured_closer_when_forge_writes_are_disabled(
 
 def test_factory_seats_the_hub_closer_even_when_forge_writes_are_disabled(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
-    work_item_store, delete = _work_deps(engine)
+    work_item_store, edits = _work_deps(engine)
     registry = WorkSourceEntry.registry(
         [],
-        hub_store_connections(engine),
-        _clock(),
         users=_users(engine),
         work_item_store=work_item_store,
-        delete=delete,
+        edits=edits,
         resolution=_resolution(engine),
         close_forge_writes_enabled=False,
     )

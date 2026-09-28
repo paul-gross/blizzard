@@ -14,8 +14,8 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.graph import Graph, Node
-from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal.graph_store import GraphStore
 from tests.support import count_queries, hub_store_connections, migrate_to
 

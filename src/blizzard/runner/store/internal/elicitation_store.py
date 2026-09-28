@@ -8,9 +8,9 @@ from datetime import datetime
 from sqlalchemy import and_, select
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.domain.elicitation import ElicitationRecord, IWriteElicitationRepository
-from blizzard.runner.store.internal.base import RunnerStoreConnections
-from blizzard.runner.store.internal.batching import id_batches
+from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import in_flight_elicitations
 
 _log = get_logger("blizzard.runner.store")

@@ -70,6 +70,7 @@ from blizzard.hub.domain.work import (
     WorkItemRecord,
     WorkRef,
 )
+from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
@@ -637,11 +638,16 @@ def build_hub(
         built_sources,
         editors,
         closers,
-        store=store_connections,
-        clock=clock,
         users=user_store,
         items=work_item_store,
-        delete=delete_service,
+        edits=WorkItemEditService(
+            items=work_item_store,
+            work_refs=built_chunk_stores.work_refs,
+            record=built_chunk_stores.record,
+            facts=built_chunk_stores.facts,
+            clock=clock,
+            delete=delete_service,
+        ),
         resolution=garden_proposal_resolution,
     )
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)

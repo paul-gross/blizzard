@@ -11,12 +11,12 @@ from collections.abc import Sequence
 from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.identities import IWriteIdentityRepository
 from blizzard.hub.auth.models import Identity
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 
 
 class IdentityRepository:

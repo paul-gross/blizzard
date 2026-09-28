@@ -16,7 +16,8 @@ from sqlalchemy import select
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.asks import AskRecord, IWriteAskRepository, ParkRecord
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.store.internal.base import PAUSE_PARKED_LEASE_IDS, RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import PAUSE_PARKED_LEASE_IDS
 from blizzard.runner.store.schema import asks, lease_closures, park_facts, park_resumes
 
 _log = get_logger("blizzard.runner.store")

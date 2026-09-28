@@ -14,6 +14,7 @@ from sqlalchemy import Connection, desc, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.ids import WORK_ITEM_PREFIX, Id
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
@@ -30,7 +31,6 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_dependencies_store import release_outgoing_edges_conn
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,

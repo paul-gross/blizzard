@@ -29,10 +29,9 @@ from blizzard.runner.harness.internal.harness_registry import (
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.loop.capability_snapshot import HarnessHealthCache, default_harness_id
 from blizzard.runner.loop.process import LinuxProcessProbe
-from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
-from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.internal.check_store import CheckStore
 from blizzard.runner.store.internal.elicitation_store import ElicitationStore
 from blizzard.runner.store.internal.environment_store import EnvironmentStore

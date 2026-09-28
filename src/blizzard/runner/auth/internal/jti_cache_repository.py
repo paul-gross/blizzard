@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.auth.jti_cache import IJtiCache
-from blizzard.runner.store.internal.base import RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import jwt_jti_seen
 
 

@@ -10,7 +10,8 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.takeover import IWriteTakeoverRepository, TakeoverRecord
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.store.internal.base import RunnerStoreConnections, Unclosed, lease_select, row_to_lease
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import Unclosed, lease_select, row_to_lease
 from blizzard.runner.store.schema import leases, takeover_ends, takeovers
 
 _log = get_logger("blizzard.runner.store")

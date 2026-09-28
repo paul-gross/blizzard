@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import Connection, and_, case, func, select
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.domain.usage import (
     ContextSampleState,
@@ -18,8 +19,7 @@ from blizzard.runner.domain.usage import (
 )
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample, invocation_cost
-from blizzard.runner.store.internal.base import RunnerStoreConnections
-from blizzard.runner.store.internal.batching import id_batches
+from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import (
     context_samples,
     external_usage_samples,

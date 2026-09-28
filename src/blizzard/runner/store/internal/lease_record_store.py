@@ -12,13 +12,8 @@ from sqlalchemy import and_, func, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import ClosedLeaseRecord, IWriteLeaseRecordRepository, LeaseRecord, NewLease
-from blizzard.runner.store.internal.base import (
-    RunnerStoreConnections,
-    Unclosed,
-    enqueue_transcript_final,
-    lease_select,
-    row_to_lease,
-)
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import Unclosed, enqueue_transcript_final, lease_select, row_to_lease
 from blizzard.runner.store.schema import (
     lease_closures,
     lease_context,

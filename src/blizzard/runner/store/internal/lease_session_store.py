@@ -12,7 +12,8 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import IWriteLeaseSessionRepository, LeaseRecord, PoolHead
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.store.internal.base import RunnerStoreConnections, lease_select, row_to_lease
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import lease_select, row_to_lease
 from blizzard.runner.store.schema import (
     lease_context,
     lease_spawns,

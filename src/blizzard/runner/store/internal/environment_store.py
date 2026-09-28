@@ -8,7 +8,8 @@ from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.environments.repository import EnvBindingRecord, IWriteEnvironmentRepository
-from blizzard.runner.store.internal.base import HELD_BINDING, RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import HELD_BINDING
 from blizzard.runner.store.schema import binding_releases, env_bindings
 
 _log = get_logger("blizzard.runner.store")

@@ -6,15 +6,12 @@ here is fetched from a forge.
 
 from __future__ import annotations
 
-from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
     IReadWorkItemRepository,
-    IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkItemClosure,
     WorkItemPriority,
@@ -22,10 +19,6 @@ from blizzard.hub.domain.work import (
     WorkRef,
 )
 from blizzard.hub.domain.work_items import CreatedWorkItem, WithdrawnWorkItem, WorkItemEdit, WorkItemEditService
-from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
-from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
-from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError, resolve_author_view
@@ -137,24 +130,16 @@ def seat_hub_work_source(
     editors: dict[str, IWorkEditor],
     closers: dict[str, IWorkCloser],
     *,
-    store: HubStoreConnections,
-    clock: IClock,
     users: IReadUserRepository,
-    items: IWriteWorkItemRepository,
-    delete: DeleteService,
+    items: IReadWorkItemRepository,
+    edits: WorkItemEditService,
     resolution: GardenProposalDeliveryResolution,
 ) -> None:
     """Seats the built-in ``hub`` binding in place — reached from both
     :meth:`~blizzard.hub.work_sources.internal.factory.WorkSourceEntry.registry` and
     ``tests/support.py::build_hub``: never absent, never configured. ``users``/``items``/
-    ``delete``/``resolution`` are the composition root's own instances (#362, #364),
-    so every write path shares the same claim-locked instances."""
-    facts = ChunkFactsStore(store, clock)
-    record = ChunkRecordStore(store, clock)
-    work_refs = ChunkWorkRefsStore(store, clock, facts=facts)
-    edits = WorkItemEditService(
-        items=items, work_refs=work_refs, record=record, facts=facts, clock=clock, delete=delete
-    )
+    ``edits``/``resolution`` are the composition root's own instances, so every write
+    path shares the same claim-locked instances."""
     hub_source = HubWorkSource(items, edits, users, resolution)
     sources[RESERVED_HUB_SOURCE_NAME] = hub_source
     editors[RESERVED_HUB_SOURCE_NAME] = hub_source

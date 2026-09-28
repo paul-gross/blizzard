@@ -12,7 +12,7 @@ from blizzard.runner.domain.invocation_boundaries import (
     InvocationBoundaryRecord,
     IWriteInvocationBoundaryRepository,
 )
-from blizzard.runner.store.internal.base import RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import invocation_boundaries
 
 _log = get_logger("blizzard.runner.store")

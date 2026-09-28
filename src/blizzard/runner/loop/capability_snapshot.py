@@ -14,9 +14,9 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
+from blizzard.runner.harness.admission import classify_offline
+from blizzard.runner.harness.admission import version_admitted as harness_version_admitted
 from blizzard.runner.harness.health import HarnessHealthEvidence, HarnessHealthResult, evaluate_harness_health
-from blizzard.runner.harness.internal.harness_shared import version_admitted as _version_admitted
-from blizzard.runner.harness.internal.offline_compatibility import classify_offline
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.wire.runner import RunnerCapability
 
@@ -114,7 +114,7 @@ class HarnessHealthCache:
         version_admitted = (
             None
             if normalized_version is None
-            else supported_version is not None and _version_admitted(normalized_version, supported_version)
+            else supported_version is not None and harness_version_admitted(normalized_version, supported_version)
         )
         result = evaluate_harness_health(
             HarnessHealthEvidence(

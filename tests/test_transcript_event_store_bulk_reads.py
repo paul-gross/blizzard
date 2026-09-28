@@ -15,13 +15,13 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine, update
 
+from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics.events import SegmentProvenance
 from blizzard.hub.domain.transcripts import SegmentRecord
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore, _segment_contexts_stmt
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from tests.support import hub_store_connections, seed_chunk, seed_graph

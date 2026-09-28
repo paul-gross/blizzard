@@ -14,6 +14,7 @@ from datetime import datetime
 from pydantic import ValidationError
 from sqlalchemy import insert, select
 
+from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.registry import (
     DeclaredSubscription,
@@ -27,7 +28,6 @@ from blizzard.hub.domain.registry import (
 from blizzard.hub.domain.work import ActivityRow
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 from blizzard.wire.facts import ExternalSubscriptionUsageWindowFact
 
 

@@ -176,7 +176,7 @@ def test_record_event_is_called_only_through_event_log_service() -> None:
     assert not violations, f"M — record_event must be called only from EventLogService: {violations}"
 
 
-_RUNNER_STORE_CONNECTIONS_FILE = _RUNNER_STORE_DIR / "internal" / "base.py"
+_RUNNER_STORE_CONNECTIONS_FILE = _RUNNER_STORE_DIR / "errors.py"
 
 
 def test_runner_acquires_no_connection_outside_the_store_seam() -> None:
@@ -318,6 +318,9 @@ def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter()
     assert not violations, f"I — only runner/composition.py may name a concrete runner-store adapter: {violations}"
 
 
+# The one roster of composition roots: modules that wire adapters, and so may import any
+# package's ``internal/`` (``bzh:internal-visibility``). The last two are short-lived
+# command roots wiring adapters inline at the top of the command body.
 _COMPOSITION_ROOTS = frozenset(
     {
         _HUB_DIR / "app.py",
@@ -327,6 +330,9 @@ _COMPOSITION_ROOTS = frozenset(
         _RUNNER_DIR / "loop" / "build.py",
         _RUNNER_DIR / "cli" / "runtime.py",
         _RUNNER_DIR / "cli" / "external_usage.py",
+        _RUNNER_COMPOSITION_FILE,
+        _RUNNER_DIR / "cli" / "opencode.py",
+        _SRC_DIR / "tools" / "invariants.py",
     }
 )
 
@@ -352,7 +358,7 @@ def _runner_composition_imports(root: Path, *, exempt: frozenset[Path]) -> list[
 
 def test_only_the_composition_roots_import_the_runner_composition_module() -> None:
     """`blizzard.runner.composition` is a wiring module, not a Protocol or a
-    bundle seam — importing it in any form outside the seven composition roots means
+    bundle seam — importing it in any form outside the composition roots means
     constructing runner stores outside their one approved wiring site
     (``bzh:dependency-injection``). Fail-closed: no name exemptions, unlike the old
     allowlist this replaces, which missed `build_read_stores`."""
@@ -360,79 +366,6 @@ def test_only_the_composition_roots_import_the_runner_composition_module() -> No
     assert not violations, (
         f"D5 — blizzard.runner.composition must only be imported at its composition roots: {violations}"
     )
-
-
-# Each gated concrete adapter class may be imported only by its one approved factory module.
-_GATED_COMPOSITIONS: dict[str, Path] = {
-    "ClaudeCodeAdapter": _RUNNER_DIR / "harness" / "internal" / "harness_registry.py",
-    "OpenCodeAdapter": _RUNNER_DIR / "harness" / "internal" / "opencode_registry.py",
-}
-
-
-def test_gated_harness_adapters_stay_in_their_wiring_module() -> None:
-    """L: each harness adapter is named only by the one factory that constructs it —
-    every composition root takes the registry it builds instead."""
-    violations: list[str] = []
-    for path in sorted(_SRC_DIR.rglob("*.py")):
-        tree = ast.parse(path.read_text(), filename=str(path))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ImportFrom):
-                continue
-            names = {alias.name for alias in node.names}
-            for adapter_name, factory in _GATED_COMPOSITIONS.items():
-                if path == factory:
-                    continue
-                if adapter_name in names:
-                    violations.append(f"{path.relative_to(_REPO_ROOT)} imports {adapter_name!r}")
-    assert not violations, f"L — a gated harness adapter escaped its approved wiring module: {violations}"
-
-
-_TRANSCRIPT_SERVICE_FILE = _RUNNER_DIR / "transcripts" / "service.py"
-
-
-def test_transcript_service_imports_no_internal_module() -> None:
-    """``TranscriptService`` takes its per-owner repository resolver injected
-    (``bzh:dependency-inversion``) rather than constructing one itself, so it never needs
-    to import any package's ``internal/`` adapter — not even its own."""
-    violations = [m for m in sorted(_imported_modules(_TRANSCRIPT_SERVICE_FILE)) if ".internal." in m]
-    assert not violations, f"transcripts/service.py must not import an internal/ module: {violations}"
-
-
-_RUNTIME_FILE = _RUNNER_DIR / "runtime.py"
-
-
-def test_runtime_imports_no_harness_internal_module() -> None:
-    """``Runtime.init`` is not one of the seven composition roots, so it takes
-    ``harness/opencode_scaffold.py``, the harness package's own public surface, rather
-    than reaching into ``harness/internal/`` directly."""
-    violations = [m for m in sorted(_imported_modules(_RUNTIME_FILE)) if ".internal." in m]
-    assert not violations, f"runtime.py must not import a harness/internal/ module: {violations}"
-
-
-_HUB_CLI_SESSION_STORE_FILE = _HUB_DIR / "cli" / "sessions" / "internal" / "session_file.py"
-
-
-def _session_file_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
-    violations: list[str] = []
-    for path in sorted(root.rglob("*.py")):
-        if path in exempt:
-            continue
-        tree = ast.parse(path.read_text(), filename=str(path))
-        for node in ast.walk(tree):
-            names_session_file = (isinstance(node, ast.Name) and node.id == "SessionFile") or (
-                isinstance(node, ast.Attribute) and node.attr == "SessionFile"
-            )
-            if names_session_file:
-                violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} names SessionFile")  # type: ignore[union-attr]
-    return violations
-
-
-def test_session_file_is_named_only_at_its_composition_root() -> None:
-    """``SessionFile`` is named only at ``hub/cli/__init__.py`` — every other module
-    takes the read/write Protocol seam, however the class is reached, never the concrete
-    name itself. ``sessions/internal/session_file.py`` (its declaring module) is exempt."""
-    violations = _session_file_accesses(_SRC_DIR, exempt=_COMPOSITION_ROOTS | frozenset({_HUB_CLI_SESSION_STORE_FILE}))
-    assert not violations, f"N — SessionFile must be named only at its composition root: {violations}"
 
 
 def _write_session_store_accesses(root: Path, *, exempt: frozenset[Path]) -> list[str]:
@@ -520,3 +453,108 @@ def test_no_wire_model_projects_into_another() -> None:
     supplying a sibling default outside any method body, are model config, not this)."""
     violations = _wire_cross_model_constructions()
     assert not violations, f"O — wire/ must declare no cross-model projection: {violations}"
+
+
+def _internal_crossings(src_root: Path, *, exempt: frozenset[Path]) -> list[str]:
+    """Every import of a module under ``<owner>/internal/`` from a module outside ``<owner>``.
+    Absolute, relative, and ``from <owner> import internal`` forms all resolve to the module
+    path they name before the owner comparison."""
+    top = src_root.name
+    violations: list[str] = []
+    for path in sorted(src_root.rglob("*.py")):
+        if path in exempt:
+            continue
+        importer = list(path.relative_to(src_root.parent).with_suffix("").parts)
+        if path.name == "__init__.py":
+            importer = importer[:-1]
+        package = importer if path.name == "__init__.py" else importer[:-1]
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                named = [alias.name.split(".") for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                base = package[: len(package) - (node.level - 1)] if node.level else []
+                base = [*base, *(node.module.split(".") if node.module else [])]
+                named = [base, *([*base, alias.name] for alias in node.names)]
+            else:
+                continue
+            for module in named:
+                if module[:1] != [top] or "internal" not in module:
+                    continue
+                owner = module[: module.index("internal")]
+                if importer[: len(owner)] != owner:
+                    violations.append(
+                        f"{path.relative_to(src_root.parent.parent)}:{node.lineno} imports {'.'.join(module)}"
+                        f" (internal to {'.'.join(owner)})"
+                    )
+                    break
+    return violations
+
+
+def test_internal_is_imported_only_by_its_owner_or_a_composition_root() -> None:
+    """``<pkg>/internal/`` is private to ``<pkg>`` and everything below it — any other
+    importer is a composition root (``bzh:internal-visibility``). One generic check over
+    every ``internal/`` under ``src/blizzard/``, no per-name roster beyond the roots."""
+    violations = _internal_crossings(_SRC_DIR, exempt=_COMPOSITION_ROOTS)
+    assert not violations, f"P — internal/ is importable only by its owner or a composition root: {violations}"
+
+
+def _plant(tmp_path: Path, importer: str, statement: str) -> list[str]:
+    """A two-package tree where ``blizzard/a/internal/x.py`` is a's private module and
+    ``importer`` holds one ``statement`` — the crossings the generic check must catch."""
+    src = tmp_path / "blizzard"
+    for rel, text in {
+        "__init__.py": "",
+        "a/__init__.py": "",
+        "a/internal/__init__.py": "",
+        "a/internal/x.py": "VALUE = 1\n",
+        "b/__init__.py": "",
+        "a/sibling.py": "",
+    }.items():
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text(text)
+    (src / importer).write_text(f"{statement}\n")
+    return _internal_crossings(src, exempt=frozenset())
+
+
+@pytest.mark.parametrize(
+    ("importer", "statement"),
+    [
+        ("b/mod.py", "from blizzard.a.internal.x import VALUE"),
+        ("b/mod.py", "import blizzard.a.internal.x"),
+        ("b/mod.py", "from blizzard.a import internal"),
+        ("b/mod.py", "from blizzard.a.internal import x"),
+        ("b/mod.py", "from ..a.internal.x import VALUE"),
+        ("b/mod.py", "from ..a import internal"),
+    ],
+)
+def test_internal_check_catches_every_import_form(tmp_path: Path, importer: str, statement: str) -> None:
+    violations = _plant(tmp_path, importer, statement)
+    assert len(violations) == 1
+    assert violations[0].endswith("(internal to blizzard.a)")
+
+
+@pytest.mark.parametrize(
+    ("importer", "statement"),
+    [
+        ("a/sibling.py", "from blizzard.a.internal.x import VALUE"),
+        ("a/sibling.py", "from .internal.x import VALUE"),
+        ("a/internal/y.py", "from blizzard.a.internal import x"),
+        ("a/__init__.py", "from .internal import x"),
+        ("b/mod.py", "from blizzard.a import sibling"),
+    ],
+)
+def test_internal_check_admits_the_owner_and_public_imports(tmp_path: Path, importer: str, statement: str) -> None:
+    assert _plant(tmp_path, importer, statement) == []
+
+
+_DOMAIN_CORE_FORBIDDEN = ("fastapi", "starlette", "sqlalchemy", "click", "httpx")
+
+
+def test_domain_core_imports_no_framework_or_driver() -> None:
+    """``hub/domain/`` and ``runner/domain/`` are framework-free (``bzh:domain-core``): no
+    web framework, driver, CLI, or HTTP-client import."""
+    violations = _violations(_HUB_DIR / "domain", _DOMAIN_CORE_FORBIDDEN) + _violations(
+        _RUNNER_DOMAIN_DIR, _DOMAIN_CORE_FORBIDDEN
+    )
+    assert not violations, f"Q — a domain core must import no framework or driver: {violations}"

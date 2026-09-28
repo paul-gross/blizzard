@@ -14,13 +14,13 @@ from sqlalchemy import Connection, select
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import RouteCreatedFact, RouteHistory, RouteReleasedFact
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import conn_of, next_route_seq, route_of_conn
 
 _ROUTE_PREFIX = "route"

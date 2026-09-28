@@ -18,6 +18,7 @@ from sqlalchemy import insert, select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.graph import (
     Choice,
     ChoiceTarget,
@@ -33,7 +34,6 @@ from blizzard.hub.domain.graph import (
     SessionDecl,
 )
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.schema import (
     graph_artifacts,
     graph_choices,

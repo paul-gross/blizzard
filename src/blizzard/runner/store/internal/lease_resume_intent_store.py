@@ -10,7 +10,8 @@ from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import IWriteLeaseResumeIntentRepository
-from blizzard.runner.store.internal.base import OPEN_INTENT, RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import OPEN_INTENT
 from blizzard.runner.store.schema import resume_clears, resume_intents
 
 _log = get_logger("blizzard.runner.store")

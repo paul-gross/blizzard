@@ -14,11 +14,11 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunks.decisions import LiveDecisionStatus
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import ChunkFacts, DecisionRow
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore

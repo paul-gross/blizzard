@@ -56,10 +56,9 @@ from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.runtime import migration_runner
-from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
-from blizzard.runner.store.internal.base import RunnerStoreConnections
 from blizzard.runner.store.internal.check_store import CheckStore
 from blizzard.runner.store.internal.elicitation_store import ElicitationStore
 from blizzard.runner.store.internal.environment_store import EnvironmentStore

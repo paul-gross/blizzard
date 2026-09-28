@@ -10,11 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Protocol
 
 from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
 
 __all__ = [
+    "ANTHROPIC_DEFAULT_CREDENTIALS_PATH",
     "PROVIDER_ANTHROPIC",
     "PROVIDER_OPENAI",
     "ExternalSubscriptionUsageSnapshot",
@@ -27,6 +29,10 @@ __all__ = [
 # The Anthropic provider-sampler binding's own selector value — distinct
 # from a subscription declaration's `slug`, which identifies an operator's subscription.
 PROVIDER_ANTHROPIC = "anthropic"
+
+# The credential file Claude Code's own login writes — shared by the Anthropic sampler and
+# the Claude Code health probe, both of which read it.
+ANTHROPIC_DEFAULT_CREDENTIALS_PATH = str(Path.home() / ".claude" / ".credentials.json")
 
 # The OpenAI (ChatGPT plan) binding's selector — reached only by an explicit `[[subscription]]`.
 PROVIDER_OPENAI = "openai"

@@ -8,7 +8,8 @@ from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.requeue import IWriteRequeueRepository
-from blizzard.runner.store.internal.base import RunnerStoreConnections, Unsuperseded
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import Unsuperseded
 from blizzard.runner.store.schema import leases, requeues
 
 _log = get_logger("blizzard.runner.store")
