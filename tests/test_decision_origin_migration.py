@@ -1,4 +1,4 @@
-"""The ``20260928_1100_decision_imposed_by_runner`` revision against a store that already holds
+"""The ``20260929_1000_decision_imposed_by_runner`` revision against a store that already holds
 decisions — a worker-judged node's decision is backfilled with the runner that held its lease, a
 human-judged node's stays NULL, and downgrade drops both new columns (the
 ``tests/test_garden_proposal_origin_migration.py`` shape)."""
@@ -16,7 +16,7 @@ from tests.support import migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
-_BEFORE = "20260928_1000_queue_positions_chunk_id_index"  # the head just before this revision
+_BEFORE = "20260928_1100_runner_retirement"  # the head just before this revision
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 

@@ -1,7 +1,7 @@
 """Decision origin — the runner whose configuration imposed a gate, backfilled for worker-judged nodes.
 
-Revision ID: 20260928_1100_decision_imposed_by_runner
-Revises: 20260928_1000_queue_positions_chunk_id_index
+Revision ID: 20260929_1000_decision_imposed_by_runner
+Revises: 20260928_1100_runner_retirement
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "20260928_1100_decision_imposed_by_runner"
-down_revision: str | None = "20260928_1000_queue_positions_chunk_id_index"
+revision: str = "20260929_1000_decision_imposed_by_runner"
+down_revision: str | None = "20260928_1100_runner_retirement"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
