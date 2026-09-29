@@ -16,6 +16,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.domain.leases import (
     HEARTBEAT_STALENESS_THRESHOLD,
+    ClosedLeaseActivity,
     LeaseActivity,
     LeaseRecord,
     Liveness,
@@ -55,13 +56,13 @@ def _lease_record(**overrides: object) -> LeaseRecord:
 @pytest.mark.unit
 def test_state_running_when_alive_and_fresh() -> None:
     lease = _lease_record()
-    assert LeaseActivity(lease, closed=False, parked=False, alive=True, stale=False).state == "running"
+    assert LeaseActivity(lease, parked=False, alive=True, stale=False).state == "running"
 
 
 @pytest.mark.unit
 def test_state_stale_when_alive_but_heartbeat_old() -> None:
     lease = _lease_record()
-    assert LeaseActivity(lease, closed=False, parked=False, alive=True, stale=True).state == "stale"
+    assert LeaseActivity(lease, parked=False, alive=True, stale=True).state == "stale"
 
 
 @pytest.mark.unit
@@ -69,25 +70,25 @@ def test_state_exited_when_process_not_alive() -> None:
     """A dead pid is ADVANCE's exit-is-done, not a stall — it derives exited
     even when the (stale) heartbeat check would also fire, since exit is checked first."""
     lease = _lease_record()
-    assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=True).state == "exited"
+    assert LeaseActivity(lease, parked=False, alive=False, stale=True).state == "exited"
 
 
 @pytest.mark.unit
 def test_state_spawning_when_pid_unset() -> None:
     lease = _lease_record(pid=None, process_start_time=None)
-    assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=False).state == "spawning"
+    assert LeaseActivity(lease, parked=False, alive=False, stale=False).state == "spawning"
 
 
 @pytest.mark.unit
 def test_state_spawning_when_session_unset() -> None:
     lease = _lease_record(session_id=None)
-    assert LeaseActivity(lease, closed=False, parked=False, alive=True, stale=False).state == "spawning"
+    assert LeaseActivity(lease, parked=False, alive=True, stale=False).state == "spawning"
 
 
 @pytest.mark.unit
 def test_state_parked_when_dormant_on_a_question() -> None:
     lease = _lease_record()
-    assert LeaseActivity(lease, closed=False, parked=True, alive=True, stale=False).state == "parked"
+    assert LeaseActivity(lease, parked=True, alive=True, stale=False).state == "parked"
 
 
 @pytest.mark.unit
@@ -96,7 +97,7 @@ def test_state_parked_wins_over_stale() -> None:
     clock is stopped for a dormant lease, so a growing heartbeat age is expected, not
     a stall."""
     lease = _lease_record()
-    assert LeaseActivity(lease, closed=False, parked=True, alive=True, stale=True).state == "parked"
+    assert LeaseActivity(lease, parked=True, alive=True, stale=True).state == "parked"
 
 
 @pytest.mark.unit
@@ -105,39 +106,22 @@ def test_state_spawning_wins_over_an_ancient_heartbeat() -> None:
     heartbeat baseline reads as stale — the mint→spawn window has no live worker to
     stall yet."""
     lease = _lease_record(pid=None, process_start_time=None, session_id=None)
-    assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=True).state == "spawning"
+    assert LeaseActivity(lease, parked=False, alive=False, stale=True).state == "spawning"
 
 
 @pytest.mark.unit
-def test_state_closed_when_closure_fact_exists() -> None:
-    """Closed outranks exited: the process is gone, which derives ``exited`` on its own, and
-    the closure fact still wins. The pid-reuse case below is the same precedence against a
-    *live* pid."""
-    lease = _lease_record()
-    assert LeaseActivity(lease, closed=True, parked=False, alive=False, stale=False).state == "closed"
+def test_closed_activity_derives_closed() -> None:
+    """A closed lease's pid may have been reused by an unrelated process, so it carries no
+    liveness facts at all — the closure fact is the whole state."""
+    activity = ClosedLeaseActivity(_lease_record(), closed_at=_NOW, closure_reason="transitioned")
+    assert activity.state == "closed"
 
 
 @pytest.mark.unit
-def test_state_closed_wins_over_alive_pid_reuse() -> None:
-    """Precedence: a closed lease's pid may have been reused by an unrelated
-    process, so ``is_alive=True`` can be a false positive. Closure is the terminal
-    fact and must win, or a finished agent would misread as still ``running``."""
-    lease = _lease_record()
-    assert LeaseActivity(lease, closed=True, parked=False, alive=True, stale=False).state == "closed"
-
-
-@pytest.mark.unit
-def test_state_closed_wins_over_stale() -> None:
-    lease = _lease_record()
-    assert LeaseActivity(lease, closed=True, parked=False, alive=True, stale=True).state == "closed"
-
-
-@pytest.mark.unit
-def test_state_closed_wins_over_parked() -> None:
-    """Precedence: closed outranks even parked — the highest-precedence live state — the
-    same way parked outranks stale."""
-    lease = _lease_record()
-    assert LeaseActivity(lease, closed=True, parked=True, alive=True, stale=False).state == "closed"
+@pytest.mark.parametrize("fact", ["alive", "parked", "stale", "backing_off"])
+def test_closed_activity_cannot_carry_liveness_facts(fact: str) -> None:
+    with pytest.raises(TypeError):
+        ClosedLeaseActivity(_lease_record(), closed_at=_NOW, closure_reason="reaped", **{fact: True})  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
@@ -145,9 +129,7 @@ def test_state_backing_off_when_flagged() -> None:
     """A lease with an open, un-elapsed provider-overload backoff derives
     ``backing-off``, distinct from ``exited`` even though its worker's process is gone."""
     lease = _lease_record()
-    assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=False, backing_off=True).state == (
-        "backing-off"
-    )
+    assert LeaseActivity(lease, parked=False, alive=False, stale=False, backing_off=True).state == ("backing-off")
 
 
 @pytest.mark.unit
@@ -156,9 +138,7 @@ def test_state_backing_off_wins_over_exited() -> None:
     ``exited`` (its pid/session are still set from the generation that overloaded) —
     the backoff fact must win."""
     lease = _lease_record()
-    assert LeaseActivity(lease, closed=False, parked=False, alive=False, stale=True, backing_off=True).state == (
-        "backing-off"
-    )
+    assert LeaseActivity(lease, parked=False, alive=False, stale=True, backing_off=True).state == ("backing-off")
 
 
 @pytest.mark.unit
@@ -166,17 +146,7 @@ def test_state_parked_wins_over_backing_off() -> None:
     """Precedence: parked outranks backing-off — a lease cannot be both in practice, but
     the ranking still holds if it were."""
     lease = _lease_record()
-    assert LeaseActivity(lease, closed=False, parked=True, alive=False, stale=False, backing_off=True).state == (
-        "parked"
-    )
-
-
-@pytest.mark.unit
-def test_state_closed_wins_over_backing_off() -> None:
-    lease = _lease_record()
-    assert LeaseActivity(lease, closed=True, parked=False, alive=False, stale=False, backing_off=True).state == (
-        "closed"
-    )
+    assert LeaseActivity(lease, parked=True, alive=False, stale=False, backing_off=True).state == ("parked")
 
 
 # Liveness.stale — the staleness-boundary pin
@@ -537,9 +507,9 @@ def test_list_recent_appends_closed_leases_after_active(tmp_path) -> None:  # ty
 
     assert [a.lease.lease_id for a in activities] == ["lease_1", "lease_2"]
     active, closed = activities
+    assert isinstance(active, LeaseActivity)
     assert active.state == "running"
-    assert active.closed_at is None
-    assert active.closure_reason is None
+    assert isinstance(closed, ClosedLeaseActivity)
     assert closed.state == "closed"
     assert closed.closed_at == closed_at
     assert closed.closure_reason == "transitioned"
@@ -596,8 +566,9 @@ def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) ->
     activities = service.list_recent()
 
     assert len(activities) == 1
-    assert activities[0].environment_id is None
-    assert activities[0].workdir is None
+    assert isinstance(activities[0], ClosedLeaseActivity)
+    assert not hasattr(activities[0], "environment_id")
+    assert not hasattr(activities[0], "workdir")
 
 
 @pytest.mark.unit
