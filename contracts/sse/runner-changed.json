@@ -15,5 +15,17 @@
     "by": "operator",
     "reason": "maintenance window",
     "key": "runner_local_pause_facts:rlp_1"
+  },
+  "retired": {
+    "runner_id": "runner-a",
+    "kind": "retired",
+    "by": "operator",
+    "key": "runner_lifecycle_facts:1"
+  },
+  "token-revoked": {
+    "runner_id": "runner-a",
+    "kind": "token-revoked",
+    "by": "operator",
+    "key": "runner_token_revocations:1"
   }
 }

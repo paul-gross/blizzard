@@ -39,6 +39,8 @@ GATE_RESOLVE = Permission("gate:resolve")
 QUEUE_REORDER = Permission("queue:reorder")
 #: Pause/resume/enroll a runner.
 RUNNER_PAUSE = Permission("runner:pause")
+#: Retire/reinstate a runner, or revoke its token.
+RUNNER_RETIRE = Permission("runner:retire")
 #: Mint, edit (retire/enable), or otherwise author a workflow graph — also scope and
 #: routine authoring, the same authoring tier.
 GRAPH_EDIT = Permission("graph:edit")
@@ -70,7 +72,7 @@ _CONTRIBUTOR_PERMISSIONS: frozenset[Permission] = _GUEST_PERMISSIONS | frozenset
 #: ``admin`` adds fleet-identity/runner writes, graph-authoring, and user
 #: administration (the admin page, ``user:manage``) on top of ``contributor``.
 _ADMIN_PERMISSIONS: frozenset[Permission] = _CONTRIBUTOR_PERMISSIONS | frozenset(
-    {RUNNER_PAUSE, GRAPH_EDIT, USER_MANAGE, ANALYTICS_ADMIN}
+    {RUNNER_PAUSE, RUNNER_RETIRE, GRAPH_EDIT, USER_MANAGE, ANALYTICS_ADMIN}
 )
 
 #: ``superuser`` holds every permission that exists — in #91 that is exactly the

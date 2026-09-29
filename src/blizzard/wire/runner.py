@@ -124,6 +124,10 @@ class RunnerView(BaseModel):
     subscriptions: list[SubscriptionUsageView] = []
     # The runner's reported capability snapshot — every harness/tier it can execute right now.
     capabilities: list[RunnerCapability] = []
+    # Retired — `blizzard hub runner retire`, cleared by `reinstate`; when and by whom only while retired.
+    retired: bool = False
+    retired_at: str | None = None
+    retired_by: str | None = None
 
 
 class RunnerListResponse(BaseModel):
@@ -136,3 +140,29 @@ class RunnerPauseRequest(BaseModel):
     """Set a runner's pause brake — records who flipped it."""
 
     by: str = "operator"
+
+
+class RunnerRetireRequest(BaseModel):
+    """Retire a runner — ``force`` releases every chunk it still holds."""
+
+    by: str = "operator"
+    force: bool = False
+
+
+class RunnerLifecycleRequest(BaseModel):
+    """Reinstate a runner, or revoke its token — records who did it."""
+
+    by: str = "operator"
+
+
+class RunnerRetireResponse(BaseModel):
+    """The retired runner, plus every chunk the retire released."""
+
+    runner: RunnerView
+    released_chunk_ids: list[str] = []
+
+
+class RunnerTokenRevocationResponse(BaseModel):
+    """The runner after its token was revoked — still registered, now unenrolled."""
+
+    runner: RunnerView

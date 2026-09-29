@@ -136,3 +136,6 @@
   flex-wrap: wrap;
   gap: 4px;
 }
+.filter {
+  margin: 0 0 8px;
+}

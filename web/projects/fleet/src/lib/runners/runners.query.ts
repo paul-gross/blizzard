@@ -10,12 +10,19 @@ import { hubRunnersKey } from '../query-keys';
  * through TanStack Query and the generated hub client (bzh:generated-client).
  * The live-update service re-reads this on `runner-changed`; the poll is a backstop,
  * not the primary freshness path.
+ *
+ * Retired runners are excluded unless `includeRetired()` is true, so every consumer
+ * that passes nothing reads exactly what it did before. The include-retired read keys
+ * under {@link hubRunnersKey}, so a `runner-changed` invalidation re-reads both.
  */
-export function injectHubRunnersQuery() {
+export function injectHubRunnersQuery(includeRetired: () => boolean = () => false) {
   return injectQuery(() => ({
-    queryKey: hubRunnersKey,
+    queryKey: includeRetired() ? [...hubRunnersKey, 'include-retired'] : hubRunnersKey,
     queryFn: async (): Promise<RunnerView[]> => {
-      const { data, error } = await listRunnersApiRunnersGet({ throwOnError: false });
+      const { data, error } = await listRunnersApiRunnersGet({
+        query: includeRetired() ? { include_retired: true } : undefined,
+        throwOnError: false,
+      });
       if (error) throw error;
       return data?.runners ?? [];
     },

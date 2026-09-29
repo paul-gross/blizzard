@@ -76,10 +76,16 @@ class RunnerAuth:
 
     def demand(self) -> RunnerPrincipal | None:
         """The resolved principal, or ``None`` under ``warn``. Under ``enforce`` a
-        missing/malformed header or an unresolved token raises 401."""
+        missing/malformed header or an unresolved token raises 401. A **revoked** token
+        raises 401 under every mode — checked before :meth:`AuthMode.refuse` is consulted,
+        since ``warn`` would otherwise let it through as anonymous."""
         principal = self.principal
         if principal is not None:
             return principal
+        token = presented_bearer(self.request)
+        if token is not None and self.services.registry.is_token_revoked(TokenHash(token).hex):
+            _log.warning("revoked runner token presented", path=self.request.url.path)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="bearer token has been revoked")
         reason = (
             "missing or malformed Authorization header"
             if presented_bearer(self.request) is None

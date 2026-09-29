@@ -622,6 +622,8 @@ route_created = Table(
     Column("seq", Integer, nullable=False),
 )
 Index("ix_route_created_chunk_id", route_created.c.chunk_id)
+# A runner's held routes — retirement's by-runner holdings read.
+Index("ix_route_created_runner_id", route_created.c.runner_id)
 # (created_at, route_id) for newest-first bounded reads since a timestamp.
 Index("ix_route_created_created_at_route_id", route_created.c.created_at, route_created.c.route_id)
 
@@ -1163,6 +1165,28 @@ runner_pause_facts = Table(
     Column("paused", Boolean, nullable=False),  # paused derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
+)
+
+# Retirement — ``retired`` derives from the newest row; reinstate is a ``retired=False`` fact.
+runner_lifecycle_facts = Table(
+    "runner_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, ForeignKey("runner_registrations.runner_id"), nullable=False),
+    Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
+# Every revoked token hash, never cleared — a revoked token is refused, not merely unresolved.
+runner_token_revocations = Table(
+    "runner_token_revocations",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, ForeignKey("runner_registrations.runner_id"), nullable=False),
+    Column("token_hash", Text, nullable=False, index=True),
+    Column("revoked_at", UtcDateTime, nullable=False),
+    Column("revoked_by", String, nullable=False),
 )
 
 # The runner's *own* brake, as reported to us — a separate table because the

@@ -263,6 +263,24 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     expect(el.querySelector('[data-testid="vital-runners-up"]')?.textContent).toContain('2/3');
   });
 
+  it('leaves a retired runner out of the runners-up denominator', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/runners') {
+        return { runners: [...RUNNERS, { ...RUNNERS[2], runner_id: 'r4', retired: true }] };
+      }
+      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
+      if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
+      if (method === 'GET' && path === '/api/questions') return QUESTIONS;
+      return {};
+    });
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="vital-runners-up"]')?.textContent).toContain('2/3');
+  });
+
   it('renders the fleet spend-today total via cost-format/formatTokens', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);

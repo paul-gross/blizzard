@@ -73,7 +73,7 @@ export class GlanceBoard {
 
   private readonly chunks = computed<readonly ChunkSummary[]>(() => this.chunksQuery.data() ?? []);
   private readonly questions = computed(() => this.questionsQuery.data() ?? []);
-  private readonly runners = computed(() => this.runnersQuery.data() ?? []);
+  private readonly runners = computed(() => (this.runnersQuery.data() ?? []).filter((runner) => !runner.retired));
   private readonly now = injectNowSignal(60_000);
 
   /**

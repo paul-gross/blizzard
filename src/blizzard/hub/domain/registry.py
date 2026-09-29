@@ -1,21 +1,26 @@
 """Fleet-registry domain — runner registration, liveness, and the pause brake.
 
-Three things derive over the registry rather than being stored: **liveness** (``last_seen_at`` against a
-staleness threshold, clock-relative so it is computed at read time), **paused** (the newest appended
-pause/resume fact), and **external subscription usage** (independently by slug against its own
-wider threshold). ``token_hash`` is the one exception to facts-only: the row is already a mutable upsert."""
+Derived rather than stored: **liveness** (``last_seen_at`` against a staleness threshold, at read time),
+**paused** and **retired** (the newest appended fact), and **external subscription usage** (by slug, against
+its own wider threshold). ``token_hash`` is the one mutable exception; a revoked hash is kept as a fact."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import ActivityRow
 from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
+
+if TYPE_CHECKING:  # the chunk seams import this module's RunnerRegistration
+    from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
+    from blizzard.hub.domain.chunks.route import IReadChunkRouteRepository
+    from blizzard.hub.domain.detach import DetachService
 
 _log = get_logger("blizzard.hub.registry")
 
@@ -71,6 +76,10 @@ class RunnerRegistration:
     capabilities: tuple[RunnerCapability, ...] = ()
     #: The declared subscription roster — ``None`` for no roster, ``()`` for none declared.
     declared_subscriptions: tuple[DeclaredSubscription, ...] | None = None
+    #: Derived from the newest lifecycle fact; ``retired_at``/``retired_by`` populate only while retired.
+    retired: bool = False
+    retired_at: datetime | None = None
+    retired_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -288,7 +297,14 @@ class IReadRunnerRegistry(Protocol):
     """Read-only registry access — the ``GET /runners`` surface."""
 
     def get_runner(self, runner_id: str) -> RunnerRegistration | None: ...
-    def list_runners(self) -> list[RunnerRegistration]: ...
+    def list_runners(self, *, include_retired: bool = False) -> list[RunnerRegistration]:
+        """Every registration, oldest first — retired runners only when ``include_retired``."""
+        ...
+
+    def is_token_revoked(self, token_hash: str) -> bool:
+        """Whether ``token_hash`` was ever revoked — a revoked token is refused as revoked,
+        never merely left unresolved, since ``warn`` tolerates an unresolved one."""
+        ...
 
     def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
         """The reverse, hash-indexed lookup a presented bearer token resolves through — the
@@ -350,6 +366,16 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         the freshly-written ``runner_local_pause_facts.id`` (the activity-feed's key)."""
         ...
 
+    def record_lifecycle(self, runner_id: str, *, retired: bool, at: datetime, by: str) -> int:
+        """Append a retire/reinstate fact; ``retired`` derives from the newest. Returns the
+        freshly-written ``runner_lifecycle_facts.id`` — always writes, never a no-op."""
+        ...
+
+    def revoke_token(self, runner_id: str, *, at: datetime, by: str) -> int | None:
+        """Record the runner's current token hash as revoked and null it, in one transaction.
+        Returns the ``runner_token_revocations.id``, or ``None`` when no token was enrolled."""
+        ...
+
     def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
         """Overwrite the registration's bearer-token hash — a rotation, not a fact append.
         Re-enrolling replaces the hash in place, so the prior token stops resolving immediately. ``at``
@@ -375,11 +401,76 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         ...
 
 
-class FleetService:
-    """Register runners, refresh liveness, and set the declarative pause brake."""
+class RunnerRetired(Exception):
+    """The runner is retired — refused regardless of auth mode, keyed on its id."""
 
-    def __init__(self, *, registry: IWriteRunnerRegistry, clock: IClock, stale_after: timedelta = STALE_AFTER) -> None:
+    def __init__(self, runner_id: str, *, action: str) -> None:
+        super().__init__(f"runner {runner_id} is retired — {action} refused; `reinstate` it first")
+        self.runner_id = runner_id
+
+
+class RunnerHoldsRoutes(Exception):
+    """A retire without ``force`` found live routes — each held chunk and its environments."""
+
+    def __init__(self, runner_id: str, holdings: list[Route]) -> None:
+        held = "; ".join(f"{r.chunk_id} (environments: {', '.join(r.environment_ids) or 'none'})" for r in holdings)
+        super().__init__(f"runner {runner_id} holds {len(holdings)} chunk(s): {held} — retire with --force to release")
+        self.runner_id = runner_id
+        self.holdings = holdings
+
+
+class RunnerNotEnrolled(Exception):
+    """A token revocation targeted a runner with no enrolled token."""
+
+    def __init__(self, runner_id: str) -> None:
+        super().__init__(f"runner {runner_id} has no enrolled token to revoke")
+        self.runner_id = runner_id
+
+
+class RunnerNotRetired(Exception):
+    """A reinstate targeted a runner that is not retired."""
+
+    def __init__(self, runner_id: str) -> None:
+        super().__init__(f"runner {runner_id} is not retired")
+        self.runner_id = runner_id
+
+
+@dataclass(frozen=True)
+class ReleasedRoute:
+    """One route the retire release pass released — the chunk and its ``route_released.id``."""
+
+    chunk_id: str
+    released_id: int
+
+
+@dataclass(frozen=True)
+class RetireOutcome:
+    """What one retire wrote: ``fact_id`` is ``None`` on a re-run over an already-retired
+    runner, ``revocation_id`` ``None`` when no token was enrolled."""
+
+    fact_id: int | None
+    revocation_id: int | None
+    released: tuple[ReleasedRoute, ...]
+
+
+class FleetService:
+    """Register runners, refresh liveness, set the declarative pause brake, and retire."""
+
+    def __init__(
+        self,
+        *,
+        registry: IWriteRunnerRegistry,
+        routes: IReadChunkRouteRepository,
+        records: IReadChunkRecordRepository,
+        detach: DetachService,
+        clock: IClock,
+        stale_after: timedelta = STALE_AFTER,
+    ) -> None:
         self._registry = registry
+        # Retirement's holdings read and release pass — the hub's existing detach path.
+        self._routes = routes
+        self._records = records
+        self._detach = detach
         self._clock = clock
         self._stale_after = stale_after
 
@@ -396,9 +487,9 @@ class FleetService:
     ) -> bool:
         """Register (or refresh) a runner; returns True on a first registration.
 
-        ``env_capacity``, ``public_url``/``redirect_uris``, ``capabilities``, and
-        ``subscriptions`` are the runner's own reported facts, unconditionally overwritten
-        on every (re-)registration; absent values store as null/empty."""
+        The runner's reported facts (``env_capacity``, ``public_url``/``redirect_uris``,
+        ``capabilities``, ``subscriptions``) are overwritten on every registration; absent
+        values store as null/empty. Callers gate a retired runner with :meth:`refuse_retired`."""
         created = self._registry.upsert_registration(
             runner_id,
             workspace_id=workspace_id,
@@ -424,6 +515,70 @@ class FleetService:
     def heartbeat(self, runner_id: str) -> bool:
         """Refresh a runner's liveness; returns False if it is unregistered."""
         return self._registry.touch_last_seen(runner_id, at=self._clock.now())
+
+    def refuse_retired(self, registration: RunnerRegistration | None, *, action: str) -> None:
+        """Raise :class:`RunnerRetired` when the loaded registration is retired — the id-keyed
+        refusal a token-less caller under ``warn`` still meets. ``None`` (unregistered) passes."""
+        if registration is not None and registration.retired:
+            raise RunnerRetired(registration.runner_id, action=action)
+
+    def retire(self, registration: RunnerRegistration, *, by: str, force: bool) -> RetireOutcome:
+        """Record the fact and revoke the token first, so claims are refused from that instant,
+        then release every held route through ``DetachService``. A first retire without ``force``
+        refuses with :class:`RunnerHoldsRoutes`; a re-run writes no second fact and re-runs the
+        release pass, which also catches a claim that slipped past the pre-lock check."""
+        runner_id = registration.runner_id
+        if not registration.retired and not force:
+            holdings = self._routes.live_routes_of_runner(runner_id)
+            if holdings:
+                raise RunnerHoldsRoutes(runner_id, holdings)
+        now = self._clock.now()
+        fact_id = None
+        if not registration.retired:
+            fact_id = self._registry.record_lifecycle(runner_id, retired=True, at=now, by=by)
+        revocation_id = self._registry.revoke_token(runner_id, at=now, by=by)
+        released = tuple(self._release(route) for route in self._routes.live_routes_of_runner(runner_id))
+        outcome = RetireOutcome(
+            fact_id=fact_id, revocation_id=revocation_id, released=tuple(r for r in released if r is not None)
+        )
+        _log.info(
+            "runner retired",
+            runner_id=runner_id,
+            by=by,
+            force=force,
+            rerun=fact_id is None,
+            released=[r.chunk_id for r in outcome.released],
+        )
+        return outcome
+
+    def _release(self, route: Route) -> ReleasedRoute | None:
+        chunk = self._records.get(route.chunk_id)
+        if chunk is None:  # pragma: no cover - a routed chunk always has its record
+            return None
+        released_id = self._detach.release_held(chunk, runner_id=route.runner_id)
+        if released_id is None:  # released (or re-claimed elsewhere) since the holdings read
+            return None
+        return ReleasedRoute(chunk_id=route.chunk_id, released_id=released_id)
+
+    def reinstate(self, registration: RunnerRegistration, *, by: str) -> int:
+        """Record a ``retired=False`` fact, returning its id. The runner stays unenrolled —
+        its token was revoked at retire — so the operator enrolls it afresh."""
+        if not registration.retired:
+            raise RunnerNotRetired(registration.runner_id)
+        fact_id = self._registry.record_lifecycle(registration.runner_id, retired=False, at=self._clock.now(), by=by)
+        _log.info("runner reinstated", runner_id=registration.runner_id, by=by)
+        return fact_id
+
+    def revoke_token(self, registration: RunnerRegistration, *, by: str) -> int:
+        """Revoke the runner's current token, leaving it registered; returns the revocation id.
+        Refuses with :class:`RunnerNotEnrolled` when it holds none."""
+        if registration.token_hash is None:
+            raise RunnerNotEnrolled(registration.runner_id)
+        revocation_id = self._registry.revoke_token(registration.runner_id, at=self._clock.now(), by=by)
+        if revocation_id is None:  # revoked concurrently between the read and the write
+            raise RunnerNotEnrolled(registration.runner_id)
+        _log.info("runner token revoked", runner_id=registration.runner_id, by=by)
+        return revocation_id
 
     def set_paused(self, registration: RunnerRegistration, *, paused: bool, by: str) -> int:
         """Flip the fleet's brake for a registered runner, returning the freshly-written
@@ -477,9 +632,10 @@ class FleetService:
         unknown) before calling this."""
         return self._liveness(registration)
 
-    def list_with_liveness(self) -> list[RunnerLiveness]:
-        """Every registered runner with its derived liveness — the ``GET /runners`` view."""
-        return [self._liveness(r) for r in self._registry.list_runners()]
+    def list_with_liveness(self, *, include_retired: bool = False) -> list[RunnerLiveness]:
+        """Every registered runner with its derived liveness — the ``GET /runners`` view;
+        retired runners only when ``include_retired``."""
+        return [self._liveness(r) for r in self._registry.list_runners(include_retired=include_retired)]
 
     def _liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
         return RunnerLiveness.of(registration, now=self._clock.now(), threshold=self._stale_after)

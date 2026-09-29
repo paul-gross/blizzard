@@ -197,6 +197,7 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     TableWideAllowance("runner_registrations", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("runner_pause_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("runner_local_pause_facts", 200, _FLEET_CONFIG_REASON),
+    TableWideAllowance("runner_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("scopes", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("scope_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routines", 200, _FLEET_CONFIG_REASON),

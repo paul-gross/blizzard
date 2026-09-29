@@ -1797,6 +1797,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkRouteRepository, "load_all_routes"): lambda w: w.read.route.load_all_routes(),
     (IReadChunkRouteRepository, "routes_for"): lambda w: w.read.route.routes_for([w.chunk_route_a, w.chunk_route_b]),
     (IReadChunkRouteRepository, "runner_high_water"): lambda w: w.read.route.runner_high_water(HUB_RUNNER_ID),
+    (IReadChunkRouteRepository, "live_routes_of_runner"): lambda w: w.read.route.live_routes_of_runner(HUB_RUNNER_ID),
     (IReadChunkUsageRepository, "usage_total_since"): lambda w: w.read.usage.usage_total_since(_HUB_BASE),
     (IReadChunkWorkRefsRepository, "find_live_holder"): lambda w: w.read.work_refs.find_live_holder(
         WorkRef(source="default", ref="1001")
@@ -1883,6 +1884,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRunnerRegistry, "registration_for_token_hash"): lambda w: w.hub.services.registry.registration_for_token_hash(
         w.runner_token_hash
     ),
+    (IReadRunnerRegistry, "is_token_revoked"): lambda w: w.hub.services.registry.is_token_revoked(w.runner_token_hash),
     (IReadRunnerRegistry, "list_pause_facts_since"): lambda w: w.hub.services.registry.list_pause_facts_since(
         _HUB_BASE, limit=50
     ),

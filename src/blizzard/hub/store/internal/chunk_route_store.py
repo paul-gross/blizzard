@@ -58,6 +58,22 @@ class ChunkRouteStore:
         with self._store.read("routes_for") as conn:
             return self._routes(conn, ids)
 
+    def live_routes_of_runner(self, runner_id: str) -> list[Route]:
+        """See :meth:`~blizzard.hub.domain.chunks.route.IReadChunkRouteRepository.live_routes_of_runner` —
+        the chunks this runner ever routed, resolved through :meth:`_routes`, kept where the
+        live route is still this runner's."""
+        with self._store.read("live_routes_of_runner") as conn:
+            chunk_ids = [
+                row.chunk_id
+                for row in conn.execute(
+                    select(s.route_created.c.chunk_id).where(s.route_created.c.runner_id == runner_id).distinct()
+                ).all()
+            ]
+            if not chunk_ids:
+                return []
+            routes = self._routes(conn, chunk_ids)
+        return sorted((r for r in routes.values() if r.runner_id == runner_id), key=lambda r: r.chunk_id)
+
     def _routes(self, conn, chunk_ids: list[str] | None) -> dict[str, Route]:  # type: ignore[no-untyped-def]
         """:meth:`load_all_routes`/:meth:`routes_for`'s shared entry — ``chunk_ids=None``
         reads fleet-wide in one pass; otherwise batches through :func:`id_batches`

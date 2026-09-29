@@ -122,7 +122,10 @@ export type RunnerChangeKind =
   | 'resumed'
   | 'locally-paused'
   | 'locally-resumed'
-  | 'external-usage';
+  | 'external-usage'
+  | 'retired'
+  | 'reinstated'
+  | 'token-revoked';
 
 /**
  * The general rule behind every Activity feed drop: a frame belongs in the ring only when

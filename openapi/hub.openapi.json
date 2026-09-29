@@ -7055,6 +7055,18 @@
         "title": "RunnerFactBatch",
         "type": "object"
       },
+      "RunnerLifecycleRequest": {
+        "description": "Reinstate a runner, or revoke its token \u2014 records who did it.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "RunnerLifecycleRequest",
+        "type": "object"
+      },
       "RunnerListResponse": {
         "description": "The fleet registry \u2014 every registered runner with its liveness.",
         "properties": {
@@ -7172,6 +7184,44 @@
         "title": "RunnerRegistrationResponse",
         "type": "object"
       },
+      "RunnerRetireRequest": {
+        "description": "Retire a runner \u2014 ``force`` releases every chunk it still holds.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          },
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          }
+        },
+        "title": "RunnerRetireRequest",
+        "type": "object"
+      },
+      "RunnerRetireResponse": {
+        "description": "The retired runner, plus every chunk the retire released.",
+        "properties": {
+          "released_chunk_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Released Chunk Ids",
+            "type": "array"
+          },
+          "runner": {
+            "$ref": "#/components/schemas/RunnerView"
+          }
+        },
+        "required": [
+          "runner"
+        ],
+        "title": "RunnerRetireResponse",
+        "type": "object"
+      },
       "RunnerSubscriptionDeclaration": {
         "description": "One provider subscription the runner declares at registration \u2014 the join key\neverything else keys off. ``provider`` is stored but reaches no view; nothing reads\nit there yet.",
         "properties": {
@@ -7194,6 +7244,19 @@
           "provider"
         ],
         "title": "RunnerSubscriptionDeclaration",
+        "type": "object"
+      },
+      "RunnerTokenRevocationResponse": {
+        "description": "The runner after its token was revoked \u2014 still registered, now unenrolled.",
+        "properties": {
+          "runner": {
+            "$ref": "#/components/schemas/RunnerView"
+          }
+        },
+        "required": [
+          "runner"
+        ],
+        "title": "RunnerTokenRevocationResponse",
         "type": "object"
       },
       "RunnerView": {
@@ -7260,6 +7323,33 @@
           "registered_at": {
             "title": "Registered At",
             "type": "string"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "retired_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired At"
+          },
+          "retired_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired By"
           },
           "runner_id": {
             "title": "Runner Id",
@@ -15210,7 +15300,7 @@
     },
     "/api/fleet/routes": {
       "post": {
-        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nalready terminal ({done, stopped}), standing on an unmet prerequisite,\nor incompatible with the runner's stored capabilities, else the first node envelope.",
+        "description": "Claim a chunk; 403 if the runner is paused or retired at the hub, 409 if already claimed,\nalready terminal ({done, stopped}), standing on an unmet prerequisite,\nor incompatible with the runner's stored capabilities, else the first node envelope.",
         "operationId": "claim_route_api_fleet_routes_post",
         "requestBody": {
           "content": {
@@ -15252,7 +15342,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level; the ``subscriptions`` roster\nrides the same authenticated write. The hub never rejects a registration over its\nroster \u2014 it doubles as the heartbeat every tick.",
+        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth is checked at the router level. The hub never rejects a registration over\nits roster \u2014 it doubles as the heartbeat every tick. A retired runner is refused 403.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {
@@ -15337,7 +15427,7 @@
     },
     "/api/fleet/runners/{runner_id}/heartbeats": {
       "post": {
-        "description": "Refresh a runner's liveness \u2014 the slow runner-level heartbeat. Returns 204.",
+        "description": "Refresh a runner's liveness \u2014 the slow runner-level heartbeat. Returns 204; 403 when retired.",
         "operationId": "heartbeat_runner_api_fleet_runners__runner_id__heartbeats_post",
         "parameters": [
           {
@@ -17329,8 +17419,20 @@
     },
     "/api/runners": {
       "get": {
-        "description": "The fleet registry \u2014 every runner with derived liveness + paused state.",
+        "description": "The fleet registry \u2014 every runner with derived liveness + paused state; a retired\nrunner excluded by default, included and marked when ``include_retired``.",
         "operationId": "list_runners_api_runners_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -17341,6 +17443,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Runners",
@@ -17394,7 +17506,7 @@
     },
     "/api/runners/{runner_id}/enrollments": {
       "post": {
-        "description": "Mint (or rotate) ``runner_id``'s bearer token \u2014 the plaintext is returned once;\nthe store keeps only its sha256 hash from here on.\n\nRequires an existing registration (404 otherwise): enrollment is a deliberate act on\na known runner, never a trust-on-first-use grant to an unregistered name.",
+        "description": "Mint (or rotate) ``runner_id``'s bearer token \u2014 the plaintext is returned once.\n\nRequires an existing registration (404 otherwise), never a trust-on-first-use grant.\nA retired runner is refused 409: ``reinstate`` is the one reinstatement lever.",
         "operationId": "enroll_runner_api_runners__runner_id__enrollments_post",
         "parameters": [
           {
@@ -17488,6 +17600,59 @@
         ]
       }
     },
+    "/api/runners/{runner_id}/reinstate": {
+      "post": {
+        "description": "Reinstate a retired runner \u2014 it stays unenrolled until enrolled afresh; 409 when not retired.",
+        "operationId": "reinstate_runner_api_runners__runner_id__reinstate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reinstate Runner",
+        "tags": [
+          "runners"
+        ]
+      }
+    },
     "/api/runners/{runner_id}/resume": {
       "post": {
         "description": "Clear a runner's pause brake \u2014 it resumes claiming on its next pull.",
@@ -17536,6 +17701,112 @@
           }
         },
         "summary": "Resume Runner",
+        "tags": [
+          "runners"
+        ]
+      }
+    },
+    "/api/runners/{runner_id}/retire": {
+      "post": {
+        "description": "Retire a runner \u2014 its token is revoked and its claims and registrations refused;\n409 naming each held chunk unless ``force``, which releases them. Re-running on a\nretired runner re-runs the release pass.",
+        "operationId": "retire_runner_api_runners__runner_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRetireResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Runner",
+        "tags": [
+          "runners"
+        ]
+      }
+    },
+    "/api/runners/{runner_id}/token-revocations": {
+      "post": {
+        "description": "Revoke a runner's token \u2014 it stays registered and must be re-enrolled; 409 when unenrolled.",
+        "operationId": "revoke_runner_token_api_runners__runner_id__token_revocations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerTokenRevocationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Runner Token",
         "tags": [
           "runners"
         ]

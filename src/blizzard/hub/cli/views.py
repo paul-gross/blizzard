@@ -74,8 +74,18 @@ class RunnerRow:
             brakes.append(f"local — {reason}" if reason else "local")
         return f" [paused: {'+'.join(brakes)}]" if brakes else ""
 
+    @property
+    def retirement(self) -> str:  # ast-grep-ignore: bzh:property-delegates
+        """When and by whom a retired runner was retired; empty for a live one."""
+        if not self.row.get("retired"):
+            return ""
+        return f" [retired {self.row.get('retired_at') or '-'} by {self.row.get('retired_by') or '-'}]"
+
     def line(self) -> str:
-        return f"{self.row['runner_id']:<16} {self.liveness:<8} ws={self.row.get('workspace_id', '-')}{self.brake}"
+        return (
+            f"{self.row['runner_id']:<16} {self.liveness:<8} ws={self.row.get('workspace_id', '-')}"
+            f"{self.brake}{self.retirement}"
+        )
 
 
 @dataclass(frozen=True)

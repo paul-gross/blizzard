@@ -132,14 +132,15 @@ function toPaceBars(now: number, windows: readonly ExternalSubscriptionUsageWind
  * slot-bar numerator, and pace bars, derived once per registry query
  * (`bzh:frontend-formatters`).
  *
- * Returns only the shared reads and their fold; permission reads and pause
- * mutations are left to the caller.
+ * Retired runners are folded in only while `includeRetired()` is true. Returns only
+ * the shared reads and their fold; permission reads and pause mutations are left to
+ * the caller.
  */
-export function injectRunnerRows(): {
+export function injectRunnerRows(includeRetired: () => boolean = () => false): {
   readonly rows: () => readonly RunnerRow[];
   readonly state: () => KitAsyncStateValue;
 } {
-  const runnersQuery = injectHubRunnersQuery();
+  const runnersQuery = injectHubRunnersQuery(includeRetired);
   const chunksQuery = injectHubChunksQuery();
 
   const runners = computed<readonly RunnerView[]>(() => runnersQuery.data() ?? []);

@@ -4507,6 +4507,18 @@ export type RunnerFactBatch = {
 };
 
 /**
+ * RunnerLifecycleRequest
+ *
+ * Reinstate a runner, or revoke its token — records who did it.
+ */
+export type RunnerLifecycleRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
  * RunnerListResponse
  *
  * The fleet registry — every registered runner with its liveness.
@@ -4586,6 +4598,35 @@ export type RunnerRegistrationResponse = {
 };
 
 /**
+ * RunnerRetireRequest
+ *
+ * Retire a runner — ``force`` releases every chunk it still holds.
+ */
+export type RunnerRetireRequest = {
+    /**
+     * By
+     */
+    by?: string;
+    /**
+     * Force
+     */
+    force?: boolean;
+};
+
+/**
+ * RunnerRetireResponse
+ *
+ * The retired runner, plus every chunk the retire released.
+ */
+export type RunnerRetireResponse = {
+    /**
+     * Released Chunk Ids
+     */
+    released_chunk_ids?: Array<string>;
+    runner: RunnerView;
+};
+
+/**
  * RunnerSubscriptionDeclaration
  *
  * One provider subscription the runner declares at registration — the join key
@@ -4605,6 +4646,15 @@ export type RunnerSubscriptionDeclaration = {
      * Slug
      */
     slug: string;
+};
+
+/**
+ * RunnerTokenRevocationResponse
+ *
+ * The runner after its token was revoked — still registered, now unenrolled.
+ */
+export type RunnerTokenRevocationResponse = {
+    runner: RunnerView;
 };
 
 /**
@@ -4652,6 +4702,18 @@ export type RunnerView = {
      * Registered At
      */
     registered_at: string;
+    /**
+     * Retired
+     */
+    retired?: boolean;
+    /**
+     * Retired At
+     */
+    retired_at?: string | null;
+    /**
+     * Retired By
+     */
+    retired_by?: string | null;
     /**
      * Runner Id
      */
@@ -10234,9 +10296,23 @@ export type RoutineSweepsApiRoutinesRoutineIdSweepsGetResponse = RoutineSweepsAp
 export type ListRunnersApiRunnersGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
     url: '/api/runners';
 };
+
+export type ListRunnersApiRunnersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRunnersApiRunnersGetError = ListRunnersApiRunnersGetErrors[keyof ListRunnersApiRunnersGetErrors];
 
 export type ListRunnersApiRunnersGetResponses = {
     /**
@@ -10337,6 +10413,36 @@ export type PauseRunnerApiRunnersRunnerIdPausePostResponses = {
 
 export type PauseRunnerApiRunnersRunnerIdPausePostResponse = PauseRunnerApiRunnersRunnerIdPausePostResponses[keyof PauseRunnerApiRunnersRunnerIdPausePostResponses];
 
+export type ReinstateRunnerApiRunnersRunnerIdReinstatePostData = {
+    body: RunnerLifecycleRequest;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/runners/{runner_id}/reinstate';
+};
+
+export type ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReinstateRunnerApiRunnersRunnerIdReinstatePostError = ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors[keyof ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors];
+
+export type ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerView;
+};
+
+export type ReinstateRunnerApiRunnersRunnerIdReinstatePostResponse = ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses[keyof ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses];
+
 export type ResumeRunnerApiRunnersRunnerIdResumePostData = {
     body: RunnerPauseRequest;
     path: {
@@ -10366,6 +10472,66 @@ export type ResumeRunnerApiRunnersRunnerIdResumePostResponses = {
 };
 
 export type ResumeRunnerApiRunnersRunnerIdResumePostResponse = ResumeRunnerApiRunnersRunnerIdResumePostResponses[keyof ResumeRunnerApiRunnersRunnerIdResumePostResponses];
+
+export type RetireRunnerApiRunnersRunnerIdRetirePostData = {
+    body: RunnerRetireRequest;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/runners/{runner_id}/retire';
+};
+
+export type RetireRunnerApiRunnersRunnerIdRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireRunnerApiRunnersRunnerIdRetirePostError = RetireRunnerApiRunnersRunnerIdRetirePostErrors[keyof RetireRunnerApiRunnersRunnerIdRetirePostErrors];
+
+export type RetireRunnerApiRunnersRunnerIdRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerRetireResponse;
+};
+
+export type RetireRunnerApiRunnersRunnerIdRetirePostResponse = RetireRunnerApiRunnersRunnerIdRetirePostResponses[keyof RetireRunnerApiRunnersRunnerIdRetirePostResponses];
+
+export type RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostData = {
+    body: RunnerLifecycleRequest;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/runners/{runner_id}/token-revocations';
+};
+
+export type RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostError = RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostErrors[keyof RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostErrors];
+
+export type RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RunnerTokenRevocationResponse;
+};
+
+export type RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostResponse = RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostResponses[keyof RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostResponses];
 
 export type ListRunsApiRunsGetData = {
     body?: never;
