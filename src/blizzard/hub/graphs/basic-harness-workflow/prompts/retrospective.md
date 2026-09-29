@@ -21,8 +21,8 @@ that was pushed, not the merged sha — read each PR's own state rather than ass
 Per repo, check its PR's merge state from inside that repo's worktree so the query targets the right forge (on GitHub,
 `gh pr view --json state,mergedAt`), then test the PR merge commit's reachability, not the sha the newest declaration
 carries, with `git merge-base --is-ancestor <merged sha>
-origin/<base>` — `<base>` is the repo's recorded base branch; on GitHub, `gh pr view --json mergeCommit` gives the merged sha
-— exit 0 means reachable; comparing branch tips or log output answers a different question.
+origin/<base>` — `<base>` is the repo's recorded base branch; on GitHub, `gh pr view --json mergeCommit` gives the
+merged sha — exit 0 means reachable; comparing branch tips or log output answers a different question.
 
 Check whether the landing turned the base branch's own gate red separately, per repo, by querying the gate by the PR's
 merge commit rather than by branch. A completed red run is a real finding: raise it here and leave it for the standing
