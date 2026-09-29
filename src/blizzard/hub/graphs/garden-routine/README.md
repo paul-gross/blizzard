@@ -1,8 +1,8 @@
 # The packaged garden-routine graph
 
-The packaged copy of the prebaked plan artifact at `blizzard-product:/delivered/garden/artifacts/garden-routine/`. The plan
-froze when this shipped; a correction the graph needs to mint or to run lands here and is recorded below, never in the
-plan.
+The packaged copy of the prebaked plan artifact at `blizzard-product:/delivered/garden/artifacts/garden-routine/`. The
+plan froze when this shipped; a correction the graph needs to mint or to run lands here and is recorded below, never in
+the plan.
 
 Conventions for the `prompts/` tree are owned by the
 [prompt-authoring README](../advanced-development-workflow/README.md) — read it before adding or editing a node prompt.
@@ -28,6 +28,8 @@ Conventions for the `prompts/` tree are owned by the
   run-level facts.
 - **`survey.md` is condensed** to the packaged 4,000-byte node-prompt bar (`tests/test_prompt_byte_bars.py`); every rule
   survives, some rationale does not.
+- **`survey` fans out before it bails.** An over-large sweep is split across at most 10 subagent batches before the
+  survey may choose `excessive`.
 - **`deliver` authors a `failure` edge.** The plan left `garden_deliver`'s own nonzero-exit paths (a missing env var, a
   failed POST, an unrecognized response, a failed marker write) with no edge to route through, which deadlocks the chunk
   per `bzh:hub-node-outcome-protocol`. Routes to `propose`, which re-affirms the standing docket and retries; bounded by

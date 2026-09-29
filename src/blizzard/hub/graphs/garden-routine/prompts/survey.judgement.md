@@ -4,9 +4,10 @@ Report what the sweep produced.
 
 Choose `found` if the `survey` asset holds at least one candidate.
 
-Choose `excessive` if you stopped before enumerating because the scope is past what one pass can inventory, and the
-survey holds exactly one `excessive-scope` candidate. Do not choose it with an inventory attached: a bail-out and a
-partial list are different claims, and a submission making both is unreadable as either.
+Choose `excessive` if you stopped before enumerating because the scope is past what one pass can inventory, even fanned
+out across 10 subagent batches, and the survey holds exactly one `excessive-scope` candidate. Do not choose it with an
+inventory attached: a bail-out and a partial list are different claims, and a submission making both is unreadable as
+either.
 
 Choose `no-strategy` if you stopped before sweeping because the target's gardening-axes registry declares no entry for
 your routine's axis, and the survey holds exactly one `undeclared-axis` candidate and nothing else. Same rule as
