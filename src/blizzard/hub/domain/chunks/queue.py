@@ -11,14 +11,16 @@ from typing import Protocol
 class IReadChunkQueueRepository(Protocol):
     """Read-only chunk-queue access."""
 
-    def queue_positions(self) -> dict[str, float]:
-        """The newest explicit position per chunk, across both the ``ready`` queue and
-        the ``not_ready`` list — the order each list's peek honours."""
+    def queue_positions(self, chunk_ids: Sequence[str]) -> dict[str, float]:
+        """The newest explicit position per chunk among ``chunk_ids``, across both the
+        ``ready`` queue and the ``not_ready`` list — the order each list's peek honours.
+        Bounded by the candidates the caller ranks, never by the store's whole history
+        (``bzh:live-set-read``)."""
         ...
 
-    def promoted_ats(self) -> dict[str, datetime]:
-        """Each promoted chunk's ``chunk_promoted.promoted_at`` — the ready-queue's
-        fallback sort instant once a chunk has never had an explicit
+    def promoted_ats(self, chunk_ids: Sequence[str]) -> dict[str, datetime]:
+        """Each promoted chunk's ``chunk_promoted.promoted_at`` among ``chunk_ids`` — the
+        ready-queue's fallback sort instant once a chunk has never had an explicit
         position stamped, superseding a never-promoted chunk's own ``minted_at``."""
         ...
 

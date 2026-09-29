@@ -17,7 +17,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine, insert
 
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.chunks import FleetPulse
@@ -393,7 +393,7 @@ def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> N
     assert large_count < 40  # bounded by table count, not chunk count
 
 
-def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(tmp_path: Path) -> None:
+def test_fleet_pulse_view_calls_load_live_statuses_and_never_load_facts_or_list_all(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}])
     ingest(hub, [{"source": "default", "ref": "2"}])
@@ -401,12 +401,12 @@ def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(
     class _CountingFactsStore(ChunkFactsStore):
         def __init__(self, store, clock) -> None:  # type: ignore[no-untyped-def]
             super().__init__(store, clock)
-            self.load_all_facts_calls = 0
+            self.load_live_statuses_calls = 0
             self.load_facts_calls = 0
 
-        def load_all_facts(self):  # type: ignore[no-untyped-def]
-            self.load_all_facts_calls += 1
-            return super().load_all_facts()
+        def load_live_statuses(self):  # type: ignore[no-untyped-def]
+            self.load_live_statuses_calls += 1
+            return super().load_live_statuses()
 
         def load_facts(self, chunk_id: str):  # type: ignore[no-untyped-def]
             self.load_facts_calls += 1
@@ -427,7 +427,7 @@ def test_fleet_pulse_view_calls_load_all_facts_and_never_load_facts_or_list_all(
 
     view = FleetPulse(services).view()
 
-    assert counting_facts.load_all_facts_calls == 1
+    assert counting_facts.load_live_statuses_calls == 1
     assert counting_facts.load_facts_calls == 0
     assert counting_record.list_all_calls == 0
     assert view.ready == 2
@@ -460,16 +460,16 @@ def test_load_facts_for_of_no_ids_is_empty(tmp_path: Path) -> None:
     assert store.facts.load_facts_for([]) == {}
 
 
-def test_load_all_statuses_matches_load_all_facts_status_across_every_derived_status(tmp_path: Path) -> None:
+def test_load_live_statuses_matches_the_non_terminal_load_all_facts_statuses(tmp_path: Path) -> None:
     store, engine, clock = _store(tmp_path)
     _seed_fixture(store, engine, clock)
 
-    statuses = store.facts.load_all_statuses()
+    statuses = store.facts.load_live_statuses()
     bulk = store.facts.load_all_facts()
 
-    assert set(statuses) == set(_LIVE_CHUNK_IDS)
-    assert statuses == {chunk_id: facts.status() for chunk_id, facts in bulk.items()}
-    assert set(statuses.values()) == set(ChunkStatus)  # the fixture spans every derived status
+    expected = {chunk_id: facts.status() for chunk_id, facts in bulk.items() if facts.status() not in TERMINAL_STATUSES}
+    assert statuses == expected
+    assert set(statuses.values()) == set(ChunkStatus) - TERMINAL_STATUSES
 
 
 def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> None:
@@ -516,7 +516,7 @@ def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> Non
     assert loud.status() == baseline.status()
 
 
-def test_load_all_statuses_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
+def test_load_live_statuses_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
     small, small_engine, _small_clock = _store(tmp_path / "small")
@@ -528,21 +528,21 @@ def test_load_all_statuses_query_count_is_independent_of_fleet_size(tmp_path: Pa
         large.record.mint(Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=_T0))
         large.queue.record_promote(f"ch_{i}", at=_T0)
 
-    small_count = count_queries(small_engine, small.facts.load_all_statuses)
-    large_count = count_queries(large_engine, large.facts.load_all_statuses)
+    small_count = count_queries(small_engine, small.facts.load_live_statuses)
+    large_count = count_queries(large_engine, large.facts.load_live_statuses)
 
     assert small_count == large_count
     assert large_count < 40  # bounded by table count, not chunk count
 
 
-def test_load_all_statuses_reads_fewer_statements_than_load_all_facts(tmp_path: Path) -> None:
+def test_load_live_statuses_reads_fewer_statements_than_load_all_facts(tmp_path: Path) -> None:
     store, engine, clock = _store(tmp_path)
     _seed_fixture(store, engine, clock)
 
-    statuses_count = count_queries(engine, store.facts.load_all_statuses)
+    statuses_count = count_queries(engine, store.facts.load_live_statuses)
     all_facts_count = count_queries(engine, store.facts.load_all_facts)
 
-    # load_all_statuses skips every family status() never reaches (pr_opened, usage,
+    # load_live_statuses skips every family status() never reaches (pr_opened, usage,
     # landed_repos, delivery_landed, route_tokens_minted, hub_node_polls).
     assert statuses_count < all_facts_count
 

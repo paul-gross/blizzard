@@ -95,7 +95,7 @@ def test_chunk_lands_ready_carrying_the_routines_defaults(tmp_path: Path) -> Non
     facts = chunks.facts.load_facts(chunk.chunk_id)
     assert facts is not None
     assert facts.status() == ChunkStatus.READY
-    assert chunks.queue.queue_positions()[chunk.chunk_id] == 0.0
+    assert chunks.queue.queue_positions([chunk.chunk_id])[chunk.chunk_id] == 0.0
 
 
 def test_tail_position_is_whatever_the_caller_computed(tmp_path: Path) -> None:
@@ -118,7 +118,7 @@ def test_tail_position_is_whatever_the_caller_computed(tmp_path: Path) -> None:
         position=7.5,
     )
 
-    assert chunks.queue.queue_positions()[chunk.chunk_id] == 7.5
+    assert chunks.queue.queue_positions([chunk.chunk_id])[chunk.chunk_id] == 7.5
 
 
 def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:

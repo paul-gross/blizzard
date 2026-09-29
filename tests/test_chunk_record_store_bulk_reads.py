@@ -121,7 +121,7 @@ def test_list_ready_and_list_not_ready_filter_by_the_given_statuses(tmp_path: Pa
     store.queue.record_promote("ch_ready", at=_T0)
     _mint(store, "ch_not_ready")
 
-    statuses = store.facts.load_all_statuses()
+    statuses = store.facts.load_live_statuses()
 
     assert [c.chunk_id for c in store.record.list_ready(statuses=statuses)] == ["ch_ready"]
     assert [c.chunk_id for c in store.record.list_not_ready(statuses=statuses)] == ["ch_not_ready"]
@@ -132,7 +132,7 @@ def test_list_ready_with_statuses_issues_no_statement_against_the_facts_seam(tmp
     _mint(store, "ch_ready")
     store.queue.record_promote("ch_ready", at=_T0)
     _mint(store, "ch_not_ready")
-    statuses = store.facts.load_all_statuses()
+    statuses = store.facts.load_live_statuses()
 
     # The baseline: `list_all`'s own cost alone, with no facts read at all — supplying
     # `statuses` must not add a single statement beyond it.

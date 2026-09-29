@@ -211,12 +211,11 @@ class ChunkRecordStore:
         return self._listed_with_status(ChunkStatus.NOT_READY, statuses=statuses)
 
     def _listed_with_status(self, status: ChunkStatus, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
-        """:meth:`list_all` narrowed by ``statuses`` — the caller's own already-derived
-        fleet statuses, never this seam's own facts read. Reading the listing first
-        excludes a chunk deleted between the two reads, never mistaking it for
-        unwritten."""
-        chunks = self.list_all()
-        return [c for c in chunks if statuses.get(c.chunk_id) is status]
+        """The chunks ``statuses`` — the caller's own already-derived live fleet statuses,
+        never this seam's own facts read — names at ``status``, reconstituted by id
+        (``bzh:bulk-reconstitution``) so the read is bounded by the live set. An id deleted
+        since the caller derived ``statuses`` is silently dropped by :meth:`get_many`."""
+        return list(self.get_many([chunk_id for chunk_id, derived in statuses.items() if derived is status]).values())
 
     def mint(self, chunk: Chunk) -> None:
         with self._store.write("mint") as conn:

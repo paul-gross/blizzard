@@ -39,7 +39,7 @@ class ChunkWorkRefsStore:
         """Reads the fleet's statuses, then the pointer rows; a row whose chunk carries
         no status — minted in the gap between the two reads, or ephemeral — is
         excluded."""
-        statuses = self._facts.load_all_statuses()
+        statuses = self._facts.load_live_statuses()
         with self._store.read("live_work_refs") as conn:
             ephemeral = ephemeral_ids(conn)
             rows = conn.execute(

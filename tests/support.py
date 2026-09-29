@@ -1067,6 +1067,22 @@ def count_queries(engine: Engine, fn: Callable[[], object]) -> int:
     return len(statements)
 
 
+def count_rows_read(engine: Engine, fn: Callable[[], object]) -> int:
+    """How many rows ``fn``'s ``SELECT`` statements return on ``engine`` — the row-volume
+    counterpart of :func:`count_queries`. A statement count stays flat while a read still
+    fetches (and derives) a row per chunk ever minted; this is what a live-set read asserts
+    is flat as only the terminal-chunk count grows (``bzh:live-set-read``). Each captured
+    ``SELECT`` is re-counted on a separate connection with its exact parameters."""
+    with capture_statements(engine) as statements:
+        fn()
+    total = 0
+    with engine.connect() as conn:
+        for statement, parameters in statements:
+            if statement.lstrip().upper().startswith("SELECT"):
+                total += conn.exec_driver_sql(f"SELECT count(*) FROM ({statement})", parameters).scalar_one()
+    return total
+
+
 def explain_query_plan(engine: Engine, statement: str, parameters: Any) -> Sequence[sa.Row[Any]]:
     """Runs ``EXPLAIN QUERY PLAN`` for one captured statement, re-executed with its exact
     captured parameters."""

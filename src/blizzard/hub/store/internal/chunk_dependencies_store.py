@@ -7,6 +7,7 @@ row rather than reviving the old one. Timestamps arrive already stamped
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Connection, select, update
@@ -18,6 +19,7 @@ from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.work import DependencyEdge
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import conn_of, record_grouped_row_conn
 
 
@@ -43,6 +45,20 @@ class ChunkDependenciesStore:
             .order_by(s.chunk_dependencies.c.declared_at, s.chunk_dependencies.c.dependency_id)
         ).all()
         return [_edge(row) for row in rows]
+
+    def standing_edges_for_dependents(self, dependent_chunk_ids: Sequence[str]) -> list[DependencyEdge]:
+        edges: list[DependencyEdge] = []
+        with self._store.read("standing_edges_for_dependents") as conn:
+            for batch in id_batches(dependent_chunk_ids):
+                rows = conn.execute(
+                    select(s.chunk_dependencies).where(
+                        s.chunk_dependencies.c.released_at.is_(None)
+                        & s.chunk_dependencies.c.dependent_chunk_id.in_(batch)
+                    )
+                ).all()
+                edges.extend(_edge(row) for row in rows)
+        # (declared_at, dependency_id) — `list_standing_edges`'s explicit total order, restored across batches.
+        return sorted(edges, key=lambda e: (e.declared_at, e.dependency_id))
 
     def standing_edge(self, dependent_chunk_id: str, prerequisite_chunk_id: str) -> DependencyEdge | None:
         with self._store.read("standing_edge") as conn:

@@ -28,8 +28,9 @@ def tail_position(
     ready = record.list_ready(statuses=statuses)
     if not ready:
         return 0.0
-    positions = queue.queue_positions()
-    promoted_ats = queue.promoted_ats()
+    ready_ids = [c.chunk_id for c in ready]
+    positions = queue.queue_positions(ready_ids)
+    promoted_ats = queue.promoted_ats(ready_ids)
     return max(QueueService._effective_position(c, positions, promoted_ats) for c in ready) + 1.0
 
 

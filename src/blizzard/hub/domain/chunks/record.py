@@ -38,7 +38,7 @@ class IReadChunkRecordRepository(Protocol):
 
     def list_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """The ready queue's own candidate set, bucketed by ``statuses`` — the caller's
-        own already-derived fleet statuses (``load_all_statuses()``), trusted as given
+        own already-derived live fleet statuses (``load_live_statuses()``), trusted as given
         with no re-verification against a fresh facts read; a caller passing a stale map
         can see a chunk bucketed by a status it has since moved past."""
         ...

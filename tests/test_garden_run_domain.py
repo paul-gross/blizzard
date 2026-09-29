@@ -92,7 +92,7 @@ class _FakeChunkFacts:
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         return self.load_facts_for(chunk_ids)
 
-    def load_all_statuses(self) -> dict[str, ChunkStatus]:
+    def load_live_statuses(self) -> dict[str, ChunkStatus]:
         return {chunk_id: f.status() for chunk_id, f in self.facts.items()}
 
 

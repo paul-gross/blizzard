@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import FLEET_VIEW, QUEUE_REORDER
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
@@ -72,10 +72,15 @@ def _other_list(list_: QueueList) -> QueueList:
 
 
 def _blocked_markings(services: HubServices, statuses: Mapping[str, ChunkStatus]) -> dict[str, list[str]]:
-    """Every currently-blocked dependent's unmet prerequisites, from one bulk
-    standing-edges read joined against the caller's own already-derived ``statuses``
-    (``bzh:dependency-inversion``) — no facts read of its own, bulk or per-chunk."""
-    return derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
+    """Every currently-blocked dependent's unmet prerequisites. ``statuses`` is the caller's
+    live map (``bzh:live-set-read``), so standing edges are read only for its pre-claim
+    dependents, and a prerequisite it lacks — finished, so excluded — is resolved by id
+    rather than read as unmet (``bzh:bulk-reconstitution``)."""
+    pre_claim = [chunk_id for chunk_id, status_ in statuses.items() if status_ in PRE_CLAIM_STATUSES]
+    edges = services.chunks.dependencies.standing_edges_for_dependents(pre_claim)
+    absent = sorted({e.prerequisite_chunk_id for e in edges} - statuses.keys())
+    resolved = {chunk_id: facts.status() for chunk_id, facts in services.chunks.facts.status_facts_for(absent).items()}
+    return derive_blocked_prerequisites(edges, {**statuses, **resolved})
 
 
 def _refuse(
@@ -249,7 +254,7 @@ def get_queue(
 ) -> QueuePageView:
     """The hub-ordered ready queue, read-only and keyset-paginated
     — honours reorder/replace + grouping."""
-    statuses = services.chunks.facts.load_all_statuses()
+    statuses = services.chunks.facts.load_live_statuses()
     try:
         page = services.queue.page(QueueList.READY, statuses=statuses, cursor=cursor, limit=limit)
     except MalformedCursor as exc:
@@ -266,7 +271,7 @@ def replace_queue(
     Resolves every named id against the current ready set: ``409`` names the first id
     that is not ready, ``422`` a duplicate id. An unnamed ready chunk keeps its relative
     order, appended after the named ones."""
-    statuses = services.chunks.facts.load_all_statuses()
+    statuses = services.chunks.facts.load_live_statuses()
     _replace(QueueList.READY, request.chunk_ids, services, statuses)
     # A position write changes no chunk's status, so the pre-write `statuses` still
     # holds for the re-render — no second derivation.
@@ -282,7 +287,7 @@ def reposition_queue(
     Resolves both ids against the current ready set: ``409`` names either one if it is
     not ready, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves the chunk to
     the top of the queue."""
-    statuses = services.chunks.facts.load_all_statuses()
+    statuses = services.chunks.facts.load_live_statuses()
     _reposition(QueueList.READY, request.chunk_id, request.after_chunk_id, services, statuses)
     # A position write changes no chunk's status, so the pre-write `statuses` still
     # holds for the re-render — no second derivation.
@@ -343,7 +348,7 @@ def get_backlog(
 ) -> BacklogPageView:
     """The hub-ordered ``not_ready`` list, read-only and keyset-paginated
     — an operator triage surface, requiring ``QUEUE_REORDER`` not ``FLEET_VIEW``."""
-    statuses = services.chunks.facts.load_all_statuses()
+    statuses = services.chunks.facts.load_live_statuses()
     try:
         page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit)
     except MalformedCursor as exc:
@@ -360,7 +365,7 @@ def replace_backlog(
     Resolves every named id against the current ``not_ready`` set: ``409`` names the
     first id that is not ``not_ready``, ``422`` a duplicate id. An unnamed chunk keeps
     its relative order, appended after the named ones."""
-    statuses = services.chunks.facts.load_all_statuses()
+    statuses = services.chunks.facts.load_live_statuses()
     _replace(QueueList.NOT_READY, request.chunk_ids, services, statuses)
     # A position write changes no chunk's status, so the pre-write `statuses` still
     # holds for the re-render — no second derivation.
@@ -376,7 +381,7 @@ def reposition_backlog(
     Resolves both ids against the current ``not_ready`` set: ``409`` names either one if
     it is not ``not_ready``, ``422`` rejects a self-anchor. ``after_chunk_id=null`` moves
     the chunk to the top of the backlog."""
-    statuses = services.chunks.facts.load_all_statuses()
+    statuses = services.chunks.facts.load_live_statuses()
     _reposition(QueueList.NOT_READY, request.chunk_id, request.after_chunk_id, services, statuses)
     # A position write changes no chunk's status, so the pre-write `statuses` still
     # holds for the re-render — no second derivation.

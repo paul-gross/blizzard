@@ -118,7 +118,7 @@ _ADAPTER_CASES = [
     _AdapterCase(
         "ChunkQueueStore",
         lambda store: ChunkQueueStore(store, FixedClock(_NOW)),
-        lambda a: a.queue_positions(),
+        lambda a: a.queue_positions(["ch_a"]),
         "queue_positions",
     ),
     _AdapterCase(
