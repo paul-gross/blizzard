@@ -46,7 +46,7 @@ class ValidationResult:
     warnings: list[str] = field(default_factory=list)
 
     @property
-    def ok(self) -> bool:
+    def ok(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """True when no error rejects the definition (warnings still mint)."""
         return not self.errors
 
@@ -347,7 +347,7 @@ class Reachability:
         return cls(doc.entry, set(edges), edges)
 
     @property
-    def warnings(self) -> list[str]:
+    def warnings(self) -> list[str]:  # ast-grep-ignore: bzh:property-delegates
         if self.entry not in self.node_names:
             return []  # an entry error already fired; reachability is meaningless
         warnings = [

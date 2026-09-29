@@ -20,7 +20,7 @@ class HostDirectory:
     dir_option: str
 
     @property
-    def path(self) -> str:
+    def path(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The directory to use — a ``click.UsageError`` on a command-line tie that
         disagrees (ranked per ``src/blizzard/cli/param_rank.py``)."""
         if (

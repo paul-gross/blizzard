@@ -117,7 +117,7 @@ class ArtifactRow:
         return cls(kind=ArtifactKind.ASSET, data=artifact.content, repo=None, forge=None, **common)
 
     @property
-    def artifact(self) -> Artifact:
+    def artifact(self) -> Artifact:  # ast-grep-ignore: bzh:property-delegates
         """Uncompress back to the typed artifact (lossless)."""
         provenance = Provenance(chunk_id=self.chunk_id, node_id=self.node_id, epoch=self.epoch)
         if self.kind is ArtifactKind.GIT_COMMIT:

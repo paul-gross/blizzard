@@ -29,7 +29,7 @@ class ArtifactEntry:
     artifact: dict
 
     @property
-    def summary(self) -> dict:
+    def summary(self) -> dict:  # ast-grep-ignore: bzh:property-delegates
         content = self.artifact.get("content")
         summary = {k: v for k, v in self.artifact.items() if k != "content"}
         summary["bytes"] = len(content.encode("utf-8")) if content is not None else None

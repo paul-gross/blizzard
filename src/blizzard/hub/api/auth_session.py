@@ -41,7 +41,7 @@ class PresentedSession:
     request: Request
 
     @property
-    def id_hash(self) -> str | None:
+    def id_hash(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         """The digest to look the session up by, or ``None`` when none was presented."""
         session_id = self.request.cookies.get(_SESSION_COOKIE_NAME) or presented_bearer(self.request)
         return None if session_id is None else SessionId(session_id).hash

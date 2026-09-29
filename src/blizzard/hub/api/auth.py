@@ -40,7 +40,7 @@ class AuthMode:
         return cls(request.app.state.config.runner_auth_mode)
 
     @property
-    def enforcing(self) -> bool:
+    def enforcing(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.value == RUNNER_AUTH_ENFORCE
 
     def refuse(self, *, status_code: int, detail: str, event: str, **fields: object) -> None:
@@ -63,7 +63,7 @@ class RunnerAuth:
         return cls(request, services, AuthMode.of(request))
 
     @property
-    def principal(self) -> RunnerPrincipal | None:
+    def principal(self) -> RunnerPrincipal | None:  # ast-grep-ignore: bzh:property-delegates
         """The presented token resolved to its runner, or ``None`` when the header is
         missing/malformed or the token does not resolve — no mode logic, no rejection."""
         token = presented_bearer(self.request)

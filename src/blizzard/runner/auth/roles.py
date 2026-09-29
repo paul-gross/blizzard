@@ -29,7 +29,7 @@ class LocalRole:
     hub_role: str
 
     @property
-    def role(self) -> Role:
+    def role(self) -> Role:  # ast-grep-ignore: bzh:property-delegates
         if self.config.auth_superuser is not None and self.username == self.config.auth_superuser:
             return Role.SUPERUSER
         overrides = dict(self.config.auth_users)

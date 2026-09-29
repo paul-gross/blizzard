@@ -51,7 +51,7 @@ class SessionLabel:
     escalation: dict
 
     @property
-    def text(self) -> str:
+    def text(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         pool = self.escalation.get("session_name")
         config = ", ".join(str(v) for v in (self.escalation.get("model"), self.escalation.get("effort")) if v)
         if not pool and not config:

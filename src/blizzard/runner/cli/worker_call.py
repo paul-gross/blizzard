@@ -29,7 +29,7 @@ class Problem:
     response: httpx.Response
 
     @property
-    def detail(self) -> str:
+    def detail(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         try:
             body = self.response.json()
         except ValueError:

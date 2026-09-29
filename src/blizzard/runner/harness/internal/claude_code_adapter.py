@@ -105,22 +105,22 @@ class ResultEnvelope:
         return str(self.fields.get("result", ""))
 
     @property
-    def usage(self) -> Mapping[str, Any] | None:
+    def usage(self) -> Mapping[str, Any] | None:  # ast-grep-ignore: bzh:property-delegates
         usage = self.fields.get("usage")
         return usage if isinstance(usage, dict) else None
 
     @property
-    def model(self) -> str | None:
+    def model(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         model = self.fields.get("model")
         return model if isinstance(model, str) and model else None
 
     @property
-    def cost_usd(self) -> float | None:
+    def cost_usd(self) -> float | None:  # ast-grep-ignore: bzh:property-delegates
         cost = self.fields.get("total_cost_usd")
         return float(cost) if isinstance(cost, int | float) else None
 
     @property
-    def cost_scope_tokens(self) -> int | None:
+    def cost_scope_tokens(self) -> int | None:  # ast-grep-ignore: bzh:property-delegates
         """The tokens ``total_cost_usd`` was charged for, summed across every model the
         envelope's ``modelUsage`` breaks out — sub-models the top-level ``usage`` omits
         included, since the cost figure covers them too. ``None`` when the envelope

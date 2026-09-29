@@ -25,6 +25,17 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - One exemption stands, at `ClaimService.claim` (`src/blizzard/hub/domain/claim.py`), reasoned at the site with
     `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
 
+- **`bzh:property-delegates`** (`rules/property-delegates.yml`) — a property body only delegates. The rule's own prose
+  home is `blizzard-context:/standards/python.md#a-property-body-only-delegates-bzhproperty-delegates`; this file states
+  none of that prose, only what the rule mechanically checks.
+  - Scoped to `src/blizzard/**`.
+  - Matches a function decorated with `@property`, `@cached_property`, `@functools.cached_property`, or
+    `@<name>.setter` / `@<name>.deleter` — alone or stacked — whose body holds, at any depth, an `if`, conditional
+    expression, `match`, comprehension `if`, `and`/`or`/`not`, or comparison. A plain method and a lone
+    `@staticmethod`/`@classmethod` are unmatched.
+  - Every site that predates the rule is recorded debt, allowlisted by a trailing `# ast-grep-ignore: bzh:property-delegates`
+    on its `def` line. Under `--error=unused-suppression` the list only shrinks.
+
 - **`bzh:subscriptions-no-write`** (`rules/subscriptions-no-write.yml`) — blizzard never opens a subscription credential
   file for writing: the vendor CLI owns its own lock, atomic write, and refresh-token rotation, and a second writer
   risks corrupting the file mid-refresh or invalidating the login it just renewed.

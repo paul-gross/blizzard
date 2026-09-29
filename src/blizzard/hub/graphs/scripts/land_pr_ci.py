@@ -85,7 +85,7 @@ class Route:
         return cls(pull.mergeable_state, merged=pull.merged, verdict=verdict)
 
     @property
-    def decision(self) -> str:
+    def decision(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         if self.merged:
             return _PUSH
         if self.mergeable_state == "dirty":
@@ -128,12 +128,12 @@ class Verdict:
         )
 
     @property
-    def failing(self) -> list[dict[str, Any]]:
+    def failing(self) -> list[dict[str, Any]]:  # ast-grep-ignore: bzh:property-delegates
         runs = self.check_runs if isinstance(self.check_runs, list) else []
         return [run for run in runs if self.terminal(run)]
 
     @property
-    def decision(self) -> str:
+    def decision(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         return _FAILED if self.failing else _WAIT
 
     @property
@@ -142,7 +142,7 @@ class Verdict:
         return bool(self.check_runs)
 
     @property
-    def green(self) -> bool:
+    def green(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """The merge-eligibility bar: at least one check run, and every one of them
         completed with a conclusion in `_GREEN_CONCLUSIONS` — a degraded or empty read is
         never green."""

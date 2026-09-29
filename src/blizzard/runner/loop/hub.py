@@ -63,7 +63,7 @@ class RouteClaimOutcome:
     denied_incompatible: RouteClaimIncompatibleDenial | None = None
 
     @property
-    def won(self) -> bool:
+    def won(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.claimed is not None
 
 

@@ -1,0 +1,104 @@
+id: bzh:property-delegates
+valid:
+  # A property that only reads or delegates.
+  - |
+    class Lease:
+        @property
+        def state(self) -> str:
+            return self._derive_state()
+  - |
+    class Lease:
+        @property
+        def name(self) -> str:
+            return self.record.name
+  # mutmut mutates a lone @staticmethod or @classmethod, so branching there is not this rule's concern.
+  - |
+    class Lease:
+        @staticmethod
+        def pick(flag: bool) -> int:
+            return 1 if flag else 2
+  - |
+    class Lease:
+        @classmethod
+        def pick(cls, flag: bool) -> int:
+            if flag:
+                return 1
+            return 2
+  # A plain method with branches is the delegate shape itself.
+  - |
+    class Lease:
+        def _derive_state(self) -> str:
+            if self.closed and not self.alive:
+                return "closed"
+            return "running"
+invalid:
+  - |
+    class Lease:
+        @property
+        def state(self) -> str:
+            if self.closed:
+                return "closed"
+            return "running"
+  - |
+    class Lease:
+        @property
+        def state(self) -> str:
+            return "closed" if self.closed else "running"
+  - |
+    class Lease:
+        @property
+        def state(self) -> str:
+            match self.kind:
+                case "a":
+                    return "x"
+                case _:
+                    return "y"
+  - |
+    class Lease:
+        @property
+        def live(self) -> list[int]:
+            return [x for x in self.items if x]
+  - |
+    class Lease:
+        @property
+        def ready(self) -> bool:
+            return self.a or self.b
+  - |
+    class Lease:
+        @property
+        def idle(self) -> bool:
+            return not self.busy
+  - |
+    class Lease:
+        @property
+        def unset(self) -> bool:
+            return self.pid is None
+  - |
+    class Lease:
+        @cached_property
+        def state(self) -> str:
+            return "a" if self.x else "b"
+  - |
+    class Lease:
+        @functools.cached_property
+        def state(self) -> str:
+            return "a" if self.x else "b"
+  - |
+    class Lease:
+        @state.setter
+        def state(self, value: str) -> None:
+            if value:
+                self._state = value
+  - |
+    class Lease:
+        @state.deleter
+        def state(self) -> None:
+            if self._state:
+                del self._state
+  # Stacked with another decorator, the property still puts the body out of mutmut's reach.
+  - |
+    class Lease:
+        @override
+        @property
+        def state(self) -> str:
+            return "a" if self.x else "b"

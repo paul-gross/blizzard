@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:property-delegates
+language: Python
+severity: error
+message: >-
+  A property body only delegates
+  (blizzard-context:/standards/python.md#a-property-body-only-delegates-bzhproperty-delegates)
+  — move the branch, boolean operator, or comparison into a plain method or function the property returns.
+files:
+  - src/blizzard/**
+rule:
+  all:
+    - kind: function_definition
+    # mutmut skips every decorated function but a lone @staticmethod/@classmethod,
+    # so a property-family decorator is what puts a body out of its reach.
+    - inside:
+        kind: decorated_definition
+        has:
+          kind: decorator
+          regex: ^@(property|cached_property|functools\.cached_property|[\w.]+\.(setter|deleter))\s*$
+    - has:
+        field: body
+        has:
+          stopBy: end
+          any:
+            - kind: if_statement
+            - kind: conditional_expression
+            - kind: match_statement
+            - kind: if_clause
+            - kind: boolean_operator
+            - kind: not_operator
+            - kind: comparison_operator

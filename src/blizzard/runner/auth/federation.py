@@ -85,14 +85,14 @@ class HumanLane:
     request: Request
 
     @property
-    def gated(self) -> bool:
+    def gated(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """Whether the hub offers an IdP surface to bounce to (:class:`HubAuthModeCache`) — ``None``
         on the store-free app resolves to *ungated*, matching the hermetic default's authless posture."""
         cache: HubAuthModeCache | None = self.request.app.state.hub_auth_mode
         return cache is not None and cache.enabled()
 
     @property
-    def session(self) -> RunnerSession | None:
+    def session(self) -> RunnerSession | None:  # ast-grep-ignore: bzh:property-delegates
         """The presented session, or ``None`` when this lane is gated and none validly rode along.
         Two cases grant the implicit identity outright, whatever cookie came with them: a
         **unix-socket peer** (``request.client is None``, whose access control is the socket file's
@@ -144,7 +144,7 @@ class Bounce:
         return ReturnTo(self.request.cookies.get(_BOUNCE_RETURN_COOKIE)).safe
 
     @property
-    def policy(self) -> tuple[Literal["lax", "none"], bool]:
+    def policy(self) -> tuple[Literal["lax", "none"], bool]:  # ast-grep-ignore: bzh:property-delegates
         """``SameSite``/``Secure``: ``None`` + ``Secure`` wherever a browser will accept ``Secure`` (an
         https or loopback origin), so the cookie survives the cross-site ``form_post`` callback; ``Lax``
         elsewhere, where a ``Secure`` cookie cannot be held at all (pinned by

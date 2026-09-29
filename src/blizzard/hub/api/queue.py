@@ -211,7 +211,7 @@ class MatchedPeek:
         return cls(entry)
 
     @property
-    def view(self) -> QueuePeekResponse:
+    def view(self) -> QueuePeekResponse:  # ast-grep-ignore: bzh:property-delegates
         if self.entry is None:
             return QueuePeekResponse(entries=[])
         chunk = self.entry.chunk

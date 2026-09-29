@@ -35,7 +35,7 @@ class AllowlistedEnv:
         return cls(tuple(passthrough), tuple(path_prepend))
 
     @property
-    def variables(self) -> dict[str, str]:
+    def variables(self) -> dict[str, str]:  # ast-grep-ignore: bzh:property-delegates
         names = set(BASE_ALLOWLIST_VARS) | set(self.passthrough)
         env = {name: os.environ[name] for name in names if name in os.environ}
         env.update((k, v) for k, v in os.environ.items() if k.startswith(LOCALE_PREFIX))

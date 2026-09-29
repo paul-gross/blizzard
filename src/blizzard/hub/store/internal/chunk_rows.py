@@ -76,7 +76,7 @@ class QuestionQuery:
     question, since ``answer_deliveries`` is append-only with no per-question uniqueness."""
 
     @property
-    def select(self):  # type: ignore[no-untyped-def]
+    def select(self):  # ast-grep-ignore: bzh:property-delegates  # type: ignore[no-untyped-def]
         earliest_delivery = (
             select(
                 s.answer_deliveries.c.question_id.label("question_id"),

@@ -20,7 +20,7 @@ class SpawnCwd:
     fallback_workdir: str | None
 
     @property
-    def path(self) -> str | None:
+    def path(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         return self.workspace_root or self.fallback_workdir
 
     @staticmethod

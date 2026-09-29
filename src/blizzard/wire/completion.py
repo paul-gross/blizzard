@@ -77,7 +77,7 @@ class Coverage:
     artifacts: list[SubmittedArtifact]
 
     @property
-    def satisfied_names(self) -> set[str]:
+    def satisfied_names(self) -> set[str]:  # ast-grep-ignore: bzh:property-delegates
         """The ``produces:`` names these artifacts explicitly satisfy — an artifact with
         ``attached=True``, or a ``GIT_COMMIT`` artifact. A name present only as
         the judgement-assessment fallback is excluded (``test_produces_coverage_agreement``)."""
@@ -123,7 +123,7 @@ class ChecksGate:
     check_results: Sequence[_HasPassed]
 
     @property
-    def violated(self) -> bool:
+    def violated(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """``True`` iff a ``requires_checks`` choice is being taken while any check is red —
         the one shared home for the predicate, guarded by
         ``tests/test_checks_gate_agreement.py``. An ungated choice is never violated; a node

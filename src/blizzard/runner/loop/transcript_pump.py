@@ -136,7 +136,7 @@ class TranscriptPump:
         return resolve_record_max_bytes(self.ctx)
 
     @property
-    def _chunk_max_bytes(self) -> int:
+    def _chunk_max_bytes(self) -> int:  # ast-grep-ignore: bzh:property-delegates
         """The configured per-chunk budget, or the module default. Widened for a
         backfill window: a re-ship spends this budget a second time over the same chunk."""
         configured = self.ctx.config.transcript_chunk_max_bytes

@@ -89,7 +89,7 @@ class Slug:
     handle: str
 
     @property
-    def text(self) -> str:
+    def text(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """Lowercase, disallowed chars collapsed to ``-``, trimmed — falling back to
         ``user`` for a handle that slugifies to nothing (one made entirely of symbols)."""
         slug = _SLUG_DISALLOWED.sub("-", self.handle.strip().lower()).strip("-")

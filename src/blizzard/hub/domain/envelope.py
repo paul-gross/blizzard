@@ -81,7 +81,7 @@ class Arrival:
         return cls(graph.edge_for_choice(from_node.node_id, choice))
 
     @property
-    def addendum(self) -> str | None:
+    def addendum(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         return self.edge.prompt_addendum if self.edge is not None else None
 
 
@@ -137,7 +137,7 @@ class Envelope:
     entered_by_restart: bool = False
 
     @property
-    def prompt(self) -> str | None:
+    def prompt(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         prompt = self.node.prompt
         if self.arrival_addendum:
             prompt = f"{prompt}\n\n{self.arrival_addendum}" if prompt else self.arrival_addendum
@@ -147,7 +147,7 @@ class Envelope:
         return prompt
 
     @property
-    def required_artifacts(self) -> str:
+    def required_artifacts(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The generated table appended to the pre-prompt: one line per ``produces:``
         entry naming its kind and the fleet-protocol verb that declares it, or ``""``. Never
         authored app or toolchain knowledge (``bzh:app-agnostic-graphs``); ``#``-prefixed so a
@@ -173,7 +173,7 @@ class Envelope:
         return "\n".join(lines)
 
     @property
-    def judgement_prompt(self) -> str | None:
+    def judgement_prompt(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         """The node's **authored** judgement prose only — the elicitation tail naming the choice set
         is generated at delivery, not baked in here. ``None`` at a node with no choices."""
         if not self.node.choices:
@@ -181,7 +181,7 @@ class Envelope:
         return self.node.judgement_prompt
 
     @property
-    def config(self) -> NodeConfig:
+    def config(self) -> NodeConfig:  # ast-grep-ignore: bzh:property-delegates
         session = EffectiveSession.of(self.chunk, self.graph, self.node)
         node = self.node
         return NodeConfig(

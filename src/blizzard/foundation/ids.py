@@ -86,7 +86,7 @@ class Id:
         return f"{self.prefix}_{self.ulid}"
 
     @property
-    def minted_at(self) -> datetime | None:
+    def minted_at(self) -> datetime | None:  # ast-grep-ignore: bzh:property-delegates
         """The UTC instant this id was minted, decoded from its leading 48 timestamp
         bits; ``None`` when a character is outside the Crockford alphabet."""
         millis = 0

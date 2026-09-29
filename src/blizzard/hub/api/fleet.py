@@ -173,7 +173,7 @@ class MigrationTargets:
     follow_latest_default: bool
 
     @property
-    def cross_graph(self) -> Graph | None:
+    def cross_graph(self) -> Graph | None:  # ast-grep-ignore: bzh:property-delegates
         """What a cross-graph migration edge names, resolved by name — ``None`` when the edge
         is not cross-graph, names no enabled graph, or is missing outright. Pinned by
         ``tests/test_migration_apply.py::test_an_unresolvable_cross_graph_target_escalates_to_needs_human``."""
@@ -186,7 +186,7 @@ class MigrationTargets:
         return self.services.graphs.get_enabled_by_name(edge.target_graph)
 
     @property
-    def intended(self) -> Graph | None:
+    def intended(self) -> Graph | None:  # ast-grep-ignore: bzh:property-delegates
         """The chunk's standing migration intent, resolved by id — ``None`` when none is set,
         the target was never minted, or it has since been retired, which leaves the intent set (pinned by
         ``tests/test_intended_migration_apply.py::test_forced_target_retired_at_consult_is_skipped``)."""
@@ -199,7 +199,7 @@ class MigrationTargets:
         return target
 
     @property
-    def follow_latest(self) -> Graph | None:
+    def follow_latest(self) -> Graph | None:  # ast-grep-ignore: bzh:property-delegates
         """The newer same-name mint a follow-latest chunk drifts to — ``None`` when an explicit
         :attr:`intended` wins outright, when the effective policy resolves ``false`` (the graph's own
         tri-state, else the hub default), or when the name resolves to nothing or to no newer mint."""

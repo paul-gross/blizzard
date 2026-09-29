@@ -87,7 +87,7 @@ class WorkSourceEntry:
         return WorkSourceRegistry(built, annotators, closers, editors)
 
     @property
-    def token(self) -> str:
+    def token(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         env = self.config.token_env
         if env not in os.environ:
             raise ConfigError(f"work_source {self.config.name!r} names token_env {env!r}, which is unset")
@@ -110,11 +110,11 @@ class GithubEntry(WorkSourceEntry):
     DEFAULT_API_BASE = "https://api.github.com"
 
     @property
-    def api_base(self) -> str:
+    def api_base(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         return self.config.api_base or self.DEFAULT_API_BASE
 
     @property
-    def web_base(self) -> str:
+    def web_base(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The provider's web origin from its API base — GitHub-adapter knowledge.
 
         Two unrelated derivations for one vendor — an ``api.`` host prefix for public GitHub,

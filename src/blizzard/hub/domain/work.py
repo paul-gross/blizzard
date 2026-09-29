@@ -235,7 +235,7 @@ class DependencyEdge:
     released_by: str | None = None
 
     @property
-    def standing(self) -> bool:
+    def standing(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """``True`` while the edge is unreleased."""
         return self.released_at is None
 
@@ -689,7 +689,7 @@ class DecisionRow:
     docket: list[DocketEntry] = field(default_factory=list)
 
     @property
-    def resolved(self) -> bool:
+    def resolved(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.resolved_choice is not None
 
 
@@ -1074,7 +1074,7 @@ class RouteHistory:
         return cls(facts.routes_created, facts.routes_released, facts.route_tokens_minted)
 
     @property
-    def newest(self) -> RouteCreatedFact | None:
+    def newest(self) -> RouteCreatedFact | None:  # ast-grep-ignore: bzh:property-delegates
         """The newest ``route.created`` fact still live, or ``None`` if released.
 
         The single tie-break route liveness resolves against, ``(timestamp, seq)``, where
@@ -1089,7 +1089,7 @@ class RouteHistory:
         return newest_created
 
     @property
-    def newest_token(self) -> RouteTokenMintedFact | None:
+    def newest_token(self) -> RouteTokenMintedFact | None:  # ast-grep-ignore: bzh:property-delegates
         """The chunk's live route capability token, or ``None`` if unclaimed/released.
 
         The newest one minted at or after :attr:`newest`'s own ``seq`` — that lower bound
