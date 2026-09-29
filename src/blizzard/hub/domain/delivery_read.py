@@ -63,29 +63,45 @@ class DeliveryRead:
     def of(cls, facts: ChunkFacts, sources: DeliverySources) -> DeliveryRead:
         prs = {(p.repo, p.number): DeliveryPr(p.repo, p.number, p.url) for p in facts.pr_opened}
         landed = dict(sources.legacy_landed)
-        # Epoch and artifact id settle a re-entry's reference for the same repo.
+        script_prs: dict[str, tuple[str, int]] = {}
+        script_epochs: dict[tuple[str, int], int] = {}
+        external_epochs: set[int] = set()
+        # Epoch and artifact id settle replacement references for the same repo.
         for row in sorted(sources.markers, key=lambda r: (r.epoch, r.artifact_id)):
             if row.name.startswith("merged/"):
                 landed[row.name.removeprefix("merged/")] = row.data.strip()
+            elif row.name == "awaiting-external-merge":
+                external_epochs.add(row.epoch)
             elif row.name.startswith("delivery-pr/"):
-                repo = row.name.removeprefix("delivery-pr/")
                 try:
                     payload = json.loads(row.data)
                 except ValueError:
                     continue
                 if (
                     isinstance(payload, dict)
-                    and payload.get("repo") == repo
+                    and isinstance(payload.get("repo"), str)
                     and isinstance(payload.get("number"), int)
                     and isinstance(payload.get("url"), str)
                 ):
-                    prs[(repo, payload["number"])] = DeliveryPr(repo, payload["number"], payload["url"])
-        open_prs = [p for p in prs.values() if (p.repo, p.number) not in sources.closed and p.repo not in landed]
+                    repo, number = payload["repo"], payload["number"]
+                    if row.name not in {f"delivery-pr/{repo}", f"delivery-pr/{repo}/{number}"}:
+                        continue
+                    prs[(repo, number)] = DeliveryPr(repo, number, payload["url"])
+                    script_prs[repo] = (repo, number)
+                    script_epochs[(repo, number)] = row.epoch
+        open_prs = [
+            p
+            for p in prs.values()
+            if (p.repo, p.number) not in sources.closed
+            and p.repo not in landed
+            and ((p.repo, p.number) not in script_epochs or script_prs[p.repo] == (p.repo, p.number))
+        ]
         # A script-created PR is reviewable, not an external merge wait. Only
         # historical PR facts (or the explicitly authored marker) signal that wait.
-        external = any(
-            (p.repo, p.number) not in sources.closed and p.repo not in landed for p in facts.pr_opened
-        ) or any(row.name == "awaiting-external-merge" for row in sources.markers)
+        open_keys = {(p.repo, p.number) for p in open_prs}
+        external = any((p.repo, p.number) in open_keys for p in facts.pr_opened) or any(
+            script_epochs.get(key) in external_epochs for key in open_keys
+        )
         closed_prs = [p for p in prs.values() if p not in open_prs]
         rows = [
             LandedRepo(

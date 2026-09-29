@@ -385,11 +385,11 @@ class PullRequest:
     def _record(cls, pull: PullRequest) -> PullRequest:
         """Persist the PR identity before a script can wait, reject or merge it.
 
-        The hub marker callback is idempotent within an epoch; a retry after a lost
-        response or a crash records the same reference again without opening a new PR.
+        The hub marker callback is idempotent per PR within an epoch; a retry
+        records the same reference, while a replacement PR gets its own marker.
         """
         pull.run.markers.post(
-            f"{_PR_MARKER_PREFIX}{pull.bare_repo}",
+            f"{_PR_MARKER_PREFIX}{pull.bare_repo}/{pull.number}",
             json.dumps({"repo": pull.bare_repo, "number": pull.number, "url": pull.url}),
         )
         return pull

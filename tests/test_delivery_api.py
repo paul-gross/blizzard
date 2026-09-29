@@ -71,6 +71,32 @@ def test_delivery_survives_reread_and_partial_multi_repo_land(tmp_path: Path) ->
         assert not page["awaiting_external_merge"]
 
 
+def test_replacement_pr_is_open_and_previous_pr_is_closed_in_list_and_detail(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
+    with hub.engine.begin() as conn:
+        _marker(
+            conn,
+            chunk_id,
+            "delivery-pr/acme/one/3",
+            '{"repo":"acme/one","number":3,"url":"http://forge/acme/one/pull/3"}',
+            1,
+        )
+        _marker(
+            conn,
+            chunk_id,
+            "delivery-pr/acme/one/4",
+            '{"repo":"acme/one","number":4,"url":"http://forge/acme/one/pull/4"}',
+            2,
+        )
+    page = hub.client.get("/api/chunks").json()["chunks"][0]
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    for view in (page, detail):
+        assert [p["number"] for p in view["open_prs"]] == [4]
+        assert [p["number"] for p in view["closed_prs"]] == [3]
+        assert not view["awaiting_external_merge"]
+
+
 def test_delivery_marker_read_only_touches_page_ids_at_two_fleet_sizes(tmp_path: Path) -> None:
     counts = []
     for size in (4, 20):

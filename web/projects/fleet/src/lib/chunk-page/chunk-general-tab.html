@@ -1,5 +1,5 @@
 <div class="general" data-testid="chunk-general-tab">
-  @if (detail().open_prs?.length || detail().landed_repos?.length || detail().awaiting_external_merge) {
+  @if (detail().open_prs?.length || detail().closed_prs?.length || detail().landed_repos?.length || detail().awaiting_external_merge) {
     <fleet-kit-panel class="section" data-testid="section-delivery" label="delivery">
       <fleet-chunk-delivery [detail]="detail()" />
     </fleet-kit-panel>

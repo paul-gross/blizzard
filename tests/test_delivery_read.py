@@ -73,3 +73,32 @@ def test_authored_external_merge_marker_requires_a_still_open_pr() -> None:
     assert not DeliveryRead.of(
         ChunkFacts(minted=True), DeliverySources(sources.markers, frozenset({("acme/one", 3)}))
     ).awaiting_external_merge
+
+
+def test_replacement_pr_in_same_epoch_closes_first_reference_without_a_closure_fact() -> None:
+    sources = DeliverySources(
+        markers=[
+            marker("delivery-pr/acme/one", '{"repo":"acme/one","number":3,"url":"http://forge/acme/one/pull/3"}'),
+            marker("delivery-pr/acme/one/4", '{"repo":"acme/one","number":4,"url":"http://forge/acme/one/pull/4"}'),
+        ]
+    )
+    view = DeliveryRead.of(ChunkFacts(minted=True), sources)
+    assert [p.number for p in view.open_prs] == [4]
+    assert [p.number for p in view.closed_prs] == [3]
+    assert view.awaiting_external_merge is False
+
+
+def test_old_external_merge_signal_does_not_label_a_later_auto_pr_as_human_wait() -> None:
+    sources = DeliverySources(
+        markers=[
+            marker("delivery-pr/acme/one/3", '{"repo":"acme/one","number":3,"url":"http://forge/acme/one/pull/3"}'),
+            marker("awaiting-external-merge", "human review"),
+            marker(
+                "delivery-pr/acme/one/4", '{"repo":"acme/one","number":4,"url":"http://forge/acme/one/pull/4"}', epoch=2
+            ),
+        ]
+    )
+    view = DeliveryRead.of(ChunkFacts(minted=True), sources)
+    assert [p.number for p in view.open_prs] == [4]
+    assert [p.number for p in view.closed_prs] == [3]
+    assert view.awaiting_external_merge is False

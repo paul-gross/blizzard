@@ -318,10 +318,30 @@ def test_clean_pr_waits_while_its_checks_are_still_pending(
     assert _last_line(capsys) == "pending"
     assert not any(url.endswith("/merge") for url in _urls(calls, "PUT")), "a clean-but-not-green PR must not merge"
     assert any(
-        body is not None and body["name"] == f"delivery-pr/{_REPO}"
+        body is not None and body["name"] == f"delivery-pr/{_REPO}/1"
         for method, url, body in calls
         if method == "POST" and url == _CALLBACK_URL
     ), "PR identity must be durable before the CI wait returns"
+
+
+def test_replacement_pr_has_a_distinct_idempotent_marker_in_the_same_epoch() -> None:
+    names: list[str] = []
+
+    def callback(method: str, url: str, **kwargs: Any) -> tuple[int, Any]:
+        names.append(kwargs["body"]["name"])
+        return 200, {}
+
+    run = land_common.LandRun(
+        forge_url="http://forge",
+        base_branch="main",
+        commits=[],
+        already=set(),
+        markers=land_common.MarkerWriter(_CALLBACK_URL, _MARKER_TOKEN, callback),
+    )
+    for number in (1, 1, 2):
+        pull = land_common.PullRequest(run, _REPO, number, {"html_url": f"http://forge/{_REPO}/pull/{number}"})
+        land_common.PullRequest._record(pull)
+    assert names == [f"delivery-pr/{_REPO}/1", f"delivery-pr/{_REPO}/1", f"delivery-pr/{_REPO}/2"]
 
 
 def test_clean_merge_body_requests_a_merge_commit(

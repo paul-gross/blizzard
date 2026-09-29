@@ -63,6 +63,18 @@ describe('delivery links real Chromium shell sweep', () => {
           expect(rect.right, `${link.textContent} overflows ${width}px`).toBeLessThanOrEqual(width + 1);
           expect(rect.left).toBeGreaterThanOrEqual(-1);
         }
+        const closedOnly: ChunkDetail = {
+          ...detail, open_prs: [], closed_prs: [pr], landed_repos: [], awaiting_external_merge: false,
+        };
+        dock.componentRef.setInput('detail', closedOnly);
+        general.componentRef.setInput('detail', closedOnly);
+        await Promise.all([dock.whenStable(), general.whenStable()]);
+        const closedLinks = host.querySelectorAll<HTMLAnchorElement>('[data-testid="delivery-closed-pr-link"]');
+        expect(closedLinks, 'closed-only delivery must remain visible in both detail views').toHaveLength(2);
+        for (const link of closedLinks) {
+          expect(link.href).toBe(pr.url);
+          expect(link.textContent).toContain('Closed PR #42');
+        }
       } finally {
         host.remove();
         fixtures.forEach((fixture) => fixture.destroy());
