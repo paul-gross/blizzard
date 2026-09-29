@@ -53,6 +53,8 @@ class RunnerRegistrationRequest(BaseModel):
     capabilities: list[RunnerCapability] = []
     #: The declared subscription roster — ``None`` for no roster, ``[]`` for none declared.
     subscriptions: list[RunnerSubscriptionDeclaration] | None = None
+    #: The node names this runner holds for a human decision — its own configuration, reported not enforced by the hub.
+    gates: list[str] = []
 
 
 class RunnerRegistrationResponse(BaseModel):
@@ -128,6 +130,8 @@ class RunnerView(BaseModel):
     retired: bool = False
     retired_at: str | None = None
     retired_by: str | None = None
+    # The node names the runner declared it holds for a human decision; empty when it imposes none.
+    gates: list[str] = []
 
 
 class RunnerListResponse(BaseModel):

@@ -73,12 +73,13 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         at: datetime,
         artifacts: list[ArtifactRow],
         proposals: list[WorkItemProposalRow],
+        imposed_by_runner_id: str | None,
     ) -> None:
         """Open a gate decision, committing any step artifacts and proposals atomically.
 
         A graph gate passes neither (they landed with the arriving transition); a
-        runner-config gate carries the gated step's artifacts and proposals here, exactly
-        where the step's transition would have written them."""
+        runner-config gate carries them here. ``imposed_by_runner_id`` names the runner
+        whose configuration imposed the gate — ``None`` for a graph gate."""
         ...
 
     def record_decision_resolution(

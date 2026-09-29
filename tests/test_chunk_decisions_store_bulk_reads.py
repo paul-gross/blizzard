@@ -55,6 +55,7 @@ def _record_decision(
     store: ChunkStores, chunk_id: str, decision_id: str, proposals: list[WorkItemProposalRow], *, at: datetime = _T0
 ) -> None:
     store.decisions.record_decision(
+        imposed_by_runner_id=None,
         decision_id=decision_id,
         chunk_id=chunk_id,
         node_id="nd_1",

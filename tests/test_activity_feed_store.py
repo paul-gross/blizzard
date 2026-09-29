@@ -173,6 +173,7 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
 def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     store.decisions.record_decision(
+        imposed_by_runner_id=None,
         decision_id="dec_1",
         chunk_id="ch_1",
         node_id="nd_gate",
@@ -192,6 +193,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
 def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
     store.decisions.record_decision(
+        imposed_by_runner_id=None,
         decision_id="dec_1",
         chunk_id="ch_1",
         node_id="nd_gate",

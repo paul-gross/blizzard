@@ -902,6 +902,7 @@ def register_runner(
         redirect_uris=tuple(request.redirect_uris),
         capabilities=capabilities,
         subscriptions=subscriptions,
+        gates=tuple(request.gates),
     )
     services.events.publish_runner_changed(request.runner_id, kind="registered")
     return RunnerRegistrationResponse(runner_id=request.runner_id, first_registration=first)

@@ -226,6 +226,7 @@ class ChunkDecisionsStore:
         at: datetime,
         artifacts: list[ArtifactRow],
         proposals: list[WorkItemProposalRow],
+        imposed_by_runner_id: str | None,
     ) -> None:
         payload = json.dumps([{"name": c.name, "description": c.description} for c in choices])
         with self._store.write("record_decision") as conn:
@@ -238,6 +239,7 @@ class ChunkDecisionsStore:
                     epoch=epoch,
                     choices=payload,
                     submitted_at=at,
+                    imposed_by_runner_id=imposed_by_runner_id,
                 )
             )
             for row in artifacts:
@@ -350,6 +352,7 @@ class ChunkDecisionsStore:
             resolved_at=resolution.resolved_at if resolution is not None else None,
             transitioned=transitioned,
             docket=docket,
+            imposed_by_runner_id=row.imposed_by_runner_id,
         )
 
     @staticmethod

@@ -134,6 +134,7 @@ def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
         retired=r.retired,
         retired_at=iso_utc(r.retired_at) if r.retired_at is not None else None,
         retired_by=r.retired_by,
+        gates=list(r.gates),
     )
 
 

@@ -70,6 +70,8 @@ class DecisionView(BaseModel):
     resolved_at: str | None = None
     transitioned: bool = False
     docket: list[DocketEntryView] = []
+    #: The runner whose configuration imposed this gate; ``None`` when the graph declared it.
+    imposed_by_runner_id: str | None = None
 
 
 class OpenDecisionsResponse(BaseModel):

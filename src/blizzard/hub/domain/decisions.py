@@ -134,6 +134,7 @@ class DecisionService:
             proposals=self._proposal_rows(
                 chunk, node, submission.epoch, submission.proposals, runner_id=submission.runner_id
             ),
+            imposed_by_runner_id=submission.runner_id,
         )
         return DecisionSubmitResult(
             response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`"),

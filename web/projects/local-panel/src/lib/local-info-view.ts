@@ -46,6 +46,7 @@ export class LocalInfoView {
       { label: 'last flush', value: this.lastFlushLabel(), testid: 'hub-last-flush' },
       { label: 'buffered', value: `${v.hub.buffer_depth} events`, testid: 'hub-buffered' },
       { label: 'agents', value: `${v.capacities.used}/${v.capacities.max_agents} slots` },
+      { label: 'gates', value: v.gates?.join(', ') || 'none', testid: 'hub-gates' },
       { label: 'loop', template: loopValue },
     ];
   }

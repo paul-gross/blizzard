@@ -181,6 +181,31 @@ describe('ChunkAwaitingHuman', () => {
     expect(el.querySelector('[data-testid="open-question"]')).toBeNull();
   });
 
+  it('reads a graph-declared gate as declared by the graph', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="decision-origin"]')?.textContent?.trim()).toBe('declared by the graph');
+    expect(el.querySelector('[data-testid="decision-origin-runner"]')).toBeNull();
+  });
+
+  it('names the runner whose configuration imposed the gate', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...WAITING_DECISION_DETAIL,
+      decision: { ...WAITING_DECISION_DETAIL.decision, imposed_by_runner_id: 'r-claude' },
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="decision-origin"]')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'gated by runner r-claude (runner config)',
+    );
+    expect(el.querySelector('[data-testid="decision-origin-runner"]')?.textContent?.trim()).toBe('r-claude');
+  });
+
   it('withholds the answer input and option chips without question:answer', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);

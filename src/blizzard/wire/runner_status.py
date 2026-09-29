@@ -51,6 +51,8 @@ class RunnerStatusView(BaseModel):
     capacities: CapacitiesView
     hub: HubConnectivityView
     last_tick_at: str | None
+    #: The node names this runner's own loaded configuration holds for a human decision.
+    gates: list[str] = []
 
 
 class EnvironmentView(BaseModel):

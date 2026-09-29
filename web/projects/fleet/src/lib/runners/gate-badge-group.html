@@ -1,0 +1,14 @@
+@if (gates().length > 0) {
+  <div class="gates" data-testid="runner-gates">
+    <span class="gates-label">Gates:</span>
+    <ul class="gate-list">
+      @for (gate of gates(); track gate) {
+        <li>
+          <fleet-kit-badge data-testid="runner-gate-badge" variant="soft" tone="waiting" [attr.data-gate]="gate">
+            {{ gate }}
+          </fleet-kit-badge>
+        </li>
+      }
+    </ul>
+  </div>
+}

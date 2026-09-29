@@ -458,6 +458,23 @@ def test_a_real_runners_registration_carries_every_declared_subscription(tmp_pat
         assert [s["slug"] for s in view] == ["probe"]
 
 
+def test_a_real_runners_registration_carries_the_gates_it_imposes(tmp_path: Path) -> None:
+    """The mock hub's view echoes the node names the real runner's config gates."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        config = dataclasses.replace(
+            _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), gates=("build", "review")
+        )
+
+        _drive(config, fenced, ticks=1)
+
+        assert hub.get(f"/api/fleet/runners/{config.runner_id}").json()["gates"] == ["build", "review"]
+
+
 def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(tmp_path: Path) -> None:
     """The stopped-chunk lease-abandon backstop, driven over a real hub response rather than ``FakeHub``."""
     bin_dir = require_mock_fleet()

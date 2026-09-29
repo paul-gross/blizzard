@@ -1275,6 +1275,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_decision_1, "1006", at=_ht(42))
     _mint(chunk_decision_2, "1007", at=_ht(43))
     write.decisions.record_decision(
+        imposed_by_runner_id=None,
         decision_id="dec_hub_1",
         chunk_id=chunk_decision_1,
         node_id=build_node.node_id,
@@ -1301,6 +1302,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         ],
     )
     write.decisions.record_decision(
+        imposed_by_runner_id=None,
         decision_id="dec_hub_2",
         chunk_id=chunk_decision_2,
         node_id=build_node.node_id,

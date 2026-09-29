@@ -148,6 +148,21 @@ const MULTI_HARNESS_ROW: RunnerRow = {
   ],
 };
 
+const GATED_ROW: RunnerRow = {
+  runner_id: 'rn_gated',
+  workspace_id: 'ws_a',
+  registered_at: NOW,
+  last_seen_at: NOW,
+  online: true,
+  hub_paused: false,
+  locally_paused: false,
+  claims: [],
+  used: 0,
+  subscriptionPaces: [],
+  capabilities: [{ harness_id: 'claude_code', version: null, tiers: [], default: true, available: true }],
+  gates: ['build', 'review', 'deliver-to-master', 'a-node-with-a-rather-long-name-to-force-wrapping'],
+};
+
 const EMPTY_SAMPLE_ROW: RunnerRow = {
   runner_id: 'rn_empty_sample',
   workspace_id: 'ws_a',
@@ -535,6 +550,42 @@ describe('runner registry pace bars layout shell sweep (web:shell-sweep, blizzar
       expect(root.querySelector('[data-testid="runner-toggle"]')).not.toBeNull();
       expect(root.querySelector('[data-runner-slot-bar="rn_multi_harness"]')).not.toBeNull();
       expect(root.querySelector('[data-runner="rn_multi_harness"] [data-testid="runner-claim"]')).not.toBeNull();
+
+      expect(
+        panel.scrollWidth,
+        `panel overflows horizontally at 390px (${panel.scrollWidth} > ${panel.clientWidth})`,
+      ).toBeLessThanOrEqual(panel.clientWidth);
+    } finally {
+      root.remove();
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    }
+
+    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it('keeps a runner imposing several gates inside the panel with no page errors or horizontal overflow at ~390px', async () => {
+    const pageErrors: string[] = [];
+    const onError = (e: ErrorEvent) => pageErrors.push(e.message);
+    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+
+    const fixture = await render([GATED_ROW]);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(390, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const panel = root.querySelector<HTMLElement>('[data-testid="runner-panel"]')!;
+      const gates = root.querySelectorAll<HTMLElement>('[data-runner="rn_gated"] [data-testid="runner-gate-badge"]');
+      expect(gates).toHaveLength(4);
+      for (const gate of gates) {
+        expect(gate.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
+      }
 
       expect(
         panel.scrollWidth,

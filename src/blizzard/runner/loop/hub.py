@@ -142,11 +142,13 @@ class IHubClient(IChunkStatusReader, Protocol):
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
         subscriptions: tuple[RunnerSubscriptionDeclaration, ...] = (),
+        gates: tuple[str, ...] = (),
     ) -> None:
         """``POST /api/fleet/runners`` — register into the fleet registry. Idempotent
         upsert and the liveness heartbeat, called before the paused read. Every optional
         field, ``subscriptions`` included, is unconditionally overwritten each call;
-        ``subscriptions`` is always a list, never omitted."""
+        ``subscriptions`` is always a list, never omitted. ``gates`` is the runner's own configured
+        human-gate node names — reported for display, never read back to enforce."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

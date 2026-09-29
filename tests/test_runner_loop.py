@@ -3792,6 +3792,24 @@ def test_pull_sends_every_declared_subscription_including_a_sampler_less_one(tmp
 
 
 @pytest.mark.unit
+def test_pull_registers_the_gates_this_runner_imposes(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, gates=("build", "review")),
+    )
+
+    Pull(ctx).run()
+
+    assert hub.registered_gates == [("build", "review")]
+
+
+@pytest.mark.unit
 def test_one_tick_probes_each_bound_harnesss_version_once_for_every_snapshot_it_sends(tmp_path):  # type: ignore[no-untyped-def]
     """Building a snapshot spawns each binding's binary for its version, and a tick sends
     one with PULL's registration and again with every FILL claim attempt's peek — so the

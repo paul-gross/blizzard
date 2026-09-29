@@ -249,6 +249,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
     store.delivery.record_delivery_repo_landed("ch_kitchen_sink", repo="r1", commit_hash="c1", at=_T0)
     store.delivery.record_delivery_landed("ch_kitchen_sink", at=_T0)
     store.decisions.record_decision(
+        imposed_by_runner_id=None,
         decision_id="dec_1",
         chunk_id="ch_kitchen_sink",
         node_id="nd_g1_hub",
@@ -555,6 +556,7 @@ def _seed_promoted_with_open_decision(store: ChunkStores, chunk_id: str) -> None
     store.record.mint(Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
     store.queue.record_promote(chunk_id, at=_T0)
     store.decisions.record_decision(
+        imposed_by_runner_id=None,
         decision_id=f"dec_{chunk_id}",
         chunk_id=chunk_id,
         node_id="nd_g1_hub",

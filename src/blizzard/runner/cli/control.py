@@ -101,6 +101,7 @@ def status(directory: str, runner_url: str | None) -> None:
     contact = hub["last_contact_at"] or "never"
     click.echo(f"  hub: {reachability} (last contact {contact}), {hub['buffer_depth']} fact(s) buffered")
     click.echo(f"  last tick: {view['last_tick_at'] or 'never'}")
+    click.echo(f"  gates: {', '.join(view['gates']) or 'none'}")
 
     leases = [lease for lease in leases_resp.json().get("items", []) if lease.get("state") != "closed"]
     click.echo(f"\nleases ({len(leases)}):")

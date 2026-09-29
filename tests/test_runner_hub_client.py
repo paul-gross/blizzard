@@ -360,6 +360,7 @@ def test_register_runner_posts_registration() -> None:
         "redirect_uris": [],
         "capabilities": [],
         "subscriptions": [],
+        "gates": [],
     }
 
 
@@ -383,7 +384,22 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
         "redirect_uris": [],
         "capabilities": [],
         "subscriptions": [],
+        "gates": [],
     }
+
+
+@pytest.mark.unit
+def test_register_runner_posts_the_gates_it_imposes() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+
+        seen.update(json.loads(request.content))
+        return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
+
+    _client(handler).register_runner("r1", "ws1", gates=("build", "review"))
+    assert seen["gates"] == ["build", "review"]
 
 
 @pytest.mark.unit

@@ -214,6 +214,22 @@ def test_status_renders_empty_sections_on_a_fresh_runner(tmp_path: Path, monkeyp
     assert "open takeovers (0):" in result.output
     assert "subscriptions (1):" in result.output  # the synthesized legacy anthropic declaration
     assert "never sampled" in result.output
+    assert "gates: none" in result.output
+
+
+@pytest.mark.component
+def test_status_renders_the_configured_gates_with_the_hub_unreachable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _init_runner(tmp_path)
+    config_path = root / "blizzard-runner.toml"
+    config_path.write_text(config_path.read_text().replace("gates = []", 'gates = ["build", "review"]'))
+    _no_hub(monkeypatch)
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "gates: build, review" in result.output
 
 
 @pytest.mark.component
