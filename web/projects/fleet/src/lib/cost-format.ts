@@ -1,18 +1,8 @@
 /**
- * A derived spend total's one board/CLI legible figure — always to the cent, folding
- * `costUsd` and `estimatedCostUsd` into the single amount an operator reads as "what
- * this cost": `costUsd + (estimatedCostUsd ?? 0)`. Two independent markers ride the
- * one figure rather than a second, separate one: a leading `~` whenever
- * `estimatedCostUsd` is present (`!= null`, even when it is `0` — some part of the
- * amount is estimated, not billed), and a trailing `+` whenever `costPartial` is
- * `true` (some summed row carried no amount at all, so the figure is a **lower
- * bound** rather than the true spend — `src/blizzard/hub/domain/work.py`'s
- * `UsageTotal`). The two combine freely: `$4.00`, `~$4.05`, `$4.00+`, `~$4.05+`, and
- * an entirely-estimated total (nothing billed yet) reads `~$0.07` on its own. Every
- * surface that renders a `ChunkUsageTotalView`/`FleetSpendView`/`StepUsageTotal`
- * cost — the board card, the chunk detail panel, the glance board, and
- * `blizzard hub status` — reads it through this one function so neither marker ever
- * silently drops.
+ * A derived spend total as one figure, to the cent: `costUsd + (estimatedCostUsd ?? 0)`,
+ * with a leading `~` when `estimatedCostUsd` is present (even `0`) and a trailing `+` when
+ * `costPartial` is true. The markers' meaning is owned by docs/deployment/spend.md and the
+ * hub's `UsageTotal` (`src/blizzard/hub/domain/work.py`).
  */
 export function formatCost(costUsd: number, estimatedCostUsd: number | null | undefined, costPartial: boolean): string {
   const amount = costUsd + (estimatedCostUsd ?? 0);
