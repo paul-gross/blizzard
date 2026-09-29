@@ -9,10 +9,8 @@ from typing import Any, ClassVar
 
 @dataclass(frozen=True)
 class Cost:
-    """The one CLI cost formatter: one amount, ``cost_usd + (estimated_cost_usd ?? 0)``, to
-    the cent, with two independent markers — a leading ``~`` when an estimate is present
-    (even ``0.0``) and a trailing ``+`` when partial, a lower bound. The renderings are pinned
-    by tests/test_hub_cli_views.py; docs/deployment/spend.md owns the vocabulary."""
+    """The one CLI cost formatter; markers per docs/deployment/spend.md, renderings pinned by
+    tests/test_hub_cli_views.py."""
 
     cost_usd: float
     estimated_cost_usd: float | None

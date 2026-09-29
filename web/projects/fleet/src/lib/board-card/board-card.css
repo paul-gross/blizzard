@@ -160,10 +160,8 @@
   margin-left: auto;
   min-width: 0;
 }
-/* The chunk's one derived cost figure — `formatCost` folds a billed
-   amount and its estimate into this single number, with its own leading `~`
-   (estimated) and trailing `+` (partial, a lower bound) markers; no separate badge
-   or figure on a card this small. */
+/* The chunk's one derived cost figure, rendered by `formatCost`; no separate badge on a
+   card this small. */
 .cost {
   color: var(--amber-hi);
   font-size: var(--fs-xs);
