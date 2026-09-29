@@ -49,7 +49,7 @@ class ProviderEntry:
         return OAuthProviderRegistry({e.name: cls.of(e).provider(client) for e in providers})
 
     @property
-    def secret(self) -> str:
+    def secret(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         if self.config.client_secret_env not in os.environ:
             raise ConfigError(
                 f"[[auth.oauth.provider]] {self.config.name!r} names client_secret_env "

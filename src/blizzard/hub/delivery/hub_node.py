@@ -197,7 +197,7 @@ class HubEnv:
     marker_token: str = ""
 
     @property
-    def vars(self) -> dict[str, str]:
+    def vars(self) -> dict[str, str]:  # ast-grep-ignore: bzh:property-delegates
         """The env-var mapping itself — pure, no I/O.
 
         **Never a model credential** (``bzh:deterministic-shell``): no key injected here

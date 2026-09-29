@@ -49,7 +49,7 @@ class Label:
         return self.COLORS[self.marker]
 
     @property
-    def excluded(self) -> Label:
+    def excluded(self) -> Label:  # ast-grep-ignore: bzh:property-delegates
         other = WorkStatusMarker.IN_PROGRESS if self.marker is WorkStatusMarker.INGESTED else WorkStatusMarker.INGESTED
         return Label(other)
 

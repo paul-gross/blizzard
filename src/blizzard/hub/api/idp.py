@@ -47,11 +47,11 @@ class CliRedirect:
     uri: str
 
     @property
-    def out_of_band(self) -> bool:
+    def out_of_band(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.uri == CLI_OOB_REDIRECT_URI
 
     @property
-    def valid(self) -> bool:
+    def valid(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.out_of_band or bool(_CLI_LOOPBACK_REDIRECT_RE.match(self.uri))
 
 
@@ -73,7 +73,7 @@ class IdpSurface:
         return get_services(self.request)
 
     @property
-    def signing(self) -> SigningKeyService:
+    def signing(self) -> SigningKeyService:  # ast-grep-ignore: bzh:property-delegates
         signing = self.services.signing
         if signing is None:
             raise self._absent()

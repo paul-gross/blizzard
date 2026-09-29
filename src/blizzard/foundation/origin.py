@@ -17,7 +17,7 @@ class Origin:
     trusted: TrustedProxies
 
     @property
-    def ip(self) -> str:
+    def ip(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The effective client IP — ``"unknown"`` for a peer-less connection."""
         direct = self.request.client.host if self.request.client is not None else "unknown"
         return self.trusted.effective_client_ip(
@@ -25,7 +25,7 @@ class Origin:
         )
 
     @property
-    def secure(self) -> bool:
+    def secure(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """Whether the effective scheme is ``https`` — what a ``Secure`` cookie is keyed on."""
         scheme = self.trusted.effective_scheme(
             direct_scheme=self.request.url.scheme,

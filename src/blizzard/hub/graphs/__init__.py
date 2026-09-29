@@ -95,7 +95,7 @@ class GraphFile:
         return self.path.read_text()
 
     @property
-    def body(self) -> dict[str, object]:
+    def body(self) -> dict[str, object]:  # ast-grep-ignore: bzh:property-delegates
         """The definition mapping, with every prompt reference and every top-level
         ``artifacts:`` entry replaced by its referenced file's text, resolved relative to
         :attr:`path`. A missing prompt file raises :class:`FileNotFoundError`; a missing

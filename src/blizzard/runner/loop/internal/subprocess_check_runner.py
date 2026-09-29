@@ -32,7 +32,7 @@ class CheckOutput:
         return cls(cls._decoded(stdout) + cls._decoded(stderr) + note)
 
     @property
-    def tail(self) -> str:
+    def tail(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The last :data:`_TAIL_MAX_CHARS` characters, prefixed with an elision marker when
         truncated so a reader sees the output was clipped."""
         if len(self.text) <= _TAIL_MAX_CHARS:

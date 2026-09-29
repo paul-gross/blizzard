@@ -50,7 +50,7 @@ class ChoiceTarget:
         return cls(graph=name)
 
     @property
-    def malformed(self) -> bool:
+    def malformed(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.node is None and self.graph is None
 
 
@@ -270,7 +270,7 @@ class NodeShape[StepT]:
     run: list[StepT]
 
     @property
-    def is_hub_command_node(self) -> bool:
+    def is_hub_command_node(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """True for a generic hub command node — ``executor: hub`` plus a non-empty
         ``run:``. A predicate, not an assertion: an empty ``run:`` is authorable."""
         return self.executor is Executor.HUB and bool(self.run)
@@ -582,7 +582,7 @@ class Graph:
     artifacts: list[GraphArtifact] = field(default_factory=list)
 
     @property
-    def declares_git_commit(self) -> bool:
+    def declares_git_commit(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """Whether any node declares a ``git_commit``-kind ``produces:`` — the graph's own
         statement of intent, and the only thing that tells an empty delivery set apart
         from a failed one."""
@@ -663,7 +663,7 @@ class Mints:
         return cls([Mint.of(g) for g in graphs], retired_ids)
 
     @property
-    def newest_by_name(self) -> dict[str, Mint]:
+    def newest_by_name(self) -> dict[str, Mint]:  # ast-grep-ignore: bzh:property-delegates
         newest: dict[str, Mint] = {}
         for candidate in self.mints:
             if candidate.graph.graph_id in self.retired_ids:
@@ -674,7 +674,7 @@ class Mints:
         return newest
 
     @property
-    def effective(self) -> dict[str, bool]:
+    def effective(self) -> dict[str, bool]:  # ast-grep-ignore: bzh:property-delegates
         """Whether each ``graph_id`` is the newest non-retired mint of its name.
 
         ``retired_ids`` carries no default, so omitting it raises — pinned by

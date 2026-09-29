@@ -38,7 +38,7 @@ class AskRecord:
     harness_id: str | None = None
 
     @property
-    def session(self) -> SessionReference | None:
+    def session(self) -> SessionReference | None:  # ast-grep-ignore: bzh:property-delegates
         if self.session_id is None:
             return None
         if self.harness_id is None:

@@ -150,7 +150,7 @@ class StoreUrl:
     url: str
 
     @property
-    def path(self) -> Path | None:
+    def path(self) -> Path | None:  # ast-grep-ignore: bzh:property-delegates
         """``None`` for a non-sqlite backend (external by nature, so there is nothing to
         compare against) or an in-memory store, neither of which has a path to confine."""
         url = make_url(self.url)

@@ -12,7 +12,7 @@ class ReturnTo:
     raw: str | None
 
     @property
-    def safe(self) -> str:
+    def safe(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The raw target when it is a same-origin relative path, else ``/`` — an absolute
         URL or a protocol-relative ``//host`` is an open-redirect vector."""
         if self.raw and self.raw.startswith("/") and not self.raw.startswith("//"):

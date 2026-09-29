@@ -44,7 +44,7 @@ class TranscriptProof:
     compaction_pruned: bool = False
 
     @property
-    def valid(self) -> bool:
+    def valid(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return not self.failures
 
     def to_payload(self) -> dict[str, object]:

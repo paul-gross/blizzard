@@ -33,7 +33,7 @@ class LeaseToken:
         return token, TokenHash(token).hex
 
     @property
-    def valid(self) -> bool:
+    def valid(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """``False`` when either side is absent — no token presented, or the lease never
         minted one (a lease that predates capability tokens, or an id that resolved to
         nothing)."""

@@ -69,7 +69,7 @@ class OpenCodeAttachSignal:
         return _first_status(self.requests, "/session/")
 
     @property
-    def event_status(self) -> int | None:
+    def event_status(self) -> int | None:  # ast-grep-ignore: bzh:property-delegates
         for path in _EVENT_PATHS:
             status = _first_status(self.requests, path)
             if status is not None:
@@ -77,7 +77,7 @@ class OpenCodeAttachSignal:
         return None
 
     @property
-    def observed(self) -> bool:
+    def observed(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return (
             self.session_matches
             and self.directory_matches
@@ -89,18 +89,18 @@ class OpenCodeAttachSignal:
         )
 
     @property
-    def event_stream_valid(self) -> bool:
+    def event_stream_valid(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return any(request.path in _EVENT_PATHS and request.event_stream_valid for request in self.requests)
 
     @property
-    def event_stream_bytes(self) -> int:
+    def event_stream_bytes(self) -> int:  # ast-grep-ignore: bzh:property-delegates
         return max(
             (request.event_stream_bytes for request in self.requests if request.path in _EVENT_PATHS),
             default=0,
         )
 
     @property
-    def handshake_complete(self) -> bool:
+    def handshake_complete(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """Return whether attach reached the session and a validated upstream SSE handshake."""
 
         return _successful(self.session_status) and _successful(self.event_status) and self.event_stream_valid
@@ -144,7 +144,7 @@ class OpenCodeAttachProxy:
         self._thread: threading.Thread | None = None
 
     @property
-    def url(self) -> str:
+    def url(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         if self._server is None:
             raise RuntimeError("the OpenCode attach proxy is not running")
         return f"http://127.0.0.1:{self._server.server_port}"

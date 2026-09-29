@@ -228,7 +228,7 @@ class Spend:
         return self.table.real("runner_ceiling_usd")
 
     @property
-    def window_hours(self) -> float:
+    def window_hours(self) -> float:  # ast-grep-ignore: bzh:property-delegates
         """Defaulted whether or not a ceiling is set alongside it."""
         hours = self.table.real("window_hours")
         return DEFAULT_RUNNER_CEILING_WINDOW_HOURS if hours is None else hours
@@ -248,7 +248,7 @@ class Context:
         return cls(Table.of(raw))
 
     @property
-    def warn_tokens(self) -> int | None:
+    def warn_tokens(self) -> int | None:  # ast-grep-ignore: bzh:property-delegates
         """The line a running session's context is warned about crossing; absent = no lane,
         and nothing is sampled at all."""
         return self.table.count("warn_tokens", 0) or None
@@ -443,7 +443,7 @@ class Auth:
         return self.table.word("superuser")
 
     @property
-    def hub_role_default(self) -> str:
+    def hub_role_default(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         return self.table.word("hub_role_default") or DEFAULT_AUTH_HUB_ROLE
 
     @property
@@ -582,7 +582,7 @@ class RunnerConfig:
         return AllowlistedEnv.of(self.worker_env_passthrough, path_prepend=self.worker_path_prepend)
 
     @property
-    def missing_worker_path_prepend_entries(self) -> tuple[str, ...]:
+    def missing_worker_path_prepend_entries(self) -> tuple[str, ...]:  # ast-grep-ignore: bzh:property-delegates
         """Every configured ``[worker] path_prepend`` entry absent on disk right now —
         ``host``'s own startup warning reads this; a missing entry still starts the runner,
         it just never contributes to a spawned child's ``PATH``."""
@@ -594,7 +594,7 @@ class RunnerConfig:
         return PublicOrigins.of(*self.public_urls)
 
     @property
-    def public_url(self) -> str:
+    def public_url(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The canonical origin — the first declared. It is what the hub records as this runner's own
         URL, and what a request whose ``Host`` matches no declared origin falls back to. Empty when
         none is declared, which is how a runner registers no federation identity at all."""
@@ -617,13 +617,13 @@ class RunnerConfig:
         return self.root / DATA_DIRNAME
 
     @property
-    def effective_workspace_root(self) -> str:
+    def effective_workspace_root(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """An absolute root shared by the hosted app and loop, independent of their cwd."""
         path = Path(self.workspace_root) if self.workspace_root else self.root / "workspace"
         return str((path if path.is_absolute() else self.root / path).resolve())
 
     @property
-    def provider_workspace_root(self) -> str:
+    def provider_workspace_root(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         return self.effective_workspace_root if self.workspace_provider == "basic" else self.workspace_root
 
     @property

@@ -28,7 +28,7 @@ class Cost:
         )
 
     @property
-    def rendered(self) -> str:
+    def rendered(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         estimated = self.estimated_cost_usd is not None
         amount = self.cost_usd + (self.estimated_cost_usd or 0.0)
         prefix = "~" if estimated else ""
@@ -43,7 +43,7 @@ class ChunkRow:
     prefer_node_name: bool = True
 
     @property
-    def node(self) -> str:
+    def node(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         name = self.row.get("current_node_name") if self.prefer_node_name else None
         return name or self.row.get("current_node_id") or "-"
 
@@ -59,11 +59,11 @@ class RunnerRow:
     row: dict[str, Any]
 
     @property
-    def liveness(self) -> str:
+    def liveness(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         return "online" if self.row.get("online") else "offline"
 
     @property
-    def brake(self) -> str:
+    def brake(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """Name which brake is on (pinned by
         tests/test_hub_cli_status.py::test_status_names_a_hub_pause_with_no_local_brake)."""
         brakes = []

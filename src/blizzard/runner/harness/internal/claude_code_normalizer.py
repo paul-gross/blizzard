@@ -163,21 +163,21 @@ class Record:
         return bool(self.raw.get("isSidechain"))
 
     @property
-    def is_control(self) -> bool:
+    def is_control(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.type in _CONTROL_TYPES
 
     @property
-    def uuid(self) -> str | None:
+    def uuid(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         value = self.raw.get("uuid")
         return value if isinstance(value, str) else None
 
     @property
-    def parent_uuid(self) -> str | None:
+    def parent_uuid(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         value = self.raw.get("parentUuid")
         return value if isinstance(value, str) else None
 
     @property
-    def at(self) -> datetime | None:
+    def at(self) -> datetime | None:  # ast-grep-ignore: bzh:property-delegates
         """Timezone-aware or ``None`` — an offset-less stamp is coerced to UTC rather than left
         naive (``bzh:utc-instants``), so every comparison between two parsed stamps stays total."""
         raw = self.raw.get("timestamp")
@@ -190,7 +190,7 @@ class Record:
         return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
     @property
-    def content(self) -> object:
+    def content(self) -> object:  # ast-grep-ignore: bzh:property-delegates
         message = self.raw.get("message")
         return message.get("content") if isinstance(message, dict) else None
 
@@ -199,13 +199,13 @@ class Record:
         return Text.joined(self.content)
 
     @property
-    def result_agent_id(self) -> str | None:
+    def result_agent_id(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         result = self.raw.get("toolUseResult")
         value = result.get("agentId") if isinstance(result, dict) else None
         return value if isinstance(value, str) and value else None
 
     @property
-    def context_tokens(self) -> int | None:
+    def context_tokens(self) -> int | None:  # ast-grep-ignore: bzh:property-delegates
         """This turn's **prompt size** — ``input + cache_read + cache_creation`` of ``message.usage``.
 
         The conversation's SIZE here, not spend summed across turns. ``None`` when the record
@@ -290,7 +290,7 @@ class Run:
         return self.records[0].at
 
     @property
-    def prompt(self) -> str | None:
+    def prompt(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         """The first non-empty user text — route 3's join key."""
         for record in self.records:
             if record.type == "user" and record.text:

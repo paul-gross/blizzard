@@ -135,7 +135,7 @@ class LeaseRecord:
     pgid: int | None = None
 
     @property
-    def session(self) -> SessionReference | None:
+    def session(self) -> SessionReference | None:  # ast-grep-ignore: bzh:property-delegates
         """The typed concrete-session identity, absent until spawn-return."""
         if self.session_id is None:
             return None
@@ -238,7 +238,11 @@ class LeaseActivity:
 
     @property
     def state(self) -> LeaseState:
-        """The lease's state, derived from the resolved facts — pure, no store, no I/O.
+        """The lease's state, derived from the resolved facts — pure, no store, no I/O."""
+        return self._derive_state()
+
+    def _derive_state(self) -> LeaseState:
+        """Apply the state precedence — a plain method, so mutation testing reaches it.
 
         The precedence is the point: ``closed`` outranks ``alive`` because a closed
         lease's pid may have been reused, ``parked`` outranks ``stale`` because parking

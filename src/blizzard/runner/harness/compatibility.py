@@ -227,7 +227,7 @@ class CompatibilityReport:
         )
 
     @property
-    def classification(self) -> CompatibilityClassification:
+    def classification(self) -> CompatibilityClassification:  # ast-grep-ignore: bzh:property-delegates
         """The worst deterministic result; a version outside the admitted range always blocks."""
 
         if not self.version_admitted or any(
@@ -239,19 +239,19 @@ class CompatibilityReport:
         return CompatibilityClassification.SUPPORTED
 
     @property
-    def complete(self) -> bool:
+    def complete(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """Reports can only be constructed after every roster member appears exactly once."""
 
         return len(self.results) == len(PROBE_ROSTER) and tuple(result.probe for result in self.results) == PROBE_ROSTER
 
     @property
-    def admissible(self) -> bool:
+    def admissible(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """Whether later production work may depend on this admitted-range observation."""
 
         return self.complete and self.classification is not CompatibilityClassification.BLOCKING
 
     @property
-    def blocking_reasons(self) -> tuple[str, ...]:
+    def blocking_reasons(self) -> tuple[str, ...]:  # ast-grep-ignore: bzh:property-delegates
         reasons = []
         if not self.version_admitted:
             reasons.append(f"observed {self.observed_version!r}, admitted range: {self.admitted_range}")

@@ -29,5 +29,5 @@ class ParamSource:
         return cls(_SOURCE_RANK.get(source, 0) if source is not None else 0)
 
     @property
-    def on_commandline(self) -> bool:
+    def on_commandline(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return self.rank == _SOURCE_RANK[ParameterSource.COMMANDLINE]

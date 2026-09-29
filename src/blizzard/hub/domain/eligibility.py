@@ -35,7 +35,7 @@ class EligibilityCheck:
         return all(self._lineage_satisfied(runner_node) for runner_node in self._reachable_runner_nodes())
 
     @property
-    def _available_capabilities(self) -> list[RunnerCapability]:
+    def _available_capabilities(self) -> list[RunnerCapability]:  # ast-grep-ignore: bzh:property-delegates
         """Capabilities health has withdrawn from selection satisfy no
         lineage — a runner's own diagnostics still see them; a claim or peek never does."""
         return [capability for capability in self.capabilities if capability.available]

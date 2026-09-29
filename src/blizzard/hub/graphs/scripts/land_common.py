@@ -429,11 +429,11 @@ class PullRequest:
         return self.body.get("mergeable_state")
 
     @property
-    def head_sha(self) -> str | None:
+    def head_sha(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         return (self.body.get("head") or {}).get("sha")
 
     @property
-    def url(self) -> str:
+    def url(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         return self.body.get("html_url") or ""
 
     def reread(self) -> PullRequest:

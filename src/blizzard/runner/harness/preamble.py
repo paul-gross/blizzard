@@ -130,7 +130,7 @@ class Preamble:
         return "\n\n".join([*self.standing, self.table])
 
     @property
-    def standing(self) -> list[str]:
+    def standing(self) -> list[str]:  # ast-grep-ignore: bzh:property-delegates
         """Layers 1 and 2 as this spawn sends them — in full, collapsed, or announced."""
         # The role-change line leads every render whose nodes are known to differ;
         # a differing recorded prior node already implies a resume, fingerprint or not.

@@ -51,7 +51,7 @@ class OpenCodeCompactionResult:
     transition_observed: bool = False
 
     @property
-    def effective(self) -> bool:
+    def effective(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """A compaction is effective only after a successful request changes the export."""
 
         return self.request_succeeded and self.transition_observed

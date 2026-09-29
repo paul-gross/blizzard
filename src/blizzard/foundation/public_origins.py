@@ -83,7 +83,7 @@ class PublicOrigins:
         return cls(tuple(kept.values()))
 
     @property
-    def canonical(self) -> str | None:
+    def canonical(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         """The first declared origin — the fallback when a request matches none."""
         return self.urls[0] if self.urls else None
 

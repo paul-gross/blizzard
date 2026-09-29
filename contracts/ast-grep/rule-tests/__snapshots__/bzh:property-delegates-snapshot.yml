@@ -1,0 +1,422 @@
+id: bzh:property-delegates
+snapshots:
+  ? |
+    class Lease:
+        @cached_property
+        def state(self) -> str:
+            return "a" if self.x else "b"
+  : labels:
+    - source: |-
+        def state(self) -> str:
+                return "a" if self.x else "b"
+      style: primary
+      start: 38
+      end: 99
+    - source: '@cached_property'
+      style: secondary
+      start: 17
+      end: 33
+    - source: |-
+        @cached_property
+            def state(self) -> str:
+                return "a" if self.x else "b"
+      style: secondary
+      start: 17
+      end: 99
+    - source: '"a" if self.x else "b"'
+      style: secondary
+      start: 77
+      end: 99
+    - source: '"a" if self.x else "b"'
+      style: secondary
+      start: 77
+      end: 99
+  ? |
+    class Lease:
+        @functools.cached_property
+        def state(self) -> str:
+            return "a" if self.x else "b"
+  : labels:
+    - source: |-
+        def state(self) -> str:
+                return "a" if self.x else "b"
+      style: primary
+      start: 48
+      end: 109
+    - source: '@functools.cached_property'
+      style: secondary
+      start: 17
+      end: 43
+    - source: |-
+        @functools.cached_property
+            def state(self) -> str:
+                return "a" if self.x else "b"
+      style: secondary
+      start: 17
+      end: 109
+    - source: '"a" if self.x else "b"'
+      style: secondary
+      start: 87
+      end: 109
+    - source: '"a" if self.x else "b"'
+      style: secondary
+      start: 87
+      end: 109
+  ? |
+    class Lease:
+        @override
+        @property
+        def state(self) -> str:
+            return "a" if self.x else "b"
+  : labels:
+    - source: |-
+        def state(self) -> str:
+                return "a" if self.x else "b"
+      style: primary
+      start: 45
+      end: 106
+    - source: '@property'
+      style: secondary
+      start: 31
+      end: 40
+    - source: |-
+        @override
+            @property
+            def state(self) -> str:
+                return "a" if self.x else "b"
+      style: secondary
+      start: 17
+      end: 106
+    - source: '"a" if self.x else "b"'
+      style: secondary
+      start: 84
+      end: 106
+    - source: '"a" if self.x else "b"'
+      style: secondary
+      start: 84
+      end: 106
+  ? |
+    class Lease:
+        @property
+        def idle(self) -> bool:
+            return not self.busy
+  : labels:
+    - source: |-
+        def idle(self) -> bool:
+                return not self.busy
+      style: primary
+      start: 31
+      end: 83
+    - source: '@property'
+      style: secondary
+      start: 17
+      end: 26
+    - source: |-
+        @property
+            def idle(self) -> bool:
+                return not self.busy
+      style: secondary
+      start: 17
+      end: 83
+    - source: not self.busy
+      style: secondary
+      start: 70
+      end: 83
+    - source: not self.busy
+      style: secondary
+      start: 70
+      end: 83
+  ? |
+    class Lease:
+        @property
+        def live(self) -> list[int]:
+            return [x for x in self.items if x]
+  : labels:
+    - source: |-
+        def live(self) -> list[int]:
+                return [x for x in self.items if x]
+      style: primary
+      start: 31
+      end: 103
+    - source: '@property'
+      style: secondary
+      start: 17
+      end: 26
+    - source: |-
+        @property
+            def live(self) -> list[int]:
+                return [x for x in self.items if x]
+      style: secondary
+      start: 17
+      end: 103
+    - source: if x
+      style: secondary
+      start: 98
+      end: 102
+    - source: if x
+      style: secondary
+      start: 98
+      end: 102
+  ? |
+    class Lease:
+        @property
+        def ready(self) -> bool:
+            return self.a or self.b
+  : labels:
+    - source: |-
+        def ready(self) -> bool:
+                return self.a or self.b
+      style: primary
+      start: 31
+      end: 87
+    - source: '@property'
+      style: secondary
+      start: 17
+      end: 26
+    - source: |-
+        @property
+            def ready(self) -> bool:
+                return self.a or self.b
+      style: secondary
+      start: 17
+      end: 87
+    - source: self.a or self.b
+      style: secondary
+      start: 71
+      end: 87
+    - source: self.a or self.b
+      style: secondary
+      start: 71
+      end: 87
+  ? |
+    class Lease:
+        @property
+        def state(self) -> str:
+            if self.closed:
+                return "closed"
+            return "running"
+  : labels:
+    - source: |-
+        def state(self) -> str:
+                if self.closed:
+                    return "closed"
+                return "running"
+      style: primary
+      start: 31
+      end: 131
+    - source: '@property'
+      style: secondary
+      start: 17
+      end: 26
+    - source: |-
+        @property
+            def state(self) -> str:
+                if self.closed:
+                    return "closed"
+                return "running"
+      style: secondary
+      start: 17
+      end: 131
+    - source: |-
+        if self.closed:
+                    return "closed"
+      style: secondary
+      start: 63
+      end: 106
+    - source: |-
+        if self.closed:
+                    return "closed"
+      style: secondary
+      start: 63
+      end: 106
+  ? |
+    class Lease:
+        @property
+        def state(self) -> str:
+            match self.kind:
+                case "a":
+                    return "x"
+                case _:
+                    return "y"
+  : labels:
+    - source: |-
+        def state(self) -> str:
+                match self.kind:
+                    case "a":
+                        return "x"
+                    case _:
+                        return "y"
+      style: primary
+      start: 31
+      end: 175
+    - source: '@property'
+      style: secondary
+      start: 17
+      end: 26
+    - source: |-
+        @property
+            def state(self) -> str:
+                match self.kind:
+                    case "a":
+                        return "x"
+                    case _:
+                        return "y"
+      style: secondary
+      start: 17
+      end: 175
+    - source: |-
+        match self.kind:
+                    case "a":
+                        return "x"
+                    case _:
+                        return "y"
+      style: secondary
+      start: 63
+      end: 175
+    - source: |-
+        match self.kind:
+                    case "a":
+                        return "x"
+                    case _:
+                        return "y"
+      style: secondary
+      start: 63
+      end: 175
+  ? |
+    class Lease:
+        @property
+        def state(self) -> str:
+            return "closed" if self.closed else "running"
+  : labels:
+    - source: |-
+        def state(self) -> str:
+                return "closed" if self.closed else "running"
+      style: primary
+      start: 31
+      end: 108
+    - source: '@property'
+      style: secondary
+      start: 17
+      end: 26
+    - source: |-
+        @property
+            def state(self) -> str:
+                return "closed" if self.closed else "running"
+      style: secondary
+      start: 17
+      end: 108
+    - source: '"closed" if self.closed else "running"'
+      style: secondary
+      start: 70
+      end: 108
+    - source: '"closed" if self.closed else "running"'
+      style: secondary
+      start: 70
+      end: 108
+  ? |
+    class Lease:
+        @property
+        def unset(self) -> bool:
+            return self.pid is None
+  : labels:
+    - source: |-
+        def unset(self) -> bool:
+                return self.pid is None
+      style: primary
+      start: 31
+      end: 87
+    - source: '@property'
+      style: secondary
+      start: 17
+      end: 26
+    - source: |-
+        @property
+            def unset(self) -> bool:
+                return self.pid is None
+      style: secondary
+      start: 17
+      end: 87
+    - source: self.pid is None
+      style: secondary
+      start: 71
+      end: 87
+    - source: self.pid is None
+      style: secondary
+      start: 71
+      end: 87
+  ? |
+    class Lease:
+        @state.deleter
+        def state(self) -> None:
+            if self._state:
+                del self._state
+  : labels:
+    - source: |-
+        def state(self) -> None:
+                if self._state:
+                    del self._state
+      style: primary
+      start: 36
+      end: 112
+    - source: '@state.deleter'
+      style: secondary
+      start: 17
+      end: 31
+    - source: |-
+        @state.deleter
+            def state(self) -> None:
+                if self._state:
+                    del self._state
+      style: secondary
+      start: 17
+      end: 112
+    - source: |-
+        if self._state:
+                    del self._state
+      style: secondary
+      start: 69
+      end: 112
+    - source: |-
+        if self._state:
+                    del self._state
+      style: secondary
+      start: 69
+      end: 112
+  ? |
+    class Lease:
+        @state.setter
+        def state(self, value: str) -> None:
+            if value:
+                self._state = value
+  : labels:
+    - source: |-
+        def state(self, value: str) -> None:
+                if value:
+                    self._state = value
+      style: primary
+      start: 35
+      end: 121
+    - source: '@state.setter'
+      style: secondary
+      start: 17
+      end: 30
+    - source: |-
+        @state.setter
+            def state(self, value: str) -> None:
+                if value:
+                    self._state = value
+      style: secondary
+      start: 17
+      end: 121
+    - source: |-
+        if value:
+                    self._state = value
+      style: secondary
+      start: 80
+      end: 121
+    - source: |-
+        if value:
+                    self._state = value
+      style: secondary
+      start: 80
+      end: 121

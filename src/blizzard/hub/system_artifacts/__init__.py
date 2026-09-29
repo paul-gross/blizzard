@@ -50,13 +50,13 @@ class PackagedSystemArtifacts:
     root: Path
 
     @property
-    def paths(self) -> list[Path]:
+    def paths(self) -> list[Path]:  # ast-grep-ignore: bzh:property-delegates
         """Every packaged document's path, sorted so a report over them reads the same way
         twice (mirrors ``PackagedGraphs.paths``) — excluding ``_NEVER_PUBLISHED`` names."""
         return sorted(p for p in self.root.rglob(f"*{_SUFFIX}") if p.name not in _NEVER_PUBLISHED)
 
     @property
-    def files(self) -> list[SystemArtifactFile]:
+    def files(self) -> list[SystemArtifactFile]:  # ast-grep-ignore: bzh:property-delegates
         files = []
         for path in self.paths:
             name = path.relative_to(self.root).with_suffix("").as_posix()

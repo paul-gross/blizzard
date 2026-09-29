@@ -31,12 +31,12 @@ class ProcStat:
         return cls(tuple(stat[close + 1 :].split())) if close != -1 else cls(())
 
     @property
-    def start_time(self) -> str | None:
+    def start_time(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         """The stable start-time token, or ``None`` when this pid named no live process."""
         return self.fields[19] if len(self.fields) >= 20 else None
 
     @property
-    def zombie(self) -> bool:
+    def zombie(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         """True iff the kernel marks the process defunct — exited, not yet reaped.
 
         Such a process keeps its ``/proc`` entry and start time, so a bare start-time
