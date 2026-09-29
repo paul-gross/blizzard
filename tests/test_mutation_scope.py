@@ -633,8 +633,6 @@ def test_a_completed_atomic_save_replaces_the_meta(tmp_path: Path) -> None:
     assert list(tmp_path.iterdir()) == [meta_path]
 
 
-# --- delta: the functions a revision range changed -----------------------------------------------
-
 _DIFF = """\
 diff --git a/src/blizzard/cli/x.py b/src/blizzard/cli/x.py
 --- a/src/blizzard/cli/x.py
