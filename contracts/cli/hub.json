@@ -3873,7 +3873,7 @@
           "short_help": "Retire routine NAME \u2014 a reversible brake; in-flight runs are untouched."
         },
         "run": {
-          "help": "Mint and ingest a hub work item from routine NAME, in one act.\n\nThe minted chunk rests not_ready until promoted with `blizzard hub chunk promote`.\n\nNAME is resolved to its routine_id through the routine list, including a retired\nroutine \u2014 so it reaches the domain's own retired refusal.",
+          "help": "Mint and ingest a hub work item from routine NAME, in one act.\n\nThe chunk rests not_ready until `blizzard hub chunk promote`. NAME resolves through\nthe routine list, including a retired routine \u2014 so it reaches the domain's own\nretired refusal.",
           "params": [
             {
               "hidden": false,

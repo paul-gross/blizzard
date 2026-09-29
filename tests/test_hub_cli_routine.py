@@ -571,6 +571,7 @@ def test_routine_run_resolves_name_then_posts(monkeypatch: pytest.MonkeyPatch) -
     assert "ch_1" in result.output
     assert "blizzard hub chunk promote ch_1" in result.output
 
+
 @pytest.mark.unit
 def test_routine_run_threads_scope_mode_and_note(monkeypatch: pytest.MonkeyPatch) -> None:
     post_calls: list[tuple[str, object]] = []
