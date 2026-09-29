@@ -191,6 +191,12 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert pulls and not any(p.get("merged") for p in pulls), f"a blocked PR merged while pending: {pulls}"
         assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved while pending"
+        reference = {"repo": REPO_NAME, "number": pulls[0]["number"], "url": pulls[0]["html_url"]}
+        assert pending["open_prs"] == [reference]
+        assert pending["awaiting_external_merge"] is False
+        assert pending["landed_repos"] == []
+        assert hub.get("/api/chunks").json()["chunks"][0]["open_prs"] == [reference]
+        assert forge.get(reference["url"]).status_code == 200
 
         # The substantive wait writes `delivery-findings` on its first poll...
         findings_rows = [a for a in pending["artifacts"] if a.get("name") == "delivery-findings"]
@@ -226,11 +232,19 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         done = _drive_until(config, hub, chunk_id, fenced, lambda b: b["status"] in {"done", "needs_human"}, timeout=90)
         assert done["status"] == "done", f"did not land after CI went green (status {done['status']!r})"
         assert done["landed"] is True
+        landed = done["landed_repos"]
+        assert len(landed) == 1 and landed[0]["repo"] == REPO_NAME
+        assert done["open_prs"] == []
+        assert done["closed_prs"] == [reference]
+        assert forge.get(landed[0]["url"]).status_code == 200
+        summary = next(row for row in hub.get("/api/chunks").json()["chunks"] if row["chunk_id"] == chunk_id)
+        assert summary["landed_repos"] == landed
 
     main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
     assert main_after != main_before, "bare main did not move despite a clean merge"
     merge_sha, base_parent, head_parent = _git_bare(origin_bare, "rev-list", "--parents", "-n", "1", "main").split()
     assert merge_sha == main_after and base_parent == main_before
+    assert landed[0]["commit_hash"] == merge_sha
     assert head_parent == pulls[0]["head"]["sha"], "merge commit did not preserve the checked PR head"
     landings = [
         ln for ln in _git_bare(origin_bare, "log", "--oneline", "--", "PR_CI_LANDED.md").splitlines() if ln.strip()
