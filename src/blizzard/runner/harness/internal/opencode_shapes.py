@@ -106,6 +106,16 @@ def _list(value: Mapping[str, Any], key: str, where: str) -> list[object]:
     return raw
 
 
+def _epoch_ms(container: object, key: str) -> int | None:
+    """``container[key]`` as epoch ms, or ``None`` when absent or not a number — never a parse failure."""
+    if not isinstance(container, Mapping):
+        return None
+    value = container.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
 @dataclass(frozen=True)
 class OpenCodeTokenUsage:
     """The token breakdown carried by an OpenCode ``step-finish`` shape."""
@@ -129,6 +139,16 @@ class OpenCodeTokenUsage:
         )
 
 
+def _child_session_id(metadata: object) -> str | None:
+    if not isinstance(metadata, Mapping):
+        return None
+    for key in ("sessionId", "sessionID"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
 @dataclass(frozen=True)
 class OpenCodeToolState:
     """A pending, running, completed, or failed tool invocation state."""
@@ -138,6 +158,10 @@ class OpenCodeToolState:
     output: str | None
     error: str | None
     title: str | None
+    time_start_ms: int | None = None
+    time_end_ms: int | None = None
+    #: The child session a ``task`` tool spawned: ``metadata.sessionId`` (1.18.32) or ``sessionID`` (1.18.25).
+    child_session_id: str | None = None
 
     @classmethod
     def parse(cls, value: object, *, where: str = "tool.state") -> OpenCodeToolState:
@@ -154,7 +178,17 @@ class OpenCodeToolState:
             raise OpenCodeShapeError(f"{where} with status 'completed' needs output")
         if status == "error" and error is None:
             raise OpenCodeShapeError(f"{where} with status 'error' needs error")
-        return cls(status, raw_input, output, error, title)
+        time = state.get("time")
+        return cls(
+            status,
+            raw_input,
+            output,
+            error,
+            title,
+            time_start_ms=_epoch_ms(time, "start"),
+            time_end_ms=_epoch_ms(time, "end"),
+            child_session_id=_child_session_id(state.get("metadata")),
+        )
 
 
 @dataclass(frozen=True)
@@ -174,6 +208,12 @@ class OpenCodePart:
     cost: float | None
     tail_start_id: str | None
     raw: Mapping[str, Any]
+
+    def started_at_ms(self) -> int | None:
+        """A tool part's ``state.time.start``, else the part's own ``time.start``; ``None`` when absent."""
+        if self.state is not None and self.state.time_start_ms is not None:
+            return self.state.time_start_ms
+        return _epoch_ms(self.raw.get("time"), "start")
 
     @classmethod
     def parse(cls, value: object, *, where: str = "part") -> OpenCodePart:
@@ -390,6 +430,11 @@ class OpenCodeMessageInfo:
     tokens: OpenCodeTokenUsage | None
     cost: float | None
     raw: Mapping[str, Any]
+
+    @property
+    def created_at_ms(self) -> int | None:
+        """``info.time.created`` in epoch ms, or ``None``."""
+        return _epoch_ms(self.raw.get("time"), "created")
 
     @classmethod
     def parse(cls, value: object, *, where: str = "message.info") -> OpenCodeMessageInfo:

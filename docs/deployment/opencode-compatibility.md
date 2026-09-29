@@ -107,7 +107,9 @@ operator meaning are:
 - `transcript_cursor` — the identity cursor admits each exported message or part only once.
 - `child_sessions` — the child-session response parses, or the CLI reports no child-session result. The proof denies the
   `task` tool for every agent, so a live run cannot spawn a child and this probe reports the neutral absence rather than
-  an observation; its corpus fixture is hand-authored and pins the parser only.
+  an observation; its corpus fixture is hand-authored and pins the parser only. A separate 1.18.32 live capture, beside
+  the corpus and without a manifest, pins the real `task` shape (`metadata.sessionId`, `input.subagent_type`, tool and
+  message times) the usage fold and the transcript source read.
 - `configuration_isolation` — OpenCode externally enforces the runner-owned config outside the disposable project while
   competing project and user configs are isolated, and resolves both the runner-owned model-tool shell and the
   compaction tail bound the transcript proof depends on. The runner supplies the file through `OPENCODE_CONFIG` and

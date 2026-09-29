@@ -21,6 +21,7 @@ from blizzard.runner.harness.internal.opencode_transcript_source import OpenCode
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_pump import TranscriptPump
+from tests.repo_files import repo_root
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
 from tests.test_runner_harness_opencode_transcript import (
     FakeExporter,
@@ -233,3 +234,36 @@ def test_an_unresolved_child_sidechain_is_visible_and_picked_up_on_a_later_windo
     shipped_before = _shipped_turns(ctx)
     TranscriptPump(ctx).run()
     assert _shipped_turns(ctx) == shipped_before
+
+
+def test_a_live_capture_ships_a_timestamp_on_every_turn_and_sidechain_turn() -> None:
+    capture = repo_root() / "src/blizzard/runner/harness/contracts/opencode/1.18.32"
+    children = ["ses_f6070f70bffeyvhNqEiKNcjN1F", "ses_f6058d7ddffew6JulFmKVefJx1"]
+    scripts: dict[str, str | Exception] = {"sess-1": (capture / "root_export.json").read_text()}
+    scripts.update({child: (capture / f"child_{child}.json").read_text() for child in children})
+    exporter = FakeExporter(scripts)
+    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    store = make_store("sqlite://")
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-1", pid=1, process_start_time="1", pgid=1),
+        verdict=None,
+        transcript_source=source,
+    )
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", transcripts_ship=True),
+    )
+    ctx = replace(ctx, harnesses=_registry(harness, source))
+    _open_segment(ctx)
+
+    TranscriptPump(ctx).run()
+
+    shipped = _shipped_turns(ctx)
+    sidechain_turns = [turn for t in shipped if t.get("sidechain") for turn in t["sidechain"]["turns"]]
+    assert shipped
+    assert sidechain_turns
+    assert all(t["timestamp"] is not None for t in [*shipped, *sidechain_turns])

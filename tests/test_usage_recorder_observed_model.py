@@ -16,6 +16,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
+from blizzard.runner.harness.internal.opencode_descendant_usage import OpenCodeDescendantUsage
 from blizzard.runner.harness.internal.opencode_price_cache import OpenCodeModelPrice, OpenCodeRate
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -23,7 +24,9 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_stdout import WorkerStdoutFiles
 from blizzard.wire.facts import USAGE_RECORDED
+from tests.repo_files import repo_root
 from tests.runner_fakes import FakeHarness, FakeProbe, FakeTranscriptSource, make_store
+from tests.test_runner_harness_opencode_transcript import FakeExporter
 
 pytestmark = pytest.mark.component
 
@@ -279,3 +282,45 @@ def test_a_pinned_lease_hands_its_stamp_to_both_samples_without_observing(tmp_pa
     assert harness.usage_models == ["claude-pinned", "claude-pinned"]
     assert harness.observed_model_calls == []
     assert source.read_raw_lines_calls == []
+
+
+def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one_fact(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    capture = repo_root() / "src/blizzard/runner/harness/contracts/opencode/1.18.32"
+    child = "ses_f6070f70bffeyvhNqEiKNcjN1F"
+    exporter = FakeExporter({child: (capture / f"child_{child}.json").read_text()})
+    stdout_dir = tmp_path / "stdout"
+    stdout_dir.mkdir()
+    generation = (capture / "run_generation_1.jsonl").read_text()
+    (stdout_dir / "lease_1.1.stdout").write_text(generation)
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_lease(store, harness_id=OPENCODE_HARNESS_ID, resolved_model="openai/gpt-5.6-sol")
+    probe = FakeProbe()
+    adapter = OpenCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        process=probe,
+        launcher=ProcessLauncher(probe),
+        descendant_usage=OpenCodeDescendantUsage(exporter),
+    )
+    source = FakeTranscriptSource(lines_by_session={})
+    registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=source)})
+    recorder = UsageRecorder(
+        leases=store,
+        usage=store,
+        clock=FixedClock(_NOW),
+        worker_files=WorkerStdoutFiles(str(stdout_dir), store),
+        workspace_root="/ws",
+        harnesses=registry,
+        invocation_boundaries=store,
+        transcripts_wired=True,
+    )
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    recorder.record_worker(lease, bindings=[])
+
+    [payload] = _usage_payloads(store)
+    solo = OpenCodeAdapter(worker_env=AllowlistedEnv.of(()), process=probe, launcher=ProcessLauncher(probe))
+    root_steps = solo.parse_usage(generation, "spawn")
+    assert root_steps is not None
+    assert payload["input_tokens"] > root_steps.input_tokens
+    assert exporter.calls == [child]

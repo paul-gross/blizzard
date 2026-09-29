@@ -9,6 +9,7 @@ from __future__ import annotations
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
+from blizzard.runner.harness.internal.opencode_descendant_usage import OpenCodeDescendantUsage
 from blizzard.runner.harness.internal.opencode_export import SubprocessOpenCodeExporter
 from blizzard.runner.harness.internal.opencode_price_cache import FileOpenCodePriceCatalog, resolve_price_cache_path
 from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
@@ -25,10 +26,11 @@ def build_opencode_binding(
     ``process``/``launcher`` pair the Claude Code binding also receives. Wires one
     :class:`OpenCodeTranscriptSource` into both the adapter and the binding, exactly as
     Claude Code's own binding wires its transcript source, plus a price catalog resolved
-    from the same worker env — never a constant path."""
+    from the same worker env — never a constant path. One exporter backs both readers."""
     worker_env = config.worker_env
+    exporter = SubprocessOpenCodeExporter(binary=config.opencode_binary, worker_env=worker_env)
     transcript_source = OpenCodeTranscriptSource(
-        SubprocessOpenCodeExporter(binary=config.opencode_binary, worker_env=worker_env),
+        exporter,
         TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript")),
     )
     cache_path = resolve_price_cache_path(worker_env.variables)
@@ -41,6 +43,7 @@ def build_opencode_binding(
         worker_config_path=config.opencode_worker_config_path,
         transcript_source=transcript_source,
         price_catalog=price_catalog,
+        descendant_usage=OpenCodeDescendantUsage(exporter),
         process=process,
         launcher=launcher,
     )
