@@ -102,7 +102,7 @@ def _task_windows(generation: int) -> dict[str, tuple[int, int]]:
     }
 
 
-# --- D5: child_candidate_of -------------------------------------------------
+# --- child_candidate_of -------------------------------------------------
 
 
 def test_child_candidate_of_resolves_the_real_1_18_32_task_keys() -> None:
@@ -140,7 +140,7 @@ def test_child_candidate_of_reads_absent_or_malformed_metadata_as_none() -> None
     assert child_candidate_of(part({"metadata": {"sessionId": 7}})) is None
 
 
-# --- D4: timestamps ----------------------------------------------------------
+# --- timestamps ----------------------------------------------------------
 
 
 def test_every_turn_of_the_capture_carries_a_utc_timestamp() -> None:
@@ -220,7 +220,7 @@ def test_a_sidechain_turn_is_stamped_through_the_transcript_source() -> None:
     assert all(t.timestamp is not None for t in batch.turns)
 
 
-# --- D1-D3: descendant usage fold -------------------------------------------
+# --- descendant usage fold -------------------------------------------
 
 
 def _fold(adapter: OpenCodeAdapter, generation: int, model: str | None = None) -> Any:
