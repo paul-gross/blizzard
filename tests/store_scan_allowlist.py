@@ -127,10 +127,10 @@ RUNNER_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
 # The hub's store is shared fleet-wide, unlike the runner's own per-environment store (module docstring above) —
 # populated empirically: each entry below names the specific, bounded reason its scan is genuinely small or rare.
 
-# ChunkFactsStore.load_all_facts/load_all_statuses (#374) and their queue-position siblings read this way by design.
+# ChunkFactsStore.load_all_facts/load_live_statuses (#374) read this way by design.
 _FLEET_SNAPSHOT_REASON = (
-    "ChunkFactsStore.load_all_facts/load_all_statuses (issue #374) and their "
-    "ChunkQueueStore siblings read one bounded query per fact table across the WHOLE "
+    "ChunkFactsStore.load_all_facts/load_live_statuses (issue #374) read one "
+    "bounded query per fact table across the WHOLE "
     "store by design — the method's entire point is a fleet-wide snapshot, not a "
     "per-chunk lookup, so no chunk_id index applies."
 )
@@ -185,8 +185,6 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     TableWideAllowance("route_token_minted", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("usage_facts", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("chunk_work_refs", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("chunk_promoted", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("queue_positions", 200, _FLEET_SNAPSHOT_REASON),
     # --- tombstones with no chunk_id index ----------------------------------------------
     TableWideAllowance("chunk_deleted", 200, _TOMBSTONE_NO_KEY_INDEX_REASON),
     TableWideAllowance("chunk_grouped", 200, _TOMBSTONE_NO_KEY_INDEX_REASON),

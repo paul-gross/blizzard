@@ -32,10 +32,11 @@ class IReadChunkFactsRepository(Protocol):
         is silently dropped, the same as :meth:`load_facts` returning ``None`` for it."""
         ...
 
-    def load_all_statuses(self) -> dict[str, ChunkStatus]:
-        """Every non-ephemeral chunk's derived :class:`ChunkStatus`, keyed by chunk id —
-        `load_all_facts`'s status-only projection, reading only the fact families
-        :meth:`ChunkFacts.status` reaches."""
+    def load_live_statuses(self) -> dict[str, ChunkStatus]:
+        """Every non-ephemeral, non-terminal chunk's derived :class:`ChunkStatus`, keyed by
+        chunk id (``bzh:live-set-read``) — terminal chunks are excluded in the store query,
+        before anything is loaded or derived per chunk. A caller needing a terminal status
+        (a done prerequisite) resolves it by id through :meth:`status_facts_for`."""
         ...
 
     def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:

@@ -5,6 +5,7 @@ isolation shape)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -133,10 +134,10 @@ class _FakeChunks:
     def list_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.ready
 
-    def queue_positions(self) -> dict[str, float]:
+    def queue_positions(self, chunk_ids: Sequence[str]) -> dict[str, float]:
         return self.positions
 
-    def promoted_ats(self) -> dict[str, datetime]:
+    def promoted_ats(self, chunk_ids: Sequence[str]) -> dict[str, datetime]:
         return self.promoted_ats_by_chunk
 
     def find_live_holder(self, pointer: WorkRef) -> str | None:

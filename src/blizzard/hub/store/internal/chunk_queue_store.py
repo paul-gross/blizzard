@@ -26,22 +26,33 @@ class ChunkQueueStore:
         self._store = store
         self._clock = clock
 
-    def queue_positions(self) -> dict[str, float]:
-        """The newest explicit queue position per chunk — the ordering the peek honours."""
+    def queue_positions(self, chunk_ids: Sequence[str]) -> dict[str, float]:
+        """The newest explicit queue position per chunk among ``chunk_ids`` — the ordering
+        the peek honours."""
+        result: dict[str, float] = {}
         with self._store.read("queue_positions") as conn:
-            rows = conn.execute(
-                select(s.queue_positions.c.chunk_id, s.queue_positions.c.position, s.queue_positions.c.id).order_by(
-                    s.queue_positions.c.id
-                )
-            ).all()
-        # id is monotonic per insert, so the last row seen for a chunk is its newest fact.
-        return {r.chunk_id: float(r.position) for r in rows}
+            for batch in id_batches(chunk_ids):
+                rows = conn.execute(
+                    select(s.queue_positions.c.chunk_id, s.queue_positions.c.position, s.queue_positions.c.id)
+                    .where(s.queue_positions.c.chunk_id.in_(batch))
+                    .order_by(s.queue_positions.c.id)
+                ).all()
+                # id is monotonic per insert, so the last row seen for a chunk is its newest fact.
+                result.update((r.chunk_id, float(r.position)) for r in rows)
+        return result
 
-    def promoted_ats(self) -> dict[str, datetime]:
-        """Each promoted chunk's ``chunk_promoted.promoted_at``."""
+    def promoted_ats(self, chunk_ids: Sequence[str]) -> dict[str, datetime]:
+        """Each promoted chunk's ``chunk_promoted.promoted_at`` among ``chunk_ids``."""
+        result: dict[str, datetime] = {}
         with self._store.read("promoted_ats") as conn:
-            rows = conn.execute(select(s.chunk_promoted.c.chunk_id, s.chunk_promoted.c.promoted_at)).all()
-        return {r.chunk_id: r.promoted_at for r in rows}
+            for batch in id_batches(chunk_ids):
+                rows = conn.execute(
+                    select(s.chunk_promoted.c.chunk_id, s.chunk_promoted.c.promoted_at).where(
+                        s.chunk_promoted.c.chunk_id.in_(batch)
+                    )
+                ).all()
+                result.update((r.chunk_id, r.promoted_at) for r in rows)
+        return result
 
     def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         # Idempotent by chunk_id: a chunk already promoted keeps its first row, so a

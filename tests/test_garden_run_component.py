@@ -61,7 +61,7 @@ def _run(hub: HubHarness, routine: Routine) -> str:
         mode=RunMode.FULL,
         note=None,
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_all_statuses(),
+        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
     return result.chunk_id
 

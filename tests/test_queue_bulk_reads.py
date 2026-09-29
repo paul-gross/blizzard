@@ -63,16 +63,16 @@ class _CountingFactsStore(ChunkFactsStore):
     def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
         super().__init__(store, clock)
         self.load_all_facts_calls = 0
-        self.load_all_statuses_calls = 0
+        self.load_live_statuses_calls = 0
         self.load_facts_calls = 0
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         self.load_all_facts_calls += 1
         return super().load_all_facts()
 
-    def load_all_statuses(self) -> dict[str, ChunkStatus]:
-        self.load_all_statuses_calls += 1
-        return super().load_all_statuses()
+    def load_live_statuses(self) -> dict[str, ChunkStatus]:
+        self.load_live_statuses_calls += 1
+        return super().load_live_statuses()
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         self.load_facts_calls += 1
@@ -114,13 +114,13 @@ def test_peek_reads_statuses_in_bulk_once_and_never_per_chunk(tmp_path: Path, pa
     # The whole request — ordering, candidate filtering, and blocked marking alike —
     # derives the fleet's statuses exactly once, and never falls back to `load_all_facts`
     # or a per-chunk `load_facts`.
-    assert counting.load_all_statuses_calls == 1
+    assert counting.load_live_statuses_calls == 1
     assert counting.load_all_facts_calls == 0
     assert counting.load_facts_calls == 0
 
 
 @pytest.mark.parametrize("path", ["/api/queue", "/api/backlog"])
-def test_replace_issues_one_load_all_statuses_call_on_success(tmp_path: Path, path: str) -> None:
+def test_replace_issues_one_load_live_statuses_call_on_success(tmp_path: Path, path: str) -> None:
     promote = path == "/api/queue"
     hub = build_hub(tmp_path)
     a = ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
@@ -131,12 +131,12 @@ def test_replace_issues_one_load_all_statuses_call_on_success(tmp_path: Path, pa
     resp = hub.client.put(path, json={"chunk_ids": [b, a]})
 
     assert resp.status_code == 200, resp.text
-    assert counting.load_all_statuses_calls == 1
+    assert counting.load_live_statuses_calls == 1
     assert counting.load_all_facts_calls == 0
 
 
 @pytest.mark.parametrize("path", ["/api/queue", "/api/backlog"])
-def test_replace_issues_one_load_all_statuses_call_on_conflict(tmp_path: Path, path: str) -> None:
+def test_replace_issues_one_load_live_statuses_call_on_conflict(tmp_path: Path, path: str) -> None:
     promote = path == "/api/queue"
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
@@ -146,12 +146,12 @@ def test_replace_issues_one_load_all_statuses_call_on_conflict(tmp_path: Path, p
     resp = hub.client.put(path, json={"chunk_ids": ["ch_not_a_member"]})
 
     assert resp.status_code == 409, resp.text
-    assert counting.load_all_statuses_calls == 1
+    assert counting.load_live_statuses_calls == 1
     assert counting.load_all_facts_calls == 0
 
 
 @pytest.mark.parametrize("path", ["/api/queue/position", "/api/backlog/position"])
-def test_reposition_issues_one_load_all_statuses_call_on_success(tmp_path: Path, path: str) -> None:
+def test_reposition_issues_one_load_live_statuses_call_on_success(tmp_path: Path, path: str) -> None:
     promote = path == "/api/queue/position"
     hub = build_hub(tmp_path)
     a = ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
@@ -162,12 +162,12 @@ def test_reposition_issues_one_load_all_statuses_call_on_success(tmp_path: Path,
     resp = hub.client.post(path, json={"chunk_id": b, "after_chunk_id": None if a == b else a})
 
     assert resp.status_code == 200, resp.text
-    assert counting.load_all_statuses_calls == 1
+    assert counting.load_live_statuses_calls == 1
     assert counting.load_all_facts_calls == 0
 
 
 @pytest.mark.parametrize("path", ["/api/queue/position", "/api/backlog/position"])
-def test_reposition_issues_one_load_all_statuses_call_on_conflict(tmp_path: Path, path: str) -> None:
+def test_reposition_issues_one_load_live_statuses_call_on_conflict(tmp_path: Path, path: str) -> None:
     promote = path == "/api/queue/position"
     hub = build_hub(tmp_path)
     ingest(hub, [{"source": "default", "ref": "1"}], promote=promote)
@@ -177,7 +177,7 @@ def test_reposition_issues_one_load_all_statuses_call_on_conflict(tmp_path: Path
     resp = hub.client.post(path, json={"chunk_id": "ch_not_a_member", "after_chunk_id": None})
 
     assert resp.status_code == 409, resp.text
-    assert counting.load_all_statuses_calls == 1
+    assert counting.load_live_statuses_calls == 1
     assert counting.load_all_facts_calls == 0
 
 

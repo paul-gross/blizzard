@@ -40,7 +40,7 @@ def test_record_queue_positions_writes_an_empty_sequence_as_a_no_op(tmp_path: Pa
 
     store.queue.record_queue_positions([], at=_T0)
 
-    assert store.queue.queue_positions() == {}
+    assert store.queue.queue_positions(["ch_a"]) == {}
 
 
 def test_record_queue_positions_writes_every_pair(tmp_path: Path) -> None:
@@ -50,7 +50,7 @@ def test_record_queue_positions_writes_every_pair(tmp_path: Path) -> None:
 
     store.queue.record_queue_positions([("ch_a", 0.0), ("ch_b", 1.0), ("ch_c", 2.0)], at=_T0)
 
-    assert store.queue.queue_positions() == {"ch_a": 0.0, "ch_b": 1.0, "ch_c": 2.0}
+    assert store.queue.queue_positions(["ch_a", "ch_b", "ch_c"]) == {"ch_a": 0.0, "ch_b": 1.0, "ch_c": 2.0}
 
 
 def test_record_queue_positions_statement_count_does_not_grow_with_batch_size(tmp_path: Path) -> None:
@@ -80,7 +80,7 @@ def test_record_backlog_positions_skips_a_chunk_promoted_since_candidates_were_r
 
     store.queue.record_backlog_positions([("ch_a", 0.0), ("ch_promoted", 1.0)], at=_T0)
 
-    positions = store.queue.queue_positions()
+    positions = store.queue.queue_positions(["ch_a", "ch_promoted"])
     assert positions.get("ch_a") == 0.0
     assert "ch_promoted" not in positions
 
