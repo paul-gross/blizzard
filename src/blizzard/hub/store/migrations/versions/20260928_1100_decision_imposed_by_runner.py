@@ -21,9 +21,7 @@ _REGISTRATIONS = "runner_registrations"
 _COLUMN = "imposed_by_runner_id"
 _GATES = "gates"
 
-# A decision at a worker-judged node can only have been opened by a runner-config gate
-# (a graph gate parks at a human-judged node), and the submitting runner held the
-# lease at the decision's epoch. A decision with no lease match stays NULL.
+# Only a runner-config gate opens a decision at a worker-judged node; no lease match stays NULL.
 _BACKFILL = sa.text(
     """
     UPDATE decisions
