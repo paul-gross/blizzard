@@ -67,21 +67,15 @@ def _terminate(hub: HubHarness, chunk_id: str, path: int) -> None:
     engine = hub.engine
     for epoch in (1, 2):
         _transition(engine, chunk_id, f"nd_{epoch}", epoch=epoch, at=epoch)
-    kind = path % 4
+    kind = path % 3
     with engine.begin() as conn:
         if kind == 0:
             conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=_at(10)))
         elif kind == 1:
             conn.execute(insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=_at(10), completed_by="op"))
-        elif kind == 2:
+        else:
             conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=_at(10)))
             conn.execute(insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=_at(11), completed_by="op"))
-        else:
-            conn.execute(
-                insert(s.delivery_pr_closed).values(
-                    chunk_id=chunk_id, repo="r", pr_number=1, merged=True, landed_commit="c", closed_at=_at(10)
-                )
-            )
     if path % 5 == 4:
         _transition(engine, chunk_id, RESERVED_TERMINAL, epoch=3, at=12)
 
@@ -221,7 +215,6 @@ def test_the_prefilter_and_candidate_reads_use_named_indexes(tmp_path: Path) -> 
     tables = {
         "chunk_stopped",
         "chunk_completed",
-        "delivery_pr_closed",
         "transitions",
         "chunk_migrations",
         "chunk_restarts",

@@ -21,7 +21,6 @@ from blizzard.hub.domain.work import (
     LeaseFact,
     MigrationFact,
     PauseFact,
-    PrOpenedFact,
     QuestionFact,
     RestartFact,
     RouteCreatedFact,
@@ -277,38 +276,6 @@ def test_merged_but_escalated_derives_needs_human_with_landed_detail() -> None:
 
 def test_has_landed_repos_false_with_no_landed_facts_at_all() -> None:
     assert ChunkFacts(minted=True).has_landed_repos() is False
-
-
-def _parked_on_open_pr(**extra: object) -> ChunkFacts:
-    """A chunk in open-pr mode: its newest transition entered the deliver hub node, a PR
-    was opened, and no ``pr.closed`` yet — the environments still held."""
-    return ChunkFacts(
-        minted=True,
-        routes_created=[RouteCreatedFact(created_at=_at(1))],
-        transitions=[
-            TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5))
-        ],
-        pr_opened=[
-            PrOpenedFact(repo="acme/widget", number=7, url="http://forge/pr/7", commit_hash="abc", opened_at=_at(5))
-        ],
-        **extra,  # type: ignore[arg-type]
-    )
-
-
-def test_open_pr_park_is_delivering_awaiting_external_merge() -> None:
-    facts = _parked_on_open_pr()
-    # Still ``delivering`` (the newest transition entered the deliver hub node), with the
-    # awaiting-external-merge detail set — not a distinct status.
-    assert facts.status() is ChunkStatus.DELIVERING
-    assert facts.awaiting_external_merge() is True
-
-
-def test_pr_closed_is_done() -> None:
-    # The terminal ``pr.closed`` fact flips the chunk to done, the open-pr counterpart of
-    # ``delivery.landed``, and clears the awaiting-external-merge detail.
-    facts = _parked_on_open_pr(pr_closed=True)
-    assert facts.status() is ChunkStatus.DONE
-    assert facts.awaiting_external_merge() is False
 
 
 def test_stopped_wins_over_everything() -> None:
@@ -870,42 +837,6 @@ def test_completed_at_is_the_terminal_transitions_instant_for_done() -> None:
     )
     assert facts.status() is ChunkStatus.DONE
     assert facts.completed_at() == _at(5)
-
-
-def test_completed_at_in_open_pr_mode_with_no_terminal_transition_is_the_newest_pr_closed() -> None:
-    # Open-pr mode's own terminal fact, standing alone (no terminal transition at all —
-    # the deliver hub node's own transition targets the hub node itself, never `done`).
-    facts = _parked_on_open_pr(pr_closed=True, pr_closed_at=_at(6))
-    assert facts.status() is ChunkStatus.DONE
-    assert facts.completed_at() == _at(6)
-
-
-def test_completed_at_in_open_pr_mode_takes_the_later_of_transition_and_pr_closed() -> None:
-    # A multi-repo chunk whose deliver hub node's terminal transition landed before every
-    # repo's PR closed — the newest pr_closed_at, not the earlier transition instant.
-    facts = ChunkFacts(
-        minted=True,
-        transitions=[
-            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
-        ],
-        pr_closed=True,
-        pr_closed_at=_at(9),
-    )
-    assert facts.status() is ChunkStatus.DONE
-    assert facts.completed_at() == _at(9)
-
-
-def test_completed_at_in_open_pr_mode_keeps_the_transition_instant_when_it_is_later() -> None:
-    facts = ChunkFacts(
-        minted=True,
-        transitions=[
-            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(9)),
-        ],
-        pr_closed=True,
-        pr_closed_at=_at(5),
-    )
-    assert facts.status() is ChunkStatus.DONE
-    assert facts.completed_at() == _at(9)
 
 
 def test_completed_at_is_none_for_a_chunk_that_migrated_after_reaching_terminal() -> None:

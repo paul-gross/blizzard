@@ -276,20 +276,6 @@ class RouteTokenMintedFact:
 
 
 @dataclass(frozen=True)
-class PrOpenedFact:
-    """A ``pr.opened`` fact — the open-pr deliver mode's park record. One per repo whose
-    branch got a PR instead of a merge; it carries no terminal weight, deriving
-    ``delivering`` while no ``pr.closed`` matches. ``repo`` is also the skip-set that
-    keeps a redelivery from opening a duplicate PR."""
-
-    repo: str
-    number: int
-    url: str
-    commit_hash: str
-    opened_at: datetime
-
-
-@dataclass(frozen=True)
 class LeaseFact:
     """A ``lease.minted`` fact reported up from a runner."""
 
@@ -722,10 +708,6 @@ class ChunkFacts:
     # The chunk's per-repo ``delivery.repo_landed`` facts, independent of whether delivery
     # has reached a terminal transition; the derivation reads only non-emptiness.
     landed_repos: frozenset[str] = field(default_factory=frozenset)
-    pr_closed: bool = False
-    # The newest ``delivery_pr_closed.closed_at`` across every repo's row — a
-    # multi-repo chunk in open-PR mode can carry several.
-    pr_closed_at: datetime | None = None
     escalations: list[EscalationFact] = field(default_factory=list)
     leases: list[LeaseFact] = field(default_factory=list)
     transitions: list[TransitionFact] = field(default_factory=list)
@@ -740,7 +722,6 @@ class ChunkFacts:
     migrations: list[MigrationFact] = field(default_factory=list)
     # The chunk's operator restart facts (#370) — a third movement family beside the two above.
     restarts: list[RestartFact] = field(default_factory=list)
-    pr_opened: list[PrOpenedFact] = field(default_factory=list)
     pauses: list[PauseFact] = field(default_factory=list)
     usage: list[UsageFact] = field(default_factory=list)
     # The chunk's recorded delivery kick-backs (#64) — feeds :meth:`ChunkFacts.bounce_count` /
@@ -869,14 +850,12 @@ class ChunkFacts:
     def status(self) -> ChunkStatus:
         """Derive a chunk's single status from its facts, first match wins. ``done`` is the
         **only** terminal (#63): reached via the terminal transition, an operator's manual
-        completion, or the open-pr mode's own terminal fact — not the landed
+        completion — not the landed
         fact, since an authored ``merged -> <node>`` edge can land every repo and keep the
         chunk running post-merge."""
         if self.stopped and not self._operator_completion_outranks_stop():
             return ChunkStatus.STOPPED
-        if self.operator_completed or self.newest_transition_is_terminal() or self.pr_closed:
-            # ``pr.closed`` is the open-pr mode's terminal fact (merged or closed unmerged); its
-            # finalize lands the terminal transition too, but the check keeps this legible.
+        if self.operator_completed or self.newest_transition_is_terminal():
             return ChunkStatus.DONE
         if self._has_open_escalation():
             return ChunkStatus.NEEDS_HUMAN
@@ -901,19 +880,13 @@ class ChunkFacts:
     def completed_at(self) -> datetime | None:
         """The instant a terminal chunk finished, or ``None`` — render-only,
         never a status. Mirrors ``status``'s branch order (the operator completion
-        included) so the two never disagree, taking the **later** of the terminal transition
-        and ``pr_closed_at`` in open-PR mode, where closing every repo's PR can lag the
-        terminal transition."""
+        included) so the two never disagree."""
         if self.stopped and not self._operator_completion_outranks_stop():
             return self.stopped_at
         if self.operator_completed:
             return self.operator_completed_at
         terminal_transition = self.newest_transition() if self.newest_transition_is_terminal() else None
-        if terminal_transition is None:
-            return self.pr_closed_at if self.pr_closed else None
-        if self.pr_closed_at is not None:
-            return max(terminal_transition.recorded_at, self.pr_closed_at)
-        return terminal_transition.recorded_at
+        return terminal_transition.recorded_at if terminal_transition is not None else None
 
     def open_escalation(self) -> EscalationFact | None:
         """The newest escalation nothing later superseded, or ``None``.
@@ -960,13 +933,6 @@ class ChunkFacts:
         human-gated states, so a status-keyed reader would miss a chunk that is paused
         *and* parked on a question."""
         return self.pauses[-1] if self.pauses and self.pauses[-1].paused else None
-
-    def awaiting_external_merge(self) -> bool:
-        """A ``delivering`` chunk parked on an open PR — ``pr.opened`` without ``pr.closed``.
-
-        Not a distinct status: the chunk still derives ``delivering``. A **detail** that
-        distinguishes an open-pr park from an in-flight merge."""
-        return bool(self.pr_opened) and not self.pr_closed
 
     def _has_open_escalation(self) -> bool:
         """An escalation nothing later superseded — supersession, not resolution."""

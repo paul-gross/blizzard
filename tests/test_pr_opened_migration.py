@@ -20,6 +20,7 @@ from blizzard.hub.runtime import migration_runner
 pytestmark = pytest.mark.component
 
 _BEFORE = "20260716_1512_hub_pm_pointer_source_ref"  # the head just before the idempotent constraint
+_AFTER = "20260716_2206_hub_pr_opened_idempotent"  # the revision under test; later heads drop the table
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 _GRAPHS = sa.Table(
@@ -121,7 +122,7 @@ def test_upgrade_deduplicates_existing_duplicate_rows(tmp_path: Path) -> None:
     engine = create_engine_from_url(db_url)
     _seed(engine)
 
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     with engine.connect() as conn:
         rows = conn.execute(sa.select(_NEW_PR_OPENED.c.id, _NEW_PR_OPENED.c.chunk_id, _NEW_PR_OPENED.c.repo)).all()
@@ -139,7 +140,7 @@ def test_upgrade_enforces_the_constraint_going_forward(tmp_path: Path) -> None:
     runner.upgrade(_BEFORE)
     engine = create_engine_from_url(db_url)
     _seed(engine)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     with pytest.raises(IntegrityError), engine.begin() as conn:
         conn.execute(
@@ -160,10 +161,10 @@ def test_downgrade_then_upgrade_round_trips_the_deduplicated_rows(tmp_path: Path
     runner.upgrade(_BEFORE)
     engine = create_engine_from_url(db_url)
     _seed(engine)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     runner.downgrade(_BEFORE)
-    runner.upgrade("head")
+    runner.upgrade(_AFTER)
 
     with engine.connect() as conn:
         rows = conn.execute(sa.select(_NEW_PR_OPENED.c.chunk_id, _NEW_PR_OPENED.c.repo)).all()

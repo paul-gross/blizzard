@@ -533,7 +533,7 @@
     },
     {
       "id": "fleet-pr-merge-commit-policy",
-      "statement": "In merge-to-main delivery, repositories with work land by pull request only after green checks, using a merge commit that preserves branch history.",
+      "statement": "On the `land-pr-ci` path, repositories with work land by pull request only after green checks, using a merge commit that preserves branch history.",
       "owner": "blizzard-context:/workflows/feature-delivery.md#what-the-platform-owns",
       "owner_kind": "doc-section",
       "owner_assert": {

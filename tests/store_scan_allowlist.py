@@ -173,8 +173,6 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     TableWideAllowance("chunk_stopped", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("chunks", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("decisions", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("delivery_pr_closed", 200, _FLEET_SNAPSHOT_REASON),
-    TableWideAllowance("delivery_pr_opened", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("delivery_repo_landed", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("hub_node_poll", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("lease_facts", 200, _FLEET_SNAPSHOT_REASON),

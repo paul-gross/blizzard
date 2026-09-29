@@ -12,8 +12,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 from sqlalchemy import insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -27,7 +25,6 @@ from tests.runner_fakes import FakeProbe
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
-_PR_OPENED_UNIQUE = "uq_delivery_pr_opened_chunk_repo"  # added by 20260716_2206_hub_pr_opened_idempotent
 
 
 def _runner_engine(tmp_path: Path):
@@ -719,32 +716,6 @@ def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
             )
     slugs = {v.invariant for v in HubInvariants(engine).run()}
     assert "hub:per-repo-land-idempotent" in slugs
-
-
-def test_duplicate_pr_opened_is_a_violation(tmp_path: Path) -> None:
-    """See the module docstring — the constraint is dropped so the check behind it is
-    observable."""
-    engine = _hub_engine(tmp_path)
-    with engine.begin() as conn:
-        batch_op = Operations(MigrationContext.configure(conn))
-        with batch_op.batch_alter_table("delivery_pr_opened") as batch:
-            batch.drop_constraint(_PR_OPENED_UNIQUE, type_="unique")
-
-    with engine.begin() as conn:
-        for pk in (1, 2):
-            conn.execute(
-                insert(hub.delivery_pr_opened).values(
-                    id=pk,
-                    chunk_id="ch_1",
-                    repo="acme/widget",
-                    pr_number=1,
-                    pr_url="http://forge/acme/widget/pull/1",
-                    commit_hash="abc123",
-                    opened_at=_NOW,
-                )
-            )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
-    assert "hub:pr-opened-idempotent" in slugs
 
 
 def test_duplicate_route_seq_across_tables_is_a_violation(tmp_path: Path) -> None:

@@ -750,37 +750,6 @@ chunk_bounces = Table(
 # epoch) anti-join, at no extra write cost over a single-column index.
 Index("ix_chunk_bounces_chunk_id_epoch", chunk_bounces.c.chunk_id, chunk_bounces.c.epoch)
 
-# --- Open-PR delivery facts (pr.opened / pr.closed) ---------------------------
-# Read-only history (#67): no engine path writes either table any more.
-
-delivery_pr_opened = Table(
-    "delivery_pr_opened",
-    metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("repo", String, nullable=False),  # the forge repo coordinate the PR was opened on
-    Column("pr_number", Integer, nullable=False),
-    Column("pr_url", String, nullable=False),  # the PR's html url — surfaced on the board
-    Column("commit_hash", String, nullable=False),  # the authoritative head the PR carries
-    Column("opened_at", UtcDateTime, nullable=False),
-    # One ``pr.opened`` per (chunk, repo) — the constraint that closed a replay race,
-    # retained as the shape of the historical rows this table still reads back.
-    UniqueConstraint("chunk_id", "repo", name="uq_delivery_pr_opened_chunk_repo"),
-)
-
-delivery_pr_closed = Table(
-    "delivery_pr_closed",
-    metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("repo", String, nullable=False),
-    Column("pr_number", Integer, nullable=False),
-    Column("merged", Boolean, nullable=False),  # merged vs closed-without-merge — both terminal
-    Column("landed_commit", String, nullable=True),  # the merge commit where one exists
-    Column("closed_at", UtcDateTime, nullable=False),
-)
-Index("ix_delivery_pr_closed_chunk_id", delivery_pr_closed.c.chunk_id)
-
 # --- The fleet-wide hub-execution serialization slot (#65) -------------------
 # A live slot has ``released_at IS NULL``; one at a time, reclaimable past its TTL.
 
