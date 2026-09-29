@@ -206,7 +206,7 @@ def test_scenario_board_status_composition_agrees_with_the_hub_and_survives_a_co
         assert delivered["delivered_at"] is not None, delivered
 
         # --- 4. GET /api/events — mixed kinds/severities from the scenario's own log - #
-        events_resp = hub.get("/api/events", params={"limit": 1000})
+        events_resp = hub.get("/api/events", params={"limit": 200})
         assert events_resp.status_code == 200, events_resp.text
         events = events_resp.json()["events"]
         kinds = {e["kind"] for e in events}
