@@ -343,9 +343,8 @@ export const getFindingApiLeasesLeaseIdFindingsFindingIdGet = <ThrowOnError exte
  * List Garden Findings
  *
  * Forward this lease's chunk's finding-bucket read to the hub — the layered
- * pass-through: its routine's non-exited findings in every scope, plus review findings on
- * its scope. A chunk with no run context (not a routine run) reaches this only as the hub's
- * own refusal, forwarded verbatim rather than answered as an empty bucket.
+ * pass-through. A chunk with no run context (not a routine run) reaches this only as
+ * the hub's own refusal, forwarded verbatim rather than answered as an empty bucket.
  */
 export const listGardenFindingsApiLeasesLeaseIdGardenFindingsGet = <ThrowOnError extends boolean = false>(options: Options<ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetData, ThrowOnError>): RequestResult<ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses, ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetResponses, ListGardenFindingsApiLeasesLeaseIdGardenFindingsGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/garden/findings', ...options });
 
