@@ -1,8 +1,8 @@
 """The runner's SSO federation bounce, and the gates the human web lane depends on.
 
-``login`` stashes a random ``state`` and ``return_to`` in two short-lived cookies and redirects to the
-hub's authorize endpoint; ``callback`` validates the round-tripped ``state``, verifies the token,
-resolves a local role, and mints this runner's own session cookie."""
+``login`` rehomes a browser on an undeclared origin to the canonical one, else stashes ``state`` and
+``return_to`` in two short-lived cookies and redirects to the hub's authorize endpoint; ``callback``
+validates the round-tripped ``state``, verifies the token, resolves a local role, and mints a session cookie."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 from urllib.parse import parse_qs, quote
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
@@ -192,8 +192,7 @@ def _callback_url(request: Request, config: RunnerConfig) -> str:
     arrived = request.headers.get("host")
     chosen = origins.select(arrived)
     if chosen is None:
-        # The bounce still completes against the canonical origin, which is registered — but the cookies
-        # were set on this request's origin, so a remote browser dead-ends on `bad or expired state`.
+        # Still unmatched after `login` rehomed the browser: a proxy rewriting Host.
         _log.warning(
             "no declared origin matches the arriving Host — falling back to the canonical origin",
             arrived_host=arrived,
@@ -204,8 +203,24 @@ def _callback_url(request: Request, config: RunnerConfig) -> str:
 
 
 @router.get("/login")
-def login(request: Request, return_to: str = "/") -> Response:
+def login(
+    request: Request,
+    return_to: str = "/",
+    rehomed: Annotated[bool, Query(include_in_schema=False)] = False,
+) -> Response:
     config: RunnerConfig = request.app.state.config
+    origins = config.public_origins
+    arrived = request.headers.get("host")
+    # Bounce cookies set on an undeclared origin (`localhost` for `127.0.0.1`) never reach the callback.
+    if origins.canonical and not rehomed and origins.select(arrived) is None:
+        _log.warning(
+            "no declared origin matches the arriving Host — rehoming to the canonical origin",
+            arrived_host=arrived,
+            declared=list(origins.urls),
+            rehoming_to=origins.canonical,
+        )
+        safe_return = quote(ReturnTo(return_to).safe, safe="")
+        return RedirectResponse(f"{origins.canonical}/api/auth/login?return_to={safe_return}&rehomed=true")
     state = secrets.token_urlsafe(24)
     callback_url = _callback_url(request, config)
     target = (

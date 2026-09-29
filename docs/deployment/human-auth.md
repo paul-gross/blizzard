@@ -68,22 +68,25 @@ mode `"none"`, since there is no IdP to bounce to.
 `public_url` takes one URL or a list; more than one matters because the browser, not the runner, POSTs the federation
 token to the redirect URI, which therefore resolves in the browsing device's own network namespace. Every declared
 origin registers with the hub, which exact-matches presented redirect URIs against the set; the runner selects among
-declared origins per request by the arriving Host, an unmatched Host falling back to the first declared origin — the
-canonical one the hub records as the runner's URL. Selection is membership in the declared set, never construction from
-the request: a forged or unrecognized Host resolves only to a declared origin, logged as a warning and falling back,
-never reflected into a redirect URI. A runner whose Host is rewritten fails like an undeclared origin: the bounce falls
-back to the canonical origin, the hub accepts it, and the browser is sent wherever that origin names — its own machine,
-for a loopback canonical; the runner logs a warning naming the arriving Host and the declared set when the fallback
-fires, the signal to check the proxy.
+declared origins per request by the arriving Host. A browser whose Host matches none — `localhost` against a declared
+`127.0.0.1` — is first redirected to the same login on the first declared origin, the canonical one the hub records as
+the runner's URL, so the bounce cookies are set where the callback will land. Selection is membership in the declared
+set, never construction from the request: a forged or unrecognized Host resolves only to a declared origin, never
+reflected into a redirect URI. That redirect is a single hop — a Host still matching nothing after it, as behind a
+proxy that rewrites Host, falls back to presenting the canonical callback, which completes only if that proxy fronts
+the canonical origin, and sends the browser to its own machine for a loopback canonical. The runner logs a warning
+naming the arriving Host and the declared set both when it redirects and when it falls back — the signal to check the
+origin the browser used, or the proxy.
 
 Each `public_url` entry must equal the origin the browser shows exactly — scheme, host, and port — because selection
 compares it against the request's Host; a proxy terminating TLS on 443 makes the visible origin
-`https://runner.example`, which a declared `https://runner.example:8431` never matches, and the mismatch is silent
-because the fallback lands on a registered origin and the hub raises nothing. `localhost` and `127.0.0.1` are distinct
-origins to browser and guard alike, each needing its own entry; two entries a browser cannot distinguish — differing
-only in scheme or in an explicit-versus-default port — are refused at config load. A non-URL `public_url` value, an
-entry carrying a path, userinfo, or a non-numeric port, and two entries naming one browser origin all fail at config
-load rather than surfacing later as an opaque unregistered-redirect_uri refusal.
+`https://runner.example`, which a declared `https://runner.example:8431` never matches, so every sign-in is redirected
+off the proxy to `https://runner.example:8431` — reachable or not — and the hub raises nothing; only the runner's
+warning names the mismatch. `localhost` and `127.0.0.1` are distinct origins to browser and guard alike, so the
+undeclared one signs in only by being redirected to the canonical origin. Two entries a browser cannot distinguish —
+differing only in scheme or in an explicit-versus-default port — are refused at config load. A non-URL `public_url`
+value, an entry carrying a path, userinfo, or a non-numeric port, and two entries naming one browser origin all fail
+at config load rather than surfacing later as an opaque unregistered-redirect_uri refusal.
 
 Registration happens on the runner's reconciliation tick: a widened set reaches the hub on the first tick after a
 restart, and a login attempted before that tick is refused as an unregistered redirect URI.
