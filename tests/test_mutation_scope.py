@@ -64,9 +64,13 @@ def _stub_the_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, completed:
     selections: list[list[str]] = []
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(m, "MUTANTS_DIR", tmp_path / "mutants")
-    monkeypatch.setattr(m, "ensure_mutant_tree_for_scope", lambda scope, mutants_dir: ["tests/test_cli.py"])
+    monkeypatch.setattr(
+        m, "ensure_mutant_tree_for_scope", lambda scope, mutants_dir, fresh=False: ["tests/test_cli.py"]
+    )
 
-    def run_scope(scope: object, *, test_selection: list[str], budget_seconds: float | None) -> bool:
+    def run_scope(
+        scope: object, *, test_selection: list[str], budget_seconds: float | None, mutant_names: tuple[str, ...] = ()
+    ) -> bool:
         selections.append(test_selection)
         return completed
 
@@ -84,13 +88,69 @@ def test_main_hands_the_frozen_selection_to_the_run_and_writes_the_report(
     assert json.loads((tmp_path / "mutants" / m.REPORT_NAME).read_text())["scope"] == "cli-surface"
 
 
-def test_main_exits_the_budget_code_without_a_report_when_the_budget_expires(
+def test_main_exits_the_budget_code_with_an_incomplete_report_when_the_budget_expires(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _stub_the_run(monkeypatch, tmp_path, completed=False)
     (tmp_path / "mutants").mkdir()
     assert m.main(["cli-surface", "--budget", "5"]) == m.BUDGET_EXIT_CODE
-    assert not (tmp_path / "mutants" / m.REPORT_NAME).exists()
+    report = json.loads((tmp_path / "mutants" / m.REPORT_NAME).read_text())
+    assert report["complete"] is False
+
+
+def test_main_with_fresh_asks_for_a_cleared_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_the_run(monkeypatch, tmp_path, completed=True)
+    asked: list[bool] = []
+
+    def ensure(scope: object, mutants_dir: Path, fresh: bool = False) -> list[str]:
+        asked.append(fresh)
+        return []
+
+    monkeypatch.setattr(m, "ensure_mutant_tree_for_scope", ensure)
+    (tmp_path / "mutants").mkdir()
+    assert m.main(["cli-surface", "--fresh"]) == 0
+    assert m.main(["cli-surface"]) == 0
+    assert asked == [True, False]
+
+
+def test_main_with_an_unknown_revision_exits_non_zero_naming_it_and_runs_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    selections = _stub_the_run(monkeypatch, tmp_path, completed=True)
+    assert m.main(["cli-surface", "--since", "no-such-revision-anywhere"]) == m.BAD_REVISION_EXIT_CODE
+    assert "no-such-revision-anywhere" in capsys.readouterr().err
+    assert selections == []
+    assert not (tmp_path / "mutants").exists()
+
+
+def test_main_with_no_changed_function_writes_an_empty_complete_report_without_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    selections = _stub_the_run(monkeypatch, tmp_path, completed=True)
+    monkeypatch.setattr(m, "changed_mutant_globs", lambda scope, since: [])
+    assert m.main(["cli-surface", "--since", "abc123"]) == 0
+    assert selections == []
+    report = json.loads((tmp_path / "mutants" / m.REPORT_NAME).read_text())
+    assert (report["since"], report["complete"], report["total"], report["survivors"]) == ("abc123", True, 0, [])
+
+
+def test_main_with_since_hands_the_changed_function_globs_to_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_the_run(monkeypatch, tmp_path, completed=True)
+    (tmp_path / "mutants").mkdir()
+    monkeypatch.setattr(m, "changed_mutant_globs", lambda scope, since: ["blizzard.cli.x.x_run__mutmut_*"])
+    handed: list[tuple[str, ...]] = []
+
+    def run_scope(
+        scope: object, *, test_selection: list[str], budget_seconds: float | None, mutant_names: tuple[str, ...]
+    ) -> bool:
+        handed.append(mutant_names)
+        return True
+
+    monkeypatch.setattr(m, "run_scope", run_scope)
+    assert m.main(["cli-surface", "--since", "abc123"]) == 0
+    assert handed == [("blizzard.cli.x.x_run__mutmut_*",)]
 
 
 # --- scope table: disjointness + coverage against the real tree ----------------------------
@@ -571,3 +631,175 @@ def test_a_completed_atomic_save_replaces_the_meta(tmp_path: Path) -> None:
     Data().save()
     assert json.loads(meta_path.read_text()) == {"exit_code_by_key": {"k": 1}}
     assert list(tmp_path.iterdir()) == [meta_path]
+
+
+_DIFF = """\
+diff --git a/src/blizzard/cli/x.py b/src/blizzard/cli/x.py
+--- a/src/blizzard/cli/x.py
++++ b/src/blizzard/cli/x.py
+@@ -3,0 +4,2 @@ def a
++added
++added
+@@ -20 +22 @@ def b
+-old
++new
+@@ -30,2 +31,0 @@ def c
+-gone
+-gone
+diff --git a/src/blizzard/cli/gone.py b/src/blizzard/cli/gone.py
+--- a/src/blizzard/cli/gone.py
++++ /dev/null
+@@ -1,2 +0,0 @@
+-x
+-y
+"""
+
+
+def test_changed_line_ranges_reads_added_replaced_and_deleted_lines_and_skips_deleted_files() -> None:
+    assert m.changed_line_ranges(_DIFF) == {"src/blizzard/cli/x.py": [(4, 5), (22, 22), (31, 30)]}
+
+
+_SOURCE = """\
+def free():
+    return 1
+
+
+class Widget:
+    def run(self):
+        return 2
+
+    @staticmethod
+    def make():
+        def inner():
+            return 3
+
+        return inner
+
+
+def last():
+    return 4
+"""
+
+
+def test_functions_touching_names_the_free_function_a_line_falls_in() -> None:
+    assert m.functions_touching(_SOURCE, [(2, 2)]) == [(None, "free")]
+
+
+def test_functions_touching_names_the_method_and_its_class() -> None:
+    assert m.functions_touching(_SOURCE, [(7, 7)]) == [("Widget", "run")]
+
+
+def test_functions_touching_attributes_a_nested_function_to_its_enclosing_one() -> None:
+    assert m.functions_touching(_SOURCE, [(12, 12)]) == [("Widget", "make")]
+
+
+def test_functions_touching_counts_a_decorator_line_as_its_function() -> None:
+    assert m.functions_touching(_SOURCE, [(9, 9)]) == [("Widget", "make")]
+
+
+def test_functions_touching_ignores_lines_outside_every_function() -> None:
+    assert m.functions_touching(_SOURCE, [(3, 5)]) == []
+
+
+def test_functions_touching_places_a_pure_deletion_inside_the_function_it_shrank() -> None:
+    assert m.functions_touching(_SOURCE, [(6, 5)]) == [("Widget", "run")]
+    assert m.functions_touching(_SOURCE, [(2, 1)]) == [(None, "free")]
+    assert m.functions_touching(_SOURCE, [(3, 2)]) == []
+
+
+def test_mutant_name_globs_follow_mutmut_s_naming() -> None:
+    assert m.mutant_name_globs("src/blizzard/hub/domain.py", [(None, "run"), ("Widget", "go")]) == [
+        "blizzard.hub.domain.x_run__mutmut_*",
+        "blizzard.hub.domain.xǁWidgetǁgo__mutmut_*",
+    ]
+
+
+def test_a_package_init_file_names_its_mutants_after_the_package() -> None:
+    assert m.mutant_module_name("src/blizzard/__init__.py") == "blizzard"
+    assert m.mutant_name_globs("src/blizzard/wire/__init__.py", [(None, "f")]) == ["blizzard.wire.x_f__mutmut_*"]
+
+
+def _git_repo(root: Path) -> None:
+    import subprocess
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+    git("init", "-q")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    package = root / "src" / "blizzard" / "cli"
+    package.mkdir(parents=True)
+    (package / "x.py").write_text("def run():\n    return 1\n\n\ndef keep():\n    return 2\n")
+    other = root / "src" / "blizzard" / "hub"
+    other.mkdir(parents=True)
+    (other / "h.py").write_text("def hub_fn():\n    return 1\n")
+    git("add", "-A")
+    git("commit", "-qm", "base")
+    (package / "x.py").write_text("def run():\n    return 10\n\n\ndef keep():\n    return 2\n")
+    (other / "h.py").write_text("def hub_fn():\n    return 10\n")
+    git("commit", "-qam", "change")
+
+
+def test_changed_mutant_globs_lists_only_changed_functions_inside_the_scope(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    scope = m.SCOPES["cli-surface"]
+    assert m.changed_mutant_globs(scope, "HEAD~1", tmp_path) == ["blizzard.cli.x.x_run__mutmut_*"]
+    assert m.changed_mutant_globs(scope, "HEAD", tmp_path) == []
+
+
+def test_changed_mutant_globs_rejects_a_revision_that_names_no_commit(tmp_path: Path) -> None:
+    _git_repo(tmp_path)
+    with pytest.raises(m.UnknownRevisionError, match="nope"):
+        m.changed_mutant_globs(m.SCOPES["cli-surface"], "nope", tmp_path)
+
+
+def test_build_report_restricted_to_globs_leaves_out_every_other_mutant(tmp_path: Path) -> None:
+    mutants_dir = tmp_path / "mutants"
+    _write_meta(
+        mutants_dir,
+        "src/blizzard/hub/domain.py",
+        {"blizzard.hub.domain.x_run__mutmut_1": 0, "blizzard.hub.domain.x_other__mutmut_1": 0},
+    )
+    report = m.build_report(
+        scope="hub-daemon",
+        mutants_dir=mutants_dir,
+        diff_provider=lambda name, path: "diff",
+        name_globs=["blizzard.hub.domain.x_run__mutmut_*"],
+        since="abc",
+    )
+    assert report["total"] == 1
+    assert [s["function"] for s in report["survivors"]] == ["run"]
+    assert (report["since"], report["complete"]) == ("abc", True)
+
+
+def test_a_delta_matching_no_mutant_is_a_completed_run() -> None:
+    def run(_names: object, _max_children: object) -> None:
+        raise AssertionError(f"{m.NO_MATCHING_MUTANTS_MESSAGE}\n\nFilter: ('x',)")
+
+    assert m._run_with_budget(None, _fake_mutmut(run), ("x",)) is True
+
+
+def test_an_unrelated_assertion_in_a_delta_run_propagates() -> None:
+    def run(_names: object, _max_children: object) -> None:
+        raise AssertionError("something else")
+
+    with pytest.raises(AssertionError):
+        m._run_with_budget(None, _fake_mutmut(run), ("x",))
+
+
+def test_the_mutant_names_reach_mutmut_s_run() -> None:
+    seen: list[object] = []
+    m._run_with_budget(None, _fake_mutmut(lambda names, _max: seen.append(names)), ("a*", "b*"))
+    assert seen == [("a*", "b*")]
+
+
+def test_ensure_mutant_tree_with_fresh_clears_a_tree_of_the_same_scope(tmp_path: Path) -> None:
+    mutants_dir = tmp_path / "mutants"
+    m.ensure_mutant_tree_for_scope(m.SCOPES["cli-surface"], mutants_dir)
+    stale = mutants_dir / "stale.txt"
+    stale.write_text("x")
+    m.ensure_mutant_tree_for_scope(m.SCOPES["cli-surface"], mutants_dir)
+    assert stale.exists()
+    m.ensure_mutant_tree_for_scope(m.SCOPES["cli-surface"], mutants_dir, fresh=True)
+    assert not stale.exists()
