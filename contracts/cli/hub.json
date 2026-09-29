@@ -4349,7 +4349,7 @@
     "runner": {
       "commands": {
         "enroll": {
-          "help": "Mint (or rotate) RUNNER_ID's bearer token; prints the plaintext exactly once.\n\nA thin client of ``POST /runners/{id}/enrollments``. Re-running\nrotates: the old token stops resolving immediately. RUNNER_ID must already be\nregistered at the hub (404 otherwise).",
+          "help": "Mint (or rotate) RUNNER_ID's bearer token; prints the plaintext exactly once.\n\nA thin client of ``POST /runners/{id}/enrollments``. Re-running\nrotates: the old token stops resolving immediately. RUNNER_ID must already be\nregistered at the hub (404 otherwise) and not retired (409 \u2014 `reinstate` it first).",
           "params": [
             {
               "hidden": false,
@@ -4389,8 +4389,19 @@
           "short_help": "Mint (or rotate) RUNNER_ID's bearer token; prints the plaintext exactly once."
         },
         "list": {
-          "help": "The fleet registry \u2014 every runner with derived liveness + paused state.",
+          "help": "The fleet registry \u2014 every runner with derived liveness + paused state.\n\nExcludes a retired runner unless --all.",
           "params": [
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "include_retired",
+              "opts": [
+                "--all"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
             {
               "hidden": false,
               "kind": "option",
@@ -4468,6 +4479,57 @@
           "path": "hub runner pause",
           "short_help": "Pause a runner \u2014 it stops claiming new work; in-flight chunks run on."
         },
+        "reinstate": {
+          "help": "Reinstate a retired runner \u2014 it stays unenrolled; `enroll` it afresh.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "runner_id",
+              "opts": [
+                "runner_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner reinstate",
+          "short_help": "Reinstate a retired runner \u2014 it stays unenrolled; `enroll` it afresh."
+        },
         "resume": {
           "help": "Resume a paused runner \u2014 it claims work again on its next pull.",
           "params": [
@@ -4519,6 +4581,119 @@
           "path": "hub runner resume",
           "short_help": "Resume a paused runner \u2014 it claims work again on its next pull."
         },
+        "retire": {
+          "help": "Retire a runner \u2014 revoke its token and refuse its claims and registrations.\n\nRefused (409) while it holds chunks unless --force, which releases them. Re-running\nfinishes a partial release. Stop the runner process too: the hub refuses it from here on.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "runner_id",
+              "opts": [
+                "runner_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "force",
+              "opts": [
+                "--force"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner retire",
+          "short_help": "Retire a runner \u2014 revoke its token and refuse its claims and registrations."
+        },
+        "revoke-token": {
+          "help": "Revoke a runner's token \u2014 it stays registered, and is refused until re-enrolled.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "runner_id",
+              "opts": [
+                "runner_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "by",
+              "opts": [
+                "--by"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner revoke-token",
+          "short_help": "Revoke a runner's token \u2014 it stays registered, and is refused until re-enrolled."
+        },
         "show": {
           "help": "One runner's derived liveness + paused state, symmetric with ``runner list``.",
           "params": [
@@ -4560,10 +4735,10 @@
           "short_help": "One runner's derived liveness + paused state, symmetric with ``runner list``."
         }
       },
-      "help": "Operator verbs over one runner: identity, liveness, and its pause brake.",
+      "help": "Operator verbs over one runner: identity, liveness, its pause brake, and retirement.",
       "params": [],
       "path": "hub runner",
-      "short_help": "Operator verbs over one runner: identity, liveness, and its pause brake."
+      "short_help": "Operator verbs over one runner: identity, liveness, its pause brake, and retirement."
     },
     "scope": {
       "commands": {

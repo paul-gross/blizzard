@@ -15,6 +15,7 @@ from blizzard.auth_core import (
     QUEUE_REORDER,
     ROLE_PERMISSIONS,
     RUNNER_PAUSE,
+    RUNNER_RETIRE,
     TRANSCRIPT_READ,
     USER_MANAGE,
     Role,
@@ -37,6 +38,7 @@ def test_guest_holds_fleet_view_and_nothing_else() -> None:
         GATE_RESOLVE,
         QUEUE_REORDER,
         RUNNER_PAUSE,
+        RUNNER_RETIRE,
         GRAPH_EDIT,
         USER_MANAGE,
         TRANSCRIPT_READ,
@@ -89,6 +91,13 @@ def test_runner_pause_and_graph_edit_are_admin_and_above() -> None:
     for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
         assert RUNNER_PAUSE not in expand(role)
         assert GRAPH_EDIT not in expand(role)
+
+
+def test_runner_retire_is_admin_and_above() -> None:
+    for role in (Role.ADMIN, Role.SUPERUSER):
+        assert RUNNER_RETIRE in expand(role)
+    for role in (Role.PENDING, Role.GUEST, Role.CONTRIBUTOR):
+        assert RUNNER_RETIRE not in expand(role)
 
 
 def test_analytics_admin_is_admin_and_above() -> None:

@@ -15,7 +15,7 @@ import httpx
 import pytest
 
 from blizzard.runner.config import RunnerConfig
-from tests.e2e.test_acceptance_loop import _free_port, _runner_api, _runner_config
+from tests.e2e.test_acceptance_loop import _forge, _free_port, _hub, _runner_api, _runner_config
 from tests.service.support import (
     mint_fixture,
     mock_hub,
@@ -24,6 +24,7 @@ from tests.service.support import (
     require_winter_source,
     service_gate,
 )
+from tests.service.test_hub_service import _stack
 from tests.service.test_runner_service import _WORK_REF_URL, _drive, _seed, _tick_env
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -120,3 +121,21 @@ def test_runner_with_no_token_sends_no_authorization_header(tmp_path: Path, monk
 def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Client, chunk_id: str, target: str) -> bool:
     _drive(config, fenced, ticks=1, pause=0.3)
     return _status(hub, chunk_id) == target
+
+
+def test_a_running_hub_rejects_a_revoked_token_under_warn(tmp_path: Path) -> None:
+    """``warn`` lets an unresolved token through as anonymous, so revocation must be keyed on the
+    revoked hash: the same token that peeked fine before its revocation is refused after."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with _forge(bin_dir, origins, forge_port), _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/fleet/runners", json={"runner_id": "r1", "workspace_id": "w1"}).status_code == 201
+        enrolled = hub.post("/api/runners/r1/enrollments")
+        assert enrolled.status_code == 201, enrolled.text
+        auth = {"Authorization": f"Bearer {enrolled.json()['token']}"}
+        assert hub.get("/api/fleet/queue/peek", headers=auth).status_code == 200
+
+        revoked = hub.post("/api/runners/r1/token-revocations", json={"by": "svc"})
+        assert revoked.status_code == 201, revoked.text
+
+        assert hub.get("/api/fleet/queue/peek", headers=auth).status_code == 401
+        assert hub.get("/api/fleet/queue/peek").status_code == 200  # tokenless stays tolerated under warn

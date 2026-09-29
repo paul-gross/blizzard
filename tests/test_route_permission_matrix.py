@@ -113,6 +113,9 @@ def _mutations(ids: dict[str, str]) -> list[tuple[str, str, dict[str, object]]]:
         ),  # QUESTION_ANSWER
         ("POST", "/api/decisions/dc_missing/resolutions", {"choice": "approve", "resolved_by": "x"}),  # GATE_RESOLVE
         ("POST", "/api/runners/runner-a/pause", {"by": "x"}),  # RUNNER_PAUSE
+        ("POST", "/api/runners/runner-a/retire", {"by": "x"}),  # RUNNER_RETIRE
+        ("POST", "/api/runners/runner-a/reinstate", {"by": "x"}),  # RUNNER_RETIRE
+        ("POST", "/api/runners/runner-a/token-revocations", {"by": "x"}),  # RUNNER_RETIRE
         ("POST", "/api/graphs", {"definition_yaml": _GRAPH_YAML}),  # GRAPH_EDIT
         ("GET", "/api/users", {}),  # USER_MANAGE
         ("POST", "/api/analytics/re-derive", {"limit": 1}),  # ANALYTICS_ADMIN

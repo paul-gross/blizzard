@@ -27,17 +27,23 @@ class RunnerDetail:
     def lines(self) -> Iterator[str]:
         yield f"{self.body['runner_id']}  {RunnerRow(self.body).liveness}  ws={self.body.get('workspace_id', '-')}"
         yield f"  hub_paused={self.body.get('hub_paused')}  locally_paused={self.body.get('locally_paused')}"
+        if self.body.get("retired"):
+            yield f"  retired={self.body.get('retired_at')} by {self.body.get('retired_by')}"
 
 
 @click.group("runner")
 def runner_group() -> None:
-    """Operator verbs over one runner: identity, liveness, and its pause brake."""
+    """Operator verbs over one runner: identity, liveness, its pause brake, and retirement."""
 
 
 @runner_group.command("list", cls=FleetCommand)
-def runner_list(cli: CliContext) -> None:
-    """The fleet registry — every runner with derived liveness + paused state."""
-    body = cli.get("/api/runners", "GET /runners").json()
+@click.option("--all", "include_retired", is_flag=True, default=False, help="Include retired runners, marked.")
+def runner_list(cli: CliContext, include_retired: bool) -> None:
+    """The fleet registry — every runner with derived liveness + paused state.
+
+    Excludes a retired runner unless --all."""
+    params = {"include_retired": "true"} if include_retired else None
+    body = cli.get("/api/runners", "GET /runners", params=params).json()
     cli.show(body, RunnerListing(body.get("runners", [])))
 
 
@@ -89,11 +95,64 @@ def runner_enroll(cli: CliContext, runner_id: str) -> None:
 
     A thin client of ``POST /runners/{id}/enrollments``. Re-running
     rotates: the old token stops resolving immediately. RUNNER_ID must already be
-    registered at the hub (404 otherwise)."""
+    registered at the hub (404 otherwise) and not retired (409 — `reinstate` it first)."""
     resp = cli.post(
         f"/api/runners/{runner_id}/enrollments",
         "POST /runners/{id}/enrollments",
-        on_status={404: f"unknown runner {runner_id}"},
+        on_status={404: f"unknown runner {runner_id}", 409: f"runner {runner_id} is retired"},
     )
     body = resp.json()
     cli.show_lines(body, f"enrolled {runner_id} — bearer token (copy now, shown only once):\n{body['token']}")
+
+
+@runner_group.command("retire", cls=FleetCommand)
+@click.argument("runner_id")
+@click.option("--force", is_flag=True, default=False, help="Release every chunk the runner still holds.")
+@click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
+def runner_retire(cli: CliContext, runner_id: str, force: bool, by: str) -> None:
+    """Retire a runner — revoke its token and refuse its claims and registrations.
+
+    Refused (409) while it holds chunks unless --force, which releases them. Re-running
+    finishes a partial release. Stop the runner process too: the hub refuses it from here on."""
+    resp = cli.post(
+        f"/api/runners/{runner_id}/retire",
+        "POST /runners/{id}/retire",
+        json_body={"by": by, "force": force},
+        on_status={404: f"unknown runner {runner_id}", 409: f"runner {runner_id} holds chunks"},
+    )
+    body = resp.json()
+    lines = [f"runner {runner_id} is retired"]
+    released = body.get("released_chunk_ids") or []
+    if released:
+        lines.append(f"released: {', '.join(released)}")
+    cli.show_lines(body, *lines)
+
+
+@runner_group.command("reinstate", cls=FleetCommand)
+@click.argument("runner_id")
+@click.option("--by", "by", default="operator", help="Who is reinstating (recorded on the fact).")
+def runner_reinstate(cli: CliContext, runner_id: str, by: str) -> None:
+    """Reinstate a retired runner — it stays unenrolled; `enroll` it afresh."""
+    resp = cli.post(
+        f"/api/runners/{runner_id}/reinstate",
+        "POST /runners/{id}/reinstate",
+        json_body={"by": by},
+        on_status={404: f"unknown runner {runner_id}", 409: f"runner {runner_id} is not retired"},
+    )
+    body = resp.json()
+    cli.show_lines(body, f"runner {runner_id} is reinstated — enroll it to mint a fresh token")
+
+
+@runner_group.command("revoke-token", cls=FleetCommand)
+@click.argument("runner_id")
+@click.option("--by", "by", default="operator", help="Who is revoking (recorded on the revocation).")
+def runner_revoke_token(cli: CliContext, runner_id: str, by: str) -> None:
+    """Revoke a runner's token — it stays registered, and is refused until re-enrolled."""
+    resp = cli.post(
+        f"/api/runners/{runner_id}/token-revocations",
+        "POST /runners/{id}/token-revocations",
+        json_body={"by": by},
+        on_status={404: f"unknown runner {runner_id}", 409: f"runner {runner_id} has no enrolled token"},
+    )
+    body = resp.json()
+    cli.show_lines(body, f"revoked {runner_id}'s token — enroll it to mint a fresh one")

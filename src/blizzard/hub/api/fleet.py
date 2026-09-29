@@ -45,12 +45,13 @@ from blizzard.hub.domain.claim import (
     ClaimDeniedDependency,
     ClaimDeniedIncompatible,
     ClaimDeniedPaused,
+    ClaimDeniedRetired,
     ClaimDeniedTerminal,
 )
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.garden_proposals import RoutineProposalState
 from blizzard.hub.domain.graph import FollowLatest, Graph, Mint
-from blizzard.hub.domain.registry import DeclaredSubscription, RunnerCapability
+from blizzard.hub.domain.registry import DeclaredSubscription, RunnerCapability, RunnerRetired
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.hub.domain.work import (
     Chunk,
@@ -611,7 +612,7 @@ def claim_route(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> object:
-    """Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,
+    """Claim a chunk; 403 if the runner is paused or retired at the hub, 409 if already claimed,
     already terminal ({done, stopped}), standing on an unmet prerequisite,
     or incompatible with the runner's stored capabilities, else the first node envelope."""
     fleet.assert_owns(claim.runner_id)
@@ -630,6 +631,9 @@ def claim_route(
             workspace_id=claim.workspace_id,
             environment_ids=claim.environment_ids,
         )
+    except ClaimDeniedRetired as exc:
+        retired_denial = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id, detail=str(exc))
+        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=retired_denial.model_dump())
     except ClaimDeniedPaused as exc:
         denial = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id)
         return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=denial.model_dump())
@@ -868,9 +872,8 @@ def register_runner(
 ) -> RunnerRegistrationResponse:
     """Register a runner — runner id + workspace binding; idempotent upsert.
 
-    Runner-auth is checked at the router level; the ``subscriptions`` roster
-    rides the same authenticated write. The hub never rejects a registration over its
-    roster — it doubles as the heartbeat every tick."""
+    Runner-auth is checked at the router level. The hub never rejects a registration over
+    its roster — it doubles as the heartbeat every tick. A retired runner is refused 403."""
     fleet.assert_owns(request.runner_id)
     capabilities = tuple(
         RunnerCapability(
@@ -887,6 +890,10 @@ def register_runner(
         if request.subscriptions is not None
         else None
     )
+    try:
+        services.fleet.refuse_retired(services.registry.get_runner(request.runner_id), action="registration")
+    except RunnerRetired as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     first = services.fleet.register(
         request.runner_id,
         request.workspace_id,
@@ -906,8 +913,12 @@ def heartbeat_runner(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> Response:
-    """Refresh a runner's liveness — the slow runner-level heartbeat. Returns 204."""
+    """Refresh a runner's liveness — the slow runner-level heartbeat. Returns 204; 403 when retired."""
     fleet.assert_owns(runner_id)
+    try:
+        services.fleet.refuse_retired(services.registry.get_runner(runner_id), action="heartbeat")
+    except RunnerRetired as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     if not services.fleet.heartbeat(runner_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
     services.events.publish_runner_changed(runner_id, kind="heartbeat")

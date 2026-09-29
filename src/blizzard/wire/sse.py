@@ -42,7 +42,16 @@ ChunkChangeCause = Literal[
 #: What a ``runner-changed`` frame reports — see
 #: :func:`blizzard.hub.events.broker.EventBroker.publish_runner_changed`.
 RunnerChangeKind = Literal[
-    "registered", "heartbeat", "paused", "resumed", "locally-paused", "locally-resumed", "external-usage"
+    "registered",
+    "heartbeat",
+    "paused",
+    "resumed",
+    "locally-paused",
+    "locally-resumed",
+    "external-usage",
+    "retired",
+    "reinstated",
+    "token-revoked",
 ]
 
 

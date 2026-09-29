@@ -14,6 +14,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.facts import FactIngestService
 from blizzard.hub.domain.registry import FleetService
@@ -54,7 +55,13 @@ def _payload(*, slug: str, sampled_at: datetime, utilization_pct: float, name: s
 def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
     store = hub_store_connections(engine)
     chunks = chunk_stores(engine, clock)
-    fleet = FleetService(registry=RunnerRegistryStore(store), clock=clock)
+    fleet = FleetService(
+        registry=RunnerRegistryStore(store),
+        routes=chunks.route,
+        records=chunks.record,
+        detach=DetachService(route=chunks.route, exclusive=chunks.exclusive, clock=clock),
+        clock=clock,
+    )
     event_log = EventLogService(events=chunks.events, publisher=EventBroker())
     return FactIngestService(
         facts=chunks.facts,

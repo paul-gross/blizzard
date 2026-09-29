@@ -58,12 +58,17 @@ class RunnerRegistryStore:
             self._local_pause_detail(conn, runner_id),
             self._external_usage(conn, runner_id),
             self._external_usage_misses(conn, runner_id),
+            self._lifecycle(conn, runner_id),
         )
 
-    def list_runners(self) -> list[RunnerRegistration]:
+    def list_runners(self, *, include_retired: bool = False) -> list[RunnerRegistration]:
         with self._store.read("list_runners") as conn:
             rows = conn.execute(select(s.runner_registrations).order_by(s.runner_registrations.c.registered_at)).all()
             runner_ids = [row.runner_id for row in rows]
+            lifecycle = self._lifecycle_many(conn, runner_ids)
+            if not include_retired:
+                rows = [row for row in rows if not lifecycle[row.runner_id][0]]
+                runner_ids = [row.runner_id for row in rows]
             paused = self._paused_many(conn, runner_ids)
             local_pause = self._local_pause_detail_many(conn, runner_ids)
             usage = self._external_usage_many(conn, runner_ids)
@@ -75,9 +80,19 @@ class RunnerRegistryStore:
                     local_pause[row.runner_id],
                     usage[row.runner_id],
                     usage_misses[row.runner_id],
+                    lifecycle[row.runner_id],
                 )
                 for row in rows
             ]
+
+    def is_token_revoked(self, token_hash: str) -> bool:
+        with self._store.read("is_token_revoked") as conn:
+            row = conn.execute(
+                select(s.runner_token_revocations.c.id)
+                .where(s.runner_token_revocations.c.token_hash == token_hash)
+                .limit(1)
+            ).first()
+            return row is not None
 
     def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
         with self._store.read("registration_for_token_hash") as conn:
@@ -92,6 +107,7 @@ class RunnerRegistryStore:
                 self._local_pause_detail(conn, row.runner_id),
                 self._external_usage(conn, row.runner_id),
                 self._external_usage_misses(conn, row.runner_id),
+                self._lifecycle(conn, row.runner_id),
             )
 
     def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
@@ -302,6 +318,36 @@ class RunnerRegistryStore:
                 .values(name=name, missed_at=missed_at, reason=reason, updated_at=at)
             )
 
+    def record_lifecycle(self, runner_id: str, *, retired: bool, at: datetime, by: str) -> int:
+        with self._store.write("record_lifecycle") as conn:
+            result = conn.execute(
+                insert(s.runner_lifecycle_facts).values(runner_id=runner_id, retired=retired, set_at=at, set_by=by)
+            )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
+
+    def revoke_token(self, runner_id: str, *, at: datetime, by: str) -> int | None:
+        # The revocation fact and the nulled hash land in one transaction, so there is
+        # no instant where the token neither resolves nor reads as revoked.
+        with self._store.write("revoke_token") as conn:
+            token_hash = conn.execute(
+                select(s.runner_registrations.c.token_hash).where(s.runner_registrations.c.runner_id == runner_id)
+            ).scalar_one_or_none()
+            if token_hash is None:
+                return None
+            result = conn.execute(
+                insert(s.runner_token_revocations).values(
+                    runner_id=runner_id, token_hash=token_hash, revoked_at=at, revoked_by=by
+                )
+            )
+            conn.execute(
+                s.runner_registrations.update()
+                .where(s.runner_registrations.c.runner_id == runner_id)
+                .values(token_hash=None)
+            )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
+
     def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
         # `at` is not persisted: no rotation-audit column exists yet — accepted only for
         # signature symmetry with this seam's other writes.
@@ -338,6 +384,36 @@ class RunnerRegistryStore:
             for row in rows:
                 newest[row.runner_id] = row.paused  # newest-fact-wins: ascending id order overwrites
         result.update(newest)
+        return result
+
+    @staticmethod
+    def _lifecycle(conn, runner_id: str) -> tuple[bool, datetime | None, str | None]:  # type: ignore[no-untyped-def]
+        """The runner's retirement, off its newest lifecycle fact."""
+        return RunnerRegistryStore._lifecycle_many(conn, [runner_id])[runner_id]
+
+    @staticmethod
+    def _lifecycle_many(  # type: ignore[no-untyped-def]
+        conn, runner_ids: Sequence[str]
+    ) -> dict[str, tuple[bool, datetime | None, str | None]]:
+        """``_lifecycle``'s grouped sibling — every listed runner's ``(retired, at, by)`` off
+        its newest lifecycle fact, one query per id batch. Defaults ``(False, None, None)``,
+        and a reinstated runner's newest fact nulls ``at``/``by``."""
+        result: dict[str, tuple[bool, datetime | None, str | None]] = dict.fromkeys(runner_ids, (False, None, None))
+        if not runner_ids:
+            return result
+        for batch in id_batches(runner_ids):
+            rows = conn.execute(
+                select(
+                    s.runner_lifecycle_facts.c.runner_id,
+                    s.runner_lifecycle_facts.c.retired,
+                    s.runner_lifecycle_facts.c.set_at,
+                    s.runner_lifecycle_facts.c.set_by,
+                )
+                .where(s.runner_lifecycle_facts.c.runner_id.in_(batch))
+                .order_by(s.runner_lifecycle_facts.c.id)
+            ).all()
+            for row in rows:  # newest-fact-wins: ascending id order overwrites
+                result[row.runner_id] = (True, row.set_at, row.set_by) if row.retired else (False, None, None)
         return result
 
     @staticmethod
@@ -449,7 +525,9 @@ class RunnerRegistryStore:
         local_pause_detail: tuple[bool, str | None, str | None],
         external_usage: list[tuple[str, str, datetime, str]],
         external_usage_misses: list[tuple[str, str, datetime, str]],
+        lifecycle: tuple[bool, datetime | None, str | None],
     ) -> RunnerRegistration:
+        retired, retired_at, retired_by = lifecycle
         locally_paused, locally_paused_by, locally_paused_reason = local_pause_detail
         subscription_usage = tuple(
             SubscriptionUsageRecord(
@@ -501,6 +579,9 @@ class RunnerRegistryStore:
             subscription_usage_misses=subscription_usage_misses,
             capabilities=capabilities,
             declared_subscriptions=declared_subscriptions,
+            retired=retired,
+            retired_at=as_utc(retired_at) if retired_at is not None else None,
+            retired_by=retired_by,
         )
 
     @staticmethod

@@ -38,3 +38,12 @@ class DetachService:
             if handle.route_of(chunk.chunk_id) is None:
                 raise NotRouted(f"chunk {chunk.chunk_id} has no live route")
             return self._route.record_route_released_locked(handle, chunk.chunk_id, at=self._clock.now())
+
+    def release_held(self, chunk: Chunk, *, runner_id: str) -> int | None:
+        """:meth:`detach`, only while ``runner_id`` still holds the chunk — retirement's
+        release pass. ``None`` when the route is gone or another runner's by now."""
+        with self._exclusive.locked([chunk.chunk_id]) as handle:
+            route = handle.route_of(chunk.chunk_id)
+            if route is None or route.runner_id != runner_id:
+                return None
+            return self._route.record_route_released_locked(handle, chunk.chunk_id, at=self._clock.now())

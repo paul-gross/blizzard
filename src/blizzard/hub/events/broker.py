@@ -122,8 +122,8 @@ class EventBroker(_EventBroker):
     ) -> int:
         """A runner's registry state changed — ``kind`` names which change.
 
-        ``by`` rides the four pause/resume kinds and ``reason`` the runner-local pair.
-        ``key`` names the pause-family fact's identity, absent on
+        ``by`` rides the four pause/resume kinds and the three retirement kinds, ``reason`` the runner-local pair.
+        ``key`` names the pause- or retirement-family fact's identity, absent on
         ``registered``/``heartbeat``, which have no fact table."""
         payload = RunnerChangedPayload(runner_id=runner_id, kind=kind, by=by, reason=reason, key=key).to_payload()
         return self.publish(RUNNER_CHANGED, payload)

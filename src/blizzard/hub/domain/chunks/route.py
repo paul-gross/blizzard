@@ -31,6 +31,12 @@ class IReadChunkRouteRepository(Protocol):
         dict, as :meth:`route_of` returns ``None``."""
         ...
 
+    def live_routes_of_runner(self, runner_id: str) -> list[Route]:
+        """Every live route ``runner_id`` holds, ordered by chunk id — a runner's holdings,
+        each carrying its environments. Not a hot-path read: retirement asks it once per verb,
+        so it narrows by the runner's own route history rather than a live-set prefilter."""
+        ...
+
     def runner_high_water(self, runner_id: str) -> int:
         """The greatest per-runner seq the hub has already applied, or 0."""
         ...
