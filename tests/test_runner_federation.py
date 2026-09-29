@@ -32,6 +32,8 @@ pytestmark = pytest.mark.component
 
 _KID = "hub-kid-1"
 _RUNNER_ID = "runner-a"
+_TAILNET = "https://tailnet.example:8431"
+_LOOPBACK = "http://127.0.0.1:8431"
 
 
 def _keypair() -> tuple[object, dict[str, str]]:
@@ -76,6 +78,7 @@ def _build_app(
     client_host: str | None = None,
     base_url: str | None = None,
     extra_public_urls: tuple[str, ...] = (),
+    canonical_url: str = "https://runner-a.example",
 ) -> TestClient:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     metadata.create_all(engine)
@@ -84,7 +87,7 @@ def _build_app(
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
         runner_id=_RUNNER_ID,
         hub_url="http://hub.example",
-        public_urls=("https://runner-a.example", *extra_public_urls),
+        public_urls=tuple(url for url in (canonical_url, *extra_public_urls) if url),
         trusted_proxies=trusted_proxies,
     )
     store = SqlAlchemyRunnerStore(engine, runner_store_errors())
@@ -109,8 +112,8 @@ def _build_app(
     kwargs: dict[str, object] = {}
     if client_host is not None:
         kwargs["client"] = (client_host, 41000)
-    if base_url is not None:
-        kwargs["base_url"] = base_url
+    # The canonical Host, so login bounces rather than rehoming; plain http, so no cookie is Secure.
+    kwargs["base_url"] = base_url or "http://runner-a.example"
     return TestClient(app, **kwargs)  # type: ignore[arg-type]
 
 
@@ -369,7 +372,9 @@ def test_bounce_cookies_are_samesite_none_secure_on_a_loopback_runner(tmp_path: 
     """A loopback origin is potentially trustworthy, so `Secure` is honored over plain
     http — which is what lets a 127.0.0.1 runner federate against a hosted hub."""
     _private_key, jwk = _keypair()
-    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, base_url="http://127.0.0.1:8431")
+    client = _build_app(
+        tmp_path, oauth_enabled=True, jwk=jwk, extra_public_urls=(_LOOPBACK,), base_url="http://127.0.0.1:8431"
+    )
     resp = client.get("/api/auth/login", follow_redirects=False)
     header = _bounce_set_cookie_headers(resp)
     assert "bz_runner_bounce_state" in header
@@ -401,9 +406,6 @@ def test_bounce_cookies_stay_lax_on_a_plain_http_non_loopback_runner(tmp_path: P
 
 # --- Multi-origin callback selection ------------------------------
 
-_TAILNET = "https://tailnet.example:8431"
-_LOOPBACK = "http://127.0.0.1:8431"
-
 
 def test_login_presents_the_declared_origin_the_browser_actually_reached(tmp_path: Path) -> None:
     _private_key, jwk = _keypair()
@@ -428,7 +430,50 @@ def test_login_presents_each_declared_origin_to_the_browser_that_reached_it(tmp_
         assert params["redirect_uri"] == [f"{origin}/api/auth/callback"], origin
 
 
-def test_login_falls_back_to_the_canonical_origin_for_an_unmatched_host(tmp_path: Path) -> None:
+def test_login_rehomes_an_undeclared_loopback_alias_before_setting_bounce_cookies(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(
+        tmp_path, oauth_enabled=True, jwk=jwk, extra_public_urls=(_LOOPBACK,), base_url="http://localhost:8431"
+    )
+    with capture_logs() as logs:
+        resp = client.get("/api/auth/login?return_to=/board", follow_redirects=False)
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "https://runner-a.example/api/auth/login?return_to=%2Fboard&rehomed=true"
+    assert "bz_runner_bounce_state" not in _bounce_set_cookie_headers(resp)
+    warned = [entry for entry in logs if entry["log_level"] == "warning"]
+    assert [(entry["arrived_host"], entry["rehoming_to"]) for entry in warned] == [
+        ("localhost:8431", "https://runner-a.example")
+    ]
+
+
+def test_the_rehomed_login_bounces_from_the_canonical_origin_with_its_callback(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, base_url="http://localhost:8431")
+    rehome = client.get("/api/auth/login?return_to=/board", follow_redirects=False)
+    with capture_logs() as logs:
+        resp = client.get(rehome.headers["location"], follow_redirects=False)
+    location = urlparse(resp.headers["location"])
+    assert location.path == "/api/auth/authorize"
+    assert parse_qs(location.query)["redirect_uri"] == ["https://runner-a.example/api/auth/callback"]
+    assert "bz_runner_bounce_state" in _bounce_set_cookie_headers(resp)
+    assert not [entry for entry in logs if entry["log_level"] == "warning"]
+
+
+def test_login_does_not_rehome_when_no_origin_is_declared(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, canonical_url="", base_url="http://localhost:8431")
+    resp = client.get("/api/auth/login", follow_redirects=False)
+    assert urlparse(resp.headers["location"]).path == "/api/auth/authorize"
+
+
+def test_rehoming_carries_only_a_safe_return_to(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, base_url="http://localhost:8431")
+    resp = client.get("/api/auth/login?return_to=//evil.example", follow_redirects=False)
+    assert resp.headers["location"] == "https://runner-a.example/api/auth/login?return_to=%2F&rehomed=true"
+
+
+def test_a_rehomed_login_on_an_unmatched_host_falls_back_to_the_canonical_origin(tmp_path: Path) -> None:
     _private_key, jwk = _keypair()
     client = _build_app(
         tmp_path,
@@ -437,7 +482,7 @@ def test_login_falls_back_to_the_canonical_origin_for_an_unmatched_host(tmp_path
         extra_public_urls=(_TAILNET,),
         base_url="https://evil.example",
     )
-    resp = client.get("/api/auth/login", follow_redirects=False)
+    resp = client.get("/api/auth/login?rehomed=true", follow_redirects=False)
     params = parse_qs(urlparse(resp.headers["location"]).query)
     assert params["redirect_uri"] == ["https://runner-a.example/api/auth/callback"]
 
@@ -509,7 +554,9 @@ def test_a_proxy_that_rewrites_host_falls_back_and_is_not_silent(tmp_path: Path)
         client_host=_PROXY_IP,
     )
     with capture_logs() as logs:
-        resp = client.get("/api/auth/login", follow_redirects=False, headers={"x-forwarded-proto": "https"})
+        resp = client.get(
+            "/api/auth/login?rehomed=true", follow_redirects=False, headers={"x-forwarded-proto": "https"}
+        )
     params = parse_qs(urlparse(resp.headers["location"]).query)
     assert params["redirect_uri"] == ["https://runner-a.example/api/auth/callback"]
     warned = [entry for entry in logs if entry["log_level"] == "warning"]
