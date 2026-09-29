@@ -1,0 +1,54 @@
+<button
+  #triggerEl
+  type="button"
+  class="trigger"
+  cdkOverlayOrigin
+  #origin="cdkOverlayOrigin"
+  aria-haspopup="listbox"
+  [attr.aria-expanded]="open()"
+  [attr.aria-controls]="open() ? listboxId : null"
+  [attr.aria-label]="triggerName() ?? ariaLabel()"
+  [attr.data-testid]="testid()"
+  (click)="toggle()"
+>
+  @if (label(); as prefix) {
+    <span class="prefix">{{ prefix }} ·</span>
+  }
+  <span class="value">{{ selectedLabel() }}</span>
+  <span class="caret" aria-hidden="true">▾</span>
+</button>
+
+<ng-template
+  cdkConnectedOverlay
+  cdkConnectedOverlayHasBackdrop
+  cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
+  [cdkConnectedOverlayOrigin]="origin"
+  [cdkConnectedOverlayOpen]="open()"
+  [cdkConnectedOverlayMinWidth]="origin.elementRef.nativeElement.offsetWidth"
+  (attach)="focusActive()"
+  (backdropClick)="close()"
+  (detach)="close()"
+>
+  <div
+    class="popup"
+    cdkListbox
+    [id]="listboxId"
+    [attr.aria-label]="ariaLabel()"
+    [cdkListboxValue]="selection()"
+  >
+    @for (option of options(); track option.value) {
+      <div
+        class="option"
+        tabindex="-1"
+        [cdkOption]="option.value"
+        [attr.data-testid]="option.testid ?? null"
+        [title]="option.label"
+        (click)="pick(option.value)"
+        (keydown.enter)="pick(option.value)"
+        (keydown.space)="$event.preventDefault(); pick(option.value)"
+      >
+        {{ option.label }}
+      </div>
+    }
+  </div>
+</ng-template>

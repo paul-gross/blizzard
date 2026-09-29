@@ -57,6 +57,7 @@ async function renderHeader(width: number): Promise<{ root: HTMLElement; fixture
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkDetailHeader);
   fixture.componentRef.setInput('detail', DETAIL);
+  fixture.componentRef.setInput('renderedStatus', DETAIL.status);
   fixture.componentRef.setInput('canControl', true);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;

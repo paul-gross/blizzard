@@ -4,8 +4,16 @@
     [selectedValue]="waitingChipValue()"
     (choose)="onWaitingChoose($event)"
   />
-  <fleet-kit-chips [options]="classChips()" [selectedValue]="classChipValue()" (choose)="onClassChoose($event)" />
-  <fleet-kit-chips
+  <fleet-kit-select
+    ariaLabel="Class"
+    testid="gardening-proposal-class-filter"
+    [options]="classChips()"
+    [selectedValue]="classChipValue()"
+    (choose)="onClassChoose($event)"
+  />
+  <fleet-kit-select
+    ariaLabel="Routine"
+    testid="gardening-proposal-routine-filter"
     [options]="routineChips()"
     [selectedValue]="routineChipValue()"
     (choose)="onRoutineChoose($event)"

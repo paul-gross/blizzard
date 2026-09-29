@@ -1,27 +1,39 @@
 <div class="gf-filters">
   <span class="gf-filter-label" data-testid="gardening-findings-filter-label-routine">Routine</span>
-  <fleet-kit-chips
+  <fleet-kit-select
+    ariaLabel="Routine"
+    [label]="mobile() ? 'Routine' : null"
+    testid="gardening-findings-routine-filter"
     [options]="filters.routineChips()"
     [selectedValue]="filters.routineChipValue()"
     (choose)="filters.onRoutineChoose($event)"
   />
 
   <span class="gf-filter-label" data-testid="gardening-findings-filter-label-scope">Scope</span>
-  <fleet-kit-chips
+  <fleet-kit-select
+    ariaLabel="Scope"
+    [label]="mobile() ? 'Scope' : null"
+    testid="gardening-findings-scope-filter"
     [options]="filters.scopeChips()"
     [selectedValue]="filters.scopeChipValue()"
     (choose)="filters.onScopeChoose($event)"
   />
 
   <span class="gf-filter-label" data-testid="gardening-findings-filter-label-class">Class</span>
-  <fleet-kit-chips
+  <fleet-kit-select
+    ariaLabel="Class"
+    [label]="mobile() ? 'Class' : null"
+    testid="gardening-findings-class-filter"
     [options]="filters.classChips()"
     [selectedValue]="filters.classChipValue()"
     (choose)="filters.onClassChoose($event)"
   />
 
   <span class="gf-filter-label" data-testid="gardening-findings-filter-label-state">State</span>
-  <fleet-kit-chips
+  <fleet-kit-select
+    ariaLabel="State"
+    [label]="mobile() ? 'State' : null"
+    testid="gardening-findings-state-filter"
     [options]="filters.stateChips"
     [selectedValue]="filters.stateFilter() ?? 'all'"
     (choose)="filters.onStateChoose($event)"

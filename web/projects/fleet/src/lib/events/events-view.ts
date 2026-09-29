@@ -5,6 +5,7 @@ import { compactRef } from '../compact-ref';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
 import { KitChips, type KitChipOption } from '../kit/kit-chips';
+import { KitSelect } from '../kit/kit-select';
 import { KitPanel } from '../kit/kit-panel';
 import type { Tone } from '../kit/tone';
 import { FleetWhen } from '../when-display';
@@ -57,7 +58,7 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
 @Component({
   selector: 'fleet-events-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel, KitBadge, KitChips, FleetWhen],
+  imports: [KitAsyncState, KitPanel, KitBadge, KitChips, KitSelect, FleetWhen],
   templateUrl: './events-view.html',
   styleUrl: './events-view.css',
 })

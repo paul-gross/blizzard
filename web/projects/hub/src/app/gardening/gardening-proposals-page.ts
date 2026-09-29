@@ -11,6 +11,7 @@ import {
   isGardenProposalWaiting,
   KitBackBar,
   KitChips,
+  KitSelect,
   passGardenProposalMutationKey,
   type GardenProposalView,
   type KitAsyncStateValue,
@@ -67,7 +68,7 @@ const ALL_ROUTINES = 'all';
 @Component({
   selector: 'app-gardening-proposals-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetProposalList, KitBackBar, KitChips, RouterLink, RouterOutlet],
+  imports: [FleetProposalList, KitBackBar, KitChips, KitSelect, RouterLink, RouterOutlet],
   templateUrl: './gardening-proposals-page.html',
   styleUrl: './gardening-proposals-page.css',
   host: {

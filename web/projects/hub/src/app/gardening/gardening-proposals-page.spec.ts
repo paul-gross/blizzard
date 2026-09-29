@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, EnvironmentInjector, provideZonelessChangeDetection, runInInjectionContext } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient, injectAcceptGardenProposalMutation, injectPassGardenProposalMutation, type MeResponse, ViewportService } from 'fleet';
@@ -97,6 +97,20 @@ class TestProposalDetail {}
   template: '<router-outlet />',
 })
 class TestProposalsHost {}
+
+/** The select's popup renders into a CDK overlay on `document.body`, not the fixture. */
+const inOverlay = (testid: string) => document.body.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+
+async function openFilter(fixture: ComponentFixture<unknown>, el: HTMLElement, triggerTestid: string) {
+  el.querySelector<HTMLElement>(`[data-testid="${triggerTestid}"]`)!.click();
+  await settle(fixture);
+}
+
+async function pickOption(fixture: ComponentFixture<unknown>, el: HTMLElement, triggerTestid: string, optionTestid: string) {
+  await openFilter(fixture, el, triggerTestid);
+  inOverlay(optionTestid)!.click();
+  await settle(fixture);
+}
 
 /** The real route table's own shape for this tab (`app.routes.ts`), driven by the
  * real router — the filters under test live in the URL, and the docket drives its
@@ -235,9 +249,8 @@ describe('GardeningProposalsPage', () => {
     expect(el.querySelector('[data-testid="gardening-proposal-filter-all"]')?.getAttribute('aria-pressed')).toBe(
       'true',
     );
-    expect(
-      el.querySelector('[data-testid="gardening-proposal-class-item-fix-the-source"]')?.getAttribute('aria-pressed'),
-    ).toBe('true');
+    await openFilter(fixture, el, 'gardening-proposal-class-filter');
+    expect(inOverlay('gardening-proposal-class-item-fix-the-source')?.getAttribute('aria-selected')).toBe('true');
   });
 
   it('moves a routed proposal a filter change excludes onto the first row still in the set', async () => {
@@ -249,7 +262,7 @@ describe('GardeningProposalsPage', () => {
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')?.classList).toContain('selected');
 
     // gp_1 is 'fix-the-source' — this class pick excludes it from the filtered set.
-    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-class-item-remediate"]')!.click();
+    await pickOption(fixture, el, 'gardening-proposal-class-filter', 'gardening-proposal-class-item-remediate');
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/proposals/gp_2?class=remediate');
@@ -267,32 +280,33 @@ describe('GardeningProposalsPage', () => {
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_3"]')).toBeTruthy();
   });
 
-  it('derives the class chips from the fetched data, never a hardcoded list', async () => {
-    const { el } = await render();
+  it('derives the class options from the fetched data, never a hardcoded list', async () => {
+    const { fixture, el } = await render();
 
-    expect(el.querySelector('[data-testid="gardening-proposal-class-all"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-proposal-class-item-fix-the-source"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-proposal-class-item-remediate"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-proposal-class-item-mechanize"]')).toBeNull();
+    await openFilter(fixture, el, 'gardening-proposal-class-filter');
+    expect(inOverlay('gardening-proposal-class-all')).toBeTruthy();
+    expect(inOverlay('gardening-proposal-class-item-fix-the-source')).toBeTruthy();
+    expect(inOverlay('gardening-proposal-class-item-remediate')).toBeTruthy();
+    expect(inOverlay('gardening-proposal-class-item-mechanize')).toBeNull();
   });
 
   it('filters the list down to one class', async () => {
     const { fixture, el } = await render();
 
-    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-class-item-remediate"]')!.click();
+    await pickOption(fixture, el, 'gardening-proposal-class-filter', 'gardening-proposal-class-item-remediate');
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeNull();
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_2"]')).toBeTruthy();
   });
 
-  it("renders and filters by a deployment class literally named 'all' without colliding with the All-classes chip", async () => {
+  it("renders and filters by a deployment class literally named 'all' without colliding with the All-classes option", async () => {
     const { fixture, el } = await render([{ ...WAITING_A, class: 'all' }, WAITING_B]);
 
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_2"]')).toBeTruthy();
 
-    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-class-item-all"]')!.click();
+    await pickOption(fixture, el, 'gardening-proposal-class-filter', 'gardening-proposal-class-item-all');
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
@@ -305,14 +319,13 @@ describe('GardeningProposalsPage', () => {
     expect(el.querySelector('[data-testid="gardening-proposals-empty"]')).toBeTruthy();
   });
 
-  it('derives the routine chips from the fetched data, defaulting to all routines', async () => {
-    const { el } = await render([WAITING_A, ARCHITECTURE_WAITING]);
+  it('derives the routine options from the fetched data, defaulting to all routines', async () => {
+    const { fixture, el } = await render([WAITING_A, ARCHITECTURE_WAITING]);
 
-    expect(el.querySelector('[data-testid="gardening-proposal-routine-all"]')?.getAttribute('aria-pressed')).toBe(
-      'true',
-    );
-    expect(el.querySelector('[data-testid="gardening-proposal-routine-item-comments"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-proposal-routine-item-architecture"]')).toBeTruthy();
+    await openFilter(fixture, el, 'gardening-proposal-routine-filter');
+    expect(inOverlay('gardening-proposal-routine-all')?.getAttribute('aria-selected')).toBe('true');
+    expect(inOverlay('gardening-proposal-routine-item-comments')).toBeTruthy();
+    expect(inOverlay('gardening-proposal-routine-item-architecture')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_4"]')).toBeTruthy();
   });
@@ -320,7 +333,7 @@ describe('GardeningProposalsPage', () => {
   it('narrows the list down to one routine, riding the query string', async () => {
     const { router, fixture, el } = await render([WAITING_A, ARCHITECTURE_WAITING]);
 
-    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-routine-item-architecture"]')!.click();
+    await pickOption(fixture, el, 'gardening-proposal-routine-filter', 'gardening-proposal-routine-item-architecture');
     await settle(fixture);
 
     expect(router.url).toContain('routine=architecture');
@@ -336,7 +349,7 @@ describe('GardeningProposalsPage', () => {
     );
     expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')?.classList).toContain('selected');
 
-    el.querySelector<HTMLElement>('[data-testid="gardening-proposal-routine-item-architecture"]')!.click();
+    await pickOption(fixture, el, 'gardening-proposal-routine-filter', 'gardening-proposal-routine-item-architecture');
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/proposals/gp_4?routine=architecture');

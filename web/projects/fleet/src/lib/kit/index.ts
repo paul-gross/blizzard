@@ -23,6 +23,7 @@ export { KitMenuItem, KitMenuItemRadio, KitMenuItemSubtitle } from './kit-menu-i
 export { KitOption } from './kit-option';
 export { KitPaceBar } from './kit-pace-bar';
 export { KitProseBlock } from './kit-prose-block';
+export { KitSelect } from './kit-select';
 export { KitSelectRow } from './kit-select-row';
 export { KitSkeleton } from './kit-skeleton';
 export { KitSlotBar } from './kit-slot-bar';

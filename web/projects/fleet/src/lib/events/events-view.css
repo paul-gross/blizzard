@@ -19,6 +19,9 @@ fleet-kit-panel.fill {
   border-bottom: 1px solid var(--line);
   flex: none;
 }
+.filters fleet-kit-select {
+  align-self: flex-start;
+}
 .rows {
   overflow-y: auto;
   min-height: 0;
