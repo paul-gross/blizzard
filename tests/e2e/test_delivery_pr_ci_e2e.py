@@ -88,6 +88,10 @@ def _graph_yaml() -> str:
                         "landed": {"description": "Every repo's PR merged cleanly.", "to": "done"},
                         "conflict": {"description": "A repo's PR is dirty; back to build.", "to": "build"},
                         "failure": {"description": "poll_timeout exceeded; back to build.", "to": "build"},
+                        "inherited-failure": {
+                            "description": "The base check remains red after a rerun; back to build.",
+                            "to": "build",
+                        },
                     }
                 },
             },
@@ -299,7 +303,7 @@ def test_pr_ci_routes_failure_on_a_terminally_failed_check(tmp_path: Path) -> No
         fenced = _fenced_env()
 
         bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
-        assert bounced["bounces"][0]["cause"] == "failure", bounced["bounces"]
+        assert bounced["bounces"][0]["cause"] == "inherited-failure", bounced["bounces"]
 
         artifacts = hub.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
         findings = next((a for a in artifacts if a.get("name") == "delivery-findings"), None)
