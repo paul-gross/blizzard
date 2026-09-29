@@ -13,7 +13,8 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.ids import FINDING_PREFIX, Id
-from blizzard.hub.domain.findings import Finding
+from blizzard.hub.domain.finding_bucket import FindingBucket
+from blizzard.hub.domain.findings import EXIT_KINDS, Finding
 from blizzard.hub.domain.garden_delivery import (
     CommitResolution,
     CommitResolver,
@@ -51,6 +52,13 @@ _BAD_COMMIT = "not-a-sha"
 def _live(*, in_scope: bool = True) -> dict[str, str]:
     scope = _RUN.scope_slug if in_scope else "other-scope"
     return {_FIN1: scope, _FIN2: scope, _FIN3: scope}
+
+
+def _bucket(findings: list[Finding]) -> FindingBucket:
+    return FindingBucket(
+        citable=[f for f in findings if f.state not in EXIT_KINDS],
+        exited_ids=frozenset(f.finding_id for f in findings if f.state in EXIT_KINDS),
+    )
 
 
 def _finding(
@@ -297,7 +305,7 @@ def test_validate_delivery_resolves_a_proposal_citing_its_own_runs_add_ref() -> 
         run=_RUN,
         delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
         proposal_artifacts={"docket": f"[{proposal.model_dump_json(by_alias=True)}]"},
-        known_findings=[],
+        bucket=_bucket([]),
     )
 
     assert [p.findings for p in result.proposals] == [["new-1"]]
@@ -311,7 +319,7 @@ def test_validate_delivery_rejects_a_proposal_citing_a_ref_absent_from_the_delta
             run=_RUN,
             delta_artifacts={},
             proposal_artifacts={"docket": f"[{proposal.model_dump_json(by_alias=True)}]"},
-            known_findings=[],
+            bucket=_bucket([]),
         )
 
 
@@ -327,7 +335,7 @@ def test_validate_delivery_rejects_an_add_ref_duplicated_across_two_delta_artifa
                 "survey-b.json": delta_b.model_dump_json(by_alias=True),
             },
             proposal_artifacts={},
-            known_findings=[],
+            bucket=_bucket([]),
         )
 
 
@@ -341,7 +349,7 @@ def test_validate_delivery_still_accepts_a_proposal_citing_a_prior_runs_live_id(
         run=_RUN,
         delta_artifacts={},
         proposal_artifacts={"docket": f"[{proposal.model_dump_json(by_alias=True)}]"},
-        known_findings=[_finding(_FIN1)],
+        bucket=_bucket([_finding(_FIN1)]),
     )
 
     assert [p.findings for p in result.proposals] == [[_FIN1]]
@@ -357,7 +365,7 @@ def test_validate_delivery_accepts_an_empty_proposals_docket() -> None:
         run=_RUN,
         delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
         proposal_artifacts={"docket": "[]"},
-        known_findings=[],
+        bucket=_bucket([]),
     )
 
     assert result.proposals == []
@@ -534,7 +542,7 @@ def test_validate_delivery_accepts_a_full_delivery_and_bundles_it() -> None:
         run=_RUN,
         delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
         proposal_artifacts={"proposals.json": f"[{proposal.model_dump_json(by_alias=True)}]"},
-        known_findings=[_finding(_FIN1), _finding(_FIN2), _finding(_FIN3)],
+        bucket=_bucket([_finding(_FIN1), _finding(_FIN2), _finding(_FIN3)]),
     )
 
     assert result.run == _RUN
@@ -558,7 +566,7 @@ def test_validate_delivery_pairs_each_proposal_with_its_own_source_artifact_name
             "docket-a": f"[{proposal_a1.model_dump_json(by_alias=True)}, {proposal_a2.model_dump_json(by_alias=True)}]",
             "docket-b": f"[{proposal_b1.model_dump_json(by_alias=True)}]",
         },
-        known_findings=[_finding(_FIN1), _finding(_FIN2)],
+        bucket=_bucket([_finding(_FIN1), _finding(_FIN2)]),
     )
 
     assert [p.ref for p in result.proposals] == ["a1", "a2", "b1"]
@@ -575,7 +583,7 @@ def test_validate_delivery_accepts_two_artifacts_reusing_one_ref() -> None:
         run=_RUN,
         delta_artifacts={},
         proposal_artifacts={"docket-a": raw, "docket-b": raw},
-        known_findings=[_finding(_FIN1)],
+        bucket=_bucket([_finding(_FIN1)]),
     )
 
     assert [p.ref for p in result.proposals] == ["p1", "p1"]
@@ -591,12 +599,12 @@ def test_validate_delivery_rejects_one_artifact_naming_a_ref_twice() -> None:
             run=_RUN,
             delta_artifacts={},
             proposal_artifacts={"docket": twice},
-            known_findings=[_finding(_FIN1)],
+            bucket=_bucket([_finding(_FIN1)]),
         )
 
 
 def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> None:
-    # A finding recorded `gone` must still be present in `known_findings`
+    # A finding recorded `gone` must still be present in the bucket
     # (reversibility) — an `observed` targeting it is accepted, not rejected as unknown.
     delta = FindingDelta(scope="runner", findings=[ObservedFindingOp(id=_FIN1)])
 
@@ -604,7 +612,7 @@ def test_validate_delivery_accepts_an_observed_op_reviving_a_gone_finding() -> N
         run=_RUN,
         delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
         proposal_artifacts={},
-        known_findings=[_finding(_FIN1, live=False)],
+        bucket=_bucket([_finding(_FIN1, live=False)]),
     )
 
     assert result.deltas == [delta]
@@ -620,7 +628,7 @@ def test_validate_delivery_accepts_an_observed_op_reviving_a_delivered_finding()
         run=_RUN,
         delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
         proposal_artifacts={},
-        known_findings=[_finding(_FIN1, live=False, state="delivered", actor="u_1")],
+        bucket=_bucket([_finding(_FIN1, live=False, state="delivered", actor="u_1")]),
     )
 
     assert result.deltas == [delta]
@@ -636,7 +644,7 @@ def test_validate_delivery_collects_delivered_findings_by_actor() -> None:
         run=_RUN,
         delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
         proposal_artifacts={},
-        known_findings=[_finding(_FIN1, live=False, state="delivered", actor="u_1")],
+        bucket=_bucket([_finding(_FIN1, live=False, state="delivered", actor="u_1")]),
     )
 
     assert result.delivered_findings == {_FIN1: "u_1"}
@@ -652,7 +660,7 @@ def test_validate_delivery_collects_an_actor_less_delivered_finding_too() -> Non
         run=_RUN,
         delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
         proposal_artifacts={},
-        known_findings=[_finding(_FIN1, live=False, state="delivered", actor=None)],
+        bucket=_bucket([_finding(_FIN1, live=False, state="delivered", actor=None)]),
     )
 
     assert _FIN1 in result.delivered_findings
@@ -669,7 +677,7 @@ def test_validate_delivery_rejects_an_op_naming_an_exited_finding() -> None:
             run=_RUN,
             delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
             proposal_artifacts={},
-            known_findings=[_finding(_FIN1, live=False, state="resolved")],
+            bucket=_bucket([_finding(_FIN1, live=False, state="resolved")]),
         )
 
 
@@ -693,7 +701,7 @@ def test_validate_delivery_resolves_each_distinct_commit_at_most_once() -> None:
         run=_RUN,
         delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
         proposal_artifacts={},
-        known_findings=[],
+        bucket=_bucket([]),
         resolve_commit=_stub,
     )
 
@@ -708,5 +716,5 @@ def test_validate_delivery_rejects_on_the_first_failing_artifact() -> None:
             run=_RUN,
             delta_artifacts={"survey.json": delta.model_dump_json(by_alias=True)},
             proposal_artifacts={},
-            known_findings=[_finding(_FIN1), _finding(_FIN2), _finding(_FIN3)],
+            bucket=_bucket([_finding(_FIN1), _finding(_FIN2), _finding(_FIN3)]),
         )

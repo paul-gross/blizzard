@@ -387,17 +387,12 @@ def record_garden_delivery(
     if services.garden_delivery.already_delivered(chunk_id=chunk_id, node_id=node_id, epoch=epoch):
         return GardenDeliveryResponse(outcome="recorded", detail="")
 
-    # Widened with this run's own scope's review-sourced findings, so an
-    # `observed`/`gone` op or a proposal citation admits one under the same-scope constraint.
-    known_findings = services.findings.list_for_routine(run.routine_name, include_gone=True)
-    known_findings += services.findings.list_by_source(scope_slug=run.scope_slug, source="review", include_gone=True)
-
     try:
         validated = validate_delivery(
             run=run,
             delta_artifacts=delta_artifacts,
             proposal_artifacts=proposal_artifacts,
-            known_findings=known_findings,
+            bucket=services.finding_bucket.for_run(run),
             resolve_commit=services.commit_resolver,
         )
     except GardenDeliveryRejected as exc:

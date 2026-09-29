@@ -61,6 +61,7 @@ from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
+from blizzard.hub.domain.finding_bucket import FindingBucketReader
 from blizzard.hub.domain.findings import FindingExitService, IReadFindingRepository, IReadFindingSetRepository
 from blizzard.hub.domain.garden_delivery import CommitResolver
 from blizzard.hub.domain.garden_delivery_materialize import GardenDelivery
@@ -275,6 +276,8 @@ class HubServices:
     #: — the worker's per-chunk read, distinct from the routine-bucket read
     #: `findings`/`run_context` back.
     answered_findings: AnsweredFindingsReader
+    #: A run's finding bucket — what it is shown and may cite.
+    finding_bucket: FindingBucketReader
     #: Materialize a validated delivery in one transaction.
     garden_delivery: GardenDelivery
     #: Materialize a delivery lane's deferred review findings, one per chunk.
@@ -601,6 +604,7 @@ def build_services(
         answered_findings=AnsweredFindingsReader(
             closures=garden_proposal_closure_store, proposals=garden_proposal_store, findings=finding_store
         ),
+        finding_bucket=FindingBucketReader(finding_store),
         garden_delivery=GardenDelivery(delivery=garden_delivery_store, clock=clock),
         review_findings=ReviewFindingsMaterialize(delivery=review_findings_store, clock=clock),
         commit_resolver=commit_resolver,

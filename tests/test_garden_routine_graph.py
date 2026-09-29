@@ -126,6 +126,18 @@ def test_garden_routine_reconcile_bucket_is_live_plus_delivered() -> None:
     assert "actually in this routine's bucket" in prompt  # type: ignore[operator]
 
 
+def test_garden_routine_reconcile_bucket_spans_scopes_but_ops_stay_in_scope() -> None:
+    """The bucket is routine-wide, so the prompt names each row's scope and confines
+    `observed`/`gone` — and a match against a neighbour's finding — to what it may touch."""
+    prompt = _doc().node("reconcile").prompt  # type: ignore[union-attr]
+    assert "findings in every scope plus review findings on yours" in prompt  # type: ignore[operator]
+    assert "`observed`/`gone` go only on findings whose `scope_slug` is your scope" in prompt  # type: ignore[operator]
+    assert "matches a neighbour scope's finding, it is already recorded" in prompt  # type: ignore[operator]
+    judgement = _doc().node("reconcile").judgement  # type: ignore[union-attr]
+    assert judgement is not None and judgement.prompt is not None
+    assert "every finding in your own scope the delta left untouched" in judgement.prompt
+
+
 def test_garden_routine_reconcile_states_class_reuse_against_the_bucket() -> None:
     """Reconcile, unlike survey, already holds the live bucket when it decides an `add`,
     so it is the node positioned to reuse an existing class rather than mint a

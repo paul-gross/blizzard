@@ -76,10 +76,11 @@ def _common() -> str:
         "scope = next(l for l in lines if l.startswith('Scope:')).split()[1]\n"
         "def publish(name, content):\n"
         "    sh('blizzard', 'runner', 'artifact', 'create', '--name', name, inp=content)\n"
+        "def rows():\n"
+        "    return json.loads(sh('blizzard', 'runner', 'garden', 'findings'))\n"
         "def bucket():\n"
-        "    rows = json.loads(sh('blizzard', 'runner', 'garden', 'findings'))\n"
-        "    assert all(r['scope_slug'] == scope for r in rows), f'bucket leaked another scope: {rows}'\n"
-        "    return [r for r in rows if r['live']]\n"
+        "    # ops and matches target only rows under this run's own scope\n"
+        "    return [r for r in rows() if r['scope_slug'] == scope and r['live']]\n"
         "addendum_marker = pathlib.Path(f'.garden-addendum-{chunk_id}')\n"
     )
 
@@ -125,6 +126,9 @@ _SURVEY_JUDGEMENT = (
 _RECONCILE = (
     "envelope = json.loads(sh('blizzard', 'runner', 'artifact', 'get', 'survey', '--content'))\n"
     "live = bucket()\n"
+    "if path == 'virgin':\n"
+    "    # the bucket is routine-wide: `found`'s findings are shown under `found`'s own scope\n"
+    f"    assert any(r['scope_slug'] == {_SCOPE_FOUND!r} for r in rows()), 'neighbour findings not shown'\n"
     "if path == 'invalid' and not addendum_marker.exists():\n"
     "    delta = {'scope': scope, 'revisions': envelope['revisions'], 'measurement': envelope['measurement'],\n"
     f"             'findings': [{{'op': 'observed', 'id': {_UNKNOWN_FINDING_ID!r}}}]}}\n"

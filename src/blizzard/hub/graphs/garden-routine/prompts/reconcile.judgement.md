@@ -4,7 +4,7 @@ Choose `converged` when the delta is complete: every survey candidate resolved a
 a live finding, and every live finding this run actually visited accounted for.
 
 Choose `nothing-to-propose` only when the delta holds no `add` — nothing new arrived — and every finding still standing
-(every `observed`, and every finding your bucket held that the delta left untouched, `delivered` included) is named in
+(every `observed`, and every finding in your own scope the delta left untouched, `delivered` included) is named in
 at least one open proposal's own `findings` list, fetched with `blizzard runner garden proposals`. A live or
 `delivered` finding not cited by any open proposal has no response yet, however old it is — that is `converged`, so
 `propose` gets the chance to draft one.

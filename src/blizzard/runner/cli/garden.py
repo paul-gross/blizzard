@@ -17,7 +17,7 @@ def garden_group() -> None:
 
 @garden_group.command("findings")
 def garden_findings() -> None:
-    """Worker: list this run's live-plus-``delivered`` finding bucket as JSON."""
+    """Worker: list this run's finding bucket as JSON — the routine's findings in every scope."""
     worker = WorkerCall.of("garden findings")
     resp = worker.get(worker.leased("garden/findings"), failure="could not read the finding bucket")
     click.echo(resp.text)

@@ -15,7 +15,7 @@ from datetime import datetime
 from pydantic import TypeAdapter, ValidationError
 
 from blizzard.foundation.ids import FINDING_PREFIX, Id
-from blizzard.hub.domain.findings import EXIT_KINDS, Finding
+from blizzard.hub.domain.finding_bucket import FindingBucket
 from blizzard.hub.domain.run_context import RunContext
 from blizzard.wire.finding import AddFindingOp, FindingDelta, GoneFindingOp
 from blizzard.wire.garden_proposal import GardenProposalCandidate
@@ -224,17 +224,16 @@ def validate_delivery(
     run: RunContext,
     delta_artifacts: Mapping[str, str],
     proposal_artifacts: Mapping[str, str],
-    known_findings: Sequence[Finding],
+    bucket: FindingBucket,
     resolve_commit: CommitResolver | None = None,
 ) -> ValidatedDelivery:
     """The delivery node's whole check: `delta_artifacts`/`proposal_artifacts` are
     artifact-name → raw-JSON-text maps a route handler holds before parsing.
-    `known_findings` is every finding on `run.routine_name` plus review-sourced ones on
-    `run.scope_slug`, live or gone. Raises :class:`GardenDeliveryRejected` on the
+    `bucket` is the run's :class:`FindingBucket`: what it may cite. Raises :class:`GardenDeliveryRejected` on the
     first failure; on success returns a :class:`ValidatedDelivery`, nothing durable."""
-    live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in known_findings if f.state not in EXIT_KINDS}
-    exited_ids = frozenset(f.finding_id for f in known_findings if f.state in EXIT_KINDS)
-    delivered_findings = {f.finding_id: f.actor for f in known_findings if f.state == "delivered"}
+    live_findings: LiveFindings = {f.finding_id: f.scope_slug for f in bucket.citable}
+    exited_ids = bucket.exited_ids
+    delivered_findings = {f.finding_id: f.actor for f in bucket.citable if f.state == "delivered"}
     deltas = [parse_delta(name, raw) for name, raw in delta_artifacts.items()]
     proposals: list[GardenProposalCandidate] = []
     proposal_sources: list[str] = []

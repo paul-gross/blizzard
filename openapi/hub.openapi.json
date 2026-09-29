@@ -14780,7 +14780,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/garden/findings": {
       "get": {
-        "description": "A worker's own routine's live-plus-`delivered` finding bucket, widened to every\nreview-sourced finding on the same scope \u2014 the\nchunk's own run context derives the routine and the scope; no caller-supplied flag can\nname another. 404 both for an unknown chunk and for one carrying no run context (not a\nroutine run): a chunk with nothing to read is refused rather than an empty bucket.",
+        "description": "A worker's finding bucket \u2014 its routine's non-exited findings in every scope, plus\nreview-sourced ones on the run's own scope: exactly what its delivery may cite. Each\nview carries its `scope_slug` and `state`. The chunk's own run context derives the\nroutine and the scope; no caller-supplied flag can name another. 404 both for an\nunknown chunk and for one carrying no run context (not a routine run): a chunk with\nnothing to read is refused rather than an empty bucket.",
         "operationId": "get_garden_findings_api_fleet_chunks__chunk_id__garden_findings_get",
         "parameters": [
           {

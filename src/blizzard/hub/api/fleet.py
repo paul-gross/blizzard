@@ -376,15 +376,11 @@ def _routine_run_or_404(chunk_id: str, services: HubServices) -> RunContext:
 
 @router.get("/chunks/{chunk_id}/garden/findings", response_model=list[FindingView])
 def get_garden_findings(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> list[FindingView]:
-    """A worker's own routine's live-plus-`delivered` finding bucket, widened to every
-    review-sourced finding on the same scope — the
-    chunk's own run context derives the routine and the scope; no caller-supplied flag can
-    name another. 404 both for an unknown chunk and for one carrying no run context (not a
-    routine run): a chunk with nothing to read is refused rather than an empty bucket."""
+    """A worker's finding bucket — exactly what its delivery may cite (`FindingBucket`); the
+    chunk's own run context derives the routine and scope, no caller flag can name another.
+    404 for an unknown chunk or one with no run context (not a routine run)."""
     run = _routine_run_or_404(chunk_id, services)
-    bucket = services.findings.list_for(run.routine_name, run.scope_slug, include_gone=True)
-    bucket += services.findings.list_by_source(scope_slug=run.scope_slug, source="review", include_gone=True)
-    return [finding_view(f) for f in bucket if f.live or f.state == "delivered"]
+    return [finding_view(f) for f in services.finding_bucket.for_run(run).citable]
 
 
 @router.get("/chunks/{chunk_id}/garden/proposals", response_model=list[GardenProposalView])
