@@ -21,7 +21,7 @@
  * initial chunk even when nothing on the eager path uses its exports (the barrel-leak
  * failure mode this check exists to catch): the fleet `chunk-detail/`, `garden/`,
  * `graphs/`, or `transcripts/` sub-barrels, `@dagrejs/*`, or `@angular/cdk`'s
- * `menu`/`overlay` bundles.
+ * `menu`/`overlay`/`listbox` bundles.
  *
  * Run from `web/`: `npm run bundle-check` (`node scripts/bundle-check.js`).
  */
@@ -43,8 +43,8 @@ const FORBIDDEN = [
   { name: 'fleet transcripts/', test: (f) => f.startsWith('projects/fleet/src/lib/transcripts/') },
   { name: '@dagrejs/*', test: (f) => f.startsWith('node_modules/@dagrejs/') },
   {
-    name: '@angular/cdk menu/overlay',
-    test: (f) => f.startsWith('node_modules/@angular/cdk/') && (f.includes('menu') || f.includes('overlay')),
+    name: '@angular/cdk menu/overlay/listbox',
+    test: (f) => f.startsWith('node_modules/@angular/cdk/') && (f.includes('menu') || f.includes('overlay') || f.includes('listbox')),
   },
 ];
 

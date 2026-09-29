@@ -1,5 +1,5 @@
 import { provideZonelessChangeDetection } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { settle } from '../testing/settle';
@@ -26,6 +26,14 @@ const EVENTS = [
     message: 'Lease minted',
   },
 ];
+
+/** The select's popup renders into a CDK overlay on `document.body`, not the fixture. */
+const inOverlay = (testid: string) => document.body.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+
+async function openSelect(fixture: ComponentFixture<unknown>, testid: string) {
+  (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(`[data-testid="${testid}"]`)?.click();
+  await settle(fixture);
+}
 
 describe('EventsPanel', () => {
   let stub: RequestClientStub;
@@ -85,24 +93,26 @@ describe('EventsPanel', () => {
     expect(after).toBeGreaterThan(before);
   });
 
-  it('derives runner filter chips from the feed and re-queries when a runner is chosen', async () => {
+  it('derives runner filter options from the feed and re-queries when a runner is chosen', async () => {
     // The fixture carries two distinct runners (rn_01/rn_02), so the runner filter row shows.
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="events-runner-filter"]')).not.toBeNull();
     const before = stub.forRoute('/api/events', 'GET').length;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="events-runner-filter-rn_02"]')?.click();
+    await openSelect(fixture, 'events-runner-filter');
+    inOverlay('events-runner-filter-rn_02')?.click();
     await settle(fixture);
 
     // The feed query (keyed on the runner filter) re-reads; the severity-only options
-    // query does not, so the runner chips stay put.
+    // query does not, so the runner options stay put.
     const after = stub.forRoute('/api/events', 'GET').length;
     expect(after).toBeGreaterThan(before);
-    expect(el.querySelector('[data-testid="events-runner-filter-rn_02"]')).not.toBeNull();
+    await openSelect(fixture, 'events-runner-filter');
+    expect(inOverlay('events-runner-filter-rn_02')).not.toBeNull();
   });
 
-  it('builds no blank runner chip from an escalation row, which names no runner', async () => {
+  it('builds no blank runner option from an escalation row, which names no runner', async () => {
     // `GET /api/events` unions the event_log with a projection of every open escalation,
     // and a projected escalation carries `runner_id: null` — it must not become a
     // label-less chip whose value collides with the "All" reset sentinel.
@@ -111,16 +121,16 @@ describe('EventsPanel', () => {
       ...EVENTS,
     ];
     const fixture = await render(WITH_ESCALATION);
-    const el = fixture.nativeElement as HTMLElement;
 
-    const chips = [...el.querySelectorAll('[data-testid="events-runner-filter"] .chip')];
+    await openSelect(fixture, 'events-runner-filter');
+    const chips = [...document.body.querySelectorAll('[role="listbox"] [role="option"]')];
     expect(chips.map((c) => c.textContent?.trim())).toEqual(['All', 'R-01', 'R-02']);
     // Only "All" reads as selected — no empty-valued chip shares its sentinel.
-    expect(chips.filter((c) => c.classList.contains('selected'))).toHaveLength(1);
-    expect(el.querySelector('[data-testid="events-runner-filter-all"]')?.classList.contains('selected')).toBe(true);
+    expect(chips.filter((c) => c.getAttribute('aria-selected') === 'true')).toHaveLength(1);
+    expect(inOverlay('events-runner-filter-all')?.getAttribute('aria-selected')).toBe('true');
   });
 
-  it('builds no blank runner chip from a real, hub-authored event_log row either', async () => {
+  it('builds no blank runner option from a real, hub-authored event_log row either', async () => {
     // Distinct from the escalation case above: this is a real `event_log` row (a positive
     // id, not a projection) that itself carries `runner_id: null` — a hub-authored event
     // names no runner (blizzard-context:/domain/operations.md). Same stripping rule, same
@@ -130,15 +140,15 @@ describe('EventsPanel', () => {
       ...EVENTS,
     ];
     const fixture = await render(WITH_HUB_AUTHORED);
-    const el = fixture.nativeElement as HTMLElement;
 
-    const chips = [...el.querySelectorAll('[data-testid="events-runner-filter"] .chip')];
+    await openSelect(fixture, 'events-runner-filter');
+    const chips = [...document.body.querySelectorAll('[role="listbox"] [role="option"]')];
     expect(chips.map((c) => c.textContent?.trim())).toEqual(['All', 'R-01', 'R-02']);
-    expect(chips.filter((c) => c.classList.contains('selected'))).toHaveLength(1);
-    expect(el.querySelector('[data-testid="events-runner-filter-all"]')?.classList.contains('selected')).toBe(true);
+    expect(chips.filter((c) => c.getAttribute('aria-selected') === 'true')).toHaveLength(1);
+    expect(inOverlay('events-runner-filter-all')?.getAttribute('aria-selected')).toBe('true');
   });
 
-  it('derives chunk filter chips from the feed and re-queries when a chunk is chosen', async () => {
+  it('derives chunk filter options from the feed and re-queries when a chunk is chosen', async () => {
     // A feed spanning two distinct chunks (plus a runner-scoped, chunk-less event to prove
     // the null chunk_id is stripped from the universe rather than becoming an empty chip).
     const TWO_CHUNKS = [
@@ -148,13 +158,14 @@ describe('EventsPanel', () => {
     ];
     const fixture = await render(TWO_CHUNKS);
     const el = fixture.nativeElement as HTMLElement;
-    // Two distinct chunks → the chunk filter row shows, one chip per chunk plus "All".
+    // Two distinct chunks → the chunk filter shows, one option per chunk plus "All".
     expect(el.querySelector('[data-testid="events-chunk-filter"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3YAB"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ"]')).not.toBeNull();
+    await openSelect(fixture, 'events-chunk-filter');
+    expect(inOverlay('events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3YAB')).not.toBeNull();
+    expect(inOverlay('events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ')).not.toBeNull();
     const before = stub.forRoute('/api/events', 'GET').length;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ"]')?.click();
+    inOverlay('events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ')?.click();
     await settle(fixture);
 
     const after = stub.forRoute('/api/events', 'GET').length;

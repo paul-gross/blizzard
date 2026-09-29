@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, EnvironmentInjector, provideZonelessChangeDetection, runInInjectionContext } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
@@ -114,12 +114,13 @@ const routes: Routes = [
  * URL names. The detail pane beside it is `gardening-finding-detail.spec.ts`'s.
  *
  * All four filters (routine, scope, class, state) render inline as
- * `fleet-kit-chips` — no accordion, no other gardening tab collapses its filters —
+ * `fleet-kit-select` dropdowns — no accordion, no other gardening tab collapses its filters —
  * and all four live in the query string, which is what lets a pick survive a row
  * click and a filtered bucket be a shareable link.
  */
 describe('GardeningFindingsPage', () => {
   let stub: RequestClientStub;
+  let current: ComponentFixture<unknown> | undefined;
 
   afterEach(() => stub?.restore());
 
@@ -146,6 +147,7 @@ describe('GardeningFindingsPage', () => {
     }).compileComponents();
     TestBed.inject(ViewportService).setOverride(opts.mobile ? 'mobile' : 'desktop');
     const fixture = TestBed.createComponent(TestFindingsHost);
+    current = fixture;
     const router = TestBed.inject(Router);
     await router.navigateByUrl(opts.url ?? '/gardening/findings');
     await settle(fixture, 12);
@@ -156,22 +158,59 @@ describe('GardeningFindingsPage', () => {
   const withBucket = (method: string, path: string) =>
     method === 'GET' && path === '/api/findings' ? { findings: BUCKET, next_cursor: null } : undefined;
 
-  function pressed(el: HTMLElement, testid: string): string | null | undefined {
-    return el.querySelector(`[data-testid="${testid}"]`)?.getAttribute('aria-pressed');
+  /** The filter whose popup carries an option testid — its trigger's testid. */
+  function triggerOf(optionTestid: string): string {
+    const kind = /^gardening-findings?-(routine|scope|class|state)-/.exec(optionTestid)![1];
+    return `gardening-findings-${kind}-filter`;
   }
 
-  it('renders all four filters — routine, scope, class, state — as chips in one row, with no accordion to expand', async () => {
+  const inOverlay = (testid: string) => document.body.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+
+  /** Opens a filter's popup (rendered into a CDK overlay on `document.body`). */
+  async function openFilter(el: HTMLElement, triggerTestid: string) {
+    el.querySelector<HTMLElement>(`[data-testid="${triggerTestid}"]`)!.click();
+    await settle(current!);
+  }
+
+  /** Picks an option through its filter's dropdown. */
+  async function pick(el: HTMLElement, optionTestid: string) {
+    await openFilter(el, triggerOf(optionTestid));
+    inOverlay(optionTestid)!.click();
+    await settle(current!);
+  }
+
+  /** An option's `aria-selected`, read with its dropdown open, then closed again. */
+  async function pressed(el: HTMLElement, testid: string): Promise<string | null | undefined> {
+    const trigger = triggerOf(testid);
+    await openFilter(el, trigger);
+    const value = inOverlay(testid)?.getAttribute('aria-selected');
+    await openFilter(el, trigger);
+    return value;
+  }
+
+  it('renders all four filters — routine, scope, class, state — as dropdowns, with no accordion to expand', async () => {
     const { el } = await mount({ routeOverride: withBucket });
 
     expect(el.querySelector('[data-testid="accordion-section-head"]')).toBeNull();
-    expect(el.querySelector('[data-testid="gardening-findings-routine-item-nightly"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-findings-scope-item-blizzard"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-finding-class-all"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-finding-state-all"]')).toBeTruthy();
+    for (const filter of ['routine', 'scope', 'class', 'state']) {
+      expect(el.querySelector(`[data-testid="gardening-findings-${filter}-filter"]`)).toBeTruthy();
+    }
+    await openFilter(el, 'gardening-findings-routine-filter');
+    expect(inOverlay('gardening-findings-routine-item-nightly')).toBeTruthy();
+    await openFilter(el, 'gardening-findings-routine-filter');
+    await openFilter(el, 'gardening-findings-scope-filter');
+    expect(inOverlay('gardening-findings-scope-item-blizzard')).toBeTruthy();
+    await openFilter(el, 'gardening-findings-scope-filter');
+    await openFilter(el, 'gardening-findings-class-filter');
+    expect(inOverlay('gardening-finding-class-all')).toBeTruthy();
+    await openFilter(el, 'gardening-findings-class-filter');
+    await openFilter(el, 'gardening-findings-state-filter');
+    expect(inOverlay('gardening-finding-state-all')).toBeTruthy();
+    await openFilter(el, 'gardening-findings-state-filter');
     // Every filter carries an "All" option — the bucket read never requires a
     // concrete routine/scope pair.
-    expect(el.querySelector('[data-testid="gardening-findings-routine-all"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="gardening-findings-scope-all"]')).toBeTruthy();
+    expect(await pressed(el, 'gardening-findings-routine-all')).toBe('true');
+    expect(await pressed(el, 'gardening-findings-scope-all')).toBe('true');
   });
 
   it('keeps a detail pane mounted on the bare route, with no row highlighted', async () => {
@@ -228,25 +267,25 @@ describe('GardeningFindingsPage', () => {
       url: '/gardening/findings?routine=weekly&scope=web&class=unused-import&state=gone',
       routeOverride: withBucket,
     });
-    expect(pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
-    expect(pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
+    expect(await pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
+    expect(await pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-finding-row-fnd_11"]')!.click();
     await settle(fixture);
 
     expect(router.url).toBe('/gardening/findings/fnd_11?routine=weekly&scope=web&class=unused-import&state=gone');
-    expect(pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
-    expect(pressed(el, 'gardening-findings-scope-item-web')).toBe('true');
-    expect(pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
-    expect(pressed(el, 'gardening-finding-state-item-gone')).toBe('true');
+    expect(await pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
+    expect(await pressed(el, 'gardening-findings-scope-item-web')).toBe('true');
+    expect(await pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
+    expect(await pressed(el, 'gardening-finding-state-item-gone')).toBe('true');
   });
 
   describe('the findings triage bucket', () => {
-    it('rests on every routine and every scope with no query params — both "All" chips selected, the bucket read firing with neither named', async () => {
+    it('rests on every routine and every scope with no query params — both "All" options selected, the bucket read firing with neither named', async () => {
       const { el } = await mount({ routeOverride: withBucket });
 
-      expect(pressed(el, 'gardening-findings-routine-all')).toBe('true');
-      expect(pressed(el, 'gardening-findings-scope-all')).toBe('true');
+      expect(await pressed(el, 'gardening-findings-routine-all')).toBe('true');
+      expect(await pressed(el, 'gardening-findings-scope-all')).toBe('true');
 
       // The bucket read fires immediately, no seeded routine/scope required, and
       // renders rows from more than one routine and scope at once.
@@ -260,7 +299,7 @@ describe('GardeningFindingsPage', () => {
       expect(resolved?.querySelector('.fl-body--exited')).toBeTruthy();
     });
 
-    it('reaches a scope literally named "all" through its own chip, distinct from the "All scopes" sentinel (review:F1)', async () => {
+    it('reaches a scope literally named "all" through its own option, distinct from the "All scopes" sentinel (review:F1)', async () => {
       // `stubRequestClient`'s own `CapturedRequest` drops each request's query
       // string down to a bare path — this local fetch stub keeps the full URL
       // alongside it (`finding.query.spec.ts`'s own `stubFetchCapturingUrl`
@@ -306,12 +345,12 @@ describe('GardeningFindingsPage', () => {
         await settle(fixture, 12);
         const el = fixture.nativeElement as HTMLElement;
 
-        el.querySelector<HTMLButtonElement>('[data-testid="gardening-findings-scope-item-all"]')!.click();
+        await pick(el, 'gardening-findings-scope-item-all');
         await settle(fixture);
 
         expect(router.url).toBe('/gardening/findings?scope=all');
-        expect(pressed(el, 'gardening-findings-scope-item-all')).toBe('true');
-        expect(pressed(el, 'gardening-findings-scope-all')).toBe('false');
+        expect(await pressed(el, 'gardening-findings-scope-item-all')).toBe('true');
+        expect(await pressed(el, 'gardening-findings-scope-all')).toBe('false');
         expect(el.querySelector('[data-testid="gardening-finding-row-fnd_30"]')).toBeTruthy();
 
         const lastFindingsUrl = urls.at(-1)!;
@@ -327,10 +366,10 @@ describe('GardeningFindingsPage', () => {
         routeOverride: withBucket,
       });
 
-      expect(pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
-      expect(pressed(el, 'gardening-findings-scope-item-web')).toBe('true');
-      expect(pressed(el, 'gardening-findings-routine-all')).toBe('false');
-      expect(pressed(el, 'gardening-findings-scope-all')).toBe('false');
+      expect(await pressed(el, 'gardening-findings-routine-item-weekly')).toBe('true');
+      expect(await pressed(el, 'gardening-findings-scope-item-web')).toBe('true');
+      expect(await pressed(el, 'gardening-findings-routine-all')).toBe('false');
+      expect(await pressed(el, 'gardening-findings-scope-all')).toBe('false');
     });
 
     it("renders the bucket's own empty rest state when the read resolves with no rows", async () => {
@@ -370,18 +409,16 @@ describe('GardeningFindingsPage', () => {
     });
 
     it('narrows the rendered rows via the class and state filters, naming each in the URL', async () => {
-      const { fixture, router, el } = await mount({ routeOverride: withBucket });
+      const { router, el } = await mount({ routeOverride: withBucket });
 
-      el.querySelector<HTMLElement>('[data-testid="gardening-finding-class-item-unused-import"]')!.click();
-      await settle(fixture);
+      await pick(el, 'gardening-finding-class-item-unused-import');
 
       expect(router.url).toBe('/gardening/findings?class=unused-import');
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_10"]')).toBeNull();
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_14"]')).toBeTruthy();
 
-      el.querySelector<HTMLElement>('[data-testid="gardening-finding-state-item-gone"]')!.click();
-      await settle(fixture);
+      await pick(el, 'gardening-finding-state-item-gone');
 
       expect(router.url).toBe('/gardening/findings?class=unused-import&state=gone');
       expect(el.querySelector('[data-testid="gardening-finding-row-fnd_11"]')).toBeTruthy();
@@ -389,22 +426,21 @@ describe('GardeningFindingsPage', () => {
     });
 
     it('clears the class and state filters on a routine or scope pick (F5)', async () => {
-      const { fixture, el } = await mount({
+      const { el } = await mount({
         url: '/gardening/findings?class=unused-import&state=gone',
         routeOverride: withBucket,
       });
-      expect(pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
-      expect(pressed(el, 'gardening-finding-state-item-gone')).toBe('true');
+      expect(await pressed(el, 'gardening-finding-class-item-unused-import')).toBe('true');
+      expect(await pressed(el, 'gardening-finding-state-item-gone')).toBe('true');
 
-      el.querySelector<HTMLElement>('[data-testid="gardening-findings-routine-item-weekly"]')!.click();
-      await settle(fixture);
+      await pick(el, 'gardening-findings-routine-item-weekly');
 
-      expect(pressed(el, 'gardening-finding-class-all')).toBe('true');
-      expect(pressed(el, 'gardening-finding-state-all')).toBe('true');
+      expect(await pressed(el, 'gardening-finding-class-all')).toBe('true');
+      expect(await pressed(el, 'gardening-finding-state-all')).toBe('true');
     });
 
     it('clears a selected finding that a filter change removes from the bucket, keeping the filter itself', async () => {
-      const { fixture, router, el } = await mount({
+      const { router, el } = await mount({
         url: '/gardening/findings/fnd_10',
         routeOverride: withBucket,
       });
@@ -414,8 +450,7 @@ describe('GardeningFindingsPage', () => {
 
       // fnd_10 is 'stale-docstring' — this class pick excludes it from the bucket's
       // filtered rows without touching the routine/scope query itself.
-      el.querySelector<HTMLElement>('[data-testid="gardening-finding-class-item-unused-import"]')!.click();
-      await settle(fixture);
+      await pick(el, 'gardening-finding-class-item-unused-import');
 
       expect(router.url).toBe('/gardening/findings?class=unused-import');
     });

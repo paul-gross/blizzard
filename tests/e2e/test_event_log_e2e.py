@@ -260,9 +260,11 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
                 expect(page.get_by_test_id("events-runner-filter")).to_be_visible()
 
                 # The runner filter narrows to just the second runner's event, then restores.
+                page.get_by_test_id("events-runner-filter").click()
                 page.get_by_test_id("events-runner-filter-runner-two").click()
                 expect(page.get_by_test_id("events-row")).to_have_count(1)
                 expect(page.get_by_test_id("events-message").first).to_have_text("other runner")
+                page.get_by_test_id("events-runner-filter").click()
                 page.get_by_test_id("events-runner-filter-all").click()
                 expect(page.get_by_test_id("events-row")).to_have_count(4)
 

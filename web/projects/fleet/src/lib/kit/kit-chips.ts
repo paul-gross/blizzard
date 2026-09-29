@@ -37,6 +37,11 @@ export class KitChip {
  * closed set of choices (e.g. a graph's edge choices, a status filter):
  * renders one {@link KitChip} per option, `(choose)` firing the clicked
  * option's `value`.
+ *
+ * Pills suit a small closed set or a toggle. An open vocabulary that grows with
+ * data (every routine, scope, or class named so far) belongs in a
+ * {@link KitSelect} instead, which takes the same options and emits the same
+ * value.
  */
 @Component({
   selector: 'fleet-kit-chips',

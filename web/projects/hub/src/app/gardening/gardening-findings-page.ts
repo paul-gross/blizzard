@@ -4,7 +4,7 @@ import {
   asyncState,
   FleetFindingList,
   KitBackBar,
-  KitChips,
+  KitSelect,
   KitPanel,
   type FindingListRowVm,
   type KitAsyncStateValue,
@@ -30,9 +30,9 @@ import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters
  * presentational {@link FleetFindingList}. The routine/scope pair, the class/state
  * filters, and the bucket read all live in that module; its resting state, with no
  * query params at all, reads every routine and every scope. All four filters render
- * as `fleet-kit-chips`, always visible, one labeled row per filter —
- * `kit-fact-list.css`'s own fixed-label-column shape, so the four groups read
- * distinctly instead of running together in one row. Each carries a leading "All"
+ * as `fleet-kit-select` dropdowns, always visible, one labeled row per filter on
+ * desktop — `kit-fact-list.css`'s own fixed-label-column shape — and two per row on
+ * mobile, each trigger carrying its own label. Each carries a leading "All"
  * option: class and state's come from the fetched bucket's own `class` values (never
  * a hardcoded vocabulary) and the fixed seven-value state vocabulary respectively;
  * routine and scope's each name every fetched routine/scope.
@@ -40,7 +40,7 @@ import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters
 @Component({
   selector: 'app-gardening-findings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetFindingList, KitBackBar, KitChips, KitPanel, RouterLink, RouterOutlet],
+  imports: [FleetFindingList, KitBackBar, KitPanel, KitSelect, RouterLink, RouterOutlet],
   templateUrl: './gardening-findings-page.html',
   styleUrl: './gardening-findings-page.css',
   host: {

@@ -11,8 +11,8 @@ import { GardeningFindingsPage } from './gardening-findings-page';
 
 /**
  * The findings tab's own filter row: widened to every
- * routine and every scope, the four chip rows (routine, scope, class, state) now
- * carry a leading "All" option apiece, and a row from a widened bucket carries its
+ * routine and every scope, the four dropdowns (routine, scope, class, state) each
+ * carry a leading "All" option, and a row from a widened bucket carries its
  * own routine/scope alongside the class and ref (`finding-list.css`'s `.fl-routine`/
  * `.fl-scope`). A real, headless-Chromium proof
  * (`blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method) that
@@ -147,12 +147,19 @@ const routes: Routes = [
   },
 ];
 
-async function render() {
+/** Fifty-plus distinct classes — the open vocabulary the Class dropdown exists for. */
+const MANY_CLASSES = Array.from({ length: 55 }, (_, i) => ({
+  ...FINDINGS[1],
+  finding_id: `fnd_many_${i}`,
+  class: `a-fairly-long-finding-class-name-number-${i}`,
+}));
+
+async function render(findings: readonly unknown[] = FINDINGS) {
   const stub = stubRequestClient(hubClient, (method, path) => {
     if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
     if (method === 'GET' && path === '/api/scopes') return SCOPES;
     if (method === 'GET' && path === '/api/routines') return ROUTINES;
-    if (method === 'GET' && path === '/api/findings') return { findings: FINDINGS, next_cursor: null };
+    if (method === 'GET' && path === '/api/findings') return { findings, next_cursor: null };
     if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
     return {};
   });
@@ -171,7 +178,7 @@ async function render() {
 }
 
 describe('gardening findings filter row and row disambiguation shell sweep (web:shell-sweep, blizzard#486)', () => {
-  it.each([390, 320])('renders all four filter chip rows and a disambiguated row with no horizontal overflow at %ipx', async (width) => {
+  it.each([390, 320])('renders all four filter dropdowns and a disambiguated row with no horizontal overflow at %ipx', async (width) => {
     const { fixture, stub } = await render();
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
@@ -180,6 +187,7 @@ describe('gardening findings filter row and row disambiguation shell sweep (web:
     try {
       await page.viewport(width, 800);
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settle(fixture);
 
       const filters = root.querySelector<HTMLElement>('.gf-filters')!;
       expect(filters).not.toBeNull();
@@ -189,12 +197,15 @@ describe('gardening findings filter row and row disambiguation shell sweep (web:
       ).toBeLessThanOrEqual(filters.clientWidth);
 
       for (const testid of [
-        'gardening-findings-routine-all',
-        'gardening-findings-scope-all',
-        'gardening-finding-class-all',
-        'gardening-finding-state-all',
+        'gardening-findings-routine-filter',
+        'gardening-findings-scope-filter',
+        'gardening-findings-class-filter',
+        'gardening-findings-state-filter',
       ]) {
         expect(root.querySelector(`[data-testid="${testid}"]`), `${width}px: missing ${testid}`).not.toBeNull();
+      }
+      for (const label of root.querySelectorAll<HTMLElement>('.gf-filter-label')) {
+        expect(getComputedStyle(label).display, `${width}px: ${label.textContent} label column still shows`).toBe('none');
       }
 
       const row = root.querySelector<HTMLElement>('[data-testid="gardening-finding-row-fnd_1"]')!;
@@ -223,6 +234,46 @@ describe('gardening findings filter row and row disambiguation shell sweep (web:
       await page.viewport(1280, 800);
     }
   });
+
+  it.each([390, 320])(
+    'lays the filters out compactly, starts the list on the first screen, and bounds a 50+ class popup at %ipx',
+    async (width) => {
+      const { fixture, stub } = await render([...FINDINGS, ...MANY_CLASSES]);
+      const root = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(root);
+      await fixture.whenStable();
+
+      try {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await settle(fixture);
+
+        const filters = root.querySelector<HTMLElement>('.gf-filters')!;
+        expect(filters.scrollWidth, `${width}px: .gf-filters overflows horizontally`).toBeLessThanOrEqual(
+          filters.clientWidth,
+        );
+        const first = root.querySelector<HTMLElement>('[data-testid^="gardening-finding-row-"]')!;
+        expect(first.getBoundingClientRect().top, `${width}px: the list starts below the first screen`).toBeLessThan(800);
+
+        const classTrigger = root.querySelector<HTMLElement>('[data-testid="gardening-findings-class-filter"]')!;
+        classTrigger.click();
+        await fixture.whenStable();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const popup = document.body.querySelector<HTMLElement>('[role="listbox"]')!;
+        expect(popup).not.toBeNull();
+        const box = popup.getBoundingClientRect();
+        expect(box.left, `${width}px: the popup runs off the left edge`).toBeGreaterThanOrEqual(0);
+        expect(box.right, `${width}px: the popup runs off the right edge`).toBeLessThanOrEqual(width);
+        expect(popup.scrollHeight, `${width}px: the popup does not scroll vertically`).toBeGreaterThan(popup.clientHeight);
+      } finally {
+        document.body.querySelector<HTMLElement>('[role="listbox"]')?.remove();
+        root.remove();
+        stub.restore();
+        await page.viewport(1280, 800);
+      }
+    },
+  );
 
   it.each([390, 320])(
     'renders a review-sourced row (no routine, severity and raising chunk shown) with no horizontal overflow at %ipx',

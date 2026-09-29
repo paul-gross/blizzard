@@ -62,6 +62,13 @@
   flex: 1;
   min-height: 0;
 }
+:host(.mobile) .gf-filters {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+:host(.mobile) .gf-filter-label {
+  display: none;
+}
 :host(.mobile:not(.detail-open)) .gf-detail,
 :host(.mobile.detail-open) .gf-list,
 :host(.mobile.detail-open) .gf-filters {

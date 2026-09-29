@@ -26,6 +26,9 @@ const EVENTS = [
   },
 ];
 
+/** The select's popup renders into a CDK overlay on `document.body`, not the fixture. */
+const inOverlay = (testid: string) => document.body.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
+
 describe('EventsView', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -223,7 +226,7 @@ describe('EventsView', () => {
     expect(el.querySelector('[data-testid="events-chunk-filter"]')).toBeNull();
   });
 
-  it('renders a runner chip per id and emits runnerFilterChange when one is clicked', async () => {
+  it('renders a runner option per id and emits runnerFilterChange when one is clicked', async () => {
     const fixture = render({ runnerIds: ['rn_01', 'rn_02'] });
     let chosen: string | undefined;
     fixture.componentInstance.runnerFilterChange.subscribe((value) => (chosen = value));
@@ -231,13 +234,15 @@ describe('EventsView', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="events-runner-filter"]')).not.toBeNull();
-    // An "All" reset plus one chip per id.
-    expect(el.querySelector('[data-testid="events-runner-filter-all"]')).not.toBeNull();
-    el.querySelector<HTMLButtonElement>('[data-testid="events-runner-filter-rn_02"]')?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="events-runner-filter"]')?.click();
+    await fixture.whenStable();
+    // An "All" reset plus one option per id.
+    expect(inOverlay('events-runner-filter-all')).not.toBeNull();
+    inOverlay('events-runner-filter-rn_02')?.click();
     expect(chosen).toBe('rn_02');
   });
 
-  it('renders a chunk chip per id and emits chunkFilterChange when one is clicked', async () => {
+  it('renders a chunk option per id and emits chunkFilterChange when one is clicked', async () => {
     const fixture = render({ chunkIds: ['ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', 'ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ'] });
     let chosen: string | undefined;
     fixture.componentInstance.chunkFilterChange.subscribe((value) => (chosen = value));
@@ -245,9 +250,9 @@ describe('EventsView', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="events-chunk-filter"]')).not.toBeNull();
-    el.querySelector<HTMLButtonElement>(
-      '[data-testid="events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3YAB"]',
-    )?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="events-chunk-filter"]')?.click();
+    await fixture.whenStable();
+    inOverlay('events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3YAB')?.click();
     expect(chosen).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YAB');
   });
 

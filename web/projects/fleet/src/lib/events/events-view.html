@@ -9,16 +9,18 @@
   <div class="filters" data-testid="events-filters">
     <fleet-kit-chips [options]="severityOptions" [selectedValue]="severity() ?? ''" (choose)="onChoose($event)" />
     @if (runnerFilterOptions().length) {
-      <fleet-kit-chips
-        data-testid="events-runner-filter"
+      <fleet-kit-select
+        ariaLabel="Runner"
+        testid="events-runner-filter"
         [options]="runnerFilterOptions()"
         [selectedValue]="runner() ?? ''"
         (choose)="onRunnerChoose($event)"
       />
     }
     @if (chunkFilterOptions().length) {
-      <fleet-kit-chips
-        data-testid="events-chunk-filter"
+      <fleet-kit-select
+        ariaLabel="Chunk"
+        testid="events-chunk-filter"
         [options]="chunkFilterOptions()"
         [selectedValue]="chunk() ?? ''"
         (choose)="onChunkChoose($event)"
