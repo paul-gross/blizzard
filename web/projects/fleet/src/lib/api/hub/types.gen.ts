@@ -885,6 +885,10 @@ export type ChunkDetail = {
      * Chunk Id
      */
     chunk_id: string;
+    /**
+     * Closed Prs
+     */
+    closed_prs?: Array<PrView>;
     cost?: ChunkUsageTotalView;
     /**
      * Current Node Id
@@ -929,6 +933,10 @@ export type ChunkDetail = {
      * Landed
      */
     landed?: boolean;
+    /**
+     * Landed Repos
+     */
+    landed_repos?: Array<LandedRepoView>;
     /**
      * Latest Epoch
      */
@@ -1236,11 +1244,19 @@ export type ChunkStopRequest = {
  * unrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.
  */
 export type ChunkSummary = {
+    /**
+     * Awaiting External Merge
+     */
+    awaiting_external_merge?: boolean;
     blocked?: BlockedView | null;
     /**
      * Chunk Id
      */
     chunk_id: string;
+    /**
+     * Closed Prs
+     */
+    closed_prs?: Array<PrView>;
     /**
      * Completed At
      */
@@ -1274,6 +1290,18 @@ export type ChunkSummary = {
      * Graph Id
      */
     graph_id: string;
+    /**
+     * Landed
+     */
+    landed?: boolean;
+    /**
+     * Landed Repos
+     */
+    landed_repos?: Array<LandedRepoView>;
+    /**
+     * Open Prs
+     */
+    open_prs?: Array<PrView>;
     /**
      * Runner Id
      */
@@ -3147,6 +3175,26 @@ export type IntendedMigrationView = {
 export type JudgedBy = 'worker' | 'human';
 
 /**
+ * LandedRepoView
+ *
+ * One repo's actual merged revision; URL absent without a known PR forge.
+ */
+export type LandedRepoView = {
+    /**
+     * Commit Hash
+     */
+    commit_hash: string;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Url
+     */
+    url?: string | null;
+};
+
+/**
  * LeaseMintReport
  *
  * A runner's ``lease.minted`` — one node-step attempt's fencing epoch.
@@ -3495,7 +3543,7 @@ export type PendingView = {
 /**
  * PrView
  *
- * An open PR a chunk is parked on in open-pr delivery mode.
+ * A repo's PR reference, open or historical according to its containing field.
  */
 export type PrView = {
     /**

@@ -126,6 +126,22 @@ class ChunkUsageView(BaseModel):
     estimated_cost_usd: float | None = None
 
 
+class PrView(BaseModel):
+    """A repo's PR reference, open or historical according to its containing field."""
+
+    repo: str
+    number: int
+    url: str
+
+
+class LandedRepoView(BaseModel):
+    """One repo's actual merged revision; URL absent without a known PR forge."""
+
+    repo: str
+    commit_hash: str
+    url: str | None = None
+
+
 class ChunkSummary(BaseModel):
     """One row of the fleet chunk list — the derived status and current node. ``current_node_name`` is
     the node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.
@@ -155,6 +171,11 @@ class ChunkSummary(BaseModel):
     # The chunk's blocked marking — non-None only when it both waits on an
     # unmet prerequisite and this read derives it; null otherwise, regardless of block state.
     blocked: BlockedView | None = None
+    open_prs: list[PrView] = []
+    closed_prs: list[PrView] = []
+    awaiting_external_merge: bool = False
+    landed_repos: list[LandedRepoView] = []
+    landed: bool = False
 
 
 class ChunksPageView(BaseModel):
@@ -280,14 +301,6 @@ class ArtifactView(BaseModel):
     branch_name: str | None = None
     commit_hash: str | None = None
     branch_url: str | None = None
-
-
-class PrView(BaseModel):
-    """An open PR a chunk is parked on in open-pr delivery mode."""
-
-    repo: str
-    number: int
-    url: str
 
 
 class BounceView(BaseModel):
@@ -512,6 +525,8 @@ class ChunkDetail(BaseModel):
     # distinct status; derived on read, never engine-written.
     awaiting_external_merge: bool = False
     open_prs: list[PrView] = []
+    closed_prs: list[PrView] = []
+    landed_repos: list[LandedRepoView] = []
     # The chunk's derived usage/cost total — see ChunkUsageTotalView.
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     # Per-node-step usage history, oldest first.

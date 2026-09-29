@@ -62,6 +62,23 @@
       </span>
     </span>
   </button>
+  @if (card().openPrs?.length || card().landedRepos?.length || card().awaitingExternalMerge) {
+    <div class="delivery-links" data-testid="card-delivery">
+      @if (card().awaitingExternalMerge) {
+        <span class="merge-wait" data-testid="card-merge-wait">Awaiting your merge</span>
+      }
+      @for (pr of card().openPrs ?? []; track pr.repo + ':' + pr.number) {
+        <a data-testid="card-pr-link" [href]="pr.url" target="_blank" rel="noopener noreferrer">{{ pr.repo }} PR #{{ pr.number }}</a>
+      }
+      @for (landed of card().landedRepos ?? []; track landed.repo) {
+        @if (landed.url; as url) {
+          <a data-testid="card-landed-link" [href]="url" target="_blank" rel="noopener noreferrer">{{ landed.repo }} {{ landed.commit_hash }}</a>
+        } @else {
+          <span data-testid="card-landed-text">{{ landed.repo }} {{ landed.commit_hash }}</span>
+        }
+      }
+    </div>
+  }
   <!-- The card's control row: Promote (not_ready only) is its one occupant now
        that Delete moved to the chunk detail dock's header, where it no longer
        eats into the card's own space. -->

@@ -80,6 +80,19 @@
   outline: 1px solid var(--cyan);
   outline-offset: 1px;
 }
+.delivery-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  min-width: 0;
+  font-size: var(--fs-xs);
+}
+.delivery-links a, .delivery-links span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.delivery-links a { color: var(--cyan); }
+.delivery-links .merge-wait { color: var(--amber-hi); }
 /* The card's identity line: the chunk's short name, with the node it currently
    sits at pushed to the far right.
 

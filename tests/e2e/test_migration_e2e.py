@@ -206,7 +206,7 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
                     expect(page.get_by_test_id("board-shell")).to_be_visible()
                     done_card = page.locator('[data-col="done"]').get_by_test_id("chunk-card")
                     expect(done_card).to_have_count(1)
-                    done_card.first.click()
+                    done_card.get_by_role("button", name="Open chunk").click()
                     expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                     expect(page.get_by_test_id("detail-id")).to_have_text(chunk_id)
 

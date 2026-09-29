@@ -25,6 +25,7 @@ _MARKER_TOKEN_HEADER = "X-Blizzard-Marker-Token"
 _ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 
 _MARKER_PREFIX = "merged/"
+_PR_MARKER_PREFIX = "delivery-pr/"
 
 _ENV_FORGE_URL = "BZ_FORGE_URL"
 _ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
@@ -359,7 +360,7 @@ class PullRequest:
         branch = commit["branch"]
         merged = cls._merged_for_branch(run, repo, branch)
         if merged is not None:
-            return cls(run, commit["repo"], int(merged["number"]), {}).reread()
+            return cls._record(cls(run, commit["repo"], int(merged["number"]), {}).reread())
         _, listed = run.api("GET", f"/repos/{repo}/pulls?state=open")
         existing = next((p for p in (listed or []) if p.get("head", {}).get("ref") == branch), None)
         if existing is None:
@@ -378,7 +379,20 @@ class PullRequest:
                     raise NothingToLand(f"{repo}:{branch} adds no commit {run.base_branch} does not already have")
                 raise PullRequestOpenError(f"could not open a PR for {repo}:{branch}: {created}")
             existing = created
-        return cls(run, commit["repo"], int(existing["number"]), {}).reread()
+        return cls._record(cls(run, commit["repo"], int(existing["number"]), {}).reread())
+
+    @classmethod
+    def _record(cls, pull: PullRequest) -> PullRequest:
+        """Persist the PR identity before a script can wait, reject or merge it.
+
+        The hub marker callback is idempotent per PR within an epoch; a retry
+        records the same reference, while a replacement PR gets its own marker.
+        """
+        pull.run.markers.post(
+            f"{_PR_MARKER_PREFIX}{pull.bare_repo}/{pull.number}",
+            json.dumps({"repo": pull.bare_repo, "number": pull.number, "url": pull.url}),
+        )
+        return pull
 
     @staticmethod
     def _merged_for_branch(run: LandRun, repo: str, branch: str) -> dict[str, Any] | None:

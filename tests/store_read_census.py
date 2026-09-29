@@ -1708,6 +1708,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)
     ),
     (IReadChunkArtifactsRepository, "load_artifacts"): lambda w: w.read.artifacts.load_artifacts(w.chunk_artifacts),
+    (IReadChunkArtifactsRepository, "delivery_sources_for"): lambda w: w.read.artifacts.delivery_sources_for(
+        [w.chunk_artifacts]
+    ),
     (IReadChunkArtifactsRepository, "latest_artifact"): lambda w: w.read.artifacts.latest_artifact(
         w.chunk_artifacts, "asset-1"
     ),

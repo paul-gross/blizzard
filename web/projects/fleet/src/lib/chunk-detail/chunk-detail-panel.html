@@ -25,6 +25,10 @@
 
   <div class="d-body">
     <section class="d-sec" aria-label="Work item">
+      @if (detail().open_prs?.length || detail().closed_prs?.length || detail().landed_repos?.length || detail().awaiting_external_merge) {
+        <div class="s-head"><span class="tag">Delivery</span></div>
+        <fleet-chunk-delivery [detail]="detail()" />
+      }
       <div class="s-head"><span class="tag">Work item · {{ pointerCount() }}</span></div>
       <fleet-chunk-detail-facts
         [detail]="detail()"

@@ -8,6 +8,7 @@ import {
   type ResolveDecisionEvent,
 } from './chunk-awaiting-human';
 import { ChunkDetailHeader } from './chunk-detail-header';
+import { ChunkDelivery } from './chunk-delivery';
 import { ChunkFacts, type EditGraphEvent } from './chunk-facts';
 import { ChunkIssuePane } from './chunk-issue-pane';
 import { ChunkTimeline } from './chunk-timeline';
@@ -51,6 +52,7 @@ export type { EditGraphEvent } from './chunk-facts';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ChunkDetailHeader,
+    ChunkDelivery,
     ChunkFacts,
     ChunkTokenBreakdown,
     ChunkIssuePane,

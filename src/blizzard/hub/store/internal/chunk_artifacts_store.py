@@ -6,15 +6,18 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.delivery_read import DeliverySources
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, chunk_is_terminal, enqueue_close_intents, latest_epoch
@@ -26,6 +29,49 @@ class ChunkArtifactsStore:
     def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
+
+    def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
+        """Only the requested chunks and delivery families; no fleet artifact scan."""
+        markers: dict[str, list[ArtifactRow]] = defaultdict(list)
+        closed: dict[str, set[tuple[str, int]]] = defaultdict(set)
+        landed: dict[str, dict[str, str]] = defaultdict(dict)
+        with self._store.read("delivery_sources_for") as conn:
+            for batch in id_batches(chunk_ids):
+                for a in conn.execute(
+                    select(s.artifacts).where(
+                        s.artifacts.c.chunk_id.in_(batch),
+                        s.artifacts.c.kind == ArtifactKind.ASSET.value,
+                        or_(
+                            s.artifacts.c.name.like("merged/%"),
+                            s.artifacts.c.name.like("delivery-pr/%"),
+                            s.artifacts.c.name == "awaiting-external-merge",
+                        ),
+                    )
+                ):
+                    markers[a.chunk_id].append(
+                        ArtifactRow(
+                            kind=ArtifactKind.ASSET,
+                            name=a.name,
+                            data=a.data,
+                            repo=None,
+                            forge=None,
+                            artifact_id=a.artifact_id,
+                            chunk_id=a.chunk_id,
+                            node_id=a.node_id,
+                            node_name=a.node_name,
+                            epoch=a.epoch,
+                        )
+                    )
+                for row in conn.execute(select(s.delivery_pr_closed).where(s.delivery_pr_closed.c.chunk_id.in_(batch))):
+                    closed[row.chunk_id].add((row.repo, row.pr_number))
+                for row in conn.execute(
+                    select(s.delivery_repo_landed).where(s.delivery_repo_landed.c.chunk_id.in_(batch))
+                ):
+                    landed[row.chunk_id][row.repo] = row.commit_hash
+        return {
+            chunk_id: DeliverySources(markers[chunk_id], frozenset(closed[chunk_id]), landed[chunk_id])
+            for chunk_id in chunk_ids
+        }
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
         with self._store.read("load_artifacts") as conn:

@@ -1,0 +1,5 @@
+.delivery { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 4px 8px; min-width: 0; overflow-wrap: anywhere; }
+.row span:first-child { color: var(--label); }
+.row a { color: var(--cyan); min-width: 0; overflow-wrap: anywhere; }
+.wait { margin: 0; color: var(--amber-hi); }

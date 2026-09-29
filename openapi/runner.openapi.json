@@ -513,6 +513,14 @@
             "title": "Chunk Id",
             "type": "string"
           },
+          "closed_prs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PrView"
+            },
+            "title": "Closed Prs",
+            "type": "array"
+          },
           "cost": {
             "$ref": "#/components/schemas/ChunkUsageTotalView"
           },
@@ -633,6 +641,14 @@
             "default": false,
             "title": "Landed",
             "type": "boolean"
+          },
+          "landed_repos": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LandedRepoView"
+            },
+            "title": "Landed Repos",
+            "type": "array"
           },
           "latest_epoch": {
             "anyOf": [
@@ -837,6 +853,11 @@
       "ChunkSummary": {
         "description": "One row of the fleet chunk list \u2014 the derived status and current node. ``current_node_name`` is\nthe node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.\n``runner_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads\nunrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.",
         "properties": {
+          "awaiting_external_merge": {
+            "default": false,
+            "title": "Awaiting External Merge",
+            "type": "boolean"
+          },
           "blocked": {
             "anyOf": [
               {
@@ -850,6 +871,14 @@
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
+          },
+          "closed_prs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PrView"
+            },
+            "title": "Closed Prs",
+            "type": "array"
           },
           "completed_at": {
             "anyOf": [
@@ -922,6 +951,27 @@
           "graph_id": {
             "title": "Graph Id",
             "type": "string"
+          },
+          "landed": {
+            "default": false,
+            "title": "Landed",
+            "type": "boolean"
+          },
+          "landed_repos": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LandedRepoView"
+            },
+            "title": "Landed Repos",
+            "type": "array"
+          },
+          "open_prs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PrView"
+            },
+            "title": "Open Prs",
+            "type": "array"
           },
           "runner_id": {
             "anyOf": [
@@ -2324,6 +2374,36 @@
         "title": "IntendedMigrationView",
         "type": "object"
       },
+      "LandedRepoView": {
+        "description": "One repo's actual merged revision; URL absent without a known PR forge.",
+        "properties": {
+          "commit_hash": {
+            "title": "Commit Hash",
+            "type": "string"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "repo",
+          "commit_hash"
+        ],
+        "title": "LandedRepoView",
+        "type": "object"
+      },
       "LeaseListResponse": {
         "description": "Active leases, then recently-closed ones.",
         "properties": {
@@ -2749,7 +2829,7 @@
         "type": "object"
       },
       "PrView": {
-        "description": "An open PR a chunk is parked on in open-pr delivery mode.",
+        "description": "A repo's PR reference, open or historical according to its containing field.",
         "properties": {
           "number": {
             "title": "Number",

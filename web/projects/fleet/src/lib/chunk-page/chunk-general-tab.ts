@@ -13,6 +13,7 @@ import {
   type WorkItemsState,
 } from '../chunk-detail';
 import { KitPanel } from '../kit/kit-panel';
+import { ChunkDelivery } from '../chunk-detail/chunk-delivery';
 
 /**
  * The chunk detail page's General tab — the hub's and the
@@ -43,7 +44,7 @@ import { KitPanel } from '../kit/kit-panel';
 @Component({
   selector: 'fleet-chunk-general-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, KitPanel],
+  imports: [ChunkAwaitingHuman, ChunkFacts, ChunkIssuePane, ChunkTimeline, ChunkTokenBreakdown, ChunkDelivery, KitPanel],
   templateUrl: './chunk-general-tab.html',
   styleUrl: './chunk-general-tab.css',
 })
