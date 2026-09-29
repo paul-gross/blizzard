@@ -34,6 +34,8 @@ from blizzard.wire.events import EventsResponse, EventView
 router = APIRouter(prefix="/api", tags=["meta"])
 
 _RESERVED_COMMENT = ": blizzard hub event stream\n\n"
+# These two reads are bounded below the hub's general list maximum: 200 is a real ceiling here.
+FEED_MAX_LIMIT = 200
 
 
 @router.get("/events/stream", include_in_schema=False)
@@ -71,9 +73,6 @@ class Events:
             message=row.message,
             detail=row.detail,
         )
-
-# These two reads are bounded below the hub's general list maximum: 200 is a real ceiling here.
-FEED_MAX_LIMIT = 200
 
 
 @router.get(
