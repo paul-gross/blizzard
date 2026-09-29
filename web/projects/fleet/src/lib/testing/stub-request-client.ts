@@ -3,6 +3,8 @@ export interface CapturedRequest {
   readonly method: string;
   readonly path: string;
   readonly body: unknown;
+  /** The URL's query string, `?`-prefixed, or empty. */
+  readonly search: string;
 }
 
 /** Handle over a stubbed generated client — the captured requests plus a restore hook. */
@@ -82,7 +84,7 @@ export function stubRequestClient(
     } catch {
       body = undefined;
     }
-    requests.push({ method, path, body });
+    requests.push({ method, path, body, search: url.search });
     const result = await route(method, path);
     const [status, data] = isStubHttpError(result) ? [result.status, result.body] : [200, result];
     return new Response(JSON.stringify(data ?? {}), {

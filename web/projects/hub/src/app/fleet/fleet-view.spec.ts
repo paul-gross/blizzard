@@ -366,4 +366,35 @@ describe('FleetView (mobile Fleet screen)', () => {
       expect(el.querySelector('[data-testid="mobile-fleet-runner-seen"]')?.textContent).toBe('seen 5s ago');
     });
   });
+
+  it('marks a retired runner with when and by whom', async () => {
+    const fixture = TestBed.createComponent(FleetView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_gone', { retired: true, retired_at: '2026-09-28T00:00:00Z', retired_by: 'op' }),
+      row('rn_live'),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const badge = el.querySelector('[data-runner="rn_gone"] [data-testid="mobile-fleet-runner-retired"]');
+    expect(badge?.textContent).toContain('op');
+    expect(badge?.getAttribute('title')).toBe('Retired 2026-09-28T00:00:00Z by op');
+    expect(el.querySelector('[data-runner="rn_live"] [data-testid="mobile-fleet-runner-retired"]')).toBeNull();
+  });
+
+  it('renders the show-retired chip reflecting the flag and emits its toggle', async () => {
+    const fixture = TestBed.createComponent(FleetView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', []);
+    const toggled = vi.fn();
+    fixture.componentInstance.toggleShowRetired.subscribe(toggled);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const chip = el.querySelector('[data-testid="mobile-fleet-show-retired"]') as HTMLElement;
+    expect(chip).not.toBeNull();
+    chip.click();
+    expect(toggled).toHaveBeenCalledTimes(1);
+  });
 });

@@ -90,6 +90,21 @@ const ROWS: readonly RunnerRow[] = [
     ],
   },
   {
+    runner_id: 'rn_retired',
+    workspace_id: 'ws_a',
+    registered_at: NOW,
+    last_seen_at: NOW,
+    online: false,
+    hub_paused: false,
+    locally_paused: false,
+    retired: true,
+    retired_at: NOW,
+    retired_by: 'a-genuinely-long-operator-name@example.com',
+    used: 0,
+    claims: [],
+    subscriptionPaces: [],
+  },
+  {
     runner_id: 'rn_freshness',
     workspace_id: 'ws_a',
     registered_at: NOW,
@@ -145,6 +160,7 @@ async function render() {
   fixture.componentRef.setInput('state', 'ready');
   fixture.componentRef.setInput('rows', ROWS);
   fixture.componentRef.setInput('canPause', true);
+  fixture.componentRef.setInput('showRetired', true);
   await fixture.whenStable();
   return fixture;
 }
@@ -171,7 +187,7 @@ describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
       expect(panel).not.toBeNull();
 
       const cards = Array.from(root.querySelectorAll<HTMLElement>('[data-testid="mobile-fleet-runner"]'));
-      expect(cards).toHaveLength(3);
+      expect(cards).toHaveLength(4);
 
       const rects = cards.map((c) => c.getBoundingClientRect());
       for (let i = 1; i < rects.length; i++) {
@@ -192,6 +208,13 @@ describe('mobile Fleet screen layout shell sweep (web:shell-sweep)', () => {
       // two spans most likely to force a card wider than its own box.
       const claim = root.querySelector<HTMLElement>('[data-runner="rn_online"] [data-testid="mobile-fleet-runner-claim"]')!;
       expect(claim.getBoundingClientRect().right).toBeLessThanOrEqual(cards[0].getBoundingClientRect().right + 1);
+
+      // A retired row's marker carries the operator's name, which can be long: it must stay
+      // inside its own card rather than widening it.
+      const retiredCard = root.querySelector<HTMLElement>('[data-runner="rn_retired"]')!;
+      const retiredBadge = retiredCard.querySelector<HTMLElement>('[data-testid="mobile-fleet-runner-retired"]')!;
+      expect(retiredBadge).not.toBeNull();
+      expect(retiredBadge.getBoundingClientRect().right).toBeLessThanOrEqual(retiredCard.getBoundingClientRect().right + 1);
 
       const subName = root.querySelector<HTMLElement>('[data-testid="subscription-pace-group-name"]')!;
       expect(subName.getBoundingClientRect().right).toBeLessThanOrEqual(cards[0].getBoundingClientRect().right + 1);

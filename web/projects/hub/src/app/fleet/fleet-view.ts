@@ -3,6 +3,7 @@ import {
   KitAsyncState,
   KitBadge,
   KitButton,
+  KitChip,
   KitPanel,
   KitSlotBar,
   STATUS_TONE,
@@ -26,7 +27,7 @@ import {
 @Component({
   selector: 'app-fleet-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitButton, KitPanel, KitSlotBar, SubscriptionPaceGroup],
+  imports: [KitAsyncState, KitBadge, KitButton, KitChip, KitPanel, KitSlotBar, SubscriptionPaceGroup],
   templateUrl: './fleet-view.html',
   styleUrl: './fleet-view.css',
 })
@@ -63,6 +64,12 @@ export class FleetView {
 
   /** Emitted with the row to flip the **hub** brake on. */
   readonly togglePause = output<RunnerRow>();
+
+  /** Whether retired runners are listed — the container owns the flag (it drives the read). */
+  readonly showRetired = input(false);
+
+  /** Emitted when the "show retired" chip is clicked. */
+  readonly toggleShowRetired = output<void>();
 
   protected readonly formatSeenAgo = formatSeenAgo;
 

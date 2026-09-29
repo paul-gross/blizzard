@@ -43,8 +43,11 @@ export class FleetPage {
    * (`runner:pause`, admin-tier). */
   protected readonly canPause = computed(() => hasPermission(this.meQuery.data(), 'runner:pause'));
 
+  /** Whether retired runners are listed — off by default; the chip in {@link FleetView} flips it. */
+  protected readonly showRetired = signal(false);
+
   /** The registry rows and their async state, from the shared {@link injectRunnerRows} fold. */
-  private readonly runnerRows = injectRunnerRows();
+  private readonly runnerRows = injectRunnerRows(() => this.showRetired());
   protected readonly state = this.runnerRows.state;
 
   /** Every runner id the shared `pauseMutation` is currently in flight for — one
@@ -82,6 +85,10 @@ export class FleetPage {
   /** The page's last pause/resume failure, or `null` ("report, don't
    * swallow") — reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
+
+  protected toggleShowRetired(): void {
+    this.showRetired.update((shown) => !shown);
+  }
 
   protected toggle(row: RunnerRow): void {
     this.actionError.set(null);

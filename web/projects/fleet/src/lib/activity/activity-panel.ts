@@ -11,7 +11,7 @@ import { ActivityFeedView, type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
 
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
- * as one. Only the pause family needs an entry: the registration and heartbeat kinds
+ * as one. Only the pause and retirement families need an entry: the registration and heartbeat kinds
  * never reach the feed (fleet-live.ts, `MUTED_RUNNER_KINDS`), and the fallback below
  * renders any kind absent here as itself. */
 const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind, string>([
@@ -19,6 +19,9 @@ const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind
   ['resumed', 'resumed'],
   ['locally-paused', 'locally paused'],
   ['locally-resumed', 'locally resumed'],
+  ['retired', 'retired'],
+  ['reinstated', 'reinstated'],
+  ['token-revoked', 'had its token revoked'],
 ]);
 
 /**
