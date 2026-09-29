@@ -41,3 +41,11 @@ def decode_cursor(cursor: str) -> list[object]:
     if not isinstance(parts, list):
         raise MalformedCursor(cursor)
     return parts
+
+
+def clamp_limit(limit: int | None) -> int:
+    """A caller's requested page size, forced into the contract: `DEFAULT_LIMIT` when
+    omitted, otherwise within 1..`MAX_LIMIT`."""
+    if limit is None:
+        return DEFAULT_LIMIT
+    return max(1, min(limit, MAX_LIMIT))
