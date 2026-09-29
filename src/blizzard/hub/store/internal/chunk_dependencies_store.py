@@ -14,12 +14,12 @@ from sqlalchemy import Connection, select, update
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import DEPENDENCY_EDGE_PREFIX, Id
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.work import DependencyEdge
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import conn_of, record_grouped_row_conn
 
 

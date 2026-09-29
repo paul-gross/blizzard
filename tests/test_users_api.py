@@ -13,10 +13,10 @@ import pytest
 import structlog
 
 from blizzard.auth_core import Role
+from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.models import Identity, User
-from blizzard.hub.store.internal import batching as batching_module
 from tests.support import HubHarness, build_hub, count_queries, hub_store_connections, seed_session, seed_user
 
 pytestmark = pytest.mark.component

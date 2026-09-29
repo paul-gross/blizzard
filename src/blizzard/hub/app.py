@@ -64,6 +64,7 @@ from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.forge_status import AnnotationReconciler
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.transcripts import TranscriptCaps
+from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
@@ -315,11 +316,16 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     )
     work_source_registry = WorkSourceEntry.registry(
         config.work_sources,
-        store_connections,
-        clock,
         users=user_store,
         work_item_store=work_item_store,
-        delete=delete_service,
+        edits=WorkItemEditService(
+            items=work_item_store,
+            work_refs=chunk_stores.work_refs,
+            record=chunk_stores.record,
+            facts=chunk_stores.facts,
+            clock=clock,
+            delete=delete_service,
+        ),
         resolution=garden_proposal_resolution,
         close_forge_writes_enabled=config.close_forge_writes_enabled,
     )

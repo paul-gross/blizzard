@@ -12,10 +12,10 @@ from datetime import datetime
 from sqlalchemy import select
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import insert_promote_rows, row_exists
 
 

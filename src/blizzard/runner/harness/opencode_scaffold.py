@@ -2,7 +2,7 @@
 (execution spec, "Runner-owned plugin").
 
 ``Runtime.init`` is not a composition root, so it may not reach into ``harness/internal/``
-directly (``bzh:dependency-injection``); it calls this harness-neutral surface instead,
+directly (``bzh:internal-visibility``); it calls this harness-neutral surface instead,
 which delegates to the real scaffolding under ``harness/internal/``."""
 
 from __future__ import annotations

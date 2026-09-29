@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlalchemy import Select, and_, delete, func, insert, or_, select, update
 
+from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosureKind,
@@ -27,7 +28,6 @@ from blizzard.hub.domain.garden_proposals import (
 )
 from blizzard.hub.domain.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.schema import garden_proposal_closures, garden_proposal_findings, garden_proposals
 
 #: `list_page`'s cursor, already total: `(created_at, proposal_id)`.

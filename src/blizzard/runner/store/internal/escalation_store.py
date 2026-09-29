@@ -8,7 +8,8 @@ from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.escalations import EscalationRecord, IWriteEscalationRepository
-from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION, RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION
 from blizzard.runner.store.schema import escalation_closures, lease_closures, lease_context, lease_spawns, leases
 
 _log = get_logger("blizzard.runner.store")

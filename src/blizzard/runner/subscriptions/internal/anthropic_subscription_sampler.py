@@ -16,6 +16,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.subscriptions.subscription_sampler import (
+    ANTHROPIC_DEFAULT_CREDENTIALS_PATH,
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
     ISubscriptionSampler,
@@ -28,7 +29,6 @@ _log = get_logger("blizzard.runner.harness")
 # The subscription-usage seam — the API host and the shared credential file
 # the harness's own login writes. Both overridable via the constructor.
 DEFAULT_USAGE_API_BASE = "https://api.anthropic.com"
-DEFAULT_CREDENTIALS_PATH = str(Path.home() / ".claude" / ".credentials.json")
 
 _USAGE_PATH = "/api/oauth/usage"
 _USAGE_OAUTH_BETA_HEADER = "oauth-2025-04-20"
@@ -54,7 +54,7 @@ class AnthropicSubscriptionSampler:
         clock: IClock,
     ) -> None:
         # `credentials_path` is read-only here; the caller supplies the (shared) client.
-        self._credentials_path = credentials_path or DEFAULT_CREDENTIALS_PATH
+        self._credentials_path = credentials_path or ANTHROPIC_DEFAULT_CREDENTIALS_PATH
         self._usage_api_base = usage_api_base
         self._http_client = http_client
         self._clock: IClock = clock

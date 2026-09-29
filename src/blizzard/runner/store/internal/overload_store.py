@@ -9,7 +9,8 @@ from sqlalchemy import and_, func, select
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.overload import InvocationKind, IWriteOverloadRepository, OverloadFactRecord
-from blizzard.runner.store.internal.base import RunnerStoreConnections, Unclosed, Unsuperseded
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import Unclosed, Unsuperseded
 from blizzard.runner.store.schema import lease_closures, overload_facts, overload_resets
 
 _log = get_logger("blizzard.runner.store")

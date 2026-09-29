@@ -1,10 +1,8 @@
-"""Shared id-batching for every bulk read seam (package-private).
+"""Shared id-batching for every bulk read seam, hub and runner alike.
 
 Every batch read filtering a family query by a caller-supplied id selection batches
 through :func:`id_batches` so no single ``IN (...)`` bind-parameter count grows with the
-caller — every seam's batch method shares one cap and one batching loop. The runner gets
-its own copy of ``hub/store/internal/batching.py``'s shape: that module is package-private
-to the hub."""
+caller — every seam's batch method shares one cap and one batching loop."""
 
 from __future__ import annotations
 

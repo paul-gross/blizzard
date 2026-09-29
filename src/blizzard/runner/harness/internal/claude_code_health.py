@@ -15,7 +15,7 @@ from packaging.specifiers import SpecifierSet
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.internal import harness_shared
-from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import DEFAULT_CREDENTIALS_PATH
+from blizzard.runner.subscriptions.subscription_sampler import ANTHROPIC_DEFAULT_CREDENTIALS_PATH
 
 # Currently >=2.1,<3.0, corpus-free: membership via `version_admitted` admits it alone.
 ADMITTED_CLAUDE_CODE_RANGE_DISPLAY = ">=2.1,<3.0"
@@ -53,7 +53,7 @@ class ClaudeCodeHealthProbe:
         self._binary = binary
         # Injectable for testability (`bzh:dependency-injection`); defaults to the same
         # OAuth credential file `AnthropicSubscriptionSampler` already reads for usage sampling.
-        self._credentials_path = Path(credentials_path or DEFAULT_CREDENTIALS_PATH)
+        self._credentials_path = Path(credentials_path or ANTHROPIC_DEFAULT_CREDENTIALS_PATH)
 
     def binary_present(self) -> bool:
         return harness_shared.binary_present(self._binary)

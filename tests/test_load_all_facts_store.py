@@ -19,6 +19,7 @@ from sqlalchemy import Engine, insert
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.chunks import FleetPulse
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.fleet import Route
@@ -36,7 +37,6 @@ from blizzard.hub.domain.work import (
     UsageFact,
 )
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
 from blizzard.hub.store.internal.chunk_facts_store import _ALL_FAMILIES, _STATUS_FAMILIES, ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore

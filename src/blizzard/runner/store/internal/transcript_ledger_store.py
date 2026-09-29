@@ -11,14 +11,10 @@ from sqlalchemy import Connection, func, select
 
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.store.internal.base import (
-    NO_NORMALIZER_VERSION,
-    RunnerStoreConnections,
-    enqueue_transcript_final,
-    lease_select,
-)
-from blizzard.runner.store.internal.batching import id_batches
+from blizzard.runner.store.errors import RunnerStoreConnections
+from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, enqueue_transcript_final, lease_select
 from blizzard.runner.store.schema import leases, transcript_outbound_buffer, transcript_segments
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,

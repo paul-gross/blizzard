@@ -14,12 +14,12 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import Engine
 
+from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.findings import FactEntry, Finding
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.errors import HubStoreError
-from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal.finding_store import FindingStore
 from tests.support import count_queries, hub_store_connections
 

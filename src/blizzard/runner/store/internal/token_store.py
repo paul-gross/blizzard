@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.auth.tokens import IWriteTokenRepository
-from blizzard.runner.store.internal.base import RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import lease_tokens, route_tokens
 
 _log = get_logger("blizzard.runner.store")

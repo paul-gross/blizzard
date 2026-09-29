@@ -9,7 +9,7 @@ from sqlalchemy import select
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.artifacts import GraphArtifactRecord, IWriteGraphArtifactRepository
-from blizzard.runner.store.internal.base import RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import graph_artifacts
 
 _log = get_logger("blizzard.runner.store")

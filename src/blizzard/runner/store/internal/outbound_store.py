@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import and_, func, select
 
 from blizzard.runner.domain.outbound import BufferedFact, IWriteOutboundRepository, OutboundFactRecord
-from blizzard.runner.store.internal.base import RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import outbound_buffer
 
 # See IWriteOutboundRepository.prune_outbound's own docstring for the retention contract.

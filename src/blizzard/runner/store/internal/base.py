@@ -6,16 +6,13 @@ predicate used by exactly one concept is defined at that concept's own adapter i
 from __future__ import annotations
 
 import json
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Engine, Row, Select, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import Connection, select
 
 from blizzard.runner.domain.leases import LeaseRecord
-from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import (
     binding_releases,
     env_bindings,
@@ -33,34 +30,6 @@ from blizzard.runner.store.schema import (
 #: A fresh segment's placeholder, before its first pump read — restated rather than
 #: imported (the store never depends on the harness seam). Shared by the leases and transcripts adapters.
 NO_NORMALIZER_VERSION = ""
-
-
-class RunnerStoreConnections:
-    """The connection-acquiring collaborator every ``runner/store/internal/`` adapter
-    takes in place of ``Engine`` (``bzh:dependency-injection``)."""
-
-    def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
-        self._engine = engine
-        self._errors = errors
-
-    def connect(self) -> Connection:
-        try:
-            return self._engine.connect()
-        except SQLAlchemyError as exc:
-            raise self._errors.from_driver(exc, operation="connect") from exc
-
-    def begin(self) -> AbstractContextManager[Connection]:
-        try:
-            return self._engine.begin()
-        except SQLAlchemyError as exc:
-            raise self._errors.from_driver(exc, operation="begin") from exc
-
-    def all(self, stmt: Select[Any]) -> list[Row[Any]]:
-        try:
-            with self._engine.connect() as conn:
-                return list(conn.execute(stmt))
-        except SQLAlchemyError as exc:
-            raise self._errors.from_driver(exc, operation="query") from exc
 
 
 @dataclass(frozen=True)

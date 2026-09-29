@@ -6,7 +6,12 @@ Mirrors ``blizzard.hub.store.errors``: a driver exception is translated into the
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+from typing import Any
+
 import structlog
+from sqlalchemy import Connection, Engine, Row, Select
+from sqlalchemy.exc import SQLAlchemyError
 
 
 class RunnerStoreError(RuntimeError):
@@ -29,3 +34,31 @@ class RunnerStoreErrorFactory:
         detail = str(exc).strip()
         self._log.error("runner store operation failed", operation=operation, detail=detail)
         return RunnerStoreError(f"runner store {operation} failed: {detail}")
+
+
+class RunnerStoreConnections:
+    """The connection-acquiring collaborator every ``runner/store/internal/`` adapter
+    takes in place of ``Engine`` (``bzh:dependency-injection``)."""
+
+    def __init__(self, engine: Engine, errors: RunnerStoreErrorFactory) -> None:
+        self._engine = engine
+        self._errors = errors
+
+    def connect(self) -> Connection:
+        try:
+            return self._engine.connect()
+        except SQLAlchemyError as exc:
+            raise self._errors.from_driver(exc, operation="connect") from exc
+
+    def begin(self) -> AbstractContextManager[Connection]:
+        try:
+            return self._engine.begin()
+        except SQLAlchemyError as exc:
+            raise self._errors.from_driver(exc, operation="begin") from exc
+
+    def all(self, stmt: Select[Any]) -> list[Row[Any]]:
+        try:
+            with self._engine.connect() as conn:
+                return list(conn.execute(stmt))
+        except SQLAlchemyError as exc:
+            raise self._errors.from_driver(exc, operation="query") from exc

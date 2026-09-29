@@ -12,11 +12,11 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine
 
+from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkItemRecord, WorkRef
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import hub_store_connections, seed_graph, seed_work_item
 

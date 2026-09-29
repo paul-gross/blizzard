@@ -15,13 +15,13 @@ from sqlalchemy import Connection, and_, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, enqueue_close_intents, insert_proposals, proposal_row
 
 #: Every fact table whose ``decision_id`` column closes a decision — the resolving

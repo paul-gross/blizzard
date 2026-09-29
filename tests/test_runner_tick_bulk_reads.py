@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.domain.leases import NewLease
@@ -30,7 +31,6 @@ from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
-from blizzard.runner.store.internal import batching as batching_module
 from tests import support
 from tests.runner_fakes import (
     FakeHarness,

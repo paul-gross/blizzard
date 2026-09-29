@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.attachments import IWriteAttachmentRepository
-from blizzard.runner.store.internal.base import RunnerStoreConnections
+from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import attachments
 
 _log = get_logger("blizzard.runner.store")

@@ -14,9 +14,9 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.work import Chunk, WorkRef
-from blizzard.hub.store.internal import batching as batching_module
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from tests.support import chunk_stores, migrate_to, seed_graph
 

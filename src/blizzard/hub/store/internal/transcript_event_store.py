@@ -17,6 +17,7 @@ from typing import Any
 
 from sqlalchemy import Delete, Insert, Select, func, insert, select
 
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.analytics.events import (
     CandidacyRead,
     DerivationMarker,
@@ -29,7 +30,6 @@ from blizzard.hub.domain.analytics.events import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 from blizzard.wire.transcript_segment import TurnSegmentView
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier

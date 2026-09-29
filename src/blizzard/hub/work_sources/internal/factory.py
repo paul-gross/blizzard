@@ -14,13 +14,11 @@ from typing import cast
 
 import httpx
 
-from blizzard.foundation.clock import IClock
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import ConfigError, WorkSourceConfig
-from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
-from blizzard.hub.domain.work import IWriteWorkItemRepository
-from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.domain.work import IReadWorkItemRepository
+from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -48,12 +46,10 @@ class WorkSourceEntry:
     def registry(
         cls,
         sources: Sequence[WorkSourceConfig],
-        store: HubStoreConnections,
-        clock: IClock,
         *,
         users: IReadUserRepository,
-        work_item_store: IWriteWorkItemRepository,
-        delete: DeleteService,
+        work_item_store: IReadWorkItemRepository,
+        edits: WorkItemEditService,
         resolution: GardenProposalDeliveryResolution,
         close_forge_writes_enabled: bool = True,
     ) -> WorkSourceRegistry:
@@ -77,11 +73,9 @@ class WorkSourceEntry:
             built,
             editors,
             closers,
-            store=store,
-            clock=clock,
             users=users,
             items=work_item_store,
-            delete=delete,
+            edits=edits,
             resolution=resolution,
         )
         return WorkSourceRegistry(built, annotators, closers, editors)

@@ -18,6 +18,7 @@ from sqlalchemy import and_, exists, or_, select
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import (
@@ -42,7 +43,6 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.batching import id_batches
 from blizzard.hub.store.internal.chunk_rows import graph_id_of_batch
 
 #: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
