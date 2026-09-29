@@ -23,16 +23,16 @@ answering an unenrolled runner a permanently empty queue it could mistake for an
 The chunk-scoped fleet reads — garden findings/proposals and the six analytics counts/spend reads
 (`GET /api/fleet/chunks/{chunk_id}/garden/...`, `.../analytics/...`) — take the opposite position: they serve an
 unresolved token under `warn` like any other fleet route, an accepted exposure rather than an oversight. Each is
-confined only to the chunk carrying a routine run's context, never to the calling runner's own identity, so a
-resolved principal would add no narrowing a wrong-runner token could exploit; `enforce` still closes the window the
-same way it does for the rest of the fleet router.
+confined only to the chunk carrying a routine run's context, never to the calling runner's own identity, so a resolved
+principal would add no narrowing a wrong-runner token could exploit; `enforce` still closes the window the same way it
+does for the rest of the fleet router.
 
 ## Enrollment
 
-Enrollment requires prior registration: a runner registers itself with the hub on its own pull, reporting the
-harnesses and tiers it can execute alongside its identity, and `blizzard hub runner enroll <runner_id>` 404s on an
-unknown id — a deliberate act on a runner the fleet knows, not trust-on-first-use. `enroll` mints the runner's bearer
-token — or rotates it when run again — and prints the plaintext exactly once; there is no read-back, only rotation.
+Enrollment requires prior registration: a runner registers itself with the hub on its own pull, reporting the harnesses
+and tiers it can execute alongside its identity, and `blizzard hub runner enroll <runner_id>` 404s on an unknown id — a
+deliberate act on a runner the fleet knows, not trust-on-first-use. `enroll` mints the runner's bearer token — or
+rotates it when run again — and prints the plaintext exactly once; there is no read-back, only rotation.
 
 `blizzard-runner.toml`'s `token_env` (default `BZ_HUB_TOKEN`) names the environment variable carrying the enrolled
 token, never the secret itself; the secret goes in the runner's env file (the systemd unit's `EnvironmentFile`), read
@@ -44,3 +44,20 @@ Start the runner once so it registers; enroll it; install the token in the runne
 its `token_env` key names; flip `runner_auth_mode` to `enforce` and restart the hub once every runner carries an
 enrolled token; flip `route_token_mode` to `enforce` only after outbound buffers carrying pre-upgrade token-less facts
 have drained — `warn` already covers that window, so there is no separate grace period.
+
+## Revocation
+
+A revoked token is refused with a 401 on every fleet route under **every** `runner_auth_mode` — `warn` included. The hub
+records each hash it revokes and never clears it, so the refusal keys on the token itself rather than on its failing to
+resolve, which `warn` tolerates. A token revoked once stays dead even after the runner is enrolled afresh.
+
+`blizzard hub runner revoke-token <runner_id>` revokes the current token and leaves the runner registered; it refuses
+with a 409 when the runner holds no enrolled token. The runner is refused until `enroll` mints a new one. That
+distinguishes it from rotation, where re-running `enroll` replaces the token but leaves the old one merely unresolved:
+under `warn` a rotated-away token still passes as an anonymous call, a revoked one does not.
+
+`blizzard hub runner retire` revokes the runner's token as part of retiring it
+([control-verbs.md](./control-verbs.md#runner-level-brakes)). `enroll` on a retired runner refuses with a 409 naming
+`reinstate`; after `reinstate`, `enroll` mints a fresh token.
+
+`revoke-token`, `retire`, and `reinstate` require the `runner:retire` permission, held by `admin` and `superuser`.

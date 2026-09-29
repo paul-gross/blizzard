@@ -172,3 +172,23 @@ The two runner-level brakes — the hub brake (`blizzard hub runner pause`/`resu
 (`runner pause`/`start`, or the runner panel's control; [runner-doors.md](./runner-doors.md)) — are per-runner, not
 per-chunk, and neither kills any worker: the hub brake stops only new claims, the local brake additionally blocks every
 other spawn site (restart-resume, answer-resume, requeue respawn) but never a worker already running.
+
+### Retire and reinstate
+
+`blizzard hub runner retire <runner_id>` takes a runner out of service for good: it revokes the runner's token, hides it
+from `runner list` and the board's fleet views, and refuses its registration and heartbeat (`403`) and its claims (the
+same `403` denial a paused runner gets), whatever `runner_auth_mode` is. The runner's registration and every fact
+attributed to it stay, so chunk history, transcripts, and events keep naming it. `runner list --all` (and the board's
+"show retired" chip) shows retired runners marked with when and by whom. `--by` records who retired it.
+
+A runner still holding chunks refuses the retire with a `409` naming each held chunk and its environments. `--force`
+records the retirement and then releases every held route through the same path `chunk detach` uses, so each chunk
+re-derives `ready` for any runner. Re-running `retire` on an already-retired runner writes no second fact and finishes
+any release a crash interrupted.
+
+Stop the runner process too. The hub refuses a retired runner's calls, so it never learns that its routes were released,
+and its local worktrees stay held until the process stops.
+
+`blizzard hub runner reinstate <runner_id>` records the reversal. The runner stays unenrolled — its token was revoked at
+retire — so run `enroll` next; `enroll` on a retired runner refuses with a `409`. `reinstate` on a runner that is not
+retired is a `409`. All three verbs need the `runner:retire` permission ([runner-auth.md](./runner-auth.md#revocation)).
