@@ -173,6 +173,12 @@ def test_events_feed_cap_keeps_the_most_severe_rows(tmp_path: Path) -> None:
     ]
 
 
+def test_limit_above_the_cap_is_refused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.get("/api/events", params={"limit": 200}).status_code == 200
+    assert hub.client.get("/api/events", params={"limit": 201}).status_code == 422
+
+
 def test_malformed_since_422s(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.get("/api/events", params={"since": "not-a-date"})

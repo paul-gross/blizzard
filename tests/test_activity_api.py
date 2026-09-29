@@ -70,6 +70,8 @@ def test_limit_out_of_bounds_422s(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.get("/api/activity", params={"limit": 0}).status_code == 422
     assert hub.client.get("/api/activity", params={"limit": 1001}).status_code == 422
+    assert hub.client.get("/api/activity", params={"limit": 200}).status_code == 200
+    assert hub.client.get("/api/activity", params={"limit": 201}).status_code == 422
 
 
 def test_naive_since_is_coerced_not_raised(tmp_path: Path) -> None:
