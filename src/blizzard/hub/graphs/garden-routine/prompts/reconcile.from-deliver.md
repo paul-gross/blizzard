@@ -13,6 +13,7 @@ format's own field lists. If that read fails or comes back empty, proceed on the
 names against that shape and resubmit the delta with `blizzard runner artifact create --name delta`. Change nothing
 about what you concluded while you are in there; correcting a format error is not an invitation to revisit the matching.
 
-**Loop bound.** Before resubmitting, read `blizzard runner chunk history`. If an `invalid` transition has already left
-`deliver` once for this chunk, do not resubmit again: record the second rejection's detail as a finding of its own and
-escalate with `blizzard runner ask` rather than let the cycle repeat.
+**Loop bound.** Retry once, then escalate. Before resubmitting, read `blizzard runner chunk history`. You are here
+because of an `invalid` transition out of `deliver`; that one does not count. If an *earlier* `invalid` transition out
+of `deliver` precedes it for this chunk, this is the second rejection: do not resubmit. Record its detail as a finding
+of its own and escalate with `blizzard runner ask` rather than let the cycle repeat.

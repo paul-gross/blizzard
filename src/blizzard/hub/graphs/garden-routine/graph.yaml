@@ -61,7 +61,7 @@ nodes:
           description: The sweep recorded candidate observations in the survey asset.
           to: reconcile
         excessive:
-          description: The scope is past what one pass can inventory. The survey holds a single excessive-scope candidate and no inventory at all; reconcile converges it against any bail-out already live on this routine.
+          description: The scope is past what one pass can inventory, even fanned out across 10 subagent batches. The survey holds a single excessive-scope candidate and no inventory at all; reconcile converges it against any bail-out already live on this routine.
           to: reconcile
         no-strategy:
           description: The target's gardening-axes registry declares no entry for this routine's axis. The survey holds a single undeclared-axis candidate and no inventory at all; reconcile converges it against any bail-out already live on this routine.
