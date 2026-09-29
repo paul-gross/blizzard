@@ -1,5 +1,5 @@
-"""open-PR delivery facts — pr.opened / pr.closed; ``delivery_pr_opened`` is a frozen
-local literal rather than a ``schema.py`` import (hub store tree, ``canon:no-retro``)
+"""open-PR delivery facts — pr.opened / pr.closed; both tables are frozen
+local literals rather than a ``schema.py`` import (hub store tree, ``canon:no-retro``)
 
 Revision ID: 20260714_0819_hub_delivery_pr_facts
 Revises: 20260713_1947_hub_runner_registry
@@ -11,8 +11,6 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-
-from blizzard.hub.store.schema import delivery_pr_closed
 
 revision: str = "20260714_0819_hub_delivery_pr_facts"
 down_revision: str | None = "20260713_1947_hub_runner_registry"
@@ -38,8 +36,19 @@ _delivery_pr_opened = sa.Table(
     sa.Column("commit_hash", sa.String, nullable=False),
     sa.Column("opened_at", sa.DateTime, nullable=False),
 )
+_delivery_pr_closed = sa.Table(
+    "delivery_pr_closed",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
+    sa.Column("repo", sa.String, nullable=False),
+    sa.Column("pr_number", sa.Integer, nullable=False),
+    sa.Column("merged", sa.Boolean, nullable=False),
+    sa.Column("landed_commit", sa.String, nullable=True),
+    sa.Column("closed_at", sa.DateTime, nullable=False),
+)
 
-_TABLES = [_delivery_pr_opened, delivery_pr_closed]
+_TABLES = [_delivery_pr_opened, _delivery_pr_closed]
 
 
 def upgrade() -> None:

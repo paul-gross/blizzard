@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.delivery_read import DeliveryRead, DeliverySources
-from blizzard.hub.domain.work import ChunkFacts, PrOpenedFact
+from blizzard.hub.domain.work import ChunkFacts
 
 pytestmark = pytest.mark.unit
 
@@ -41,25 +39,18 @@ def test_partial_land_auto_prs_are_not_human_waits_and_use_each_repos_forge() ->
     ]
 
 
-def test_historical_closure_is_matched_by_repo_and_number_and_unknown_forge_has_no_link() -> None:
-    facts = ChunkFacts(
-        minted=True,
-        pr_opened=[
-            PrOpenedFact("acme/one", 1, "https://wrong/acme/other/pull/1", "tip", datetime.now(UTC)),
-            PrOpenedFact("acme/two", 2, "https://forge/acme/two/pull/2", "tip", datetime.now(UTC)),
+def test_landed_repo_whose_pr_is_on_another_forge_origin_has_no_commit_link() -> None:
+    sources = DeliverySources(
+        markers=[
+            marker("delivery-pr/acme/one", '{"repo":"acme/one","number":1,"url":"https://wrong/acme/other/pull/1"}'),
         ],
+        legacy_landed={"acme/one": "merged-sha"},
     )
-    view = DeliveryRead.of(
-        facts, DeliverySources(closed=frozenset({("acme/two", 2)}), legacy_landed={"acme/one": "merged-sha"})
-    )
+    view = DeliveryRead.of(ChunkFacts(minted=True), sources)
     assert view.open_prs == []
-    assert len(view.closed_prs) == 2
+    assert [p.repo for p in view.closed_prs] == ["acme/one"]
     assert view.awaiting_external_merge is False
     assert view.landed_repos[0].url is None
-
-    still_open = DeliveryRead.of(facts, DeliverySources(closed=frozenset({("acme/two", 2)})))
-    assert [p.repo for p in still_open.open_prs] == ["acme/one"]
-    assert still_open.awaiting_external_merge is True
 
 
 def test_authored_external_merge_marker_requires_a_still_open_pr() -> None:
@@ -70,9 +61,8 @@ def test_authored_external_merge_marker_requires_a_still_open_pr() -> None:
         ]
     )
     assert DeliveryRead.of(ChunkFacts(minted=True), sources).awaiting_external_merge
-    assert not DeliveryRead.of(
-        ChunkFacts(minted=True), DeliverySources(sources.markers, frozenset({("acme/one", 3)}))
-    ).awaiting_external_merge
+    landed = DeliverySources(sources.markers, legacy_landed={"acme/one": "merge-sha"})
+    assert not DeliveryRead.of(ChunkFacts(minted=True), landed).awaiting_external_merge
 
 
 def test_replacement_pr_in_same_epoch_closes_first_reference_without_a_closure_fact() -> None:

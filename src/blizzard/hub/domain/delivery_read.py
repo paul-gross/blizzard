@@ -1,4 +1,4 @@
-"""Delivery's read projection, derived from durable markers and historical facts."""
+"""Delivery's read projection, derived from durable markers."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ class DeliverySources:
     """The narrowed, page-keyed delivery read (not the chunk's whole artifact history)."""
 
     markers: list[ArtifactRow] = field(default_factory=list)
-    closed: frozenset[tuple[str, int]] = frozenset()
     legacy_landed: dict[str, str] = field(default_factory=dict)
 
 
@@ -61,7 +60,7 @@ class DeliveryRead:
 
     @classmethod
     def of(cls, facts: ChunkFacts, sources: DeliverySources) -> DeliveryRead:
-        prs = {(p.repo, p.number): DeliveryPr(p.repo, p.number, p.url) for p in facts.pr_opened}
+        prs: dict[tuple[str, int], DeliveryPr] = {}
         landed = dict(sources.legacy_landed)
         script_prs: dict[str, tuple[str, int]] = {}
         script_epochs: dict[tuple[str, int], int] = {}
@@ -92,16 +91,12 @@ class DeliveryRead:
         open_prs = [
             p
             for p in prs.values()
-            if (p.repo, p.number) not in sources.closed
-            and p.repo not in landed
+            if p.repo not in landed
             and ((p.repo, p.number) not in script_epochs or script_prs[p.repo] == (p.repo, p.number))
         ]
-        # A script-created PR is reviewable, not an external merge wait. Only
-        # historical PR facts (or the explicitly authored marker) signal that wait.
-        open_keys = {(p.repo, p.number) for p in open_prs}
-        external = any((p.repo, p.number) in open_keys for p in facts.pr_opened) or any(
-            script_epochs.get(key) in external_epochs for key in open_keys
-        )
+        # A script-created PR is reviewable, not an external merge wait. Only the
+        # explicitly authored marker signals that wait.
+        external = any(script_epochs.get((p.repo, p.number)) in external_epochs for p in open_prs)
         closed_prs = [p for p in prs.values() if p not in open_prs]
         rows = [
             LandedRepo(

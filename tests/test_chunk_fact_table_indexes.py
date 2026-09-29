@@ -54,8 +54,8 @@ pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=UTC)
 
-# Mirrors the revision's own table list, minus `delivery_pr_opened` (covered by its own
-# unique constraint) and the three composite-superseded tables
+# Mirrors the revision's own table list, minus the tables a later revision drops
+# (`delivery_pr_opened`, `delivery_pr_closed`) and the three composite-superseded tables
 # (`transitions`, `lease_facts`, `chunk_bounces`) — those get their own exact-name
 # assertion below, since a substring match here would also match their new
 # `ix_<table>_chunk_id_epoch` composite.
@@ -75,7 +75,6 @@ _INDEXED_TABLES = (
     "hub_node_poll",
     "chunk_stopped",
     "chunk_completed",
-    "delivery_pr_closed",
     "chunk_promoted",
     "delivery_landed",
 )
@@ -130,18 +129,6 @@ def test_chunk_id_epoch_composite_tables_plan_through_the_exact_composite(tmp_pa
         plan = conn.execute(sa.text(f"EXPLAIN QUERY PLAN SELECT * FROM {table} WHERE chunk_id = 'ch_1'")).all()
     assert _plan_uses_index(plan, f"ix_{table}_chunk_id_epoch"), plan
     assert not _plan_uses_index(plan, f"ix_{table}_chunk_id"), plan
-
-
-def test_delivery_pr_opened_read_plans_as_an_index_search_on_its_own_unique_constraint(tmp_path: Path) -> None:
-    """No `ix_delivery_pr_opened_chunk_id` exists — `uq_delivery_pr_opened_chunk_repo`
-    already leads with `chunk_id`, so sqlite's own autoindex for that constraint already
-    serves the filter and a fresh index would be redundant."""
-    engine = _engine(tmp_path)
-    with engine.connect() as conn:
-        plan = conn.execute(
-            sa.text("EXPLAIN QUERY PLAN SELECT * FROM delivery_pr_opened WHERE chunk_id = 'ch_1'")
-        ).all()
-    assert any("SEARCH" in str(row) and "INDEX" in str(row) for row in plan), plan
 
 
 def test_load_facts_answered_question_read_plans_as_an_index_search(tmp_path: Path) -> None:

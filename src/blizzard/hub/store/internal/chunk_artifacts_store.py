@@ -33,7 +33,6 @@ class ChunkArtifactsStore:
     def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
         """Only the requested chunks and delivery families; no fleet artifact scan."""
         markers: dict[str, list[ArtifactRow]] = defaultdict(list)
-        closed: dict[str, set[tuple[str, int]]] = defaultdict(set)
         landed: dict[str, dict[str, str]] = defaultdict(dict)
         with self._store.read("delivery_sources_for") as conn:
             for batch in id_batches(chunk_ids):
@@ -62,16 +61,11 @@ class ChunkArtifactsStore:
                             epoch=a.epoch,
                         )
                     )
-                for row in conn.execute(select(s.delivery_pr_closed).where(s.delivery_pr_closed.c.chunk_id.in_(batch))):
-                    closed[row.chunk_id].add((row.repo, row.pr_number))
                 for row in conn.execute(
                     select(s.delivery_repo_landed).where(s.delivery_repo_landed.c.chunk_id.in_(batch))
                 ):
                     landed[row.chunk_id][row.repo] = row.commit_hash
-        return {
-            chunk_id: DeliverySources(markers[chunk_id], frozenset(closed[chunk_id]), landed[chunk_id])
-            for chunk_id in chunk_ids
-        }
+        return {chunk_id: DeliverySources(markers[chunk_id], landed[chunk_id]) for chunk_id in chunk_ids}
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
         with self._store.read("load_artifacts") as conn:

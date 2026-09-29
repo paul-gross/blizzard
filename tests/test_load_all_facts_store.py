@@ -32,7 +32,6 @@ from blizzard.hub.domain.work import (
     FleetSummary,
     HubNodePollFact,
     MigrationSource,
-    PrOpenedFact,
     RouteTokenMintedFact,
     UsageFact,
 )
@@ -265,17 +264,6 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         store.movement.record_restart_locked(
             handle, "ch_kitchen_sink", from_node_id="nd_g1_runner", to_node_id="nd_g1_runner", by="op", at=_at(3)
         )
-    with engine.begin() as conn:
-        conn.execute(
-            insert(s.delivery_pr_opened).values(
-                chunk_id="ch_kitchen_sink", repo="r1", pr_number=1, pr_url="http://x/1", commit_hash="c1", opened_at=_T0
-            )
-        )
-        conn.execute(
-            insert(s.delivery_pr_closed).values(
-                chunk_id="ch_kitchen_sink", repo="r1", pr_number=1, merged=True, landed_commit="c1", closed_at=_at(1)
-            )
-        )
 
 
 _LIVE_CHUNK_IDS = [
@@ -482,7 +470,6 @@ def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> Non
         "delivery_landed",
         "landed_repos",
         "route_tokens_minted",
-        "pr_opened",
         "usage",
         "bounces",
         "hub_node_polls",
@@ -494,7 +481,6 @@ def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> Non
         delivery_landed=True,
         landed_repos=frozenset({"acme/widget"}),
         route_tokens_minted=[RouteTokenMintedFact(token_hash="h", minted_at=_T0, seq=1)],
-        pr_opened=[PrOpenedFact(repo="acme/widget", number=1, url="u", commit_hash="c", opened_at=_T0)],
         usage=[
             UsageFact(
                 node_id="nd_1",
@@ -543,7 +529,7 @@ def test_load_live_statuses_reads_fewer_statements_than_load_all_facts(tmp_path:
     statuses_count = count_queries(engine, store.facts.load_live_statuses)
     all_facts_count = count_queries(engine, store.facts.load_all_facts)
 
-    # load_live_statuses skips every family status() never reaches (pr_opened, usage,
+    # load_live_statuses skips every family status() never reaches (usage,
     # landed_repos, delivery_landed, route_tokens_minted, hub_node_polls).
     assert statuses_count < all_facts_count
 

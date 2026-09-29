@@ -31,7 +31,6 @@ from blizzard.hub.domain.work import (
     MigrationFact,
     MigrationSource,
     PauseFact,
-    PrOpenedFact,
     QuestionFact,
     RequeueFact,
     RestartFact,
@@ -53,7 +52,6 @@ _ALL_FAMILIES: frozenset[str] = frozenset(
         "operator_completed",
         "delivery_landed",
         "landed_repos",
-        "pr_closed",
         "escalations",
         "leases",
         "transitions",
@@ -65,7 +63,6 @@ _ALL_FAMILIES: frozenset[str] = frozenset(
         "requeues",
         "migrations",
         "restarts",
-        "pr_opened",
         "pauses",
         "usage",
         "bounces",
@@ -79,7 +76,6 @@ _STATUS_FAMILIES: frozenset[str] = frozenset(
         "promoted",
         "stopped",
         "operator_completed",
-        "pr_closed",
         "escalations",
         "leases",
         "transitions",
@@ -110,11 +106,10 @@ def _rows(conn, table, batch: Sequence[str] | None, *columns):  # type: ignore[n
 
 def _maybe_live():  # type: ignore[no-untyped-def]
     """The ``chunks`` predicate that drops every chunk a terminal fact already settles, and
-    never one :meth:`ChunkFacts.status` would derive non-terminal. A stop, a completion, and
-    a closed PR are unconditional — none can be undone. A transition into the reserved
-    terminal holds only while it is strictly the newest movement across transitions,
-    migrations, and restarts (a later requeue-style movement supersedes it), so a tie keeps
-    the chunk in."""
+    never one :meth:`ChunkFacts.status` would derive non-terminal. A stop and a completion are unconditional — none
+    can be undone. A transition into the reserved terminal holds only while it is strictly
+    the newest movement across transitions, migrations, and restarts (a later requeue-style
+    movement supersedes it), so a tie keeps the chunk in."""
     chunk_id = s.chunks.c.chunk_id
     terminal = s.transitions.alias("terminal_transition")
     other = s.transitions.alias("other_transition")
@@ -140,7 +135,6 @@ def _maybe_live():  # type: ignore[no-untyped-def]
     return and_(
         ~exists().where(s.chunk_stopped.c.chunk_id == chunk_id),
         ~exists().where(s.chunk_completed.c.chunk_id == chunk_id),
-        ~exists().where(s.delivery_pr_closed.c.chunk_id == chunk_id),
         ~done_by_transition,
     )
 
@@ -391,15 +385,6 @@ class ChunkFactsStore:
             for p in conn.execute(stmt).all():
                 pauses[p.chunk_id].append(PauseFact(paused=p.paused, set_at=p.set_at, set_by=p.set_by))
 
-        pr_opened: dict[str, list[PrOpenedFact]] = defaultdict(list)
-        if "pr_opened" in families:
-            for p in _rows(conn, s.delivery_pr_opened, batch):
-                pr_opened[p.chunk_id].append(
-                    PrOpenedFact(
-                        repo=p.repo, number=p.pr_number, url=p.pr_url, commit_hash=p.commit_hash, opened_at=p.opened_at
-                    )
-                )
-
         usage: dict[str, list[UsageFact]] = defaultdict(list)
         if "usage" in families:
             for u in _rows(conn, s.usage_facts, batch):
@@ -452,13 +437,6 @@ class ChunkFactsStore:
             ):
                 completed_ats[r.chunk_id].append(r.completed_at)
 
-        pr_closed_ats: dict[str, list[datetime]] = defaultdict(list)
-        if "pr_closed" in families:
-            for r in _rows(
-                conn, s.delivery_pr_closed, batch, s.delivery_pr_closed.c.chunk_id, s.delivery_pr_closed.c.closed_at
-            ):
-                pr_closed_ats[r.chunk_id].append(r.closed_at)
-
         promoted_ids: set[str] = set()
         if "promoted" in families:
             promoted_ids = {r.chunk_id for r in _rows(conn, s.chunk_promoted, batch, s.chunk_promoted.c.chunk_id)}
@@ -479,8 +457,6 @@ class ChunkFactsStore:
                 operator_completed_at=max(completed_ats[chunk_id], default=None),
                 delivery_landed=chunk_id in delivery_landed_ids,
                 landed_repos=frozenset(landed_repos[chunk_id]),
-                pr_closed=bool(pr_closed_ats[chunk_id]),
-                pr_closed_at=max(pr_closed_ats[chunk_id], default=None),
                 escalations=escalations[chunk_id],
                 leases=leases[chunk_id],
                 transitions=transitions[chunk_id],
@@ -492,7 +468,6 @@ class ChunkFactsStore:
                 requeues=requeues[chunk_id],
                 migrations=migrations[chunk_id],
                 restarts=restarts[chunk_id],
-                pr_opened=pr_opened[chunk_id],
                 pauses=pauses[chunk_id],
                 usage=usage[chunk_id],
                 bounces=bounces[chunk_id],

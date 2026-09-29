@@ -598,23 +598,6 @@ class PerRepoMarkerIdempotent(QueryCheck):
         return violations
 
 
-class PrOpenedIdempotent(QueryCheck):
-    """At most one pr.opened fact per (chunk, repo); also guarded by ``uq_delivery_pr_opened_chunk_repo``."""
-
-    def run(self) -> list[Violation]:
-        violations: list[Violation] = []
-        pr_opens = Counter(
-            (row[0], row[1])
-            for row in self.conn.execute(select(hub.delivery_pr_opened.c.chunk_id, hub.delivery_pr_opened.c.repo))
-        )
-        for (chunk_id, repo), n in pr_opens.items():
-            if n > 1:
-                violations.append(
-                    Violation("hub:pr-opened-idempotent", f"chunk {chunk_id} repo {repo} has {n} pr.opened facts")
-                )
-        return violations
-
-
 class NoDoubleDelivery(QueryCheck):
     """At most one whole-chunk delivery.landed terminal fact."""
 
@@ -853,17 +836,15 @@ class DerivationAndDelivery(FactsCheck):
             facts.status()
         except Exception as exc:  # a fact combination the derivation cannot resolve
             return [Violation("hub:derived-status-total", f"chunk {chunk_id} derivation raised {exc!r}")]
-        # Both terminal delivery facts require the terminal transition:
-        # ``delivery.landed`` and ``pr.closed``. An *open* PR is parked, so it is not flagged.
-        if facts.delivery_landed or facts.pr_closed:
+        # ``delivery.landed`` requires the terminal transition.
+        if facts.delivery_landed:
             newest = max(facts.transitions, key=lambda t: (t.recorded_at, t.epoch), default=None)
             if newest is None or newest.to_node_id != RESERVED_TERMINAL:
                 target = None if newest is None else newest.to_node_id
-                fact = "delivery.landed" if facts.delivery_landed else "pr.closed"
                 return [
                     Violation(
                         "hub:merge-queue-single-state",
-                        f"chunk {chunk_id} is {fact} but newest transition targets {target}",
+                        f"chunk {chunk_id} is delivery.landed but newest transition targets {target}",
                     )
                 ]
         return []
@@ -1061,7 +1042,6 @@ class HubInvariants:
                 OneLiveRoutePerChunk(conn),
                 PerRepoLandIdempotent(conn),
                 PerRepoMarkerIdempotent(conn),
-                PrOpenedIdempotent(conn),
                 NoDoubleDelivery(conn),
                 OneLiveExecSlot(conn),
                 NoDoubleTerminalClosure(conn),
