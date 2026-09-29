@@ -1,6 +1,6 @@
-"""``WorkItemStore.create_with_chunk_and_promote`` — a routine run's own one-act mint
-(component tier). Mirrors ``test_work_item_store.py``'s shape, plus the
-promote-then-tail-stamp pair landing in the same transaction."""
+"""``WorkItemStore.create_run_with_chunk`` — a routine run's own one-act mint
+(component tier). Mirrors ``test_work_item_store.py``'s shape; the chunk lands
+``not_ready``, with no promote fact and no queue position."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> 
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
     chunk = mint_chunk([pointer], graph_id="gr_1", at=_NOW, default_model=["opus"], default_effort="high")
 
-    _item, promoted_id = items.create_with_chunk_and_promote(
+    items.create_run_with_chunk(
         pointer=pointer,
         title="gardening run (full)",
         body="Routine: gardening (graph: default)",
@@ -52,10 +52,8 @@ def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> 
         run_mode="full",
         at=_NOW,
         chunk=chunk,
-        position=0.0,
     )
 
-    assert promoted_id is not None
     fetched = items.get("hub", pointer.ref)
     assert fetched is not None
     assert fetched.routine_name == "gardening"
@@ -70,12 +68,12 @@ def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> 
     assert run.mode == "full"
 
 
-def test_chunk_lands_ready_carrying_the_routines_defaults(tmp_path: Path) -> None:
+def test_chunk_lands_not_ready_carrying_the_routines_defaults(tmp_path: Path) -> None:
     items, chunks, _run_context, _engine = _stores(tmp_path)
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
     chunk = mint_chunk([pointer], graph_id="gr_1", at=_NOW, default_model=["opus"], default_effort="high")
 
-    items.create_with_chunk_and_promote(
+    items.create_run_with_chunk(
         pointer=pointer,
         title="t",
         body="b",
@@ -85,7 +83,6 @@ def test_chunk_lands_ready_carrying_the_routines_defaults(tmp_path: Path) -> Non
         run_mode="full",
         at=_NOW,
         chunk=chunk,
-        position=0.0,
     )
 
     minted = chunks.record.get(chunk.chunk_id)
@@ -94,31 +91,9 @@ def test_chunk_lands_ready_carrying_the_routines_defaults(tmp_path: Path) -> Non
     assert minted.default_effort == "high"
     facts = chunks.facts.load_facts(chunk.chunk_id)
     assert facts is not None
-    assert facts.status() == ChunkStatus.READY
-    assert chunks.queue.queue_positions([chunk.chunk_id])[chunk.chunk_id] == 0.0
-
-
-def test_tail_position_is_whatever_the_caller_computed(tmp_path: Path) -> None:
-    """No re-derivation inside the store write — ``position`` is trusted as given,
-    exactly as ``record_promote_with_tail_position`` already trusts its own caller."""
-    items, chunks, _run_context, _engine = _stores(tmp_path)
-    pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id="gr_1", at=_NOW)
-
-    items.create_with_chunk_and_promote(
-        pointer=pointer,
-        title="t",
-        body="b",
-        author=WorkItemAuthor.user("usr_1"),
-        routine_name="gardening",
-        scope_slug="blizzard",
-        run_mode="full",
-        at=_NOW,
-        chunk=chunk,
-        position=7.5,
-    )
-
-    assert chunks.queue.queue_positions([chunk.chunk_id])[chunk.chunk_id] == 7.5
+    assert facts.status() == ChunkStatus.NOT_READY
+    assert not facts.promoted
+    assert chunks.queue.queue_positions([chunk.chunk_id]) == {}
 
 
 def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
@@ -132,7 +107,7 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
     colliding_chunk = Chunk(chunk_id="ch_collide", graph_id="gr_1", work_refs=[pointer], minted_at=_NOW)
 
     with pytest.raises(HubStoreError):
-        items.create_with_chunk_and_promote(
+        items.create_run_with_chunk(
             pointer=pointer,
             title="t",
             body="b",
@@ -142,7 +117,6 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
             run_mode="full",
             at=_NOW,
             chunk=colliding_chunk,
-            position=0.0,
         )
 
     assert items.get("hub", pointer.ref) is None

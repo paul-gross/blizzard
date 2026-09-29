@@ -1,8 +1,8 @@
 """Routine create/edit/run requests and their read views.
 
 A create names the graph its runs execute and a default scope (minted if unseen);
-edit changes everything but the name, which is immutable. A run mints, ingests, and
-promotes a hub work item from the routine in one act."""
+edit changes everything but the name, which is immutable. A run mints and ingests a
+hub work item from the routine in one act; its chunk rests ``not_ready`` until promoted."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ class RoutineBaselineView(BaseModel):
 
 
 class RoutineRunResponse(BaseModel):
-    """The minted, ingested, and promoted run item — the chunk id, the item's own
+    """The minted and ingested run item — the chunk id, the item's own
     pointer, the effective mode and whether it was downgraded from a requested delta,
     and the resolved baseline, when the mode settled on delta."""
 

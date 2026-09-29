@@ -17,8 +17,8 @@ export interface RoutineRunVars {
 
 /**
  * `POST /api/routines/{routine_id}/run` through the generated client
- * (bzh:generated-client) — mints, ingests, and promotes a hub work item from the
- * routine in one act. Submits exactly the mode it is given and resolves no baseline
+ * (bzh:generated-client) — mints and ingests a hub work item from the
+ * routine in one act; its chunk rests `not_ready` until promoted. Submits exactly the mode it is given and resolves no baseline
  * itself; a requested `delta` with no recorded baseline downgrades to `full` on the
  * response rather than refusing (`RoutineRunResponse.downgraded`). On success,
  * invalidates the routine list — a run leaves no field on the routine record unchanged

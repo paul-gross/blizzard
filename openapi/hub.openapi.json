@@ -6628,7 +6628,7 @@
         "type": "object"
       },
       "RoutineRunResponse": {
-        "description": "The minted, ingested, and promoted run item \u2014 the chunk id, the item's own\npointer, the effective mode and whether it was downgraded from a requested delta,\nand the resolved baseline, when the mode settled on delta.",
+        "description": "The minted and ingested run item \u2014 the chunk id, the item's own\npointer, the effective mode and whether it was downgraded from a requested delta,\nand the resolved baseline, when the mode settled on delta.",
         "properties": {
           "baseline_finding_set_id": {
             "anyOf": [
@@ -17197,7 +17197,7 @@
     },
     "/api/routines/{routine_id}/run": {
       "post": {
-        "description": "Mint, ingest, and promote a hub work item from the routine, in one act.\n404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown\n``mode``, or an effective scope no scope row holds or outside the routine's own\nrelated set (never minted); 503 on a retired routine\n(checked first, before the mode or scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
+        "description": "Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``\nuntil promoted.\n404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown\n``mode``, or an effective scope no scope row holds or outside the routine's own\nrelated set (never minted); 503 on a retired routine\n(checked first, before the mode or scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
         "operationId": "run_routine_api_routines__routine_id__run_post",
         "parameters": [
           {

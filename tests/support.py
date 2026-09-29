@@ -523,6 +523,10 @@ class HubHarness:
     #: address — the forwarded-header trust tests need a concrete IP peer.
     app: FastAPI | None = None
 
+    def promote(self, chunk_id: str) -> None:
+        """Promote ``chunk_id`` through the real ``POST /api/chunks/{id}/promote`` path."""
+        assert self.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+
 
 _hub_prototype_lock = threading.Lock()
 _hub_prototype_tmp: tempfile.TemporaryDirectory[str] | None = None

@@ -65,7 +65,7 @@ def _work_item_count(hub: HubHarness) -> int:
         return conn.execute(sa.select(sa.func.count()).select_from(s.work_items)).scalar_one()
 
 
-def test_full_mode_mints_ingests_and_promotes(tmp_path: Path) -> None:
+def test_full_mode_mints_and_ingests_leaving_the_chunk_not_ready(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine, _graph = _routine(hub)
 
@@ -75,7 +75,6 @@ def test_full_mode_mints_ingests_and_promotes(tmp_path: Path) -> None:
         mode=RunMode.FULL,
         note=None,
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
 
     assert result.effective_mode is RunMode.FULL
@@ -85,7 +84,8 @@ def test_full_mode_mints_ingests_and_promotes(tmp_path: Path) -> None:
     assert result.item.run_mode == "full"
     facts = hub.services.chunks.facts.load_facts(result.chunk_id)
     assert facts is not None
-    assert facts.status() == ChunkStatus.READY
+    assert facts.status() == ChunkStatus.NOT_READY
+    assert not facts.promoted
 
 
 def test_the_minted_chunk_carries_a_resolvable_run_context(tmp_path: Path) -> None:
@@ -101,7 +101,6 @@ def test_the_minted_chunk_carries_a_resolvable_run_context(tmp_path: Path) -> No
         mode=RunMode.FULL,
         note=None,
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
 
     minted = hub.services.chunks.record.get(result.chunk_id)
@@ -123,7 +122,6 @@ def test_chunk_is_pinned_to_the_routines_graph(tmp_path: Path) -> None:
         mode=RunMode.FULL,
         note=None,
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
 
     minted = hub.services.chunks.record.get(result.chunk_id)
@@ -141,7 +139,6 @@ def test_the_routines_model_and_effort_defaults_reach_the_minted_chunk(tmp_path:
         mode=RunMode.FULL,
         note=None,
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
 
     minted = hub.services.chunks.record.get(result.chunk_id)
@@ -160,7 +157,6 @@ def test_the_routines_harnesses_default_reaches_the_minted_chunk(tmp_path: Path)
         mode=RunMode.FULL,
         note=None,
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
 
     minted = hub.services.chunks.record.get(result.chunk_id)
@@ -180,7 +176,6 @@ def test_a_scope_override_outside_the_routines_related_set_is_refused_never_mint
             mode=RunMode.FULL,
             note=None,
             author=_AUTHOR,
-            statuses=hub.services.chunks.facts.load_live_statuses(),
         )
 
 
@@ -196,7 +191,6 @@ def test_a_scope_override_naming_a_related_scope_runs_against_it(tmp_path: Path)
         mode=RunMode.FULL,
         note=None,
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
 
     assert result.item.scope_slug == "related"
@@ -212,7 +206,6 @@ def test_delta_against_a_never_swept_pair_downgrades_to_full(tmp_path: Path) -> 
         mode=RunMode.DELTA,
         note=None,
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
 
     assert result.effective_mode is RunMode.FULL
@@ -232,7 +225,6 @@ def test_delta_with_a_recorded_baseline_stays_delta_and_names_its_revisions(tmp_
         mode=RunMode.DELTA,
         note=None,
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
 
     assert result.effective_mode is RunMode.DELTA
@@ -252,7 +244,6 @@ def test_a_note_lands_in_the_charge_as_a_this_run_section(tmp_path: Path) -> Non
         mode=RunMode.FULL,
         note="focus on the auth module",
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
 
     assert "This run" in result.item.body
@@ -273,7 +264,6 @@ def test_a_retired_scope_is_refused_rather_than_defaulted(tmp_path: Path) -> Non
             mode=RunMode.FULL,
             note=None,
             author=_AUTHOR,
-            statuses=hub.services.chunks.facts.load_live_statuses(),
         )
 
 
@@ -289,7 +279,6 @@ def test_a_retired_routine_is_refused_and_enabling_it_lets_the_run_succeed(tmp_p
             mode=RunMode.FULL,
             note=None,
             author=_AUTHOR,
-            statuses=hub.services.chunks.facts.load_live_statuses(),
         )
     assert _work_item_count(hub) == 0
 
@@ -300,7 +289,6 @@ def test_a_retired_routine_is_refused_and_enabling_it_lets_the_run_succeed(tmp_p
         mode=RunMode.FULL,
         note=None,
         author=_AUTHOR,
-        statuses=hub.services.chunks.facts.load_live_statuses(),
     )
     assert result.effective_mode is RunMode.FULL
     assert _work_item_count(hub) == 1
@@ -318,7 +306,6 @@ def test_a_routine_whose_graph_has_no_enabled_mint_is_refused(tmp_path: Path) ->
             mode=RunMode.FULL,
             note=None,
             author=_AUTHOR,
-            statuses=hub.services.chunks.facts.load_live_statuses(),
         )
 
 

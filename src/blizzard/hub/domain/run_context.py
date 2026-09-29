@@ -1,6 +1,6 @@
 """A run's identity — the routine, scope, and mode a work item's
 run executes under. Minted by
-:meth:`~blizzard.hub.store.internal.work_item_store.WorkItemStore.create_with_chunk_and_promote`;
+:meth:`~blizzard.hub.store.internal.work_item_store.WorkItemStore.create_run_with_chunk`;
 this seam only resolves it back, through a chunk's first work ref, to the ``work_item_runs``
 row that call wrote."""
 

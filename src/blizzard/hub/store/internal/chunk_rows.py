@@ -156,11 +156,10 @@ def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
 def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int | None:
     """Insert one chunk's ``chunk_promoted`` and ``queue_positions`` rows on a
     caller-supplied ``conn`` — mirrors :func:`insert_chunk_rows`'s shared-connection
-    shape, so ``ChunkQueueStore.record_promote_with_tail_position`` and a routine run's
-    own mint-and-promote composite write both fold the promote-then-tail-stamp pair into
-    their own transaction. No idempotency check: a caller minting a fresh
-    chunk has nothing to check against, and ``record_promote_with_tail_position`` keeps
-    its own ahead of this call. Returns the freshly-inserted ``chunk_promoted.id``."""
+    shape, so ``ChunkQueueStore.record_promote_with_tail_position`` folds the
+    promote-then-tail-stamp pair into its own transaction. No idempotency check:
+    ``record_promote_with_tail_position`` keeps its own ahead of this call. Returns the freshly-inserted
+    ``chunk_promoted.id``."""
     result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
     conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
     key = result.inserted_primary_key

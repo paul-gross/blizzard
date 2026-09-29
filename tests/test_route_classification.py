@@ -90,8 +90,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/routines/{routine_id}/scopes"): FLEET_VIEW,
     ("PUT", "/api/routines/{routine_id}/scopes/{scope_slug}"): GRAPH_EDIT,
     ("DELETE", "/api/routines/{routine_id}/scopes/{scope_slug}"): GRAPH_EDIT,
-    # Mint, ingest, and promote a run in one act — the same CHUNK_CONTROL
-    # the acts it composes (ingest, promote) already require.
+    # Mint and ingest a run in one act — the same CHUNK_CONTROL
+    # the act it composes (ingest) already requires.
     ("POST", "/api/routines/{routine_id}/run"): CHUNK_CONTROL,
     # The per-scope delta baseline a routine has swept — a read, FLEET_VIEW.
     ("GET", "/api/routines/{routine_id}/baselines"): FLEET_VIEW,

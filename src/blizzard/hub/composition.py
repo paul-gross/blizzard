@@ -247,7 +247,7 @@ class HubServices:
     routine_authoring: RoutineAuthoring
     #: The routine retire/enable brake.
     routine_lifecycle: RoutineLifecycle
-    #: Mint, ingest, and promote a hub work item from a routine, in one act.
+    #: Mint and ingest a hub work item from a routine, in one act.
     routine_run: RunService
     #: The per-scope delta baseline a routine has swept, and how much has landed since
     #: — the run dialog's pre-submit read.
@@ -580,8 +580,6 @@ def build_services(
             finding_sets=finding_set_store,
             items=work_item_store,
             work_refs=chunk_work_refs,
-            record=chunk_record,
-            queue=chunk_queue,
             clock=clock,
         ),
         routine_baselines=RoutineBaselineService(finding_sets=finding_set_store, delivery=chunk_delivery),
