@@ -840,3 +840,65 @@ def test_deliver_batch_reads_final_marker_segments_through_one_batched_call() ->
     assert delivered == 2
     assert len(calls) == 1  # both finals batched together, read through one call
     assert set(calls[0]) == {segment_1, segment_2}
+
+
+def test_drain_delivers_a_record_with_a_lone_surrogate_and_keeps_valid_emoji() -> None:
+    """A harness preview truncated mid-surrogate-pair stores a lone surrogate, which the
+    hub client's UTF-8 body encoding rejects — the drain must still deliver the record."""
+    hub = FakeHub()
+    batches: list[TranscriptSegmentBatch] = []
+    push = hub.push_transcripts
+
+    def capture(batch: TranscriptSegmentBatch) -> TranscriptSegmentAck:
+        batches.append(batch)
+        return push(batch)
+
+    hub.push_transcripts = capture  # type: ignore[method-assign]
+    ctx = _ctx(hub)
+    segment_id = _spawn_one_segment(ctx)
+    turn = {
+        "index": 0,
+        "kind": "asst",
+        "timestamp": None,
+        "text": "ok \U0001f642 cut \ud83d\n...",
+        "tool": None,
+        "thinking_redacted": False,
+        "sidechain": None,
+        "truncated": False,
+    }
+    payload = json.dumps(
+        {
+            "segment_id": segment_id,
+            "chunk_id": "ch_1",
+            "node_id": "nd_build",
+            "epoch": 1,
+            "spawn_generation": 1,
+            "turn_range_start": 0,
+            "turn_range_end": 1,
+            "final": False,
+            "normalizer_version": "fake/1",
+            "harness_version": None,
+            "turns": [turn],
+        }
+    )
+    ctx.stores.transcript_ledger.record_transcript_deltas(
+        segment_id=segment_id,
+        chunk_id="ch_1",
+        cursor="pos-1",
+        shipped_bytes=1,
+        shipped_turns=1,
+        normalizer_version="fake/1",
+        harness_version=None,
+        payloads=[payload],
+        created_at=_NOW,
+    )
+
+    TranscriptDrain(ctx).run()
+
+    assert len(hub.transcripts_pushed) == 1
+    assert ctx.stores.transcript_ledger.pending_transcript_outbound() == []
+    text = hub.transcripts_pushed[0].turns[0].text
+    assert "�" in text
+    assert "\U0001f642" in text
+    assert not any("\ud800" <= ch <= "\udfff" for ch in text)
+    json.dumps(batches[0].model_dump(mode="json"), ensure_ascii=False).encode("utf-8")

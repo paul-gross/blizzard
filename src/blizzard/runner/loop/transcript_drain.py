@@ -10,6 +10,7 @@ import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
@@ -182,13 +183,26 @@ class TranscriptDrain:
         than one :meth:`~IReadTranscriptLedgerRepository.transcript_segment` per final
         marker — so it reflects an earlier batch's just-applied hub-cap ack."""
         if not delta.final:
-            return TranscriptSegmentRecord.model_validate({"seq": delta.seq, **json.loads(delta.payload)})
+            return TranscriptSegmentRecord.model_validate(
+                {"seq": delta.seq, **_scrub_surrogates(json.loads(delta.payload))}
+            )
         segment = final_segments.get(delta.segment_id)
         if segment is None:
             # A final marker's own segment row always exists; a conditional rather than
             # an `assert`, which `python -O` strips into an opaque `AttributeError` below.
             raise RuntimeError(f"final transcript marker {delta.seq} has no segment row {delta.segment_id}")
         return _final_record(delta.seq, segment)
+
+
+def _scrub_surrogates(value: Any) -> Any:
+    """U+FFFD for each lone surrogate a mid-pair preview cut leaves, which no UTF-8 body can carry."""
+    if isinstance(value, str):
+        return value.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+    if isinstance(value, list):
+        return [_scrub_surrogates(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _scrub_surrogates(item) for key, item in value.items()}
+    return value
 
 
 def _final_record(seq: int, segment: TranscriptSegmentLedgerRow) -> TranscriptSegmentRecord:
