@@ -42,6 +42,11 @@ panel.
 windows are dropped at intake and the subscription renders **present with no windows**, which is not the same as a
 pre-boundary runner's absent block. Both are logged at warning severity on the hub with the runner and slug.
 
+**`sampled_at` can be null.** `SubscriptionUsageView.sampled_at` is now nullable: for a miss-only subscription row — one
+with no successful sample, whose credential has lapsed — it is `null`, and `condition` carries the reason. This is
+deliberate and counts as breaking on the HTTP API, so an API client that reads `sampled_at` as always present must handle
+null and read `condition` in that case.
+
 ## Pull and recreate
 
 From `packaging/docker/`, pull the tag:
