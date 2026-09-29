@@ -655,6 +655,7 @@ class ApplyService:
             at=self._clock.now(),
             artifacts=[],
             proposals=[],
+            imposed_by_runner_id=None,
         )
 
     def _check_route_token(

@@ -259,6 +259,24 @@ describe('RunnerPanelView', () => {
     expect(host?.querySelector('[data-harness-id="codex"]')?.getAttribute('data-available')).toBe('false');
   });
 
+  it('renders one gate badge per node name a runner imposes, and nothing for a runner with none', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_gated', { gates: ['build', 'review'] }),
+      row('rn_ungated', { gates: [] }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const gated = el.querySelector('[data-runner="rn_gated"] [data-testid="runner-gates-group"]');
+    expect([...(gated?.querySelectorAll('[data-testid="runner-gate-badge"]') ?? [])].map((b) => b.textContent?.trim())).toEqual([
+      'build',
+      'review',
+    ]);
+    expect(el.querySelector('[data-runner="rn_ungated"] [data-testid="runner-gates"]')).toBeNull();
+  });
+
   it('renders a labelled empty branch for a runner with no reported capabilities', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
     fixture.componentRef.setInput('state', 'ready');

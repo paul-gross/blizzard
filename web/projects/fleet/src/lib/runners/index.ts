@@ -7,4 +7,5 @@ export type { RunnerView } from '../api/hub';
 export { injectRunnerRows, localPauseHint, runnerToggleHint } from './runner-rows';
 export type { RunnerRow, SubscriptionPace } from './runner-rows';
 export { CapabilityBadgeGroup } from './capability-badge-group';
+export { GateBadgeGroup } from './gate-badge-group';
 export { SubscriptionPaceGroup } from './subscription-pace-group';

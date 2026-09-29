@@ -776,6 +776,10 @@ export type DecisionView = {
      */
     epoch: number;
     /**
+     * Imposed By Runner Id
+     */
+    imposed_by_runner_id?: string | null;
+    /**
      * Node Id
      */
     node_id: string;
@@ -1971,6 +1975,10 @@ export type RunnerControlView = {
  */
 export type RunnerStatusView = {
     capacities: CapacitiesView;
+    /**
+     * Gates
+     */
+    gates?: Array<string>;
     hub: HubConnectivityView;
     /**
      * Last Tick At

@@ -163,6 +163,7 @@ class RunnerRegistryStore:
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
         subscriptions: tuple[DeclaredSubscription, ...] | None = None,
+        gates: tuple[str, ...] = (),
         at: datetime,
     ) -> bool:
         # Written unconditionally on both branches, `None`/empty verbatim included: the
@@ -191,6 +192,7 @@ class RunnerRegistryStore:
             if subscriptions is not None
             else None
         )
+        gates_json = json.dumps(list(gates)) if gates else None
         with self._store.write("upsert_registration") as conn:
             existing = conn.execute(
                 select(s.runner_registrations.c.runner_id).where(s.runner_registrations.c.runner_id == runner_id)
@@ -207,6 +209,7 @@ class RunnerRegistryStore:
                         redirect_uris=redirect_uris_json,
                         capabilities=capabilities_json,
                         subscriptions=subscriptions_json,
+                        gates=gates_json,
                     )
                 )
                 return True
@@ -221,6 +224,7 @@ class RunnerRegistryStore:
                     redirect_uris=redirect_uris_json,
                     capabilities=capabilities_json,
                     subscriptions=subscriptions_json,
+                    gates=gates_json,
                 )
             )
             return False
@@ -582,6 +586,7 @@ class RunnerRegistryStore:
             retired=retired,
             retired_at=as_utc(retired_at) if retired_at is not None else None,
             retired_by=retired_by,
+            gates=tuple(json.loads(row.gates)) if row.gates else (),
         )
 
     @staticmethod

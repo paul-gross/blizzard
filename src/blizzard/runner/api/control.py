@@ -79,6 +79,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
             buffer_depth=summary.hub.buffer_depth,
         ),
         last_tick_at=iso_utc(summary.last_tick_at) if summary.last_tick_at is not None else None,
+        gates=list(summary.gates),
     )
 
 

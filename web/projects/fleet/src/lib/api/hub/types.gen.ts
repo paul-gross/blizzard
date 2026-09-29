@@ -1627,6 +1627,10 @@ export type DecisionView = {
      */
     epoch: number;
     /**
+     * Imposed By Runner Id
+     */
+    imposed_by_runner_id?: string | null;
+    /**
      * Node Id
      */
     node_id: string;
@@ -4560,6 +4564,10 @@ export type RunnerRegistrationRequest = {
      */
     env_capacity?: number | null;
     /**
+     * Gates
+     */
+    gates?: Array<string>;
+    /**
      * Redirect Uris
      */
     redirect_uris?: Array<string>;
@@ -4674,6 +4682,10 @@ export type RunnerView = {
      * Env Capacity
      */
     env_capacity?: number | null;
+    /**
+     * Gates
+     */
+    gates?: Array<string>;
     /**
      * Hub Paused
      */

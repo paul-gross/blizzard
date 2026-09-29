@@ -47,6 +47,15 @@
           <span class="tag">Gate</span>
           <span class="gate-node" data-testid="decision-node">{{ d.node_name }}</span>
         </div>
+        <!-- Who holds this gate: a runner's own configuration when the decision names one,
+             the graph's declaration otherwise. -->
+        <p class="gate-origin" data-testid="decision-origin">
+          @if (d.imposed_by_runner_id; as runnerId) {
+            gated by runner <span class="gate-runner" data-testid="decision-origin-runner">{{ runnerId }}</span> (runner config)
+          } @else {
+            declared by the graph
+          }
+        </p>
         @if (canResolve()) {
           <div class="chips">
             @for (c of d.choices ?? []; track c.name) {

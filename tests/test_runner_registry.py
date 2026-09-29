@@ -10,6 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 
 from blizzard.hub.domain.registry import STALE_AFTER
 from tests.support import HubHarness, assert_all_timestamps_utc, build_hub, count_queries, emitted_events
@@ -53,6 +54,35 @@ def test_list_runners_derives_online_and_paused(tmp_path: Path) -> None:
     assert runners[0]["hub_paused"] is False
     assert runners[0]["locally_paused"] is False
     assert_all_timestamps_utc(resp.json())  # bzh:utc-instants — registered_at, last_seen_at
+
+
+def test_gates_reported_on_register_land_on_the_view(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post(
+        "/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a", "gates": ["build", "review"]}
+    )
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["gates"] == ["build", "review"]
+    assert hub.client.get("/api/runners").json()["runners"][0]["gates"] == ["build", "review"]
+
+
+def test_gates_converge_on_reregistration_and_clear_when_omitted(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a", "gates": ["build"]})
+    hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a", "gates": ["review"]})
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["gates"] == ["review"]
+
+    _register(hub)  # a runner that registers without gates imposes none
+
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["gates"] == []
+
+
+def test_a_legacy_registration_row_reads_no_gates(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    with hub.engine.begin() as conn:
+        conn.execute(sa.text("UPDATE runner_registrations SET gates = NULL"))
+
+    assert hub.client.get("/api/runners").json()["runners"][0]["gates"] == []
 
 
 def test_liveness_goes_offline_when_stale_and_heartbeat_refreshes(tmp_path: Path) -> None:

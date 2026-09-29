@@ -385,6 +385,7 @@ class FakeHub:
         self.registered_capabilities: list[tuple[RunnerCapability, ...]] = []
         # subscriptions per register call
         self.registered_subscriptions: list[tuple[RunnerSubscriptionDeclaration, ...]] = []
+        self.registered_gates: list[tuple[str, ...]] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         # chunk ids `get_envelope` 404s for; `chunk_statuses` never raises for
@@ -518,6 +519,7 @@ class FakeHub:
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
         subscriptions: tuple[RunnerSubscriptionDeclaration, ...] = (),
+        gates: tuple[str, ...] = (),
     ) -> None:
         if self.down:
             raise HubClientError("fake hub is down")
@@ -527,6 +529,7 @@ class FakeHub:
         self.registered_redirect_uris.append(redirect_uris)
         self.registered_capabilities.append(capabilities)
         self.registered_subscriptions.append(subscriptions)
+        self.registered_gates.append(gates)
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
         if self.down:

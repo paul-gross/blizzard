@@ -77,6 +77,7 @@ def to_decision_view(row: DecisionRow) -> DecisionView:
         resolved_at=iso_utc(row.resolved_at) if row.resolved_at is not None else None,
         transitioned=row.transitioned,
         docket=[_docket_entry_view(e) for e in row.docket],
+        imposed_by_runner_id=row.imposed_by_runner_id,
     )
 
 

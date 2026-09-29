@@ -368,6 +368,7 @@ class Pull(Step):
                     RunnerSubscriptionDeclaration(slug=s.slug, name=s.name, provider=s.provider)
                     for s in ctx.subscriptions
                 ),
+                gates=ctx.config.gates,
             )
             paused = ctx.hub.fetch_runner_paused(ctx.config.runner_id)
         except HubClientError:

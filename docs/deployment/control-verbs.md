@@ -192,3 +192,21 @@ and its local worktrees stay held until the process stops.
 `blizzard hub runner reinstate <runner_id>` records the reversal. The runner stays unenrolled — its token was revoked at
 retire — so run `enroll` next; `enroll` on a retired runner refuses with a `409`. `reinstate` on a runner that is not
 retired is a `409`. All three verbs need the `runner:retire` permission ([runner-auth.md](./runner-auth.md#revocation)).
+
+## Runner gates
+
+A runner can hold named nodes for a human decision. Set `gates` in its toml, or `BZ_RUNNER_GATES` as a comma-separated
+list of node names, and restart the runner. When the runner finishes a step at one of those nodes it submits a decision
+instead of a transition, and the chunk waits for a person. Only the runner enforces its gates; the hub never reads them
+to route or claim.
+
+The runner reports its gates on every registration, so they show in four places:
+
+- the board's runner registry, as a "Gates:" badge row beside the harness badges;
+- the Gate panel of a waiting chunk, which reads "gated by runner `<id>` (runner config)", or "declared by the graph"
+  when the graph made the node human-judged;
+- the runner panel's info section;
+- `blizzard runner status`, as a `gates:` line, which reads from the runner's own configuration and so works with the hub
+  unreachable.
+
+A runner that predates gate reporting shows none until it is redeployed.

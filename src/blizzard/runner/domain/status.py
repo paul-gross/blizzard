@@ -84,6 +84,8 @@ class RunnerStatusSummary:
     capacities: Capacities
     hub: HubConnectivity
     last_tick_at: datetime | None
+    #: The node names this runner's loaded configuration holds for a human decision.
+    gates: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -149,6 +151,7 @@ class RunnerStatusService:
         env_pool: tuple[str, ...],
         harnesses: IHarnessRegistry,
         workspace_root: str,
+        gates: tuple[str, ...] = (),
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
     ) -> None:
         self._stores = stores
@@ -160,6 +163,7 @@ class RunnerStatusService:
         self._max_agents = max_agents
         self._hub_url = hub_url
         self._env_pool = env_pool
+        self._gates = gates
         self._contact_staleness = contact_staleness
 
     def summary(self) -> RunnerStatusSummary:
@@ -183,6 +187,7 @@ class RunnerStatusService:
                 buffer_depth=self._stores.outbound.pending_outbound_count(),
             ),
             last_tick_at=self._stores.pause.last_daemon_liveness(),
+            gates=self._gates,
         )
 
     def environments(self) -> list[EnvironmentSlot]:

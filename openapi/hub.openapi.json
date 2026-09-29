@@ -2575,6 +2575,17 @@
             "title": "Epoch",
             "type": "integer"
           },
+          "imposed_by_runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imposed By Runner Id"
+          },
           "node_id": {
             "title": "Node Id",
             "type": "string"
@@ -7116,6 +7127,14 @@
             ],
             "title": "Env Capacity"
           },
+          "gates": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Gates",
+            "type": "array"
+          },
           "redirect_uris": {
             "default": [],
             "items": {
@@ -7280,6 +7299,14 @@
               }
             ],
             "title": "Env Capacity"
+          },
+          "gates": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Gates",
+            "type": "array"
           },
           "hub_paused": {
             "title": "Hub Paused",

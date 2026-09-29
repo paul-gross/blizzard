@@ -687,6 +687,8 @@ class DecisionRow:
     resolved_at: datetime | None = None
     transitioned: bool = False
     docket: list[DocketEntry] = field(default_factory=list)
+    #: The runner whose configuration imposed this gate; ``None`` when the graph declared it.
+    imposed_by_runner_id: str | None = None
 
     @property
     def resolved(self) -> bool:  # ast-grep-ignore: bzh:property-delegates

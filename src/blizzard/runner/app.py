@@ -410,6 +410,7 @@ def _wire_hosted_app(
         env_pool=config.workspace_envs if config.workspace_provider == "winter" else (),
         harnesses=harnesses,
         workspace_root=config.provider_workspace_root,
+        gates=config.gates,
     )
     takeover = TakeoverService(
         runner_stores,

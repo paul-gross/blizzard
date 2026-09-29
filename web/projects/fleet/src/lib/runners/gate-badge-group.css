@@ -1,0 +1,25 @@
+:host {
+  display: block;
+  margin-top: 3px;
+}
+.gates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.gates-label {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+}
+.gate-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}

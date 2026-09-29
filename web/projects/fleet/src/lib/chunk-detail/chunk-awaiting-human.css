@@ -72,6 +72,15 @@
   color: var(--cyan);
   font-size: var(--fs-sm);
 }
+.gate-origin {
+  margin: 0 0 4px;
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.gate-runner {
+  color: var(--text);
+}
 .chips {
   display: flex;
   flex-wrap: wrap;

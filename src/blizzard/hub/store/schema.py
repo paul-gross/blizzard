@@ -1003,6 +1003,8 @@ decisions = Table(
     Column("epoch", Integer, nullable=False),  # the parked step's fence; stale decisions rejected
     Column("choices", Text, nullable=False),  # JSON list of {name, description} — the buttons
     Column("submitted_at", UtcDateTime, nullable=False),
+    # The runner whose configuration imposed this gate — a fact of the write; `NULL` when the graph declared it.
+    Column("imposed_by_runner_id", String, nullable=True),
 )
 Index("ix_decisions_chunk_id", decisions.c.chunk_id)
 # (submitted_at, decision_id) for newest-first bounded reads since a timestamp.
@@ -1155,6 +1157,8 @@ runner_registrations = Table(
     # The runner's declared subscription roster, JSON `list[dict]` — unlike `capabilities`,
     # `NULL` (no roster reported) is kept distinct from `[]` (declared none).
     Column("subscriptions", Text, nullable=True),
+    # The node names the runner declared it holds for a human decision, JSON `list[str]`; `NULL` reads as none.
+    Column("gates", Text, nullable=True),
 )
 
 runner_pause_facts = Table(

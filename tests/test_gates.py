@@ -157,6 +157,7 @@ def test_graph_gate_opens_a_decision_and_parks(tmp_path: Path) -> None:
     decision = detail["decision"]
     assert decision is not None and decision["node_name"] == "approve-gate"
     assert {c["name"] for c in decision["choices"]} == {"approve", "reject"}
+    assert decision["imposed_by_runner_id"] is None  # the graph declared this gate
 
     # The open decision is surfaced fleet-wide.
     resp = hub.client.get("/api/decisions")
@@ -278,6 +279,9 @@ def test_runner_config_gate_submits_a_decision_for_a_worker_node(tmp_path: Path)
     decision = detail["decision"]
     assert decision["node_name"] == "build"
     assert {c["name"] for c in decision["choices"]} == {"pass", "fail"}
+    assert decision["imposed_by_runner_id"] == "r1"  # the submitting runner's configuration imposed it
+    listed = hub.client.get("/api/decisions").json()["decisions"]
+    assert [d["imposed_by_runner_id"] for d in listed] == ["r1"]
     # The gated step's artifact committed atomically with the decision.
     assert any(a["name"] == "acme/widget" for a in detail["artifacts"])
 

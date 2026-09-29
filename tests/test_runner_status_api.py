@@ -37,6 +37,7 @@ def _app_with_status(
     harness: FakeHarness | None = None,
     max_agents: int = 2,
     env_pool: tuple[str, ...] | None = None,
+    gates: tuple[str, ...] = (),
 ):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", max_agents=max_agents)
@@ -53,6 +54,7 @@ def _app_with_status(
         hub_url=config.hub_url,
         env_pool=config.workspace_envs if env_pool is None else env_pool,
         workspace_root="",
+        gates=gates,
         harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=_harness)}),
     )
     return create_app(config, runner_stores=make_stores(store), runner_status=service), store
@@ -96,7 +98,17 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
         "buffer_depth": 0,
     }
     assert body["last_tick_at"] is None
+    assert body["gates"] == []
     assert_all_timestamps_utc(body)
+
+
+@pytest.mark.component
+def test_summary_reports_the_gates_the_service_was_built_with(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path, gates=("build", "review"))
+    with TestClient(app) as client:
+        body = client.get("/api/runner").json()
+
+    assert body["gates"] == ["build", "review"]
 
 
 @pytest.mark.component

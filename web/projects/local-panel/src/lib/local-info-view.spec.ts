@@ -18,13 +18,15 @@ const RUNNER_STATUS: runnerApi.RunnerStatusView = {
   last_tick_at: '2026-07-16T11:59:45.000Z',
 };
 
-async function render(overrides: Partial<{ fleet: runnerApi.FleetSummaryView | null; fleetStale: boolean }> = {}) {
+async function render(
+  overrides: Partial<{ fleet: runnerApi.FleetSummaryView | null; fleetStale: boolean; gates: string[] }> = {},
+) {
   await TestBed.configureTestingModule({
     imports: [LocalInfoView],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(LocalInfoView);
-  fixture.componentRef.setInput('view', RUNNER_STATUS);
+  fixture.componentRef.setInput('view', { ...RUNNER_STATUS, gates: overrides.gates ?? [] });
   fixture.componentRef.setInput('lastFlushLabel', '-30s');
   fixture.componentRef.setInput('lastTickLabel', '-15s');
   if (overrides.fleet !== undefined) fixture.componentRef.setInput('fleet', overrides.fleet);
@@ -43,6 +45,18 @@ describe('LocalInfoView', () => {
     expect(el.querySelector('[data-testid="hub-last-flush"]')?.textContent).toContain('-30s');
     expect(el.querySelector('.tick')?.textContent).toContain('-15s');
     expect(el.querySelector('[data-testid="hub-buffered"]')?.textContent).toContain('2 events');
+  });
+
+  it('renders none when the runner imposes no gate', async () => {
+    const { el } = await render();
+
+    expect(el.querySelector('[data-testid="hub-gates"]')?.textContent?.trim()).toBe('none');
+  });
+
+  it('renders the gates this runner imposes', async () => {
+    const { el } = await render({ gates: ['build', 'review'] });
+
+    expect(el.querySelector('[data-testid="hub-gates"]')?.textContent?.trim()).toBe('build, review');
   });
 
   it('renders the fleet strip live with the given counts', async () => {

@@ -148,6 +148,7 @@ class HttpHubClient:
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
         subscriptions: tuple[RunnerSubscriptionDeclaration, ...] = (),
+        gates: tuple[str, ...] = (),
     ) -> None:
         self._post(
             f"{_FLEET_API}/runners",
@@ -159,6 +160,7 @@ class HttpHubClient:
                 redirect_uris=list(redirect_uris),
                 capabilities=list(capabilities),
                 subscriptions=list(subscriptions),
+                gates=list(gates),
             ).model_dump(mode="json"),
         )
 

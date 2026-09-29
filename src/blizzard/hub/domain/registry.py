@@ -80,6 +80,8 @@ class RunnerRegistration:
     retired: bool = False
     retired_at: datetime | None = None
     retired_by: str | None = None
+    #: The node names the runner declared it holds for a human decision — reported, never enforced, by the hub.
+    gates: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -334,11 +336,12 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
         subscriptions: tuple[DeclaredSubscription, ...] | None = None,
+        gates: tuple[str, ...] = (),
         at: datetime,
     ) -> bool:
         """Register a runner (idempotent upsert), refreshing ``last_seen_at``; returns True if the row
-        was newly created. ``env_capacity``, ``public_url``/``redirect_uris``, ``capabilities``, and
-        ``subscriptions`` are written on **both** branches, so a change converges on
+        was newly created. ``env_capacity``, ``public_url``/``redirect_uris``, ``capabilities``,
+        ``subscriptions``, and ``gates`` are written on **both** branches, so a change converges on
         re-registration; absent writes verbatim to null/empty. ``subscriptions`` alone keeps ``None``
         vs ``()`` distinct, unlike ``capabilities``, which collapses both to null."""
         ...
@@ -484,11 +487,12 @@ class FleetService:
         redirect_uris: tuple[str, ...] = (),
         capabilities: tuple[RunnerCapability, ...] = (),
         subscriptions: tuple[DeclaredSubscription, ...] | None = None,
+        gates: tuple[str, ...] = (),
     ) -> bool:
         """Register (or refresh) a runner; returns True on a first registration.
 
         The runner's reported facts (``env_capacity``, ``public_url``/``redirect_uris``,
-        ``capabilities``, ``subscriptions``) are overwritten on every registration; absent
+        ``capabilities``, ``subscriptions``, ``gates``) are overwritten on every registration; absent
         values store as null/empty. Callers gate a retired runner with :meth:`refuse_retired`."""
         created = self._registry.upsert_registration(
             runner_id,
@@ -498,6 +502,7 @@ class FleetService:
             redirect_uris=redirect_uris,
             capabilities=capabilities,
             subscriptions=subscriptions,
+            gates=gates,
             at=self._clock.now(),
         )
         _log.info(
