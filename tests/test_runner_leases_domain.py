@@ -392,6 +392,58 @@ def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path) ->
     assert activities[0].last_heartbeat_at == _NOW
 
 
+def _seed_spawned_lease(store) -> FakeProbe:  # type: ignore[no-untyped-def]
+    """One active lease, spawned at ``_NOW``, whose worker process is alive."""
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+    )
+    return FakeProbe(alive={(100, "start-100")})
+
+
+@pytest.mark.component
+def test_list_active_renders_a_lease_running_when_its_heartbeat_is_newer_than_a_spawn_older_than_the_window(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
+    store = _store(tmp_path)
+    probe = _seed_spawned_lease(store)
+    beat_at = _NOW + timedelta(hours=2)
+    store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
+    service = LocalLeaseService(make_read_stores(store), FixedClock(beat_at + timedelta(minutes=30)), probe)
+
+    assert [a.state for a in service.list_active()] == ["running"]
+
+
+@pytest.mark.component
+def test_list_active_renders_an_alive_lease_stale_when_its_newest_activity_is_older_than_the_window(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
+    store = _store(tmp_path)
+    probe = _seed_spawned_lease(store)
+    service = LocalLeaseService(make_read_stores(store), FixedClock(_NOW + timedelta(hours=2)), probe)
+
+    assert [a.state for a in service.list_active()] == ["stale"]
+
+
+@pytest.mark.component
+def test_list_active_honors_a_stale_after_shorter_than_the_default_threshold(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
+    store = _store(tmp_path)
+    probe = _seed_spawned_lease(store)
+    idle = timedelta(minutes=30)
+    assert idle < HEARTBEAT_STALENESS_THRESHOLD
+    service = LocalLeaseService(
+        make_read_stores(store), FixedClock(_NOW + idle), probe, stale_after=timedelta(minutes=10)
+    )
+
+    assert [a.state for a in service.list_active()] == ["stale"]
+
+
 @pytest.mark.component
 def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _counting_store(tmp_path)
