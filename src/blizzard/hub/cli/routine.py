@@ -271,10 +271,11 @@ def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str) ->
 )
 @click.option("--note", default=None, help='A note appended to the run\'s charge as a "This run" section.')
 def routine_run(cli: CliContext, name: str, scope_slug: str | None, mode: str, note: str | None) -> None:
-    """Mint, ingest, and promote a hub work item from routine NAME, in one act.
+    """Mint and ingest a hub work item from routine NAME, in one act.
 
-    NAME is resolved to its routine_id through the routine list, including a retired
-    routine — so it reaches the domain's own retired refusal."""
+    The chunk rests not_ready until `blizzard hub chunk promote`. NAME resolves through
+    the routine list, including a retired routine — so it reaches the domain's own
+    retired refusal."""
     routine_id = _resolve_routine_id(cli, name)
     resp = cli.send(
         "post",
@@ -294,6 +295,7 @@ def routine_run(cli: CliContext, name: str, scope_slug: str | None, mode: str, n
     lines = [f"minted {body['chunk_id']} from routine {name!r} — mode={body['effective_mode']}"]
     if body["downgraded"]:
         lines.append("note: requested delta downgraded to full — the routine/scope pair has recorded no baseline yet")
+    lines.append(f"not yet claimable — promote it with: blizzard hub chunk promote {body['chunk_id']}")
     cli.show_lines(body, *lines)
 
 

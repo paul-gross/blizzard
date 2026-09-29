@@ -1040,16 +1040,13 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     )
 
     # --- routine runs: garden_run/run_context's own source ---------------------------------
-    statuses = hub.services.chunks.facts.load_live_statuses()
     run_1 = hub.services.routine_run.run(
         routine,
         scope=scope_a,
         mode=RunMode.FULL,
         note=None,
         author=WorkItemAuthor.user(user_1.user_id),
-        statuses=statuses,
     )
-    statuses = hub.services.chunks.facts.load_live_statuses()
     # A second run is all `runs_in_window`/`list_all` need (>=2 rows) — its own chunk is
     # never referenced by any recipe, so its return value is deliberately discarded.
     hub.services.routine_run.run(
@@ -1058,7 +1055,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         mode=RunMode.FULL,
         note="second run",
         author=WorkItemAuthor.user(user_1.user_id),
-        statuses=statuses,
     )
     run_chunk_1 = run_1.chunk_id
     run_chunk_1_chunk = hub.services.chunks.record.get(run_chunk_1)

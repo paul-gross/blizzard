@@ -1,5 +1,5 @@
-"""``POST /api/routines/{routine_id}/run`` (component tier) — mints,
-ingests, and promotes a hub work item from a routine over the real HTTP surface, the
+"""``POST /api/routines/{routine_id}/run`` (component tier) — mints
+and ingests a hub work item from a routine over the real HTTP surface, the
 ``tests/test_hub_work_source_api.py`` shape."""
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def _create_routine(hub, **overrides: object) -> dict:  # type: ignore[no-untype
     return resp.json()
 
 
-def test_run_mints_ingests_and_promotes(tmp_path: Path) -> None:
+def test_run_mints_and_ingests_leaving_the_chunk_not_ready(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _mint_graph(hub)
     routine = _create_routine(hub)
@@ -63,7 +63,7 @@ def test_run_mints_ingests_and_promotes(tmp_path: Path) -> None:
     assert body["routine_name"] == "gardening"
     assert body["scope_slug"] == "blizzard"
     chunk = hub.client.get(f"/api/chunks/{body['chunk_id']}").json()
-    assert chunk["status"] == "ready"
+    assert chunk["status"] == "not_ready"
     assert chunk["graph_id"] == hub.client.get("/api/graphs").json()[0]["graph_id"]
 
 
@@ -214,7 +214,7 @@ def test_run_is_409_when_an_out_of_band_ingest_already_holds_the_allocated_ref(t
     assert resp.json()["existing_chunk_id"] == existing_chunk_id
 
 
-def test_run_publishes_one_minted_chunk_changed_frame_reading_ready(tmp_path: Path) -> None:
+def test_run_publishes_one_minted_chunk_changed_frame_reading_not_ready(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _mint_graph(hub)
     routine = _create_routine(hub)
@@ -225,7 +225,7 @@ def test_run_publishes_one_minted_chunk_changed_frame_reading_ready(tmp_path: Pa
     assert len(frames) == 1
     assert frames[0]["chunk_id"] == created["chunk_id"]
     assert frames[0]["cause"] == "minted"
-    assert frames[0]["status"] == "ready"
+    assert frames[0]["status"] == "not_ready"
 
 
 def test_run_also_publishes_queue_changed(tmp_path: Path) -> None:

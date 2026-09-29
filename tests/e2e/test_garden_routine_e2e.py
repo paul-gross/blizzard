@@ -279,6 +279,8 @@ def test_garden_routine_runs_end_to_end_on_all_six_paths(tmp_path: Path) -> None
             )
             assert minted_run.status_code == 201, minted_run.text
             chunk_id = minted_run.json()["chunk_id"]
+            promoted = hub.post(f"/api/chunks/{chunk_id}/promote")
+            assert promoted.status_code == 202, promoted.text
             status = _drive_until_done(config, hub, chunk_id, fenced, timeout=180.0)
             assert status == "done", f"{path} run did not reach done (last status {status!r}): {_edges(hub, chunk_id)}"
             return chunk_id

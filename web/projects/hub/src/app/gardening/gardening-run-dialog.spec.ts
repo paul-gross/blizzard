@@ -200,6 +200,8 @@ describe('GardeningRunDialog', () => {
     expect(runCalls[0].body).toMatchObject({ scope_slug: 'blizzard', mode: 'full' });
 
     expect(el.querySelector('[data-testid="run-confirmation-chunk-id"]')?.textContent).toBe('ch_new');
+    expect(el.querySelector('[data-testid="run-confirmation"]')?.textContent).toContain('not_ready');
+    expect(el.querySelector('[data-testid="run-dialog-title"]')?.textContent).not.toContain('Run started');
     const link = el.querySelector('[data-testid="run-confirmation-board-link"]');
     expect(link).not.toBeNull();
     expect(el.querySelector('fleet-board, [data-testid="board"]')).toBeNull();

@@ -542,7 +542,8 @@ def run_routine(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> object:
-    """Mint, ingest, and promote a hub work item from the routine, in one act.
+    """Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``
+    until promoted.
     404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
     ``mode``, or an effective scope no scope row holds or outside the routine's own
     related set (never minted); 503 on a retired routine
@@ -582,7 +583,6 @@ def run_routine(
             mode=mode,
             note=request.note,
             author=WorkItemAuthor.user(identity.user_id),
-            statuses=services.chunks.facts.load_live_statuses(),
         )
     except ScopeNotRelatedError as exc:
         raise HTTPException(
@@ -599,10 +599,9 @@ def run_routine(
             existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref
         )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
-    # A freshly minted chunk is promoted in the same transaction, so its post-write
-    # status already reads `ready` — one frame, not a mint then a separate promote.
+    # The chunk is minted `not_ready`, so its post-write status reads `not_ready`.
     chunk_events.ChunkChanged.of(services, result.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{result.chunk_id}"
     )
-    services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
+    services.events.publish_queue_changed()  # the mint adds the chunk to the backlog list
     return _run_response(result)

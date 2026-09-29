@@ -1504,7 +1504,8 @@ export const retireRoutineApiRoutinesRoutineIdRetirePost = <ThrowOnError extends
 /**
  * Run Routine
  *
- * Mint, ingest, and promote a hub work item from the routine, in one act.
+ * Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``
+ * until promoted.
  * 404 on an unknown id; 422 on a malformed ``scope_slug``, an unknown
  * ``mode``, or an effective scope no scope row holds or outside the routine's own
  * related set (never minted); 503 on a retired routine

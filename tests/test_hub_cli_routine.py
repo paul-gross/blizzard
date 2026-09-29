@@ -568,6 +568,8 @@ def test_routine_run_resolves_name_then_posts(monkeypatch: pytest.MonkeyPatch) -
         ("http://hub.local:8421/api/routines/rtn_1/run", {"scope_slug": None, "mode": "full", "note": None})
     ]
     assert "ch_1" in result.output
+    assert "ch_1" in result.output
+    assert "blizzard hub chunk promote ch_1" in result.output
 
 
 @pytest.mark.unit

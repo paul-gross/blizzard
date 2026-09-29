@@ -6,7 +6,7 @@
 >
   <h2 fleetKitDialogHeader data-testid="run-dialog-title">
     @if (confirmedRun(); as run) {
-      Run started
+      Run minted
     } @else {
       Run {{ routineName() }}
     }
@@ -15,7 +15,8 @@
   @if (confirmedRun(); as run) {
     <div data-testid="run-confirmation">
       <p>
-        Chunk <strong data-testid="run-confirmation-chunk-id">{{ run.chunk_id }}</strong> is on the board.
+        Chunk <strong data-testid="run-confirmation-chunk-id">{{ run.chunk_id }}</strong> is on the board, resting
+        not_ready — promote it before a runner can claim it.
         @if (run.downgraded) {
           <span data-testid="run-confirmation-downgraded">Downgraded to full — the pair had no recorded baseline.</span>
         }

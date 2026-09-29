@@ -59,8 +59,10 @@ rather than reading as unknown.
 
 ## Running one
 
-`blizzard hub routine run <name> [--scope <slug>] [--mode full|delta] [--note <text>]` mints, ingests, and promotes a
-hub work item from the named routine, in one act. `NAME` resolves to the routine's `routine_id` through the routine
+`blizzard hub routine run <name> [--scope <slug>] [--mode full|delta] [--note <text>]` mints and ingests a
+hub work item from the named routine, in one act. The minted chunk rests `not_ready` — on the board, not yet claimable —
+until `blizzard hub chunk promote <chunk-id>` promotes it, exactly as for any ingested chunk; the CLI prints that next
+step. `NAME` resolves to the routine's `routine_id` through the routine
 list; `--scope` overrides the routine's own default with a scope already linked into the routine's own related set —
 naming one that is not, or a slug no scope row holds, refuses rather than minting it (`routine scope add` links one
 first). `--mode` defaults to `full`; a requested `delta` against a routine/scope pair with no recorded baseline
@@ -69,7 +71,7 @@ too. A retired routine, a retired effective scope, or a routine whose graph has 
 rather than running it anyway — a retired routine is checked first, before any scope is resolved.
 
 The hub board's Gardening tab offers the same act as a dialog on its Routines sub-tab, reachable from the selected
-routine's own panel. The scope picker offers only the routine's own related, non-retired scopes — the same set `scope
+routine's own panel; its confirmation names the minted chunk and says it rests `not_ready` until promoted. The scope picker offers only the routine's own related, non-retired scopes — the same set `scope
 add`/`scope remove` manage — and nothing else; linking a scope into that set is what makes it offerable here. It
 resolves the delta baseline *before* the operator submits, through `GET /api/routines/{routine_id}/baselines` — one
 entry per scope this routine has ever swept, each carrying its finding-set id, the instant it was recorded, and, per

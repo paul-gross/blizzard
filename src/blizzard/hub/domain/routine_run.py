@@ -1,4 +1,4 @@
-"""Routine run — mint, ingest, and promote a hub work item from a routine in one act:
+"""Routine run — mint and ingest a hub work item from a routine in one act:
 ``blizzard hub routine run <name>``.
 
 Takes an already-resolved routine and an already-resolved, already-related scope
@@ -10,18 +10,13 @@ than defaults."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
-from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.config import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository
-from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunks.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.findings import FindingSet, IReadFindingSetRepository
 from blizzard.hub.domain.graph import IReadGraphRepository
-from blizzard.hub.domain.promote import tail_position
 from blizzard.hub.domain.routines import (
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
@@ -102,14 +97,13 @@ class RunResult:
 
     item: WorkItemRecord
     chunk_id: str
-    promoted_id: int | None
     effective_mode: RunMode
     downgraded: bool
     baseline: FindingSet | None
 
 
 class RunService:
-    """Mint, ingest, and promote a hub work item from a routine, in one act."""
+    """Mint and ingest a hub work item from a routine, in one act."""
 
     def __init__(
         self,
@@ -121,8 +115,6 @@ class RunService:
         finding_sets: IReadFindingSetRepository,
         items: IWriteWorkItemRepository,
         work_refs: IReadChunkWorkRefsRepository,
-        record: IReadChunkRecordRepository,
-        queue: IReadChunkQueueRepository,
         clock: IClock,
     ) -> None:
         self._routines = routines
@@ -132,8 +124,6 @@ class RunService:
         self._finding_sets = finding_sets
         self._items = items
         self._work_refs = work_refs
-        self._record = record
-        self._queue = queue
         self._clock = clock
 
     def refuse_if_retired(self, routine: Routine) -> None:
@@ -150,7 +140,6 @@ class RunService:
         mode: RunMode,
         note: str | None,
         author: WorkItemAuthor,
-        statuses: Mapping[str, ChunkStatus],
     ) -> RunResult:
         self.refuse_if_retired(routine)
         graph = self._graphs.get_enabled_by_name(routine.graph_name)
@@ -189,8 +178,7 @@ class RunService:
             default_effort=routine.default_effort,
             default_harnesses=routine.default_harnesses,
         )
-        position = tail_position(self._record, self._queue, statuses=statuses)
-        item, promoted_id = self._items.create_with_chunk_and_promote(
+        item = self._items.create_run_with_chunk(
             pointer=pointer,
             title=title,
             body=charge,
@@ -200,12 +188,10 @@ class RunService:
             run_mode=effective_mode.value,
             at=pointer_at,
             chunk=chunk,
-            position=position,
         )
         return RunResult(
             item=item,
             chunk_id=chunk.chunk_id,
-            promoted_id=promoted_id,
             effective_mode=effective_mode,
             downgraded=downgraded,
             baseline=baseline,

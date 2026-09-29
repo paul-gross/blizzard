@@ -36,7 +36,6 @@ from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     insert_chunk_rows,
     insert_materialization_row,
-    insert_promote_rows,
     record_deleted_row,
 )
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
@@ -130,7 +129,7 @@ class WorkItemStore:
             edited_at=at,
         )
 
-    def create_with_chunk_and_promote(
+    def create_run_with_chunk(
         self,
         *,
         pointer: WorkRef,
@@ -142,14 +141,12 @@ class WorkItemStore:
         run_mode: str,
         at: datetime,
         chunk: Chunk,
-        position: float,
-    ) -> tuple[WorkItemRecord, int | None]:
-        """:meth:`create_with_chunk` plus the promote-then-tail-stamp pair
-        (:func:`~blizzard.hub.store.internal.chunk_rows.insert_promote_rows`) plus the
-        run's own identity row (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`),
-        on one ``engine.begin()`` connection — a routine run's own one-act
-        mint."""
-        with self._store.write("create_with_chunk_and_promote") as conn:
+    ) -> WorkItemRecord:
+        """:meth:`create_with_chunk` plus the run's own identity row
+        (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`) and
+        the item's run columns, on one ``engine.begin()`` connection — a routine run's own
+        one-act mint. No promote rows are written: the chunk rests ``not_ready``."""
+        with self._store.write("create_run_with_chunk") as conn:
             work_item_id = self._insert_item(
                 conn,
                 source=pointer.source,
@@ -164,7 +161,6 @@ class WorkItemStore:
                 run_mode=run_mode,
             )
             insert_chunk_rows(conn, chunk)
-            promoted_id = insert_promote_rows(conn, chunk.chunk_id, position=position, at=at)
             insert_run_context_row(
                 conn, work_item_id, RunContext(routine_name=routine_name, scope_slug=scope_slug, mode=run_mode)
             )
@@ -182,7 +178,7 @@ class WorkItemStore:
             scope_slug=scope_slug,
             run_mode=run_mode,
         )
-        return record, promoted_id
+        return record
 
     @staticmethod
     def _insert_item(

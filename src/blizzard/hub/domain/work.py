@@ -1352,7 +1352,7 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         neither durable."""
         ...
 
-    def create_with_chunk_and_promote(
+    def create_run_with_chunk(
         self,
         *,
         pointer: WorkRef,
@@ -1364,15 +1364,12 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         run_mode: str,
         at: datetime,
         chunk: Chunk,
-        position: float,
-    ) -> tuple[WorkItemRecord, int | None]:
-        """A routine run's own one-act mint: :meth:`create_with_chunk`
-        plus the promote-then-tail-stamp pair, atomically in one transaction — no window
-        in which the item exists without its chunk, or the chunk without its ready
-        position. ``position`` is computed by the caller before the write (the same
-        already-accepted check-then-act shape
-        :meth:`~blizzard.hub.domain.promote.PromoteService.promote` uses). Returns the
-        item and the fresh ``chunk_promoted.id``."""
+    ) -> WorkItemRecord:
+        """A routine run's own one-act mint: the item row with its run columns,
+        ``chunk``'s own rows, and the run's identity row, atomically in one transaction —
+        no window in which the item exists without its chunk, or the chunk without its
+        run context. The chunk carries no promote fact and no queue position, so it rests
+        ``not_ready`` until the ordinary promote."""
         ...
 
     def edit(

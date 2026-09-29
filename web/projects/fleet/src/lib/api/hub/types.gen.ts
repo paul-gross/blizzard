@@ -4208,7 +4208,7 @@ export type RoutineRunRequest = {
 /**
  * RoutineRunResponse
  *
- * The minted, ingested, and promoted run item — the chunk id, the item's own
+ * The minted and ingested run item — the chunk id, the item's own
  * pointer, the effective mode and whether it was downgraded from a requested delta,
  * and the resolved baseline, when the mode settled on delta.
  */

@@ -21,9 +21,8 @@ def tail_position(
     record: IReadChunkRecordRepository, queue: IReadChunkQueueRepository, *, statuses: Mapping[str, ChunkStatus]
 ) -> float:
     """The position one past every currently-ready chunk's own effective position
-    — the one rule :meth:`PromoteService.promote` and a routine run's own
-    promote-on-mint both stamp a fresh tail position by, read *before*
-    the write that stamps it. ``statuses`` is the caller's own already-derived fleet
+    — the rule :meth:`PromoteService.promote` stamps a fresh tail position
+    by, read *before* the write that stamps it. ``statuses`` is the caller's own already-derived fleet
     statuses, never re-derived here."""
     ready = record.list_ready(statuses=statuses)
     if not ready:

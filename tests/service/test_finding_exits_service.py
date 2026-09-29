@@ -113,6 +113,7 @@ def deliver(
     )
     assert run.status_code == 201, run.text
     chunk_id = run.json()["chunk_id"]
+    assert g.hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     assert g.runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
 
     delta = {
