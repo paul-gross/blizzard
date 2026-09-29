@@ -21,8 +21,9 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 import tomllib
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -33,6 +34,11 @@ MUTANTS_DIR = REPO_ROOT / "mutants"
 SCOPE_MARKER_NAME = ".scope"
 TEST_SELECTION_NAME = ".test-selection.json"
 REPORT_NAME = "report.json"
+DELTA_REPORT_NAME = "delta-report.json"
+# The delta mode's wall-clock budget, preparation included; `--budget` bounds execution only.
+DEFAULT_DELTA_BUDGET_SECONDS = 1800.0
+# How much of a failed scope run's output the aggregate report keeps as its reason.
+FAILURE_TAIL_LINES = 12
 
 # Distinct from mutmut's own exit codes (it never exits non-zero for survivors) — this is
 # the caller-facing signal that the run stopped on --budget and should be re-invoked.
@@ -506,7 +512,9 @@ def _git(*args: str, repo_root: Path) -> str:
     ).stdout
 
 
-def changed_mutant_globs(scope: Scope, since: str, repo_root: Path = REPO_ROOT) -> list[str]:
+def changed_mutant_globs(
+    scope: Scope, since: str, repo_root: Path = REPO_ROOT, *, only_files: Sequence[str] | None = None
+) -> list[str]:
     """Mutant-name globs for every function in `scope`'s ground whose source differs between `since` and HEAD.
 
     Raises `UnknownRevisionError` for a `since` that names no commit; it never falls back to the whole scope.
@@ -519,13 +527,148 @@ def changed_mutant_globs(scope: Scope, since: str, repo_root: Path = REPO_ROOT) 
     diff_args = ("diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", since, "HEAD", "--", _SOURCE_DIFF_ROOT)
     diff = _git(*diff_args, repo_root=repo_root)
     ranges = changed_line_ranges(diff)
-    ground = files_for_scope(scope, (Path(path) for path in ranges if path.endswith(".py")))
+    candidates = (Path(path) for path in ranges if path.endswith(".py") and (only_files is None or path in only_files))
+    ground = files_for_scope(scope, candidates)
 
     globs: list[str] = []
     for path in sorted(ground):
         source = _git("show", f"HEAD:{path.as_posix()}", repo_root=repo_root)
         globs.extend(mutant_name_globs(path.as_posix(), functions_touching(source, ranges[path.as_posix()])))
     return globs
+
+
+# --- delta mode: every scope a revision range touches, under one wall-clock budget ---------------
+
+
+def changed_source_files(since: str, repo_root: Path = REPO_ROOT) -> list[str]:
+    """Every file under `src/blizzard` that differs between `since` and HEAD.
+
+    Raises `UnknownRevisionError` for a `since` that names no commit.
+    """
+    try:
+        _git("rev-parse", "--verify", "--quiet", f"{since}^{{commit}}", repo_root=repo_root)
+    except subprocess.CalledProcessError:
+        raise UnknownRevisionError(since) from None
+    names = _git("diff", "--name-only", "--no-renames", since, "HEAD", "--", _SOURCE_DIFF_ROOT, repo_root=repo_root)
+    return sorted(line for line in names.splitlines() if line)
+
+
+def route_changed_files(files: Iterable[str]) -> tuple[dict[str, list[str]], list[str]]:
+    """Split changed files into `(scope slug -> its files, files no scope owns)`, scopes in table order."""
+    paths = [Path(f) for f in files]
+    routed = {slug: sorted(path.as_posix() for path in files_for_scope(scope, paths)) for slug, scope in SCOPES.items()}
+    owned = {f for group in routed.values() for f in group}
+    return {slug: group for slug, group in routed.items() if group}, sorted(
+        path.as_posix() for path in paths if path.as_posix() not in owned
+    )
+
+
+@dataclass(frozen=True)
+class ScopeRun:
+    """What one child `mutation.py <scope> --since REV --fresh` run came to."""
+
+    exit_code: int | None  # None: killed at the wall budget
+    output_tail: str
+
+
+ScopeRunner = Callable[[str, str, float], ScopeRun]
+
+
+def _run_scope_process(slug: str, since: str, timeout_seconds: float) -> ScopeRun:
+    """Run one scope in its own process group, killing the group when `timeout_seconds` runs out.
+
+    A fresh process per scope keeps mutmut's process-global state from one scope out of the
+    next, and lets the wall budget stop a run in its preparation phase, which an in-process
+    timer cannot.
+    """
+    proc = subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), slug, "--since", since, "--fresh"],
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        start_new_session=True,
+    )
+    try:
+        output, _ = proc.communicate(timeout=max(timeout_seconds, 0.0))
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        output, _ = proc.communicate()
+        return ScopeRun(None, _tail(output))
+    return ScopeRun(proc.returncode, _tail(output))
+
+
+def _tail(output: str | None) -> str:
+    return "\n".join((output or "").strip().splitlines()[-FAILURE_TAIL_LINES:])
+
+
+def run_delta(
+    since: str,
+    *,
+    budget_seconds: float = DEFAULT_DELTA_BUDGET_SECONDS,
+    repo_root: Path = REPO_ROOT,
+    mutants_dir: Path = MUTANTS_DIR,
+    scope_runner: ScopeRunner = _run_scope_process,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict:
+    """Run every scope the changes since `since` touch, one after another, and write the aggregate report.
+
+    Each scope runs fresh. `budget_seconds` covers preparation as well as execution: a scope
+    still running at the deadline is killed and reported `over-budget`, and a scope not yet
+    started is reported `over-budget` without running. Scopes already finished keep their
+    results. The report is always written, whatever the scopes came to.
+    Raises `UnknownRevisionError` before anything runs.
+    """
+    started = clock()
+    routed, unscoped = route_changed_files(changed_source_files(since, repo_root))
+    mutants_dir.mkdir(parents=True, exist_ok=True)
+
+    entries: list[dict] = []
+    for slug, files in routed.items():
+        entry: dict = {"scope": slug, "status": "no-changes", "reason": None, "elapsed_seconds": 0.0, "survivors": []}
+        entries.append(entry)
+        if not changed_mutant_globs(SCOPES[slug], since, repo_root, only_files=files):
+            entry["reason"] = "no function in the scope's mutable source changed"
+            continue
+        remaining = budget_seconds - (clock() - started)
+        if remaining <= 0:
+            entry.update(status="over-budget", reason="the wall budget was spent before this scope started")
+            continue
+        (mutants_dir / REPORT_NAME).unlink(missing_ok=True)
+        scope_started = clock()
+        run = scope_runner(slug, since, remaining)
+        entry["elapsed_seconds"] = round(clock() - scope_started, 1)
+        _record_scope_run(entry, run, mutants_dir / REPORT_NAME, budget_seconds)
+
+    report = {
+        "since": since,
+        "budget_seconds": budget_seconds,
+        "elapsed_seconds": round(clock() - started, 1),
+        "scopes": entries,
+        "unscoped_files": unscoped,
+    }
+    (mutants_dir / DELTA_REPORT_NAME).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    return report
+
+
+def _record_scope_run(entry: dict, run: ScopeRun, report_path: Path, budget_seconds: float) -> None:
+    if run.exit_code is None:
+        entry.update(status="over-budget", reason=f"still running at the {budget_seconds:g}s wall budget")
+        return
+    if run.exit_code != 0:
+        reason = f"mutation exited {run.exit_code}"
+        entry.update(status="failed", reason=f"{reason}: {run.output_tail}" if run.output_tail else reason)
+        return
+    try:
+        scope_report = json.loads(report_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        entry.update(status="failed", reason="mutation exited 0 but wrote no readable report")
+        return
+    entry["status"] = "complete"
+    entry["survivors"] = scope_report["survivors"]
+    entry["mutants"] = scope_report["total"]
 
 
 # --- report building: kept import-clean of mutmut, so it runs in the default environment ---
@@ -760,7 +903,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         prog="mutation.py",
         description="Scoped, resumable mutation testing over src/blizzard.",
     )
-    parser.add_argument("scope", help=f"One of: {', '.join(sorted(SCOPES))}")
+    parser.add_argument(
+        "scope",
+        nargs="?",
+        default=None,
+        help=f"One of: {', '.join(sorted(SCOPES))}. Omit it, with --since, to run every scope the delta touches.",
+    )
     parser.add_argument(
         "--budget",
         type=float,
@@ -777,6 +925,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "No changed function gives an empty, complete report; a REV that names no commit exits 2 without running.",
     )
     parser.add_argument(
+        "--delta-budget",
+        type=float,
+        default=DEFAULT_DELTA_BUDGET_SECONDS,
+        metavar="SECONDS",
+        help="With --since and no scope: the wall-clock budget for the whole delta, preparation included "
+        f"(default {DEFAULT_DELTA_BUDGET_SECONDS:g}). Distinct from --budget, which bounds one scope's execution.",
+    )
+    parser.add_argument(
         "--fresh",
         action="store_true",
         help="Discard any existing mutant tree and its verdicts first, so nothing from an earlier run is resumed.",
@@ -784,8 +940,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def main_delta(args: argparse.Namespace) -> int:
+    if args.since is None:
+        print(f"mutation: name a scope ({', '.join(sorted(SCOPES))}) or pass --since REV", file=sys.stderr)
+        return 1
+    if args.budget is not None:
+        print("mutation: --budget bounds one scope's execution; a delta run takes --delta-budget", file=sys.stderr)
+        return 1
+    os.chdir(REPO_ROOT)
+    try:
+        run_delta(args.since, budget_seconds=args.delta_budget)
+    except UnknownRevisionError as exc:
+        print(exc, file=sys.stderr)
+        return BAD_REVISION_EXIT_CODE
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.scope is None:
+        return main_delta(args)
     try:
         scope = resolve_scope(args.scope)
     except UnknownScopeError as exc:
