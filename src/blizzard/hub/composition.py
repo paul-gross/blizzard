@@ -463,7 +463,7 @@ def build_services(
         ),
         graphs=graph_store,
         ingest=IngestService(record=chunk_record, work_refs=chunk_work_refs, clock=clock),
-        promote=PromoteService(record=chunk_record, queue=chunk_queue, clock=clock),
+        promote=PromoteService(record=chunk_record, queue=chunk_queue, facts=chunk_facts, clock=clock),
         claim=ClaimService(
             route=chunk_route,
             artifacts=chunk_artifacts,

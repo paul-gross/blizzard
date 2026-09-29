@@ -16,10 +16,11 @@ import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.queue import IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.promote import PromoteService
-from blizzard.hub.domain.work import Chunk, ChunkFacts
+from blizzard.hub.domain.work import Chunk, ChunkFacts, PauseFact
 
 pytestmark = pytest.mark.unit
 
@@ -43,9 +44,17 @@ class _FakeChunkRepo:
     promoted: list[tuple[str, datetime]] = field(default_factory=list)
     stamped: list[tuple[str, float, datetime]] = field(default_factory=list)
     promoted_return: int | None = 1
+    paused: dict[str, Chunk] = field(default_factory=dict)
+    paused_facts: dict[str, ChunkFacts] = field(default_factory=dict)
 
     def list_ready(self, *, statuses: dict[str, ChunkStatus]) -> list[Chunk]:
         return self.ready
+
+    def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
+        return {cid: self.paused[cid] for cid in chunk_ids if cid in self.paused}
+
+    def status_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        return {cid: self.paused_facts[cid] for cid in chunk_ids if cid in self.paused_facts}
 
     def queue_positions(self, chunk_ids: Sequence[str]) -> dict[str, float]:
         return self.positions
@@ -66,6 +75,10 @@ def _as_record(repo: _FakeChunkRepo) -> IReadChunkRecordRepository:
     return cast(IReadChunkRecordRepository, repo)
 
 
+def _as_facts(repo: _FakeChunkRepo) -> IReadChunkFactsRepository:
+    return cast(IReadChunkFactsRepository, repo)
+
+
 def _as_queue(repo: _FakeChunkRepo) -> IWriteChunkQueueRepository:
     return cast(IWriteChunkQueueRepository, repo)
 
@@ -73,7 +86,7 @@ def _as_queue(repo: _FakeChunkRepo) -> IWriteChunkQueueRepository:
 def test_promote_stamps_zero_when_no_chunk_is_currently_ready() -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=ChunkFacts(minted=True), ready=[])
-    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), clock=clock)
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), facts=_as_facts(repo), clock=clock)
 
     service.promote(_chunk("chk_1"), facts=repo.facts, statuses={})
 
@@ -89,7 +102,7 @@ def test_promote_stamps_one_past_the_max_effective_position_of_ready_chunks() ->
         ready=ready,
         positions={"chk_a": 4.0, "chk_b": 1.0},
     )
-    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), clock=clock)
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), facts=_as_facts(repo), clock=clock)
 
     service.promote(_chunk("chk_new"), facts=repo.facts, statuses={})
 
@@ -107,7 +120,7 @@ def test_promote_uses_the_effective_position_fallback_for_ready_chunks_with_no_e
         positions={},
         promoted_ats_by_chunk={"chk_a": datetime(2025, 6, 1, tzinfo=UTC)},
     )
-    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), clock=clock)
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), facts=_as_facts(repo), clock=clock)
 
     service.promote(_chunk("chk_new"), facts=repo.facts, statuses={})
 
@@ -120,7 +133,7 @@ def test_promote_is_a_complete_no_op_on_an_already_promoted_chunk() -> None:
     # must not shove an already-ready chunk to the back of the queue.
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo(facts=ChunkFacts(minted=True, promoted=True))
-    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), clock=clock)
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), facts=_as_facts(repo), clock=clock)
 
     service.promote(_chunk("chk_1"), facts=repo.facts, statuses={})
 
@@ -132,9 +145,30 @@ def test_promote_uses_the_injected_clock_not_the_wall_clock() -> None:
     later = datetime(2026, 6, 1, tzinfo=UTC)
     clock = FixedClock(instant=later)
     repo = _FakeChunkRepo(facts=ChunkFacts(minted=True), ready=[])
-    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), clock=clock)
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), facts=_as_facts(repo), clock=clock)
 
     service.promote(_chunk("chk_1"), facts=repo.facts, statuses={})
 
     assert repo.promoted == [("chk_1", later)]
     assert repo.stamped == [("chk_1", 0.0, later)]
+
+
+def test_promote_stamps_past_a_paused_promoted_chunk_holding_a_high_explicit_position() -> None:
+    clock = FixedClock(instant=_T0)
+    paused_facts = ChunkFacts(
+        minted=True, promoted=True, pauses=[PauseFact(paused=True, set_at=_T0, set_by="operator")]
+    )
+    repo = _FakeChunkRepo(
+        facts=ChunkFacts(minted=True),
+        ready=[_chunk("chk_a")],
+        positions={"chk_a": 1.0, "chk_x": 9.0},
+        paused={"chk_x": _chunk("chk_x")},
+        paused_facts={"chk_x": paused_facts},
+    )
+    service = PromoteService(record=_as_record(repo), queue=_as_queue(repo), facts=_as_facts(repo), clock=clock)
+
+    service.promote(
+        _chunk("chk_new"), facts=repo.facts, statuses={"chk_a": ChunkStatus.READY, "chk_x": ChunkStatus.PAUSED}
+    )
+
+    assert repo.stamped == [("chk_new", 10.0, _T0)]

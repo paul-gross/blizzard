@@ -57,6 +57,26 @@ def test_live_route_wins_over_not_ready() -> None:
     assert facts.status() is ChunkStatus.RUNNING
 
 
+def test_paused_promoted_unclaimed_chunk_is_ready_but_for_pause() -> None:
+    facts = ChunkFacts(minted=True, promoted=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
+    assert facts.is_ready_but_for_pause()
+
+
+def test_paused_unpromoted_chunk_is_not_ready_but_for_pause() -> None:
+    facts = ChunkFacts(minted=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
+    assert not facts.is_ready_but_for_pause()
+
+
+def test_paused_chunk_with_a_live_route_is_not_ready_but_for_pause() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        pauses=[PauseFact(paused=True, set_at=_at(2), set_by="operator")],
+    )
+    assert not facts.is_ready_but_for_pause()
+
+
 def test_released_route_on_promoted_chunk_re_derives_ready() -> None:
     facts = ChunkFacts(
         minted=True,

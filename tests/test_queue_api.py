@@ -494,6 +494,45 @@ def test_promoting_a_backlog_reordered_chunk_still_lands_it_at_the_ready_tail(tm
     assert _ids(hub.client.get("/api/queue").json()["entries"]) == [a, b, y]
 
 
+def test_a_chunk_promoted_while_positioned_chunks_are_paused_lands_behind_them_on_resume(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b, x, z = _ingest(hub, 1), _ingest(hub, 2), _ingest(hub, 3), _ingest(hub, 4)
+    assert hub.client.put("/api/queue", json={"chunk_ids": [a, b, x, z]}).status_code == 200
+    assert hub.client.post("/api/queue/position", json={"chunk_id": z, "after_chunk_id": x}).status_code == 200
+    for chunk_id in (x, z):
+        assert hub.client.post(f"/api/chunks/{chunk_id}/pause", json={"by": "alice"}).status_code == 202
+
+    y = _ingest(hub, 5)
+    for chunk_id in (x, z):
+        assert hub.client.post(f"/api/chunks/{chunk_id}/resume", json={"by": "alice"}).status_code == 202
+
+    assert _ids(hub.client.get("/api/queue").json()["entries"]) == [a, b, x, z, y]
+
+
+def test_a_ready_queue_reorder_survives_a_later_promote(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b, c = _ingest(hub, 1), _ingest(hub, 2), _ingest(hub, 3)
+    assert hub.client.put("/api/queue", json={"chunk_ids": [c, a, b]}).status_code == 200
+
+    d = _ingest(hub, 4)
+
+    assert _ids(hub.client.get("/api/queue").json()["entries"]) == [c, a, b, d]
+
+
+def test_reordering_either_list_writes_no_activity_row(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b, c = _ingest(hub, 1), _ingest(hub, 2), _ingest(hub, 3)
+    x, y = _ingest_backlog(hub, 4), _ingest_backlog(hub, 5)
+    before = hub.client.get("/api/activity").json()
+
+    assert hub.client.put("/api/queue", json={"chunk_ids": [c, b, a]}).status_code == 200
+    assert hub.client.post("/api/queue/position", json={"chunk_id": a, "after_chunk_id": None}).status_code == 200
+    assert hub.client.put("/api/backlog", json={"chunk_ids": [y, x]}).status_code == 200
+    assert hub.client.post("/api/backlog/position", json={"chunk_id": x, "after_chunk_id": None}).status_code == 200
+
+    assert hub.client.get("/api/activity").json() == before
+
+
 # --- Runner principal is still rejected on every route in this router -------
 
 

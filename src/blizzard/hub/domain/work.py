@@ -8,7 +8,7 @@ The derivations are pure functions over already-loaded domain facts
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
@@ -876,6 +876,12 @@ class ChunkFacts:
             # post-claim state, so only a fresh chunk with no live route lands here.
             return ChunkStatus.NOT_READY
         return ChunkStatus.READY
+
+    def is_ready_but_for_pause(self) -> bool:
+        """Whether the chunk would derive ``ready`` with its pause lifted — promoted, no live
+        route, not landed on a hub node — so a pause is the only thing withholding it
+        from the ready queue. Answered by :meth:`status` itself, never a recomposed branch."""
+        return replace(self, pauses=[]).status() is ChunkStatus.READY
 
     def completed_at(self) -> datetime | None:
         """The instant a terminal chunk finished, or ``None`` — render-only,
