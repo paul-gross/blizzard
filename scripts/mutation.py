@@ -590,6 +590,9 @@ def _run_scope_process(slug: str, since: str, timeout_seconds: float) -> ScopeRu
         encoding="utf-8",
         errors="replace",
         start_new_session=True,
+        # A backgrounded caller hands down SIGINT ignored, which the suite's own process-group
+        # tests, and mutmut's budget interrupt, both need live.
+        preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL),
     )
     try:
         output, _ = proc.communicate(timeout=max(timeout_seconds, 0.0))
