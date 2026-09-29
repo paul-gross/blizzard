@@ -7,8 +7,9 @@ module only surfaces the child-session candidates a tool part carries."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from blizzard.runner.harness.internal.opencode_cursor import MessagePartIdentity
 from blizzard.runner.harness.internal.opencode_shapes import (
@@ -55,23 +56,20 @@ class ChildCandidate:
 
 
 def child_candidate_of(part: OpenCodePart) -> ChildCandidate | None:
-    """``part.raw["state"]["metadata"]["sessionID"]``, read defensively — no field the strict
-    parser types, confirmed only by ``contracts/opencode/1.18.25/child_session.json``. Guards
-    every level; malformed or absent reads as no candidate, never raises."""
-    state = part.raw.get("state")
-    if not isinstance(state, Mapping):
-        return None
-    metadata = state.get("metadata")
-    if not isinstance(metadata, Mapping):
-        return None
-    session_id = metadata.get("sessionID")
-    if not isinstance(session_id, str) or not session_id:
+    """The child session a ``task`` tool part points at: ``state.metadata.sessionId`` (OpenCode
+    1.18.32) or ``sessionID`` (1.18.25), with the agent type from the part's own input
+    ``subagent_type`` or ``agent``. No field the strict parser requires; malformed or absent
+    reads as no candidate, never raises."""
+    state = part.state
+    if state is None or state.child_session_id is None:
         return None
     agent: str | None = None
-    if part.state is not None:
-        candidate_agent = part.state.input.get("agent")
-        agent = candidate_agent if isinstance(candidate_agent, str) else None
-    return ChildCandidate(session_id=session_id, agent_type=agent)
+    for key in ("subagent_type", "agent"):
+        candidate_agent = state.input.get(key)
+        if isinstance(candidate_agent, str) and candidate_agent:
+            agent = candidate_agent
+            break
+    return ChildCandidate(session_id=state.child_session_id, agent_type=agent)
 
 
 def harness_version_of(export: OpenCodeSessionExport) -> str | None:
@@ -79,6 +77,31 @@ def harness_version_of(export: OpenCodeSessionExport) -> str | None:
     :class:`~.opencode_shapes.OpenCodeSessionInfo`, whose parser does not extract it."""
     version = export.info.raw.get("version")
     return version if isinstance(version, str) and version else None
+
+
+def _utc(epoch_ms: int | None) -> datetime | None:
+    """Epoch ms as a tz-aware UTC instant; ``None`` when absent or out of range."""
+    if epoch_ms is None:
+        return None
+    try:
+        return datetime.fromtimestamp(epoch_ms / 1000, tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _part_time(part: OpenCodePart, message: OpenCodeMessage) -> datetime | None:
+    """The part's own start, else its message's creation time."""
+    return _utc(part.started_at_ms()) or _utc(message.info.created_at_ms)
+
+
+def _text_time(message: OpenCodeMessage) -> datetime | None:
+    """The first text part's start, else the message's creation time."""
+    for part in message.parts:
+        if part.type == "text" and part.started_at_ms() is not None:
+            stamp = _utc(part.started_at_ms())
+            if stamp is not None:
+                return stamp
+    return _utc(message.info.created_at_ms)
 
 
 def _joined_text(message: OpenCodeMessage) -> str:
@@ -107,22 +130,22 @@ def build_turns(
                     continue
                 joined_messages.add(message.info.id)
                 kind: NormalizedTurnKind = "env" if message.info.role == "user" else "asst"
-                turns.append(_text_turn(len(turns), kind, _joined_text(message)))
+                turns.append(_text_turn(len(turns), kind, _joined_text(message), _text_time(message)))
             elif part.type == "reasoning":
-                turns.append(_thinking_turn(len(turns), part))
+                turns.append(_thinking_turn(len(turns), part, _part_time(part, message)))
             elif part.type == "tool":
                 index = len(turns)
-                turns.append(_tool_turn(index, part))
+                turns.append(_tool_turn(index, part, _part_time(part, message)))
                 tool_turns[identity] = index
     return turns, tool_turns
 
 
-def _text_turn(index: int, kind: NormalizedTurnKind, raw: str) -> NormalizedTurn:
+def _text_turn(index: int, kind: NormalizedTurnKind, raw: str, timestamp: datetime | None) -> NormalizedTurn:
     text = Text.of(raw)
     return NormalizedTurn(
         index=index,
         kind=kind,
-        timestamp=None,
+        timestamp=timestamp,
         text=text.text,
         tool=None,
         thinking_redacted=False,
@@ -131,13 +154,13 @@ def _text_turn(index: int, kind: NormalizedTurnKind, raw: str) -> NormalizedTurn
     )
 
 
-def _thinking_turn(index: int, part: OpenCodePart) -> NormalizedTurn:
+def _thinking_turn(index: int, part: OpenCodePart, timestamp: datetime | None) -> NormalizedTurn:
     raw = part.text or ""
     text = Text.of(raw) if raw else _EMPTY
     return NormalizedTurn(
         index=index,
         kind="thinking",
-        timestamp=None,
+        timestamp=timestamp,
         text=text.text,
         tool=None,
         thinking_redacted=not raw,
@@ -170,7 +193,7 @@ def late_tool_output_of(part: OpenCodePart) -> LateToolOutput | None:
     return LateToolOutput(tool_use_id=part.call_id, output=text.text, output_truncated=text.truncated)
 
 
-def _tool_turn(index: int, part: OpenCodePart) -> NormalizedTurn:
+def _tool_turn(index: int, part: OpenCodePart, timestamp: datetime | None) -> NormalizedTurn:
     state = part.state
     assert state is not None  # OpenCodePart.parse requires `state` on every tool part
     raw_output = _tool_output_text(state)
@@ -187,7 +210,7 @@ def _tool_turn(index: int, part: OpenCodePart) -> NormalizedTurn:
     return NormalizedTurn(
         index=index,
         kind="tool",
-        timestamp=None,
+        timestamp=timestamp,
         text="",
         tool=tool,
         thinking_redacted=False,

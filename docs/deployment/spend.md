@@ -124,6 +124,13 @@ step's `providerID`/`modelID` regardless, and prices from the model it observes 
 never pays for that export read, since its own stamp already names what ran; with transcripts unwired, or an export
 naming no model either, the step stays unestimated.
 
+An OpenCode invocation's usage also counts the steps of every descendant session its `task` tool calls spawned — a
+child, and that child's own children — read through `opencode export`, each step priced at its own message's model.
+A step counts toward the invocation whose `task` call was running when the step's message was created, so a child
+continued across two invocations is counted once. A child whose export cannot be read is logged and contributes
+nothing. The estimate is all-or-nothing across the root and its descendants: one zero-cost step with no priced model
+leaves the whole invocation's `estimated_cost_usd` absent rather than understated.
+
 For an invocation that ends with a usage envelope, a billed step and a zero-cost, estimated step can both appear
 together: its billed steps sum into `cost_usd`, and its estimated steps separately sum into `estimated_cost_usd` — the
 two are never merged and never double counted. The transcript fallback (the crash/reap path) never bills — it always

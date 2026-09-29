@@ -445,3 +445,55 @@ def test_opencode_crash_mid_turn_recovers_with_usage_recorded_exactly_once(tmp_p
     assert set(by_lease[retried_lease_id]) == {"spawn", "judge"}, by_lease[retried_lease_id]
     assert by_lease[retried_lease_id]["spawn"]["cost_usd"] is not None
     assert by_lease[retried_lease_id]["judge"]["cost_usd"] is not None
+
+
+def _step_tokens(doc: dict) -> int:
+    return sum(
+        part["tokens"]["input"]
+        for message in doc["messages"]
+        for part in message["parts"]
+        if part["type"] == "step-finish"
+    )
+
+
+def test_opencode_spawn_usage_includes_the_task_childs_steps(tmp_path: Path) -> None:
+    """A build program that spawns one ``task`` child records a spawn usage fact whose input
+    tokens are the root's steps plus the child's, read back through the mock's own exports."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _origin_bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    transcripts_root = tmp_path / "transcripts"
+    fenced = _tick_env()
+    fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
+
+    hub_port = _free_port()
+    prior_transcripts_root = os.environ.get("BZ_TRANSCRIPTS_ROOT")
+    os.environ["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
+    try:
+        with mock_hub(bin_dir, hub_port) as hub:
+            spec = mock_hub_opencode_chunk_spec(_WORK_REF_URL)
+            spec["nodes"]["build"]["prompt"] = (
+                "tool_call('task', {'subagent_type': 'explorer', 'prompt': 'look around'}, output='delegated')\n"
+            )
+            seeded = hub.post("/_seed/chunk", json=spec)
+            assert seeded.status_code == 201, seeded.text
+            chunk_id = seeded.json()["chunk_id"]
+
+            config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+            config = dataclasses.replace(config, transcripts_root=str(transcripts_root))
+            landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
+            assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
+    finally:
+        if prior_transcripts_root is None:
+            os.environ.pop("BZ_TRANSCRIPTS_ROOT", None)
+        else:
+            os.environ["BZ_TRANSCRIPTS_ROOT"] = prior_transcripts_root
+
+    docs = [json.loads(path.read_text()) for path in (transcripts_root / "mock-opencode").glob("*.json")]
+    child_docs = [doc for doc in docs if doc["info"].get("parentID")]
+    root_docs = [doc for doc in docs if not doc["info"].get("parentID")]
+    assert len(child_docs) == 1 and len(root_docs) == 1, [doc["info"] for doc in docs]
+    [stdout] = [p for p in (tmp_path / "runner").rglob("*.1.stdout") if '"tool_use"' in p.read_text()]
+    events = [json.loads(line) for line in stdout.read_text().splitlines() if line.startswith("{")]
+    root_spawn_tokens = sum(e["part"]["tokens"]["input"] for e in events if e["type"] == "step_finish")
+    spawn = next(row for row in _usage_facts_for_chunk(config, chunk_id) if row["kind"] == "spawn")
+    assert spawn["input_tokens"] == root_spawn_tokens + _step_tokens(child_docs[0])

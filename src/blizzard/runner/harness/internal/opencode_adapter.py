@@ -28,6 +28,7 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
+from blizzard.runner.harness.internal.opencode_descendant_usage import DescendantStep, OpenCodeDescendantUsage
 from blizzard.runner.harness.internal.opencode_price_cache import (
     IOpenCodePriceCatalog,
     OpenCodeModelPrice,
@@ -158,6 +159,40 @@ class _PendingOpenCodeIdentity:
         return None
 
 
+@dataclass(frozen=True)
+class _UsageStep:
+    """A completed step and the ``(provider, model)`` its message named, if any."""
+
+    part: OpenCodePart
+    provider_id: str | None
+    model_id: str | None
+
+
+def _instants_of(decoded: dict) -> list[int]:
+    """Every epoch-ms instant one decoded line shows, for closing an unended task's window."""
+    found: list[int] = []
+
+    def take(container: object, *keys: str) -> None:
+        if isinstance(container, dict):
+            for key in keys:
+                value = container.get(key)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    found.append(int(value))
+
+    take(decoded, "timestamp")
+    info = decoded.get("info")
+    if isinstance(info, dict):
+        take(info.get("time"), "created", "completed")
+    parts = decoded.get("parts")
+    for part in parts if isinstance(parts, list) else []:
+        if isinstance(part, dict):
+            take(part.get("time"), "start", "end")
+            state = part.get("state")
+            if isinstance(state, dict):
+                take(state.get("time"), "start", "end")
+    return found
+
+
 class OpenCodeAdapter:
     """The OpenCode binding. Dumb: translates the CLI surface, never decides.
 
@@ -175,6 +210,7 @@ class OpenCodeAdapter:
         worker_config_path: str | None = None,
         transcript_source: IHarnessTranscriptSource | None = None,
         price_catalog: IOpenCodePriceCatalog | None = None,
+        descendant_usage: OpenCodeDescendantUsage | None = None,
         process: IProcessProbe,
         launcher: IProcessLauncher,
     ) -> None:
@@ -196,6 +232,8 @@ class OpenCodeAdapter:
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
         # Injected, optional: with no catalog, a zero-cost step never gets an estimate.
         self._price_catalog = price_catalog
+        # Injected, optional: with none, an invocation's usage is its root session's steps alone.
+        self._descendant_usage = descendant_usage
         self._process: IProcessProbe = process
         # Injected, never self-constructed (`bzh:dependency-injection`): ONE launcher, both bindings.
         self._launcher: IProcessLauncher = launcher
@@ -632,27 +670,19 @@ class OpenCodeAdapter:
         self, output: str, kind: UsageKind, *, model: str | None = None, transcript_lines: Sequence[str] = ()
     ) -> UsageSample | None:
         del transcript_lines  # OpenCode's invocation stream carries its own step usage.
-        finishes = self._root_step_finishes(self._parse_events(output))
+        events = self._parse_events(output)
+        finishes = self._root_step_finishes(events)
         # Deduplicated by part identity: the same completed step is never counted twice
         # even were it to appear more than once on this one capture.
         by_id = {part.id: part for part in finishes if part.tokens is not None}
         if not by_id:
             return None
-        parts = list(by_id.values())
-        input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(parts)
-        # `output` is run events, never an export, and a run event never carries a step's
-        # provider/model: nothing here to observe, so the fallback chain is the only source.
-        provider, resolved_model = self._invocation_model_reference(model)
-        estimated: list[float] = []
-        prices: dict[tuple[str, str], OpenCodeModelPrice | None] = {}
-        # Every step here prices against this one (provider, resolved_model) pair, so the
-        # lookup can never diverge step to step — unlike the per-step pairs below.
-        for part in parts:
-            if part.cost:
-                continue
-            amount = self._estimate_step(part, provider, resolved_model, prices)
-            if amount is not None:
-                estimated.append(amount)
+        # A run event carries no provider/model, so the invocation's pair prices a root step.
+        steps = [_UsageStep(part, None, None) for part in by_id.values()]
+        root = self._root_session_id(events)
+        assert root is not None  # a root step finish implies a first event
+        steps.extend(self._descendant_steps(root, self._task_parts_of_events(events, root), self._horizon_of(events)))
+        input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(s.part for s in steps)
         return UsageSample(
             kind=kind,
             model=model or self._model or "opencode",
@@ -660,9 +690,59 @@ class OpenCodeAdapter:
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
             cache_create_tokens=cache_create_tokens,
-            cost_usd=self._known_cost(parts),
-            estimated_cost_usd=sum(estimated) if estimated else None,
+            cost_usd=self._known_cost(s.part for s in steps),
+            estimated_cost_usd=self._estimate_unbilled(steps, model),
         )
+
+    def _descendant_steps(
+        self, root_session_id: str, task_parts: Sequence[OpenCodePart], horizon_ms: int | None
+    ) -> list[_UsageStep]:
+        if self._descendant_usage is None or not task_parts:
+            return []
+        collected: list[DescendantStep] = self._descendant_usage.collect(
+            root_session_id=root_session_id, task_parts=task_parts, horizon_ms=horizon_ms
+        )
+        return [_UsageStep(step.part, step.provider_id, step.model_id) for step in collected]
+
+    @staticmethod
+    def _task_parts_of_events(events: Sequence[OpenCodeRunEvent], root: str) -> list[OpenCodePart]:
+        return [
+            event.part
+            for event in events
+            if event.type == "tool_use"
+            and event.part is not None
+            and event.part.tool == "task"
+            and event.part.session_id == root
+        ]
+
+    @staticmethod
+    def _horizon_of(events: Sequence[OpenCodeRunEvent]) -> int | None:
+        """The latest event timestamp, epoch ms."""
+        stamps = [
+            event.raw["timestamp"]
+            for event in events
+            if isinstance(event.raw.get("timestamp"), int) and not isinstance(event.raw.get("timestamp"), bool)
+        ]
+        return max(stamps) if stamps else None
+
+    def _estimate_unbilled(self, steps: Sequence[_UsageStep], model: str | None) -> float | None:
+        """The summed estimate of every zero-cost step at its own ``(provider, model)``, else the
+        invocation's. All-or-nothing: one unpriceable step leaves it ``None``, as does no zero-cost step."""
+        unbilled = [step for step in steps if not step.part.cost]
+        if not unbilled:
+            return None
+        invocation_provider, invocation_model = self._invocation_model_reference(model)
+        prices: dict[tuple[str, str], OpenCodeModelPrice | None] = {}
+        total = 0.0
+        for step in unbilled:
+            provider, step_model = step.provider_id, step.model_id
+            if provider is None or step_model is None:
+                provider, step_model = invocation_provider, invocation_model
+            amount = self._estimate_step(step.part, provider, step_model, prices)
+            if amount is None:
+                return None
+            total += amount
+        return total
 
     @staticmethod
     def _decode_line(line: str) -> dict | None:
@@ -712,7 +792,9 @@ class OpenCodeAdapter:
         return parts, observed
 
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
-        by_id: dict[str, tuple[OpenCodePart, str | None, str | None]] = {}
+        by_id: dict[str, _UsageStep] = {}
+        task_parts: dict[str, OpenCodePart] = {}
+        root_session: str | None = None
         observed: tuple[str, str] | None = None
         # One pass over `lines`: the observed (provider, model) is picked up off the
         # same decode that yields each line's finish-parts, rather than a second full pass
@@ -730,27 +812,19 @@ class OpenCodeAdapter:
                 if provider is None or part_model is None:
                     # A run-event copy of a step an export line already named keeps that
                     # export's own provider/model rather than erasing it.
-                    _, provider, part_model = by_id.get(part.id, (part, None, None))
-                by_id[part.id] = (part, provider, part_model)
-        parts = [entry[0] for entry in by_id.values()]
-        input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(parts)
-        estimated_cost_usd: float | None = None
+                    known = by_id.get(part.id)
+                    provider, part_model = (known.provider_id, known.model_id) if known else (None, None)
+                by_id[part.id] = _UsageStep(part, provider, part_model)
+            for task_part in self._task_parts_of_decoded(decoded):
+                task_parts[task_part.id] = task_part
+                root_session = root_session or task_part.session_id
+        steps = list(by_id.values())
+        if root_session is not None:
+            steps.extend(self._descendant_steps(root_session, list(task_parts.values()), self._horizon_of_lines(lines)))
+        input_tokens, output_tokens, cache_read_tokens, cache_create_tokens = self._sum_tokens(s.part for s in steps)
         # A non-zero cost here is a billed figure this fallback drops; no estimate
         # may then mask it.
-        if not any(part.cost for part in parts):
-            invocation_provider, invocation_model = self._invocation_model_reference(model)
-            amounts: list[float | None] = []
-            prices: dict[tuple[str, str], OpenCodeModelPrice | None] = {}
-            for part, provider, part_model in by_id.values():
-                # The step's own (provider, model) pair when its shape carried both, else the
-                # invocation's pair — never one half of each.
-                if provider is None or part_model is None:
-                    provider, part_model = invocation_provider, invocation_model
-                amounts.append(self._estimate_step(part, provider, part_model, prices))
-            # All-or-nothing: one unpriced step leaves the whole estimate unknown rather
-            # than silently understated.
-            complete = bool(amounts) and all(a is not None for a in amounts)
-            estimated_cost_usd = sum(a for a in amounts if a is not None) if complete else None
+        estimated_cost_usd = None if any(s.part.cost for s in steps) else self._estimate_unbilled(steps, model)
         observed_model = f"{observed[0]}/{observed[1]}" if observed is not None else None
         return UsageSample(
             kind=kind,
@@ -766,6 +840,31 @@ class OpenCodeAdapter:
             cost_usd=None,
             estimated_cost_usd=estimated_cost_usd,
         )
+
+    @classmethod
+    def _task_parts_of_decoded(cls, decoded: dict) -> list[OpenCodePart]:
+        """The ``task`` tool parts one decoded line carries; an unparseable line carries none."""
+        try:
+            event = parse_run_event(decoded)
+        except OpenCodeShapeError:
+            pass
+        else:
+            return cls._task_parts_of_events([event], event.session_id)
+        try:
+            message = OpenCodeMessage.parse(decoded)
+        except OpenCodeShapeError:
+            return []
+        return [part for part in message.parts if part.type == "tool" and part.tool == "task"]
+
+    def _horizon_of_lines(self, lines: Sequence[str]) -> int | None:
+        """The latest instant the lines show, epoch ms."""
+        stamps: list[int] = []
+        for line in lines:
+            decoded = self._decode_line(line)
+            if decoded is None:
+                continue
+            stamps.extend(_instants_of(decoded))
+        return max(stamps) if stamps else None
 
     def observed_model(self, lines: Sequence[str]) -> str | None:
         observed: tuple[str, str] | None = None
