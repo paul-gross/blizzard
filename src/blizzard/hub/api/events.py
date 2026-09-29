@@ -26,7 +26,7 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT
+from blizzard.hub.domain.pagination import DEFAULT_LIMIT
 from blizzard.hub.domain.work import ActivityFeed, ActivityRow, EventFeed, EventRow
 from blizzard.wire.activity import ActivityResponse, ActivityView
 from blizzard.wire.events import EventsResponse, EventView
@@ -34,6 +34,8 @@ from blizzard.wire.events import EventsResponse, EventView
 router = APIRouter(prefix="/api", tags=["meta"])
 
 _RESERVED_COMMENT = ": blizzard hub event stream\n\n"
+# These two reads are bounded below the hub's general list maximum: 200 is a real ceiling here.
+FEED_MAX_LIMIT = 200
 
 
 @router.get("/events/stream", include_in_schema=False)
@@ -84,7 +86,7 @@ def list_events(
     runner_id: Annotated[str | None, Query()] = None,
     chunk_id: Annotated[str | None, Query()] = None,
     since: Annotated[datetime | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    limit: Annotated[int, Query(ge=1, le=FEED_MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> EventsResponse:
     """The ``event_log`` unified with open escalations, most-severe-newest first, bounded.
 
@@ -144,7 +146,7 @@ class Activity:
 def list_activity(
     services: Annotated[HubServices, Depends(get_services)],
     since: Annotated[datetime | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    limit: Annotated[int, Query(ge=1, le=FEED_MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> ActivityResponse:
     """The activity backfill — the three already-bounded per-source activity reads merged,
     sorted newest-first, and capped.
