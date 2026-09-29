@@ -7,7 +7,7 @@ what each branch carries and whether it already sits on the current base.
 
 ## Rebase
 
-Rebase every ahead repo onto the latest base branch — `origin/master` unless the repo records another. For a repo with
+Rebase every ahead repo onto the latest base branch — the repo's recorded base branch. For a repo with
 work in several environments, rebase those branches onto each other first, then the surviving branch onto the base. Each
 repo ends with exactly one branch holding all its work, in one environment — always, even with a single environment:
 delivery refuses a repo arriving with two branches, so an un-rolled-up change-set fails there rather than landing half

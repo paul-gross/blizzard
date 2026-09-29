@@ -16,7 +16,7 @@ needs its tip declared (below).
 **One branch per repo.** Every environment's work for a repo is rolled up into a single branch; delivery refuses a repo
 that arrives with two.
 
-**Every ahead repo is rebased onto the current base** — `origin/master` unless the repo records another. Where a repo
+**Every ahead repo is rebased onto the current base** — the repo's recorded base branch. Where a repo
 has work in more than one environment, rebase those onto each other first, then onto the base. Resolve every conflict
 **inside the rebase** — never abandon it for a merge, never skip a commit — and note every file a resolution touched.
 The one exception: a commit that repaired a base failure another chunk already landed the same fix for rebases to an

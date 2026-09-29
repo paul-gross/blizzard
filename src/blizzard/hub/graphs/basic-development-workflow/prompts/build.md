@@ -23,9 +23,9 @@ environment can reach the base branch; how you arrange that is the workspace's b
 ## Verify it by hand
 
 Before pushing, exercise the change by hand against a running application — a green build or type-check is not a
-verification. Stand up the leased environment (`winter service up <env> --wait`) and drive whichever surface the change
-reaches: the hub or runner's HTTP API (`blizzard:manual-hub`, `blizzard:manual-runner`) or a real browser against the
-board or panel (`web:manual-board`, `web:manual-panel`). A change reaching no running surface — a docs-only or
+verification. Stand up the leased environment's services with whatever the workspace provides, confirm readiness against
+the app's own signal, and drive every surface the change reaches through the manual method the project's verifiability
+matrix declares for it. A change reaching no running surface — a docs-only or
 context-only edit — is exempt. Record what you exercised and its result in the commit message.
 
 ## Push and declare

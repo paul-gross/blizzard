@@ -3,6 +3,7 @@ rationale are owned by `src/blizzard/hub/graphs/advanced-development-workflow/RE
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -35,3 +36,15 @@ def test_the_runner_prompt_tree_inherits_the_same_bar() -> None:
 @pytest.mark.unit
 def test_the_blizzard_preamble_stays_within_its_own_tighter_bar() -> None:
     assert _over([PROMPTS.directory / "blizzard_preamble.md"], PREAMBLE_BAR) == []
+
+
+@pytest.mark.unit
+def test_no_packaged_graph_prompt_names_a_project_method_id() -> None:
+    files = sorted(PACKAGED.root.glob("*/prompts/*.md"))
+    assert files, "no packaged graph prompts found — the glob root moved"
+    leaks = [
+        f"{path}: {match.group(0)}"
+        for path in files
+        for match in re.finditer(r"\b(?:blizzard|web):[a-z-]+", path.read_text())
+    ]
+    assert leaks == []
