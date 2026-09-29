@@ -186,6 +186,7 @@ def _push_event(
         json={"runner_id": runner_id, "facts": [{"seq": seq, "kind": "event.recorded", "payload": payload}]},
     )
     assert resp.status_code == 200, resp.text
+    assert resp.json()["applied"] == [seq] and resp.json()["rejected"] == [], resp.text
 
 
 def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
@@ -372,7 +373,7 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                     hub,
                     seq=1,
                     severity="warning",
-                    kind="reload-seam-probe",
+                    kind="attempt-failed",
                     chunk_id=chunk_a,
                     message="a probed operational event",
                     runner_id="runner-reload-seam",
@@ -399,8 +400,8 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
 
                 # The event-logged row carries the same severity/kind fields whichever
                 # source renders it, so its text matches exactly across both loads.
-                event_message = next(m for m in first_load_messages if "reload-seam-probe" in m)
-                reload_event_message = next(m for m in reload_messages if "reload-seam-probe" in m)
+                event_message = next(m for m in first_load_messages if "attempt-failed" in m)
+                reload_event_message = next(m for m in reload_messages if "attempt-failed" in m)
                 assert reload_event_message == event_message, (reload_messages, first_load_messages)
 
                 # Live-rendered rows carry the `→` transition arrow; backfill-rendered rows
