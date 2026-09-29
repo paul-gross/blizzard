@@ -803,3 +803,173 @@ def test_ensure_mutant_tree_with_fresh_clears_a_tree_of_the_same_scope(tmp_path:
     assert stale.exists()
     m.ensure_mutant_tree_for_scope(m.SCOPES["cli-surface"], mutants_dir, fresh=True)
     assert not stale.exists()
+
+
+# --- delta mode: every touched scope, one wall budget, one aggregate report ---------------------
+
+
+def _delta_repo(root: Path) -> None:
+    """`_git_repo`'s two changed functions (cli-surface, hub-daemon) plus a changed file no scope owns."""
+    import subprocess
+
+    _git_repo(root)
+    tools = root / "src" / "blizzard" / "tools"
+    tools.mkdir(parents=True)
+    (tools / "t.py").write_text("def tool():\n    return 1\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "tool"], cwd=root, check=True)
+    (tools / "t.py").write_text("def tool():\n    return 2\n")
+    subprocess.run(["git", "commit", "-qam", "tool change"], cwd=root, check=True)
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _scripted_runner(clock: _Clock, mutants_dir: Path, script: dict[str, tuple[int | None, float, dict | None]]):
+    calls: list[tuple[str, float]] = []
+
+    def runner(slug: str, since: str, timeout: float):
+        calls.append((slug, timeout))
+        exit_code, took, report = script[slug]
+        clock.now += took
+        if report is not None:
+            (mutants_dir / m.REPORT_NAME).write_text(json.dumps(report))
+        return m.ScopeRun(exit_code, "boom" if exit_code else "")
+
+    runner.calls = calls  # type: ignore[attr-defined]
+    return runner
+
+
+def _scope_report(*survivors: str) -> dict:
+    return {"total": 3, "survivors": [{"mutant": name} for name in survivors]}
+
+
+def test_delta_routes_changed_files_to_every_scope_they_touch(tmp_path: Path) -> None:
+    _delta_repo(tmp_path)
+    clock, mutants_dir = _Clock(), tmp_path / "mutants"
+    runner = _scripted_runner(
+        clock, mutants_dir, {"cli-surface": (0, 10, _scope_report("a")), "hub-daemon": (0, 20, _scope_report())}
+    )
+    report = m.run_delta("HEAD~3", repo_root=tmp_path, mutants_dir=mutants_dir, scope_runner=runner, clock=clock)
+    by_scope = {entry["scope"]: entry for entry in report["scopes"]}
+    assert set(by_scope) == {"cli-surface", "hub-daemon"}
+    assert by_scope["cli-surface"]["status"] == "complete"
+    assert by_scope["cli-surface"]["survivors"] == [{"mutant": "a"}]
+    assert by_scope["cli-surface"]["elapsed_seconds"] == 10
+    assert by_scope["hub-daemon"]["survivors"] == []
+    assert report["elapsed_seconds"] == 30
+
+
+def test_delta_reports_changed_files_no_scope_owns(tmp_path: Path) -> None:
+    _delta_repo(tmp_path)
+    clock, mutants_dir = _Clock(), tmp_path / "mutants"
+    runner = _scripted_runner(
+        clock, mutants_dir, {"cli-surface": (0, 1, _scope_report()), "hub-daemon": (0, 1, _scope_report())}
+    )
+    report = m.run_delta("HEAD~3", repo_root=tmp_path, mutants_dir=mutants_dir, scope_runner=runner, clock=clock)
+    assert report["unscoped_files"] == ["src/blizzard/tools/t.py"]
+
+
+def test_delta_with_no_changed_function_in_a_touched_scope_is_no_changes_without_a_run(tmp_path: Path) -> None:
+    _delta_repo(tmp_path)
+    (tmp_path / "src" / "blizzard" / "hub" / "data.json").write_text("{}")
+    import subprocess
+
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "data"], cwd=tmp_path, check=True)
+    clock, mutants_dir = _Clock(), tmp_path / "mutants"
+    runner = _scripted_runner(clock, mutants_dir, {})
+    report = m.run_delta("HEAD~1", repo_root=tmp_path, mutants_dir=mutants_dir, scope_runner=runner, clock=clock)
+    assert [(e["scope"], e["status"]) for e in report["scopes"]] == [("hub-daemon", "no-changes")]
+    assert report["scopes"][0]["reason"]
+    assert runner.calls == []  # type: ignore[attr-defined]
+
+
+def test_delta_reports_an_over_budget_scope_and_skips_the_rest_keeping_finished_results(tmp_path: Path) -> None:
+    _delta_repo(tmp_path)
+    clock, mutants_dir = _Clock(), tmp_path / "mutants"
+    runner = _scripted_runner(
+        clock, mutants_dir, {"hub-daemon": (0, 40, _scope_report("a")), "cli-surface": (None, 60, None)}
+    )
+    report = m.run_delta(
+        "HEAD~3", budget_seconds=100, repo_root=tmp_path, mutants_dir=mutants_dir, scope_runner=runner, clock=clock
+    )
+    by_scope = {entry["scope"]: entry for entry in report["scopes"]}
+    assert by_scope["hub-daemon"]["status"] == "complete"
+    assert by_scope["cli-surface"]["status"] == "over-budget"
+    assert runner.calls == [("hub-daemon", 100), ("cli-surface", 60)]  # type: ignore[attr-defined]
+
+
+def test_delta_budget_spent_in_preparation_leaves_later_scopes_unstarted(tmp_path: Path) -> None:
+    _delta_repo(tmp_path)
+    clock, mutants_dir = _Clock(), tmp_path / "mutants"
+    runner = _scripted_runner(clock, mutants_dir, {"hub-daemon": (None, 100, None)})
+    report = m.run_delta(
+        "HEAD~3", budget_seconds=100, repo_root=tmp_path, mutants_dir=mutants_dir, scope_runner=runner, clock=clock
+    )
+    assert [e["status"] for e in report["scopes"]] == ["over-budget", "over-budget"]
+    assert [call[0] for call in runner.calls] == ["hub-daemon"]  # type: ignore[attr-defined]
+
+
+def test_delta_records_a_mutmut_failure_as_failed_with_its_reason(tmp_path: Path) -> None:
+    _delta_repo(tmp_path)
+    clock, mutants_dir = _Clock(), tmp_path / "mutants"
+    runner = _scripted_runner(clock, mutants_dir, {"cli-surface": (1, 5, None), "hub-daemon": (0, 5, _scope_report())})
+    report = m.run_delta("HEAD~3", repo_root=tmp_path, mutants_dir=mutants_dir, scope_runner=runner, clock=clock)
+    by_scope = {entry["scope"]: entry for entry in report["scopes"]}
+    assert by_scope["cli-surface"]["status"] == "failed"
+    assert "exited 1" in by_scope["cli-surface"]["reason"] and "boom" in by_scope["cli-surface"]["reason"]
+    assert by_scope["hub-daemon"]["status"] == "complete"
+
+
+def test_delta_does_not_read_a_stale_scope_report_after_a_silent_child(tmp_path: Path) -> None:
+    _delta_repo(tmp_path)
+    clock, mutants_dir = _Clock(), tmp_path / "mutants"
+    mutants_dir.mkdir()
+    (mutants_dir / m.REPORT_NAME).write_text(json.dumps(_scope_report("stale")))
+    runner = _scripted_runner(clock, mutants_dir, {"cli-surface": (0, 1, None), "hub-daemon": (0, 1, None)})
+    report = m.run_delta("HEAD~3", repo_root=tmp_path, mutants_dir=mutants_dir, scope_runner=runner, clock=clock)
+    assert {e["status"] for e in report["scopes"]} == {"failed"}
+
+
+def test_delta_rejects_a_revision_that_names_no_commit_before_running(tmp_path: Path) -> None:
+    _delta_repo(tmp_path)
+    runner = _scripted_runner(_Clock(), tmp_path, {})
+    with pytest.raises(m.UnknownRevisionError):
+        m.run_delta("nope", repo_root=tmp_path, mutants_dir=tmp_path / "mutants", scope_runner=runner)
+    assert runner.calls == []  # type: ignore[attr-defined]
+
+
+def test_main_delta_exits_zero_whenever_the_report_is_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    written: list[str] = []
+
+    def fake_run_delta(since: str, *, budget_seconds: float) -> dict:
+        written.append(f"{since}:{budget_seconds:g}")
+        return {"scopes": [{"status": "failed"}, {"status": "over-budget"}]}
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(m, "run_delta", fake_run_delta)
+    assert m.main(["--since", "abc"]) == 0
+    assert m.main(["--since", "abc", "--delta-budget", "5"]) == 0
+    assert written == [f"abc:{m.DEFAULT_DELTA_BUDGET_SECONDS:g}", "abc:5"]
+
+
+def test_main_without_a_scope_or_since_exits_non_zero(capsys: pytest.CaptureFixture[str]) -> None:
+    assert m.main([]) == 1
+    assert "--since" in capsys.readouterr().err
+
+
+def test_main_delta_on_an_unresolvable_revision_exits_the_bad_revision_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def raising(since: str, *, budget_seconds: float) -> dict:
+        raise m.UnknownRevisionError(since)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(m, "run_delta", raising)
+    assert m.main(["--since", "nope"]) == m.BAD_REVISION_EXIT_CODE

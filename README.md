@@ -92,7 +92,7 @@ engineer's agents show up on the same board.
 <details>
 <summary><b>Design and build your own workflow</b></summary>
 <br>
-<img src="docs/media/graph-advanced-workflow.webp" alt="The graph explorer showing a workflow graph, with pass and fail edges drawn between the plan, plan-review, build, verify, and review nodes, including the cycles of the fix loop">
+<img src="docs/media/graph-advanced-workflow.webp" alt="The graph explorer showing a workflow graph, with pass and fail edges drawn between the plan, plan-review, build, verify, mutation, and review nodes, including the cycles of the fix loop">
 <p><sub>Work travels node to node, and each node is a fresh or resumed agent tuned to that one job. The edges close the
 loops: a failed gate routes back into <code>build</code> rather than off the rails, which is what makes the graph a
 place to do loop engineering.</sub></p>

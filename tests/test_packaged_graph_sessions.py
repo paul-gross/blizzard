@@ -54,16 +54,18 @@ def test_no_packaged_pool_name_collides_with_a_node_name(name: str) -> None:
     assert not (set(doc.sessions) & {n.name for n in doc.nodes})
 
 
-def test_adv_dwf_declares_the_four_tiers_and_bounds_only_the_accumulating_ones() -> None:
+def test_adv_dwf_declares_the_five_pools_and_bounds_only_the_accumulating_ones() -> None:
     doc = _doc("advanced-development-workflow")
 
-    assert set(doc.sessions) == {"planning", "code", "verification", "gate"}
+    assert set(doc.sessions) == {"planning", "code", "verification", "measurement", "gate"}
     assert doc.sessions["planning"].model == ["blizzard:advanced"]
     assert doc.sessions["planning"].effort == "high"
     assert doc.sessions["code"].model == ["blizzard:basic"]
     assert doc.sessions["verification"].model == ["blizzard:basic"]
     assert doc.sessions["gate"].model == ["blizzard:basic"]
-    # `gate` is always `fresh:gate`, so a bound would never apply to it.
+    assert doc.sessions["measurement"].model == ["blizzard:basic"]
+    # `gate` and `measurement` are only ever reached fresh, so a bound would never apply to them.
+    assert doc.sessions["measurement"].rotate is None
     assert doc.sessions["code"].rotate is not None
     assert doc.sessions["verification"].rotate is not None
     assert doc.sessions["gate"].rotate is None
@@ -92,6 +94,26 @@ def test_adv_dwf_keeps_verify_off_the_pool_build_resumes() -> None:
     assert {n.name for n in doc.nodes if n.session_source == "verification"} == {"verify"}
 
 
+def _choice(doc, node: str, choice: str):  # type: ignore[no-untyped-def]
+    found = doc.node(node)
+    assert found is not None and found.judgement is not None
+    return next(c for c in found.judgement.choices if c.name == choice)
+
+
+def test_adv_dwf_routes_verify_pass_through_the_advisory_mutation_node() -> None:
+    doc = _doc("advanced-development-workflow")
+
+    assert _choice(doc, "verify", "pass").to == "mutation"
+    reported = _choice(doc, "mutation", "reported")
+    assert reported.to == "review"
+    assert reported.prompt_addendum
+    mutation = doc.node("mutation")
+    assert mutation is not None and mutation.judgement is not None
+    # One verdict is what makes the node advisory: no outcome of it can block.
+    assert [c.name for c in mutation.judgement.choices] == ["reported"]
+    assert {p.name for p in mutation.produces} == {"mutation-report", "retrospective"}
+
+
 @pytest.mark.parametrize(
     ("graph", "expected"),
     [
@@ -105,6 +127,8 @@ def test_adv_dwf_keeps_verify_off_the_pool_build_resumes() -> None:
                 "build": (SessionMode.RESUME, "code"),
                 # Its own lineage — never the one `build` resumes next.
                 "verify": (SessionMode.RESUME, "verification"),
+                # Advisory and cold, in a pool of its own: it reads declared tips, not a conversation.
+                "mutation": (SessionMode.FRESH, "measurement"),
                 "review": (SessionMode.FRESH, "gate"),
                 "pre-push": (SessionMode.RESUME, "code"),
                 "resolve": (SessionMode.RESUME, "code"),

@@ -8,6 +8,11 @@ Answer every blocking finding by fixing or refuting. The work returns to review 
 Do not rebase or merge the base branch while repairing: verify and review re-visit by diffing from the tip they last
 judged, and base motion folded into that delta buries the repair in it. Integration is `pre-push`'s.
 
+A finding that raises a surviving mutant follows the project's survivor classification. To close a real gap, add the
+assertion that kills the mutant and name that mutant in the commit that adds it — never in the code, since mutant names
+renumber as code moves. For an equivalent mutant, record the equivalence with its pattern: the project's in-source
+marker where the classification allows one, otherwise a `review-finding-refutes` entry.
+
 ## Fixing versus refuting
 
 Refute a finding when it is factually wrong, rests on a false premise, or demands work the change's scale does not
