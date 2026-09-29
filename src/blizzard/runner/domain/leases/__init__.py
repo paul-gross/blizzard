@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 __all__ = [
     "HEARTBEAT_STALENESS_THRESHOLD",
     "RECENT_LEASE_LIMIT",
+    "ClosedLeaseActivity",
     "ClosedLeaseRecord",
     "IProcessProbe",
     "IReadLeaseLivenessRepository",
@@ -219,13 +220,11 @@ class Liveness:
 
 @dataclass(frozen=True)
 class LeaseActivity:
-    """A lease with the facts its state derives from, plus its binding — the panel's read model.
+    """An active lease with the facts its state derives from, plus its binding — the panel's read model.
 
-    ``closed_at``/``closure_reason`` are ``None`` iff the lease is active; a closed one
-    also carries no ``environment_id`` or ``workdir``, its bindings being long released."""
+    A closed lease is a :class:`ClosedLeaseActivity` instead, so it cannot carry liveness facts."""
 
     lease: LeaseRecord
-    closed: bool
     parked: bool
     alive: bool
     stale: bool
@@ -233,8 +232,6 @@ class LeaseActivity:
     environment_id: str | None = None
     workdir: str | None = None
     last_heartbeat_at: datetime | None = None
-    closed_at: datetime | None = None
-    closure_reason: str | None = None
 
     @property
     def state(self) -> LeaseState:
@@ -244,13 +241,10 @@ class LeaseActivity:
     def _derive_state(self) -> LeaseState:
         """Apply the state precedence — a plain method, so mutation testing reaches it.
 
-        The precedence is the point: ``closed`` outranks ``alive`` because a closed
-        lease's pid may have been reused, ``parked`` outranks ``stale`` because parking
+        The precedence is the point: ``parked`` outranks ``stale`` because parking
         stops the reap clock, and ``backing-off`` ranks below ``parked`` but above
         ``spawning`` — a backing-off lease's exited worker/judge already
         left ``pid``/``session_id`` set, so it would otherwise misread as ``exited``."""
-        if self.closed:
-            return "closed"
         if self.parked:
             return "parked"
         if self.backing_off:
@@ -262,6 +256,19 @@ class LeaseActivity:
         if self.stale:
             return "stale"
         return "running"
+
+
+@dataclass(frozen=True)
+class ClosedLeaseActivity:
+    """A closed lease and its closure fact — no liveness facts, no binding (long released)."""
+
+    lease: LeaseRecord
+    closed_at: datetime
+    closure_reason: str
+
+    @property
+    def state(self) -> LeaseState:
+        return "closed"
 
 
 class IProcessProbe(Protocol):
@@ -323,7 +330,6 @@ class LocalLeaseService:
             activities.append(
                 LeaseActivity(
                     lease=lease,
-                    closed=False,
                     parked=lease.lease_id in parked,
                     alive=alive,
                     stale=liveness.stale(now, threshold=self._stale_after),
@@ -335,25 +341,21 @@ class LocalLeaseService:
             )
         return activities
 
-    def list_recent(self) -> list[LeaseActivity]:
+    def list_recent(self) -> list[LeaseActivity | ClosedLeaseActivity]:
         """Active leases, then the most recently closed — the panel's list.
 
         Every active lease first — unbounded, so a long-running agent is never crowded
         out — then up to ``recent_limit`` closed leases, newest first."""
-        return self.list_active() + self._list_closed()
+        return [*self.list_active(), *self._list_closed()]
 
-    def _list_closed(self) -> list[LeaseActivity]:
+    def _list_closed(self) -> list[ClosedLeaseActivity]:
         """The recent-closed half of :meth:`list_recent` — no probe, no heartbeat read.
 
-        ``closed`` wins the precedence unconditionally, so a pid read here would be
-        wasted and actively misleading. Bindings are already released."""
+        A closed lease's pid may have been reused, so a pid read here would be actively
+        misleading. Bindings are already released."""
         return [
-            LeaseActivity(
+            ClosedLeaseActivity(
                 lease=record.lease,
-                closed=True,
-                parked=False,
-                alive=False,
-                stale=False,
                 closed_at=record.closed_at,
                 closure_reason=record.reason,
             )
