@@ -6,10 +6,19 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.work import DependencyEdge
+
+
+class FoldMint(NamedTuple):
+    """One edge a fold mints: the remapped pair, carrying the instant the edge it replaces
+    was first declared — the fold's own instant stamps only the release."""
+
+    dependent_chunk_id: str
+    prerequisite_chunk_id: str
+    declared_at: datetime
 
 
 @dataclass(frozen=True)
@@ -19,7 +28,7 @@ class FoldTarget:
 
     chunk_id: str
     release: list[str]
-    mint: list[tuple[str, str]]
+    mint: list[FoldMint]
 
 
 class IReadChunkDependenciesRepository(Protocol):

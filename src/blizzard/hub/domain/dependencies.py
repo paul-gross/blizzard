@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunks.dependencies import FoldMint, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.work import Chunk, DependencyEdge
@@ -268,24 +268,29 @@ class FoldEdgePlan:
     plus the untouched remainder of ``standing`` the cycle check runs against."""
 
     release_by_target: dict[str, list[str]]
-    mint_by_target: dict[str, list[tuple[str, str]]]
+    mint_by_target: dict[str, list[FoldMint]]
     remaining: list[DependencyEdge]
 
 
 def plan_fold(standing: list[DependencyEdge], survivor_id: str, folded_ids: list[str]) -> FoldEdgePlan:
     """The dependency-edge side of folding ``folded_ids`` into ``survivor_id``: every standing edge naming a
-    folded chunk in either role is released, and its remapped pair is minted unless it collapses to a self-edge or
-    duplicates a pair already resulting. Raises nothing — the caller checks :func:`would_close_a_cycle` first. Full
-    per-edge outcome table: `blizzard-context:/architecture/crash-correctness/hub.md` §A fold's edge rewrite."""
+    folded chunk in either role is released, and its remapped pair is minted — at the instant the edge was first
+    declared — unless it collapses to a self-edge or duplicates a pair already resulting. Where pairs collapse the
+    earliest ``declared_at`` wins: a later-declared unfolded standing edge on the same pair is released too and the
+    pair re-minted at the earlier instant. ``standing`` is in declared order. Raises nothing — the caller checks
+    :func:`would_close_a_cycle` first. Why the instant carries:
+    `blizzard-context:/domain/work/statuses.md` §The blocked marking."""
     folded = set(folded_ids)
 
     def remap(chunk_id: str) -> str:
         return survivor_id if chunk_id in folded else chunk_id
 
     release_by_target: dict[str, list[str]] = {cid: [] for cid in folded_ids}
-    mint_by_target: dict[str, list[tuple[str, str]]] = {cid: [] for cid in folded_ids}
+    mint_by_target: dict[str, list[FoldMint]] = {cid: [] for cid in folded_ids}
     remaining = [e for e in standing if e.dependent_chunk_id not in folded and e.prerequisite_chunk_id not in folded]
-    resulting_pairs = {(e.dependent_chunk_id, e.prerequisite_chunk_id) for e in remaining}
+    unfolded_by_pair = {(e.dependent_chunk_id, e.prerequisite_chunk_id): e for e in remaining}
+    minted_pairs: set[tuple[str, str]] = set()
+    superseded: set[str] = set()
 
     for edge in standing:
         dep_folded = edge.dependent_chunk_id in folded
@@ -295,9 +300,17 @@ def plan_fold(standing: list[DependencyEdge], survivor_id: str, folded_ids: list
         owner = edge.dependent_chunk_id if dep_folded else edge.prerequisite_chunk_id
         release_by_target[owner].append(edge.dependency_id)
         pair = (remap(edge.dependent_chunk_id), remap(edge.prerequisite_chunk_id))
-        if pair[0] == pair[1] or pair in resulting_pairs:
+        if pair[0] == pair[1] or pair in minted_pairs:
             continue
-        resulting_pairs.add(pair)
-        mint_by_target[owner].append(pair)
+        existing = unfolded_by_pair.get(pair)
+        if existing is not None:
+            if existing.declared_at <= edge.declared_at:
+                continue
+            release_by_target[owner].append(existing.dependency_id)
+            superseded.add(existing.dependency_id)
+            del unfolded_by_pair[pair]
+        minted_pairs.add(pair)
+        mint_by_target[owner].append(FoldMint(pair[0], pair[1], edge.declared_at))
 
+    remaining = [e for e in remaining if e.dependency_id not in superseded]
     return FoldEdgePlan(release_by_target=release_by_target, mint_by_target=mint_by_target, remaining=remaining)

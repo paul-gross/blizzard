@@ -52,7 +52,9 @@ A chunk currently named as another's prerequisite cannot itself be deleted while
 chunk's own outgoing standing edges as part of the same delete, rather than refusing.
 
 Grouping a chunk away carries its standing edges onto the survivor rather than dropping them: each edge naming the
-folded chunk, in either role, is released and re-minted, remapped onto the survivor — never updated in place. The whole
+folded chunk, in either role, is released and re-minted, remapped onto the survivor — never updated in place. A re-minted
+edge keeps the source edge's `declared_at`, which `GET /api/chunks/{id}/dependencies` shows; a later-declared standing
+survivor edge that duplicates it is released and re-minted at the earlier instant. The whole
 fold is refused 409 if carrying its edges would close a cycle in the resulting standing graph.
 
 ## The neighborhood

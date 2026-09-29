@@ -8,6 +8,7 @@ chunk may do, only what it says about why it cannot yet be claimed."""
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -264,3 +265,52 @@ def test_detail_routes_facts_reads_are_bounded_by_its_own_edges_not_fleet_size(t
     large_count = count_queries(large.engine, lambda: call(large, large_dependent_id))
 
     assert small_count == large_count
+
+
+def _queue_entry(hub: HubHarness, chunk_id: str) -> dict:  # type: ignore[type-arg]
+    resp = hub.client.get("/api/queue")
+    assert resp.status_code == 200, resp.text
+    (entry,) = [e for e in resp.json()["entries"] if e["chunk_id"] == chunk_id]
+    return entry
+
+
+def _two_unmet_prerequisites(hub: HubHarness, *, promote: bool) -> tuple[str, str, str, str]:
+    """D depends on A then B (both unmet, declared at distinct instants), with S beside them."""
+    dependent_id = ingest(hub, [_DEPENDENT], promote=promote)
+    first_id = ingest(hub, [{"source": "default", "ref": "first"}], promote=promote)
+    second_id = ingest(hub, [{"source": "default", "ref": "second"}], promote=promote)
+    survivor_id = ingest(hub, [{"source": "default", "ref": "survivor"}], promote=promote)
+    _declare(hub, dependent_id, first_id)
+    hub.clock.advance(timedelta(seconds=1))
+    _declare(hub, dependent_id, second_id)
+    hub.clock.advance(timedelta(seconds=1))
+    return dependent_id, first_id, second_id, survivor_id
+
+
+@pytest.mark.parametrize("promote", [True, False])
+def test_two_unmet_prerequisites_count_two_on_every_read(tmp_path: Path, promote: bool) -> None:
+    hub = build_hub(tmp_path)
+    dependent_id, first_id, _, _ = _two_unmet_prerequisites(hub, promote=promote)
+    expected = {"prerequisite_chunk_id": first_id, "unmet_count": 2}
+
+    assert _detail(hub, dependent_id)["blocked"] == expected
+    assert _list_entry(hub, dependent_id)["blocked"] == expected
+    read_list = _queue_entry if promote else _backlog_entry
+    assert read_list(hub, dependent_id)["blocked"] == expected
+
+
+@pytest.mark.parametrize("promote", [True, False])
+def test_folding_the_earliest_prerequisite_keeps_the_marking_naming_the_survivor(tmp_path: Path, promote: bool) -> None:
+    """The fold-minted D->S edge lands after D->B in insertion order but carries D->A's
+    earlier instant, so the earliest-declared naming moves to S — not to B."""
+    hub = build_hub(tmp_path)
+    dependent_id, first_id, _, survivor_id = _two_unmet_prerequisites(hub, promote=promote)
+
+    resp = hub.client.post(f"/api/chunks/{survivor_id}/group", json={"merge_chunk_ids": [first_id]})
+    assert resp.status_code == 200, resp.text
+
+    expected = {"prerequisite_chunk_id": survivor_id, "unmet_count": 2}
+    assert _detail(hub, dependent_id)["blocked"] == expected
+    assert _list_entry(hub, dependent_id)["blocked"] == expected
+    read_list = _queue_entry if promote else _backlog_entry
+    assert read_list(hub, dependent_id)["blocked"] == expected

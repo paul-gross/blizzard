@@ -11,13 +11,13 @@ import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunks.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotGroupable, FoldWouldCloseCycle, GroupService
@@ -32,12 +32,18 @@ def _chunk(chunk_id: str, *, work_refs: list[WorkRef] | None = None) -> Chunk:
     return Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=work_refs or [], minted_at=_T0)
 
 
-def _edge(dependent_chunk_id: str, prerequisite_chunk_id: str, *, dependency_id: str | None = None) -> DependencyEdge:
+def _edge(
+    dependent_chunk_id: str,
+    prerequisite_chunk_id: str,
+    *,
+    dependency_id: str | None = None,
+    declared_at: datetime = _T0,
+) -> DependencyEdge:
     return DependencyEdge(
         dependency_id=dependency_id or f"dep_{dependent_chunk_id}_{prerequisite_chunk_id}",
         dependent_chunk_id=dependent_chunk_id,
         prerequisite_chunk_id=prerequisite_chunk_id,
-        declared_at=_T0,
+        declared_at=declared_at,
         declared_by="operator",
     )
 
@@ -246,7 +252,7 @@ def test_two_targets_sharing_an_outside_edge_mint_only_once_across_the_fold() ->
     assert len(dependencies.folds) == 2
     by_chunk = {fold["chunk_id"]: fold for fold in dependencies.folds}
     assert by_chunk["chk_a"]["release"] == ["dep_a_outside"]
-    assert by_chunk["chk_a"]["mint"] == [("chk_survivor", "chk_outside")]
+    assert by_chunk["chk_a"]["mint"] == [FoldMint("chk_survivor", "chk_outside", _T0)]
     assert by_chunk["chk_b"]["release"] == ["dep_b_outside"]
     assert by_chunk["chk_b"]["mint"] == []  # the pair already resulted from chk_a's mint
 
@@ -284,8 +290,60 @@ def test_a_genuinely_new_edge_is_released_and_re_minted_attributed_to_its_own_ta
     fold = dependencies.folds[0]
     assert fold["chunk_id"] == "chk_target"
     assert fold["release"] == ["dep_dependent_target"]
-    assert fold["mint"] == [("chk_dependent", "chk_survivor")]
+    assert fold["mint"] == [FoldMint("chk_dependent", "chk_survivor", _T0)]
     assert fold["by"] == "fold"
+
+
+def test_a_minted_pair_carries_its_source_edges_declared_at() -> None:
+    """The fold's own instant stamps only the release; the re-minted edge keeps the
+    instant the edge it replaces was first declared."""
+    earlier = _T0 - timedelta(hours=3)
+    chunks = {"chk_survivor": _chunk("chk_survivor"), "chk_target": _chunk("chk_target")}
+    facts = {cid: _not_ready_facts() for cid in chunks}
+    edges = [_edge("chk_dependent", "chk_target", dependency_id="dep_old", declared_at=earlier)]
+    service, _, dependencies = _service(chunks, facts, edges=edges)
+
+    service.group("chk_survivor", ["chk_target"])
+
+    fold = dependencies.folds[0]
+    assert fold["mint"] == [FoldMint("chk_dependent", "chk_survivor", earlier)]
+    assert fold["at"] != earlier
+
+
+def test_a_later_standing_survivor_edge_is_released_and_re_minted_at_the_earlier_instant() -> None:
+    """D->target@t1 and D->survivor@t3 collapse to one pair: the later standing edge is
+    released too — attributed to the target owning the earlier edge — and the pair
+    re-minted at t1, so the earliest-declared naming survives the fold."""
+    t1, t3 = _T0 - timedelta(hours=3), _T0 - timedelta(hours=1)
+    chunks = {"chk_survivor": _chunk("chk_survivor"), "chk_target": _chunk("chk_target")}
+    facts = {cid: _not_ready_facts() for cid in chunks}
+    edges = [
+        _edge("chk_dependent", "chk_target", dependency_id="dep_target", declared_at=t1),
+        _edge("chk_dependent", "chk_survivor", dependency_id="dep_survivor", declared_at=t3),
+    ]
+    service, _, dependencies = _service(chunks, facts, edges=edges)
+
+    service.group("chk_survivor", ["chk_target"])
+
+    fold = dependencies.folds[0]
+    assert fold["release"] == ["dep_target", "dep_survivor"]
+    assert fold["mint"] == [FoldMint("chk_dependent", "chk_survivor", t1)]
+
+
+def test_an_equal_instant_survivor_duplicate_keeps_the_existing_edge() -> None:
+    chunks = {"chk_survivor": _chunk("chk_survivor"), "chk_target": _chunk("chk_target")}
+    facts = {cid: _not_ready_facts() for cid in chunks}
+    edges = [
+        _edge("chk_dependent", "chk_target", dependency_id="dep_target"),
+        _edge("chk_dependent", "chk_survivor", dependency_id="dep_survivor"),
+    ]
+    service, _, dependencies = _service(chunks, facts, edges=edges)
+
+    service.group("chk_survivor", ["chk_target"])
+
+    fold = dependencies.folds[0]
+    assert fold["release"] == ["dep_target"]
+    assert fold["mint"] == []
 
 
 def test_fold_that_would_close_a_cycle_raises_and_writes_nothing() -> None:
