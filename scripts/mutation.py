@@ -15,8 +15,10 @@ import ast
 import fnmatch
 import json
 import os
+import re
 import shutil
 import signal
+import subprocess
 import sys
 import threading
 import tomllib
@@ -35,6 +37,11 @@ REPORT_NAME = "report.json"
 # Distinct from mutmut's own exit codes (it never exits non-zero for survivors) — this is
 # the caller-facing signal that the run stopped on --budget and should be re-invoked.
 BUDGET_EXIT_CODE = 3
+# An unresolvable --since revision: the caller asked for a narrowed run this cannot give, and
+# it never widens to a full one.
+BAD_REVISION_EXIT_CODE = 2
+# The assertion mutmut raises when the mutant names it was given match no mutant.
+NO_MATCHING_MUTANTS_MESSAGE = "Filtered for specific mutants, but nothing matches"
 
 
 def _load_module_by_path(name: str, path: Path) -> ModuleType:
@@ -332,11 +339,14 @@ def ensure_mutant_tree_for_scope(
     mutants_dir: Path = MUTANTS_DIR,
     tests_root: Path = TESTS_ROOT,
     repo_root: Path = REPO_ROOT,
+    *,
+    fresh: bool = False,
 ) -> list[str]:
     """Prepare `mutants_dir` for `scope` and return the test selection frozen with it.
 
-    A tree built for another scope, or carrying no scope marker at all, is cleared; a
-    repeat of the same scope keeps it — that is what makes resume possible. The selection
+    A tree built for another scope, or carrying no scope marker at all, is cleared, and so
+    is any tree when `fresh`; a repeat of the same scope keeps it — that is what makes
+    resume possible. The selection
     is computed once, when the tree is built, and reused on every resume: mutmut
     fingerprints it, and any change to it discards every cached verdict. A frozen test file
     since deleted from the tree is dropped rather than handed to pytest.
@@ -345,7 +355,7 @@ def ensure_mutant_tree_for_scope(
     prepare_mutant_tree = repo_files.prepare_mutant_tree
 
     marker = mutants_dir / SCOPE_MARKER_NAME
-    if mutants_dir.exists() and (not marker.is_file() or marker.read_text().strip() != scope.slug):
+    if mutants_dir.exists() and (fresh or not marker.is_file() or marker.read_text().strip() != scope.slug):
         shutil.rmtree(mutants_dir)
 
     mutants_dir.mkdir(parents=True, exist_ok=True)
@@ -408,6 +418,116 @@ def install_atomic_meta_save(mutation_data_class: type) -> None:
     mutation_data_class.save = atomic_save  # type: ignore[attr-defined]
 
 
+# --- delta: the functions a revision range changed, as mutant-name globs ----------------------
+
+_HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+_SOURCE_DIFF_ROOT = "src/blizzard"
+
+
+def changed_line_ranges(diff_text: str) -> dict[str, list[tuple[int, int]]]:
+    """Per file, the `(first, last)` new-side lines a zero-context unified diff touches.
+
+    A pure deletion touches no new-side line, so it is recorded as the empty range
+    `(after, after - 1)` at the line it followed; `functions_touching` reads that as a
+    change to a function that spans `after`.
+    """
+    ranges: dict[str, list[tuple[int, int]]] = {}
+    current: list[tuple[int, int]] | None = None
+    for line in diff_text.splitlines():
+        if line.startswith("+++ "):
+            target = line[4:]
+            current = ranges.setdefault(target[2:], []) if target.startswith("b/") else None
+            continue
+        header = _HUNK_HEADER.match(line)
+        if header is None or current is None:
+            continue
+        start = int(header.group(1))
+        count = int(header.group(2)) if header.group(2) is not None else 1
+        current.append((start, start + count - 1) if count else (start, start - 1))
+    return ranges
+
+
+def functions_touching(source: str, ranges: Iterable[tuple[int, int]]) -> list[tuple[str | None, str]]:
+    """The `(class or None, function)` pairs mutmut mutates whose lines `ranges` touch.
+
+    mutmut mutates a module-level function and a method of a module-level class, whole; a
+    function nested inside either is part of its enclosing one. A decorator line belongs to
+    its function.
+    """
+    tree = ast.parse(source)
+    spans: list[tuple[str | None, str, int, int]] = []
+
+    def add(class_name: str | None, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        first = min([node.lineno, *(d.lineno for d in node.decorator_list)])
+        spans.append((class_name, node.name, first, node.end_lineno or node.lineno))
+
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            add(None, node)
+        elif isinstance(node, ast.ClassDef):
+            for member in node.body:
+                if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef):
+                    add(node.name, member)
+
+    def touched(first: int, last: int, lo: int, hi: int) -> bool:
+        if hi < lo:  # a pure deletion after line `lo`; one at the last line shrank the tail
+            return first <= lo <= last
+        return lo <= last and first <= hi
+
+    ranges = list(ranges)
+    return [(c, n) for c, n, first, last in spans if any(touched(first, last, lo, hi) for lo, hi in ranges)]
+
+
+def mutant_module_name(rel_path: str) -> str:
+    """The dotted module prefix mutmut gives the mutants of `rel_path` (mirrors its `get_mutant_name`)."""
+    module = rel_path.removesuffix(".py").replace("/", ".").removeprefix("src.")
+    return module.removesuffix(".__init__")
+
+
+def mutant_name_globs(rel_path: str, functions: Iterable[tuple[str | None, str]]) -> list[str]:
+    module = mutant_module_name(rel_path)
+    return [
+        f"{module}.x{_CLASS_NAME_SEPARATOR}{class_name}{_CLASS_NAME_SEPARATOR}{name}__mutmut_*"
+        if class_name
+        else f"{module}.x_{name}__mutmut_*"
+        for class_name, name in functions
+    ]
+
+
+class UnknownRevisionError(ValueError):
+    def __init__(self, revision: str) -> None:
+        self.revision = revision
+        super().__init__(f"mutation: --since {revision!r} does not name a commit in this repository")
+
+
+def _git(*args: str, repo_root: Path) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=repo_root, check=True, capture_output=True, text=True, encoding="utf-8"
+    ).stdout
+
+
+def changed_mutant_globs(scope: Scope, since: str, repo_root: Path = REPO_ROOT) -> list[str]:
+    """Mutant-name globs for every function in `scope`'s ground whose source differs between `since` and HEAD.
+
+    Raises `UnknownRevisionError` for a `since` that names no commit; it never falls back to the whole scope.
+    """
+    try:
+        _git("rev-parse", "--verify", "--quiet", f"{since}^{{commit}}", repo_root=repo_root)
+    except subprocess.CalledProcessError:
+        raise UnknownRevisionError(since) from None
+
+    diff_args = ("diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", since, "HEAD", "--", _SOURCE_DIFF_ROOT)
+    diff = _git(*diff_args, repo_root=repo_root)
+    ranges = changed_line_ranges(diff)
+    ground = files_for_scope(scope, (Path(path) for path in ranges if path.endswith(".py")))
+
+    globs: list[str] = []
+    for path in sorted(ground):
+        source = _git("show", f"HEAD:{path.as_posix()}", repo_root=repo_root)
+        globs.extend(mutant_name_globs(path.as_posix(), functions_touching(source, ranges[path.as_posix()])))
+    return globs
+
+
 # --- report building: kept import-clean of mutmut, so it runs in the default environment ---
 
 # Mirrors mutmut 3.8.0's mutmut.stats.status_by_exit_code — a small, stable table, and
@@ -456,7 +576,24 @@ def _real_diff_provider(mutant_name: str, source_path: Path) -> str:
     return get_diff_for_mutant(mutant_name, path=source_path)
 
 
-def build_report(*, scope: str, mutants_dir: Path, diff_provider: DiffProvider) -> dict:
+def _in_delta(mutant_name: str, name_globs: list[str] | None) -> bool:
+    return name_globs is None or any(fnmatch.fnmatch(mutant_name, glob) for glob in name_globs)
+
+
+def build_report(
+    *,
+    scope: str,
+    mutants_dir: Path,
+    diff_provider: DiffProvider,
+    name_globs: list[str] | None = None,
+    since: str | None = None,
+    complete: bool = True,
+) -> dict:
+    """Count and list what `mutants_dir` holds, restricted to mutants matching `name_globs` when given.
+
+    `complete` is False when the run stopped on its budget: the counts then carry the
+    unchecked mutants under `not checked`, and the survivors are only those found so far.
+    """
     counts = dict.fromkeys(KNOWN_STATUSES, 0)
     survivors: list[dict] = []
     total = 0
@@ -469,6 +606,8 @@ def build_report(*, scope: str, mutants_dir: Path, diff_provider: DiffProvider) 
             continue
 
         for mutant_name, exit_code in meta.get("exit_code_by_key", {}).items():
+            if not _in_delta(mutant_name, name_globs):
+                continue
             total += 1
             status = STATUS_BY_EXIT_CODE.get(exit_code, "suspicious")
             counts[status] += 1
@@ -486,14 +625,30 @@ def build_report(*, scope: str, mutants_dir: Path, diff_provider: DiffProvider) 
 
     return {
         "scope": scope,
+        "since": since,
+        "complete": complete,
         "total": total,
         "counts": counts,
         "survivors": survivors,
     }
 
 
-def write_report(scope: Scope, mutants_dir: Path = MUTANTS_DIR) -> dict:
-    report = build_report(scope=scope.slug, mutants_dir=mutants_dir, diff_provider=_real_diff_provider)
+def write_report(
+    scope: Scope,
+    mutants_dir: Path = MUTANTS_DIR,
+    *,
+    name_globs: list[str] | None = None,
+    since: str | None = None,
+    complete: bool = True,
+) -> dict:
+    report = build_report(
+        scope=scope.slug,
+        mutants_dir=mutants_dir,
+        diff_provider=_real_diff_provider,
+        name_globs=name_globs,
+        since=since,
+        complete=complete,
+    )
     (mutants_dir / REPORT_NAME).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return report
 
@@ -501,7 +656,11 @@ def write_report(scope: Scope, mutants_dir: Path = MUTANTS_DIR) -> dict:
 # --- driving mutmut in-process, with a budget bounding only mutant execution ---------------
 
 
-def _run_with_budget(budget_seconds: float | None, mutmut_main: ModuleType | None = None) -> bool:
+def _run_with_budget(
+    budget_seconds: float | None,
+    mutmut_main: ModuleType | None = None,
+    mutant_names: tuple[str, ...] = (),
+) -> bool:
     """Run mutmut's `run` command in-process. Returns False iff `budget_seconds` expired.
 
     The budget starts counting only once mutmut starts its mutant workers — never during
@@ -553,10 +712,15 @@ def _run_with_budget(budget_seconds: float | None, mutmut_main: ModuleType | Non
     # try/except and surface here as KeyboardInterrupt, or inside an in-process pytest run
     # that swallows it and makes mutmut exit(1) — either way, the budget is what stopped it.
     try:
-        mutmut_main._run((), None)
+        mutmut_main._run(mutant_names, None)
     except (KeyboardInterrupt, SystemExit):
         if not budget_expired.is_set():
             raise
+    except AssertionError as exc:
+        # A delta whose changed functions carry no mutant (a decorated body mutmut skips) matches nothing.
+        if mutant_names and str(exc).startswith(NO_MATCHING_MUTANTS_MESSAGE):
+            return True
+        raise
     finally:
         run_finished.set()
         if timer is not None:
@@ -566,7 +730,13 @@ def _run_with_budget(budget_seconds: float | None, mutmut_main: ModuleType | Non
     return not budget_expired.is_set()
 
 
-def run_scope(scope: Scope, *, test_selection: list[str], budget_seconds: float | None) -> bool:
+def run_scope(
+    scope: Scope,
+    *,
+    test_selection: list[str],
+    budget_seconds: float | None,
+    mutant_names: tuple[str, ...] = (),
+) -> bool:
     import mutmut.__main__ as mutmut_main
     from mutmut.configuration import config
     from mutmut.mutation.data import SourceFileMutationData
@@ -579,7 +749,7 @@ def run_scope(scope: Scope, *, test_selection: list[str], budget_seconds: float 
     # retried on resume, the same as one mutmut never got to at all.
     mutmut_main._reset_mutant_results(lambda _key, exit_code: exit_code == 2)
 
-    return _run_with_budget(budget_seconds)
+    return _run_with_budget(budget_seconds, mutant_names=mutant_names)
 
 
 # --- CLI -------------------------------------------------------------------------------------
@@ -596,7 +766,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         help="Seconds to bound mutant execution (not mutant generation, coverage mapping, or the clean-test runs). "
-        "On expiry the run stops and exits non-zero; re-invoke the same scope to resume.",
+        "On expiry the run stops, writes an incomplete report counting the unchecked mutants, and exits 3; "
+        "re-invoke the same scope to resume.",
+    )
+    parser.add_argument(
+        "--since",
+        metavar="REV",
+        default=None,
+        help="Mutate and report only the functions in the scope whose source differs between REV and HEAD. "
+        "No changed function gives an empty, complete report; a REV that names no commit exits 2 without running.",
+    )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Discard any existing mutant tree and its verdicts first, so nothing from an earlier run is resumed.",
     )
     return parser.parse_args(argv)
 
@@ -610,14 +793,31 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     os.chdir(REPO_ROOT)
-    test_selection = ensure_mutant_tree_for_scope(scope, MUTANTS_DIR)
+    name_globs: list[str] | None = None
+    if args.since is not None:
+        try:
+            name_globs = changed_mutant_globs(scope, args.since)
+        except UnknownRevisionError as exc:
+            print(exc, file=sys.stderr)
+            return BAD_REVISION_EXIT_CODE
 
-    completed = run_scope(scope, test_selection=test_selection, budget_seconds=args.budget)
+    if name_globs is not None and not name_globs:
+        MUTANTS_DIR.mkdir(parents=True, exist_ok=True)
+        write_report(scope, MUTANTS_DIR, name_globs=name_globs, since=args.since)
+        return 0
+
+    test_selection = ensure_mutant_tree_for_scope(scope, MUTANTS_DIR, fresh=args.fresh)
+
+    completed = run_scope(
+        scope,
+        test_selection=test_selection,
+        budget_seconds=args.budget,
+        mutant_names=tuple(name_globs or ()),
+    )
+    write_report(scope, MUTANTS_DIR, name_globs=name_globs, since=args.since, complete=completed)
     if not completed:
         print(f"mutation: --budget expired before {scope.slug!r} finished; re-run to resume", file=sys.stderr)
         return BUDGET_EXIT_CODE
-
-    write_report(scope, MUTANTS_DIR)
     return 0
 
 
