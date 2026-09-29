@@ -188,7 +188,7 @@ unsupported and omits it, the same one-log-line-and-drop treatment an unrecogniz
 The window-versus-rotation ordering is the whole authoring decision: set below `rotate.max_context_tokens` — the only
 rotation bound a window is commensurable with — the window fires repeatedly inside one long node, costing the worker its
 working context each firing; set above it, rotation ends an ordinary lineage first and the window remains a ceiling on
-the one invocation that outgrows it. advanced-development-workflow sets one window on all four pools, above that bound;
+the one invocation that outgrows it. advanced-development-workflow sets one window on all five pools, above that bound;
 neither number comes from measured compaction data — none exists yet.
 
 ## The worker environment

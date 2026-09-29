@@ -1,9 +1,10 @@
 # The advanced-development-workflow graph — plan -> plan-review -> build -> verify ->
-# review -> pre-push -> deliver, on one single linear track.
+# mutation -> review -> pre-push -> deliver, on one single linear track.
 #
 # The heavyweight lane: adopt-or-produce a plan gated on the project's declared
 # verification methods and architecture guidance, build the phases strictly in order,
-# close the build with the verify finale, cold multi-axes review, then a pre-push
+# close the build with the verify finale, an advisory mutation report on the change's
+# own functions, cold multi-axes review, then a pre-push
 # rebase: rebase every ahead repo onto the current base branch, resolve conflicts
 # inside the rebase, run lint plus judgement-scoped unit tests, and triage severity —
 # clean proceeds to delivery, insignificant conflicts re-enter review, semantic
@@ -18,7 +19,7 @@
 name: adv-dwf
 entry: plan
 
-# Named session pools. Four lineages, each with its own capability tier:
+# Named session pools. Five lineages, each with its own capability tier:
 #
 #   planning      the plan node's own long-running context, on the advanced tier —
 #                 authoring a plan against the project's declared verification methods
@@ -34,6 +35,9 @@ entry: plan
 #                 276k. What verify establishes still reaches the nodes that need it —
 #                 through the verification-report asset and the `fail` edge's prompt
 #                 addendum — rather than through a shared conversation.
+#   measurement   the advisory mutation step's own lineage, on the basic tier. No `rotate:`
+#                 block: it is only ever reached through `fresh:measurement`, so its head is
+#                 minted every entry and rotation never applies.
 #   gate          the two cold-eyes gates, on the basic tier. No `rotate:` block: a gate
 #                 is only ever reached through `fresh:gate`, so its head is minted every
 #                 entry and rotation never applies.
@@ -96,12 +100,17 @@ sessions:
       max_invocations: 12
       max_context_tokens: 300000
       max_transcript_bytes: 10000000
+  measurement:
+    # Fresh every entry, like `gate`: the window is declared for uniformity and inert
+    # here, since a freshly minted head has no long-lived context to reach it.
+    model: ["blizzard:basic"]
+    compaction_window: "450000"
   gate:
     # The plan gate's fold stays basic-tier deliberately: it transcribes the gate's own
     # already-rendered findings into the plan text — editing, not authoring. The
     # judgement-heavy authoring stays in `planning`. It still carries no `rotate:` block:
     # `fresh:gate` mints its head on every entry, so rotation never applies. The window is
-    # declared anyway — uniform across all four pools, and inert here for the same reason,
+    # declared anyway — uniform across all five pools, and inert here for the same reason,
     # since a freshly minted head has no long-lived context to reach it.
     model: ["blizzard:basic"]
     compaction_window: "450000"
@@ -220,11 +229,32 @@ nodes:
       choices:
         pass:
           description: The change verified end to end through verification methods the project declares.
-          to: review
+          to: mutation
         fail:
           description: Verification surfaced failures the finale could not close, recorded in the verification-report asset.
           to: build
           prompt_addendum: ./prompts/build.from-verify.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  mutation:
+    executor: runner
+    prompt: ./prompts/mutation.md
+    session: fresh:measurement  # advisory and cold: it reads the declared tips, never a
+      # prior node's conversation
+    produces:
+      - mutation-report
+      - retrospective
+    judgement:
+      prompt: ./prompts/mutation.judgement.md
+      # One verdict, by design: what makes the step advisory is that no survivor, failure,
+      # or overrun has an edge to take.
+      choices:
+        reported:
+          description: The mutation report is published — its survivors, or the reason there are none — and review reads it.
+          to: review
+          prompt_addendum: ./prompts/review.from-mutation.md
     retries:
       max: 2
       exhausted: escalate
