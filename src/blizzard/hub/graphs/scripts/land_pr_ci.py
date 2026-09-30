@@ -1,11 +1,8 @@
 """The PR + CI-watch delivery policy's `deliver` node script — self-healing. Routes by the
 PR's live ``mergeable_state`` plus, for a ``clean``/``blocked``/``unstable`` head, its check
-runs — what eligibility turns on. ``behind`` self-heals via ``update-branch``, ``dirty`` is
-the one true LLM kick-back, everything else waits. Merges via merge commit. Honors the
-hub-command-node authoring contract (``blizzard-context:/standards/hub-nodes.md``).
-
-The submitted commit stays authoritative: a PR head that is not that commit plus base merges of its own prints
-``failure`` with foreign-head findings, and nothing is updated or merged for any repo."""
+runs: ``behind`` self-heals via ``update-branch``, ``dirty`` is the one true LLM kick-back,
+everything else waits. A head beyond the submitted commit plus its own base merges prints
+``failure`` and merges nothing (``blizzard-context:/standards/hub-nodes.md``)."""
 
 from __future__ import annotations
 
