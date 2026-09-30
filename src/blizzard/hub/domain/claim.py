@@ -55,16 +55,6 @@ class ClaimDeniedPaused(Exception):
         self.runner_id = runner_id
 
 
-class ClaimDeniedRetired(ClaimDeniedPaused):
-    """The claiming runner is retired — refused before any race, keyed on its id so a
-    token-less caller under ``warn`` is refused too. A :class:`ClaimDeniedPaused` so it
-    rides the same 403 denial shape an older runner already reads."""
-
-    def __init__(self, *, runner_id: str) -> None:
-        Exception.__init__(self, f"runner {runner_id} is retired")
-        self.runner_id = runner_id
-
-
 class ClaimDeniedTerminal(Exception):
     """The chunk is already terminal ({done, stopped}) — refused before the race,
     mirroring :class:`ClaimDeniedPaused`'s shape: this is not a race loss, the chunk
@@ -157,8 +147,8 @@ class ClaimService:
         # Checked before the lock: a paused runner is refused regardless of whether it
         # would have won the race, so there is nothing here for the CAS to serialize.
         registration = self._registry.get_runner(runner_id)
-        if registration is not None and registration.retired:
-            raise ClaimDeniedRetired(runner_id=runner_id)
+        if registration is not None:
+            registration.refuse_if_retired(action="claim")
         if registration is not None and registration.hub_paused:
             raise ClaimDeniedPaused(runner_id=runner_id)
         with self._exclusive.locked([chunk.chunk_id]) as handle:
@@ -216,8 +206,8 @@ class ClaimService:
         # Re-fetched fresh under the lock, never the pre-lock read the
         # paused guard used: a capability change landing after this runner's peek must not race the claim.
         registration = handle.runner_registration(runner_id)
-        if registration is not None and registration.retired:
-            raise ClaimDeniedRetired(runner_id=runner_id)
+        if registration is not None:
+            registration.refuse_if_retired(action="claim")
         if registration is not None and registration.capabilities:
             eligible = EligibilityCheck(chunk, graph, node, registration.capabilities).eligible
             if not eligible:

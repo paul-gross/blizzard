@@ -45,7 +45,6 @@ from blizzard.hub.domain.claim import (
     ClaimDeniedDependency,
     ClaimDeniedIncompatible,
     ClaimDeniedPaused,
-    ClaimDeniedRetired,
     ClaimDeniedTerminal,
 )
 from blizzard.hub.domain.envelope import Arrival, Envelope
@@ -627,7 +626,7 @@ def claim_route(
             workspace_id=claim.workspace_id,
             environment_ids=claim.environment_ids,
         )
-    except ClaimDeniedRetired as exc:
+    except RunnerRetired as exc:
         retired_denial = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id, detail=str(exc))
         return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=retired_denial.model_dump())
     except ClaimDeniedPaused as exc:
@@ -887,19 +886,18 @@ def register_runner(
         else None
     )
     try:
-        services.fleet.refuse_retired(services.registry.get_runner(request.runner_id), action="registration")
+        first = services.fleet.register(
+            request.runner_id,
+            request.workspace_id,
+            env_capacity=request.env_capacity,
+            public_url=request.url,
+            redirect_uris=tuple(request.redirect_uris),
+            capabilities=capabilities,
+            subscriptions=subscriptions,
+            gates=tuple(request.gates),
+        )
     except RunnerRetired as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    first = services.fleet.register(
-        request.runner_id,
-        request.workspace_id,
-        env_capacity=request.env_capacity,
-        public_url=request.url,
-        redirect_uris=tuple(request.redirect_uris),
-        capabilities=capabilities,
-        subscriptions=subscriptions,
-        gates=tuple(request.gates),
-    )
     services.events.publish_runner_changed(request.runner_id, kind="registered")
     return RunnerRegistrationResponse(runner_id=request.runner_id, first_registration=first)
 
@@ -913,10 +911,10 @@ def heartbeat_runner(
     """Refresh a runner's liveness — the slow runner-level heartbeat. Returns 204; 403 when retired."""
     fleet.assert_owns(runner_id)
     try:
-        services.fleet.refuse_retired(services.registry.get_runner(runner_id), action="heartbeat")
+        alive = services.fleet.heartbeat(runner_id)
     except RunnerRetired as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    if not services.fleet.heartbeat(runner_id):
+    if not alive:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
     services.events.publish_runner_changed(runner_id, kind="heartbeat")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

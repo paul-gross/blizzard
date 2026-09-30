@@ -203,7 +203,7 @@ def authorize(
     else:
         registration = services.registry.get_runner(client)
         # A retired runner is treated as unknown — it is no federation target.
-        if registration is None or registration.retired or redirect_uri not in registration.redirect_uris:
+        if registration is None or not registration.is_federation_target(redirect_uri):
             # One undifferentiated 400 for both cases — the open-redirect guard (AC):
             # a caller cannot fingerprint valid client ids by probing.
             raise HTTPException(
