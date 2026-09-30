@@ -252,7 +252,7 @@ def test_status_renders_a_miss_reason_for_a_lapsed_subscription(
         result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
-    assert "anthropic (anthropic): miss (credential_lapsed)" in result.output
+    assert "anthropic (anthropic): miss (credential lapsed: log in again)" in result.output
 
 
 @pytest.mark.component

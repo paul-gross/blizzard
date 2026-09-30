@@ -11,6 +11,7 @@ import click
 
 from blizzard.runner.cli.daemon import RunnerDaemon
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
+from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT, SampleMissReason
 
 # The operator's TCP door onto the local API — the override for when the socket is not
 # the right address. `BZ_*` is the operator's config namespace, distinct from the worker's
@@ -143,8 +144,10 @@ def status(directory: str, runner_url: str | None) -> None:
         elif sub["ok"]:
             click.echo(f"  {sub['slug']} ({sub['provider']}): ok, sampled at {sub['sampled_at']}{renewal_suffix}")
         else:
+            reason = sub["miss_reason"]
+            miss_text = MISS_REASON_TEXT.get(SampleMissReason(reason), reason) if reason in SampleMissReason else reason
             click.echo(
-                f"  {sub['slug']} ({sub['provider']}): miss ({sub['miss_reason']}), "
+                f"  {sub['slug']} ({sub['provider']}): miss ({miss_text}), "
                 f"last attempt {sub['sampled_at']}{renewal_suffix}"
             )
 
