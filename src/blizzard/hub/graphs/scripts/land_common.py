@@ -358,7 +358,7 @@ class PullRequest:
         :class:`PullRequestOpenError` or :class:`PullRequestLookupError` on a forge hiccup."""
         repo = run.repo(commit["repo"])
         branch = commit["branch"]
-        merged = cls._merged_for_branch(run, repo, branch)
+        merged = cls._merged_for_branch(run, repo, branch, commit["commit"])
         if merged is not None:
             return cls._record(cls(run, commit["repo"], int(merged["number"]), {}).reread())
         _, listed = run.api("GET", f"/repos/{repo}/pulls?state=open")
@@ -395,10 +395,10 @@ class PullRequest:
         return pull
 
     @staticmethod
-    def _merged_for_branch(run: LandRun, repo: str, branch: str) -> dict[str, Any] | None:
-        """The already-merged PR that landed ``branch``'s live tip into THIS run's own
-        base, or ``None`` when the read confirms there is none — never a same-name PR
-        merged into a different base, and never a degraded read, which raises
+    def _merged_for_branch(run: LandRun, repo: str, branch: str, sha: str) -> dict[str, Any] | None:
+        """The already-merged PR that landed ``sha`` — else ``branch``'s live tip — into
+        THIS run's own base, or ``None`` when the read confirms there is none — never a
+        same-name PR merged into a different base, and never a degraded read, which raises
         :class:`PullRequestLookupError` instead of degrading to "no merged PR here"
         (``bzh:hub-node-step-idempotence``)."""
         candidates: list[dict[str, Any]] = []
@@ -419,7 +419,12 @@ class PullRequest:
                 break
         if not candidates:
             return None
+        recorded = next((p for p in candidates if p.get("head", {}).get("sha") == sha), None)
+        if recorded is not None:
+            return recorded
         status, ref = run.api("GET", f"/repos/{repo}/git/ref/heads/{branch}")
+        if status == 404:
+            return None  # the forge deleted the head branch on merge: the ref is gone, not unreadable
         if status != 200 or not isinstance(ref, dict):
             raise PullRequestLookupError(f"could not read {repo}:{branch}'s live tip (HTTP {status})")
         live_sha = (ref.get("object") or {}).get("sha")

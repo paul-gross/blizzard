@@ -486,6 +486,37 @@ def test_an_inherited_only_failure_fires_a_rerequest_once_and_pends(
     assert signature_posts[0]["name"] == f"ci-rerun/{_REPO}/build/headsha"
 
 
+@pytest.mark.parametrize("refusal", [403, 422])
+def test_a_refused_rerequest_writes_no_rerun_marker(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], refusal: int
+) -> None:
+    """The forge refusing the check-run rerequest is not a re-run: no `ci-rerun` marker
+    is written, so the next poll fires the rerequest again instead of routing the
+    inherited failure on."""
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_with_state(
+            calls,
+            mergeable_state="blocked",
+            head_check_runs=[_check_run("completed", "failure")],
+            base_check_runs=[_check_run("completed", "failure")],
+            rerequest_status=refusal,
+        ),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "pending"
+    assert [url for url in _urls(calls, "POST") if url.endswith("/check-runs/1/rerequest")]
+    assert not [
+        body
+        for m, url, body in calls
+        if m == "POST" and url == _CALLBACK_URL and body is not None and body["name"].startswith("ci-rerun/")
+    ]
+
+
 def test_a_re_requested_check_still_red_routes_the_inherited_failure_outcome(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1410,6 +1441,74 @@ def test_an_already_merged_pr_matching_the_live_branch_tip_is_recognized_without
     assert ("GET", f"{base}/pulls?state=open") not in [(m, u) for m, u, _ in calls], (
         "an already-merged PR is recognized before any open-PR search runs"
     )
+
+
+def test_an_already_merged_pr_is_recognized_after_the_forge_deleted_its_head_branch() -> None:
+    """A crash between the merge and the marker write, on a forge that deletes head
+    branches on merge: the live ref is a 404, and the closed PR's own recorded head sha
+    still matches the sha the run meant to land."""
+    base = f"http://forge/repos/{_REPO}"
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    responses = {
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (
+            200,
+            [
+                {
+                    "number": 1,
+                    "head": {"ref": _BRANCH, "sha": "the-head-sha"},
+                    "base": {"ref": "main"},
+                    "merged_at": "2024-01-01T00:00:00Z",
+                }
+            ],
+        ),
+        ("GET", f"{base}/git/ref/heads/{_BRANCH}"): (404, {"message": "Not Found"}),
+        ("GET", f"{base}/pulls/1"): (
+            200,
+            {
+                "number": 1,
+                "merged": True,
+                "head": {"ref": _BRANCH, "sha": "the-head-sha"},
+                "html_url": f"http://forge/{_REPO}/pull/1",
+            },
+        ),
+    }
+
+    def fake(method: str, url: str, *, token: str | None, body: dict[str, Any] | None, **_: Any) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        return responses[(method, url)]
+
+    run = _pull_request_run(fake)
+    pr = land_common.PullRequest.of(run, {"repo": _REPO, "branch": _BRANCH, "commit": "the-head-sha"})
+
+    assert pr.number == 1
+    assert pr.merged
+    assert ("POST", f"{base}/pulls") not in [(m, u) for m, u, _ in calls]
+
+
+def test_a_merged_pr_with_another_sha_and_a_deleted_branch_is_not_a_match() -> None:
+    """A 404 on the live ref means the branch is gone, not that the read failed: with no
+    closed PR matching the sha the run meant to land, there is no merged PR here."""
+    base = f"http://forge/repos/{_REPO}"
+    responses = {
+        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (
+            200,
+            [
+                {
+                    "number": 1,
+                    "head": {"ref": _BRANCH, "sha": "an-older-sha"},
+                    "base": {"ref": "main"},
+                    "merged_at": "2024-01-01T00:00:00Z",
+                }
+            ],
+        ),
+        ("GET", f"{base}/git/ref/heads/{_BRANCH}"): (404, {"message": "Not Found"}),
+    }
+
+    def fake(method: str, url: str, *, token: str | None, body: dict[str, Any] | None, **_: Any) -> tuple[int, Any]:
+        return responses[(method, url)]
+
+    run = _pull_request_run(fake)
+    assert land_common.PullRequest._merged_for_branch(run, _REPO, _BRANCH, "the-head-sha") is None
 
 
 def test_merged_for_branch_raises_lookup_error_on_a_non_200_closed_pulls_read(
