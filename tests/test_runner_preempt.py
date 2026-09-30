@@ -18,7 +18,7 @@ from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.outbound import COMPLETION_KIND
-from blizzard.runner.loop.steps import Pull
+from blizzard.runner.loop.steps import Pull, Reap
 from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -384,3 +384,62 @@ def test_an_older_restart_never_re_fences_the_lease_it_already_produced(tmp_path
 
     assert probe.killed == []
     assert store.active_lease("lease_1") is not None
+
+
+def test_lifting_an_operator_pause_preempts_and_re_enters_on_the_next_tick(tmp_path):  # type: ignore[no-untyped-def]
+    """The move outranked by the pause is not lost: on the first tick past the pause the
+    parked lease is preempted and the node re-entered on a fresh lease and session."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    paused = _restarted_hub()
+    paused.chunks["ch_1"] = _moved_chunk().model_copy(
+        update={"pause": PauseView(by="operator", set_at="2026-07-13T12:00:00Z")}
+    )
+    Pull(_ctx(store, paused)).run()
+    assert "lease_1" in store.pause_parked_lease_ids()
+    assert store.active_lease("lease_1") is not None  # parked, not yet preempted
+
+    handle = WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200)
+    harness = FakeHarness(handle=handle, verdict=None)
+    probe = FakeProbe(alive={(100, "start-100")})
+    Pull(_ctx(store, _restarted_hub(), harness=harness, probe=probe)).run()
+
+    assert probe.killed == [100]
+    closed = {record.lease.lease_id: record.reason for record in store.list_closed_leases(10)}
+    assert closed["lease_1"] == "preempted"
+    fresh = store.active_lease_for_chunk("ch_1")
+    assert fresh is not None and fresh.lease_id != "lease_1"
+    assert fresh.epoch == 3 and fresh.session_id == "sess-b"
+    assert harness.resume_froms == [None]
+
+
+def test_a_second_lease_at_the_forced_node_is_fresh_too(tmp_path):  # type: ignore[no-untyped-def]
+    """The hub keeps serving ``fresh`` until the chunk moves again, so a re-entry after the
+    first re-entry's lease was orphaned — no transition in between — mints once more."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_2",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=3,  # the first re-entry, minted above the restart at 2; never spawned
+            runner_id="r1",
+            retries_max=2,
+            session_name="main",
+            created_at=_NOW,
+        )
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = _restarted_hub()
+    hub.chunks["ch_1"] = _moved_chunk(epoch=3).model_copy(update={"restart_epochs": [2]})
+    handle = WorkerHandle(session_id="sess-c", pid=300, process_start_time="start-300", pgid=300)
+    harness = FakeHarness(handle=handle, verdict=None)
+
+    Reap(_ctx(store, hub, harness=harness, probe=FakeProbe())).run()
+
+    latest = store.active_lease_for_chunk("ch_1")
+    assert latest is not None and latest.lease_id != "lease_2"
+    assert latest.session_id == "sess-c"
+    assert harness.resume_froms == [None]  # minted again, not resumed off a pool head
