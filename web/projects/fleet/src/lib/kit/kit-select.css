@@ -54,6 +54,7 @@
   outline: none;
 }
 .option {
+  flex-shrink: 0;
   padding: 3px 12px;
   color: var(--text);
   cursor: pointer;
