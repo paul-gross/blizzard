@@ -60,7 +60,7 @@ sessions:
     compaction_window: "450000"
   code:
     model: ["blizzard:basic"]
-    # A compaction window (blizzard#343), NOT fit from a measured distribution the way the
+    # A compaction window, NOT fit from a measured distribution the way the
     # three numbers below are. 150000 sat below `rotate.max_context_tokens` so that
     # compaction would fire before rotation ended the lineage — but that is precisely what
     # made it fire over and over inside a single long build, and each firing costs the
@@ -317,24 +317,8 @@ nodes:
     run:
       - name: land-every-repo
         command: python3 -m blizzard.hub.graphs.scripts.land_pr_ci
-    # land_pr_ci reports the reserved `pending` outcome while any PR isn't yet eligible to
-    # merge — `unstable`/`unknown`/not-yet-clean, but ALSO a `clean` head whose checks
-    # haven't all finished green — so a transient forge state or in-flight CI polls in
-    # place (freeing the fleet-wide hub slot between polls) instead of bouncing validated
-    # work to build.
-    # A repo's PR reading `dirty` — a real merge conflict — routes the authored `conflict`
-    # edge immediately, without waiting out poll_timeout, straight to `resolve`, which is
-    # written for exactly this case, rather than to `build`.
-    # A `blocked`/`unstable` PR whose check run has completed with a terminal conclusion
-    # the base branch does NOT share on that same check routes immediately (without
-    # waiting out poll_timeout — issue #232) via the authored `failure` edge to `resolve`.
-    # A conclusion the base branch ALSO carries on that same check is re-run once instead:
-    # a green re-run resumes delivery with nothing charged, and a re-run that stays red
-    # routes the authored `inherited-failure` edge straight to `build` — the
-    # change did not cause it, so `resolve` has nothing to diagnose. A PR that never goes
-    # cleanly mergeable within poll_timeout, or a crash of the land script itself, also
-    # routes `failure` to `resolve`. `cancelled` is never treated as terminal on its own —
-    # a concurrency-group cancellation is not a failed job, so it is re-polled instead.
+    # Outcome classification: src/blizzard/hub/graphs/scripts/land_pr_ci.py;
+    # this graph owns the outcome routes below.
     poll_interval: 30
     poll_timeout: 1800
     judgement:
@@ -388,11 +372,8 @@ nodes:
     run:
       - name: materialize-review-findings
         command: python3 -m blizzard.hub.graphs.scripts.review_deliver
-    # The script reads no artifact names of its own — it addresses the hub, which reads
-    # this chunk's own newest `review-finding-delta` artifact (review's own `produces:`)
-    # server-side and materializes its `deferred` entries in one idempotent transaction
-    # (blizzard#582 D5/D6). None of the three outcomes routes back to build: the land
-    # step above already named a terminal choice.
+    # The review-findings-delivery route in src/blizzard/hub/api/chunks.py owns materialization;
+    # all outcomes below leave the delivery lane for retrospective.
     judgement:
       choices:
         recorded:

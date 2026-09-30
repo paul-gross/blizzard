@@ -2,14 +2,7 @@
 # scope, reconcile what was seen against proposals already on record, propose ideas,
 # deliver.
 #
-# Conforms to the canonical authoring schema (`blizzard-context:/domain/graphs.md`):
-# fused choice/edge entries, prompts as file references inlined at mint, retries
-# escaping to escalation, a hub-executed delivery node. It sits beside `garden-routine`
-# rather than inside it — same shape, opposite question: `garden-routine` judges the
-# target against a standard and proposes fixing what drifted from it; this graph judges
-# the target against its own stated intent and proposes what is still missing. Its
-# proposals cite no findings — there is nothing drifting to point at — and its own
-# three-class register lives in ./classes.md rather than ./ladder.md's five-rung one.
+# This graph's proposal classes are in ./classes.md.
 #
 # The target supplies what to judge by, not this graph. Every prompt here reads the
 # routine's own charge — the scope — out of the chunk's work item, and resolves the
@@ -30,16 +23,8 @@ sessions:
   match:
     model: ["blizzard:advanced"]
 
-# The wire formats a run's artifacts must conform to are NOT declared here, for the same
-# reason `garden-routine` does not carry a copy of them: the hub validates against a
-# shape that ships with its validator, so baking a copy into this mint would make the
-# graph a second owner of a fact it only obeys. Read at runtime from system scope —
-# `blizzard runner artifact get --scope system garden/finding-format` (for `delta`'s
-# shape) and `garden/proposal-format` (for `docket`'s).
-#
-# `classes`, below, is authored text this graph owns outright — the closed proposal-class
-# register — held here, out of the byte-barred prompt tree, the same way `garden-routine`
-# holds `ladder`. On the `artifacts:` key itself, see
+# Artifact shapes: system artifacts garden/finding-format and garden/proposal-format.
+# `classes` is this graph's proposal-class register. On the `artifacts:` key, see
 # ../../../../../docs/deployment/artifacts.md#graph-scope-artifacts
 artifacts:
   classes: ./classes.md

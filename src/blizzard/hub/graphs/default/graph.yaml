@@ -12,15 +12,14 @@
 #
 # Routing is authored as graph content, on the two primitives the engine already has:
 # a judgement choice whose `to:` names `graph:<name>` (a cross-graph MIGRATION target,
-# issue #90 — late-bound by name when taken, `bzh:ids-exact-names-correlate`), and the
+# late-bound by name when taken, `bzh:ids-exact-names-correlate`), and the
 # reserved `done` terminal. No lane declares a `triage` node, so a migration lands
 # at the target's entry — `bas-dwf`'s `build`, `adv-dwf`'s `plan`, `bas-hwf`'s `build`
 # — per the landing rule in `blizzard-context:/domain/graphs.md`. The choice table is
 # the extension point: a future lane is a new choice row and a re-mint, never an engine
-# change. `harness` (issue #231) is the first choice to exercise that point since the
-# original two.
+# change.
 #
-# The packaged set reconciles in directory order (`PackagedGraphs.paths`, issue #146):
+# The packaged set reconciles in directory order (`PackagedGraphs.paths`):
 # `advanced-development-workflow`, `basic-development-workflow`, and
 # `basic-harness-workflow` all sort before `default`, so every migration target is
 # minted before the graph that names them and the late-binding mint warning never fires
@@ -33,7 +32,7 @@
 name: default-delivery
 entry: triage
 
-# One named pool (issue #144): the routing call is the only judgement this graph
+# One named pool: the routing call is the only judgement this graph
 # makes, and getting it wrong mis-lanes the whole chunk — so triage runs on the
 # advanced tier, falling back to frontier (resolution is left-to-right; the tiers are
 # unordered roles, so the fallback is author-written, never implicit). The node is

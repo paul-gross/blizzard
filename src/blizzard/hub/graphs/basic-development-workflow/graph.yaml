@@ -46,7 +46,7 @@
 name: bas-dwf
 entry: build
 
-# Named session pools (issue #144). Two lineages, both on the basic tier:
+# Named session pools. Two lineages, both on the basic tier:
 #
 #   code  the mechanical build lineage, BOUNDED — it is the one that can accumulate
 #         indefinitely across a review-fail loop.
@@ -185,11 +185,8 @@ nodes:
     run:
       - name: materialize-review-findings
         command: python3 -m blizzard.hub.graphs.scripts.review_deliver
-    # The script reads no artifact names of its own — it addresses the hub, which reads
-    # this chunk's own newest `review-finding-delta` artifact (review's own `produces:`)
-    # server-side and materializes its `deferred` entries in one idempotent transaction
-    # (blizzard#582 D5/D6). None of the three outcomes routes back to build: the land
-    # step above already named a terminal choice.
+    # The review-findings-delivery route in src/blizzard/hub/api/chunks.py owns materialization;
+    # all outcomes below leave the delivery lane for retrospective.
     judgement:
       choices:
         recorded:
