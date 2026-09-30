@@ -87,10 +87,7 @@ class RestartService:
         # graphs themselves arrive resolved (``bzh:domain-takes-objects``).
         self._graphs = graphs
         self._clock = clock
-        # The locked-transaction seam (``bzh:store-exclusive-write``) shared with the
-        # claim and edit paths: this move reads the chunk's facts and then writes against
-        # them, the same read-then-write those two serialize on — via the row lock now,
-        # never an in-process lock.
+        # Read and write the chunk's facts under one row lock (``bzh:store-exclusive-write``).
         self._exclusive = exclusive
 
     def restart(

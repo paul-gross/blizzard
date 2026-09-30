@@ -187,8 +187,7 @@ class PerSubscriptionUsageView:
     def every(cls, registration: RunnerRegistration, *, now: datetime) -> tuple[PerSubscriptionUsageView, ...]:
         """Every subscription's usage view, sorted by slug: a declared roster switches
         membership from age-gated to roster-gated — every declared slug, whatever its
-        sample or miss age. With none declared, today's rule applies verbatim: sampled/missed
-        slugs gated by :data:`EXTERNAL_USAGE_STALE_AFTER`."""
+        sample or miss age. Without a roster, see :meth:`_rosterless_views`."""
         samples = {record.slug: record for record in registration.subscription_usage}
         misses = {record.slug: record for record in registration.subscription_usage_misses}
         if registration.declared_subscriptions is not None:
@@ -233,9 +232,9 @@ class PerSubscriptionUsageView:
         *,
         now: datetime,
     ) -> tuple[PerSubscriptionUsageView, ...]:
-        """The rosterless fallback — verbatim pre-declared-roster membership, over the
-        **union** of sample and miss rows per slug: a non-stale sample or a newest lapsed
-        miss outranking it (or an absent sample) admits the slug; a dead or stale
+        """The rosterless membership rule, over the **union** of sample and miss rows
+        per slug: a non-stale sample or a newest lapsed miss outranking it
+        (or an absent sample) admits the slug; a dead or stale
         subscription with only silent (non-lapsed) misses is simply absent. Once admitted,
         a surviving sample's fields are never blanked, stale or lapsed or not."""
         views: list[PerSubscriptionUsageView] = []
@@ -276,8 +275,7 @@ class PerSubscriptionUsageView:
     @staticmethod
     def _roster_lapsed(sample: SubscriptionUsageRecord | None, miss: SubscriptionUsageMissRecord | None) -> bool:
         """``True`` iff this slug's newest miss is a ``credential_lapsed`` newer than its
-        newest (or absent) sample — no staleness gate on either operand: an offline runner
-        already reads offline on its own row, so age no longer retires this."""
+        newest (or absent) sample, regardless of either record's age."""
         if miss is None or miss.reason != CREDENTIAL_LAPSED_CONDITION:
             return False
         return sample is None or as_utc(sample.sampled_at) < as_utc(miss.missed_at)

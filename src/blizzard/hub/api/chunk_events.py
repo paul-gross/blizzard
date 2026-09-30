@@ -16,9 +16,8 @@ from blizzard.hub.events.broker import ChunkChangeCause
 @dataclass(frozen=True)
 class ChunkFrameState:
     """One chunk's fully-loaded post-write state — everything a ``chunk-changed`` frame's
-    enrichment reads. ``chunk``/``graph`` are ``None`` on the gone-chunk/missing-graph
-    degrade branch, in which case ``from_graph``/``route`` are never loaded either, the
-    same reads :meth:`ChunkChanged.publish` used to skip."""
+    enrichment reads. A missing chunk or graph leaves ``from_graph`` as ``None``;
+    ``route`` reflects the loader's route read."""
 
     facts: ChunkFacts
     chunk: Chunk | None

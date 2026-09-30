@@ -200,8 +200,7 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         at: datetime,
     ) -> GardenProposal:
         """Insert the proposal row and its `garden_proposal_findings` link rows, in one
-        transaction. `findings` may be empty. `origin` defaults to `routine-run`,
-        matching every caller predating operator authorship."""
+        transaction. `findings` may be empty. `origin` defaults to `routine-run`."""
         ...
 
     def edit(self, proposal_id: str, *, title: str, class_: str, body: str) -> GardenProposal | None:

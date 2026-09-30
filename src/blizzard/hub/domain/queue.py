@@ -74,11 +74,9 @@ class MatchedEntry:
 def _capability_ineligible(
     chunk: Chunk, graph: Graph, facts: ChunkFacts | None, capabilities: Sequence[RunnerCapability]
 ) -> bool:
-    """Whether ``capabilities`` cannot work ``chunk``'s current node. Asserting no
-    capabilities at all — an empty snapshot, or a request declaring none — applies no
-    filter, matching the legacy peek's unfiltered reach-ahead for the head entry; this is
-    a deliberate divergence from :class:`EligibilityCheck` itself, which reads an empty
-    snapshot as satisfying nothing."""
+    """Whether ``capabilities`` cannot work ``chunk``'s current node. An empty
+    snapshot applies no capability filter; pinned by
+    ``test_no_capabilities_asserted_applies_no_capability_filter``."""
     if not capabilities:
         return False
     node_id = (facts.current_node_id() if facts is not None else None) or graph.entry_node_id
@@ -98,8 +96,7 @@ def select_matched_entry(
     policy: QueueMatchPolicy,
 ) -> MatchedEntry | None:
     """The matched peek's own selection: the first entry in ``chunks``'s order the caller
-    can both work (capability-eligible) and claim (not dependency-blocked). Moved hub-side
-    so a runner passing over an entry locally and re-peeking isn't handed it again. Under
+    can both work (capability-eligible) and claim (not dependency-blocked). Under
     :attr:`QueueMatchPolicy.HOLD` only the head is examined; :attr:`PASS_OVER` scans the
     whole order."""
     for position, chunk in enumerate(chunks):
