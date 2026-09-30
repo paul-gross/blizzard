@@ -7,7 +7,7 @@
   aria-haspopup="listbox"
   [attr.aria-expanded]="open()"
   [attr.aria-controls]="open() ? listboxId : null"
-  [attr.aria-label]="triggerName() ?? ariaLabel()"
+  [attr.aria-label]="triggerName()"
   [attr.data-testid]="testid()"
   (click)="toggle()"
 >

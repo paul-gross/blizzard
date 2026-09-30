@@ -1,11 +1,14 @@
 @if (harnessId(); as id) {
-  <span
-    class="tag"
+  <fleet-kit-badge
+    class="harness"
+    variant="pill"
+    tone="idle"
     data-testid="transcript-segment-harness"
     [attr.data-harness-id]="id"
     [attr.aria-label]="harnessName(id)"
-    >{{ harnessName(id) }}</span
   >
+    {{ harnessName(id) }}
+  </fleet-kit-badge>
 }
 @if (continuedFrom(); as prev) {
   <button type="button" class="seam" data-testid="transcript-continued-from" (click)="pickSegment.emit(prev.segment_id)">

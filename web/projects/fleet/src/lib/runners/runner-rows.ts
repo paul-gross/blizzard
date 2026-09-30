@@ -79,6 +79,9 @@ export interface RunnerRow extends RunnerView {
   readonly claims: readonly ClaimLine[];
   readonly used: number;
   readonly subscriptionPaces: readonly SubscriptionPace[];
+  /** The registry's one clock reading (`injectNowSignal`), so every time-relative label on
+   * the row — pace bars, "seen Ns ago" — ticks together rather than each reading `Date.now()`. */
+  readonly nowMs: number;
 }
 
 /** Why the runner stopped itself: a spend-ceiling crossing names the ceiling and the
@@ -223,6 +226,7 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
       claims: claims().get(runner.runner_id) ?? [],
       used: usedByRunner().get(runner.runner_id) ?? 0,
       subscriptionPaces: subscriptionPacesByRunner().get(runner.runner_id) ?? [],
+      nowMs: now(),
     })),
   );
 

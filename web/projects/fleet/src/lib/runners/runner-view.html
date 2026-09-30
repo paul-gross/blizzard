@@ -125,17 +125,15 @@
                    registry and its live paused state but not the brake it cannot operate —
                    a control that would only 403. -->
               @if (canPause()) {
-                <button
-                  type="button"
-                  class="act"
-                  data-testid="runner-toggle"
-                  [attr.aria-label]="(row.hub_paused ? 'Resume ' : 'Pause ') + row.runner_id + ' at the hub'"
+                <fleet-kit-button
+                  testid="runner-toggle"
+                  [ariaLabel]="(row.hub_paused ? 'Resume ' : 'Pause ') + row.runner_id + ' at the hub'"
                   [title]="toggleHint(row)"
                   [disabled]="isPausePending(row)"
                   (click)="togglePause.emit(row)"
                 >
                   {{ row.hub_paused ? 'Resume' : 'Pause' }}
-                </button>
+                </fleet-kit-button>
               }
             </div>
           </li>

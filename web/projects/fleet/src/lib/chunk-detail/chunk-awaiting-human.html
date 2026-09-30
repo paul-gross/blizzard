@@ -12,7 +12,7 @@
                   type="button"
                   class="chip"
                   data-testid="question-option"
-                  [disabled]="answerPending()"
+                  [disabled]="pendingAnswerQuestionIds().includes(q.question_id)"
                   (click)="submitAnswer(q.question_id, opt)"
                 >
                   {{ opt }}
@@ -32,7 +32,7 @@
             <fleet-kit-button
               variant="primary"
               testid="answer-submit"
-              [disabled]="answerPending()"
+              [disabled]="pendingAnswerQuestionIds().includes(q.question_id)"
               (click)="submitAnswer(q.question_id, answerDraft(q.question_id))"
             >
               Answer

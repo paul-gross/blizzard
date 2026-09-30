@@ -81,13 +81,15 @@
                 >
               }
               @if (u.harnessId; as harnessId) {
-                <span
-                  class="harness-badge"
+                <fleet-kit-badge
+                  variant="pill"
+                  tone="idle"
                   data-testid="history-step-harness"
                   [attr.data-harness-id]="harnessId"
                   [attr.aria-label]="harnessName(harnessId)"
-                  >{{ harnessName(harnessId) }}</span
                 >
+                  {{ harnessName(harnessId) }}
+                </fleet-kit-badge>
               }
             </span>
           }

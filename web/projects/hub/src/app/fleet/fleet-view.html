@@ -47,7 +47,7 @@
               aria-hidden="true"
             ></span>
             <span class="id" data-testid="mobile-fleet-runner-id">{{ row.runner_id }}</span>
-            <span class="seen" data-testid="mobile-fleet-runner-seen">{{ formatSeenAgo(row.last_seen_at, row.online) }}</span>
+            <span class="seen" data-testid="mobile-fleet-runner-seen">{{ formatSeenAgo(row.last_seen_at, row.online, row.nowMs) }}</span>
           </div>
           <div class="ws" data-testid="mobile-fleet-runner-workspace">{{ row.workspace_id }}</div>
 

@@ -36,7 +36,7 @@
       [canAnswer]="canAnswer()"
       [canResolve]="canResolve()"
       [resolvePending]="resolvePending()"
-      [answerPending]="answerPending()"
+      [pendingAnswerQuestionIds]="pendingAnswerQuestionIds()"
       (answerQuestion)="answerQuestion.emit($event)"
       (resolveDecision)="resolveDecision.emit($event)"
     />

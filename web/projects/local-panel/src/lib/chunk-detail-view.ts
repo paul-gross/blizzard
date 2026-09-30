@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
-import { harnessName, KitAsyncState, type KitFact, KitFactList, type runnerApi } from 'fleet';
+import { harnessName, KitAsyncState, KitBadge, type KitFact, KitFactList, type runnerApi } from 'fleet';
 
 import { HeartbeatFreshness } from './heartbeat-freshness';
 
@@ -13,7 +13,7 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
 @Component({
   selector: 'local-machine-detail-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, KitAsyncState, KitFactList],
+  imports: [HeartbeatFreshness, KitAsyncState, KitBadge, KitFactList],
   templateUrl: './chunk-detail-view.html',
   styleUrl: './chunk-detail-view.css',
 })

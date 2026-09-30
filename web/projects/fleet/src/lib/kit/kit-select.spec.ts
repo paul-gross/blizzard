@@ -167,7 +167,22 @@ describe('KitSelect', () => {
     expect(trigger()?.getAttribute('aria-label')).toBe('Routine: Alpha');
   });
 
-  it('names the trigger by ariaLabel when no label is set', () => {
+  it('names the trigger by ariaLabel and the selection when no label is set', () => {
+    expect(trigger()?.getAttribute('aria-label')).toBe('Routine filter: Alpha');
+  });
+
+  it('shows the raw value, and names it, when selectedValue matches no option', async () => {
+    fixture.componentInstance.selected.set('zz');
+    await fixture.whenStable();
+
+    expect(trigger()?.textContent).toContain('zz');
+    expect(trigger()?.getAttribute('aria-label')).toBe('Routine filter: zz');
+  });
+
+  it('names the trigger by ariaLabel alone when nothing is selected', async () => {
+    fixture.componentInstance.selected.set(null);
+    await fixture.whenStable();
+
     expect(trigger()?.getAttribute('aria-label')).toBe('Routine filter');
   });
 

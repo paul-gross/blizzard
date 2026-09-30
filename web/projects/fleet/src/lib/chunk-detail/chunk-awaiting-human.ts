@@ -72,9 +72,10 @@ export class ChunkAwaitingHuman {
    * a double click cannot resolve the gate twice. */
   readonly resolvePending = input(false);
 
-  /** Whether the answer-question mutation is in flight — disables the option chips and
-   * the Answer button so a double click cannot submit the same question twice. */
-  readonly answerPending = input(false);
+  /** The ids of the questions an answer mutation is in flight for — disables just those
+   * questions' option chips and Answer button, so a double click cannot submit the same
+   * question twice while the chunk's other questions stay answerable. */
+  readonly pendingAnswerQuestionIds = input<readonly string[]>([]);
 
   /** Emitted when the operator answers an open question (MVP criterion 7). */
   readonly answerQuestion = output<AnswerQuestionEvent>();

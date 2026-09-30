@@ -136,15 +136,3 @@
 .badge.paused.local {
   color: var(--label-dim);
 }
-.act {
-  font-family: inherit;
-  background: var(--panel-deep);
-  border: 1px solid var(--cyan-dim);
-  color: var(--cyan);
-  cursor: pointer;
-  padding: 1px 6px;
-  font-size: var(--fs-xs);
-}
-.act:hover {
-  border-color: var(--cyan);
-}

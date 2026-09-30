@@ -71,9 +71,9 @@ export class ChunkGeneralTab {
    * {@link ChunkAwaitingHuman}. */
   readonly resolvePending = input(false);
 
-  /** Whether the answer-question mutation is in flight, forwarded to
+  /** The ids of the questions an answer mutation is in flight for, forwarded to
    * {@link ChunkAwaitingHuman}. */
-  readonly answerPending = input(false);
+  readonly pendingAnswerQuestionIds = input<readonly string[]>([]);
 
   /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
    * {@link ChunkTimeline} — `null` (the default) withholds

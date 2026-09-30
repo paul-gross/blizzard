@@ -19,13 +19,16 @@
           <span class="resume-tag">escalated — resume session</span>
           <code>{{ esc.resume_command || '(no session to resume)' }}</code>
           @if (esc.harness_id; as harnessId) {
-            <span
+            <fleet-kit-badge
               class="resume-harness"
+              variant="pill"
+              tone="idle"
               data-testid="detail-resume-harness"
               [attr.data-harness-id]="harnessId"
               [attr.aria-label]="harnessName(harnessId)"
-              >{{ harnessName(harnessId) }}</span
             >
+              {{ harnessName(harnessId) }}
+            </fleet-kit-badge>
           }
         </div>
       }

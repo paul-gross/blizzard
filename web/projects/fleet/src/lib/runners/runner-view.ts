@@ -4,6 +4,7 @@ import type { ChunkStatus } from '../api/hub';
 import { STATUS_TONE } from '../chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
+import { KitButton } from '../kit/kit-button';
 import { KitPanel } from '../kit/kit-panel';
 import { KitSlotBar } from '../kit/kit-slot-bar';
 import type { Tone } from '../kit/tone';
@@ -22,7 +23,7 @@ import { SubscriptionPaceGroup } from './subscription-pace-group';
 @Component({
   selector: 'fleet-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CapabilityBadgeGroup, GateBadgeGroup, KitAsyncState, KitBadge, KitPanel, KitSlotBar, SubscriptionPaceGroup],
+  imports: [CapabilityBadgeGroup, GateBadgeGroup, KitAsyncState, KitBadge, KitButton, KitPanel, KitSlotBar, SubscriptionPaceGroup],
   templateUrl: './runner-view.html',
   styleUrl: './runner-view.css',
 })
@@ -89,6 +90,6 @@ export class RunnerPanelView {
    * tolerance window.
    */
   protected seenLabel(row: RunnerRow): string {
-    return formatSeenAgo(row.last_seen_at, row.online);
+    return formatSeenAgo(row.last_seen_at, row.online, row.nowMs);
   }
 }
