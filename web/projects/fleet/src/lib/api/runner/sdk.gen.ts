@@ -342,7 +342,7 @@ export const getFindingApiLeasesLeaseIdFindingsFindingIdGet = <ThrowOnError exte
 /**
  * List Garden Findings
  *
- * Forward this lease's chunk's garden-findings read to the hub — the layered
+ * Forward this lease's chunk's finding-bucket read to the hub — the layered
  * pass-through. A chunk with no run context (not a routine run) reaches this only as
  * the hub's own refusal, forwarded verbatim rather than answered as an empty bucket.
  */

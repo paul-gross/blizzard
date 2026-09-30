@@ -799,3 +799,34 @@ def test_a_chunk_with_no_run_context_is_invalid(tmp_path: Path) -> None:
     body = resp.json()
     assert body["outcome"] == "invalid"
     assert chunk_id in body["detail"]
+
+
+# --- one bucket, two routes -------------------------------------------------
+
+
+def test_every_finding_the_worker_read_shows_is_a_citable_proposal_finding(tmp_path: Path) -> None:
+    """The worker read and delivery take one bucket: each id the read returns — a
+    neighbour scope's, a review finding — is admitted as a proposal citation, while an
+    `observed` op on a neighbour-scope id is refused as outside the declared scope."""
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    own = Id.mint(FINDING_PREFIX, hub.clock).value
+    neighbour = Id.mint(FINDING_PREFIX, hub.clock).value
+    review = Id.mint(FINDING_PREFIX, hub.clock).value
+    _seed_finding(hub, own)
+    _seed_finding(hub, neighbour, scope_slug="other-scope")
+    _seed_review_finding(hub, review)
+
+    shown = [row["finding_id"] for row in hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/findings").json()]
+    assert set(shown) == {own, neighbour, review}
+
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_observed_op(neighbour)]))
+    refused = _post(hub, chunk_id, delta=["delta"])
+    assert refused.json()["outcome"] == "invalid"
+    assert "outside the declared scope" in refused.json()["detail"]
+
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(), epoch=_EPOCH + 1)
+    _record_artifact(hub, chunk_id, name="proposals", content=_proposals(findings=shown), epoch=_EPOCH + 1)
+    admitted = _post(hub, chunk_id, delta=["delta"], proposals=["proposals"], epoch=_EPOCH + 1)
+    assert admitted.json()["outcome"] == "recorded", admitted.text

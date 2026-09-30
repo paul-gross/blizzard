@@ -16,9 +16,10 @@ runs observe or lose it, or a person exits or reopens it.
 
 A running pass cross-references its own bucket a different way: `blizzard runner garden findings`, flagless — the
 routine and the scope are derived server-side from the lease's own chunk, so a worker cannot point this read at another
-routine's bucket, and it needs no hub credential in its child environment at all. This bucket is live findings plus any
-`delivered` one: a delivery-triggered closure the routine's own run has not yet re-checked, surfaced unconditionally so
-that check can happen. It is a pure client of the runner's local API, authorized by the spawn-injected lease identity,
+routine's bucket, and it needs no hub credential in its child environment at all. This bucket spans the routine's scopes: every finding not yet exited, in any of them, each row carrying its `scope_slug`
+and `state` — including a `delivered` one, a delivery-triggered closure the routine's own run has not yet re-checked,
+surfaced unconditionally so that check can happen. It is exactly what the run's delivery may cite: a proposal may name
+any finding in it, while `observed` and `gone` ops stay within the run's own scope. It is a pure client of the runner's local API, authorized by the spawn-injected lease identity,
 the same shape the `blizzard runner artifact` verbs take (see [artifacts.md](./artifacts.md));
 [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shape.
 
@@ -55,7 +56,7 @@ A delivery lane's review round can raise a finding too, alongside a routine's ow
 (`blocking` or `should-fix`), and the chunk that raised it. `blizzard hub finding list --scope <slug> --source review`
 (and `GET /api/findings?scope=&source=review`) reads only these; omitting `--source` reads both kinds together. A
 routine's own bucket read — `blizzard runner garden findings` above — already includes any review-sourced finding
-filed under that routine's swept scope, answerable with the same triage verbs as any other. The board's Findings rows
+filed under that run's own scope, answerable with the same triage verbs as any other. The board's Findings rows
 render one exactly like a routine-sourced row, except the routine chip is replaced by the finding's severity and a link
 to the raising chunk.
 

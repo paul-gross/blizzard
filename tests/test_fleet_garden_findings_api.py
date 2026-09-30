@@ -1,6 +1,6 @@
 """``GET /api/fleet/chunks/{chunk_id}/garden/findings`` — the worker-scoped fleet read
-of a routine's live-plus-`delivered` finding bucket (component
-tier). Derives the routine and scope from the chunk's own ``RunContext`` rather than a
+of a run's finding bucket (component tier): the routine's non-exited findings in
+every scope, plus review findings on the run's scope. Derives the routine and scope from the chunk's own ``RunContext`` rather than a
 caller-supplied flag, reuses ``findings.py``'s own ``finding_view`` projection, and
 refuses — rather than answering an empty bucket for — an unknown chunk or one with no
 run context at all."""
@@ -106,21 +106,37 @@ def test_404s_on_a_chunk_with_no_run_context(tmp_path: Path) -> None:
     assert "no run context" in resp.json()["detail"]
 
 
-def test_returns_the_scoped_live_bucket_via_the_shared_projection(tmp_path: Path) -> None:
+def test_returns_the_cross_scope_bucket_own_scope_first(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _seed_chunk(hub)
-    _seed_finding(hub, "fin_1")
-    _seed_finding(hub, "fin_2", scope_slug="other-scope")  # a different scope — not in this bucket
+    _seed_finding(hub, "fin_2", scope_slug="other-scope")
+    _seed_finding(hub, "fin_3")
+    _seed_finding(hub, "fin_1", scope_slug="other-scope")
+    _seed_finding(hub, "fin_4", routine_name="other-routine")  # another routine's — not in this bucket
 
     resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/findings")
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert [row["finding_id"] for row in body] == ["fin_1"]
+    assert [(row["finding_id"], row["scope_slug"]) for row in body] == [
+        ("fin_3", _SCOPE),
+        ("fin_1", "other-scope"),
+        ("fin_2", "other-scope"),
+    ]
 
     # The operator's own `GET /api/findings` reads through the identical projection —
     # the fleet route reuses it rather than restating it.
     operator = hub.client.get("/api/findings", params={"routine": _ROUTINE, "scope": _SCOPE})
-    assert body == operator.json()["findings"]
+    assert body[0] in operator.json()["findings"]
+
+
+def test_includes_a_gone_finding(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _seed_finding(hub, "fin_1", scope_slug="other-scope")
+    FindingStore(hub_store_connections(hub.engine)).record_fact("fin_1", kind="gone", at=_NOW, note="n", actor="u_1")
+
+    body = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/findings").json()
+    assert [(row["finding_id"], row["state"]) for row in body] == [("fin_1", "gone")]
 
 
 def test_excludes_an_exited_finding_and_takes_no_include_gone_flag(tmp_path: Path) -> None:

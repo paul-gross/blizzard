@@ -127,5 +127,8 @@ gone.
 
 A delivery lane's own review round can raise a finding too (`review/finding-format`) — filed under a scope exactly like
 this routine's own, but with no routine lineage behind it. A run sweeping that same scope reads those findings in its
-own live-plus-`delivered` bucket alongside its routine's, and may answer one with `observed` or `gone` exactly as it
-would one of its own: liveness is derived from facts, not from which format minted the finding.
+bucket alongside its routine's — every non-exited finding of the routine in every scope, each carrying `scope_slug` and
+`state` — and may answer a review finding with `observed` or `gone` exactly as it would one of its own: liveness is
+derived from facts, not from which format minted the finding. `observed` and `gone` name only findings whose
+`scope_slug` is the run's own scope; a neighbour scope's finding may be read and cited by a proposal, never
+transformed.

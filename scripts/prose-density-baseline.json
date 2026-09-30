@@ -1559,10 +1559,10 @@
    "total": 512
   },
   "blizzard/hub/api/chunks.py": {
-   "comments": 33,
+   "comments": 31,
    "docstrings": 83,
    "over_cap": 0,
-   "total": 840
+   "total": 835
   },
   "blizzard/hub/api/decisions.py": {
    "comments": 2,
@@ -1590,9 +1590,9 @@
   },
   "blizzard/hub/api/fleet.py": {
    "comments": 26,
-   "docstrings": 124,
+   "docstrings": 122,
    "over_cap": 3,
-   "total": 940
+   "total": 936
   },
   "blizzard/hub/api/garden_proposals.py": {
    "comments": 5,
@@ -2057,10 +2057,10 @@
    "total": 115
   },
   "blizzard/hub/composition.py": {
-   "comments": 93,
+   "comments": 94,
    "docstrings": 15,
    "over_cap": 22,
-   "total": 614
+   "total": 618
   },
   "blizzard/hub/config.py": {
    "comments": 47,
@@ -2380,6 +2380,12 @@
    "over_cap": 2,
    "total": 387
   },
+  "blizzard/hub/domain/finding_bucket.py": {
+   "comments": 0,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 42
+  },
   "blizzard/hub/domain/findings.py": {
    "comments": 19,
    "docstrings": 90,
@@ -2400,9 +2406,9 @@
   },
   "blizzard/hub/domain/garden_delivery.py": {
    "comments": 20,
-   "docstrings": 53,
+   "docstrings": 52,
    "over_cap": 4,
-   "total": 319
+   "total": 318
   },
   "blizzard/hub/domain/garden_delivery_materialize.py": {
    "comments": 19,
@@ -5938,7 +5944,7 @@
    "comments": 33,
    "docstrings": 16,
    "over_cap": 7,
-   "total": 450
+   "total": 454
   },
   "e2e/test_gardening_run_dialog_browser_e2e.py": {
    "comments": 14,
@@ -7122,6 +7128,12 @@
    "over_cap": 0,
    "total": 653
   },
+  "test_finding_bucket.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 87
+  },
   "test_finding_delivered_state_migration.py": {
    "comments": 2,
    "docstrings": 4,
@@ -7198,7 +7210,7 @@
    "comments": 5,
    "docstrings": 17,
    "over_cap": 0,
-   "total": 201
+   "total": 217
   },
   "test_fleet_garden_proposals_api.py": {
    "comments": 1,
@@ -7273,16 +7285,16 @@
    "total": 179
   },
   "test_garden_delivery_api.py": {
-   "comments": 20,
-   "docstrings": 37,
+   "comments": 21,
+   "docstrings": 40,
    "over_cap": 1,
-   "total": 801
+   "total": 832
   },
   "test_garden_delivery_domain.py": {
    "comments": 35,
    "docstrings": 33,
    "over_cap": 0,
-   "total": 712
+   "total": 720
   },
   "test_garden_delivery_materialize.py": {
    "comments": 3,
@@ -7369,10 +7381,10 @@
    "total": 711
   },
   "test_garden_routine_graph.py": {
-   "comments": 45,
-   "docstrings": 44,
+   "comments": 50,
+   "docstrings": 46,
    "over_cap": 1,
-   "total": 274
+   "total": 286
   },
   "test_garden_routine_graph_mint.py": {
    "comments": 0,

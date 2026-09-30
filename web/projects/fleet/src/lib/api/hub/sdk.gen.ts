@@ -848,11 +848,9 @@ export const getChunkFindingApiFleetChunksChunkIdFindingsFindingIdGet = <ThrowOn
 /**
  * Get Garden Findings
  *
- * A worker's own routine's live-plus-`delivered` finding bucket, widened to every
- * review-sourced finding on the same scope — the
- * chunk's own run context derives the routine and the scope; no caller-supplied flag can
- * name another. 404 both for an unknown chunk and for one carrying no run context (not a
- * routine run): a chunk with nothing to read is refused rather than an empty bucket.
+ * A worker's finding bucket — exactly what its delivery may cite (`FindingBucket`); the
+ * chunk's own run context derives the routine and scope, no caller flag can name another.
+ * 404 for an unknown chunk or one with no run context (not a routine run).
  */
 export const getGardenFindingsApiFleetChunksChunkIdGardenFindingsGet = <ThrowOnError extends boolean = false>(options: Options<GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetData, ThrowOnError>): RequestResult<GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetResponses, GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetErrors, ThrowOnError> => (options.client ?? client).get<GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetResponses, GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/garden/findings', ...options });
 
