@@ -57,7 +57,7 @@ def test_found_turns_are_projected_and_the_request_is_authenticated() -> None:
 
 
 @pytest.mark.unit
-def test_thinking_turns_and_sidechains_survive_the_read_intact() -> None:
+def test_thinking_kind_redaction_and_nested_sidechain_text_are_projected() -> None:
     """The repository projects a thinking turn and nested sidechain from the response."""
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -149,7 +149,7 @@ def test_empty_turns_is_the_hub_holds_nothing_outcome() -> None:
 
 
 @pytest.mark.unit
-def test_a_turn_less_body_reads_as_empty_whatever_its_truncation_flag_says() -> None:
+def test_a_truncated_turn_less_body_reads_as_empty() -> None:
     """The repository reports empty for a turn-less response marked truncated."""
 
     def handler(request: httpx.Request) -> httpx.Response:
