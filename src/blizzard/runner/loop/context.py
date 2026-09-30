@@ -31,6 +31,7 @@ from blizzard.runner.loop.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.env_release import EnvironmentRelease
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.process import IProcessProbe
+from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.usage import UsageRecorder
 from blizzard.runner.loop.worker_scratch import WorkerScratchDirs
@@ -192,6 +193,9 @@ class LoopContext:
     harness_versions: HarnessVersionCache | None = None
     #: The loop's own cross-tick harness-health cache — mirrors ``harness_versions`` above.
     harness_health: HarnessHealthCache | None = None
+    #: The loop's own cross-tick retention-pass floor — mirrors ``harness_versions`` above.
+    #: ``None`` (a one-shot tick) has no memory to gate on, so every pass runs.
+    retention_passes: RetentionPasses | None = None
 
     def capability_snapshot(self) -> tuple[RunnerCapability, ...]:
         """This runner's capabilities as the registration push and the matched fleet peek

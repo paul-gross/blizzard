@@ -35,6 +35,7 @@ from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
 from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
+from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.shutdown_drain import ShutdownDrain
 from blizzard.runner.loop.steps import ResumeIntents
@@ -257,6 +258,8 @@ class LoopWiring:
             harness_versions=HarnessVersionCache(clock=_clock),
             # Mirrors `harness_versions`: built once, long-lived across every tick.
             harness_health=health_cache,
+            # Mirrors `harness_versions`: built once, long-lived across every tick.
+            retention_passes=RetentionPasses(),
         )
 
     def tick_once(self) -> None:
