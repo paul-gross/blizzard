@@ -143,6 +143,31 @@ def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
     assert detail["route"]["runner_id"] == "r1"
 
 
+def test_a_claim_on_a_finished_chunk_is_denied_as_terminal_not_as_held(tmp_path: Path) -> None:
+    """A runner-authored ``done`` leaves the route fact live, yet the route confers no
+    tenure: a second runner's claim reads the terminal denial, naming no holder."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TERMINAL_YAML}).status_code == 201
+    chunk_id = _ingest(hub, ref="8")
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
+    assert resp.status_code == 201, resp.text
+    node_id = resp.json()["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": node_id, "artifacts": []},
+    )
+    assert resp.status_code == 200 and resp.json()["outcome"] == "done", resp.text
+    assert hub.services.chunks.route.route_of(chunk_id) is not None
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, runner="r2"))
+
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["status"] == "done"
+    assert "held_by_runner_id" not in body
+
+
 # --- Route capability token — mint at claim, hash-only at rest, returned once (#84a) ---
 
 

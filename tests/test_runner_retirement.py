@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE, RUNNER_AUTH_WARN
 from blizzard.hub.domain.registry import IWriteRunnerRegistry
-from tests.support import build_hub, pointer_token
+from tests.support import build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -146,6 +146,47 @@ def test_a_retire_rerun_finishes_a_partial_release(tmp_path: Path) -> None:
     assert resp.json()["released_chunk_ids"] == [chunk_id]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
     assert _retire(hub).json()["released_chunk_ids"] == []
+
+
+def _finished_chunk(hub, runner_id: str = "runner-a") -> str:  # type: ignore[no-untyped-def]
+    """A chunk ``runner_id`` claimed and completed to ``done`` — its route fact left live."""
+    chunk_id = _held_chunk(hub, runner_id)
+    node_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1, runner_id=runner_id)
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": runner_id, "from_node_id": node_id, "artifacts": []},
+    )
+    assert resp.status_code == 200 and resp.json()["outcome"] == "done", resp.text
+    assert hub.services.chunks.route.route_of(chunk_id) is not None
+    return chunk_id
+
+
+def test_a_plain_retire_counts_a_finished_chunk_as_no_holding(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    _finished_chunk(hub)
+
+    resp = _retire(hub)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["released_chunk_ids"] == []
+    assert resp.json()["runner"]["retired"] is True
+
+
+def test_a_forced_retire_leaves_a_finished_chunk_untouched(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    chunk_id = _finished_chunk(hub)
+    registration = hub.services.registry.get_runner("runner-a")
+    assert registration is not None
+
+    outcome = hub.services.fleet.retire(registration, by="op", force=True)
+
+    assert outcome.released == ()
+    assert hub.services.chunks.route.route_of(chunk_id) is not None
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
+    assert _retire(hub, force=True).json()["released_chunk_ids"] == []
 
 
 @pytest.mark.parametrize("mode", [RUNNER_AUTH_WARN, RUNNER_AUTH_ENFORCE])

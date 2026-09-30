@@ -59,6 +59,7 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
         registry=RunnerRegistryStore(store),
         routes=chunks.route,
         records=chunks.record,
+        facts=chunks.facts,
         detach=DetachService(route=chunks.route, exclusive=chunks.exclusive, clock=clock),
         clock=clock,
     )

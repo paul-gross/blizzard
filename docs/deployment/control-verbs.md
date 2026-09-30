@@ -186,6 +186,9 @@ records the retirement and then releases every held route through the same path 
 re-derives `ready` for any runner. Re-running `retire` on an already-retired runner writes no second fact and finishes
 any release a crash interrupted.
 
+Finished chunks don't count as held. A chunk that already reached a terminal status never blocks a plain `retire`, and
+`--force` leaves it as it is.
+
 Stop the runner process too. The hub refuses a retired runner's calls, so it never learns that its routes were released,
 and its local worktrees stay held until the process stops.
 

@@ -457,7 +457,9 @@ def build_services(
     # One fleet service, shared: the API's pause routes and the fact ingest both land
     # registry facts, and two instances would be two of the same thing.
     detach = DetachService(route=chunk_route, exclusive=chunk_exclusive, clock=clock)
-    fleet = FleetService(registry=registry_store, routes=chunk_route, records=chunk_record, detach=detach, clock=clock)
+    fleet = FleetService(
+        registry=registry_store, routes=chunk_route, records=chunk_record, facts=chunk_facts, detach=detach, clock=clock
+    )
     enrollment = RunnerEnrollmentService(registry=registry_store, clock=clock)
     # The identity spine — one error factory shared by the SQLAlchemy
     # adapters, so the same instances back both the Write Protocols and the reads.

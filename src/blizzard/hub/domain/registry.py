@@ -14,10 +14,11 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import ActivityRow
+from blizzard.hub.domain.work import ActivityRow, holds_claim
 from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
 
 if TYPE_CHECKING:  # the chunk seams import this module's RunnerRegistration
+    from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
     from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
     from blizzard.hub.domain.chunks.route import IReadChunkRouteRepository
     from blizzard.hub.domain.detach import DetachService
@@ -475,6 +476,7 @@ class FleetService:
         registry: IWriteRunnerRegistry,
         routes: IReadChunkRouteRepository,
         records: IReadChunkRecordRepository,
+        facts: IReadChunkFactsRepository,
         detach: DetachService,
         clock: IClock,
         stale_after: timedelta = STALE_AFTER,
@@ -483,6 +485,7 @@ class FleetService:
         # Retirement's holdings read and release pass — the hub's existing detach path.
         self._routes = routes
         self._records = records
+        self._facts = facts
         self._detach = detach
         self._clock = clock
         self._stale_after = stale_after
@@ -543,12 +546,12 @@ class FleetService:
 
     def retire(self, registration: RunnerRegistration, *, by: str, force: bool) -> RetireOutcome:
         """Record the fact and revoke the token first, so claims are refused from that instant,
-        then release every held route through ``DetachService``. A first retire without ``force``
-        refuses with :class:`RunnerHoldsRoutes`; a re-run writes no second fact and re-runs the
-        release pass, which also catches a claim that slipped past the pre-lock check."""
+        then release every held route through ``DetachService`` — a terminal chunk holds none. A
+        first retire without ``force`` refuses with :class:`RunnerHoldsRoutes`; a re-run writes no
+        second fact and re-runs the release pass, which also catches a claim that slipped past the pre-lock check."""
         runner_id = registration.runner_id
         if not registration.retired and not force:
-            holdings = self._routes.live_routes_of_runner(runner_id)
+            holdings = self._holdings(runner_id)
             if holdings:
                 raise RunnerHoldsRoutes(runner_id, holdings)
         now = self._clock.now()
@@ -569,6 +572,13 @@ class FleetService:
             released=[r.chunk_id for r in outcome.released],
         )
         return outcome
+
+    def _holdings(self, runner_id: str) -> list[Route]:
+        """The runner's live routes on chunks that still hold a claim — a route left on a
+        terminal chunk is no holding."""
+        routes = self._routes.live_routes_of_runner(runner_id)
+        facts = self._facts.status_facts_for([route.chunk_id for route in routes])
+        return [route for route in routes if route.chunk_id not in facts or holds_claim(facts[route.chunk_id].status())]
 
     def _release(self, route: Route) -> ReleasedRoute | None:
         chunk = self._records.get(route.chunk_id)

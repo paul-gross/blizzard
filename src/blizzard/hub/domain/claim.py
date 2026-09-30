@@ -10,7 +10,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass
 
-from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.tokens import TokenHash
@@ -22,7 +22,7 @@ from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.registry import IReadRunnerRegistry
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.work import Chunk, holds_claim
 from blizzard.wire.envelope import NodeEnvelope
 
 #: `secrets.token_urlsafe` byte count for the route capability token (43 URL-safe chars).
@@ -165,10 +165,6 @@ class ClaimService:
         workspace_id: str,
         environment_ids: list[str],
     ) -> ClaimResult:
-        existing = handle.route_of(chunk.chunk_id)
-        if existing is not None:
-            raise ClaimConflict(held_by_runner_id=existing.runner_id)
-
         # Re-read the chunk under the lock: an edit that landed first may have
         # moved `graph_id`/`model` since the edge resolved the handed-in objects.
         current = handle.record(chunk.chunk_id)
@@ -183,10 +179,15 @@ class ClaimService:
 
         facts = handle.facts(chunk.chunk_id)
         # Re-derive status fresh under the claim lock: a stop landing between this
-        # runner's peek and its claim POST is invisible to the peek.
+        # runner's peek and its claim POST is invisible to the peek. Checked before the
+        # route: a route left on a terminal chunk confers no tenure.
         status = facts.status() if facts is not None else ChunkStatus.NOT_READY
-        if status in TERMINAL_STATUSES:
+        if not holds_claim(status):
             raise ClaimDeniedTerminal(chunk_id=chunk.chunk_id, status=status)
+
+        existing = handle.route_of(chunk.chunk_id)
+        if existing is not None:
+            raise ClaimConflict(held_by_runner_id=existing.runner_id)
 
         # Re-derived fresh under the same lock: a declared edge or a
         # prerequisite's completion landing after this runner's peek is invisible to the
