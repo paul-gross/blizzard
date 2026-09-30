@@ -12,6 +12,7 @@ import pytest
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
 from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.delivery_read import DeliveryRead
 from blizzard.hub.domain.work import ChunkFacts
 from tests.support import build_hub, ingest
@@ -44,6 +45,7 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
             name=f"delivery-pr/acme/one/{number}",
             content=f'{{"repo":"acme/one","number":{number},"url":"http://forge/acme/one/pull/{number}"}}',
             at=at,
+            admission=EpochAdmission.AT_OR_ABOVE,
         )
 
     sources = cast(IReadChunkArtifactsRepository, hub.services.chunks.artifacts).delivery_sources_for([chunk_id])[
