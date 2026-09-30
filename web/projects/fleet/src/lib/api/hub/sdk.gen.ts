@@ -592,7 +592,7 @@ export const resolveDecisionApiDecisionsDecisionIdResolutionsPost = <ThrowOnErro
 /**
  * List Events
  *
- * The ``event_log`` unified with open escalations, most-severe-newest first, bounded.
+ * The ``event_log`` unified with open escalations, newest first, bounded.
  *
  * The ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;
  * the open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the

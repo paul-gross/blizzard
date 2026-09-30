@@ -3094,7 +3094,7 @@
         "type": "object"
       },
       "EventsResponse": {
-        "description": "The operational event feed, newest-and-most-severe first (bounded).",
+        "description": "The operational event feed, newest first (bounded).",
         "properties": {
           "events": {
             "default": [],
@@ -13407,7 +13407,7 @@
     },
     "/api/events": {
       "get": {
-        "description": "The ``event_log`` unified with open escalations, most-severe-newest first, bounded.\n\nThe ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;\nthe open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the\nprojection's aware ``recorded_at`` comparison below never raises against it.",
+        "description": "The ``event_log`` unified with open escalations, newest first, bounded.\n\nThe ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;\nthe open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the\nprojection's aware ``recorded_at`` comparison below never raises against it.",
         "operationId": "list_events_api_events_get",
         "parameters": [
           {

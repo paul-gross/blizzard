@@ -97,8 +97,7 @@ def test_rows_come_back_newest_first(tmp_path: Path) -> None:
 
 
 def test_events_are_capped_by_recency_not_severity(tmp_path: Path) -> None:
-    """The feed's event source is pure-recency, not the severity-ranked read
-    ``/api/events`` uses — with more in-window rows than ``limit``, the newest survive
+    """The feed's event source is pure-recency — with more in-window rows than ``limit``, the newest survive
     even when an older row outranks them by severity."""
     hub = build_hub(tmp_path)
     store = chunk_stores(hub.engine, hub.clock)

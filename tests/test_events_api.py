@@ -1,7 +1,7 @@
 """``GET /api/events`` — the operational event feed read.
 
 Proves AC#2 and AC#5: the read returns ``event_log`` unified with every open escalation,
-newest-and-most-severe first, honouring the ``severity``/``runner_id``/``chunk_id``/
+newest first, honouring the ``severity``/``runner_id``/``chunk_id``/
 ``since`` filters and the bounded default page — and a malformed ``since`` 422s.
 """
 
@@ -129,7 +129,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     assert len(_events(hub, limit=1)) == 1
 
 
-def test_events_feed_cap_keeps_the_most_severe_rows(tmp_path: Path) -> None:
+def test_events_feed_cap_keeps_the_newest_rows(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     store = chunk_stores(hub.engine, hub.clock)
     t0 = hub.clock.now()
@@ -164,17 +164,16 @@ def test_events_feed_cap_keeps_the_most_severe_rows(tmp_path: Path) -> None:
             at=at(sec),
         )
 
-    # End to end through the API: a limit=3 read over 5 rows still surfaces the oldest
-    # critical ahead of the two newest warnings, and the existing runner/chunk filters
-    # still compose with the severity-first ordering.
+    # End to end through the API: a limit=3 read over 5 rows keeps the three newest, dropping
+    # the older critical, and the runner/chunk filters compose with the recency ordering.
     feed = _events(hub, limit=3)
-    assert [e["message"] for e in feed] == ["old-critical", "warning-5", "warning-4"]
+    assert [e["message"] for e in feed] == ["warning-5", "warning-4", "warning-3"]
     assert [e["message"] for e in _events(hub, runner_id="r1")] == [
-        "old-critical",
         "warning-5",
         "warning-4",
         "warning-3",
         "warning-2",
+        "old-critical",
     ]
 
 

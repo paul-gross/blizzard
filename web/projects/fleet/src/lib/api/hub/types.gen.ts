@@ -1936,7 +1936,7 @@ export type EventView = {
 /**
  * EventsResponse
  *
- * The operational event feed, newest-and-most-severe first (bounded).
+ * The operational event feed, newest first (bounded).
  */
 export type EventsResponse = {
     /**

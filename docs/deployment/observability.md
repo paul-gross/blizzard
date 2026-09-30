@@ -2,9 +2,9 @@
 
 ## The operational event log
 
-The hub owns a durable, append-only, typed, severity-ranked operational event log — the place that says why a chunk is
-stuck when its status only says that it is. Severities are a closed set — info, warning, critical — because the feed
-ranks by severity, ordering anything else below every row. The log has no rotation policy.
+The hub owns a durable, append-only, typed operational event log — the place that says why a chunk is stuck when its
+status only says that it is. Severities are a closed set — info, warning, critical — each row carrying its severity as a
+badge. The log has no rotation policy.
 
 The runner emits failure events on the same durable store-and-forward path completions ride — non-clean worker exits,
 failed captured spawn, push, or environment-prep commands, reaped, abandoned, or escalated attempts — and the hub folds
@@ -62,10 +62,9 @@ swept the next time the runner starts.
 
 ## Reading the feed
 
-`GET /api/events` returns the log newest-and-most-severe first, filterable by severity, runner_id, chunk_id, and since,
-with a bounded default page — the cap keeps the most severe rows, so a `critical` survives it ahead of any less severe
-row, however much older. The board's Events tab renders the feed live over the SSE spine (`/api/events/stream`), each
-row linking to its chunk.
+`GET /api/events` returns the log newest first, filterable by severity, runner_id, chunk_id, and since, with a bounded
+default page — the cap keeps the newest rows, whatever their severity. The board's Events tab renders the feed live over
+the SSE spine (`/api/events/stream`), each row linking to its chunk.
 
 `GET /api/activity` is a second read the board's Activity feed rail backfills from on page load, merging three durable
 sources — chunk status changes, the event log, and runner pause/resume — newest-first, bounded by `since` (default 24
@@ -81,8 +80,8 @@ used: an optional `cursor` and a `limit` (`ge=1, le=1000`, default 200 — an ov
 a `422`, never silently clamped). The response is an envelope carrying the page's rows alongside `next_cursor`, which is
 `null` exactly on the last page; a caller wanting every row follows it to exhaustion. An undecodable `cursor` is a `422`
 naming `"malformed cursor"`. `GET /api/events` and `GET /api/activity` share this same `limit` ceiling (`le=1000`,
-default 200) but predate the cursor/`next_cursor` half of the contract — each is its own bounded, severity- or
-recency-ranked window, not a walk over the full backing set.
+default 200) but predate the cursor/`next_cursor` half of the contract — each is its own bounded, recency-ordered
+window, not a walk over the full backing set.
 
 ## Demo mode
 
