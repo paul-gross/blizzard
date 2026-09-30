@@ -38,12 +38,10 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.app import create_app
-from blizzard.hub.auth.errors import RepoErrorFactory
-from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
 from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
-from blizzard.hub.composition import HubServices, build_services
+from blizzard.hub.composition import HubServices, build_hub_core, build_services
 from blizzard.hub.config import (
     AUTH_MODE_NONE,
     AUTH_MODE_OAUTH,
@@ -57,9 +55,6 @@ from blizzard.hub.config import (
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.chunks.stores import ChunkStores
-from blizzard.hub.domain.delete import DeleteService
-from blizzard.hub.domain.findings import FindingExitService
-from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import (
@@ -70,16 +65,12 @@ from blizzard.hub.domain.work import (
     WorkItemRecord,
     WorkRef,
 )
-from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
-from blizzard.hub.store.internal.finding_store import FindingStore
-from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
-from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
@@ -104,7 +95,8 @@ def chunk_stores(engine: Engine, clock: IClock) -> ChunkStores:
     store-level test's own single-object fixture-setup convenience a per-seam physical
     split would otherwise take from it. A test calls ``stores.<seam>.<method>(...)`` in
     place of the old single ``ChunkStore``'s bare method call."""
-    return build_chunk_stores(hub_store_connections(engine), clock)
+    store = hub_store_connections(engine)
+    return build_chunk_stores(store, clock, registry=RunnerRegistryStore(store))
 
 
 def make_graph(
@@ -617,56 +609,22 @@ def build_hub(
     # The built-in `hub` source is seated as a closer unconditionally,
     # mirroring `WorkSourceEntry.registry`'s production wiring.
     closers: dict[str, IWorkCloser] = {}
-    # Constructed once here, ahead of both the work-source registry and `build_services`
-    # below — mirrors `build_hosted_app`'s own wiring.
-    cycle_lock = threading.Lock()
-    store_connections = hub_store_connections(engine)
-    user_store = UserRepository(store_connections, RepoErrorFactory(get_logger("blizzard.hub.auth")))
-    work_item_store = WorkItemStore(store_connections)
-    built_chunk_stores = build_chunk_stores(store_connections, clock)
-    delete_service = DeleteService(
-        items=work_item_store,
-        clock=clock,
-        exclusive=built_chunk_stores.exclusive,
-        cycle_lock=cycle_lock,
-    )
-    finding_store = FindingStore(store_connections)
-    finding_exit = FindingExitService(repo=finding_store, clock=clock)
-    garden_proposal_resolution = GardenProposalDeliveryResolution(
-        closures=GardenProposalClosureStore(store_connections),
-        proposals=GardenProposalStore(store_connections),
-        findings=finding_store,
-        exits=finding_exit,
-    )
+    core = build_hub_core(engine, clock=clock)
     seat_hub_work_source(
         built_sources,
         editors,
         closers,
-        users=user_store,
-        items=work_item_store,
-        edits=WorkItemEditService(
-            items=work_item_store,
-            work_refs=built_chunk_stores.work_refs,
-            record=built_chunk_stores.record,
-            facts=built_chunk_stores.facts,
-            clock=clock,
-            delete=delete_service,
-        ),
-        resolution=garden_proposal_resolution,
+        users=core.users,
+        items=core.work_item_store,
+        edits=core.work_item_edits,
+        resolution=core.garden_proposal_resolution,
     )
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
     events = EventBroker()
     services = build_services(
-        engine,
+        core,
         events=events,
         work_sources=work_source_registry,
-        cycle_lock=cycle_lock,
-        work_item_store=work_item_store,
-        delete=delete_service,
-        finding_store=finding_store,
-        finding_exit=finding_exit,
-        clock=clock,
-        users=user_store,
         base_branch=base_branch,
         hub_command_runner=hub_command_runner,
         hub_workdir=hub_workdir,
@@ -679,7 +637,6 @@ def build_hub(
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=transcript_caps,
-        chunk_stores=built_chunk_stores,
         system_artifacts=system_artifacts,
     )
     app = create_app(config, services=services)

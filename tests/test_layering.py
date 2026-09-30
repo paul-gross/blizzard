@@ -558,3 +558,48 @@ def test_domain_core_imports_no_framework_or_driver() -> None:
         _RUNNER_DOMAIN_DIR, _DOMAIN_CORE_FORBIDDEN
     )
     assert not violations, f"Q — a domain core must import no framework or driver: {violations}"
+
+
+_COMPOSITION_ROOT_FILES = (
+    _HUB_DIR / "app.py",
+    _HUB_DIR / "composition.py",
+    _HUB_DIR / "store" / "internal" / "chunk_store_factory.py",
+)
+
+
+# `TranscriptCaps` is a value object; `EventBroker` has a store-free `create_app` fallback.
+_REPEATABLE_CONSTRUCTIONS = frozenset({"TranscriptCaps", "EventBroker"})
+
+
+def _blizzard_constructions(path: Path) -> list[tuple[str, int]]:
+    """Each ``Name(...)`` call in ``path`` whose ``Name`` was imported from ``blizzard.*``
+    and is a class (CamelCase) — a construction, not a function call."""
+    tree = ast.parse(path.read_text(), filename=str(path))
+    imported = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module is not None and node.module.startswith("blizzard.")
+        for alias in node.names
+    }
+    return [
+        (node.func.id, node.lineno)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in imported
+        and node.func.id[:1].isupper()
+        and not node.func.id.isupper()
+    ]
+
+
+def test_each_blizzard_class_is_constructed_once_across_the_hub_composition_roots() -> None:
+    """bzh:dependency-injection: a process-scoped collaborator is built once and shared, so
+    no class is constructed twice across the hub's composition-root files."""
+    sites: dict[str, list[str]] = {}
+    for path in _COMPOSITION_ROOT_FILES:
+        for name, lineno in _blizzard_constructions(path):
+            sites.setdefault(name, []).append(f"{path.relative_to(_REPO_ROOT)}:{lineno}")
+    duplicated = {
+        name: where for name, where in sites.items() if len(where) > 1 and name not in _REPEATABLE_CONSTRUCTIONS
+    }
+    assert not duplicated, f"constructed more than once across the composition roots: {duplicated}"

@@ -28,12 +28,10 @@ from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 
 
-def build_chunk_stores(store: HubStoreConnections, clock: IClock) -> ChunkStores:
+def build_chunk_stores(store: HubStoreConnections, clock: IClock, *, registry: RunnerRegistryStore) -> ChunkStores:
     """All chunk-seam adapters over one connection seam and clock. ``facts`` is built
     first since ``record``/``work_refs``/``escalations``/``exclusive`` each hold it as
-    their own read collaborator; ``exclusive`` holds its own private ``RunnerRegistryStore``
-    — a second, harmless instance over the same connection seam, not the composition
-    root's shared one."""
+    their own read collaborator; ``exclusive`` holds the caller's shared ``registry``."""
     facts = ChunkFactsStore(store, clock)
     record = ChunkRecordStore(store, clock)
     dependencies = ChunkDependenciesStore(store, clock)
@@ -59,6 +57,6 @@ def build_chunk_stores(store: HubStoreConnections, clock: IClock) -> ChunkStores
             facts=facts,
             record=record,
             dependencies=dependencies,
-            registry=RunnerRegistryStore(store),
+            registry=registry,
         ),
     )

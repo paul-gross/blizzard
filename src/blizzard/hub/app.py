@@ -11,10 +11,6 @@ import asyncio
 import contextlib
 import os
 import random
-
-# The residual dependency-graph lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
-# ast-grep-ignore: bzh:store-exclusive-write
-import threading
 import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass
@@ -55,24 +51,11 @@ from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
 from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
-from blizzard.hub.auth.errors import RepoErrorFactory
-from blizzard.hub.auth.internal.user_repository import UserRepository
-from blizzard.hub.composition import HubServices, build_services
+from blizzard.hub.composition import HubServices, build_hub_core, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
-from blizzard.hub.domain.delete import DeleteService
-from blizzard.hub.domain.findings import FindingExitService
-from blizzard.hub.domain.forge_status import AnnotationReconciler
-from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.transcripts import TranscriptCaps
-from blizzard.hub.domain.work_items import WorkItemEditService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
-from blizzard.hub.store.internal.finding_store import FindingStore
-from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
-from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
@@ -128,10 +111,9 @@ class Sweep:
         if services is None:
             return
         interval = app.state.config.annotation_interval_seconds
-        if services.work_sources.annotating_names():
-            annotator = AnnotationReconciler(work_refs=services.chunks.work_refs, work_sources=services.work_sources)
+        if services.annotation is not None:
             yield cls(
-                annotator,
+                services.annotation,
                 interval,
                 app.state.shutdown,
                 "blizzard.hub.forge_status",
@@ -284,49 +266,15 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
     owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
-    # Constructed once here, ahead of the work-source registry and `build_services` below —
-    # one instance each, shared by every write path and auth path.
-    clock = SystemClock()
-    # The hub-store seam — one collaborator shared by every
-    # ``hub/store/internal/`` adapter constructed ahead of `build_services` below.
-    store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
-    user_store = UserRepository(store_connections, RepoErrorFactory(get_logger("blizzard.hub.auth")))
-    # Constructed once here too, so the built-in hub binding and `build_services` below
-    # share one `WorkItemStore`/`DeleteService`/lock/`ChunkStores` bundle rather than each
-    # building its own.
-    cycle_lock = threading.Lock()
-    work_item_store = WorkItemStore(store_connections)
-    chunk_stores = build_chunk_stores(store_connections, clock)
-    delete_service = DeleteService(
-        items=work_item_store,
-        clock=clock,
-        exclusive=chunk_stores.exclusive,
-        cycle_lock=cycle_lock,
-    )
-    # Own instances, ahead of `build_services` below — mirrors `work_item_store`'s own
-    # early construction: the built-in hub closer needs this seam
-    # before `build_services` wires its own.
-    finding_store = FindingStore(store_connections)
-    finding_exit = FindingExitService(repo=finding_store, clock=clock)
-    garden_proposal_resolution = GardenProposalDeliveryResolution(
-        closures=GardenProposalClosureStore(store_connections),
-        proposals=GardenProposalStore(store_connections),
-        findings=finding_store,
-        exits=finding_exit,
-    )
+    # The one process-scoped clock and the stores and leaf services built once over it —
+    # the work-source registry and `build_services` below both take the same core.
+    core = build_hub_core(engine, clock=SystemClock())
     work_source_registry = WorkSourceEntry.registry(
         config.work_sources,
-        users=user_store,
-        work_item_store=work_item_store,
-        edits=WorkItemEditService(
-            items=work_item_store,
-            work_refs=chunk_stores.work_refs,
-            record=chunk_stores.record,
-            facts=chunk_stores.facts,
-            clock=clock,
-            delete=delete_service,
-        ),
-        resolution=garden_proposal_resolution,
+        users=core.users,
+        work_item_store=core.work_item_store,
+        edits=core.work_item_edits,
+        resolution=core.garden_proposal_resolution,
         close_forge_writes_enabled=config.close_forge_writes_enabled,
     )
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
@@ -339,16 +287,9 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     signing_keys_dir = config.data_dir / "auth" / "signing-keys" if config.auth.mode == AUTH_MODE_OAUTH else None
 
     services = build_services(
-        engine,
+        core,
         events=EventBroker(),
         work_sources=work_source_registry,
-        cycle_lock=cycle_lock,
-        work_item_store=work_item_store,
-        delete=delete_service,
-        finding_store=finding_store,
-        finding_exit=finding_exit,
-        clock=clock,
-        users=user_store,
         base_branch=base_branch,
         hub_workdir_root=config.data_dir / "hub_workdirs",
         hub_marker_callback_base_url=f"http://{config.host}:{config.port}",
@@ -359,7 +300,6 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         signing_keys_dir=signing_keys_dir,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=_transcript_caps(config),
-        chunk_stores=chunk_stores,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
