@@ -3686,6 +3686,10 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
     _chunk_id, submission = hub.completions[0]
     branches = sorted(a.branch_name or "" for a in submission.artifacts if a.kind is ArtifactKind.GIT_COMMIT)
     assert branches == ["feat/from-e1", "feat/from-e2"]
+    reports = [f.payload for f in hub.pushed if f.kind == EVENT_RECORDED]
+    failed = [r for r in reports if r["kind"] == "command-failed" and "converge" in r["detail"]["command"]]
+    assert failed, "disagreeing pointers must be reported"
+    assert "'e1'" in failed[0]["detail"]["stderr_tail"] and "'e2'" in failed[0]["detail"]["stderr_tail"]
 
 
 def _two_env_commit_submission(tmp_path, *, origins, commits):  # type: ignore[no-untyped-def]
