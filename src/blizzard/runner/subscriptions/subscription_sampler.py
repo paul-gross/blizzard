@@ -17,6 +17,7 @@ from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
 
 __all__ = [
     "ANTHROPIC_DEFAULT_CREDENTIALS_PATH",
+    "MISS_REASON_TEXT",
     "PROVIDER_ANTHROPIC",
     "PROVIDER_OPENAI",
     "ExternalSubscriptionUsageSnapshot",
@@ -72,6 +73,15 @@ class SampleMissReason(StrEnum):
     CREDENTIAL_UNREADABLE = "credential_unreadable"
     ENDPOINT_UNREACHABLE = "endpoint_unreachable"
     RESPONSE_UNPARSEABLE = "response_unparseable"
+
+
+# Operator-facing text per closed-set miss reason — what to do about it, not the machine word.
+MISS_REASON_TEXT: dict[SampleMissReason, str] = {
+    SampleMissReason.CREDENTIAL_LAPSED: "credential lapsed: log in again",
+    SampleMissReason.CREDENTIAL_UNREADABLE: "credential unreadable",
+    SampleMissReason.ENDPOINT_UNREACHABLE: "endpoint unreachable",
+    SampleMissReason.RESPONSE_UNPARSEABLE: "response unparseable",
+}
 
 
 @dataclass(frozen=True)

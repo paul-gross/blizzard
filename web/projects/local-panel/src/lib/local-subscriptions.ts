@@ -4,6 +4,14 @@ import { ageMs, asyncState, formatAge, injectNowSignal, KitAsyncState } from 'fl
 import { type SubscriptionRow, LocalSubscriptionsView } from './local-subscriptions-view';
 import { injectRunnerDashboardQuery } from './status.query';
 
+/** Operator-facing text per closed-set miss reason — what to do about it, not the machine word. */
+const MISS_REASON_TEXT: Readonly<Record<string, string>> = {
+  credential_lapsed: 'credential lapsed: log in again',
+  credential_unreadable: 'credential unreadable',
+  endpoint_unreachable: 'endpoint unreachable',
+  response_unparseable: 'response unparseable',
+};
+
 /**
  * The subscriptions panel **container** — every declared provider subscription's own
  * newest sampling attempt: whether it sampled successfully, and when not,
@@ -41,12 +49,13 @@ export class LocalSubscriptions {
     return age === null ? 'never' : `${formatAge(age)} ago`;
   }
 
-  /** "ok", "never sampled", or "miss: <reason>" — the operator-facing distinguishable
-   * condition, mirroring the probe CLI's own translation. */
+  /** "ok", "never sampled", or "miss: <operator text>" — the operator-facing distinguishable
+   * condition. The strings are a hand-kept copy of the runner CLI's `MISS_REASON_TEXT`; nothing
+   * keeps the two in sync, so change both together. */
   private conditionLabel(ok: boolean | null, missReason: string | null): string {
     if (ok === null) return 'never sampled';
     if (ok) return 'ok';
-    return `miss: ${missReason ?? 'unknown'}`;
+    return `miss: ${missReason === null ? 'unknown' : (MISS_REASON_TEXT[missReason] ?? missReason)}`;
   }
 
   protected readonly rows = computed<readonly SubscriptionRow[]>(() =>

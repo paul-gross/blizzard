@@ -113,7 +113,7 @@ describe('LocalSubscriptions', () => {
     const rows = el.querySelectorAll('[data-testid="subscription-row"]');
     expect(rows).toHaveLength(2);
     const missRow = Array.from(rows).find((row) => row.getAttribute('data-slug') === 'codex');
-    expect(missRow?.querySelector('.condition')?.textContent).toBe('miss: credential_lapsed');
+    expect(missRow?.querySelector('.condition')?.textContent).toBe('miss: credential lapsed: log in again');
     expect(missRow?.classList.contains('miss')).toBe(true);
   });
 

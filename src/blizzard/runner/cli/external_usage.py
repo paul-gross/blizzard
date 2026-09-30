@@ -10,15 +10,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import LEGACY_ANTHROPIC_SLUG, ConfigError, RunnerConfig
 from blizzard.runner.subscriptions.internal.subscription_sampler_factory import select_sampler
-from blizzard.runner.subscriptions.subscription_sampler import SampleMiss, SampleMissReason
-
-# Operator-facing text per closed-set miss reason — what to do about it, not the machine word.
-_MISS_REASON_TEXT: dict[SampleMissReason, str] = {
-    SampleMissReason.CREDENTIAL_LAPSED: "credential lapsed: log in again",
-    SampleMissReason.CREDENTIAL_UNREADABLE: "credential unreadable",
-    SampleMissReason.ENDPOINT_UNREACHABLE: "endpoint unreachable",
-    SampleMissReason.RESPONSE_UNPARSEABLE: "response unparseable",
-}
+from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT, SampleMiss
 
 
 @click.group("external-usage")
@@ -56,7 +48,7 @@ def external_usage_probe(slug: str | None, directory: str) -> None:
             return
         result = sampler.sample()
     if isinstance(result, SampleMiss):
-        click.echo(f"no sample: {_MISS_REASON_TEXT[result.reason]}")
+        click.echo(f"no sample: {MISS_REASON_TEXT[result.reason]}")
         return
     snapshot = result
     click.echo(f"sampled at {iso_utc(snapshot.sampled_at)}")
