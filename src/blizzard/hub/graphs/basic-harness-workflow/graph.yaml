@@ -5,7 +5,7 @@
 # Harness work — workspace skills, `blizzard-context` convention rules, graph prompts,
 # agent docs, and other agent-capability surfaces — is the fleet's own operating rules:
 # unusually high-leverage per token and judgement-heavy per line. Frontier authors once;
-# advanced reviews and iterates (issue #493): only `build`, the first authoring pass,
+# advanced reviews and iterates: only `build`, the first authoring pass,
 # runs on the frontier tier. `review`'s cold-eyes gate, the `iterate` loop that answers
 # its findings, and the `pre-push` integration step all run on the advanced tier
 # instead — none of the three is doing first-draft authoring, so none needs frontier
@@ -32,7 +32,7 @@
 name: bas-hwf
 entry: build
 
-# Named session pools (issue #144). Four lineages, split across two tiers:
+# Named session pools. Four lineages, split across two tiers:
 #
 #   code      the mechanical build lineage, on the frontier tier — the one pass this
 #             lane still spends its strongest model on. BOUNDED: it can accumulate
@@ -48,7 +48,7 @@ entry: build
 #   prepush   the `pre-push` node's own lineage, on the advanced tier. BOUNDED, across
 #             the deliver-conflict loop.
 #
-# Every pool carries the same `compaction_window` (issue #343) as a ceiling sitting
+# Every pool carries the same `compaction_window` as a ceiling sitting
 # above the bounded lineages' own `rotate:` bounds, and inert on `gate`'s unbounded one
 # for the same reason `rotate:` is absent there — see `advanced-development-workflow`
 # for where the window and the three rotate numbers come from.
@@ -218,11 +218,8 @@ nodes:
     run:
       - name: materialize-review-findings
         command: python3 -m blizzard.hub.graphs.scripts.review_deliver
-    # The script reads no artifact names of its own — it addresses the hub, which reads
-    # this chunk's own newest `review-finding-delta` artifact (review's own `produces:`)
-    # server-side and materializes its `deferred` entries in one idempotent transaction
-    # (blizzard#582 D5/D6). None of the three outcomes routes back to iterate: the land
-    # step above already named a terminal choice.
+    # The review-findings-delivery route in src/blizzard/hub/api/chunks.py owns materialization;
+    # all outcomes below leave the delivery lane for retrospective.
     judgement:
       choices:
         recorded:
