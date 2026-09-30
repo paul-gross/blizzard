@@ -14,9 +14,9 @@ from blizzard.runner.cli.worker_call import WorkerCall
 
 @click.group("analytics")
 def analytics_group() -> None:
-    """Worker: read fleet-wide usage-counts and spend summaries over a window — access
-    is gated server-side on the worker's own lease naming a routine-run chunk, but the
-    rows returned are fleet-wide rollups, not scoped to that run."""
+    """Worker: read fleet-wide usage-counts and spend summaries over a window. Only a
+    routine-run chunk's worker may read; the rows returned are fleet-wide rollups, not
+    scoped to that run."""
 
 
 @analytics_group.group("counts")

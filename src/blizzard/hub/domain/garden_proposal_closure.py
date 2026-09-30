@@ -198,15 +198,11 @@ class GardenProposalClosureService:
         graph: Graph | None,
         findings: Sequence[Finding],
     ) -> AcceptedGardenProposal:
-        """Accept ``proposal``: minting is the default (``mint=True``, requiring
-        ``graph``), linking a hub work item whose body wraps ``body`` or the proposal's
-        own in the "Related findings" template when ``findings`` names any, or left
-        bare otherwise (``_compose_minted_body``) — built from ``findings``,
-        already-loaded objects the caller resolves (``bzh:domain-takes-objects``), never
-        read from ``proposal.findings`` here;
-        ``mint=False`` records the acceptance without minting, or composing anything.
-        Raises :class:`GardenProposalAlreadyClosed` when already closed, and
-        :class:`~blizzard.hub.domain.ingest.IngestConflict` on a raced ref."""
+        """Accept ``proposal`` — see ``blizzard-context:/domain/findings-and-proposals.md``
+        §Closing a proposal: pass or accept. ``mint=True`` requires ``graph`` and composes
+        the item body (``_compose_minted_body``) from ``findings``, already-loaded objects
+        the caller resolves (``bzh:domain-takes-objects``). Raises :class:`GardenProposalAlreadyClosed` when
+        already closed, and :class:`~blizzard.hub.domain.ingest.IngestConflict` on a raced ref."""
         self._refuse_if_closed(proposal.proposal_id)
         if not mint:
             at = self._clock.now()

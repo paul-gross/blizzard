@@ -162,3 +162,56 @@ def test_garden_proposal_show_unknown_id_reports_404(monkeypatch: pytest.MonkeyP
 
     assert result.exit_code != 0
     assert "unknown garden proposal gprop_ghost" in result.output
+
+
+def _row(origin: str, routine_name: str | None, created_by: str | None) -> dict[str, object]:
+    return {
+        "proposal_id": "gprop_1",
+        "origin": origin,
+        "routine_name": routine_name,
+        "created_by": created_by,
+        "class": "fix-the-source",
+        "title": "Author a docstring standard",
+        "body": "the case",
+        "findings": [],
+        "created_at": "t0",
+    }
+
+
+def _render(monkeypatch: pytest.MonkeyPatch, row: dict[str, object], verb: list[str]) -> str:
+    payload = {"proposals": [row], "next_cursor": None} if verb == ["list"] else row
+    monkeypatch.setattr(httpx, "get", lambda url, *, timeout, params=None: _FakeResponse(200, payload))
+    result = CliRunner().invoke(hub_group, ["garden-proposal", *verb])
+    assert result.exit_code == 0, result.output
+    return result.output
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("verb", [["list"], ["show", "gprop_1"]])
+def test_an_operator_row_with_a_routine_renders_routine_and_created_by(
+    monkeypatch: pytest.MonkeyPatch, verb: list[str]
+) -> None:
+    output = _render(monkeypatch, _row("operator", "nightly", "paul"), verb)
+
+    assert "origin=operator  routine=nightly  created_by=paul" in output
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("verb", [["list"], ["show", "gprop_1"]])
+def test_an_operator_row_without_a_routine_renders_no_routine_and_no_none(
+    monkeypatch: pytest.MonkeyPatch, verb: list[str]
+) -> None:
+    output = _render(monkeypatch, _row("operator", None, "paul"), verb)
+
+    assert "origin=operator  created_by=paul" in output
+    assert "routine=" not in output
+    assert "None" not in output
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("verb", [["list"], ["show", "gprop_1"]])
+def test_a_routine_run_row_renders_routine_and_no_created_by(monkeypatch: pytest.MonkeyPatch, verb: list[str]) -> None:
+    output = _render(monkeypatch, _row("routine-run", "nightly", None), verb)
+
+    assert "origin=routine-run  routine=nightly" in output
+    assert "created_by" not in output

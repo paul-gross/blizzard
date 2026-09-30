@@ -91,8 +91,7 @@ def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict]:
 def artifact_list(content: bool, scope: str | None) -> None:
     """Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,
     plus the graph mint's own baked-in declarations and blizzard's published system-artifact
-    set — ``--scope`` narrows to one. Content is elided by default, since inlining
-    every upstream asset's full text has overflowed tool output; ``--content`` restores it.
+    set — ``--scope`` narrows to one. Content is elided by default; ``--content`` includes it.
     Also includes this node-step's own staged, not-yet-published submissions,
     each carrying ``"staged": true`` — everything published carries ``"staged": false``."""
     worker = WorkerCall.of("artifact list")
@@ -134,7 +133,7 @@ def _is_not_found(exc: click.ClickException) -> bool:
     "--name",
     "name_opt",
     default=None,
-    help="Alias for the positional NAME, accepted since node prompts spell required artifacts as `--name`.",
+    help="The artifact's NAME, as an alternative to passing it positionally.",
 )
 @click.option(
     "--node",
@@ -173,9 +172,7 @@ def artifact_get(
     published until the node-step completes; a not-yet-published NAME 404s naming
     ``artifact staged`` instead. Read it back before completion with that verb.
 
-    NAME is passed literally: the CLI percent-encodes it itself, slashes
-    included, so a slashed name (e.g. a ``merged/<owner>/<repo>`` delivery marker) is passed
-    as-is, not pre-encoded."""
+    Pass NAME literally, slashes included."""
     name = name_opt if name_opt is not None else name_arg
     if name_arg is not None and name_opt is not None and name_arg != name_opt:
         raise click.ClickException("artifact get: NAME given both positionally and via --name — pick one")
@@ -221,8 +218,7 @@ def artifact_get(
     "scope",
     type=_SCOPE_CHOICE,
     default=None,
-    help="Always `node` — `graph` and `system` are refused, since a graph-mint declaration and "
-    "a system artifact are both read-only.",
+    help="Always `node` — `graph` and `system` are read-only and refused.",
 )
 def artifact_create(name: str, scope: str | None) -> None:
     """Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node
@@ -259,7 +255,7 @@ def artifact_create(name: str, scope: str | None) -> None:
     "scope",
     type=_SCOPE_CHOICE,
     default=None,
-    help="Always `node` — `graph` and `system` are refused, neither ever having a staged submission.",
+    help="Always `node` — `graph` and `system` hold no staged submission and are refused.",
 )
 def artifact_staged(content: bool, scope: str | None) -> None:
     """Worker: list this node-step's own staged (not-yet-published) submissions, node scope only.
@@ -281,9 +277,8 @@ def artifact_staged(content: bool, scope: str | None) -> None:
     "--env",
     "environment_id",
     default=None,
-    help="The leased environment the repo worktree lives in. Optional while a chunk "
-    "holds exactly one environment (it is inferred); required once it holds several, "
-    "since the same repo has a worktree in each.",
+    help="The leased environment the repo worktree lives in. Inferred while a chunk "
+    "holds exactly one environment; required once it holds several.",
 )
 @click.option(
     "--repo",
@@ -306,16 +301,13 @@ def artifact_staged(content: bool, scope: str | None) -> None:
     "scope",
     type=_SCOPE_CHOICE,
     default=None,
-    help="Always `node` — `graph` and `system` are refused, since a graph-mint declaration and "
-    "a system artifact are both read-only.",
+    help="Always `node` — `graph` and `system` are read-only and refused.",
 )
 def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_sha: str, scope: str | None) -> None:
     """Worker: durably declare a git-commit artifact for REPO. Carries the ``git_commit``
-    kind only — an asset is declared through ``artifact create``. Node scope only. Deliberately no
-    ``--forge``: the origin comes from the environment's repo manifest (pinned by
-    tests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag). Echoes a
-    confirmation naming REPO, BRANCH, and the sha on success — a silent exit 0 was
-    indistinguishable from a no-op."""
+    kind only — an asset is declared through ``artifact create``. Node scope only. The origin
+    comes from the environment's repo manifest. Echoes a confirmation naming REPO, BRANCH,
+    and the sha on success."""
     _refuse_read_only_scope("commit", scope)
     worker = WorkerCall.of("artifact commit")
     body: dict[str, str] = {"repo": repo, "branch": branch, "commit": commit_sha}

@@ -171,12 +171,12 @@ def accept_garden_proposal(
     services: Annotated[HubServices, Depends(get_services)],
     identity: Annotated[ResolvedIdentity, Depends(require(CHUNK_CONTROL))],
 ) -> object:
-    """Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default,
-    wrapping `body` (or the proposal's own, when none is given) in the "Related
-    findings" template when the proposal names any finding, or left bare when it names
-    none, or records the decline when `mint_work_item` is false — never inferred from an
-    absent link. Promotes nothing and changes no finding's state. 404 unknown proposal,
-    409 already closed or a raced ingest, 503 the packaged default graph retired."""
+    """Accept the proposal at PROPOSAL_ID. When `mint_work_item` is true, mints a linked
+    hub work item from `body` (or the proposal's own), wrapped in the "Related findings"
+    template when the proposal names findings and bare when it names none. When it is
+    false, mints nothing and records the decline. Promotes nothing and changes no
+    finding's state. 404 unknown proposal, 409 already closed or a raced ingest, 503 the
+    packaged default graph retired."""
     proposal = _get_or_404(proposal_id, services)
     existing = services.garden_proposal_closures.get(proposal_id)
     if existing is not None:
