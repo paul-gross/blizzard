@@ -57,10 +57,8 @@ def test_found_turns_are_projected_and_the_request_is_authenticated() -> None:
 
 
 @pytest.mark.unit
-def test_thinking_turns_and_sidechains_survive_the_read_intact() -> None:
-    """Widened the runner's own read model to the segment wire's shape,
-    so an archived read narrows nothing — a thinking turn and a whole nested sidechain both
-    reach the panel exactly as the hub stored them."""
+def test_thinking_kind_redaction_and_nested_sidechain_text_are_projected() -> None:
+    """The repository projects a thinking turn and nested sidechain from the response."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -151,10 +149,8 @@ def test_empty_turns_is_the_hub_holds_nothing_outcome() -> None:
 
 
 @pytest.mark.unit
-def test_a_turn_less_body_reads_as_empty_whatever_its_truncation_flag_says() -> None:
-    """An all-cap-rejected lease carries `truncated: true` and no turns. The caller resolves
-    it to local exactly like "the hub holds nothing", so the adapter reports one outcome for
-    both rather than a distinction no consumer acts on."""
+def test_a_truncated_turn_less_body_reads_as_empty() -> None:
+    """The repository reports empty for a turn-less response marked truncated."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -176,8 +172,7 @@ def test_a_turn_less_body_reads_as_empty_whatever_its_truncation_flag_says() -> 
 
 @pytest.mark.unit
 def test_the_recency_cap_keeps_the_newest_turns_and_renumbers_them(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An over-cap read keeps the *newest* turns — the ones an operator opened the panel
-    for — renumbered onto the window it returned, and says so via ``truncated``."""
+    """An over-cap read keeps the newest turns, reindexes them, and flags truncation."""
     monkeypatch.setattr(adapter_module, "MAX_TURNS", 2)
 
     def turn(index: int, kind: str, text: str = "") -> dict[str, object]:
