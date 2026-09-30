@@ -147,6 +147,59 @@ def test_review_fail_carries_findings_and_addendum_back_into_build(tmp_path: Pat
     assert findings[0]["content"] == _FINDINGS
 
 
+def _fail_review_into_build(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyped-def]
+    """Drive build -> review -> (fail) -> build, leaving the chunk on build entered by the addended edge."""
+    chunk_id, nodes = _mint_and_claim(hub)
+    hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json=_completion(nodes["build"], epoch=1, choice="pass", artifacts=[_git_artifact("c1")]),
+    )
+    _report_lease(hub, chunk_id, epoch=2)
+    failed = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json=_completion(nodes["review"], epoch=2, choice="fail", artifacts=[]),
+    ).json()
+    assert failed["outcome"] == "next"
+    return chunk_id, nodes
+
+
+def test_envelope_reread_at_a_node_entered_by_an_addended_edge_carries_the_addendum(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _fail_review_into_build(hub)
+
+    reread = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope").json()
+
+    assert reread["node"]["node_name"] == "build"
+    assert _ADDENDUM in reread["prompt"]
+
+
+def test_envelope_reread_after_a_restart_carries_no_stale_addendum(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _fail_review_into_build(hub)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/restart", json={"node": "review"}).status_code == 202
+
+    reread = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope").json()
+
+    assert reread["node"]["node_name"] == "review"
+    assert _ADDENDUM not in reread["prompt"]
+
+
+def test_reclaim_at_a_node_entered_by_an_addended_edge_carries_the_addendum(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _fail_review_into_build(hub)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
+
+    reclaim = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+
+    assert reclaim.status_code == 201, reclaim.text
+    envelope = reclaim.json()["envelope"]
+    assert envelope["node"]["node_name"] == "build"
+    assert _ADDENDUM in envelope["prompt"]
+
+
 def test_chunk_detail_exposes_the_review_fail_loop_and_findings_asset(tmp_path: Path) -> None:
     """The chunk detail surfaces the full transition history — including the
     review-fail loop back to build — and the review-findings asset content

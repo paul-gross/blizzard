@@ -11,9 +11,9 @@ from pydantic import ValidationError
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.artifacts import ArtifactRow
-from blizzard.hub.domain.envelope import Envelope, LatestArtifacts
-from blizzard.hub.domain.graph import Choice, Graph, GraphArtifact, Node, ProducesSpec, RotatePolicy, SessionDecl
-from blizzard.hub.domain.work import Chunk, WorkRef
+from blizzard.hub.domain.envelope import Arrival, Envelope, LatestArtifacts
+from blizzard.hub.domain.graph import Choice, Edge, Graph, GraphArtifact, Node, ProducesSpec, RotatePolicy, SessionDecl
+from blizzard.hub.domain.work import Chunk, ChunkFacts, RestartFact, TransitionFact, WorkRef
 from blizzard.wire.envelope import EnvelopeArtifact
 
 pytestmark = pytest.mark.unit
@@ -364,3 +364,49 @@ def test_neither_a_declaration_nor_a_chunk_default_yields_an_empty_effective_har
     env = Envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1).wire
 
     assert env.node.session_harnesses == []
+
+
+def test_declared_graph_artifacts_are_never_spliced_into_the_prompt() -> None:
+    artifacts = [GraphArtifact(name="policy", content="POLICY-BODY-MARKER", ordinal=0)]
+    env = Envelope(chunk=_chunk(), graph=_graph(artifacts=artifacts), node=_node(), artifacts=[], epoch=1).wire
+    assert env.prompt is not None
+    assert "POLICY-BODY-MARKER" not in env.prompt
+    assert "policy" not in env.prompt
+
+
+_T0 = datetime(2026, 7, 13, 1, tzinfo=UTC)
+_T1 = datetime(2026, 7, 13, 2, tzinfo=UTC)
+
+
+def _addended_graph() -> Graph:
+    review = replace(_node(), node_id="nd_review", name="review", choices=[Choice("cho_fail", "fail", "no")])
+    edge = Edge(from_node_id="nd_review", choice_id="cho_fail", to_node_name="build", prompt_addendum="RE-ENTER")
+    return replace(_graph(), nodes=[_node(), review], edges=[edge])
+
+
+def _transition_into_build() -> TransitionFact:
+    return TransitionFact(
+        to_node_id="nd_build",
+        to_node_executor=Executor.RUNNER,
+        epoch=2,
+        recorded_at=_T0,
+        from_node_id="nd_review",
+        choice_name="fail",
+        graph_id="gr_1",
+    )
+
+
+def test_arrival_of_a_transition_into_the_current_node_is_the_edges_addendum() -> None:
+    facts = ChunkFacts(minted=True, transitions=[_transition_into_build()])
+    assert Arrival.of_facts(_addended_graph(), facts).addendum == "RE-ENTER"
+
+
+def test_arrival_is_nothing_once_a_restart_supersedes_the_transition() -> None:
+    restart = RestartFact(to_node_id="nd_build", from_node_id="nd_build", graph_id="gr_1", epoch=3, recorded_at=_T1)
+    facts = ChunkFacts(minted=True, transitions=[_transition_into_build()], restarts=[restart])
+    assert Arrival.of_facts(_addended_graph(), facts).addendum is None
+
+
+def test_arrival_is_nothing_for_a_chunk_that_has_not_moved() -> None:
+    assert Arrival.of_facts(_addended_graph(), None).addendum is None
+    assert Arrival.of_facts(_addended_graph(), ChunkFacts(minted=True)).addendum is None

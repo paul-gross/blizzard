@@ -13,7 +13,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.graph import Edge, Graph, Node
-from blizzard.hub.domain.work import Chunk, TransitionFact
+from blizzard.hub.domain.work import Chunk, ChunkFacts, MovementKind, TransitionFact
 from blizzard.wire.envelope import (
     EnvelopeArtifact,
     EnvelopeChoice,
@@ -75,6 +75,16 @@ class Arrival:
         if transition is None or transition.from_node_id is None or transition.choice_name is None:
             return cls(None)
         return cls(graph.edge_for_choice(transition.from_node_id, transition.choice_name))
+
+    @classmethod
+    def of_facts(cls, graph: Graph, facts: ChunkFacts | None) -> Arrival:
+        """The arrival of the chunk's *latest movement*: its addendum only when that movement is a
+        transition into the current node — a later restart or migration re-enters the node without
+        the edge that once led there, so it carries none."""
+        movement = facts.latest_movement() if facts is not None else None
+        if facts is None or movement is None or movement.kind is not MovementKind.TRANSITION:
+            return cls(None)
+        return cls.of_transition(graph, facts.newest_transition())
 
     @classmethod
     def of_choice(cls, graph: Graph, from_node: Node, choice: str) -> Arrival:
