@@ -225,14 +225,6 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
         "small fraction of the fleet's own question volume.",
     ),
     TableWideAllowance(
-        "event_log",
-        200,
-        "ChunkEventsStore.list_events's own default call (no severity/runner_id/"
-        "chunk_id/since filter) is a deliberate unfiltered browse of the operational "
-        "event log — ix_event_log_recorded_at serves the filtered/paged callers, not "
-        "this one.",
-    ),
-    TableWideAllowance(
         "chunk_dependencies",
         200,
         "ChunkDependenciesStore.list_standing_edges filters on released_at IS NULL, a "
