@@ -27,6 +27,7 @@ from blizzard.hub.domain.registry import (
     RunnerNotEnrolled,
     RunnerNotRetired,
     RunnerRegistration,
+    RunnerRetired,
 )
 from blizzard.wire.runner import (
     ExternalSubscriptionUsageWindowView,
@@ -163,12 +164,10 @@ def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_s
     Requires an existing registration (404 otherwise), never a trust-on-first-use grant.
     A retired runner is refused 409: ``reinstate`` is the one reinstatement lever."""
     registration = _registration(services, runner_id)
-    if registration.retired:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"runner {runner_id} is retired — `reinstate` it before enrolling",
-        )
-    token = services.enrollment.enroll(registration)
+    try:
+        token = services.enrollment.enroll(registration)
+    except RunnerRetired as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return RunnerEnrollmentResponse(runner_id=runner_id, token=token)
 
 

@@ -83,6 +83,18 @@ class RunnerRegistration:
     #: The node names the runner declared it holds for a human decision — reported, never enforced, by the hub.
     gates: tuple[str, ...] = ()
 
+    def refuse_if_retired(self, *, action: str) -> None:
+        """Raise :class:`RunnerRetired` when this runner is retired — the one guard every
+        operation a retired runner must not perform enforces, keyed on the id so a token-less
+        caller under ``warn`` is refused too."""
+        if self.retired:
+            raise RunnerRetired(self.runner_id, action=action)
+
+    def is_federation_target(self, redirect_uri: str) -> bool:
+        """Whether the IdP may bounce to ``redirect_uri`` for this runner: it must not be
+        retired, and the URI must be one it registered."""
+        return not self.retired and redirect_uri in self.redirect_uris
+
 
 @dataclass(frozen=True)
 class RunnerCapability:
@@ -491,7 +503,9 @@ class FleetService:
 
         The runner's reported facts (``env_capacity``, ``public_url``/``redirect_uris``,
         ``capabilities``, ``subscriptions``, ``gates``) are overwritten on every registration; absent
-        values store as null/empty. Callers gate a retired runner with :meth:`refuse_retired`."""
+        values store as null/empty. A retired runner is refused with :class:`RunnerRetired`
+        before any write."""
+        self._guard_not_retired(runner_id, action="registration")
         created = self._registry.upsert_registration(
             runner_id,
             workspace_id=workspace_id,
@@ -516,14 +530,17 @@ class FleetService:
         return created
 
     def heartbeat(self, runner_id: str) -> bool:
-        """Refresh a runner's liveness; returns False if it is unregistered."""
+        """Refresh a runner's liveness; returns False if it is unregistered. A retired runner
+        is refused with :class:`RunnerRetired` before its liveness is touched."""
+        self._guard_not_retired(runner_id, action="heartbeat")
         return self._registry.touch_last_seen(runner_id, at=self._clock.now())
 
-    def refuse_retired(self, registration: RunnerRegistration | None, *, action: str) -> None:
-        """Raise :class:`RunnerRetired` when the loaded registration is retired — the id-keyed
-        refusal a token-less caller under ``warn`` still meets. ``None`` (unregistered) passes."""
-        if registration is not None and registration.retired:
-            raise RunnerRetired(registration.runner_id, action=action)
+    def _guard_not_retired(self, runner_id: str, *, action: str) -> None:
+        """Resolve ``runner_id`` to the retired-runner guard, a domain rule. An unregistered
+        runner passes — there is nothing to be retired; a first registration has no object to pass."""
+        registration = self._registry.get_runner(runner_id)
+        if registration is not None:
+            registration.refuse_if_retired(action=action)
 
     def retire(self, registration: RunnerRegistration, *, by: str, force: bool) -> RetireOutcome:
         """Record the fact and revoke the token first, so claims are refused from that instant,
