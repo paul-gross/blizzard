@@ -138,8 +138,8 @@ export class FleetRoutinePanel {
   readonly lifecyclePending = input(false);
 
   readonly run = output<void>();
-  readonly retire = output<void>();
-  readonly enable = output<void>();
+  readonly retire = output<string>();
+  readonly enable = output<string>();
 
   protected readonly pendingConfirm = signal<{
     readonly heading: string;
@@ -181,7 +181,7 @@ export class FleetRoutinePanel {
       message: `Retire routine ${name}? It stops offering a run; its runs, findings, proposals, and closures stay live, queryable, and attributable.`,
       confirmLabel: 'Retire',
       variant: 'danger',
-      run: () => this.retire.emit(),
+      run: () => this.retire.emit(name),
     });
   }
 
@@ -194,7 +194,7 @@ export class FleetRoutinePanel {
       message: `Re-enable routine ${name}? It resumes offering a run.`,
       confirmLabel: 'Re-enable',
       variant: 'primary',
-      run: () => this.enable.emit(),
+      run: () => this.enable.emit(name),
     });
   }
 

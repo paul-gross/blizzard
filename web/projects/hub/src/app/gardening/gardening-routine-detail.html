@@ -5,8 +5,8 @@
   [actionError]="lifecycleActionError()"
   [lifecyclePending]="lifecyclePending()"
   (run)="run()"
-  (retire)="onRetireRoutine()"
-  (enable)="onEnableRoutine()"
+  (retire)="onRetireRoutine($event)"
+  (enable)="onEnableRoutine($event)"
 />
 
 @if (panelVm(); as panel) {

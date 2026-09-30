@@ -36,6 +36,9 @@ export interface ProposalEvidenceRowVm {
   readonly summary: string;
   readonly state: string;
   readonly workItem: ProposalWorkItemVm | null;
+  /** Whether an exit verb is in flight for this finding — disables the row's triage
+   * buttons so it cannot be triaged again before the first request settles. */
+  readonly pending: boolean;
 }
 
 /** The exit verbs the evidence table dispatches inline — {@link FindingTriageVerb}
@@ -95,10 +98,7 @@ export interface ProposalPanelVm {
   readonly body: string;
   readonly closure: ProposalClosureVm | null;
   readonly createdAt: string;
-  /** Whether the proposal cites any findings at all — decided from the proposal's
-   * own citation count, never from whether the live evidence read resolved to
-   * anything. Gates the Evidence section's presence outright, kept separate from
-   * `evidenceState`'s own empty/error/pending triad. */
+  /** Whether the proposal cites any findings — gates the Evidence section's presence. */
   readonly hasFindings: boolean;
 }
 
