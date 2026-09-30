@@ -119,9 +119,7 @@ def _source_option(f: Any) -> Any:
     return click.option("--source", default=None, help="Scope to one work source.")(f)
 
 
-#: The operator's own ``--since`` stays optional (an unbounded-window read is legal
-#: here, unlike the fleet route's own required window) — `blizzard.cli.window`'s
-#: shared factory built with its default.
+#: An unbounded window is legal here, so both flags stay optional.
 _since_option = since_option()
 _until_option = until_option()
 

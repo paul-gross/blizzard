@@ -5,13 +5,13 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import click
 import httpx
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -322,15 +322,10 @@ class TrendDetail:
         )
 
 
-def _utc_query_value(value: datetime) -> str:
-    """See `blizzard.cli.window.utc_query_value`."""
-    return iso_utc(value.astimezone(UTC))
-
-
 @routine_group.command("trend", cls=FleetCommand)
 @click.argument("name")
-@click.option("--since", required=True, type=click.DateTime(), help="The window's start, in local time.")
-@click.option("--until", required=True, type=click.DateTime(), help="The window's end, in local time (exclusive).")
+@since_option(required=True)
+@until_option(required=True)
 @click.option(
     "--introduced-boundary",
     "introduced_boundary",
@@ -350,9 +345,9 @@ def routine_trend(
         "/api/routines/trend",
         params={
             "routine": name,
-            "since": _utc_query_value(since),
-            "until": _utc_query_value(until),
-            "introduced_boundary": _utc_query_value(introduced_boundary),
+            "since": utc_query_value(since),
+            "until": utc_query_value(until),
+            "introduced_boundary": utc_query_value(introduced_boundary),
             "period_days": str(period_days),
         },
     )
@@ -391,10 +386,8 @@ class SweepsDetail:
 
 @routine_group.command("sweeps", cls=FleetCommand)
 @click.argument("name")
-@click.option("--since", required=True, type=click.DateTime(), help="The measurement window's start, in local time.")
-@click.option(
-    "--until", required=True, type=click.DateTime(), help="The measurement window's end, in local time (exclusive)."
-)
+@since_option(required=True)
+@until_option(required=True)
 def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime) -> None:
     """NAME's per-scope last-swept table — its declared scope set, retired scopes
     filtered out unless already swept while linked — and its measurement series over
@@ -403,7 +396,7 @@ def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime)
     resp = cli.send(
         "get",
         f"/api/routines/{routine_id}/sweeps",
-        params={"since": _utc_query_value(since), "until": _utc_query_value(until)},
+        params={"since": utc_query_value(since), "until": utc_query_value(until)},
     )
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"sweeps rejected: {cli.detail(resp, 'validation failed')}")
@@ -438,8 +431,8 @@ class ProposalCountsDetail:
 
 @routine_group.command("proposal-counts", cls=FleetCommand)
 @click.argument("name", required=False, default=None)
-@click.option("--since", required=True, type=click.DateTime(), help="The window's start, in local time.")
-@click.option("--until", required=True, type=click.DateTime(), help="The window's end, in local time (exclusive).")
+@since_option(required=True)
+@until_option(required=True)
 @click.option("--origin", type=click.Choice(["routine-run", "operator"]), default=None, help="Narrow to one origin.")
 def routine_proposal_counts(
     cli: CliContext, name: str | None, since: datetime, until: datetime, origin: str | None
@@ -447,7 +440,7 @@ def routine_proposal_counts(
     """NAME's garden-proposal counts over --since/--until, split into open/passed/
     accepted-with-item/accepted-without-item per class, with created as their sum; omit
     NAME to see every routine's rows at once."""
-    params = {"since": _utc_query_value(since), "until": _utc_query_value(until)}
+    params = {"since": utc_query_value(since), "until": utc_query_value(until)}
     if name is not None:
         params["routine"] = name
     if origin is not None:

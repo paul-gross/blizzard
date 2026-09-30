@@ -1,7 +1,5 @@
-"""The ``--since``/``--until`` window flags shared by the hub and runner analytics
-verbs — one declaration, since the operator's ``--since`` stays optional
-(``GET /api/analytics/...``'s own default-all-time reads) while the runner's is
-required (the fleet route's own 422-unset window, ``bzh:utc-instants``)."""
+"""The ``--since``/``--until`` window flags CLI verbs share — one declaration of each
+flag, read in the caller's local time and converted to UTC for the wire."""
 
 from __future__ import annotations
 
@@ -32,10 +30,14 @@ def since_option(*, required: bool = False) -> Any:
     )
 
 
-def until_option() -> Any:
+def until_option(*, required: bool = False) -> Any:
+    # `default` is left unset (click's own UNSET sentinel) rather than passed as `None`
+    # when `required` — an explicit `None` default reads as "the caller supplied None",
+    # not "missing", so click's own required check would never fire.
+    attrs: dict[str, Any] = {"required": True} if required else {"default": None}
     return click.option(
         "--until",
-        default=None,
         type=click.DateTime(),
         help="Only records before this instant, read in the caller's own local time.",
+        **attrs,
     )
