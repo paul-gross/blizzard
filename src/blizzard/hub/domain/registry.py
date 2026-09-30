@@ -14,10 +14,11 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.work import ActivityRow
+from blizzard.hub.domain.work import ActivityRow, holds_claim
 from blizzard.wire.facts import CREDENTIAL_LAPSED_MISS_REASON
 
 if TYPE_CHECKING:  # the chunk seams import this module's RunnerRegistration
+    from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
     from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
     from blizzard.hub.domain.chunks.route import IReadChunkRouteRepository
     from blizzard.hub.domain.detach import DetachService
@@ -91,9 +92,9 @@ class RunnerRegistration:
             raise RunnerRetired(self.runner_id, action=action)
 
     def is_federation_target(self, redirect_uri: str) -> bool:
-        """Whether the IdP may bounce to ``redirect_uri`` for this runner: it must not be
-        retired, and the URI must be one it registered."""
-        return not self.retired and redirect_uri in self.redirect_uris
+        """Whether the IdP may bounce to ``redirect_uri`` for this runner — the URI must be one
+        it registered. Retirement is refused separately, once the URI has matched."""
+        return redirect_uri in self.redirect_uris
 
 
 @dataclass(frozen=True)
@@ -422,6 +423,24 @@ class RunnerRetired(Exception):
         self.runner_id = runner_id
 
 
+class RetiredRunnerGuard:
+    """The id-keyed retired-runner refusal — the one domain home for every operation that
+    names a runner by id rather than a loaded registration, so a token-less caller under
+    ``warn`` is refused on each of them alike."""
+
+    def __init__(self, *, registry: IReadRunnerRegistry) -> None:
+        self._registry = registry
+
+    # runner_id resolves the retired-runner guard, a domain rule (bzh:domain-takes-objects).
+    # ast-grep-ignore: bzh:domain-takes-objects
+    def refuse_if_retired(self, runner_id: str, *, action: str) -> None:
+        """Raise :class:`RunnerRetired` when ``runner_id`` names a retired runner. An
+        unregistered runner passes — there is nothing to be retired."""
+        registration = self._registry.get_runner(runner_id)
+        if registration is not None:
+            registration.refuse_if_retired(action=action)
+
+
 class RunnerHoldsRoutes(Exception):
     """A retire without ``force`` found live routes — each held chunk and its environments."""
 
@@ -475,7 +494,9 @@ class FleetService:
         registry: IWriteRunnerRegistry,
         routes: IReadChunkRouteRepository,
         records: IReadChunkRecordRepository,
+        facts: IReadChunkFactsRepository,
         detach: DetachService,
+        retired: RetiredRunnerGuard,
         clock: IClock,
         stale_after: timedelta = STALE_AFTER,
     ) -> None:
@@ -483,7 +504,9 @@ class FleetService:
         # Retirement's holdings read and release pass — the hub's existing detach path.
         self._routes = routes
         self._records = records
+        self._facts = facts
         self._detach = detach
+        self._retired = retired
         self._clock = clock
         self._stale_after = stale_after
 
@@ -504,7 +527,7 @@ class FleetService:
         The runner's reported facts (``env_capacity``, ``public_url``/``redirect_uris``,
         ``capabilities``, ``subscriptions``, ``gates``) are overwritten on every registration; absent
         values store as null/empty. A retired runner raises :class:`RunnerRetired` before any write."""
-        self._guard_not_retired(runner_id, action="registration")
+        self._retired.refuse_if_retired(runner_id, action="registration")
         created = self._registry.upsert_registration(
             runner_id,
             workspace_id=workspace_id,
@@ -531,24 +554,17 @@ class FleetService:
     def heartbeat(self, runner_id: str) -> bool:
         """Refresh a runner's liveness; returns False if it is unregistered. A retired runner
         is refused with :class:`RunnerRetired` before its liveness is touched."""
-        self._guard_not_retired(runner_id, action="heartbeat")
+        self._retired.refuse_if_retired(runner_id, action="heartbeat")
         return self._registry.touch_last_seen(runner_id, at=self._clock.now())
-
-    def _guard_not_retired(self, runner_id: str, *, action: str) -> None:
-        """Resolve ``runner_id`` to the retired-runner guard, a domain rule. An unregistered
-        runner passes — there is nothing to be retired; a first registration has no object to pass."""
-        registration = self._registry.get_runner(runner_id)
-        if registration is not None:
-            registration.refuse_if_retired(action=action)
 
     def retire(self, registration: RunnerRegistration, *, by: str, force: bool) -> RetireOutcome:
         """Record the fact and revoke the token first, so claims are refused from that instant,
-        then release every held route through ``DetachService``. A first retire without ``force``
-        refuses with :class:`RunnerHoldsRoutes`; a re-run writes no second fact and re-runs the
-        release pass, which also catches a claim that slipped past the pre-lock check."""
+        then release every held route through ``DetachService`` — a terminal chunk holds none. A
+        first retire without ``force`` refuses with :class:`RunnerHoldsRoutes`; a re-run writes no
+        second fact and re-runs the release pass, which also catches a claim that slipped past the pre-lock check."""
         runner_id = registration.runner_id
         if not registration.retired and not force:
-            holdings = self._routes.live_routes_of_runner(runner_id)
+            holdings = self._holdings(runner_id)
             if holdings:
                 raise RunnerHoldsRoutes(runner_id, holdings)
         now = self._clock.now()
@@ -569,6 +585,13 @@ class FleetService:
             released=[r.chunk_id for r in outcome.released],
         )
         return outcome
+
+    def _holdings(self, runner_id: str) -> list[Route]:
+        """The runner's live routes on chunks that still hold a claim — a route left on a
+        terminal chunk is no holding."""
+        routes = self._routes.live_routes_of_runner(runner_id)
+        facts = self._facts.status_facts_for([route.chunk_id for route in routes])
+        return [route for route in routes if route.chunk_id not in facts or holds_claim(facts[route.chunk_id].status())]
 
     def _release(self, route: Route) -> ReleasedRoute | None:
         chunk = self._records.get(route.chunk_id)
@@ -649,6 +672,12 @@ class FleetService:
         """One runner's derived liveness over its loaded registration
         (``bzh:domain-takes-objects``) — the edge resolves ``runner_id`` to it (404 if
         unknown) before calling this."""
+        return self._liveness(registration)
+
+    def own_liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
+        """The runner's own pull read of its liveness — refused with :class:`RunnerRetired`
+        when it is retired, unlike the operator's :meth:`get_liveness`, which still shows it."""
+        registration.refuse_if_retired(action="runner read")
         return self._liveness(registration)
 
     def list_with_liveness(self, *, include_retired: bool = False) -> list[RunnerLiveness]:

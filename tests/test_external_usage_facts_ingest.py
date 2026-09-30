@@ -17,7 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.facts import FactIngestService
-from blizzard.hub.domain.registry import FleetService
+from blizzard.hub.domain.registry import FleetService, RetiredRunnerGuard
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -55,11 +55,14 @@ def _payload(*, slug: str, sampled_at: datetime, utilization_pct: float, name: s
 def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
     store = hub_store_connections(engine)
     chunks = chunk_stores(engine, clock)
+    retired = RetiredRunnerGuard(registry=RunnerRegistryStore(store))
     fleet = FleetService(
         registry=RunnerRegistryStore(store),
         routes=chunks.route,
         records=chunks.record,
+        facts=chunks.facts,
         detach=DetachService(route=chunks.route, exclusive=chunks.exclusive, clock=clock),
+        retired=retired,
         clock=clock,
     )
     event_log = EventLogService(events=chunks.events, publisher=EventBroker())
@@ -71,6 +74,7 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
         usage=chunks.usage,
         events=event_log,
         fleet=fleet,
+        retired=retired,
         clock=clock,
     )
 

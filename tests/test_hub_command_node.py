@@ -766,6 +766,18 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
+def test_a_hub_node_landing_done_releases_the_route(tmp_path: Path) -> None:
+    """The hub node's ``done`` is the release a runner-authored ``done`` never writes."""
+    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id, _graph = _to_merge_node(hub)
+
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
+    assert hub.services.chunks.route.route_of(chunk_id) is None
+
+
+@pytest.mark.component
 def test_the_env_addresses_this_visits_garden_delivery_route(tmp_path: Path) -> None:
     """`garden_deliver` reaches the hub only through the injected
     ``BZ_HUB_GARDEN_DELIVERY_URL``, so the executor must address this

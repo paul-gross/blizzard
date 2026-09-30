@@ -87,7 +87,7 @@ from blizzard.hub.domain.pause import PauseService
 from blizzard.hub.domain.promote import PromoteService
 from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
-from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
+from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.restart import RestartService
 from blizzard.hub.domain.review_findings_materialize import ReviewFindingsMaterialize
 from blizzard.hub.domain.routine_baselines import RoutineBaselineService
@@ -457,7 +457,17 @@ def build_services(
     # One fleet service, shared: the API's pause routes and the fact ingest both land
     # registry facts, and two instances would be two of the same thing.
     detach = DetachService(route=chunk_route, exclusive=chunk_exclusive, clock=clock)
-    fleet = FleetService(registry=registry_store, routes=chunk_route, records=chunk_record, detach=detach, clock=clock)
+    # One id-keyed retired-runner refusal, shared by every runner-contact operation.
+    retired = RetiredRunnerGuard(registry=registry_store)
+    fleet = FleetService(
+        registry=registry_store,
+        routes=chunk_route,
+        records=chunk_record,
+        facts=chunk_facts,
+        detach=detach,
+        retired=retired,
+        clock=clock,
+    )
     enrollment = RunnerEnrollmentService(registry=registry_store, clock=clock)
     # The identity spine — one error factory shared by the SQLAlchemy
     # adapters, so the same instances back both the Write Protocols and the reads.
@@ -531,6 +541,7 @@ def build_services(
             artifacts=chunk_artifacts,
             graphs=graph_store,
             registry=registry_store,
+            retired=retired,
             exclusive=chunk_exclusive,
             clock=clock,
         ),
@@ -541,10 +552,13 @@ def build_services(
             escalations=chunk_escalations,
             route=chunk_route,
             artifacts=chunk_artifacts,
+            retired=retired,
             clock=clock,
             hub_node_executor=hub_node,
         ),
-        decisions=DecisionService(facts=chunk_facts, route=chunk_route, decisions=chunk_decisions, clock=clock),
+        decisions=DecisionService(
+            facts=chunk_facts, route=chunk_route, decisions=chunk_decisions, retired=retired, clock=clock
+        ),
         requeue=RequeueService(movement=chunk_movement, route=chunk_route, exclusive=chunk_exclusive, clock=clock),
         restart=RestartService(movement=chunk_movement, graphs=graph_store, clock=clock, exclusive=chunk_exclusive),
         detach=detach,
@@ -567,12 +581,15 @@ def build_services(
             usage=chunk_usage,
             events=event_log,
             fleet=fleet,
+            retired=retired,
             clock=clock,
         ),
-        transcript_ingest=TranscriptIngestService(store=transcript_store, clock=clock, caps=transcript_caps),
+        transcript_ingest=TranscriptIngestService(
+            store=transcript_store, retired=retired, clock=clock, caps=transcript_caps
+        ),
         graph_mint=graph_mint,
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
-        runner_facts=RunnerFactsService(route=chunk_route, escalations=chunk_escalations, clock=clock),
+        runner_facts=RunnerFactsService(route=chunk_route, escalations=chunk_escalations, retired=retired, clock=clock),
         questions=QuestionService(questions=chunk_questions, clock=clock),
         queue=QueueService(queue=chunk_queue, record=chunk_record, clock=clock),
         group=GroupService(

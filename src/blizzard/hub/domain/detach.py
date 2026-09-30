@@ -10,7 +10,7 @@ from __future__ import annotations
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.work import Chunk, holds_claim
 
 
 class NotRouted(Exception):
@@ -41,9 +41,13 @@ class DetachService:
 
     def release_held(self, chunk: Chunk, *, runner_id: str) -> int | None:
         """:meth:`detach`, only while ``runner_id`` still holds the chunk — retirement's
-        release pass. ``None`` when the route is gone or another runner's by now."""
+        release pass. ``None`` when the route is gone, another runner's by now, or left on a
+        terminal chunk, which holds no claim to release."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             route = handle.route_of(chunk.chunk_id)
             if route is None or route.runner_id != runner_id:
+                return None
+            facts = handle.facts(chunk.chunk_id)
+            if facts is not None and not holds_claim(facts.status()):
                 return None
             return self._route.record_route_released_locked(handle, chunk.chunk_id, at=self._clock.now())

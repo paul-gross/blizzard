@@ -13,6 +13,7 @@ from typing import Literal, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.hub.domain.registry import RetiredRunnerGuard
 
 _log = get_logger("blizzard.hub.transcripts")
 
@@ -167,15 +168,25 @@ class TranscriptIngestService:
     lane's own high-water mark. Caps are derived by summing stored rows, never
     a maintained counter."""
 
-    def __init__(self, *, store: IWriteTranscriptSegments, clock: IClock, caps: TranscriptCaps | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        store: IWriteTranscriptSegments,
+        retired: RetiredRunnerGuard,
+        clock: IClock,
+        caps: TranscriptCaps | None = None,
+    ) -> None:
         self._store = store
+        self._retired = retired
         self._clock = clock
         self._caps = caps if caps is not None else TranscriptCaps()
 
     def ingest(self, runner_id: str, records: list[tuple[int, SegmentRecord]]) -> TranscriptIngestResult:
         """``records`` pairs each record with its lane ``seq`` (the wire batch's own
         per-record field) — kept out of :class:`SegmentRecord` since ``seq`` is a lane
-        concept, not part of a record's stored identity."""
+        concept, not part of a record's stored identity. A retired runner is refused with
+        :class:`RunnerRetired` before anything lands."""
+        self._retired.refuse_if_retired(runner_id, action="transcript ingest")
         mark = self._store.high_water(runner_id)
         applied: list[int] = []
         already: list[int] = []

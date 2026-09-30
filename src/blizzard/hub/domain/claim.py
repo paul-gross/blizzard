@@ -10,7 +10,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass
 
-from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.tokens import TokenHash
@@ -21,15 +21,14 @@ from blizzard.hub.domain.eligibility import EligibilityCheck
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
-from blizzard.hub.domain.registry import IReadRunnerRegistry
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.registry import IReadRunnerRegistry, RetiredRunnerGuard
+from blizzard.hub.domain.work import Chunk, holds_claim
 from blizzard.wire.envelope import NodeEnvelope
 
 #: `secrets.token_urlsafe` byte count for the route capability token (43 URL-safe chars).
 _ROUTE_TOKEN_BYTES = 32
 
-# Crash point (``bzh:crash-point-registry``): the route and its capability-token
-# fact are durable, but the plaintext has not reached the runner; recovered by claim adoption.
+# Crash point (``bzh:crash-point-registry``): route durable, plaintext not yet delivered.
 _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE = crashpoint(
     "claim.after-persist.before-response",
     "the route + its route_token_minted fact are durable; the plaintext has not yet reached the runner",
@@ -67,12 +66,9 @@ class ClaimDeniedTerminal(Exception):
 
 
 class ClaimDeniedDependency(Exception):
-    """The chunk stands on a prerequisite that has not reached ``done`` — refused before
-    the race, mirroring :class:`ClaimDeniedTerminal`'s shape. Re-derived fresh under the
-    claim lock so a race between a peek and a claim can never slip a
-    blocked chunk through, whether the edge landed or the prerequisite finished after the
-    peek. Names the one standing edge found unmet, earliest-declared first — not every
-    unmet edge the chunk may carry."""
+    """The chunk stands on a prerequisite not yet ``done``, mirroring
+    :class:`ClaimDeniedTerminal`'s shape and re-derived under the claim lock. Names the one
+    unmet edge found, earliest-declared first."""
 
     def __init__(self, *, chunk_id: str, prerequisite_chunk_id: str) -> None:
         super().__init__(f"chunk {chunk_id} depends on unmet prerequisite {prerequisite_chunk_id}")
@@ -115,6 +111,7 @@ class ClaimService:
         artifacts: IReadChunkArtifactsRepository,
         graphs: IReadGraphRepository,
         registry: IReadRunnerRegistry,
+        retired: RetiredRunnerGuard,
         exclusive: IChunkExclusiveWrites,
         clock: IClock,
     ) -> None:
@@ -125,11 +122,11 @@ class ClaimService:
         # The pre-lock paused-runner peek only — every guard read inside the CAS itself
         # goes through the locked handle instead (`_claim_locked`'s own re-fetch).
         self._registry = registry
-        # The locked-transaction seam (``bzh:store-exclusive-write``): the check-live-route
-        # → record-route CAS runs inside one row-locked write transaction, never an
-        # in-process lock, so it stays correct once more than one hub process shares the
-        # store.
+        # The locked-transaction seam (``bzh:store-exclusive-write``): the route CAS runs in
+        # one row-locked write transaction, never an in-process lock.
         self._exclusive = exclusive
+        # The rekey's refusal; the claim refuses through the registration it already reads.
+        self._retired = retired
         self._clock = clock
 
     # runner_id resolves a paused-runner guard, a domain rule (bzh:domain-takes-objects).
@@ -165,10 +162,6 @@ class ClaimService:
         workspace_id: str,
         environment_ids: list[str],
     ) -> ClaimResult:
-        existing = handle.route_of(chunk.chunk_id)
-        if existing is not None:
-            raise ClaimConflict(held_by_runner_id=existing.runner_id)
-
         # Re-read the chunk under the lock: an edit that landed first may have
         # moved `graph_id`/`model` since the edge resolved the handed-in objects.
         current = handle.record(chunk.chunk_id)
@@ -182,15 +175,17 @@ class ClaimService:
         chunk = current
 
         facts = handle.facts(chunk.chunk_id)
-        # Re-derive status fresh under the claim lock: a stop landing between this
-        # runner's peek and its claim POST is invisible to the peek.
+        # Re-derived under the lock (a stop can land after the peek), and before the
+        # route: a route left on a terminal chunk confers no tenure.
         status = facts.status() if facts is not None else ChunkStatus.NOT_READY
-        if status in TERMINAL_STATUSES:
+        if not holds_claim(status):
             raise ClaimDeniedTerminal(chunk_id=chunk.chunk_id, status=status)
 
-        # Re-derived fresh under the same lock: a declared edge or a
-        # prerequisite's completion landing after this runner's peek is invisible to the
-        # peek, exactly as a terminal transition is.
+        existing = handle.route_of(chunk.chunk_id)
+        if existing is not None:
+            raise ClaimConflict(held_by_runner_id=existing.runner_id)
+
+        # Re-derived under the same lock: an edge or completion can land after the peek.
         unmet = self._unmet_prerequisite(handle, chunk.chunk_id)
         if unmet is not None:
             raise ClaimDeniedDependency(chunk_id=chunk.chunk_id, prerequisite_chunk_id=unmet)
@@ -264,6 +259,7 @@ class ClaimService:
         way to learn it. Appends a new ``route_token_minted`` fact rather than mutating
         the prior one (``bzh:facts-not-status``); newest-fact-wins supersedes the old
         token, re-run idempotent. Takes an already-resolved route (``bzh:domain-takes-objects``)."""
+        self._retired.refuse_if_retired(route.runner_id, action="route-token rekey")
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         self._route.record_route_token(route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now())
         return route_token

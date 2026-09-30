@@ -16,7 +16,8 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass
 from typing import Protocol
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 
 from blizzard import __version__
 from blizzard.foundation.clock import SystemClock
@@ -53,6 +54,7 @@ from blizzard.hub.api.work_sources import router as work_sources_router
 from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_hub_core, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
+from blizzard.hub.domain.registry import RunnerRetired
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
@@ -175,6 +177,12 @@ class Sweep:
             first = False
 
 
+def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:
+    """Map the domain's :class:`RunnerRetired` to a 403 carrying its message — the one
+    refusal every runner-contact route and IdP federation return for a retired runner."""
+    return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
@@ -210,6 +218,8 @@ def create_app(
     app.state.events = services.events if services is not None else EventBroker()
     # Set on shutdown by ``_lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
+
+    app.add_exception_handler(RunnerRetired, _refuse_retired_runner)
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)

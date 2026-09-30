@@ -25,6 +25,7 @@ from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
 from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.registry import RetiredRunnerGuard
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import Chunk, DecisionChoice, DecisionRow
 from blizzard.wire.completion import SubmittedArtifact, WorkItemProposal
@@ -69,17 +70,21 @@ class DecisionService:
         facts: IReadChunkFactsRepository,
         route: IWriteChunkRouteRepository,
         decisions: IWriteChunkDecisionsRepository,
+        retired: RetiredRunnerGuard,
         clock: IClock,
     ) -> None:
         self._facts = facts
         self._route = route
         self._decisions = decisions
+        self._retired = retired
         self._clock = clock
 
     def submit(
         self, chunk: Chunk, graph: Graph, submission: DecisionSubmission, *, route_token_mode: str = ROUTE_TOKEN_WARN
     ) -> DecisionSubmitResult:
-        """Runner-config gate: park the chunk on a decision instead of transitioning."""
+        """Runner-config gate: park the chunk on a decision instead of transitioning. A retired
+        submitting runner is refused with :class:`RunnerRetired` before anything lands."""
+        self._retired.refuse_if_retired(submission.runner_id, action="decision")
         node = graph.node_by_id(submission.from_node_id)
         if node is None:
             return DecisionSubmitResult.failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")

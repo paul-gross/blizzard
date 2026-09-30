@@ -349,7 +349,7 @@ def test_escalation_route_query_count_is_unaffected(tmp_path: Path) -> None:
         )
         assert resp.status_code == 202, resp.text
 
-    assert count_queries(hub.engine, call) == 68
+    assert count_queries(hub.engine, call) == 69  # includes the retired-runner guard's registry read
 
 
 def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) -> None:

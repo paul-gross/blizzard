@@ -529,6 +529,19 @@ def test_a_cross_graph_restart_repins_the_chunk_and_lands_it_by_name(tmp_path) -
     assert detail["latest_epoch"] == 3
 
 
+def test_a_cross_graph_restart_keeps_the_holding_runners_route(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The re-pin releases nothing: the runner holding the chunk keeps it and re-enters."""
+    hub = build_hub(tmp_path)
+    chunk_id = _mint(hub)
+    target = _target_graph(hub)
+
+    assert _restart(hub, chunk_id, to_graph=target).status_code == 202
+
+    route = hub.services.chunks.route.route_of(chunk_id)
+    assert route is not None
+    assert route.runner_id == "r1"
+
+
 def test_a_same_graph_restart_refuses_a_graph_that_changed_since_the_caller_loaded_it(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """A same-graph restart's ``graph`` argument is re-checked against the chunk's
     current pin under the row lock (``bzh:store-exclusive-write``) — a concurrent edit's

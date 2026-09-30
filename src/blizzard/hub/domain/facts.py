@@ -25,7 +25,7 @@ from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunks.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.event_log import EventLogService
-from blizzard.hub.domain.registry import FleetService
+from blizzard.hub.domain.registry import FleetService, RetiredRunnerGuard
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import ChunkFacts
 from blizzard.wire.facts import (
@@ -129,22 +129,38 @@ class RunnerFactsService:
     """Land runner-reported ``lease.minted`` / ``escalation.recorded`` facts."""
 
     def __init__(
-        self, *, route: IWriteChunkRouteRepository, escalations: IWriteChunkEscalationsRepository, clock: IClock
+        self,
+        *,
+        route: IWriteChunkRouteRepository,
+        escalations: IWriteChunkEscalationsRepository,
+        retired: RetiredRunnerGuard,
+        clock: IClock,
     ) -> None:
         self._route = route
         self._escalations = escalations
+        self._retired = retired
         self._clock = clock
 
     def record_lease_minted(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
-        """Land a runner's ``lease.minted`` — advances the fence's latest epoch."""
+        """Land a runner's ``lease.minted`` — advances the fence's latest epoch. A retired
+        runner is refused with :class:`RunnerRetired` before anything lands."""
+        self._retired.refuse_if_retired(runner_id, action="lease report")
         self._route.record_lease(chunk_id, epoch=epoch, runner_id=runner_id, at=self._clock.now())
 
     def record_escalation(
-        self, chunk_id: str, *, epoch: int, takeover_command: str, wrapped_takeover_command: str = ""
+        self,
+        chunk_id: str,
+        *,
+        runner_id: str,
+        epoch: int,
+        takeover_command: str,
+        wrapped_takeover_command: str = "",
     ) -> int:
-        """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``.
+        """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``. A retired
+        runner is refused with :class:`RunnerRetired` before anything lands.
 
         Returns the freshly-written ``escalations.id`` (its activity-feed key)."""
+        self._retired.refuse_if_retired(runner_id, action="escalation report")
         return self._escalations.record_escalation(
             chunk_id,
             epoch=epoch,
@@ -178,6 +194,7 @@ class FactIngestService:
         usage: IWriteChunkUsageRepository,
         events: EventLogService,
         fleet: FleetService,
+        retired: RetiredRunnerGuard,
         clock: IClock,
     ) -> None:
         self._facts = facts
@@ -187,9 +204,13 @@ class FactIngestService:
         self._usage = usage
         self._events = events
         self._fleet = fleet
+        self._retired = retired
         self._clock = clock
 
     def ingest(self, batch: RunnerFactBatch, *, route_token_mode: str = ROUTE_TOKEN_WARN) -> FactIngestResult:
+        """Apply the batch. A retired runner is refused with :class:`RunnerRetired` before its
+        high-water mark is read, so nothing in the batch lands."""
+        self._retired.refuse_if_retired(batch.runner_id, action="fact ingest")
         mark = self._route.runner_high_water(batch.runner_id)
         applied: list[int] = []
         already: list[int] = []
