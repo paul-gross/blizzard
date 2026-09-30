@@ -22,11 +22,11 @@ const BASE_VM: ProposalPanelVm = {
 };
 
 const EVIDENCE: readonly ProposalEvidenceRowVm[] = [
-  { findingId: 'fin_1', locus: 'src/a.py:1', summary: 'stale docstring', state: 'live', workItem: null },
-  { findingId: 'fin_2', locus: 'src/b.py:9', summary: 'another one', state: 'resolved', workItem: null },
+  { findingId: 'fin_1', locus: 'src/a.py:1', summary: 'stale docstring', state: 'live', workItem: null, pending: false },
+  { findingId: 'fin_2', locus: 'src/b.py:9', summary: 'another one', state: 'resolved', workItem: null, pending: false },
   // `gone` is the state that separates "has exited" from the wire's `live` boolean:
   // still open, still triageable, and the only row Confirm gone is actually for.
-  { findingId: 'fin_3', locus: 'src/c.py:4', summary: 'ground moved', state: 'gone', workItem: null },
+  { findingId: 'fin_3', locus: 'src/c.py:4', summary: 'ground moved', state: 'gone', workItem: null, pending: false },
 ];
 
 describe('FleetProposalPanel', () => {
@@ -197,6 +197,17 @@ describe('FleetProposalPanel', () => {
       expect(el.querySelector('[data-testid="gardening-proposal-finding-resolve-fin_1"]')).toBeNull();
     });
 
+    it('disables every verb on a row whose triage is in flight', async () => {
+      const evidence = EVIDENCE.map((row) => ({ ...row, pending: row.findingId === 'fin_1' }));
+      const fixture = await mount({ canControl: true, evidence });
+      const el = fixture.nativeElement as HTMLElement;
+      const button = (id: string) =>
+        el.querySelector<HTMLButtonElement>(`[data-testid="gardening-proposal-finding-resolve-${id}"]`);
+
+      expect(button('fin_1')?.disabled).toBe(true);
+      expect(button('fin_3')?.disabled).toBe(false);
+    });
+
     it('withholds the actions on a row that already left the bucket', async () => {
       const fixture = await mount({ canControl: true });
       const el = fixture.nativeElement as HTMLElement;
@@ -353,7 +364,7 @@ describe('FleetProposalPanel', () => {
 
   it("renders each evidence row's summary through a prose block, formatting preserved", async () => {
     const evidence: readonly ProposalEvidenceRowVm[] = [
-      { findingId: 'fin_1', locus: 'src/a.py:1', summary: 'line one\nline two', state: 'live', workItem: null },
+      { findingId: 'fin_1', locus: 'src/a.py:1', summary: 'line one\nline two', state: 'live', workItem: null, pending: false },
     ];
     const fixture = await mount({ evidence });
     const el = fixture.nativeElement as HTMLElement;

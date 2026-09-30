@@ -333,14 +333,14 @@ describe('FleetRoutinePanel', () => {
   it('emits retire once the operator confirms', async () => {
     const fixture = await mount({ canEdit: true });
     const el = fixture.nativeElement as HTMLElement;
-    let emitted = false;
-    fixture.componentInstance.retire.subscribe(() => (emitted = true));
+    let emitted: string | null = null;
+    fixture.componentInstance.retire.subscribe((name) => (emitted = name));
 
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-routine-panel-retire"]')?.click();
     await fixture.whenStable();
     el.querySelector<HTMLButtonElement>('[data-testid="confirm-dialog-confirm"]')?.click();
 
-    expect(emitted).toBe(true);
+    expect(emitted).toBe(VM.record.name);
   });
 
   it('emits nothing when the operator cancels the retire confirm', async () => {

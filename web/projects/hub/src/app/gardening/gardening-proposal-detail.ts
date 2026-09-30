@@ -9,11 +9,17 @@ import {
   injectHubGardenProposalsQuery,
   injectHubWorkItemQuery,
   injectMeQuery,
+  injectPendingMutationVariables,
   injectConfirmGoneFindingsMutation,
   injectNotAFindingFindingsMutation,
   injectResolveFindingsMutation,
   injectWontFixFindingsMutation,
   compactRef,
+  confirmGoneFindingsMutationKey,
+  notAFindingFindingsMutationKey,
+  resolveFindingsMutationKey,
+  wontFixFindingsMutationKey,
+  type FindingExitVars,
   errorMessage,
   type FindingView,
   type GardenProposalClosureView,
@@ -162,12 +168,31 @@ export class GardeningProposalDetail {
       summary: f.summary,
       state: f.state,
       workItem,
+      pending: this.pendingTriage().some((vars) => vars.findingIds.includes(f.finding_id)),
     }));
   });
 
+  /** A proposal citing no findings leaves the findings query disabled, which reports
+   * `isPending()` forever — so that case is `empty` before the helper is consulted. */
   protected readonly evidenceState = computed<KitAsyncStateValue>(() =>
-    asyncState(this.findingsQuery, this.evidenceFindings().length === 0),
+    (this.selectedProposal()?.findings.length ?? 0) === 0
+      ? 'empty'
+      : asyncState(this.findingsQuery, this.evidenceFindings().length === 0),
   );
+
+  /** The variables of every inline triage mutation still in flight, across the four
+   * verbs (`bzh:frontend-pending-override`) — a row whose finding id is among them is
+   * not offered its buttons again. */
+  private readonly pendingTriage = computed<readonly FindingExitVars[]>(() => [
+    ...this.pendingResolve(),
+    ...this.pendingConfirmGone(),
+    ...this.pendingWontFix(),
+    ...this.pendingNotAFinding(),
+  ]);
+  private readonly pendingResolve = injectPendingMutationVariables<FindingExitVars>(resolveFindingsMutationKey);
+  private readonly pendingConfirmGone = injectPendingMutationVariables<FindingExitVars>(confirmGoneFindingsMutationKey);
+  private readonly pendingWontFix = injectPendingMutationVariables<FindingExitVars>(wontFixFindingsMutationKey);
+  private readonly pendingNotAFinding = injectPendingMutationVariables<FindingExitVars>(notAFindingFindingsMutationKey);
 
   /** Whether the current identity may pass or accept (`chunk:control` — the same
    * permission `garden_proposals.py`'s two closing routes require server-side);

@@ -267,8 +267,8 @@ export class GardeningRoutineDetail {
    * shown for the routine's current lifecycle state. */
   protected readonly lifecyclePending = computed(() => this.routineLifecycleMutation.isPending());
 
-  protected onRetireRoutine(): void {
-    const routineId = this.selectedRoutine()?.routine_id;
+  protected onRetireRoutine(name: string): void {
+    const routineId = this.routines().find((r) => r.name === name)?.routine_id;
     if (routineId === undefined) return;
     this.lifecycleActionError.set(null);
     this.routineLifecycleMutation.mutate(
@@ -277,8 +277,8 @@ export class GardeningRoutineDetail {
     );
   }
 
-  protected onEnableRoutine(): void {
-    const routineId = this.selectedRoutine()?.routine_id;
+  protected onEnableRoutine(name: string): void {
+    const routineId = this.routines().find((r) => r.name === name)?.routine_id;
     if (routineId === undefined) return;
     this.lifecycleActionError.set(null);
     this.routineLifecycleMutation.mutate(

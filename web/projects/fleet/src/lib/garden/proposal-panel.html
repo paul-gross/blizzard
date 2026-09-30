@@ -121,6 +121,7 @@
                           @for (action of actions; track action.verb) {
                             <fleet-kit-button
                               [testid]="'gardening-proposal-finding-' + action.verb + '-' + row.findingId"
+                              [disabled]="row.pending"
                               (click)="evidenceTriage.emit({ findingId: row.findingId, verb: action.verb })"
                               >{{ action.label }}</fleet-kit-button
                             >

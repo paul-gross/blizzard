@@ -187,6 +187,12 @@ describe('GardeningProposalDetail', () => {
     expect(panel.componentInstance.vm()?.hasFindings).toBe(false);
   });
 
+  it('resolves evidenceState to empty, not loading, for a proposal citing none', async () => {
+    const { fixture } = await render([NO_FINDINGS], VIEWER_ME_RESPONSE, 'gp_none');
+    const panel = fixture.debugElement.query(By.css('fleet-proposal-panel'));
+    expect(panel.componentInstance.evidenceState()).toBe('empty');
+  });
+
   it('withholds the Evidence section outright for a proposal that cites no findings', async () => {
     const { el } = await render([NO_FINDINGS], VIEWER_ME_RESPONSE, 'gp_none');
 
