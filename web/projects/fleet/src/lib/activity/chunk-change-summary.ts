@@ -37,6 +37,12 @@ export interface ChunkChangeSummary {
  * Every other unclaimed transition still omits line 2 entirely, unchanged from before.
  */
 export function summarizeChunkChange(data: LoggedEvent['data']): ChunkChangeSummary {
+  if (data.cause === 'claimed') {
+    return {
+      transition: `${compactRef(data.chunk_id ?? '—')} claimed`,
+      ...(data.runner_id ? { runner: compactRef(data.runner_id) } : {}),
+    };
+  }
   const segments: string[] = [compactRef(data.chunk_id ?? '—')];
   if (data.prev_node) segments.push(data.prev_node);
   if (data.status) segments.push('→', data.status);

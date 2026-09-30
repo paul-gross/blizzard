@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -31,6 +32,8 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _winter_source,
 )
+from tests.service.support import mock_runner
+from tests.service.test_hub_service import _graph_yaml as _activity_graph_yaml
 
 # The built Angular bundle `blizzard hub host` mounts at `/`, needed for the browser
 # scenarios; absent it, they skip rather than fail against a placeholder.
@@ -333,6 +336,121 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
 
 def _rail_messages(page: Page) -> list[str]:
     return page.get_by_test_id("activity-message").all_text_contents()
+
+
+def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
+    tmp_path: Path, chromium_available: bool
+) -> None:
+    """The live rail and durable read have one identity per occurrence despite
+    subsequent lease/usage refreshes and a two-frame question notification."""
+    if not chromium_available:
+        pytest.skip("no Playwright Chromium installed")
+    if not _HUB_BUNDLE.is_file():
+        pytest.skip("no built hub bundle")
+    bin_dir = _mock_bin_dir()
+    winter_source = _winter_source()
+    if bin_dir is None or winter_source is None:
+        pytest.skip("no provisioned mock worktree or local winter source")
+
+    from playwright.sync_api import expect, sync_playwright
+
+    _workspace, origins = _reset_fixture(bin_dir, winter_source, tmp_path / "scratch")
+    forge_port, hub_port = _free_port(), _free_port()
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/graphs", json={"definition_yaml": _activity_graph_yaml()}).status_code == 201
+        issue = forge.post(f"/repos/{REPO}/issues", json={"title": "activity burst", "body": "chunk"})
+        chunk_id = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]}).json()[
+            "chunk_id"
+        ]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner, sync_playwright() as pw:
+            assert runner.post("/_drive/register").status_code == 200
+            browser = pw.chromium.launch(headless=True)
+            page = browser.new_page()
+            try:
+                page.goto(f"http://127.0.0.1:{hub_port}/board", wait_until="load")
+                expect(page.get_by_test_id("activity-row")).to_have_count(2)
+                claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
+                assert claim["claimed"] is True, claim
+                expect(page.get_by_test_id("activity-row")).to_have_count(3)
+                assert any("claimed" in message for message in _rail_messages(page))
+
+                completed = runner.post("/_drive/complete", json={"chunk_id": chunk_id, "choice": "pass"}).json()
+                assert completed["response"]["outcome"] == "next", completed
+                expect(page.get_by_test_id("activity-row")).to_have_count(4)
+                node_id = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
+                facts = [
+                    {"seq": 1, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 2}},
+                    {
+                        "seq": 2,
+                        "kind": "usage.recorded",
+                        "payload": {
+                            "chunk_id": chunk_id,
+                            "node_id": node_id,
+                            "epoch": 2,
+                            "kind": "spawn",
+                            "model": "claude-opus-4-8",
+                            "input_tokens": 100,
+                            "output_tokens": 10,
+                            "cache_read_tokens": 0,
+                            "cache_create_tokens": 0,
+                            "cost_usd": 0.03,
+                        },
+                    },
+                ]
+                pushed = hub.post("/api/fleet/events", json={"runner_id": "activity-pusher", "facts": facts})
+                assert pushed.status_code == 200, pushed.text
+                assert pushed.json()["applied"] == [1, 2], pushed.text
+                expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.03")
+                expect(page.get_by_test_id("activity-row")).to_have_count(4)
+
+                asked = hub.post(
+                    "/api/fleet/events",
+                    json={
+                        "runner_id": "activity-pusher",
+                        "facts": [
+                            {
+                                "seq": 3,
+                                "kind": "question.asked",
+                                "payload": {
+                                    "question_id": "qn_activity",
+                                    "chunk_id": chunk_id,
+                                    "node_id": node_id,
+                                    "session_id": "sess-activity",
+                                    "runner_id": "activity-pusher",
+                                    "epoch": 2,
+                                    "question": "Which path?",
+                                    "options": ["a", "b"],
+                                    "asked_at": datetime.now(UTC).isoformat(),
+                                },
+                            }
+                        ],
+                    },
+                )
+                assert asked.status_code == 200, asked.text
+                assert asked.json()["applied"] == [3], asked.text
+                expect(page.get_by_test_id("activity-row")).to_have_count(5)
+
+                read = hub.get("/api/activity").json()["activity"]
+                keys = [row["key"] for row in read]
+                assert len(keys) == len(set(keys)) == 5, read
+                assert {row["cause"] for row in read if row["type"] == "chunk-changed"} == {
+                    "minted",
+                    "promoted",
+                    "claimed",
+                    "node-completed",
+                    "question-asked",
+                }
+                live_messages = _rail_messages(page)
+                assert len(live_messages) == len(keys)
+                assert sum("claimed" in message for message in live_messages) == 1
+                page.reload(wait_until="load")
+                expect(page.get_by_test_id("activity-row")).to_have_count(len(keys))
+                assert sum("claimed" in message for message in _rail_messages(page)) == 1
+                assert hub.get("/api/activity", params={"limit": 1001}).status_code == 422
+            finally:
+                browser.close()
 
 
 def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: Path, chromium_available: bool) -> None:

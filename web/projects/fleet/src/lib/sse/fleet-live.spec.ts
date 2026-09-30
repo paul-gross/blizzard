@@ -274,7 +274,7 @@ describe('FleetLiveUpdates', () => {
 
     const source = FakeEventSource.instances[0];
     source.open();
-    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running' }), '1');
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running', cause: 'node-completed' }), '1');
     // queue-changed carries no durable fact and is dropped from the ring entirely — see
     // 'drops queue-changed from the ring, but still invalidates on it' below.
     source.emitNamed('question-asked', JSON.stringify({ chunk_id: 'ch_a' }), '2');
@@ -302,6 +302,40 @@ describe('FleetLiveUpdates', () => {
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'queue']);
     expect(keys).toContainEqual(['hub', 'backlog']);
+  });
+
+  it('keeps one transition through lease and usage refreshes while invalidating every chunk fact', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const live = TestBed.inject(FleetLiveUpdates);
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running', cause: 'node-completed', key: 'transitions:1' }));
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running', cause: 'claimed', key: 'route_created:1' }));
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running', key: 'usage:1' }));
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running' }));
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running', cause: 'edited', key: 'edits:1' }));
+    expect(live.log().map((event) => event.key)).toEqual(['transitions:1', 'route_created:1']);
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toContainEqual(['hub', 'chunk', 'ch_a']);
+    expect(keys).toContainEqual(['hub', 'fleet-spend']);
+    expect(keys).toContainEqual(['hub', 'events']);
+  });
+
+  it('dedupes keyed replay and cross-type notifications in the live ring, retaining distinct keyless rows', () => {
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const live = TestBed.inject(FleetLiveUpdates);
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('question-asked', JSON.stringify({ chunk_id: 'ch_a', key: 'questions:1' }));
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', cause: 'question-asked', status: 'waiting_on_human', key: 'questions:1' }));
+    source.emitNamed('question-asked', JSON.stringify({ chunk_id: 'ch_a', key: 'questions:1' }));
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', cause: 'question-asked', status: 'waiting_on_human', key: 'questions:1' }));
+    source.emitNamed('event-logged', JSON.stringify({ kind: 'worker-lost' }));
+    source.emitNamed('event-logged', JSON.stringify({ kind: 'attempt-failed' }));
+    expect(live.log().map((event) => event.type)).toEqual(['chunk-changed', 'event-logged', 'event-logged']);
+    expect(live.log()[0].seq).toBe(1);
   });
 
   it('re-GETs the whole tree on the confirmed reopen, not on drop detection (D1)', () => {
