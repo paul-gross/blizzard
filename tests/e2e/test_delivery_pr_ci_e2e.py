@@ -414,8 +414,8 @@ def test_pr_ci_refuses_a_foreign_commit_on_the_head(tmp_path: Path) -> None:
         assert pulls and not any(p.get("merged") for p in pulls), f"a foreign-head PR merged: {pulls}"
 
         artifacts = hub.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
-        findings = next((a for a in artifacts if a.get("name") == "delivery-findings"), None)
-        assert findings is not None, f"no delivery-findings artifact recorded: {artifacts}"
+        findings = next((a for a in artifacts if a.get("name") == "delivery-findings/foreign-head"), None)
+        assert findings is not None, f"no foreign-head findings artifact recorded: {artifacts}"
         assert foreign in (findings.get("content") or "")
 
     assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a foreign head"

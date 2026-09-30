@@ -10,6 +10,6 @@ Redo this node's whole job, for every repo still ahead, against the base as it n
 stand now rather than as the bounce described them: a mechanical `failure` (a script crash, a transient forge hiccup)
 may already have cleared on its own. A `failure` naming a real CI check on this chunk's own change is not a rebase
 problem — do not attempt to fix it here; triage it `significant` so the chunk re-enters iterate with the finding, rather
-than pushing an unfixed defect back to deliver. A `failure` naming a foreign commit on the PR head is triaged
-`significant` the same way, never waved through. A multi-repo chunk lands one repo at a time, so some repos may already
-be landed — a repo whose PR is already merged needs no rework.
+than pushing an unfixed defect back to deliver. A `failure` with a `delivery-findings/foreign-head` artifact names a
+foreign commit on the PR head and is triaged `significant` the same way, never waved through. A multi-repo chunk lands
+one repo at a time, so some repos may already be landed — a repo whose PR is already merged needs no rework.

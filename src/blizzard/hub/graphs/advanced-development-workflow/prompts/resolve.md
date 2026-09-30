@@ -25,10 +25,11 @@ it here: capture exactly which check failed and why in the `resolve-report`; you
 
 ### 3. Foreign commit on the PR head
 
-`delivery-findings` says the PR head carries a commit beyond the one the chunk submitted and its own base merges, and
-names it. Never select `resolved` over it: the commit has not been verified, reviewed, or pre-pushed. Read what it
-changed. If it belongs to the change, adopt it — fetch, declare the head as the repo's tip, and select `substantive` so
-it earns verification. If it does not belong, select `broken`.
+`delivery-findings/foreign-head` (read it with `--node deliver`) says the PR head carries a commit beyond the one the
+chunk submitted and its own base merges, and names it; `delivery-findings` may still show an earlier wait. Never select
+`resolved` over it: the commit has not been verified, reviewed, or pre-pushed. Read what it changed. If it belongs to
+the change, adopt it — fetch, declare the head as the repo's tip, and select `substantive` so it earns verification. If
+it does not belong, select `broken`.
 
 ### 4. Transient or infra failure
 

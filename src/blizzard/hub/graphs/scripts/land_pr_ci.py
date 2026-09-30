@@ -7,9 +7,10 @@ hub-command-node authoring contract (``blizzard-context:/standards/hub-nodes.md`
 The submitted commit stays authoritative: before any routing, every repo's live PR head must
 be that commit or descend from it through nothing but merges of the base branch (first-parent
 chain, each merge contributing exactly the base side's own change). Any other commit on the
-head prints ``failure`` with a ``delivery-findings`` marker naming it, and nothing is updated
-or merged for any repo; an unprovable head refuses, an unreadable one waits. The verified
-head sha is the one the check read, ``update-branch`` and the merge all carry."""
+head prints ``failure`` with ``delivery-findings`` and ``delivery-findings/foreign-head`` markers
+naming it, and nothing is updated or merged for any repo; an unprovable head refuses, an
+unreadable one waits. The verified head sha is the one the check read, ``update-branch`` and the
+merge all carry."""
 
 from __future__ import annotations
 
@@ -45,6 +46,10 @@ _INHERITED_FAILURE = "inherited-failure"
 
 # The marker name a terminal-CI-failure or a substantive wait writes its findings under.
 _FINDINGS_NAME = "delivery-findings"
+# A foreign-advance refusal also writes here: the hub keeps only the first write per name in a
+# visit, so an earlier wait's `delivery-findings` would otherwise hide the refusal from the
+# repair worker.
+_FOREIGN_FINDINGS_NAME = f"{_FINDINGS_NAME}/foreign-head"
 
 # The re-run signature marker's name prefix: one per (repo, check name, head sha) a
 # base-inherited failure was re-requested under, so a re-entry to `deliver` can tell
@@ -292,8 +297,8 @@ def gate_head(run: LandRun, bare_repo: str, submitted: str, head: str) -> HeadGa
     offenders: list[str] = []
     for commit in chain:
         sha = commit["sha"]
-        parents = [p.get("sha") for p in commit["parents"] if isinstance(p, dict)]
-        if len(parents) != 2 or not all(isinstance(p, str) for p in parents):
+        parents = [p["sha"] for p in commit["parents"] if isinstance(p, dict) and isinstance(p.get("sha"), str)]
+        if len(parents) != 2 or len(commit["parents"]) != 2:
             offenders.append(f"{sha} (not a merge of the base branch)")
             continue
         first, second = parents
@@ -499,7 +504,9 @@ def _land() -> int:
     if foreign:
         # Nothing is updated or merged for any repo. The write is unguarded: unwritten
         # findings leave the repair worker nothing to read.
-        run.markers.post(_FINDINGS_NAME, Findings(foreign).render())
+        rendered = Findings(foreign).render()
+        run.markers.post(_FINDINGS_NAME, rendered)
+        run.markers.post(_FOREIGN_FINDINGS_NAME, rendered)
         print(_CI_FAILURE)
         return 0
 

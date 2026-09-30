@@ -379,6 +379,14 @@ def _findings_text(calls: list[tuple[str, str, dict[str, Any] | None]]) -> str:
     return "\n".join(post["content"] for post in _findings_posts(calls))
 
 
+def _foreign_findings(calls: list[tuple[str, str, dict[str, Any] | None]]) -> list[str]:
+    return [
+        body["content"]
+        for method, url, body in calls
+        if method == "POST" and url == _CALLBACK_URL and body and body["name"] == "delivery-findings/foreign-head"
+    ]
+
+
 def test_a_head_advanced_only_by_a_base_merge_lands_the_verified_head(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -411,6 +419,7 @@ def test_a_foreign_non_merge_commit_on_the_head_refuses_and_names_it(
     findings = _findings_text(calls)
     assert "foreign1" in findings and "sha1" in findings and _REPO in findings
     assert "CI check failures" not in findings, "a foreign advance must read differently from a CI failure"
+    assert _foreign_findings(calls) == [findings], "the same findings ride under the name a prior wait cannot shadow"
     assert not any("/check-runs" in url for _, url, _ in calls), "a foreign head is never read for a verdict"
 
 
