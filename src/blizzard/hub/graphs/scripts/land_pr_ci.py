@@ -274,13 +274,16 @@ def _rerequest_once(run: LandRun, repo: str, check: dict[str, Any], head_sha: st
     :meth:`land_common.MarkerWriter.record`: a crash before the marker is durable just
     re-fires the rerequest on the next poll, which is harmless to repeat. Neither the
     forge call nor the marker write is fatal to the run: a re-request that never fires
-    just leaves the same failure to be re-read, and re-attempted, on the next poll."""
+    just leaves the same failure to be re-read, and re-attempted, on the next poll. The
+    marker is written only when the forge answers 2xx — a refusal must not read as a re-run."""
     check_id = check.get("id")
     if check_id is None:
         return
     try:
-        run.api("POST", f"/repos/{repo}/check-runs/{check_id}/rerequest")
+        status, _ = run.api("POST", f"/repos/{repo}/check-runs/{check_id}/rerequest")
     except Exception:
+        return
+    if not 200 <= status < 300:
         return
     try:
         run.markers.post(_rerun_marker(repo, check.get("name", ""), head_sha), head_sha)
