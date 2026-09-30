@@ -15,6 +15,7 @@ from blizzard.hub.api.runners import runner_view
 from blizzard.hub.domain.registry import (
     CREDENTIAL_LAPSED_CONDITION,
     EXTERNAL_USAGE_STALE_AFTER,
+    DeclaredSubscription,
     ExternalSubscriptionUsageWindow,
     PerSubscriptionUsageView,
     RunnerCapability,
@@ -111,6 +112,7 @@ def _registration(
     *,
     records: tuple[SubscriptionUsageRecord, ...] = (),
     misses: tuple[SubscriptionUsageMissRecord, ...] = (),
+    roster: tuple[DeclaredSubscription, ...] | None = None,
 ) -> RunnerRegistration:
     return RunnerRegistration(
         runner_id="runner-a",
@@ -120,6 +122,7 @@ def _registration(
         hub_paused=False,
         subscription_usage=records,
         subscription_usage_misses=misses,
+        declared_subscriptions=roster,
     )
 
 
@@ -219,6 +222,75 @@ def test_a_lapsed_sibling_does_not_blank_a_healthy_ones_view() -> None:
     healthy_view = next(v for v in views if v.slug == "anthropic")
     assert lapsed.condition == CREDENTIAL_LAPSED_CONDITION
     assert healthy_view.condition is None
+
+
+# --------------------------------------------------------------------------- #
+# The declared-roster path — membership is roster-gated, not age-gated.
+# --------------------------------------------------------------------------- #
+
+
+def _declared(*slugs: str) -> tuple[DeclaredSubscription, ...]:
+    return tuple(DeclaredSubscription(slug=slug, name=slug.title(), provider="p") for slug in slugs)
+
+
+def test_a_declared_slug_stays_a_member_whatever_the_age_of_its_sample_or_miss() -> None:
+    stale = _NOW - EXTERNAL_USAGE_STALE_AFTER - timedelta(days=1)
+    registration = _registration(
+        records=(_record("stale", stale),),
+        misses=(_miss("missed", stale, reason="endpoint_unreachable"),),
+        roster=_declared("stale", "missed", "never"),
+    )
+    views = PerSubscriptionUsageView.every(registration, now=_NOW)
+
+    assert [v.slug for v in views] == ["missed", "never", "stale"]
+    by_slug = {v.slug: v for v in views}
+    assert by_slug["stale"].sampled_at == stale
+    assert by_slug["never"].sampled_at is None
+    assert by_slug["never"].windows == ()
+
+
+def test_a_roster_lapsed_miss_outranks_an_older_sample_however_old_both_are() -> None:
+    stale = _NOW - EXTERNAL_USAGE_STALE_AFTER - timedelta(days=2)
+    registration = _registration(
+        records=(_record("openai", stale),),
+        misses=(_miss("openai", stale + timedelta(days=1)),),
+        roster=_declared("openai"),
+    )
+    (view,) = PerSubscriptionUsageView.every(registration, now=_NOW)
+
+    assert view.condition == CREDENTIAL_LAPSED_CONDITION
+
+
+def test_a_roster_lapsed_condition_never_blanks_the_surviving_sample_and_a_non_lapsed_miss_sets_none() -> None:
+    sample = _record("openai", _NOW - timedelta(minutes=10))
+    lapsed = _registration(
+        records=(sample,), misses=(_miss("openai", _NOW - timedelta(minutes=1)),), roster=_declared("openai")
+    )
+    (lapsed_view,) = PerSubscriptionUsageView.every(lapsed, now=_NOW)
+    assert lapsed_view.condition == CREDENTIAL_LAPSED_CONDITION
+    assert lapsed_view.sampled_at == sample.sampled_at
+    assert lapsed_view.windows == sample.windows
+
+    silent = _registration(
+        records=(sample,),
+        misses=(_miss("openai", _NOW - timedelta(minutes=1), reason="endpoint_unreachable"),),
+        roster=_declared("openai"),
+    )
+    (silent_view,) = PerSubscriptionUsageView.every(silent, now=_NOW)
+    assert silent_view.condition is None
+    assert silent_view.windows == sample.windows
+
+
+def test_a_dropped_slugs_reports_persist_and_resume_when_redeclared() -> None:
+    sample = _record("openai", _NOW - timedelta(minutes=1))
+    miss = _miss("openai", _NOW - timedelta(minutes=2))
+    dropped = _registration(records=(sample,), misses=(miss,), roster=_declared("anthropic"))
+    assert [v.slug for v in PerSubscriptionUsageView.every(dropped, now=_NOW)] == ["anthropic"]
+
+    redeclared = _registration(records=(sample,), misses=(miss,), roster=_declared("anthropic", "openai"))
+    views = {v.slug: v for v in PerSubscriptionUsageView.every(redeclared, now=_NOW)}
+    assert views["openai"].sampled_at == sample.sampled_at
+    assert views["openai"].miss_reason == CREDENTIAL_LAPSED_CONDITION
 
 
 def test_the_rendered_view_carries_the_lapsed_condition_through_runner_view() -> None:
