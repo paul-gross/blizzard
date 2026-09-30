@@ -370,7 +370,9 @@ class GroupService:
 
         standing = handle.standing_edges()
         plan = plan_fold(standing, survivor_id, folded_ids)
-        minted_pairs = [pair for cid in folded_ids for pair in plan.mint_by_target[cid]]
+        minted_pairs = [
+            (m.dependent_chunk_id, m.prerequisite_chunk_id) for cid in folded_ids for m in plan.mint_by_target[cid]
+        ]
         if would_close_a_cycle(plan.remaining, minted_pairs):
             raise FoldWouldCloseCycle(survivor_id, folded_ids)
 

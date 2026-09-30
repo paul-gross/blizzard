@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import Engine, func, select
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunks.dependencies import FoldTarget, IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunks.dependencies import FoldMint, FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
@@ -173,7 +173,9 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
             handle,
             [
                 FoldTarget(
-                    chunk_id="ch_prereq", release=[declared.dependency_id], mint=[("ch_dependent", "ch_survivor")]
+                    chunk_id="ch_prereq",
+                    release=[declared.dependency_id],
+                    mint=[FoldMint("ch_dependent", "ch_survivor", _NOW)],
                 )
             ],
             grouped_into="ch_survivor",
@@ -187,6 +189,16 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
     assert minted is not None
     assert minted.dependency_id != declared.dependency_id
     assert minted.declared_by == "fold"
+    assert minted.declared_at == _NOW  # the carried instant, not the fold's own
+    with engine.connect() as conn:
+        released = (
+            conn.execute(
+                select(s.chunk_dependencies).where(s.chunk_dependencies.c.dependency_id == declared.dependency_id)
+            )
+            .mappings()
+            .one()
+        )
+    assert released["released_at"] == at
 
     with engine.connect() as conn:
         row = conn.execute(select(s.chunk_grouped).where(s.chunk_grouped.c.chunk_id == "ch_prereq")).mappings().one()
@@ -211,7 +223,7 @@ def test_record_fold_writes_every_target_in_one_transaction(tmp_path: Path) -> N
                 FoldTarget(chunk_id="ch_a", release=[], mint=[]),
                 # A `None` dependent id fails the NOT NULL column only after ch_a's row
                 # lands on the same connection — covers both targets' writes, not one.
-                FoldTarget(chunk_id="ch_b", release=[], mint=[(cast(str, None), "ch_survivor")]),
+                FoldTarget(chunk_id="ch_b", release=[], mint=[FoldMint(cast(str, None), "ch_survivor", _NOW)]),
             ],
             grouped_into="ch_survivor",
             by="fold",

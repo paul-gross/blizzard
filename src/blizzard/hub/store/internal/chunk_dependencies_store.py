@@ -157,14 +157,14 @@ class ChunkDependenciesStore:
                     .where(s.chunk_dependencies.c.dependency_id.in_(target.release))
                     .values(released_at=at, released_by=by)
                 )
-            for dependent_chunk_id, prerequisite_chunk_id in target.mint:
+            for dependent_chunk_id, prerequisite_chunk_id, declared_at in target.mint:
                 dependency_id = Id.mint_at(DEPENDENCY_EDGE_PREFIX, at).value
                 conn.execute(
                     s.chunk_dependencies.insert().values(
                         dependency_id=dependency_id,
                         dependent_chunk_id=dependent_chunk_id,
                         prerequisite_chunk_id=prerequisite_chunk_id,
-                        declared_at=at,
+                        declared_at=declared_at,
                         declared_by=by,
                         released_at=None,
                         released_by=None,

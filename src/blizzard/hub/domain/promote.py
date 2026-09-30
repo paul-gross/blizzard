@@ -11,6 +11,7 @@ from collections.abc import Mapping
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.queue import IReadChunkQueueRepository, IWriteChunkQueueRepository
 from blizzard.hub.domain.chunks.record import IReadChunkRecordRepository
 from blizzard.hub.domain.queue import QueueService
@@ -18,19 +19,30 @@ from blizzard.hub.domain.work import Chunk, ChunkFacts
 
 
 def tail_position(
-    record: IReadChunkRecordRepository, queue: IReadChunkQueueRepository, *, statuses: Mapping[str, ChunkStatus]
+    record: IReadChunkRecordRepository,
+    queue: IReadChunkQueueRepository,
+    facts: IReadChunkFactsRepository,
+    *,
+    statuses: Mapping[str, ChunkStatus],
 ) -> float:
-    """The position one past every currently-ready chunk's own effective position
+    """The position one past every queue-ranked chunk's own effective position
     — the rule :meth:`PromoteService.promote` stamps a fresh tail position
-    by, read *before* the write that stamps it. ``statuses`` is the caller's own already-derived fleet
-    statuses, never re-derived here."""
-    ready = record.list_ready(statuses=statuses)
-    if not ready:
+    by, read *before* the write that stamps it. The candidates are the ready chunks plus
+    the paused chunks only a pause withholds from ready
+    (:meth:`~blizzard.hub.domain.work.ChunkFacts.is_ready_but_for_pause`), whose explicit
+    position they resume at. Facts are read only for the ids ``statuses`` names ``PAUSED``.
+    ``statuses`` is the caller's own already-derived fleet statuses, never re-derived here."""
+    candidates = record.list_ready(statuses=statuses)
+    paused_ids = [chunk_id for chunk_id, status in statuses.items() if status is ChunkStatus.PAUSED]
+    if paused_ids:
+        withheld = [cid for cid, f in facts.status_facts_for(paused_ids).items() if f.is_ready_but_for_pause()]
+        candidates = [*candidates, *record.get_many(withheld).values()]
+    if not candidates:
         return 0.0
-    ready_ids = [c.chunk_id for c in ready]
-    positions = queue.queue_positions(ready_ids)
-    promoted_ats = queue.promoted_ats(ready_ids)
-    return max(QueueService._effective_position(c, positions, promoted_ats) for c in ready) + 1.0
+    candidate_ids = [c.chunk_id for c in candidates]
+    positions = queue.queue_positions(candidate_ids)
+    promoted_ats = queue.promoted_ats(candidate_ids)
+    return max(QueueService._effective_position(c, positions, promoted_ats) for c in candidates) + 1.0
 
 
 class PromoteService:
@@ -41,10 +53,12 @@ class PromoteService:
         *,
         record: IReadChunkRecordRepository,
         queue: IWriteChunkQueueRepository,
+        facts: IReadChunkFactsRepository,
         clock: IClock,
     ) -> None:
         self._record = record
         self._queue = queue
+        self._facts = facts
         self._clock = clock
 
     def promote(self, chunk: Chunk, *, facts: ChunkFacts, statuses: Mapping[str, ChunkStatus]) -> int | None:
@@ -55,5 +69,5 @@ class PromoteService:
         already-derived ``statuses`` (``bzh:domain-takes-objects``)."""
         if facts.promoted:
             return None
-        tail = tail_position(self._record, self._queue, statuses=statuses)
+        tail = tail_position(self._record, self._queue, self._facts, statuses=statuses)
         return self._queue.record_promote_with_tail_position(chunk.chunk_id, position=tail, at=self._clock.now())
