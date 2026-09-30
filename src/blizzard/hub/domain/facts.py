@@ -142,13 +142,15 @@ class RunnerFactsService:
         self._retired = retired
         self._clock = clock
 
-    def record_lease_minted(self, chunk_id: str, *, epoch: int, runner_id: str) -> FenceRefusal | None:
+    def record_lease_minted(
+        self, chunk_id: str, *, epoch: int, runner_id: str, lease_id: str | None = None
+    ) -> FenceRefusal | None:
         """Land a runner's ``lease.minted`` — advances the fence's latest epoch. A retired
         runner is refused with :class:`RunnerRetired` before anything lands; a mint its
         admission refuses (``bzh:epoch-fencing``) returns its :class:`FenceRefusal`."""
         self._retired.refuse_if_retired(runner_id, action="lease report")
         return self._route.record_lease_minted(
-            chunk_id, epoch=epoch, claimant=Claimant(runner_id), at=self._clock.now()
+            chunk_id, epoch=epoch, claimant=Claimant(runner_id, lease_id), at=self._clock.now()
         )
 
     def record_escalation(
@@ -281,7 +283,7 @@ class FactIngestService:
             refusal = self._route.record_lease_minted(
                 fact.require_text("chunk_id"),
                 epoch=fact.require_number("epoch"),
-                claimant=Claimant(runner_id),
+                claimant=Claimant(runner_id, fact.text("lease_id")),
                 at=now,
             )
             if refusal is not None:
@@ -292,7 +294,7 @@ class FactIngestService:
                 fact.require_text("chunk_id"),
                 epoch=fact.require_number("epoch"),
                 admission=EpochAdmission.AT_OR_ABOVE,
-                claimant=Claimant(runner_id),
+                claimant=Claimant(runner_id, fact.text("lease_id")),
                 takeover_command=fact.string("takeover_command"),
                 wrapped_takeover_command=fact.string("wrapped_takeover_command"),
                 at=now,
@@ -311,7 +313,7 @@ class FactIngestService:
                 runner_id=runner_id,
                 epoch=fact.require_number("epoch"),
                 admission=EpochAdmission.AT_OR_ABOVE,
-                claimant=Claimant(runner_id),
+                claimant=Claimant(runner_id, fact.text("lease_id")),
                 question=fact.require_text("question"),
                 options=fact.strings("options"),
                 asked_at=fact.instant("asked_at", now),

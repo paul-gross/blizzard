@@ -151,3 +151,6 @@ class CompletionSubmission(BaseModel):
     # The route capability token stamped at enqueue — evidence the submitter
     # still holds the chunk's live route. Optional: the hub does not reject on it.
     route_token: str | None = None
+    # The submitting attempt's lease — matched against its epoch's owning lease when both
+    # are known. Optional: a submission without it is matched on its runner alone.
+    lease_id: str | None = None

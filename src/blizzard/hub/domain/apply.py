@@ -313,7 +313,7 @@ class ApplyService:
             choice_name=submission.choice,
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
-            claimant=Claimant(submission.runner_id),
+            claimant=Claimant(submission.runner_id, submission.lease_id),
             runner_id=submission.runner_id,
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submission.artifacts],
@@ -387,7 +387,7 @@ class ApplyService:
             choice_name=submission.choice,
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
-            claimant=Claimant(submission.runner_id),
+            claimant=Claimant(submission.runner_id, submission.lease_id),
             runner_id=submission.runner_id,
             at=self._clock.now(),
             artifacts=[],  # the decision's artifacts already landed
@@ -433,7 +433,7 @@ class ApplyService:
                     chunk.chunk_id,
                     epoch=submission.epoch,
                     admission=EpochAdmission.CURRENT,
-                    claimant=Claimant(submission.runner_id),
+                    claimant=Claimant(submission.runner_id, submission.lease_id),
                     takeover_command=(
                         f"cross-graph target `{edge.target_graph}` names no enabled graph — mint a graph "
                         f"named `{edge.target_graph}` (or edit the choice), then requeue this chunk"
@@ -579,7 +579,7 @@ class ApplyService:
             source=source,
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
-            claimant=Claimant(submission.runner_id),
+            claimant=Claimant(submission.runner_id, submission.lease_id),
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in artifacts],
             proposals=self._proposal_rows(
@@ -630,7 +630,7 @@ class ApplyService:
             # carrying the node's choice set. Only on the real apply, never a replay.
             if is_fresh_apply:
                 self._open_graph_gate_decision(
-                    chunk, to_node, epoch=submission.epoch, claimant=Claimant(submission.runner_id)
+                    chunk, to_node, epoch=submission.epoch, claimant=Claimant(submission.runner_id, submission.lease_id)
                 )
             return ApplyResult.parked(to_node, transition_id)
 

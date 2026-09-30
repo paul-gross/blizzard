@@ -39,7 +39,7 @@ class QuestionService:
             runner_id=fact.runner_id,
             epoch=fact.epoch,
             admission=EpochAdmission.AT_OR_ABOVE,
-            claimant=Claimant(fact.runner_id),
+            claimant=Claimant(fact.runner_id, fact.lease_id),
             question=fact.question,
             options=fact.options,
             asked_at=self._asked_at(fact.asked_at),

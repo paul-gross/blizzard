@@ -128,7 +128,7 @@ class DecisionService:
             node_name=node.name,
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
-            claimant=Claimant(submission.runner_id),
+            claimant=Claimant(submission.runner_id, submission.lease_id),
             choices=[DecisionChoice(name=c.name, description=c.description) for c in node.choices],
             at=self._clock.now(),
             artifacts=[self._row(chunk, node, submission.epoch, a) for a in submission.artifacts],

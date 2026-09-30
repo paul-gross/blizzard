@@ -2436,6 +2436,17 @@
             "title": "From Node Id",
             "type": "string"
           },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
+          },
           "proposals": {
             "default": [],
             "items": {
@@ -2606,6 +2617,17 @@
           "from_node_id": {
             "title": "From Node Id",
             "type": "string"
+          },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
           },
           "proposals": {
             "default": [],
@@ -3034,6 +3056,17 @@
           "epoch": {
             "title": "Epoch",
             "type": "integer"
+          },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
           },
           "runner_id": {
             "title": "Runner Id",
@@ -5130,6 +5163,17 @@
             "title": "Epoch",
             "type": "integer"
           },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
+          },
           "runner_id": {
             "title": "Runner Id",
             "type": "string"
@@ -5807,6 +5851,17 @@
               }
             ],
             "title": "Harness Id"
+          },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
           },
           "node_id": {
             "anyOf": [

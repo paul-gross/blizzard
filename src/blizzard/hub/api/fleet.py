@@ -765,7 +765,9 @@ def report_lease(
     fleet.assert_owns(report.runner_id)
     if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    refusal = services.runner_facts.record_lease_minted(chunk_id, epoch=report.epoch, runner_id=report.runner_id)
+    refusal = services.runner_facts.record_lease_minted(
+        chunk_id, epoch=report.epoch, runner_id=report.runner_id, lease_id=report.lease_id
+    )
     if refusal is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal.detail)
     return {"chunk_id": chunk_id}
