@@ -27,6 +27,11 @@ valid:
         def sample(self):
             with self._path.open("r") as f:
                 return f.read()
+  - |
+    class LegacySampler:
+        def sample(self):
+            fd = os.open(self._path, os.O_RDONLY)
+            return fd
 invalid:
   - |
     class BadRenewer:
@@ -51,3 +56,20 @@ invalid:
         def _rotate(self):
             with self._credentials_path.open("w") as f:
                 f.write(json.dumps(data))
+  - |
+    class BadRenewer:
+        def _rotate(self):
+            with self._credentials_path.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(data))
+  - |
+    class BadRenewer:
+        def _rotate(self):
+            fd = os.open(self._credentials_path, os.O_WRONLY | os.O_TRUNC)
+  - |
+    class BadRenewer:
+        def _rotate(self):
+            os.replace(self._tmp, self._credentials_path)
+  - |
+    class BadRenewer:
+        def _rotate(self):
+            os.rename(self._tmp, self._credentials_path)

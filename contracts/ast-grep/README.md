@@ -40,9 +40,10 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   file for writing: the vendor CLI owns its own lock, atomic write, and refresh-token rotation, and a second writer
   risks corrupting the file mid-refresh or invalidating the login it just renewed.
   - Scoped to `src/blizzard/runner/subscriptions/**` — every sampler and renewer binding's own home.
-  - Matches `.write_text(`, `.write_bytes(`, a bare or keyword-carrying `open($PATH, $MODE, ...)` whose mode string
-    contains `w`, `a`, or `x`, and the same shape via `$PATH.open($MODE)`. A read (`open(path)`, `open(path, "r")`,
-    `path.read_text()`) is unmatched.
+  - Matches `.write_text(`, `.write_bytes(`, `open($PATH, $MODE, ...)` and `$PATH.open($MODE, ...)` (further arguments
+    allowed) whose mode string contains `w`, `a`, `x`, or `+`, any `os.open` carrying a write flag (`O_WRONLY`,
+    `O_RDWR`, `O_CREAT`, `O_APPEND`, `O_TRUNC`), and any `os.replace` or `os.rename`. A read (`open(path)`,
+    `open(path, "r")`, `path.read_text()`, `os.open(path, os.O_RDONLY)`) is unmatched.
   - No exemption stands; nothing in `runner/subscriptions/` opens a credential file for writing today.
 
 - **`bzh:store-exclusive-write`** (`rules/store-exclusive-write.yml`) — an in-process lock in `hub/` cannot enforce an

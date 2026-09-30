@@ -3,6 +3,33 @@ snapshots:
   ? |
     class BadRenewer:
         def _rotate(self):
+            fd = os.open(self._credentials_path, os.O_WRONLY | os.O_TRUNC)
+  : labels:
+    - source: os.open(self._credentials_path, os.O_WRONLY | os.O_TRUNC)
+      style: primary
+      start: 54
+      end: 111
+  ? |
+    class BadRenewer:
+        def _rotate(self):
+            os.rename(self._tmp, self._credentials_path)
+  : labels:
+    - source: os.rename(self._tmp, self._credentials_path)
+      style: primary
+      start: 49
+      end: 93
+  ? |
+    class BadRenewer:
+        def _rotate(self):
+            os.replace(self._tmp, self._credentials_path)
+  : labels:
+    - source: os.replace(self._tmp, self._credentials_path)
+      style: primary
+      start: 49
+      end: 94
+  ? |
+    class BadRenewer:
+        def _rotate(self):
             self._credentials_path.write_bytes(raw)
   : labels:
     - source: self._credentials_path.write_bytes(raw)
@@ -48,3 +75,13 @@ snapshots:
       style: primary
       start: 54
       end: 86
+  ? |
+    class BadRenewer:
+        def _rotate(self):
+            with self._credentials_path.open("w", encoding="utf-8") as f:
+                f.write(json.dumps(data))
+  : labels:
+    - source: self._credentials_path.open("w", encoding="utf-8")
+      style: primary
+      start: 54
+      end: 104

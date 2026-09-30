@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
+import signal
 import subprocess
 import time
 from collections.abc import Mapping, Sequence
@@ -11,6 +14,9 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.subscriptions.one_shot_process import IOneShotProcess, OneShotResult
 
 _log = get_logger("blizzard.runner.subscriptions")
+
+# SIGTERM lets the vendor CLI finish an in-flight credential write; SIGKILL follows only if it lingers.
+_TERMINATE_GRACE_SECONDS = 2.0
 
 
 class SubprocessOneShotProcess:
@@ -30,6 +36,7 @@ class SubprocessOneShotProcess:
                 stderr=subprocess.PIPE,
                 text=True,
                 env=dict(env),
+                start_new_session=True,
             )
         except OSError as exc:
             _log.warning("one-shot subprocess failed to launch", argv=list(argv), detail=str(exc))
@@ -49,11 +56,27 @@ class SubprocessOneShotProcess:
         try:
             stdout, stderr = process.communicate(timeout=max(0.0, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
-            process.kill()
-            stdout, stderr = process.communicate()
+            stdout, stderr = self._terminate_group(process)
             _log.warning("one-shot subprocess timed out", argv=list(argv), timeout=timeout)
             return OneShotResult(exit_code=None, stdout=stdout, stderr=stderr, timed_out=True)
         return OneShotResult(exit_code=process.returncode, stdout=stdout, stderr=stderr, timed_out=False)
+
+    @staticmethod
+    def _terminate_group(process: subprocess.Popen[str]) -> tuple[str, str]:
+        """SIGTERM the child's whole process group (it leads its own session), then SIGKILL the
+        group after a grace period — reaching an npm-shim's real app-server, and sparing a
+        credential file a hard kill mid-write."""
+        _signal_group(process, signal.SIGTERM)
+        try:
+            return process.communicate(timeout=_TERMINATE_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            _signal_group(process, signal.SIGKILL)
+            return process.communicate()
+
+
+def _signal_group(process: subprocess.Popen[str], sig: signal.Signals) -> None:
+    with contextlib.suppress(ProcessLookupError):  # the group already exited
+        os.killpg(process.pid, sig)
 
 
 def _conforms_one_shot_process(x: SubprocessOneShotProcess) -> IOneShotProcess:

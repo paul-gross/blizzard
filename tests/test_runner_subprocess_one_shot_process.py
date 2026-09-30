@@ -49,6 +49,30 @@ def test_a_hung_child_is_killed_and_reported_as_a_timeout() -> None:
     assert result.timed_out is True
 
 
+def test_a_timeout_terminates_the_whole_process_group_gracefully(tmp_path) -> None:
+    marker = tmp_path / "grandchild-pid"
+    script = (
+        "import os, signal, subprocess, sys, time\n"
+        "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\n"
+        f"g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        f"open({str(marker)!r}, 'w').write(str(g.pid))\n"
+        "time.sleep(60)\n"
+    )
+
+    result = SubprocessOneShotProcess().run([sys.executable, "-c", script], stdin="", timeout=1.0, env=_INHERITED_ENV)
+
+    assert result.timed_out is True
+    grandchild = int(marker.read_text())
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        try:
+            os.kill(grandchild, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.05)
+    pytest.fail("the grandchild outlived the timeout")
+
+
 def test_a_missing_binary_is_reported_without_raising() -> None:
     result = SubprocessOneShotProcess().run(["no-such-binary-anywhere"], stdin="", timeout=5.0, env=_INHERITED_ENV)
 
