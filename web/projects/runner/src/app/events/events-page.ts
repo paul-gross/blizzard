@@ -3,9 +3,8 @@ import { KitPanel } from 'fleet';
 import { FactLog } from 'local-panel';
 
 /**
- * The `/events` route — the local fact log at full width,
- * split out of the panel layout's right rail so it gets the whole viewport
- * rather than a rail-sized panel. {@link FactLog} is self-fetching
+ * The `/events` route — the local fact log at full width.
+ * {@link FactLog} is self-fetching
  * (`status.query.ts`'s shared dashboard read), so this page owns nothing
  * beyond mounting it in a full-height panel, mirroring the hub's own
  * `events-page.ts`.

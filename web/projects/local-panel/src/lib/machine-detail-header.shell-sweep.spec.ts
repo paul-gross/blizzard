@@ -6,9 +6,9 @@ import { page, userEvent } from 'vitest/browser';
 import { MachineDetailHeader } from './machine-detail-header';
 
 /**
- * The machine detail dock header's own half of `web:shell-sweep` — it had none
- * before this change wired {@link KitTooltip} onto its Pause/Resume button
- * (`bzh:claim-vocabulary`). `local-panel-mobile.shell-sweep.spec.ts` covers
+ * The machine detail dock header's own half of `web:shell-sweep` covers
+ * {@link KitTooltip} on its Pause/Resume button (`bzh:claim-vocabulary`).
+ * `local-panel-mobile.shell-sweep.spec.ts` covers
  * `ChunkCard` line-stacking, never this header's own action row.
  *
  * Two claims jsdom cannot make: a real pointer hover actually opens the

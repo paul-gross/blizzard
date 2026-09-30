@@ -4,8 +4,7 @@ import type { Routes } from '@angular/router';
  * The runner app's top-level route table. `''` redirects to
  * `/board` — the panel's existing default surface, selection riding in the
  * URL's query params via the shared `injectChunkUrlSelection`.
- * `/events` is the local fact log at full width, split out of the panel's own
- * right rail. `/board/chunk/:chunkId` is the runner-local chunk detail page —
+ * `/events` is the local fact log at full width. `/board/chunk/:chunkId` is the runner-local chunk detail page —
  * mirrors the hub's own `board/chunk/:chunkId`
  * (`hub/src/app/app.routes.ts`), keeping the chunk id in the path while
  * `?attempt=` stays a query param. Every route is

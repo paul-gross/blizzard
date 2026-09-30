@@ -52,8 +52,7 @@ const UNACQUIRED_STATUSES = new Set<ChunkStatus>(['not_ready', 'ready']);
  * chunk's hub item(s) outright, reachable only from `not_ready`/`ready`
  * ({@link UNACQUIRED_STATUSES}) — a chunk with an acquiring runner has no
  * live route to release, the same reasoning Detach's own route guard
- * follows. It moved here from the board card, which had no room for a
- * control that invasive.
+ * follows. The dock provides room for the confirmation control.
  *
  * Presentational only: it holds the detail input and emits `dismiss`,
  * `detach`, `pauseChunk`, `resumeChunk`, `complete`, and `delete`; the

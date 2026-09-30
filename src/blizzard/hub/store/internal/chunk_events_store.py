@@ -39,7 +39,7 @@ _HUB_RUNNER_ID = "hub"
 
 def _bounded_stmt(stmt: Select[Any], *, ts_col: Any, pk_col: Any, since: datetime, limit: int) -> Select[Any]:
     """``activity_facts_since``'s shared bound over a source's base statement (never a full-table scan) — a pure
-    builder, split from `_bounded` so a test can compile the exact statement a source executes."""
+    builder that lets a test compile the exact statement a source executes."""
     return stmt.where(ts_col >= since).order_by(ts_col.desc(), pk_col.desc()).limit(limit)
 
 

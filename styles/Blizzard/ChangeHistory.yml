@@ -1,0 +1,13 @@
+extends: existence
+message: "'%s' narrates change history — state the adjacent code's current purpose instead."
+level: error
+scope: text
+nonword: true
+tokens:
+  - '\b[Ss]plit (?:out of|off|from)\b'
+  - '\b[Mm]oved (?:here|verbatim) from\b'
+  - '\b[Ff]ormerly\b'
+  - '\b[Oo]nce did\b'
+  - '\b[Bb]efore this (?:change|phase)\b'
+  - '\b[Ss]ince this (?:change|phase)\b'
+  - '\b[Aa]fter this (?:change|phase)\b'

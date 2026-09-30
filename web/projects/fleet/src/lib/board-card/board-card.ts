@@ -49,16 +49,10 @@ export interface BoardCard {
 }
 
 /**
- * One board card — split out of {@link BoardShell} so that file
- * stayed under the `web:lint` line cap as the READY lane's
- * drag-and-drop landed on it. Renders exactly what was inline in
- * `BoardShell`'s `@for` before, plus one addition — `[attr.data-chunk]`
+ * One board card for every lane. `[attr.data-chunk]`
  * carries the card's full chunk id, a unique locator the e2e suite needs
  * since same-instant chunk ids share a 12-char prefix. Nothing else in the
  * board repeats that attribute, so it stays one node per chunk.
- *
- * The same card renders in every lane, READY included, so this remains the one card the
- * whole board is built from.
  *
  * Presentational only: {@link card} and {@link selected} are plain inputs; every
  * output forwards the chunk id to whatever container composes this — no query or

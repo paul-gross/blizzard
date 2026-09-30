@@ -9,9 +9,7 @@ import type { LaidOutNode } from './graph-layout';
 const CORNER_RADIUS = 9;
 
 /**
- * One node's SVG shape — split out of `graph-diagram.ts` (400-line
- * `web:lint` cap) once the selection feature pushed the
- * parent over it. An attribute-selector component (`g[fleetGraphDiagramNode]`)
+ * One node's SVG shape. An attribute-selector component (`g[fleetGraphDiagramNode]`)
  * so it renders as a plain `<g>` inside the parent's `<svg>`, no wrapping element.
  * Purely presentational: `selected`/`incident` are booleans the parent derives from
  * `graph-diagram-selection.ts`; the click listener stays on the parent's usage site

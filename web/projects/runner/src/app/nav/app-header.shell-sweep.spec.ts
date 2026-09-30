@@ -18,10 +18,8 @@ import { AppHeader } from './app-header';
  * a phone forced into desktop mode, and at every username length from
  * authless to a 64-character one.
  *
- * Moved here from `local-panel`'s own `local-panel-layout.shell-sweep.spec.ts`
- * along with the header itself: this is the shell where the identity block's
- * variable width actually pushed the profile menu off-viewport — the identity
- * block is the header's one *content-dependent* width, so — unlike the hub
+ * The identity block's variable width can push the profile menu off-viewport.
+ * It is the header's one *content-dependent* width, so — unlike the hub
  * shell's own sweep — identity length is a real, load-bearing axis here, not
  * a no-op one.
  *

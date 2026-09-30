@@ -2,8 +2,7 @@ import type { GraphNodeView } from '../api/hub';
 import { producesNames, sessionLabel } from './graph-node';
 
 /**
- * Sizes a node's box to its *measured* text — split out of `graph-layout.ts` as the pure
- * text-measurement/box-sizing seam, kept under the `web:lint` line cap.
+ * Pure text-measurement and box-sizing for a node's measured text.
  */
 
 /** A node box's height with a single (or no) meta line — the baseline every extra

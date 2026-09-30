@@ -17,9 +17,7 @@ import { injectFindingsBucketFilters } from './gardening-findings-bucket-filters
 /**
  * The `/gardening/findings` sub-tab — the findings triage list and its filter row,
  * beside a `<router-outlet>` holding whichever finding the URL names
- * (`gardening-finding-detail.ts`, where triage itself lives). Split off the
- * combined runs-and-findings surface built; runs and findings
- * are unrelated concepts and get one tab each now.
+ * (`gardening-finding-detail.ts`, where triage itself lives).
  *
  * `gardening-scopes-page.ts`'s own parent-list/child-detail shape, and the tab
  * this shape matters most for: the filters below are what a flat pair of routes
