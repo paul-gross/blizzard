@@ -96,7 +96,7 @@ class _FakeWorkSources:
 
 class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``_lifespan``
-    reads: ``work_sources`` (the forge-status start-condition), ``close_drain``
+    reads: ``annotation`` (the forge-status sweep, ``None`` when no source opts in), ``close_drain``
     (started unconditionally, no source gate), ``event_derivation``
     (started unconditionally too), and ``work_item_materialization``
     (the same)."""
@@ -108,12 +108,13 @@ class _FakeServices:
         close_drain: _CountingReconciler | None = None,
         event_derivation: _CountingReconciler | None = None,
         work_item_materialization: _CountingReconciler | None = None,
+        annotation: _CountingReconciler | None = None,
     ) -> None:
         self.work_sources = work_sources
         self.close_drain = close_drain or _CountingReconciler()
         self.event_derivation = event_derivation or _CountingReconciler()
         self.work_item_materialization = work_item_materialization or _CountingReconciler()
-        self.chunks = None  # unread unless annotating_names() is non-empty, which these tests never set
+        self.annotation = annotation
 
 
 class _FakeState:
@@ -174,6 +175,25 @@ async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Pa
         await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
 
     assert close_drain.calls == 1
+
+
+async def test_the_sweep_set_carries_the_injected_annotator_when_one_is_present(tmp_path: Path) -> None:
+    annotator = _CountingReconciler()
+    services = _FakeServices(work_sources=_FakeWorkSources(annotating=("widget",)), annotation=annotator)
+    app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
+
+    sweeps = list(Sweep.all(app))  # type: ignore[arg-type]
+
+    assert [sweep.reconciler for sweep in sweeps if sweep.logger_name == "blizzard.hub.forge_status"] == [annotator]
+
+
+async def test_the_sweep_set_has_no_forge_status_sweep_without_an_annotator(tmp_path: Path) -> None:
+    services = _FakeServices(work_sources=_FakeWorkSources())
+    app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
+
+    sweeps = list(Sweep.all(app))  # type: ignore[arg-type]
+
+    assert all(sweep.logger_name != "blizzard.hub.forge_status" for sweep in sweeps)
 
 
 # --------------------------------------------------------------------------- #

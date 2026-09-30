@@ -19,7 +19,7 @@ from pathlib import Path
 import httpx
 from sqlalchemy import Engine
 
-from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
@@ -38,7 +38,7 @@ from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import IpThrottle
-from blizzard.hub.auth.users import IReadUserRepository, IWriteUserRepository
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import OAuthProviderConfig
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
@@ -63,13 +63,14 @@ from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.finding_bucket import FindingBucketReader
 from blizzard.hub.domain.findings import FindingExitService, IReadFindingRepository, IReadFindingSetRepository
+from blizzard.hub.domain.forge_status import AnnotationReconciler
 from blizzard.hub.domain.garden_delivery import CommitResolver
 from blizzard.hub.domain.garden_delivery_materialize import GardenDelivery
 from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosureService,
     IReadGardenProposalClosureRepository,
 )
-from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader
+from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReader, GardenProposalDeliveryResolution
 from blizzard.hub.domain.garden_proposals import (
     GardenProposalAuthoring,
     IReadGardenProposalRepository,
@@ -290,20 +291,90 @@ class HubServices:
     garden_sweeps: GardenSweepsService
     #: A routine's runs are readable — the run list and one run's own delta.
     garden_run: GardenRunService
+    #: The forge-status annotation reconciler — present only when a work source opts into
+    #: annotation.
+    annotation: AnnotationReconciler | None
+
+
+@dataclass(frozen=True)
+class HubCore:
+    """The process-scoped collaborators every other hub wiring shares, each built once by
+    :func:`build_hub_core`: the stores and leaf services the work-source registry and
+    :func:`build_services` both consume, so neither builds its own copy."""
+
+    store_connections: HubStoreConnections
+    auth_errors: RepoErrorFactory
+    users: UserRepository
+    registry: RunnerRegistryStore
+    work_item_store: WorkItemStore
+    chunk_stores: ChunkStores
+    cycle_lock: threading.Lock
+    delete: DeleteService
+    finding_store: FindingStore
+    finding_exit: FindingExitService
+    garden_proposal_store: GardenProposalStore
+    garden_proposal_closure_store: GardenProposalClosureStore
+    work_item_edits: WorkItemEditService
+    garden_proposal_resolution: GardenProposalDeliveryResolution
+    clock: IClock
+
+
+def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
+    """Build the hub's shared stores and leaf services once. The order is a DAG — core,
+    then the work-source registry, then :func:`build_services` — so nothing here reads
+    the registry."""
+    store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
+    auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
+    registry = RunnerRegistryStore(store_connections)
+    work_item_store = WorkItemStore(store_connections)
+    chunk_stores = build_chunk_stores(store_connections, clock, registry=registry)
+    cycle_lock = threading.Lock()
+    delete = DeleteService(
+        items=work_item_store,
+        clock=clock,
+        exclusive=chunk_stores.exclusive,
+        cycle_lock=cycle_lock,
+    )
+    finding_store = FindingStore(store_connections)
+    finding_exit = FindingExitService(repo=finding_store, clock=clock)
+    garden_proposal_store = GardenProposalStore(store_connections)
+    garden_proposal_closure_store = GardenProposalClosureStore(store_connections)
+    return HubCore(
+        store_connections=store_connections,
+        auth_errors=auth_errors,
+        users=UserRepository(store_connections, auth_errors),
+        registry=registry,
+        work_item_store=work_item_store,
+        chunk_stores=chunk_stores,
+        cycle_lock=cycle_lock,
+        delete=delete,
+        finding_store=finding_store,
+        finding_exit=finding_exit,
+        garden_proposal_store=garden_proposal_store,
+        garden_proposal_closure_store=garden_proposal_closure_store,
+        work_item_edits=WorkItemEditService(
+            items=work_item_store,
+            work_refs=chunk_stores.work_refs,
+            record=chunk_stores.record,
+            facts=chunk_stores.facts,
+            clock=clock,
+            delete=delete,
+        ),
+        garden_proposal_resolution=GardenProposalDeliveryResolution(
+            closures=garden_proposal_closure_store,
+            proposals=garden_proposal_store,
+            findings=finding_store,
+            exits=finding_exit,
+        ),
+        clock=clock,
+    )
 
 
 def build_services(
-    engine: Engine,
+    core: HubCore,
     *,
     events: EventBroker,
     work_sources: IWorkSourceRegistry,
-    cycle_lock: threading.Lock,
-    work_item_store: WorkItemStore,
-    delete: DeleteService,
-    finding_store: FindingStore,
-    finding_exit: FindingExitService,
-    clock: IClock | None = None,
-    users: IWriteUserRepository | None = None,
     base_branch: str = "main",
     hub_command_runner: IHubCommandRunner | None = None,
     hub_workdir: IHubWorkdir | None = None,
@@ -319,22 +390,20 @@ def build_services(
     trusted_proxies: TrustedProxies | None = None,
     transcript_caps: TranscriptCaps | None = None,
     system_artifacts: PackagedSystemArtifacts | None = None,
-    chunk_stores: ChunkStores | None = None,
 ) -> HubServices:
-    """Construct and wire every fleet service over a migrated store engine.
+    """Construct and wire every fleet service over the shared :class:`HubCore`.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
     (#65), left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
-    ``oauth_providers``. ``cycle_lock``/``work_item_store``/``delete``/``finding_store``/
-    ``finding_exit`` are required, not built here, so the built-in hub binding shares the
-    same five. ``chunk_stores``, given, is reused rather than rebuilt — the built-in hub
-    binding passes its own bundle so ``delete`` and every service built here share one
-    ``ChunkExclusiveWrites`` instance rather than each opening a separate one."""
-    clock = clock or SystemClock()
-    # The hub-store seam — one collaborator shared by every
-    # ``hub/store/internal/`` adapter, replacing the bare engine.
-    store_connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
-    # The chunk-seam adapters, in the one place their construction order is expressed.
-    chunk_stores = chunk_stores or build_chunk_stores(store_connections, clock)
+    ``oauth_providers``. Every store and leaf service the core holds is taken from it,
+    never rebuilt, so the work-source registry and every service here share one instance."""
+    clock = core.clock
+    store_connections = core.store_connections
+    chunk_stores = core.chunk_stores
+    work_item_store = core.work_item_store
+    finding_store = core.finding_store
+    garden_proposal_store = core.garden_proposal_store
+    garden_proposal_closure_store = core.garden_proposal_closure_store
+    registry_store = core.registry
     chunk_facts = chunk_stores.facts
     chunk_record = chunk_stores.record
     chunk_lifecycle = chunk_stores.lifecycle
@@ -353,7 +422,6 @@ def build_services(
     chunk_dependencies = chunk_stores.dependencies
     chunk_exclusive = chunk_stores.exclusive
     graph_store = GraphStore(store_connections)
-    registry_store = RunnerRegistryStore(store_connections)
     transcript_store = TranscriptSegmentStore(store_connections)
     event_store = TranscriptEventStore(store_connections)
     event_derivation_service = EventDerivationService(
@@ -393,8 +461,8 @@ def build_services(
     enrollment = RunnerEnrollmentService(registry=registry_store, clock=clock)
     # The identity spine — one error factory shared by the SQLAlchemy
     # adapters, so the same instances back both the Write Protocols and the reads.
-    auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
-    user_store = users or UserRepository(store_connections, auth_errors)
+    user_store = core.users
+    auth_errors = core.auth_errors
     identity_store = IdentityRepository(store_connections, auth_errors)
     session_store = SessionRepository(store_connections, auth_errors)
     auth_state_store: IWriteAuthStateRepository = AuthStateRepository(store_connections, auth_errors)
@@ -418,22 +486,13 @@ def build_services(
     # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
-    materialization_edits = WorkItemEditService(
-        items=work_item_store,
-        work_refs=chunk_work_refs,
-        record=chunk_record,
-        facts=chunk_facts,
-        clock=clock,
-        delete=delete,
-    )
+    materialization_edits = core.work_item_edits
     graph_mint = GraphMintService(graphs=graph_store, clock=clock)
     scope_store = ScopeStore(store_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = RoutineStore(store_connections)
     routine_scope_store = RoutineScopeStore(store_connections)
     finding_set_store = FindingSetStore(store_connections)
-    garden_proposal_store = GardenProposalStore(store_connections)
-    garden_proposal_closure_store = GardenProposalClosureStore(store_connections)
     run_context_store = RunContextStore(store_connections)
     garden_delivery_store = GardenDeliveryStore(store_connections)
     review_findings_store = ReviewFindingsStore(store_connections)
@@ -497,9 +556,9 @@ def build_services(
             dependencies=chunk_dependencies,
             exclusive=chunk_exclusive,
             clock=clock,
-            cycle_lock=cycle_lock,
+            cycle_lock=core.cycle_lock,
         ),
-        delete=delete,
+        delete=core.delete,
         facts=FactIngestService(
             facts=chunk_facts,
             route=chunk_route,
@@ -521,7 +580,7 @@ def build_services(
             dependencies=chunk_dependencies,
             exclusive=chunk_exclusive,
             clock=clock,
-            cycle_lock=cycle_lock,
+            cycle_lock=core.cycle_lock,
         ),
         fleet=fleet,
         enrollment=enrollment,
@@ -587,7 +646,7 @@ def build_services(
         ),
         routine_baselines=RoutineBaselineService(finding_sets=finding_set_store, delivery=chunk_delivery),
         findings=finding_store,
-        finding_exit=finding_exit,
+        finding_exit=core.finding_exit,
         finding_sets=finding_set_store,
         garden_proposals=garden_proposal_store,
         garden_proposal_authoring=GardenProposalAuthoring(
@@ -614,5 +673,10 @@ def build_services(
         ),
         garden_run=GardenRunService(
             repo=garden_run_store, chunk_records=chunk_record, chunk_facts=chunk_facts, findings=finding_store
+        ),
+        annotation=(
+            AnnotationReconciler(work_refs=chunk_work_refs, work_sources=work_sources)
+            if work_sources.annotating_names()
+            else None
         ),
     )

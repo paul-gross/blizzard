@@ -27,6 +27,7 @@ from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
@@ -61,7 +62,7 @@ def _work_deps(engine):  # type: ignore[no-untyped-def]
     needs to seat the built-in ``hub`` source's editor."""
     store = hub_store_connections(engine)
     work_item_store = WorkItemStore(store)
-    chunks = build_chunk_stores(store, _clock())
+    chunks = build_chunk_stores(store, _clock(), registry=RunnerRegistryStore(store))
     delete = DeleteService(
         items=work_item_store,
         clock=_clock(),

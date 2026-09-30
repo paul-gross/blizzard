@@ -16,8 +16,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.work import Chunk
-from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
-from tests.support import count_queries, hub_store_connections, migrate_to, seed_graph
+from tests.support import chunk_stores, count_queries, migrate_to, seed_graph
 
 pytestmark = pytest.mark.component
 
@@ -28,7 +27,7 @@ def _store(tmp_path: Path) -> tuple[ChunkStores, Engine]:
     _, engine = migrate_to(tmp_path, "head")
     with engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
-    return build_chunk_stores(hub_store_connections(engine), FixedClock(_T0)), engine
+    return chunk_stores(engine, FixedClock(_T0)), engine
 
 
 def _mint(store: ChunkStores, chunk_id: str) -> None:
