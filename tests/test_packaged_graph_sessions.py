@@ -54,18 +54,20 @@ def test_no_packaged_pool_name_collides_with_a_node_name(name: str) -> None:
     assert not (set(doc.sessions) & {n.name for n in doc.nodes})
 
 
-def test_adv_dwf_declares_the_five_pools_and_bounds_only_the_accumulating_ones() -> None:
+def test_adv_dwf_declares_the_six_pools_and_bounds_only_the_accumulating_ones() -> None:
     doc = _doc("advanced-development-workflow")
 
-    assert set(doc.sessions) == {"planning", "code", "verification", "measurement", "gate"}
+    assert set(doc.sessions) == {"planning", "code", "verification", "measurement", "gate", "retro"}
     assert doc.sessions["planning"].model == ["blizzard:advanced"]
     assert doc.sessions["planning"].effort == "high"
     assert doc.sessions["code"].model == ["blizzard:basic"]
     assert doc.sessions["verification"].model == ["blizzard:basic"]
     assert doc.sessions["gate"].model == ["blizzard:basic"]
     assert doc.sessions["measurement"].model == ["blizzard:basic"]
-    # `gate` and `measurement` are only ever reached fresh, so a bound would never apply to them.
+    assert doc.sessions["retro"].model == ["blizzard:advanced"]
+    # `gate`, `measurement`, and `retro` are only ever reached fresh, so a bound would never apply to them.
     assert doc.sessions["measurement"].rotate is None
+    assert doc.sessions["retro"].rotate is None
     assert doc.sessions["code"].rotate is not None
     assert doc.sessions["verification"].rotate is not None
     assert doc.sessions["gate"].rotate is None
@@ -132,9 +134,9 @@ def test_adv_dwf_routes_verify_pass_through_the_advisory_mutation_node() -> None
                 "review": (SessionMode.FRESH, "gate"),
                 "pre-push": (SessionMode.RESUME, "code"),
                 "resolve": (SessionMode.RESUME, "code"),
-                # Left bare deliberately: `retrospective` belongs to no pool, so it gets
-                # the chunk's most-recent session and no tier pin of its own.
-                "retrospective": (SessionMode.RESUME, None),
+                # Cold and tier-pinned: a bare `resume` declares no model, so an entry that
+                # minted instead of resuming ran on the harness's own default.
+                "retrospective": (SessionMode.FRESH, "retro"),
             },
         ),
         (
@@ -153,7 +155,7 @@ def test_adv_dwf_routes_verify_pass_through_the_advisory_mutation_node() -> None
                 # `pre-push` was `resume:build` — the same lineage, differently spelled;
                 # moved onto the pool so the graph carries one vocabulary for it.
                 "pre-push": (SessionMode.RESUME, "code"),
-                "retrospective": (SessionMode.RESUME, None),
+                "retrospective": (SessionMode.FRESH, "retro"),
             },
         ),
     ],

@@ -19,7 +19,7 @@
 name: adv-dwf
 entry: plan
 
-# Named session pools. Five lineages, each with its own capability tier:
+# Named session pools. Six lineages, each with its own capability tier:
 #
 #   planning      the plan node's own long-running context, on the advanced tier —
 #                 authoring a plan against the project's declared verification methods
@@ -41,6 +41,12 @@ entry: plan
 #   gate          the two cold-eyes gates, on the basic tier. No `rotate:` block: a gate
 #                 is only ever reached through `fresh:gate`, so its head is minted every
 #                 entry and rotation never applies.
+#   retro         the closing retrospective, on the advanced tier and fresh every entry,
+#                 so no `rotate:` block either. A bare `resume` declares no model, so a
+#                 retrospective that minted instead of resuming ran on whatever the harness
+#                 defaulted to; this pool pins the tier every entry instead. The node
+#                 synthesizes the per-node `retrospective` diaries and the asset trail, not
+#                 a resumed conversation.
 #
 # A pool bounds and tier-pins a lineage; it does not fork one. `--resume <sid>` reuses the
 # session id in place (forking is opt-in and never used), so every member of a pool
@@ -110,9 +116,13 @@ sessions:
     # already-rendered findings into the plan text — editing, not authoring. The
     # judgement-heavy authoring stays in `planning`. It still carries no `rotate:` block:
     # `fresh:gate` mints its head on every entry, so rotation never applies. The window is
-    # declared anyway — uniform across all five pools, and inert here for the same reason,
+    # declared anyway — uniform across all six pools, and inert here for the same reason,
     # since a freshly minted head has no long-lived context to reach it.
     model: ["blizzard:basic"]
+    compaction_window: "450000"
+  retro:
+    # Fresh every entry, like `gate` and `measurement`: the window is inert here too.
+    model: ["blizzard:advanced"]
     compaction_window: "450000"
 
 # `docket` is this graph's own findings-docket definition — the format every plan-review/review
@@ -391,6 +401,7 @@ nodes:
   retrospective:
     executor: runner
     prompt: ./prompts/retrospective.md
+    session: fresh:retro
     produces:
       - retrospective
     judgement:

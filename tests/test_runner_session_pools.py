@@ -371,8 +371,8 @@ def test_a_mint_stamps_what_it_resolved(tmp_path):  # type: ignore[no-untyped-de
 
 @pytest.mark.component
 def test_a_bare_resume_node_entered_after_a_pooled_one_stamps_the_pools_model(tmp_path):  # type: ignore[no-untyped-def]
-    """The case that makes stamp-inheritance load-bearing: `retrospective` carries a
-    bare `resume:` (no pool, no declaration) that resumes the `code` pool's session —
+    """The case that makes stamp-inheritance load-bearing: a node carrying a bare
+    `resume:` (no pool, no declaration) that resumes the `code` pool's session —
     stamping the fresh preference would switch models and misattribute spend."""
     store = _store(tmp_path)
     hub = FakeHub()

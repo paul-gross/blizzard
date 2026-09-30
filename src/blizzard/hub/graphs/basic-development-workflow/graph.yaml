@@ -36,7 +36,7 @@
 # graph's in one way: this lane's nodes carry no per-node `retrospective` diary to
 # synthesize (adding one to every node is exactly the per-node overhead this lane exists
 # to avoid), so the node reconstructs the journey from the assets the chunk did produce
-# — review-findings, the pre-push summary, the bounces — plus its own resumed session.
+# — review-findings, the pre-push summary, the bounces — in a cold session of its own.
 #
 # Conforms to the canonical authoring schema: fused choice/edge entries, prompts as
 # file references inlined at mint, retries escaping to escalation. Every prompt below
@@ -46,12 +46,17 @@
 name: bas-dwf
 entry: build
 
-# Named session pools. Two lineages, both on the basic tier:
+# Named session pools. Three lineages:
 #
-#   code  the mechanical build lineage, BOUNDED — it is the one that can accumulate
-#         indefinitely across a review-fail loop.
-#   gate  the cold-eyes review. No `rotate:` block: a gate is only ever reached through
-#         `fresh:gate`, so its head is minted every entry and rotation never applies.
+#   code   the mechanical build lineage, on the basic tier and BOUNDED — it is the one
+#          that can accumulate indefinitely across a review-fail loop.
+#   gate   the cold-eyes review, on the basic tier. No `rotate:` block: a gate is only
+#          ever reached through `fresh:gate`, so its head is minted every entry and
+#          rotation never applies.
+#   retro  the closing retrospective, on the advanced tier and fresh every entry, so no
+#          `rotate:` block either. A bare `resume` declares no model, so a retrospective
+#          that minted instead of resuming ran on whatever the harness defaulted to; this
+#          pool pins the tier every entry instead.
 #
 # A re-EXPRESSION of the lineages these nodes already had, not a re-shaping: `--resume
 # <sid>` reuses the session id in place, so the members already share one session and
@@ -70,6 +75,8 @@ sessions:
       max_transcript_bytes: 10000000
   gate:
     model: ["blizzard:basic"]
+  retro:
+    model: ["blizzard:advanced"]
 
 nodes:
   build:
@@ -204,10 +211,8 @@ nodes:
   retrospective:
     executor: runner
     prompt: ./prompts/retrospective.md
-    session: resume  # the default, spelled out: `deliver` is a script node with no
-      # session, so the chunk's most-recent session is pre-push's — which is build's
-      # own (pre-push is `resume:build`). That is the session holding the whole
-      # journey, which is exactly what a retrospective synthesizes.
+    session: fresh:retro  # cold, on a pinned tier: the journey is reconstructed from
+      # the asset trail and `chunk history`, not from a resumed conversation.
     produces:
       - retrospective
     judgement:
