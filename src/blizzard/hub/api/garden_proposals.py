@@ -33,8 +33,8 @@ from blizzard.hub.domain.garden_proposals import (
     GardenProposalEdit,
     GardenProposalEmptyEditError,
     GardenProposalFindingAlreadyLinkedError,
+    GardenProposalFindingExitedError,
     GardenProposalFindingNotLinkedError,
-    GardenProposalFindingNotLiveError,
     GardenProposalOrigin,
 )
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
@@ -251,7 +251,7 @@ def create_garden_proposal(
             body=request.body,
             findings=findings,
         )
-    except (DuplicateProposalFindingError, GardenProposalFindingNotLiveError, GardenProposalBlankFieldError) as exc:
+    except (DuplicateProposalFindingError, GardenProposalFindingExitedError, GardenProposalBlankFieldError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return garden_proposal_view(proposal, None)
 
@@ -302,7 +302,7 @@ def attach_garden_proposal_findings(
         updated = services.garden_proposal_authoring.attach(proposal, findings)
     except (
         DuplicateProposalFindingError,
-        GardenProposalFindingNotLiveError,
+        GardenProposalFindingExitedError,
         GardenProposalFindingAlreadyLinkedError,
     ) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

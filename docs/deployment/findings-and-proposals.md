@@ -79,7 +79,7 @@ and an existing routine when `--routine` names one, or none at all. `edit <propo
 <text>] [--body-file <path>|-]` replaces the given fields in place, `attach <proposal_id> <finding_id>...` links more
 findings to it, and `detach <proposal_id> <finding_id>...` unlinks some — all three work on either origin while the
 proposal is still open, and each 409s once it carries a closure, since closure is terminal. `create`/`attach` refuse the
-whole call on an unknown, non-live, or duplicate finding id; `attach` also refuses one already linked to that same
+whole call on an unknown, exited, or duplicate finding id — a `delivered` or `gone` finding is still attachable; `attach` also refuses one already linked to that same
 proposal, and `detach` one that is not linked — a finding may otherwise belong to more than one proposal at once.
 
 `blizzard hub garden-proposal pass <proposal_id> --reason <text>` records that the proposal was considered and declined,
