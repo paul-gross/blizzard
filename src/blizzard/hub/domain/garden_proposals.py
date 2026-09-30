@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, NoReturn, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import GARDEN_PROPOSAL_PREFIX, Id
 from blizzard.hub.domain.edit import UNSET, UnsetType
-from blizzard.hub.domain.findings import Finding
+from blizzard.hub.domain.findings import EXIT_KINDS, Finding
 
 if TYPE_CHECKING:
     # Deferred to break the cycle: `garden_proposal_closure.py` itself imports
@@ -31,12 +31,12 @@ class DuplicateProposalFindingError(ValueError):
         super().__init__(f"finding {finding_id!r} named more than once")
 
 
-class GardenProposalFindingNotLiveError(ValueError):
-    """`create`/`attach` named a finding that is not live — the whole
+class GardenProposalFindingExitedError(ValueError):
+    """`create`/`attach` named an exited finding — the whole
     call is refused, nothing links."""
 
     def __init__(self, finding_id: str) -> None:
-        super().__init__(f"finding {finding_id!r} is not live")
+        super().__init__(f"finding {finding_id!r} has been exited")
         self.finding_id = finding_id
 
 
@@ -266,12 +266,12 @@ class GardenProposalAuthoring:
         """Mint an operator-authored proposal, naming `routine.name`
         when the caller resolved one, else none — `routine`'s own existence is the
         caller's own resolution, not checked here. `title`/`class_`/`body` must not be
-        blank, and every named finding must be live and named at most once; the whole
+        blank, and every named finding must be unexited and named at most once; the whole
         call is refused otherwise, nothing is linked."""
         title = self._stripped(title, "title")
         class_ = self._stripped(class_, "class")
         body = self._stripped(body, "body")
-        finding_ids = self._checked_finding_ids(findings, require_live=True)
+        finding_ids = self._checked_finding_ids(findings, require_unexited=True)
         return self._proposals.create(
             Id.mint(GARDEN_PROPOSAL_PREFIX, self._clock).value,
             origin=GardenProposalOrigin.OPERATOR,
@@ -304,11 +304,11 @@ class GardenProposalAuthoring:
 
     def attach(self, proposal: GardenProposal, findings: Sequence[Finding]) -> GardenProposal:
         """Link `findings` to `proposal`. Raises :class:`GardenProposalAlreadyClosed`
-        first; every finding must be live, named once, and not already linked to
+        first; every finding must be unexited, named once, and not already linked to
         `proposal` (re-made by the store under its row lock) — linked to *another*
         proposal is allowed."""
         self._refuse_if_closed(proposal.proposal_id)
-        finding_ids = self._checked_finding_ids(findings, require_live=True)
+        finding_ids = self._checked_finding_ids(findings, require_unexited=True)
         for finding_id in finding_ids:
             if finding_id in proposal.findings:
                 raise GardenProposalFindingAlreadyLinkedError(proposal.proposal_id, finding_id)
@@ -321,9 +321,9 @@ class GardenProposalAuthoring:
         """Unlink `findings` from `proposal`. Raises
         :class:`GardenProposalAlreadyClosed` first, ahead of any finding problem, when
         `proposal` already carries a closure. Every named finding must be named at most
-        once and currently linked to `proposal`; liveness is not required."""
+        once and currently linked to `proposal`; exit is not checked."""
         self._refuse_if_closed(proposal.proposal_id)
-        finding_ids = self._checked_finding_ids(findings, require_live=False)
+        finding_ids = self._checked_finding_ids(findings, require_unexited=False)
         for finding_id in finding_ids:
             if finding_id not in proposal.findings:
                 raise GardenProposalFindingNotLinkedError(proposal.proposal_id, finding_id)
@@ -349,15 +349,15 @@ class GardenProposalAuthoring:
             raise GardenProposalBlankFieldError(field_name)
         return text
 
-    def _checked_finding_ids(self, findings: Sequence[Finding], *, require_live: bool) -> list[str]:
+    def _checked_finding_ids(self, findings: Sequence[Finding], *, require_unexited: bool) -> list[str]:
         finding_ids: list[str] = []
         seen: set[str] = set()
         for finding in findings:
             if finding.finding_id in seen:
                 raise DuplicateProposalFindingError(finding.finding_id)
             seen.add(finding.finding_id)
-            if require_live and not finding.live:
-                raise GardenProposalFindingNotLiveError(finding.finding_id)
+            if require_unexited and finding.state in EXIT_KINDS:
+                raise GardenProposalFindingExitedError(finding.finding_id)
             finding_ids.append(finding.finding_id)
         return finding_ids
 

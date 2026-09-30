@@ -25,8 +25,8 @@ from blizzard.hub.domain.garden_proposals import (
     GardenProposalEdit,
     GardenProposalEmptyEditError,
     GardenProposalFindingAlreadyLinkedError,
+    GardenProposalFindingExitedError,
     GardenProposalFindingNotLinkedError,
-    GardenProposalFindingNotLiveError,
     GardenProposalOrigin,
     IWriteGardenProposalRepository,
     RoutineGardenProposalReader,
@@ -195,16 +195,16 @@ def test_create_operator_names_the_resolved_routine() -> None:
     assert proposal.routine_name == "nightly"
 
 
-def test_create_operator_rejects_a_non_live_finding() -> None:
+def test_create_operator_rejects_a_exited_finding() -> None:
     repo = _FakeGardenProposalRepo()
     authoring = GardenProposalAuthoring(
         proposals=_as_write_repo(repo),
         closures=cast(Any, _FakeGardenProposalClosureRepo()),
         clock=FixedClock(instant=_T0),
     )
-    gone = replace(_finding("fin_1"), live=False)
+    gone = replace(_finding("fin_1"), live=False, state="wont-fix")
 
-    with pytest.raises(GardenProposalFindingNotLiveError):
+    with pytest.raises(GardenProposalFindingExitedError):
         authoring.create_operator(created_by="operator", routine=None, class_="c", title="t", body="b", findings=[gone])
 
     assert repo.created == []
@@ -381,7 +381,7 @@ def test_attach_rejects_a_finding_already_linked_to_this_proposal() -> None:
     assert repo.attached == []
 
 
-def test_attach_rejects_a_non_live_finding() -> None:
+def test_attach_rejects_a_exited_finding() -> None:
     repo = _FakeGardenProposalRepo()
     authoring = GardenProposalAuthoring(
         proposals=_as_write_repo(repo),
@@ -389,9 +389,9 @@ def test_attach_rejects_a_non_live_finding() -> None:
         clock=FixedClock(instant=_T0),
     )
     proposal = _proposal("gprop_1")
-    gone = replace(_finding("fin_2"), live=False)
+    gone = replace(_finding("fin_2"), live=False, state="wont-fix")
 
-    with pytest.raises(GardenProposalFindingNotLiveError):
+    with pytest.raises(GardenProposalFindingExitedError):
         authoring.attach(proposal, [gone])
 
     assert repo.attached == []

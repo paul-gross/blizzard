@@ -44,7 +44,12 @@ def _seed_routine(hub: HubHarness, name: str = "nightly", *, default_scope_slug:
 
 
 def _seed_finding(
-    hub: HubHarness, finding_id: str, *, routine_name: str = "nightly", scope_slug: str = "blizzard", live: bool = True
+    hub: HubHarness,
+    finding_id: str,
+    *,
+    routine_name: str = "nightly",
+    scope_slug: str = "blizzard",
+    state: str = "live",
 ) -> None:
     FindingStore(hub_store_connections(hub.engine)).add(
         finding_id,
@@ -56,8 +61,8 @@ def _seed_finding(
         introduced=None,
         at=_NOW,
     )
-    if not live:
-        FindingStore(hub_store_connections(hub.engine)).record_fact(finding_id, kind="gone", at=_NOW)
+    if state != "live":
+        FindingStore(hub_store_connections(hub.engine)).record_fact(finding_id, kind=state, at=_NOW, note="n")
 
 
 def _seed_proposal(
@@ -142,10 +147,10 @@ def test_create_an_unknown_finding_id_is_422_and_creates_nothing(tmp_path: Path)
     assert hub.client.get("/api/garden-proposals").json()["proposals"] == []
 
 
-def test_create_a_non_live_finding_is_422_and_creates_nothing(tmp_path: Path) -> None:
+def test_create_a_exited_finding_is_422_and_creates_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub)
-    _seed_finding(hub, "fin_1", live=False)
+    _seed_finding(hub, "fin_1", state="wont-fix")
 
     resp = hub.client.post(
         "/api/garden-proposals", json={"title": "t", "class": "c", "body": "b", "findings": ["fin_1"]}
@@ -153,6 +158,19 @@ def test_create_a_non_live_finding_is_422_and_creates_nothing(tmp_path: Path) ->
 
     assert resp.status_code == 422, resp.text
     assert hub.client.get("/api/garden-proposals").json()["proposals"] == []
+
+
+def test_create_naming_a_delivered_finding_succeeds(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub)
+    _seed_finding(hub, "fin_1", state="delivered")
+
+    resp = hub.client.post(
+        "/api/garden-proposals", json={"title": "t", "class": "c", "body": "b", "findings": ["fin_1"]}
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["findings"] == ["fin_1"]
 
 
 def test_create_the_same_finding_named_twice_is_422(tmp_path: Path) -> None:
@@ -332,15 +350,27 @@ def test_attach_an_unknown_finding_id_is_422_and_links_nothing(tmp_path: Path) -
     assert hub.client.get("/api/garden-proposals/gprop_1").json()["findings"] == ["fin_1"]
 
 
-def test_attach_a_non_live_finding_is_422(tmp_path: Path) -> None:
+def test_attach_a_exited_finding_is_422(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub)
-    _seed_finding(hub, "fin_2", live=False)
+    _seed_finding(hub, "fin_2", state="wont-fix")
     _seed_proposal(hub, findings=["fin_1"])
 
     resp = hub.client.post("/api/garden-proposals/gprop_1/attach", json={"findings": ["fin_2"]})
 
     assert resp.status_code == 422, resp.text
+
+
+def test_attach_a_delivered_finding_succeeds(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub)
+    _seed_finding(hub, "fin_2", state="delivered")
+    _seed_proposal(hub, findings=["fin_1"])
+
+    resp = hub.client.post("/api/garden-proposals/gprop_1/attach", json={"findings": ["fin_2"]})
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["findings"] == ["fin_1", "fin_2"]
 
 
 def test_attach_a_finding_already_linked_to_this_proposal_is_422(tmp_path: Path) -> None:
@@ -466,7 +496,7 @@ def test_detach_the_same_finding_named_twice_is_422(tmp_path: Path) -> None:
 def test_detach_does_not_require_liveness(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_scope(hub)
-    _seed_finding(hub, "fin_1", live=False)
+    _seed_finding(hub, "fin_1", state="wont-fix")
     _seed_proposal(hub, findings=["fin_1"])
 
     resp = hub.client.post("/api/garden-proposals/gprop_1/detach", json={"findings": ["fin_1"]})
