@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.harness.usage import SessionCostBasis, UsageSample, invocation_cost
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
 
 __all__ = [
@@ -16,7 +16,9 @@ __all__ = [
     "ExternalUsageAttemptSummary",
     "IReadUsageRepository",
     "IWriteUsageRepository",
+    "InvocationCost",
     "UsageTotals",
+    "derive_invocation_cost",
 ]
 
 
@@ -45,6 +47,29 @@ class ExternalUsageAttemptSummary:
 
 
 @dataclass(frozen=True)
+class InvocationCost:
+    """The two cost figures one usage fact persists, decided by :func:`derive_invocation_cost`."""
+
+    #: This invocation's own billed share; ``None`` is cost unknown.
+    cost_usd: float | None
+    #: The zero-cost steps' estimate; ``None`` when absent or withheld with a rejected billed reading.
+    estimated_cost_usd: float | None
+
+
+def derive_invocation_cost(sample: UsageSample, basis: SessionCostBasis | None) -> InvocationCost:
+    """The figures to persist for ``sample`` read against its session's banked ``basis``.
+
+    A billed reading :func:`~blizzard.runner.harness.usage.invocation_cost` rejects withholds
+    the estimate too, so the two readings can never diverge."""
+    cost_usd = invocation_cost(sample, basis)
+    billed_reading_rejected = cost_usd is None and sample.cost_usd is not None
+    return InvocationCost(
+        cost_usd=cost_usd,
+        estimated_cost_usd=None if billed_reading_rejected else sample.estimated_cost_usd,
+    )
+
+
+@dataclass(frozen=True)
 class UsageTotals:
     """A summed window of usage facts. ``cost_partial`` carries the
     lower-bound contract on ``cost_usd``: a caller must check it before treating
@@ -60,6 +85,15 @@ class UsageTotals:
 
 class IReadUsageRepository(Protocol):
     """Read-only usage/context-sample queries (held by read-path edges)."""
+
+    def session_cost_basis(self, lease_id: str) -> SessionCostBasis | None:
+        """What ``lease_id``'s session has banked; ``None`` without an identified session.
+
+        Keyed on the session, not the lease, because a session outlives the lease it was minted
+        under. The basis holds still only because one session is driven by one lease at a
+        time — no transaction serializes this read against :meth:`~IWriteUsageRepository.record_usage`'s
+        insert."""
+        ...
 
     def usage_since(self, at: datetime) -> UsageTotals:
         """Sum every local usage fact recorded at or after ``at`` — see
@@ -112,13 +146,14 @@ class IWriteUsageRepository(IReadUsageRepository, Protocol):
         epoch: int,
         generation: int,
         sample: UsageSample,
+        cost: InvocationCost,
         recorded_at: datetime,
     ) -> int | None:
         """Idempotently record one usage fact **and** buffer its outbound report, atomically;
         return the buffered report's seq. Keyed on ``(lease_id, generation,
         sample.kind)``: a resume within the same lease is a genuinely new row; an exact replay
-        writes nothing, buffers nothing, returns ``None``. The cost stored and reported is this
-        invocation's own share of ``sample.cost_usd``, and is absent when no reading was possible."""
+        writes nothing, buffers nothing, returns ``None``. The figures stored and reported are
+        exactly the ``cost`` handed in — the store decides none of them."""
         ...
 
     def record_context_sample(

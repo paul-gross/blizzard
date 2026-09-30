@@ -44,6 +44,7 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     make_store,
+    record_usage,
 )
 
 _NOW = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
@@ -520,7 +521,8 @@ def _seed_head(store, *, session_id: str = "sess-head", model: str = "sonnet") -
 
 
 def _seed_usage(store, *, kind: str = "spawn", generation: int = 1, tokens: int = 0) -> None:
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_head",
         chunk_id="ch_1",
         node_id="nd_build",

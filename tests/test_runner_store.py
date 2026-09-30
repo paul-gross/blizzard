@@ -15,11 +15,12 @@ import sqlalchemy as sa
 
 from blizzard.foundation.ids import SEGMENT_PREFIX, Id
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.domain.usage import InvocationCost
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.store.schema import external_usage_samples, heartbeats, transcript_outbound_buffer
-from tests.runner_fakes import make_store
+from tests.runner_fakes import make_store, record_usage
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -514,7 +515,8 @@ def test_record_usage_lands_fact_and_buffers_outbound(tmp_path):  # type: ignore
     """The atomic local-write + outbound-enqueue pairing (mirrors ``record_local_pause``)."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -541,7 +543,8 @@ def test_record_usage_stamps_the_samples_own_harness_identity_onto_the_outbound_
     store = _store(tmp_path)
     _mint(store)
     sample = replace(_sample(), harness_id="claude_code", harness_version="1.2.3")
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -561,7 +564,8 @@ def test_record_usage_with_no_stamped_harness_identity_reads_back_null(tmp_path)
     fabricated identity."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -582,7 +586,8 @@ def test_record_usage_carries_an_estimate_on_the_payload_but_never_into_the_row(
     store = _store(tmp_path)
     _mint(store)
     sample = replace(_sample(cost=None), estimated_cost_usd=0.0308)
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -600,35 +605,26 @@ def test_record_usage_carries_an_estimate_on_the_payload_but_never_into_the_row(
 
 
 @pytest.mark.unit
-def test_record_usage_withholds_the_estimate_when_a_backwards_billed_reading_is_rejected(tmp_path):  # type: ignore[no-untyped-def]
-    """A billed reading ``invocation_cost`` rejects as backwards leaves ``cost_usd`` ``None``;
-    an estimate riding the same sample must not survive it either, or the two would disagree."""
+def test_record_usage_persists_the_handed_cost_verbatim(tmp_path):  # type: ignore[no-untyped-def]
+    """The store decides no figure: a pair ``invocation_cost`` would never produce — an
+    estimate beside an absent billed cost, on a sample reporting a billed figure — lands as handed."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_spawn(
-        "lease_1",
-        pid=1,
-        process_start_time="1",
-        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-backwards"),
-        spawned_at=_NOW,
-    )
-    banked = replace(_sample(cost=5.0), cost_scope_tokens=37)
-    store.record_usage(
-        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", epoch=1, generation=1, sample=banked, recorded_at=_NOW
-    )
-    backwards = replace(_sample(cost=3.0), cost_scope_tokens=74, estimated_cost_usd=0.02)
+    sample = replace(_sample(cost=3.0), estimated_cost_usd=0.02)
     store.record_usage(
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
         epoch=1,
-        generation=2,
-        sample=backwards,
+        generation=1,
+        sample=sample,
+        cost=InvocationCost(cost_usd=0.75, estimated_cost_usd=None),
         recorded_at=_NOW,
     )
-    payload = json.loads(store.pending_outbound()[1].payload)
-    assert payload["cost_usd"] is None
+    payload = json.loads(store.pending_outbound()[0].payload)
+    assert payload["cost_usd"] == 0.75
     assert payload["estimated_cost_usd"] is None
+    assert store.usage_since(_NOW).cost_usd == 0.75
 
 
 @pytest.mark.unit
@@ -636,7 +632,8 @@ def test_record_usage_is_idempotent_per_lease_generation_kind(tmp_path):  # type
     """A replay of the exact same invocation (same lease/generation/kind) is a no-op."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -645,7 +642,8 @@ def test_record_usage_is_idempotent_per_lease_generation_kind(tmp_path):  # type
         sample=_sample(),
         recorded_at=_NOW,
     )
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -664,7 +662,8 @@ def test_record_usage_appends_a_new_row_for_a_new_generation(tmp_path):  # type:
     """A retry/resume within the same lease mints a new generation — a genuinely new row."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -673,7 +672,8 @@ def test_record_usage_appends_a_new_row_for_a_new_generation(tmp_path):  # type:
         sample=_sample(kind="spawn"),
         recorded_at=_NOW,
     )
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -693,7 +693,8 @@ def test_usage_since_flags_partial_on_absent_cost(tmp_path):  # type: ignore[no-
     never fabricated as zero-cost (lower-bound + PARTIAL treatment)."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -712,7 +713,8 @@ def test_usage_since_excludes_facts_before_the_window(tmp_path):  # type: ignore
     store = _store(tmp_path)
     _mint(store)
     earlier = _NOW - timedelta(hours=1)
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",

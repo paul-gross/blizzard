@@ -13,7 +13,7 @@ from blizzard.runner.domain.invocation_boundaries import (
     IReadInvocationBoundaryRepository,
 )
 from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, LeaseRecord
-from blizzard.runner.domain.usage import IWriteUsageRepository
+from blizzard.runner.domain.usage import IWriteUsageRepository, derive_invocation_cost
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessUsageAccounting
@@ -87,6 +87,7 @@ class UsageRecorder:
                 harness_id=session.harness_id,
                 harness_version=self.leases.latest_spawn_harness_version(lease.lease_id),
             )
+        cost = derive_invocation_cost(sample, self.usage.session_cost_basis(lease.lease_id))
         seq = self.usage.record_usage(
             lease_id=lease.lease_id,
             chunk_id=lease.chunk_id,
@@ -94,10 +95,21 @@ class UsageRecorder:
             epoch=lease.epoch,
             generation=generation,
             sample=sample,
+            cost=cost,
             recorded_at=self.clock.now(),
         )
         # `None` on an exact-replay idempotent no-op (`record_usage`'s own docstring) — nothing
-        # was enqueued, so nothing to announce.
+        # was enqueued, so nothing to announce, and no rejected reading to warn of a second time.
+        if seq is not None and sample.cost_usd is not None and cost.cost_usd is None:
+            # Absent cost here is a rejected reading, not a worker that died before its
+            # envelope — the two are indistinguishable on the board, so say so once here.
+            _log.warning(
+                "harness cost figure reads below what its session already banked",
+                lease_id=lease.lease_id,
+                chunk_id=lease.chunk_id,
+                generation=generation,
+                reported_cost_usd=sample.cost_usd,
+            )
         if seq is not None and self.events is not None:
             self.events.publish_fact_changed(
                 seq=seq,

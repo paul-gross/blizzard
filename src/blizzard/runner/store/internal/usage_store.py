@@ -14,11 +14,12 @@ from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.domain.usage import (
     ContextSampleState,
     ExternalUsageAttemptSummary,
+    InvocationCost,
     IWriteUsageRepository,
     UsageTotals,
 )
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import SessionCostBasis, UsageSample, invocation_cost
+from blizzard.runner.harness.usage import SessionCostBasis, UsageSample
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import (
     context_samples,
@@ -62,12 +63,11 @@ class UsageStore:
             cost_partial=bool(row[5]),
         )
 
-    def _session_cost_basis(self, conn: Connection, lease_id: str) -> SessionCostBasis | None:
-        """What ``lease_id``'s session has banked; ``None`` without an identified session.
+    def session_cost_basis(self, lease_id: str) -> SessionCostBasis | None:
+        with self._store.connect() as conn:
+            return self._session_cost_basis(conn, lease_id)
 
-        Keyed on ``(harness_id, session_id)``, joined through ``leases`` because a session
-        outlives the lease it was minted under. The basis holds still only because one session
-        is driven by one lease at a time — no transaction serializes this read against the insert."""
+    def _session_cost_basis(self, conn: Connection, lease_id: str) -> SessionCostBasis | None:
         row = conn.execute(
             select(leases.c.session_id, leases.c.harness_id).where(leases.c.lease_id == lease_id)
         ).one_or_none()
@@ -196,6 +196,7 @@ class UsageStore:
         epoch: int,
         generation: int,
         sample: UsageSample,
+        cost: InvocationCost,
         recorded_at: datetime,
     ) -> int | None:
         # Both writes, one transaction: a usage fact the hub is never told about is never
@@ -214,13 +215,6 @@ class UsageStore:
                 # A replay of the exact same invocation — the row is already durable;
                 # write nothing a second time.
                 return None
-            # What this invocation alone cost, which is the harness's own figure only
-            # until the session has banked something for a session-scoped one to include.
-            cost_usd = invocation_cost(sample, self._session_cost_basis(conn, lease_id))
-            # `invocation_cost` rejected a backwards billed reading: withhold the estimate too,
-            # so the two readings can never diverge.
-            billed_reading_rejected = cost_usd is None and sample.cost_usd is not None
-            estimated_cost_usd = None if billed_reading_rejected else sample.estimated_cost_usd
             conn.execute(
                 usage_facts.insert().values(
                     lease_id=lease_id,
@@ -236,7 +230,7 @@ class UsageStore:
                     output_tokens=sample.output_tokens,
                     cache_read_tokens=sample.cache_read_tokens,
                     cache_create_tokens=sample.cache_create_tokens,
-                    cost_usd=cost_usd,
+                    cost_usd=cost.cost_usd,
                     reported_cost_usd=sample.cost_usd,
                     cost_is_share=True,
                     recorded_at=recorded_at,
@@ -255,10 +249,10 @@ class UsageStore:
                     "output_tokens": sample.output_tokens,
                     "cache_read_tokens": sample.cache_read_tokens,
                     "cache_create_tokens": sample.cache_create_tokens,
-                    "cost_usd": cost_usd,
+                    "cost_usd": cost.cost_usd,
                     # Never written to the runner's `usage_facts` row: only this
                     # outbound fact carries it, as computed on the sample itself.
-                    "estimated_cost_usd": estimated_cost_usd,
+                    "estimated_cost_usd": cost.estimated_cost_usd,
                 }
             )
             result = conn.execute(
@@ -270,23 +264,13 @@ class UsageStore:
                     created_at=recorded_at,
                 )
             )
-        if sample.cost_usd is not None and cost_usd is None:
-            # Absent cost here is a rejected reading, not a worker that died before its
-            # envelope — the two are indistinguishable on the board, so say so once here.
-            _log.warning(
-                "harness cost figure reads below what its session already banked",
-                lease_id=lease_id,
-                chunk_id=chunk_id,
-                generation=generation,
-                reported_cost_usd=sample.cost_usd,
-            )
         _log.info(
             "usage fact recorded",
             lease_id=lease_id,
             chunk_id=chunk_id,
             generation=generation,
             kind=sample.kind,
-            cost_usd=cost_usd,
+            cost_usd=cost.cost_usd,
         )
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0

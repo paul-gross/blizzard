@@ -15,7 +15,7 @@ from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store import MIGRATIONS_DIR
-from tests.runner_fakes import make_store
+from tests.runner_fakes import make_store, record_usage
 
 pytestmark = pytest.mark.component
 
@@ -150,7 +150,8 @@ def test_equal_raw_session_ids_are_isolated_across_runner_session_repositories(t
             harness_version=f"v{ordinal}",
             spawned_at=at,
         )
-        store.record_usage(
+        record_usage(
+            store,
             lease_id=lease_id,
             chunk_id="chunk_1",
             node_id="node_1",

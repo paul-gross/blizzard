@@ -21,6 +21,7 @@ from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.usage import derive_invocation_cost
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -181,6 +182,13 @@ def runner_store_errors() -> RunnerStoreErrorFactory:
     """The runner-store seam every test's ``SqlAlchemyRunnerStore``
     construction supplies — one helper so its call sites construct it identically."""
     return RunnerStoreErrorFactory(structlog.get_logger("test"))
+
+
+def record_usage(usage, **kwargs):  # type: ignore[no-untyped-def]
+    """``record_usage`` as ``UsageRecorder`` drives it: the session's banked basis, then the
+    domain cost policy, then the store's verbatim write."""
+    cost = derive_invocation_cost(kwargs["sample"], usage.session_cost_basis(kwargs["lease_id"]))
+    return usage.record_usage(cost=cost, **kwargs)
 
 
 def make_store(tmp_path_url: str) -> SqlAlchemyRunnerStore:

@@ -121,6 +121,7 @@ from blizzard.runner.stores import RunnerReadStores, RunnerStores
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
+from tests.runner_fakes import record_usage
 from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_work_item
 
 _BASE = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
@@ -204,7 +205,8 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         spawned_at=_t(1),
     )
     stores.liveness.record_heartbeat(lease_id=lease_1, beat_at=_t(2))
-    stores.usage.record_usage(
+    record_usage(
+        stores.usage,
         lease_id=lease_1,
         chunk_id=chunk_1,
         node_id=node_a,
@@ -273,7 +275,8 @@ def build_runner_world(engine: Engine) -> RunnerWorld:
         start_position=None,
         opened_at=_t(9),
     )
-    stores.usage.record_usage(
+    record_usage(
+        stores.usage,
         lease_id=lease_2,
         chunk_id=chunk_1,
         node_id=node_a,
@@ -694,6 +697,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadEscalationRepository, "open_escalation_for_chunk"): lambda w: w.read.escalations.open_escalation_for_chunk(
         w.chunk_3
     ),
+    (IReadUsageRepository, "session_cost_basis"): lambda w: w.read.usage.session_cost_basis(w.lease_1),
     (IReadUsageRepository, "usage_since"): lambda w: w.read.usage.usage_since(_BASE),
     (IReadUsageRepository, "context_sample_state"): lambda w: w.read.usage.context_sample_state(w.lease_1),
     (IReadUsageRepository, "context_sample_states"): lambda w: w.read.usage.context_sample_states([w.lease_1]),
