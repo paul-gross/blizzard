@@ -20,6 +20,7 @@ pytestmark = pytest.mark.component
 _NEW_PATHS = [
     "/api/graphs",
     "/api/chunks",
+    "/api/chunk-counts",
     "/api/chunks/{chunk_id}",
     "/api/chunks/{chunk_id}/work-items",
     "/api/queue",

@@ -9,18 +9,17 @@ the union of every other seam's own writes, so this adapter has no write half.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import func, select
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import (
     BounceFact,
     ChunkFacts,
@@ -42,7 +41,8 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import graph_id_of_batch
+from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, graph_id_of_batch
+from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live, settled_done, settled_stopped
 
 #: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
 _ALL_FAMILIES: frozenset[str] = frozenset(
@@ -104,41 +104,6 @@ def _rows(conn, table, batch: Sequence[str] | None, *columns):  # type: ignore[n
     return conn.execute(stmt).all()
 
 
-def _maybe_live():  # type: ignore[no-untyped-def]
-    """The ``chunks`` predicate that drops every chunk a terminal fact already settles, and
-    never one :meth:`ChunkFacts.status` would derive non-terminal. A stop and a completion are unconditional — none
-    can be undone. A transition into the reserved terminal holds only while it is strictly
-    the newest movement across transitions, migrations, and restarts (a later requeue-style
-    movement supersedes it), so a tie keeps the chunk in."""
-    chunk_id = s.chunks.c.chunk_id
-    terminal = s.transitions.alias("terminal_transition")
-    other = s.transitions.alias("other_transition")
-
-    def not_older(row):  # type: ignore[no-untyped-def]
-        return or_(
-            row.c.recorded_at > terminal.c.recorded_at,
-            and_(row.c.recorded_at == terminal.c.recorded_at, row.c.epoch >= terminal.c.epoch),
-        )
-
-    superseded = or_(
-        exists().where(
-            other.c.chunk_id == terminal.c.chunk_id,
-            other.c.transition_id != terminal.c.transition_id,
-            not_older(other),
-        ),
-        exists().where(s.chunk_migrations.c.chunk_id == terminal.c.chunk_id, not_older(s.chunk_migrations)),
-        exists().where(s.chunk_restarts.c.chunk_id == terminal.c.chunk_id, not_older(s.chunk_restarts)),
-    )
-    done_by_transition = exists().where(
-        terminal.c.chunk_id == chunk_id, terminal.c.to_node_id == RESERVED_TERMINAL, ~superseded
-    )
-    return and_(
-        ~exists().where(s.chunk_stopped.c.chunk_id == chunk_id),
-        ~exists().where(s.chunk_completed.c.chunk_id == chunk_id),
-        ~done_by_transition,
-    )
-
-
 class ChunkFactsStore:
     """Read-only chunk-facts adapter — the fleet's fact-derivation projection."""
 
@@ -196,15 +161,36 @@ class ChunkFactsStore:
     def load_live_statuses(self) -> dict[str, ChunkStatus]:
         """Every non-ephemeral, non-terminal chunk's derived :class:`ChunkStatus`, keyed by
         chunk id. The chunks a terminal fact already settles are excluded in the store
-        query (:func:`_maybe_live`), so the facts read and the per-chunk derivation track the
+        query (:func:`maybe_live`), so the facts read and the per-chunk derivation track the
         live fleet rather than every chunk ever minted. The prefilter is sound, not exact —
         a terminal chunk it keeps is dropped by the derivation below. Status derivation
         itself stays in ``domain/work.py``; this only narrows which rows get read."""
         with self._store.read("load_live_statuses") as conn:
-            candidate_ids = [r.chunk_id for r in conn.execute(select(s.chunks.c.chunk_id).where(_maybe_live()))]
-            facts_by_id = self._load(conn, candidate_ids, families=_STATUS_FAMILIES)
-        statuses = {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
+            statuses = self._maybe_live_statuses(conn)
         return {chunk_id: status for chunk_id, status in statuses.items() if status not in TERMINAL_STATUSES}
+
+    def status_counts(self) -> dict[ChunkStatus, int]:
+        """See :meth:`~blizzard.hub.domain.chunks.facts.IReadChunkFactsRepository.status_counts` —
+        the settled-terminal chunks are counted in SQL (:func:`settled_stopped`,
+        :func:`settled_done`) without loading a fact row; only the :func:`maybe_live`
+        candidates :meth:`load_live_statuses` already hydrates are derived per chunk."""
+        not_ephemeral = s.chunks.c.chunk_id.not_in(ephemeral_ids_select())
+        with self._store.read("status_counts") as conn:
+            stopped, done = (
+                conn.execute(select(func.count()).select_from(s.chunks).where(not_ephemeral, settled)).scalar_one()
+                for settled in (settled_stopped(), settled_done())
+            )
+            counts = Counter(self._maybe_live_statuses(conn).values())
+        counts[ChunkStatus.STOPPED] += stopped
+        counts[ChunkStatus.DONE] += done
+        return {status: counts[status] for status in ChunkStatus}
+
+    def _maybe_live_statuses(self, conn) -> dict[str, ChunkStatus]:  # type: ignore[no-untyped-def]
+        """Every :func:`maybe_live` candidate's derived status, terminal ones included — the
+        prefilter's tie residue derives here, not in SQL."""
+        candidate_ids = [r.chunk_id for r in conn.execute(select(s.chunks.c.chunk_id).where(maybe_live()))]
+        facts_by_id = self._load(conn, candidate_ids, families=_STATUS_FAMILIES)
+        return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
 
     def _load(
         self,

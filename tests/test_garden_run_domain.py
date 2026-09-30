@@ -72,7 +72,7 @@ class _FakeChunkRecords:
     def list_all(self) -> list[Chunk]:
         return list(self.chunks.values())
 
-    def list_page(self, *, cursor: str | None = None, limit: int) -> ChunkPage:
+    def list_page(self, *, cursor: str | None = None, limit: int, done_since: datetime | None = None) -> ChunkPage:
         raise NotImplementedError
 
 
@@ -94,6 +94,9 @@ class _FakeChunkFacts:
 
     def load_live_statuses(self) -> dict[str, ChunkStatus]:
         return {chunk_id: f.status() for chunk_id, f in self.facts.items()}
+
+    def status_counts(self) -> dict[ChunkStatus, int]:
+        raise NotImplementedError
 
 
 @dataclass

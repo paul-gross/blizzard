@@ -8,6 +8,7 @@ stored column. The work-item read is a pass-through whose contents are never sto
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -69,6 +70,7 @@ from blizzard.hub.work_sources.source import AuthorView, WorkSourceError
 from blizzard.wire.chunk import (
     BlockedView,
     ChunkCompleteRequest,
+    ChunkCountsView,
     ChunkDeleteRequest,
     ChunkDeleteResponse,
     ChunkDetail,
@@ -94,6 +96,9 @@ from blizzard.wire.chunk import (
 )
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.work_source import WorkItemAuthorView
+
+#: How long a finished ``done`` chunk stays on ``GET /api/chunks?board_window=true``.
+BOARD_DONE_WINDOW = timedelta(hours=48)
 
 router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal)])
 
@@ -165,12 +170,15 @@ def list_chunks(
     services: Annotated[HubServices, Depends(get_services)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    board_window: Annotated[bool, Query()] = False,
 ) -> ChunksPageView:
     """The fleet chunk list — derived status per chunk, bounded and keyset-paginated.
 
     Only the page's own rows render, but live-holder and blocked-marking derivation still
     see the whole fleet — a pointer this page renders can be held live by a
     chunk outside it, same for a dependent's prerequisite."""
+    # ``board_window`` drops ``done`` chunks finished before the window; a page can come back short.
+    done_since = services.clock.now() - BOARD_DONE_WINDOW if board_window else None
     names = GraphNames(services.graphs)
     facts = services.chunks.facts.load_all_facts()
     routes = services.chunks.route.load_all_routes()
@@ -179,18 +187,23 @@ def list_chunks(
     statuses = {chunk_id: chunk_facts.status() for chunk_id, chunk_facts in facts.items()}
     markings = derive_blocked_prerequisites(services.chunks.dependencies.list_standing_edges(), statuses)
     try:
-        page = services.chunks.record.list_page(cursor=cursor, limit=limit)
+        page = services.chunks.record.list_page(cursor=cursor, limit=limit, done_since=done_since)
     except MalformedCursor as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="malformed cursor") from exc
+    if done_since is not None:
+        # The store's exclusion leaves a same-instant movement tie in; the derivation settles it.
+        page_chunks = [c for c in page.chunks if not _done_before(facts.get(c.chunk_id), done_since)]
+    else:
+        page_chunks = page.chunks
     # Live-holder resolution needs every chunk's pointers, not just this page's —
     # narrowing to the page could miss a pointer another, unlisted chunk holds live.
     all_chunks = services.chunks.record.list_all()
     # One priming call resolves the page's own pinned graphs' name/entry-node/node-names
     # up front — narrowed to the page, since nothing outside it is rendered.
-    names.prime(chunk.graph_id for chunk in page.chunks)
+    names.prime(chunk.graph_id for chunk in page_chunks)
     # Unlike the fleet-wide status/holder reads above, delivery belongs only to
     # rendered rows: one narrowed, batched read over this page's ids.
-    delivery_sources = services.chunks.artifacts.delivery_sources_for([chunk.chunk_id for chunk in page.chunks])
+    delivery_sources = services.chunks.artifacts.delivery_sources_for([chunk.chunk_id for chunk in page_chunks])
     # Derives from the chunks and statuses already loaded above, no further fact load.
     live_holders = resolve_live_holders(
         ((p, chunk.chunk_id) for chunk in all_chunks for p in chunk.work_refs), statuses
@@ -210,10 +223,25 @@ def list_chunks(
                     delivery_sources.get(chunk.chunk_id, DeliverySources()),
                 ),
             ).summary()
-            for chunk in page.chunks
+            for chunk in page_chunks
         ],
         next_cursor=page.next_cursor,
     )
+
+
+def _done_before(facts: ChunkFacts | None, instant: datetime) -> bool:
+    if facts is None or facts.status() is not ChunkStatus.DONE:
+        return False
+    completed_at = facts.completed_at()
+    return completed_at is not None and completed_at < instant
+
+
+@router.get("/chunk-counts", response_model=ChunkCountsView, dependencies=[Depends(require(FLEET_VIEW))])
+def chunk_counts(services: Annotated[HubServices, Depends(get_services)]) -> ChunkCountsView:
+    """The all-time fleet count per derived status — over exactly the chunks
+    ``GET /api/chunks`` pages over, with no window applied."""
+    counts = services.chunks.facts.status_counts()
+    return ChunkCountsView(total=sum(counts.values()), **{st.value: n for st, n in counts.items()})
 
 
 def _neighbor_view(neighbor: ChunkNeighbor) -> ChunkNeighborView:
