@@ -32,23 +32,23 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         skip writes), so the ``chunk_pause_facts.id`` comes back unconditionally."""
         ...
 
-    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str) -> int:
+    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact — terminal operator abandonment —
         and, atomically on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), release any live route and any held fleet-wide
-        hub-exec slot. ``at`` is stamped by the store itself, from its own injected clock,
-        after the row lock — never passed in — so a claim that wins the row lock first can
-        never mint a route sorting newer than this release. Returns the freshly-written
+        hub-exec slot. ``at`` is passed in, stamped by the caller after the row lock, so a
+        claim that wins the row lock first can never mint a route sorting newer than this
+        release. Returns the freshly-written
         ``chunk_stopped.id``, not the ``route_released.id`` this same transaction may also
         write."""
         ...
 
-    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str) -> int:
+    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.completed`` fact — an operator's manual completion, including from
         ``stopped`` — and, atomically on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), release any live route and any held fleet-wide
         hub-exec slot, mirroring :meth:`record_stop_locked`. The caller has already
-        checked the chunk is not already ``done``. ``at`` is stamped by the store itself
-        after the row lock — see :meth:`record_stop_locked`. Returns the freshly-written
+        checked the chunk is not already ``done``. ``at`` is passed in, stamped by the
+        caller after the row lock — see :meth:`record_stop_locked`. Returns the freshly-written
         ``chunk_completed.id``."""
         ...

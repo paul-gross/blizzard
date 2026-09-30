@@ -27,7 +27,7 @@ from blizzard.hub.domain.work import (
     WorkItemClosure,
     WorkRef,
 )
-from blizzard.hub.domain.work_closure import CLOSE_DRAIN_BACKOFF_BASE_SECONDS, CloseIntentDrainer
+from blizzard.hub.domain.work_closure import CLOSE_DRAIN_BACKOFF_BASE_SECONDS, CloseIntentDrainer, close_intent_is_due
 from blizzard.hub.events.broker import EVENT_LOGGED
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
@@ -141,69 +141,59 @@ def test_record_work_item_closure_failed_outcome_leaves_the_intent_pending(tmp_p
         chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.FAILED, reason="boom", at=hub.clock.now()
     )
 
-    # Not retired, but its just-ticked backoff clock means it is not
-    # due again this same instant.
-    assert pointer not in {i.ref for i in hub.services.chunks.delivery.pending_close_intents()}
+    # Not retired: still pending, carrying the one attempt it just ticked.
+    [intent] = hub.services.chunks.delivery.pending_close_intents()
+    assert intent == PendingCloseIntent(chunk_id=chunk_id, ref=pointer)
+    assert intent.attempt_count == 1
+    assert intent.last_attempt_at == hub.clock.now()
 
-    hub.clock.advance(timedelta(hours=1))  # past the backoff cap — due again, still not dead-lettered
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
 
-
-# The backoff clock itself ------------------------------------
+# The backoff history the read carries, and the rule that consumes it ------------------------------------
 
 
 @pytest.mark.component
-def test_the_backoff_boundary_is_exact_at_sixty_seconds(tmp_path: Path) -> None:
+def test_pending_close_intents_carries_each_intents_attempt_history(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
-    pointer = WorkRef(source="default", ref="1")
     delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    [fresh] = delivery.pending_close_intents()
+    assert (fresh.attempt_count, fresh.last_attempt_at) == (0, None)
+
     delivery.record_work_item_closure(
-        chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.FAILED, reason="x", at=hub.clock.now()
+        chunk_id, pointer=fresh.ref, outcome=WorkItemCloseOutcome.FAILED, reason="x", at=hub.clock.now()
     )
+    hub.clock.advance(timedelta(seconds=10))  # a backed-off intent is still returned
+    delivery.record_close_attempt_skipped(fresh.intent_id, at=hub.clock.now())
 
-    hub.clock.advance(timedelta(seconds=59))
-    assert pointer not in {i.ref for i in delivery.pending_close_intents()}
+    [backed_off] = delivery.pending_close_intents()
+    assert backed_off.intent_id == fresh.intent_id
+    assert backed_off.attempt_count == 2
+    assert backed_off.last_attempt_at == hub.clock.now()
 
-    hub.clock.advance(timedelta(seconds=1))  # now exactly 60s since the one attempt
-    assert pointer in {i.ref for i in delivery.pending_close_intents()}
 
-
-@pytest.mark.component
-def test_the_backoff_grows_exponentially_then_caps_at_one_hour(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("attempt_count", "threshold_seconds"),
+    [(1, 60), (2, 120), (3, 240), (4, 480), (5, 960), (6, 1920), (7, 3600), (8, 3600)],
+)
+def test_close_intent_is_due_exactly_at_its_exponential_threshold_capped_at_one_hour(
+    attempt_count: int, threshold_seconds: int
+) -> None:
     """base x 2^(n-1): 60s, 120s, 240s, ... capped at 3600s."""
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    _land(hub, chunk_id)
-    pointer = WorkRef(source="default", ref="1")
-    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    last = datetime(2026, 8, 1, tzinfo=UTC)
 
-    thresholds = [60, 120, 240, 480, 960, 1920, 3600, 3600]  # the 7th attempt's threshold is already capped
-    for threshold in thresholds:
-        delivery.record_work_item_closure(
-            chunk_id, pointer=pointer, outcome=WorkItemCloseOutcome.FAILED, reason="x", at=hub.clock.now()
-        )
-        hub.clock.advance(timedelta(seconds=threshold - 1))
-        assert pointer not in {i.ref for i in delivery.pending_close_intents()}
-        hub.clock.advance(timedelta(seconds=1))
-        assert pointer in {i.ref for i in delivery.pending_close_intents()}
+    def due(elapsed: int) -> bool:
+        return close_intent_is_due(last + timedelta(seconds=elapsed), attempt_count=attempt_count, last_attempt_at=last)
+
+    assert not due(threshold_seconds - 1)
+    assert due(threshold_seconds)
 
 
-@pytest.mark.component
-def test_a_skipped_attempt_ticks_the_same_backoff_clock_as_a_failed_one(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-    _land(hub, chunk_id)
-    pointer = WorkRef(source="default", ref="1")
-    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
-    [intent] = delivery.pending_close_intents()
-
-    delivery.record_close_attempt_skipped(intent.intent_id, at=hub.clock.now())
-
-    assert pointer not in {i.ref for i in delivery.pending_close_intents()}
-    hub.clock.advance(timedelta(seconds=60))
-    assert pointer in {i.ref for i in delivery.pending_close_intents()}
+@pytest.mark.parametrize(("attempt_count", "last_attempt_at"), [(0, None), (None, None), (3, None)])
+def test_close_intent_is_due_with_no_prior_attempt(attempt_count: int | None, last_attempt_at: datetime | None) -> None:
+    assert close_intent_is_due(
+        datetime(2026, 8, 1, tzinfo=UTC), attempt_count=attempt_count, last_attempt_at=last_attempt_at
+    )
 
 
 def test_the_backoff_base_matches_the_sweep_interval() -> None:
@@ -308,9 +298,14 @@ def _as_events(chunks: _FakeCloseChunks) -> EventLogService:
     return cast(EventLogService, chunks)
 
 
-def _drainer(chunks: _FakeCloseChunks, closers: dict[str, FakeCloser]) -> CloseIntentDrainer:
+_NOW = datetime(2026, 8, 1, tzinfo=UTC)
+
+
+def _drainer(
+    chunks: _FakeCloseChunks, closers: dict[str, FakeCloser], clock: FixedClock | None = None
+) -> CloseIntentDrainer:
     registry = WorkSourceRegistry({}, closers=closers)  # type: ignore[arg-type]
-    clock = FixedClock(datetime(2026, 8, 1, tzinfo=UTC))
+    clock = clock or FixedClock(_NOW)
     return CloseIntentDrainer(
         delivery=_as_delivery(chunks), events=_as_events(chunks), work_sources=registry, clock=clock
     )
@@ -415,6 +410,54 @@ def test_sweep_over_an_empty_queue_issues_no_forge_call() -> None:
 # CloseIntentDrainer.sweep() — real store + FakeCloser (component tier)
 
 
+def test_sweep_does_not_attempt_a_backed_off_intent_until_its_threshold_elapses() -> None:
+    pointer = WorkRef(source="default", ref="1")
+    closer = FakeCloser()
+    backed_off = PendingCloseIntent(chunk_id="ch_1", ref=pointer, attempt_count=1, last_attempt_at=_NOW)
+    chunks = _FakeCloseChunks([backed_off])
+    clock = FixedClock(_NOW + timedelta(seconds=59))
+    drainer = _drainer(chunks, {"default": closer}, clock)
+
+    drainer.sweep()
+    assert closer.closed == []
+    assert chunks.closures == []
+
+    clock.advance(timedelta(seconds=1))  # exactly 60s since the one attempt
+    drainer.sweep()
+    assert closer.closed == [pointer]
+
+
+def test_sweep_reads_the_clock_once_at_the_top_of_the_pass_for_every_intents_due_check() -> None:
+    """A pass judges every intent against the same ``now``, however long the closes take."""
+    closer = FakeCloser()
+    a = PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="1"))
+    b = PendingCloseIntent(
+        chunk_id="ch_2", ref=WorkRef(source="default", ref="2"), attempt_count=1, last_attempt_at=_NOW
+    )
+    chunks = _FakeCloseChunks([a, b])
+    clock = FixedClock(_NOW)
+
+    class _AdvancingCloser(FakeCloser):
+        def close(self, pointer: WorkRef) -> None:
+            super().close(pointer)
+            clock.advance(timedelta(hours=1))
+
+    advancing = _AdvancingCloser()
+    _drainer(chunks, {"default": advancing}, clock).sweep()
+
+    assert advancing.closed == [a.ref]  # b was judged not-due at the pass's own start
+    assert closer.closed == []
+
+
+def test_sweep_of_a_skipped_intent_ticks_the_same_backoff_as_a_failed_one() -> None:
+    unopted = PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="unopted", ref="1"), intent_id=7)
+    chunks = _FakeCloseChunks([unopted])
+
+    _drainer(chunks, {}).sweep()
+
+    assert chunks.skipped_attempts == [7]
+
+
 @pytest.mark.component
 def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Path) -> None:
     """Driven twice, then re-read: the second pass issues no second close and writes
@@ -463,8 +506,8 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
     )
 
     drainer.sweep()
+    assert closer.closed == []
     hub.clock.advance(timedelta(hours=1))  # past the backoff cap — due again
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
 
     closer.fail_refs.clear()  # simulate the transient failure clearing before the next sweep
     drainer.sweep()
@@ -494,9 +537,9 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
     pointer = WorkRef(source="default", ref="1")
 
     drainer.sweep()
-    # Not retired, but its just-ticked backoff clock means it is not
-    # due again this same instant.
-    assert pointer not in {i.ref for i in hub.services.chunks.delivery.pending_close_intents()}
+    # Not retired: still pending, carrying the attempt it just ticked.
+    [pending] = hub.services.chunks.delivery.pending_close_intents()
+    assert (pending.ref, pending.attempt_count) == (pointer, 1)
 
     frames = _event_logged_frames(hub)
     assert len(frames) == 1
@@ -504,7 +547,6 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
     assert frames[0]["key"].startswith("event_log:")
 
     hub.clock.advance(timedelta(hours=1))  # past the backoff cap — due again
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
     drainer.sweep()  # the same failure again — an identical outcome, already recorded
 
     assert len(_event_logged_frames(hub)) == 1
@@ -528,11 +570,10 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_p
     drainer.sweep()
 
     pointer = WorkRef(source="default", ref="1")
-    # Just skipped — its backoff clock is not due again this instant.
-    assert pointer not in {i.ref for i in hub.services.chunks.delivery.pending_close_intents()}
-
-    hub.clock.advance(timedelta(hours=1))  # past the backoff cap — due again, still not dead-lettered
-    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in hub.services.chunks.delivery.pending_close_intents()
+    # Just skipped: still pending, carrying the attempt it ticked — not dead-lettered.
+    [pending] = hub.services.chunks.delivery.pending_close_intents()
+    assert (pending.ref, pending.attempt_count) == (pointer, 1)
+    assert pending.chunk_id == chunk_id
 
 
 # CloseIntentDrainer.sweep() against the built-in `hub` source — always

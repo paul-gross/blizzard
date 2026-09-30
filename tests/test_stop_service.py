@@ -2,10 +2,11 @@
 
 A fake stands in for the lifecycle store and the locked-transaction seam — only
 ``record_stop_locked`` and the handle's ``facts`` read are meaningfully implemented; every
-other seam raises loudly if called, including the route release and the ``at`` timestamp,
-both owned by ``record_stop_locked``'s own locked transaction, never this layer
-(``bzh:store-exclusive-write`` — a claim winning the row lock first must never see a
-release stamped before it). The terminal-status guard is re-derived from the locked
+other seam raises loudly if called. The route release is owned by ``record_stop_locked``'s
+own locked transaction, never this layer. The service stamps ``at`` from its injected clock
+once the row lock is held, never before it (``bzh:store-exclusive-write`` — a claim
+winning the row lock first must never see a release stamped before it); the fake lock
+advances the clock while it waits so the stamp pins that ordering. The terminal-status guard is re-derived from the locked
 handle's own ``facts`` read, never a pre-lock snapshot — mirrors ``DeleteService``'s own
 fake shape (``tests/test_delete_service.py``)."""
 
@@ -14,12 +15,13 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
@@ -31,6 +33,7 @@ from blizzard.hub.domain.work import Chunk, ChunkFacts, EscalationFact, Question
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
+_LOCK_WAIT = timedelta(seconds=5)
 _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 
@@ -39,9 +42,11 @@ class _FakeChunkRepo:
     """Only ``record_stop_locked`` is live; anything else is a bug."""
 
     stopped: list[tuple[str, str]] = field(default_factory=list)
+    stamps: list[datetime] = field(default_factory=list)
 
-    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str) -> int:
+    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
         self.stopped.append((chunk_id, by))
+        self.stamps.append(at)
         return len(self.stopped)
 
     def __getattr__(self, name: str) -> Any:
@@ -62,16 +67,19 @@ class _FakeLockedChunkRead:
 @dataclass
 class _FakeExclusiveWrites:
     chunk_facts: ChunkFacts | None
+    clock: FixedClock
 
     @contextmanager
     def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+        self.clock.advance(_LOCK_WAIT)  # time passes while the lock is awaited
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.chunk_facts))
 
 
 def _service(facts: ChunkFacts | None) -> tuple[StopService, _FakeChunkRepo]:
     repo = _FakeChunkRepo()
-    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts))
-    service = StopService(lifecycle=cast(IWriteChunkLifecycleRepository, repo), exclusive=exclusive)
+    clock = FixedClock(_T0)
+    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts, clock))
+    service = StopService(lifecycle=cast(IWriteChunkLifecycleRepository, repo), exclusive=exclusive, clock=clock)
     return service, repo
 
 
@@ -183,3 +191,11 @@ def test_stop_raises_chunk_not_found_for_a_chunk_gone_under_the_lock() -> None:
         service.stop(_CHUNK, by="operator")
 
     assert repo.stopped == []
+
+
+def test_stop_stamps_at_after_the_row_lock_is_taken() -> None:
+    service, repo = _service(_not_ready_facts())
+
+    service.stop(_CHUNK, by="operator")
+
+    assert repo.stamps == [_T0 + _LOCK_WAIT]

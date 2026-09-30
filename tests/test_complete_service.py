@@ -2,9 +2,10 @@
 
 A fake stands in for the lifecycle store and the locked-transaction seam — only
 ``record_completion_locked`` and the handle's ``facts`` read are meaningfully implemented;
-every other seam raises loudly if called, mirroring ``StopService``'s own split, including
-the ``at`` timestamp: the store's own concern, stamped after its row lock
-(``bzh:store-exclusive-write``), never this layer's. The already-``done`` guard is
+every other seam raises loudly if called, mirroring ``StopService``'s own split. The
+service stamps ``at`` from its injected clock once the row lock is held, never before it
+(``bzh:store-exclusive-write``); the fake lock advances the clock while it waits so the
+stamp pins that ordering. The already-``done`` guard is
 re-derived from the locked handle's own ``facts`` read, never a pre-lock snapshot."""
 
 from __future__ import annotations
@@ -12,11 +13,12 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
@@ -28,6 +30,7 @@ from blizzard.hub.domain.work import Chunk, ChunkFacts, RouteCreatedFact, Transi
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
+_LOCK_WAIT = timedelta(seconds=5)
 _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 
@@ -36,10 +39,12 @@ class _FakeChunkRepo:
     """Only ``record_completion_locked`` is live — see module docstring."""
 
     completed: list[tuple[str, str]] = field(default_factory=list)
+    stamps: list[datetime] = field(default_factory=list)
     _next_id: int = 1
 
-    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str) -> int:
+    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
         self.completed.append((chunk_id, by))
+        self.stamps.append(at)
         fact_id = self._next_id
         self._next_id += 1
         return fact_id
@@ -62,16 +67,19 @@ class _FakeLockedChunkRead:
 @dataclass
 class _FakeExclusiveWrites:
     chunk_facts: ChunkFacts | None
+    clock: FixedClock
 
     @contextmanager
     def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+        self.clock.advance(_LOCK_WAIT)  # time passes while the lock is awaited
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.chunk_facts))
 
 
 def _service(facts: ChunkFacts | None) -> tuple[CompleteService, _FakeChunkRepo]:
     repo = _FakeChunkRepo()
-    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts))
-    service = CompleteService(lifecycle=cast(IWriteChunkLifecycleRepository, repo), exclusive=exclusive)
+    clock = FixedClock(_T0)
+    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts, clock))
+    service = CompleteService(lifecycle=cast(IWriteChunkLifecycleRepository, repo), exclusive=exclusive, clock=clock)
     return service, repo
 
 
@@ -147,3 +155,11 @@ def test_complete_raises_chunk_not_found_for_a_chunk_gone_under_the_lock() -> No
         service.complete(_CHUNK, by="operator")
 
     assert repo.completed == []
+
+
+def test_complete_stamps_at_after_the_row_lock_is_taken() -> None:
+    service, repo = _service(_not_ready_facts())
+
+    service.complete(_CHUNK, by="operator")
+
+    assert repo.stamps == [_T0 + _LOCK_WAIT]

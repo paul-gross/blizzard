@@ -103,7 +103,7 @@ _ADAPTER_CASES = [
     ),
     _AdapterCase(
         "ChunkLifecycleStore",
-        lambda store: ChunkLifecycleStore(store, FixedClock(_NOW)),
+        lambda store: ChunkLifecycleStore(store),
         lambda a: a.record_pause("ch_x", paused=True, by="test", at=_NOW),
         "record_pause",
     ),
@@ -171,7 +171,7 @@ _ADAPTER_CASES = [
     ),
     _AdapterCase(
         "ChunkDeliveryStore",
-        lambda store: ChunkDeliveryStore(store, FixedClock(_NOW)),
+        lambda store: ChunkDeliveryStore(store),
         lambda a: a.landed_repos("ch_x"),
         "landed_repos",
     ),

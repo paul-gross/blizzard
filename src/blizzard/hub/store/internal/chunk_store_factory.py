@@ -40,7 +40,7 @@ def build_chunk_stores(store: HubStoreConnections, clock: IClock) -> ChunkStores
     return ChunkStores(
         facts=facts,
         record=record,
-        lifecycle=ChunkLifecycleStore(store, clock),
+        lifecycle=ChunkLifecycleStore(store),
         work_refs=ChunkWorkRefsStore(store, clock, facts=facts),
         queue=ChunkQueueStore(store, clock),
         route=ChunkRouteStore(store, clock),
@@ -51,7 +51,7 @@ def build_chunk_stores(store: HubStoreConnections, clock: IClock) -> ChunkStores
         escalations=ChunkEscalationsStore(store, clock, facts=facts),
         events=ChunkEventsStore(store, clock),
         usage=ChunkUsageStore(store, clock),
-        delivery=ChunkDeliveryStore(store, clock),
+        delivery=ChunkDeliveryStore(store),
         hub_exec=ChunkHubExecStore(store, clock),
         dependencies=dependencies,
         exclusive=ChunkExclusiveWrites(

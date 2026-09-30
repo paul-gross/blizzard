@@ -144,13 +144,17 @@ class PendingCloseIntent:
     dict would silently drop one.
 
     ``intent_id`` is the backing ``close_intents.id`` — the key a
-    skipped attempt's own ``close_intent_attempts`` row is recorded against. Excluded from
-    equality, so two instances compare equal by ``(chunk_id, ref)`` alone; defaults to
-    ``0`` when unset."""
+    skipped attempt's own ``close_intent_attempts`` row is recorded against.
+    ``attempt_count`` and ``last_attempt_at`` are that intent's backoff history (``0`` and
+    ``None`` with no attempt), the input to ``close_intent_is_due``. All three are excluded
+    from equality, so two instances compare equal by ``(chunk_id, ref)`` alone; each
+    defaults to its unset value."""
 
     chunk_id: str
     ref: WorkRef
     intent_id: int = field(default=0, compare=False)
+    attempt_count: int = field(default=0, compare=False)
+    last_attempt_at: datetime | None = field(default=None, compare=False)
 
 
 class MigrationMode(StrEnum):

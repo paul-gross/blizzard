@@ -360,7 +360,7 @@ def test_withdraw_sets_the_withdrawn_closure(tmp_path: Path) -> None:
         graph=_graph(engine),
     )
     with chunks.exclusive.locked([created.chunk_id]) as handle:
-        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator")
+        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0)
 
     withdrawn = source.withdraw(WorkRef(source="hub", ref=created.item.ref), by="operator")
 
@@ -380,7 +380,7 @@ def test_edit_and_withdraw_of_a_closed_item_are_refused(tmp_path: Path) -> None:
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
-        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator")
+        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0)
     source.withdraw(pointer, by="operator")
 
     with pytest.raises(WorkItemNotEditable):
@@ -502,7 +502,7 @@ def test_withdraw_succeeds_once_the_holding_chunk_is_no_longer_live(tmp_path: Pa
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
-        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator")
+        chunks.lifecycle.record_stop_locked(handle, created.chunk_id, by="operator", at=_T0)
 
     withdrawn = source.withdraw(pointer, by="operator")
 
