@@ -19,7 +19,8 @@ export { ViewportService } from './lib/viewport/viewport-service';
 export { matchesMobileViewport } from './lib/viewport/matches-mobile-viewport';
 export { provideViewportRenavigation } from './lib/viewport/viewport-renavigation';
 
-export { injectHubChunksQuery } from './lib/chunks/chunks.query';
+export { injectHubBoardChunksQuery } from './lib/chunks/chunks.query';
+export { injectHubChunkCountsQuery } from './lib/chunks/chunk-counts.query';
 export { injectHubFleetSpendQuery } from './lib/fleet-spend/fleet-spend.query';
 export { injectHubHealthQuery } from './lib/health/health.query';
 export { injectHubQuestionsQuery } from './lib/questions/questions.query';

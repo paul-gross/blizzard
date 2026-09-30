@@ -55,6 +55,11 @@ export class BoardColumn {
   /** The lane's cards, already in the order they should render. */
   readonly cards = input<readonly BoardCard[]>([]);
 
+  /** The lane's all-time count, or null before the counts read resolves — the head
+   * withholds the number rather than show the card list's length, which the board's
+   * window truncates. */
+  readonly count = input<number | null>(null);
+
   /** The chunk whose detail fills the dock, or null — its card carries the highlight. */
   readonly selectedChunkId = input<string | null>(null);
 

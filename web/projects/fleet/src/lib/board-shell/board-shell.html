@@ -6,6 +6,7 @@
         <fleet-board-column
           [column]="col"
           [cards]="cardsFor(col.key)"
+          [count]="countFor(col.key)"
           [selectedChunkId]="selectedChunkId()"
           [reorderControls]="col.key === 'ready' || col.key === 'notready'"
           [canControl]="canControl()"

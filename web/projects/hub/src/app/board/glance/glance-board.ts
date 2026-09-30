@@ -6,7 +6,8 @@ import {
   asyncState,
   asyncStateOf,
   compactRef,
-  injectHubChunksQuery,
+  injectHubBoardChunksQuery,
+  injectHubChunkCountsQuery,
   injectHubFleetSpendQuery,
   injectHubHealthQuery,
   injectHubQueueQuery,
@@ -34,7 +35,7 @@ import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type UpNex
  * table rather than per-page (see `app.routes.ts`'s doc comment).
  *
  * Every number and row here comes from queries {@link BoardPage}'s desktop shell
-   * already reads — `injectHubChunksQuery`, `injectHubQueueQuery`,
+   * already reads — `injectHubBoardChunksQuery`, `injectHubQueueQuery`,
    * `injectHubQuestionsQuery`, `injectHubRunnersQuery`, `injectHubHealthQuery`,
    * `injectHubFleetSpendQuery` —
  * plus the same `FleetLiveUpdates` spine the app root starts: no new backend
@@ -59,7 +60,8 @@ import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type UpNex
   styleUrl: './glance-board.css',
 })
 export class GlanceBoard {
-  private readonly chunksQuery = injectHubChunksQuery();
+  private readonly chunksQuery = injectHubBoardChunksQuery();
+  private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly queueQuery = injectHubQueueQuery();
   private readonly questionsQuery = injectHubQuestionsQuery();
   private readonly runnersQuery = injectHubRunnersQuery();
@@ -166,10 +168,13 @@ export class GlanceBoard {
       .map(({ row }) => row),
   );
 
-  /** Every terminal chunk, including older rows and rows whose completion instant
-   * cannot be rendered in the rolling window. Used as Done today's visible/total
-   * header count, so an empty fleet still states `0/0`. */
-  protected readonly terminalCount = computed(() => this.chunks().filter((chunk) => STATUS_TONE[chunk.status] === 'done').length);
+  /** Every terminal chunk the fleet has ever held — the board list omits old `done`
+   * rows, so the all-time total comes from the counts read. Used as Done today's
+   * visible/total header count, so an empty fleet still states `0/0`. */
+  protected readonly terminalCount = computed(() => {
+    const counts = this.countsQuery.data();
+    return counts === undefined ? 0 : counts.done + counts.stopped;
+  });
 
   /** Each panel's async state, derived independently (AC 4) — a panel withholds
    * its empty copy on its own reads' loading/error, regardless of the other
@@ -193,10 +198,10 @@ export class GlanceBoard {
     asyncState(this.chunksQuery, this.doneToday().length === 0),
   );
 
-  /** The terminal denominator is meaningful only once the chunks read succeeded:
+  /** The terminal denominator is meaningful only once the counts read succeeded:
    * before then its empty fallback would falsely advertise `0/0`. */
   protected readonly doneTodayTotal = computed<number | null>(() =>
-    this.chunksQuery.isPending() || this.chunksQuery.isError() ? null : this.terminalCount(),
+    this.countsQuery.isPending() || this.countsQuery.isError() ? null : this.terminalCount(),
   );
 
   /** Never `'empty'`: the spend endpoint returns a zeroed aggregate rather than

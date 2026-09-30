@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { ChunkSummary } from '../api/hub';
+import type { ChunkCountsView, ChunkSummary } from '../api/hub';
 import type { BoardCard } from '../board-card/board-card';
 import { BoardColumn, type BoardReposition } from './board-column';
 import { compactRef } from '../compact-ref';
-import { LANES, STATUS_LANE } from '../chunk-lanes';
+import { LANES, STATUS_LANE, laneCounts } from '../chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel, KitPanelHeader } from '../kit/kit-panel';
 import { KitSkeleton } from '../kit/kit-skeleton';
@@ -46,6 +46,10 @@ export class BoardShell {
    * with yet) sorts after the ones it does, keeping its relative order, rather
    * than jumping the queue or vanishing.
    */
+  /** The all-time fleet counts each column head shows — `null` while the read is
+   * pending, when the heads withhold their numbers. */
+  readonly counts = input<ChunkCountsView | null>(null);
+
   readonly readyOrder = input<readonly string[]>([]);
 
   /**
@@ -159,6 +163,15 @@ export class BoardShell {
     });
     return grouped;
   });
+
+  private readonly laneTotals = computed(() => {
+    const counts = this.counts();
+    return counts === null ? null : laneCounts(counts);
+  });
+
+  protected countFor(columnKey: string): number | null {
+    return this.laneTotals()?.get(columnKey) ?? null;
+  }
 
   protected cardsFor(columnKey: string): readonly BoardCard[] {
     return this.cards().get(columnKey) ?? [];

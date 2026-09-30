@@ -48,6 +48,20 @@ const CHUNK = (chunkId: string, status: string) => ({
   environment_count: 1,
 });
 
+/** All-time counts — `done` far above the board list's card count, since the list is windowed. */
+const COUNTS = {
+  total: 46,
+  not_ready: 2,
+  ready: 2,
+  running: 1,
+  delivering: 0,
+  waiting_on_human: 1,
+  needs_human: 0,
+  paused: 0,
+  stopped: 0,
+  done: 40,
+};
+
 const DETAIL = (chunkId: string) => ({
   ...CHUNK(chunkId, 'running'),
   graph_name: 'default',
@@ -101,6 +115,7 @@ function hubRoutes(me: object = OPERATOR_ME_RESPONSE) {
         next_cursor: null,
       };
     }
+    if (path === '/api/chunk-counts') return COUNTS;
     if (path === '/api/questions') {
       return [
         {
@@ -114,7 +129,8 @@ function hubRoutes(me: object = OPERATOR_ME_RESPONSE) {
     }
     if (path.endsWith('/work-items')) return { items: [] };
     const detail = /^\/api\/chunks\/([^/]+)$/.exec(path);
-    if (detail !== null) return DETAIL(detail[1]);
+    if (detail !== null) return detail[1] === GONE ? stubError(404, { detail: 'not found' }) : DETAIL(detail[1]);
+
     return {};
   };
 }
@@ -669,10 +685,28 @@ describe('BoardPage', () => {
       // The board renders its normal no-selection state rather than erroring…
       expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
       expect(el.querySelectorAll('[data-testid="chunk-card"].selected').length).toBe(0);
-      // …no detail read fired for the chunk that is not there…
-      expect(stub.forRoute(`/api/chunks/${GONE}`, 'GET')).toEqual([]);
+      // …the link's own detail read 404s, so nothing admits the chunk…
+      expect(stub.forRoute(`/api/chunks/${GONE}`, 'GET').length).toBeGreaterThan(0);
       // …and the board never rewrote the URL to "correct" it.
       expect(TestBed.inject(Router).url).toBe(`/board?chunk=${GONE}`);
+    });
+
+    it('opens a linked chunk the windowed list does not carry once its detail read resolves', async () => {
+      const OLD_DONE = 'ch_01KXKVVF1J3D6H6VYZ3XYNOLD1';
+      const { el } = await open(`/board?chunk=${OLD_DONE}`);
+
+      expect(el.querySelector('[data-testid="chunk-detail-empty"]')).toBeNull();
+      expect(stub.forRoute(`/api/chunks/${OLD_DONE}`, 'GET').length).toBeGreaterThan(0);
+    });
+
+    it('sends board_window=true on every list page and shows all-time column counts', async () => {
+      const { el } = await open();
+
+      const listReads = stub.forRoute('/api/chunks', 'GET');
+      expect(listReads.length).toBeGreaterThan(0);
+      expect(JSON.stringify(listReads)).toContain('board_window');
+      const doneCount = el.querySelector('[data-col="done"] .n')?.textContent?.trim();
+      expect(doneCount).toBe('40');
     });
 
     it('back and forward walk the selection history', async () => {

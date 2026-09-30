@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { hiddenAtContainerWidth } from 'fleet/testing';
 
-import type { ChunkStatus, ChunkSummary } from '../api/hub';
+import type { ChunkCountsView, ChunkStatus, ChunkSummary } from '../api/hub';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
 import { BoardHeader } from './board-header';
 
@@ -14,6 +14,26 @@ const chunk = (id: string, status: ChunkSummary['status']): ChunkSummary => ({
   work_refs: [],
 });
 
+const ZERO_COUNTS: ChunkCountsView = {
+  total: 0,
+  not_ready: 0,
+  ready: 0,
+  running: 0,
+  delivering: 0,
+  waiting_on_human: 0,
+  needs_human: 0,
+  paused: 0,
+  stopped: 0,
+  done: 0,
+};
+
+/** The hub's counts read for a fleet of exactly these chunks. */
+const tally = (chunks: readonly ChunkSummary[]): ChunkCountsView => {
+  const counts = { ...ZERO_COUNTS, total: chunks.length };
+  for (const c of chunks) counts[c.status] += 1;
+  return counts;
+};
+
 describe('BoardHeader', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -24,11 +44,27 @@ describe('BoardHeader', () => {
 
   const render = async (chunks: ChunkSummary[], connection = 'ok') => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('counts', tally(chunks));
     fixture.componentRef.setInput('connection', connection);
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   };
+
+  it('renders the all-time totals from the counts read, not from any chunk list', async () => {
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('counts', { ...ZERO_COUNTS, total: 500, done: 480, stopped: 3, running: 2 });
+    await fixture.whenStable();
+    const stat = (key: string) =>
+      (fixture.nativeElement as HTMLElement).querySelector(`[data-testid="stat-${key}"]`)?.textContent?.trim();
+    expect(stat('total')).toBe('500');
+    expect(stat('done')).toBe('483');
+  });
+
+  it('withholds its stat cells while the counts read is pending', async () => {
+    const fixture = TestBed.createComponent(BoardHeader);
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="stat-total"]')).toBeNull();
+  });
 
   it('reflects the connection input', async () => {
     const el = await render([], 'reconnecting…');
@@ -96,7 +132,7 @@ describe('BoardHeader', () => {
 
   it("renders the fleet's spend-today figure once the read resolves (issue #60)", async () => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('counts', tally([]));
     fixture.componentRef.setInput('spendToday', {
       since: '2026-07-17T00:00:00Z',
       input_tokens: 100,
@@ -114,7 +150,7 @@ describe('BoardHeader', () => {
 
   it('renders an entirely estimated spend-today figure as the estimate alone, marked ~', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('counts', tally([]));
     fixture.componentRef.setInput('spendToday', {
       since: '2026-07-17T00:00:00Z',
       input_tokens: 100,
@@ -133,7 +169,7 @@ describe('BoardHeader', () => {
 
   it('renders no ~ marker on the spend-today figure when the fleet spend read carries no estimate', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('counts', tally([]));
     fixture.componentRef.setInput('spendToday', {
       since: '2026-07-17T00:00:00Z',
       input_tokens: 100,
@@ -151,7 +187,7 @@ describe('BoardHeader', () => {
 
   it('renders explicit stat cells in place of the chunk-derived ones, as a capacity fraction (issue #131)', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('chunks', [chunk('ch_1', 'ready')]);
+    fixture.componentRef.setInput('counts', tally([chunk('ch_1', 'ready')]));
     fixture.componentRef.setInput('stats', [
       { key: 'envs', label: 'Envs', value: 2, capacity: 4 },
       { key: 'agents', label: 'Agents', value: 1, capacity: 2 },
@@ -183,7 +219,7 @@ describe('BoardHeader', () => {
 
   it('shows no spend-yesterday cell before its own read resolves, independent of today (issue #183)', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('counts', tally([]));
     fixture.componentRef.setInput('spendToday', {
       since: '2026-07-17T00:00:00Z',
       input_tokens: 100,
@@ -203,7 +239,7 @@ describe('BoardHeader', () => {
 
   it('shows two spend cells labeled TODAY and YESTERDAY, each its own value handle (issue #183)', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('counts', tally([]));
     fixture.componentRef.setInput('spendToday', {
       since: '2026-07-17T00:00:00Z',
       input_tokens: 100,
@@ -234,7 +270,7 @@ describe('BoardHeader', () => {
 
   it('marks the spend-today figure with the lower-bound suffix when PARTIAL (issue #60)', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
-    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('counts', tally([]));
     fixture.componentRef.setInput('spendToday', {
       since: '2026-07-17T00:00:00Z',
       input_tokens: 100,
@@ -262,7 +298,7 @@ describe('BoardHeader', () => {
 
     const spendRender = async () => {
       const fixture = TestBed.createComponent(BoardHeader);
-      fixture.componentRef.setInput('chunks', [chunk('ch_1', 'ready')]);
+      fixture.componentRef.setInput('counts', tally([chunk('ch_1', 'ready')]));
       fixture.componentRef.setInput('spendToday', {
         since: '2026-07-17T00:00:00Z',
         input_tokens: 100,

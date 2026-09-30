@@ -1,4 +1,4 @@
-import type { ChunkStatus } from './api/hub';
+import type { ChunkCountsView, ChunkStatus } from './api/hub';
 import type { Tone } from './kit/tone';
 
 /** The board's lanes, left → right: the backlog, the ready queue, then dispatch → done. */
@@ -51,6 +51,20 @@ export const STATUS_LANE: Record<ChunkStatus, string> = {
 /** The board lane a chunk's status belongs to — total, since every status has one. */
 export function laneFor(status: ChunkStatus): string {
   return STATUS_LANE[status];
+}
+
+/**
+ * The all-time per-lane counts — the hub's per-status counts folded through
+ * {@link STATUS_LANE}, the one fold the titlebar and the board columns both render from
+ * so they cannot disagree. Every lane is keyed, zero when empty.
+ */
+export function laneCounts(counts: ChunkCountsView): ReadonlyMap<string, number> {
+  const perLane = new Map<string, number>(LANES.map((lane) => [lane.key, 0]));
+  for (const status of Object.keys(STATUS_LANE) as ChunkStatus[]) {
+    const lane = STATUS_LANE[status];
+    perLane.set(lane, (perLane.get(lane) ?? 0) + counts[status]);
+  }
+  return perLane;
 }
 
 /**

@@ -28,7 +28,7 @@ import { AppNavMenu } from './app-nav-menu';
   selector: 'app-test-hub-shell',
   imports: [BoardHeader, AppNavMenu],
   template: `
-    <fleet-board-header [chunks]="chunks" [spendToday]="spendToday" [spendYesterday]="spendYesterday">
+    <fleet-board-header [counts]="counts" [spendToday]="spendToday" [spendYesterday]="spendYesterday">
       <app-nav-menu header-trailing />
     </fleet-board-header>
   `,
@@ -37,15 +37,18 @@ class TestHubShell {
   // A busy fleet across every lane plus both spend cells — the header's own
   // widest natural content, so a narrowing sweep tests the tightest fit it
   // ever actually renders rather than an emptier, easier-to-fit board.
-  readonly chunks: readonly hubApi.ChunkSummary[] = (
-    ['ready', 'running', 'waiting_on_human', 'needs_human', 'done', 'not_ready'] as const
-  ).map((status, i) => ({
-    chunk_id: `ch_${i}`,
-    graph_id: 'gr_1',
-    status,
-    current_node_id: 'nd_build',
-    work_refs: [],
-  }));
+  readonly counts: hubApi.ChunkCountsView = {
+    total: 6,
+    not_ready: 1,
+    ready: 1,
+    running: 1,
+    delivering: 0,
+    waiting_on_human: 1,
+    needs_human: 1,
+    paused: 0,
+    stopped: 0,
+    done: 1,
+  };
   // Carries its own estimate line too — the header's own widest natural content now
   // includes it, so this sweep still tests the tightest fit the header ever renders.
   readonly spendToday: hubApi.FleetSpendView = {

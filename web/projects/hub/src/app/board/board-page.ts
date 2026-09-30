@@ -15,7 +15,9 @@ import {
   type KitAsyncStateValue,
   type DeleteVars,
   injectHubBacklogQuery,
-  injectHubChunksQuery,
+  injectHubBoardChunksQuery,
+  injectHubChunkCountsQuery,
+  injectHubChunkDetailQuery,
   injectHubQueueQuery,
   injectMeQuery,
   injectPendingMutationVariables,
@@ -87,7 +89,8 @@ export class BoardPage {
    * the same one `ChunkDetail`'s own `actionError` follows). */
   protected readonly actionError = signal<string | null>(null);
 
-  private readonly chunksQuery = injectHubChunksQuery();
+  private readonly chunksQuery = injectHubBoardChunksQuery();
+  private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly queueQuery = injectHubQueueQuery();
   private readonly repositionQueue = injectRepositionQueueMutation((error) =>
     this.actionError.set(errorMessage(error, 'Reorder failed.')),
@@ -144,7 +147,15 @@ export class BoardPage {
    * owning it. */
   private readonly pendingDeletes = injectPendingMutationVariables<DeleteVars>(chunkDeleteMutationKey);
 
-  /** The live fleet chunk list; empty until the first read resolves. */
+  /** The linked chunk's own detail read — the dock's same cache entry, so it costs no
+   * extra request; it admits a linked chunk the windowed list does not carry. */
+  private readonly linkedDetail = injectHubChunkDetailQuery(() => this.selection.chunkId());
+
+  /** The all-time fleet counts the column heads show; `null` until the read resolves. */
+  protected readonly counts = computed(() => this.countsQuery.data() ?? null);
+
+  /** The board's chunk list — `done` chunks older than the board window are not in it;
+   * empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
 
   /** The board's async state (AC 1, AC 2) — derived from the chunks query
@@ -247,18 +258,20 @@ export class BoardPage {
    * The board card the operator opened, or `null` when nothing is selected —
    * read from the URL, never from local state.
    *
-   * Held to the live fleet list, which `GET /api/chunks` returns whole: a
+   * Held to a chunk that exists: one in the board list, or one whose own detail read
+   * resolved — the board list omits old `done` chunks, which still open by link. A
    * `chunk` param naming a chunk that no longer exists (or one that has not
-   * arrived yet, on the first frame before the read resolves) reads as
+   * arrived yet, on the first frame before either read resolves) reads as
    * no-selection, so the dock shows its normal rest state instead of chasing a
    * detail that will 404. The param itself is left alone — the board never
    * rewrites the URL to "correct" it, so a link that is merely early still
-   * opens its chunk the moment the list lands.
+   * opens its chunk the moment a read lands.
    */
   protected readonly selected = computed<string | null>(() => {
     const chunkId = this.selection.chunkId();
     if (chunkId === null) return null;
-    return this.chunks().some((chunk) => chunk.chunk_id === chunkId) ? chunkId : null;
+    if (this.chunks().some((chunk) => chunk.chunk_id === chunkId)) return chunkId;
+    return this.linkedDetail.data()?.chunk_id === chunkId ? chunkId : null;
   });
 
   /** Open a chunk in the dock — or clear it — by writing the URL. */

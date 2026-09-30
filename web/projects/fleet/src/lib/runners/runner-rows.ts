@@ -2,7 +2,7 @@ import { computed } from '@angular/core';
 
 import type { ChunkStatus, ExternalSubscriptionUsageWindowView, RunnerView } from '../api/hub';
 import { compactRef } from '../compact-ref';
-import { injectHubChunksQuery } from '../chunks/chunks.query';
+import { injectHubBoardChunksQuery } from '../chunks/chunks.query';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import { injectNowSignal } from '../now-signal';
 import { ageMs, formatRefreshedAgo } from '../when';
@@ -144,7 +144,7 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
   readonly state: () => KitAsyncStateValue;
 } {
   const runnersQuery = injectHubRunnersQuery(includeRetired);
-  const chunksQuery = injectHubChunksQuery();
+  const chunksQuery = injectHubBoardChunksQuery();
 
   const runners = computed<readonly RunnerView[]>(() => runnersQuery.data() ?? []);
 
