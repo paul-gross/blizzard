@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.work import EscalationOpen
 
 
@@ -28,13 +29,15 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         chunk_id: str,
         *,
         epoch: int,
+        admission: EpochAdmission,
         takeover_command: str,
         at: datetime,
         decision_id: str | None = None,
         wrapped_takeover_command: str = "",
-    ) -> int:
+    ) -> int | FenceRefusal:
         """Record an ``escalation.recorded`` fact — the chunk derives ``needs_human``
-        until something supersedes it. The takeover command rides along so the
+        until something supersedes it — behind the write fence (``bzh:epoch-fencing``); a
+        refusal writes nothing and is returned in place of the row id. The takeover command rides along so the
         parked session is resumable (`blizzard-context:/domain/humans/escalation.md`). ``decision_id``,
         when set, closes a gate decision no transition or migration will."""
         ...

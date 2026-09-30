@@ -13,6 +13,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.garden_delivery_materialize import (
     DeliveryOutcome,
     DeliveryPlan,
@@ -211,7 +212,7 @@ def test_republish_over_a_preref_finding_set_drops_the_unresolvable_citation(tmp
     engine = _seed_delivered_finding(tmp_path)
     store = GardenDeliveryStore(hub_store_connections(engine))
 
-    assert store.deliver(_republish_plan()) is DeliveryOutcome.RECORDED
+    assert store.deliver(_republish_plan(), admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     with engine.connect() as conn:
         assert {r.finding_id for r in conn.execute(sa.select(findings_table))} == {"fin_a"}

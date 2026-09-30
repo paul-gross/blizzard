@@ -14,6 +14,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import FINDING_PREFIX
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.graph import Node
 from blizzard.hub.domain.review_findings import ValidatedReviewFindings
 from blizzard.hub.domain.review_findings_materialize import (
@@ -50,7 +51,7 @@ class _FakeReviewFindingsRepo:
     delivered: list[ReviewFindingsPlan] = field(default_factory=list)
     outcome: ReviewFindingsOutcome = ReviewFindingsOutcome.RECORDED
 
-    def deliver(self, plan: ReviewFindingsPlan) -> ReviewFindingsOutcome:
+    def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome:
         self.delivered.append(plan)
         return self.outcome
 

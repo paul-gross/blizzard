@@ -17,6 +17,7 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph import DEFAULT_BOUNCE_CAP
 from blizzard.hub.graphs import PACKAGED
@@ -88,6 +89,7 @@ def _seed_at_deliver_with_an_unlanded_commit(hub: HubHarness, chunk_id: str, nod
         at=hub.clock.now(),
         artifacts=[commit_artifact],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
 

@@ -18,11 +18,19 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, enqueue_close_intents, insert_proposals, proposal_row
+from blizzard.hub.store.internal.chunk_rows import (
+    MARKER_PREFIX,
+    enqueue_close_intents,
+    fence,
+    insert_proposals,
+    lock_chunk_row,
+    proposal_row,
+)
 
 #: Every fact table whose ``decision_id`` column closes a decision — the resolving
 #: transition, the migration (#90), the unresolvable-target escalation (#110), or the
@@ -222,14 +230,19 @@ class ChunkDecisionsStore:
         node_id: str,
         node_name: str,
         epoch: int,
+        admission: EpochAdmission,
         choices: list[DecisionChoice],
         at: datetime,
         artifacts: list[ArtifactRow],
         proposals: list[WorkItemProposalRow],
         imposed_by_runner_id: str | None,
-    ) -> None:
+    ) -> FenceRefusal | None:
         payload = json.dumps([{"name": c.name, "description": c.description} for c in choices])
         with self._store.write("record_decision") as conn:
+            lock_chunk_row(conn, chunk_id)
+            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission)
+            if refusal is not None:
+                return refusal
             conn.execute(
                 s.decisions.insert().values(
                     decision_id=decision_id,
@@ -261,6 +274,7 @@ class ChunkDecisionsStore:
             insert_proposals(conn, proposals, at=at)
             if any(row.name.startswith(MARKER_PREFIX) for row in artifacts):
                 enqueue_close_intents(conn, chunk_id, at=at)
+            return None
 
     def record_decision_resolution(
         self, decision_id: str, *, choice: str, resolved_by: str, at: datetime, struck: Sequence[str] = ()

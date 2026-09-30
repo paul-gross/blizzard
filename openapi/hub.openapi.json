@@ -12596,7 +12596,7 @@
     },
     "/api/chunks/{chunk_id}/garden-delivery": {
       "post": {
-        "description": "The garden delivery node's own route \u2014 validates a delivering node's\n``--delta``/``--proposals`` artifacts and, on success, materializes them in one\ntransaction. An unresolvable run context or a failed validation is an ``invalid``\noutcome at a 200, never an error response \u2014 the graph's own ``invalid`` edge reads\nand routes on it.",
+        "description": "The garden delivery node's own route \u2014 validates a delivering node's\n``--delta``/``--proposals`` artifacts and, on success, materializes them in one\ntransaction. An unresolvable run context or a failed validation is an ``invalid``\noutcome at a 200, never an error response \u2014 the graph's own ``invalid`` edge reads\nand routes on it. A delivery the chunk has since been stopped or restarted past is a 409.",
         "operationId": "record_garden_delivery_api_chunks__chunk_id__garden_delivery_post",
         "parameters": [
           {
@@ -13080,7 +13080,7 @@
     },
     "/api/chunks/{chunk_id}/review-findings-delivery": {
       "post": {
-        "description": "The `record-findings` node's own route \u2014 validates the chunk's\nnewest `review-finding-delta` artifact and, on success, materializes its `deferred`\nentries in one transaction. A malformed delta or an unresolvable node is an\n``invalid`` outcome at a 200, never an error response. Idempotent per chunk.",
+        "description": "The `record-findings` node's own route \u2014 validates the chunk's\nnewest `review-finding-delta` artifact and, on success, materializes its `deferred`\nentries in one transaction. A malformed delta or an unresolvable node is an\n``invalid`` outcome at a 200, never an error response; a delivery the chunk has since been\nstopped or restarted past is a 409. Idempotent per chunk.",
         "operationId": "record_review_findings_delivery_api_chunks__chunk_id__review_findings_delivery_post",
         "parameters": [
           {
@@ -14624,7 +14624,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/escalations": {
       "post": {
-        "description": "Land a runner's ``escalation.recorded`` \u2014 the chunk derives ``needs_human``; 403 when retired.",
+        "description": "Land a runner's ``escalation.recorded`` \u2014 the chunk derives ``needs_human``; 403 when retired,\n409 when fenced out.",
         "operationId": "report_escalation_api_fleet_chunks__chunk_id__escalations_post",
         "parameters": [
           {
@@ -16514,7 +16514,7 @@
         ]
       },
       "post": {
-        "description": "Land a ``question.asked`` row \u2014 the chunk parks ``waiting_on_human``.",
+        "description": "Land a ``question.asked`` row \u2014 the chunk parks ``waiting_on_human``; 409 when fenced out.",
         "operationId": "ask_question_api_questions_post",
         "requestBody": {
           "content": {

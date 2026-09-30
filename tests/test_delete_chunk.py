@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.fleet import Route
@@ -76,7 +77,14 @@ def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
     pointer = WorkRef(source="default", ref="1")
     chunk = _mint(chunks, "ch_1", work_refs=[pointer])
     chunks.artifacts.record_hub_artifact(
-        "ch_1", node_id="nd_deliver", node_name="deliver", epoch=1, name="merged/widget", content="sha", at=_T0
+        "ch_1",
+        node_id="nd_deliver",
+        node_name="deliver",
+        epoch=1,
+        name="merged/widget",
+        content="sha",
+        at=_T0,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     # Sanity: landed and carrying a pending intent *before* the delete — proves the
     # post-delete emptiness below is the ephemeral exclusion at work, not a
@@ -99,7 +107,14 @@ def test_a_grouped_chunk_is_excluded_from_pending_close_intents(tmp_path: Path) 
     _mint(chunks, "ch_1")
     _mint(chunks, "ch_2", work_refs=[pointer])
     chunks.artifacts.record_hub_artifact(
-        "ch_2", node_id="nd_deliver", node_name="deliver", epoch=1, name="merged/widget", content="sha", at=_T0
+        "ch_2",
+        node_id="nd_deliver",
+        node_name="deliver",
+        epoch=1,
+        name="merged/widget",
+        content="sha",
+        at=_T0,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     assert chunks.delivery.pending_close_intents() == [PendingCloseIntent(chunk_id="ch_2", ref=pointer)]
 
@@ -135,6 +150,7 @@ def test_a_deleted_chunk_is_excluded_from_unmaterialized_proposals(tmp_path: Pat
                 runner_id="r1",
             )
         ],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     assert [r.proposal_id for r in chunks.delivery.unmaterialized_proposals()] == ["wip_1"]
 
@@ -163,7 +179,9 @@ def _make_paused(chunks: ChunkStores, chunk_id: str) -> None:
 
 
 def _make_needs_human(chunks: ChunkStores, chunk_id: str) -> None:
-    chunks.escalations.record_escalation(chunk_id, epoch=1, takeover_command="cd x && resume", at=_T0)
+    chunks.escalations.record_escalation(
+        chunk_id, epoch=1, takeover_command="cd x && resume", at=_T0, admission=EpochAdmission.AT_OR_ABOVE
+    )
 
 
 def _make_waiting_on_human(chunks: ChunkStores, chunk_id: str) -> None:
@@ -177,6 +195,7 @@ def _make_waiting_on_human(chunks: ChunkStores, chunk_id: str) -> None:
         question="continue?",
         options=[],
         asked_at=_T0,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
 

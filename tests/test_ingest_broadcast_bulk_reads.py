@@ -69,7 +69,7 @@ def _scaled_batch(chunk_ids: list[str]) -> RunnerFactBatch:
             RunnerFact(
                 seq=seq,
                 kind="escalation.recorded",
-                payload={"chunk_id": chunk_id, "epoch": 1, "takeover_command": "cd wd && x"},
+                payload={"chunk_id": chunk_id, "epoch": 2, "takeover_command": "cd wd && x"},
             )
         )
         seq += 1
@@ -349,7 +349,8 @@ def test_escalation_route_query_count_is_unaffected(tmp_path: Path) -> None:
         )
         assert resp.status_code == 202, resp.text
 
-    assert count_queries(hub.engine, call) == 69  # includes the retired-runner guard's registry read
+    # Includes the retired-runner guard's registry read and the write fence's lock and guard reads.
+    assert count_queries(hub.engine, call) == 75
 
 
 def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) -> None:

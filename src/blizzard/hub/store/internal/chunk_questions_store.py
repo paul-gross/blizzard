@@ -13,11 +13,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.work import AnswerOutcome, QuestionRow
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import QUESTIONS
+from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence, lock_chunk_row
 
 
 class ChunkQuestionsStore:
@@ -57,18 +58,23 @@ class ChunkQuestionsStore:
         session_id: str | None,
         runner_id: str,
         epoch: int,
+        admission: EpochAdmission,
         question: str,
         options: list[str],
         asked_at: datetime,
         harness_id: str | None = None,
-    ) -> None:
+    ) -> FenceRefusal | None:
         # Idempotent by question_id: a store-and-forward replay re-lands the same row.
         with self._store.write("record_question") as conn:
+            lock_chunk_row(conn, chunk_id)
             exists = conn.execute(
                 select(s.questions.c.question_id).where(s.questions.c.question_id == question_id)
             ).first()
             if exists is not None:
-                return
+                return None
+            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission)
+            if refusal is not None:
+                return refusal
             conn.execute(
                 s.questions.insert().values(
                     question_id=question_id,
@@ -83,6 +89,7 @@ class ChunkQuestionsStore:
                     asked_at=asked_at,
                 )
             )
+            return None
 
     def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:
         # First-write-wins CAS: the answer row's PK is the question id, so a racing

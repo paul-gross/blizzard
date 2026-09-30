@@ -21,6 +21,7 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunks.usage import IWriteChunkUsageRepository
@@ -155,15 +156,16 @@ class RunnerFactsService:
         epoch: int,
         takeover_command: str,
         wrapped_takeover_command: str = "",
-    ) -> int:
+    ) -> int | FenceRefusal:
         """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``. A retired
-        runner is refused with :class:`RunnerRetired` before anything lands.
-
-        Returns the freshly-written ``escalations.id`` (its activity-feed key)."""
+        runner is refused with :class:`RunnerRetired` before anything lands; a write the fence
+        refuses (``bzh:epoch-fencing``) returns its :class:`FenceRefusal`, else the new
+        ``escalations.id`` (its activity-feed key)."""
         self._retired.refuse_if_retired(runner_id, action="escalation report")
         return self._escalations.record_escalation(
             chunk_id,
             epoch=epoch,
+            admission=EpochAdmission.AT_OR_ABOVE,
             takeover_command=takeover_command,
             wrapped_takeover_command=wrapped_takeover_command,
             at=self._clock.now(),
@@ -252,6 +254,13 @@ class FactIngestService:
         )
         return FactIngestResult(ack=ack, row_id_by_seq=row_id_by_seq)
 
+    @staticmethod
+    def _fenced(kind: str, fact: Payload, refusal: FenceRefusal) -> tuple[bool, None]:
+        """A fact the write fence refused — rejected in the ack like a route-token refusal,
+        so the runner's drain acks it and moves on."""
+        _log.warning("fact fenced", kind=kind, chunk_id=fact.text("chunk_id"), detail=refusal.detail)
+        return False, None
+
     def _apply(
         self, runner_id: str, kind: str, payload: dict[str, object], *, route_token_mode: str
     ) -> tuple[bool, int | None]:
@@ -277,14 +286,17 @@ class FactIngestService:
             escalation_id = self._escalations.record_escalation(
                 fact.require_text("chunk_id"),
                 epoch=fact.require_number("epoch"),
+                admission=EpochAdmission.AT_OR_ABOVE,
                 takeover_command=fact.string("takeover_command"),
                 wrapped_takeover_command=fact.string("wrapped_takeover_command"),
                 at=now,
             )
+            if isinstance(escalation_id, FenceRefusal):
+                return self._fenced(kind, fact, escalation_id)
             return True, escalation_id
         if kind == QUESTION_ASKED:
             # The runner authors the question_id so it can poll the answer back.
-            self._questions.record_question(
+            refusal = self._questions.record_question(
                 question_id=fact.require_text("question_id"),
                 chunk_id=fact.require_text("chunk_id"),
                 node_id=fact.text("node_id"),
@@ -292,10 +304,13 @@ class FactIngestService:
                 harness_id=fact.text("harness_id"),
                 runner_id=runner_id,
                 epoch=fact.require_number("epoch"),
+                admission=EpochAdmission.AT_OR_ABOVE,
                 question=fact.require_text("question"),
                 options=fact.strings("options"),
                 asked_at=fact.instant("asked_at", now),
             )
+            if refusal is not None:
+                return self._fenced(kind, fact, refusal)
             return True, None
         if kind == USAGE_RECORDED:
             # No epoch fence and no route-token gate: trailing-epoch spend is real and attributed to its

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 
 
 class IReadChunkHubExecRepository(Protocol):
@@ -40,6 +41,7 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         to_node_id: str,
         choice_name: str,
         epoch: int,
+        admission: EpochAdmission,
         runner_id: str,
         transition_id: str,
         at: datetime,
@@ -48,9 +50,9 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
     ) -> bool:
         """Record a generic hub command node's exit transition, atomically and idempotently
         (#65). The hub lease and the transition land in one transaction; ``release_route``
-        is True only when ``to_node_id`` is the reserved terminal. Two guards, False either
-        way: the transition's existence at ``(chunk_id, from_node_id, epoch)`` absorbs a
-        redelivery replay, and the chunk's current epoch absorbs a restart landed mid-``run:``."""
+        is True only when ``to_node_id`` is the reserved terminal. Returns False, writing
+        nothing, on a redelivery replay — the transition's existence at ``(chunk_id,
+        from_node_id, epoch)`` — or when the write fence refuses (``bzh:epoch-fencing``)."""
         ...
 
     def record_hub_node_poll(self, chunk_id: str, *, node_id: str, epoch: int, at: datetime) -> None:

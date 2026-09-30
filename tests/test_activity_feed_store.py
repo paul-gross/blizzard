@@ -16,6 +16,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.chunks.events import IReadChunkEventsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.registry import IReadRunnerRegistry
@@ -119,6 +120,7 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
         at=_at(1),
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     row = _row_for(store, "node-completed")
     assert row.chunk_id == "ch_1"
@@ -140,6 +142,7 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
         at=_at(1),
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     row = _row_for(store, "hub-advanced")
     assert row.chunk_id == "ch_1"
@@ -163,6 +166,7 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
         artifacts=[],
         proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     row = _row_for(store, "migrated")
     assert row.chunk_id == "ch_1"
@@ -183,6 +187,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
         at=_at(1),
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     row = _row_for(store, "decision-submitted")
     assert row.chunk_id == "ch_1"
@@ -203,6 +208,7 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
         at=_at(1),
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     store.decisions.record_decision_resolution("dec_1", choice="go", resolved_by="alice", at=_at(2))
     row = _row_for(store, "decision-resolved")
@@ -223,6 +229,7 @@ def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
         question="continue?",
         options=[],
         asked_at=_at(1),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     row = _row_for(store, "question-asked")
     assert row.chunk_id == "ch_1"
@@ -243,6 +250,7 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
         question="continue?",
         options=[],
         asked_at=_at(1),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     store.questions.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2))
     row = _row_for(store, "question-answered")
@@ -253,7 +261,9 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
 
 def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.escalations.record_escalation("ch_1", epoch=1, takeover_command="cd x && resume", at=_at(1))
+    store.escalations.record_escalation(
+        "ch_1", epoch=1, takeover_command="cd x && resume", at=_at(1), admission=EpochAdmission.AT_OR_ABOVE
+    )
     row = _row_for(store, "escalated")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"

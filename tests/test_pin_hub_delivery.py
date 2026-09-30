@@ -18,6 +18,7 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.delivery.hub_node import UnconvergedDeliveryError
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_common, land_pr_ci
@@ -173,6 +174,7 @@ def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: s
         at=hub.clock.now(),
         artifacts=rows,
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
 

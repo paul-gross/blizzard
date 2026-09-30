@@ -11,12 +11,14 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.review_findings_materialize import (
     IWriteReviewFindingsRepository,
     ReviewFindingsOutcome,
     ReviewFindingsPlan,
 )
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row
 from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
 
 #: Keyed on `chunk_id` alone: a chunk owes at most one review-findings delivery.
@@ -59,10 +61,13 @@ class ReviewFindingsStore:
         except IntegrityError:
             pass
 
-    def deliver(self, plan: ReviewFindingsPlan) -> ReviewFindingsOutcome:
+    def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome:
         with self._store.write("deliver") as conn:
+            lock_chunk_row(conn, plan.chunk_id)
             if self._marker(conn, chunk_id=plan.chunk_id) is not None:
                 return ReviewFindingsOutcome.ALREADY_RECORDED
+            if fence(conn, plan.chunk_id, epoch=plan.epoch, admission=admission) is not None:
+                return ReviewFindingsOutcome.FENCED
 
             for scope_slug in plan.scope_slugs:
                 self._mint_scope_if_unseen(conn, scope_slug, plan.new_scope_description, plan.at)

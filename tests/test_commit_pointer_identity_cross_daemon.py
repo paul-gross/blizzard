@@ -16,6 +16,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.git_commits import DeclaredCommits
@@ -107,6 +108,7 @@ def _deliver_payload(tmp_path: Path, submitted: list[SubmittedArtifact]) -> list
         at=hub.clock.now(),
         artifacts=rows,
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     report_lease(hub, chunk_id, epoch=1, seq=1)
     chunk = hub.services.chunks.record.get(chunk_id)

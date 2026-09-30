@@ -20,6 +20,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.analytics.derivation import EventDerivationReconciler, EventDerivationService, GraphPins
 from blizzard.hub.domain.analytics.extraction import EXTRACTOR_VERSION, KIND_FILE_READ
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.transcripts import SegmentRecord
 from blizzard.hub.domain.work import Chunk
 from blizzard.hub.runtime import migration_runner
@@ -101,6 +102,7 @@ class _Fixture:
             at=_NOW,
             artifacts=[],
             proposals=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
         )
         self.service = EventDerivationService(
             events=self.events, facts=self.chunks.facts, record=self.chunks.record, clock=self.clock
@@ -120,6 +122,7 @@ class _Fixture:
             at=_NOW,
             artifacts=[],
             proposals=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
         )
 
     def drop_chunk_row(self, chunk_id: str) -> None:

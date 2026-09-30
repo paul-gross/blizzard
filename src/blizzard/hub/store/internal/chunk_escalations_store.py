@@ -13,9 +13,11 @@ from sqlalchemy import select
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.work import EscalationOpen
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row
 
 
 class ChunkEscalationsStore:
@@ -42,12 +44,17 @@ class ChunkEscalationsStore:
         chunk_id: str,
         *,
         epoch: int,
+        admission: EpochAdmission,
         takeover_command: str,
         at: datetime,
         decision_id: str | None = None,
         wrapped_takeover_command: str = "",
-    ) -> int:
+    ) -> int | FenceRefusal:
         with self._store.write("record_escalation") as conn:
+            lock_chunk_row(conn, chunk_id)
+            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission)
+            if refusal is not None:
+                return refusal
             result = conn.execute(
                 s.escalations.insert().values(
                     chunk_id=chunk_id,

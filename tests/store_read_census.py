@@ -45,6 +45,7 @@ from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesReposi
 from blizzard.hub.domain.chunks.escalations import IReadChunkEscalationsRepository
 from blizzard.hub.domain.chunks.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.hub_exec import IReadChunkHubExecRepository
 from blizzard.hub.domain.chunks.lifecycle import IReadChunkLifecycleRepository
 from blizzard.hub.domain.chunks.movement import IReadChunkMovementRepository
@@ -1160,6 +1161,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             {"scope": "blizzard", "revisions": {"blizzard": "aaa"}, "measurement": None, "findings": []}
         ),
         at=_ht(20),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     artifact_1 = write.artifacts.latest_artifact(run_chunk_1, "findings")
     assert artifact_1 is not None
@@ -1180,6 +1182,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         name="findings-runner",
         content=json.dumps({"scope": "runner-scope", "revisions": {}, "measurement": None, "findings": []}),
         at=_ht(21),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     artifact_2 = write.artifacts.latest_artifact(run_chunk_1, "findings-runner")
     assert artifact_2 is not None
@@ -1243,6 +1246,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(36),
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     write.movement.record_transition(
         transition_id="tr_hub_2",
@@ -1267,6 +1271,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
                 runner_id=HUB_RUNNER_ID,
             )
         ],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     chunk_migration = "ch_hub_migration"
@@ -1285,6 +1290,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         artifacts=[],
         proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     # --- decisions -----------------------------------------------------------------------------
@@ -1318,6 +1324,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
                 runner_id=HUB_RUNNER_ID,
             )
         ],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     write.decisions.record_decision(
         imposed_by_runner_id=None,
@@ -1330,6 +1337,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(45),
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     # --- escalations ---------------------------------------------------------------------------
@@ -1338,10 +1346,20 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_escalation_1, "1008", at=_ht(46))
     _mint(chunk_escalation_2, "1009", at=_ht(47))
     write.escalations.record_escalation(
-        chunk_escalation_1, epoch=1, takeover_command="resume", at=_ht(48), wrapped_takeover_command="wrapped-resume"
+        chunk_escalation_1,
+        epoch=1,
+        takeover_command="resume",
+        at=_ht(48),
+        wrapped_takeover_command="wrapped-resume",
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     write.escalations.record_escalation(
-        chunk_escalation_2, epoch=1, takeover_command="resume", at=_ht(49), wrapped_takeover_command="wrapped-resume"
+        chunk_escalation_2,
+        epoch=1,
+        takeover_command="resume",
+        at=_ht(49),
+        wrapped_takeover_command="wrapped-resume",
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     # --- questions -----------------------------------------------------------------------------
@@ -1359,6 +1377,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         question="proceed?",
         options=["yes", "no"],
         asked_at=_ht(51),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     write.questions.record_question(
         question_id=question_2,
@@ -1370,6 +1389,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         question="also?",
         options=[],
         asked_at=_ht(52),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     write.questions.answer_question(question_1, answer="yes", answered_by=user_1.user_id, at=_ht(53))
     write.questions.record_answer_delivered(question_id=question_1, chunk_id=chunk_question, at=_ht(54))
@@ -1454,6 +1474,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(65),
         artifacts=[],
         release_route=True,
+        admission=EpochAdmission.ABOVE,
     )
     write.hub_exec.release_hub_exec_slot(chunk_hub_exec_released, at=_ht(66))
     write.hub_exec.acquire_hub_exec_slot(
@@ -1478,6 +1499,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         name=f"{MARKER_PREFIX}acme/widget",
         content="merged",
         at=_ht(75),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     write.artifacts.record_hub_artifact(
         chunk_delivery_b,
@@ -1487,6 +1509,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         name=f"{MARKER_PREFIX}acme/widget",
         content="merged",
         at=_ht(76),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     # --- dependencies --------------------------------------------------------------------------
@@ -1558,6 +1581,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         name="asset-1",
         content="c1",
         at=_ht(94),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     write.artifacts.record_hub_artifact(
         chunk_artifacts,
@@ -1567,6 +1591,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         name="asset-2",
         content="c2",
         at=_ht(95),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     # --- extra work ref -----------------------------------------------------------------------

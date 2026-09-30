@@ -12,12 +12,14 @@ from sqlalchemy import insert, select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.garden_delivery_materialize import (
     DeliveryOutcome,
     DeliveryPlan,
     IWriteGardenDeliveryRepository,
 )
 from blizzard.hub.store.errors import HubStoreConnections
+from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row
 from blizzard.hub.store.schema import (
     artifacts,
     finding_facts,
@@ -53,13 +55,16 @@ class GardenDeliveryStore:
             )
         ).first()
 
-    def deliver(self, plan: DeliveryPlan) -> DeliveryOutcome:
+    def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome:
         with self._store.write("deliver") as conn:
+            lock_chunk_row(conn, plan.chunk_id)
             # Not `ChunkArtifactsStore.record_hub_artifact`: that opens its own transaction, which
             # cannot fold into this one alongside every insert below.
             already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
             if already is not None:
                 return DeliveryOutcome.ALREADY_RECORDED
+            if fence(conn, plan.chunk_id, epoch=plan.epoch, admission=admission) is not None:
+                return DeliveryOutcome.FENCED
 
             # Broader than the marker above: a fresh (node, epoch) can still resolve an
             # already-materialized artifact, which would trip the unique constraint raw.

@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from sqlalchemy import select
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import (
     IWriteWorkItemRepository,
@@ -301,6 +302,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         at=_T0,
         artifacts=[],
         proposals=[_proposal_row(runner_terminal, "wip_runner")],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     # A hub node routing to `done` via `record_hub_step_transition`.
@@ -315,6 +317,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         at=_T0,
         artifacts=[],
         proposals=[_proposal_row(hub_terminal, "wip_hub")],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     chunks.hub_exec.record_hub_step_transition(
         hub_terminal,
@@ -327,6 +330,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         at=_T0,
         artifacts=[],
         release_route=True,
+        admission=EpochAdmission.ABOVE,
     )
 
     # Delivered, then later stopped — still counts as delivered (the did-it-deliver reading).
@@ -341,6 +345,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         at=_T0,
         artifacts=[],
         proposals=[_proposal_row(stopped_after_delivery, "wip_stopped_after")],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     with chunks.exclusive.locked([stopped_after_delivery]) as handle:
         chunks.lifecycle.record_stop_locked(handle, stopped_after_delivery, by="operator", at=hub.clock.now())
@@ -357,6 +362,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         at=_T0,
         artifacts=[],
         proposals=[_proposal_row(never_delivered, "wip_never")],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     # Hand-completed by an operator — `chunk_completed`, no transition at all.
@@ -371,6 +377,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         at=_T0,
         artifacts=[],
         proposals=[_proposal_row(hand_completed, "wip_hand")],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     with chunks.exclusive.locked([hand_completed]) as handle:
         chunks.lifecycle.record_completion_locked(handle, hand_completed, by="operator", at=hub.clock.now())
@@ -387,6 +394,7 @@ def test_candidate_read_covers_both_delivery_paths_and_excludes_non_delivered(tm
         at=_T0,
         artifacts=[],
         proposals=[_proposal_row(grouped_after_delivery, "wip_grouped")],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     with hub.engine.begin() as conn:
         record_grouped_row_conn(conn, grouped_after_delivery, grouped_into=runner_terminal, at=_T0)
@@ -412,6 +420,7 @@ def test_candidate_read_excludes_an_already_judged_proposal(tmp_path: Path) -> N
         at=_T0,
         artifacts=[],
         proposals=[_proposal_row(chunk.chunk_id, "wip_judged")],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     assert len(chunks.delivery.unmaterialized_proposals()) == 1
@@ -446,6 +455,7 @@ def test_candidate_read_issues_one_statement_regardless_of_how_many_proposals_ar
             at=_T0,
             artifacts=[],
             proposals=[_proposal_row(chunk.chunk_id, f"wip_judged_{n}")],
+            admission=EpochAdmission.AT_OR_ABOVE,
         )
         chunks.delivery.record_work_item_materialization(
             f"wip_judged_{n}", outcome=WorkItemMaterializationOutcome.UNRESOLVED, pointer=None, reason="x", at=_T0

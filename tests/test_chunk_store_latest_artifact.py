@@ -11,6 +11,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.store.schema import artifacts
 from tests.support import HubHarness, build_hub, ingest
 
@@ -29,10 +30,24 @@ def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_
     # Distinct node_id, so both land: record_hub_artifact keys idempotency on
     # (chunk_id, node_id, epoch, name), and each mints its own id at the same instant.
     _writable(hub).record_hub_artifact(
-        chunk_id, node_id="nd_a", node_name="survey", epoch=1, name="tied", content="one", at=at
+        chunk_id,
+        node_id="nd_a",
+        node_name="survey",
+        epoch=1,
+        name="tied",
+        content="one",
+        at=at,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     _writable(hub).record_hub_artifact(
-        chunk_id, node_id="nd_b", node_name="survey", epoch=1, name="tied", content="two", at=at
+        chunk_id,
+        node_id="nd_b",
+        node_name="survey",
+        epoch=1,
+        name="tied",
+        content="two",
+        at=at,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     winner = hub.services.chunks.artifacts.latest_artifact(chunk_id, "tied")

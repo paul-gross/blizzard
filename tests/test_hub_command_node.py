@@ -34,6 +34,7 @@ from blizzard.hub.delivery.hub_node import (
 )
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph import HUB_PENDING_CHOICE, GraphDoc
@@ -628,6 +629,7 @@ def test_produces_marker_skips_an_already_run_step(tmp_path: Path) -> None:
         name="merged",
         content="done",
         at=hub.clock.now(),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
     assert apply.json()["outcome"] == "hub_node_taken"
@@ -728,6 +730,7 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
         at=hub.clock.now(),
         artifacts=[],
         release_route=True,
+        admission=EpochAdmission.ABOVE,
     )
 
     assert recorded is False
@@ -1061,6 +1064,7 @@ nodes:
         name="merged/acme-widget",
         content="c",
         at=hub.clock.now(),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     apply = _submit_build_pass_with_commit(hub, chunk_id, build_node_id, 1, repo="acme-widget")
@@ -1225,6 +1229,7 @@ def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tm
             at=hub.clock.now(),
             artifacts=[],
             proposals=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
         )
         return chunk, graph, merge_node
 

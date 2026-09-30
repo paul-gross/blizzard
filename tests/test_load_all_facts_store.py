@@ -21,6 +21,7 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.chunks import FleetPulse
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
@@ -107,6 +108,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         at=_T0,
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     _mint(store, "ch_waiting")
@@ -121,11 +123,14 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         question="which branch?",
         options=[],
         asked_at=_T0,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     _mint(store, "ch_needs")
     store.queue.record_promote("ch_needs", at=_T0)
-    store.escalations.record_escalation("ch_needs", epoch=1, takeover_command="cmd", at=_T0)
+    store.escalations.record_escalation(
+        "ch_needs", epoch=1, takeover_command="cmd", at=_T0, admission=EpochAdmission.AT_OR_ABOVE
+    )
 
     _mint(store, "ch_paused")
     store.queue.record_promote("ch_paused", at=_T0)
@@ -167,6 +172,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         at=_T0,
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     # AC4: movement facts spanning two graphs — a transition on gr_1, then a migration
@@ -185,6 +191,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         at=_T0,
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     store.movement.record_migration(
         "ch_multigraph",
@@ -199,6 +206,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         artifacts=[],
         proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     # AC4: grouped-away and deleted chunks are ephemeral — excluded from every read.
@@ -258,6 +266,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         at=_T0,
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_at(1))
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
@@ -552,6 +561,7 @@ def _seed_promoted_with_open_decision(store: ChunkStores, chunk_id: str) -> None
         at=_T0,
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
 

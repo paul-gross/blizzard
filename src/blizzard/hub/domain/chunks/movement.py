@@ -9,6 +9,7 @@ from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import MigrationSource
 
@@ -41,16 +42,16 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         to_node_id: str,
         choice_name: str | None,
         epoch: int,
+        admission: EpochAdmission,
         runner_id: str,
         at: datetime,
         artifacts: list[ArtifactRow],
         proposals: list[WorkItemProposalRow],
         decision_id: str | None = None,
-    ) -> None:
-        """One node-step's transition and its artifacts and proposals, written atomically.
-
-        ``decision_id`` is set only on a gate-resolving transition — the Decision this
-        transition resolves; ordinary transitions leave it ``None``."""
+    ) -> FenceRefusal | None:
+        """One node-step's transition and its artifacts and proposals, written atomically
+        behind the write fence (``bzh:epoch-fencing``) — a refusal writes nothing and is
+        returned. ``decision_id`` is set only on a gate-resolving transition."""
         ...
 
     def record_migration(
@@ -65,6 +66,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         decision_id: str | None = None,
         model: str | None,
         epoch: int,
+        admission: EpochAdmission,
         at: datetime,
         artifacts: list[ArtifactRow],
         proposals: list[WorkItemProposalRow],
@@ -72,12 +74,12 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         release_route: bool = True,
         clear_intent: bool = False,
         migration_id: str | None = None,
-    ) -> str | None:
-        """Record a cross-graph migration atomically and idempotently. One
-        transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin, the route
-        release (unless ``release_route`` is ``False``), the submitting step's ``artifacts``
-        and ``proposals``, and — when ``clear_intent`` — the intent clear. Returns the
-        ``migration_id``, ``None`` on replay."""
+    ) -> str | FenceRefusal | None:
+        """Record a cross-graph migration atomically and idempotently, behind the write fence
+        (``bzh:epoch-fencing``): the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin,
+        the route release (unless ``release_route`` is ``False``), the step's ``artifacts`` and
+        ``proposals``, and — when ``clear_intent`` — the intent clear. Returns the
+        ``migration_id``, ``None`` on replay, or the :class:`FenceRefusal` that wrote nothing."""
         ...
 
     def record_restart_locked(

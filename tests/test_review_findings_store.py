@@ -13,6 +13,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.review_findings_materialize import (
     NewReviewFinding,
     ReviewFindingFactRecord,
@@ -66,7 +67,7 @@ def _plan(*, chunk_id: str = "ch_1", node_id: str = "nd_1", epoch: int = 1, at: 
 def test_deliver_writes_every_row(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
 
-    outcome = store.deliver(_plan())
+    outcome = store.deliver(_plan(), admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is ReviewFindingsOutcome.RECORDED
     with engine.connect() as conn:
@@ -120,7 +121,7 @@ def test_deliver_mints_an_unseen_scope_in_the_same_transaction(tmp_path: Path) -
         facts=[ReviewFindingFactRecord(finding_id="fin_1", ref="F1")],
     )
 
-    outcome = store.deliver(plan)
+    outcome = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is ReviewFindingsOutcome.RECORDED
     with engine.connect() as conn:
@@ -131,7 +132,7 @@ def test_deliver_mints_an_unseen_scope_in_the_same_transaction(tmp_path: Path) -
 def test_deliver_does_not_re_mint_an_existing_scope(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
 
-    store.deliver(_plan())
+    store.deliver(_plan(), admission=EpochAdmission.AT_OR_ABOVE)
 
     with engine.connect() as conn:
         scope_row = conn.execute(sa.select(scopes).where(scopes.c.slug == "blizzard")).one()
@@ -142,7 +143,7 @@ def test_deliver_on_an_empty_plan_still_writes_a_marker_and_nothing_else(tmp_pat
     store, engine = _store_and_engine(tmp_path)
     plan = ReviewFindingsPlan(chunk_id="ch_1", node_id="nd_1", node_name="record-findings", epoch=1, at=_NOW)
 
-    outcome = store.deliver(plan)
+    outcome = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is ReviewFindingsOutcome.RECORDED
     with engine.connect() as conn:
@@ -155,10 +156,10 @@ def test_deliver_on_an_empty_plan_still_writes_a_marker_and_nothing_else(tmp_pat
 def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
     plan = _plan()
-    first = store.deliver(plan)
+    first = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
     assert first is ReviewFindingsOutcome.RECORDED
 
-    second = store.deliver(plan)
+    second = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert second is ReviewFindingsOutcome.ALREADY_RECORDED
     with engine.connect() as conn:
@@ -208,7 +209,7 @@ def test_deliver_survives_a_racing_mint_of_the_same_unseen_scope(
         facts=[ReviewFindingFactRecord(finding_id="fin_1", ref="F1")],
     )
 
-    outcome = store.deliver(plan)
+    outcome = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is ReviewFindingsOutcome.RECORDED
     with engine.connect() as conn:
@@ -224,10 +225,10 @@ def test_deliver_from_a_fresh_node_and_epoch_is_still_already_recorded(tmp_path:
     unlike garden delivery, a fresh node/epoch visit for a chunk that already delivered
     stays a no-op."""
     store, engine = _store_and_engine(tmp_path)
-    assert store.deliver(_plan()) is ReviewFindingsOutcome.RECORDED
+    assert store.deliver(_plan(), admission=EpochAdmission.AT_OR_ABOVE) is ReviewFindingsOutcome.RECORDED
 
     second = _plan(node_id="nd_2", epoch=2)
-    outcome = store.deliver(second)
+    outcome = store.deliver(second, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is ReviewFindingsOutcome.ALREADY_RECORDED
     with engine.connect() as conn:

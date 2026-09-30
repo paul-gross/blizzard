@@ -18,7 +18,7 @@ from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_work_item
+from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -270,3 +270,34 @@ def test_a_replay_at_a_fresh_epoch_stays_a_no_op(tmp_path: Path) -> None:
     assert second.status_code == 200, second.text
     assert second.json()["outcome"] == "recorded"
     assert _finding_count(hub) == 1
+
+
+# --- fenced ------------------------------------------------------------------
+
+
+def test_a_delivery_for_a_stopped_chunk_is_a_409_and_lands_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, content=_delta([_deferred()]))
+    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
+
+    resp = _post(hub, chunk_id)
+
+    assert resp.status_code == 409, resp.text
+    assert _finding_count(hub) == 0
+    with hub.engine.begin() as conn:
+        assert (
+            conn.execute(select(s.artifacts).where(s.artifacts.c.name == "review-findings-delivered")).first() is None
+        )
+
+
+def test_a_delivery_a_restart_superseded_is_a_409_and_lands_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, content=_delta([_deferred()]))
+    chunk_stores(hub.engine, hub.clock).route.record_lease(chunk_id, epoch=2, runner_id="r1", at=hub.clock.now())
+
+    resp = _post(hub, chunk_id, epoch=1)
+
+    assert resp.status_code == 409, resp.text
+    assert _finding_count(hub) == 0

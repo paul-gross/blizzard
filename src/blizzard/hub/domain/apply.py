@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import (
@@ -29,6 +28,7 @@ from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunks.route import IReadChunkRouteRepository
 from blizzard.hub.domain.envelope import Arrival, Envelope
@@ -274,12 +274,6 @@ class ApplyService:
                 f"human signoff required: node `{from_node.name}` is a gate — resolve its decision"
             )
 
-        if facts.status() in TERMINAL_STATUSES:
-            return ApplyResult.failure("chunk is terminal")
-        latest = facts.latest_epoch()
-        if latest is not None and submission.epoch != latest:
-            return ApplyResult.failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
-
         edge = graph.edge_for_choice(from_node.node_id, submission.choice)
         if edge is None:
             return ApplyResult.failure(f"node {from_node.name} has no choice `{submission.choice}`")
@@ -311,13 +305,14 @@ class ApplyService:
             return migrated
 
         fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
-        self._movement.record_transition(
+        refusal = self._movement.record_transition(
             transition_id=fresh_transition_id,
             chunk_id=chunk.chunk_id,
             from_node_id=from_node.node_id,
             to_node_id=to_node_id,
             choice_name=submission.choice,
             epoch=submission.epoch,
+            admission=EpochAdmission.CURRENT,
             runner_id=submission.runner_id,
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submission.artifacts],
@@ -325,6 +320,8 @@ class ApplyService:
                 chunk, from_node, submission.epoch, submission.proposals, runner_id=submission.runner_id
             ),
         )
+        if refusal is not None:
+            return ApplyResult.failure(refusal.detail)
         return self._respond(
             chunk,
             graph,
@@ -361,15 +358,6 @@ class ApplyService:
                 f"choice `{submission.choice}` is not the resolved choice `{decision.resolved_choice}`"
             )
 
-        facts = self._facts.load_facts(chunk.chunk_id)
-        if facts is None:
-            return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
-        if facts.status() in TERMINAL_STATUSES:
-            return ApplyResult.failure("chunk is terminal")
-        latest = facts.latest_epoch()
-        if latest is not None and submission.epoch != latest:
-            return ApplyResult.failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
-
         edge = graph.edge_for_choice(gate_node.node_id, submission.choice)
         if edge is None:
             return ApplyResult.failure(f"gate `{gate_node.name}` has no choice `{submission.choice}`")
@@ -390,19 +378,22 @@ class ApplyService:
             return migrated
 
         fresh_transition_id = Id.mint(TRANSITION_PREFIX, self._clock).value
-        self._movement.record_transition(
+        refusal = self._movement.record_transition(
             transition_id=fresh_transition_id,
             chunk_id=chunk.chunk_id,
             from_node_id=gate_node.node_id,
             to_node_id=to_node_id,
             choice_name=submission.choice,
             epoch=submission.epoch,
+            admission=EpochAdmission.CURRENT,
             runner_id=submission.runner_id,
             at=self._clock.now(),
             artifacts=[],  # the decision's artifacts already landed
             proposals=[],  # ...and so, for the same reason, are its proposals
             decision_id=submission.decision_id,
         )
+        if refusal is not None:
+            return ApplyResult.failure(refusal.detail)
         return self._respond(
             chunk,
             graph,
@@ -436,9 +427,10 @@ class ApplyService:
             if not already:
                 # Hub-authored escalation, no runner runtime dir to compose a wrapped
                 # takeover command from — leaves wrapped_takeover_command at its store default.
-                self._escalations.record_escalation(
+                escalated = self._escalations.record_escalation(
                     chunk.chunk_id,
                     epoch=submission.epoch,
+                    admission=EpochAdmission.CURRENT,
                     takeover_command=(
                         f"cross-graph target `{edge.target_graph}` names no enabled graph — mint a graph "
                         f"named `{edge.target_graph}` (or edit the choice), then requeue this chunk"
@@ -446,6 +438,8 @@ class ApplyService:
                     at=self._clock.now(),
                     decision_id=submission.decision_id,
                 )
+                if isinstance(escalated, FenceRefusal):
+                    return ApplyResult.failure(escalated.detail)
             return ApplyResult.escalated(edge.target_graph)
         submitted = submission.artifacts if artifacts is None else artifacts
         submitted_proposals = submission.proposals if proposals is None else proposals
@@ -570,7 +564,7 @@ class ApplyService:
         ``migration_id`` is the fresh fact this call wrote."""
         landed_node = target_graph.node_by_id(landed_node_id)
         lands_on_hub = landed_node is not None and landed_node.executor is Executor.HUB
-        migration_id = self._movement.record_migration(
+        recorded = self._movement.record_migration(
             chunk.chunk_id,
             from_node_id=from_node.node_id,
             from_graph_id=from_node.graph_id,
@@ -581,6 +575,7 @@ class ApplyService:
             model=model,
             source=source,
             epoch=submission.epoch,
+            admission=EpochAdmission.CURRENT,
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in artifacts],
             proposals=self._proposal_rows(
@@ -590,6 +585,9 @@ class ApplyService:
             clear_intent=clear_intent,
             migration_id=Id.mint(MIGRATION_PREFIX, self._clock).value,
         )
+        if isinstance(recorded, FenceRefusal):
+            return ApplyResult.failure(recorded.detail)
+        migration_id = recorded
         _CP_MIGRATE_AFTER_RECORD.reached()
         if lands_on_hub:
             assert landed_node is not None
@@ -649,12 +647,15 @@ class ApplyService:
         double-open."""
         if self._decisions.find_decision(chunk.chunk_id, node_id=gate_node.node_id, epoch=epoch) is not None:
             return
+        # A refusal — the chunk was stopped or restarted since the arrival was recorded —
+        # leaves the decision unopened: it would gate a superseded visit.
         self._decisions.record_decision(
             decision_id=Id.mint(DECISION_PREFIX, self._clock).value,
             chunk_id=chunk.chunk_id,
             node_id=gate_node.node_id,
             node_name=gate_node.name,
             epoch=epoch,
+            admission=EpochAdmission.CURRENT,
             choices=[DecisionChoice(name=c.name, description=c.description) for c in gate_node.choices],
             at=self._clock.now(),
             artifacts=[],

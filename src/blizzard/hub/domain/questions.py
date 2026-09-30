@@ -12,6 +12,7 @@ from datetime import datetime
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.work import AnswerOutcome
 from blizzard.wire.question import QuestionAsked
@@ -26,9 +27,10 @@ class QuestionService:
         self._questions = questions
         self._clock = clock
 
-    def record_asked(self, fact: QuestionAsked) -> None:
-        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human``."""
-        self._questions.record_question(
+    def record_asked(self, fact: QuestionAsked) -> FenceRefusal | None:
+        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human`` — unless the
+        write fence refuses it (``bzh:epoch-fencing``), which lands nothing."""
+        refusal = self._questions.record_question(
             question_id=fact.question_id,
             chunk_id=fact.chunk_id,
             node_id=fact.node_id,
@@ -36,11 +38,14 @@ class QuestionService:
             harness_id=fact.harness_id,
             runner_id=fact.runner_id,
             epoch=fact.epoch,
+            admission=EpochAdmission.AT_OR_ABOVE,
             question=fact.question,
             options=fact.options,
             asked_at=self._asked_at(fact.asked_at),
         )
-        _log.info("question landed", question_id=fact.question_id, chunk_id=fact.chunk_id)
+        if refusal is None:
+            _log.info("question landed", question_id=fact.question_id, chunk_id=fact.chunk_id)
+        return refusal
 
     def _asked_at(self, value: str) -> datetime:
         """Read an ISO-8601 instant, falling back to now on a malformed stamp.

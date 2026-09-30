@@ -5,9 +5,9 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 derived. Timestamps arrive already stamped (``bzh:injected-clock``).
 
 ``record_transition`` and ``record_migration`` are each one
-transaction on one connection, unchanged by the seam carve — the shared row helpers below
-are plain function calls inside that same ``with self._store.write(...)`` block, never a
-second connection."""
+transaction on one connection — the shared row helpers below are plain function calls
+inside that same ``with self._store.write(...)`` block, never a second connection — and
+each locks the chunk row, then fences (``bzh:epoch-fencing``), before its first insert."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import MIGRATION_PREFIX, Id
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import MigrationSource
@@ -30,9 +31,11 @@ from blizzard.hub.store.internal.chunk_rows import (
     MARKER_PREFIX,
     conn_of,
     enqueue_close_intents,
+    fence,
     graph_id_of,
     insert_proposals,
     latest_epoch,
+    lock_chunk_row,
     next_route_seq,
 )
 
@@ -73,13 +76,18 @@ class ChunkMovementStore:
         to_node_id: str,
         choice_name: str | None,
         epoch: int,
+        admission: EpochAdmission,
         runner_id: str,
         at: datetime,
         artifacts: list[ArtifactRow],
         proposals: list[WorkItemProposalRow],
         decision_id: str | None = None,
-    ) -> None:
+    ) -> FenceRefusal | None:
         with self._store.write("record_transition") as conn:
+            lock_chunk_row(conn, chunk_id)
+            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission)
+            if refusal is not None:
+                return refusal
             conn.execute(
                 s.transitions.insert().values(
                     transition_id=transition_id,
@@ -113,6 +121,7 @@ class ChunkMovementStore:
             insert_proposals(conn, proposals, at=at)
             if any(row.name.startswith(MARKER_PREFIX) for row in artifacts):
                 enqueue_close_intents(conn, chunk_id, at=at)
+            return None
 
     def record_migration(
         self,
@@ -126,6 +135,7 @@ class ChunkMovementStore:
         decision_id: str | None = None,
         model: str | None,
         epoch: int,
+        admission: EpochAdmission,
         at: datetime,
         artifacts: list[ArtifactRow],
         proposals: list[WorkItemProposalRow],
@@ -133,15 +143,19 @@ class ChunkMovementStore:
         release_route: bool = True,
         clear_intent: bool = False,
         migration_id: str | None = None,
-    ) -> str | None:
+    ) -> str | FenceRefusal | None:
         """Record a cross-graph migration **atomically and idempotently** (#90).
 
         One transaction: the fact, the ``chunks.graph_id`` re-pin, the route release
         (unless ``release_route``, #111), this step's artifacts and proposals, and the
         intent clear (``clear_intent``, #124). Keyed ``(chunk_id, from_node_id, epoch)``."""
         with self._store.write("record_migration") as conn:
+            lock_chunk_row(conn, chunk_id)
             if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
                 return None
+            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission)
+            if refusal is not None:
+                return refusal
             resolved_migration_id = (
                 migration_id if migration_id is not None else Id.mint(MIGRATION_PREFIX, self._clock).value
             )

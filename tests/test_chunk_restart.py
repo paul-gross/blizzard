@@ -16,6 +16,7 @@ import pytest
 from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
@@ -311,7 +312,12 @@ def test_restart_supersedes_an_open_escalation(tmp_path) -> None:  # type: ignor
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     cast(IWriteChunkEscalationsRepository, hub.services.chunks.escalations).record_escalation(
-        chunk_id, epoch=1, takeover_command="resume it", at=hub.clock.now(), wrapped_takeover_command=""
+        chunk_id,
+        epoch=1,
+        takeover_command="resume it",
+        at=hub.clock.now(),
+        wrapped_takeover_command="",
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     assert _detail(hub, chunk_id)["status"] == "needs_human"
 
@@ -471,6 +477,7 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
         at=hub.clock.now(),
         artifacts=[],
         release_route=False,
+        admission=EpochAdmission.ABOVE,
     )
 
     assert wrote is False
@@ -496,6 +503,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path) -> None:  # type: 
         at=hub.clock.now(),
         artifacts=[],
         release_route=True,
+        admission=EpochAdmission.ABOVE,
     )
 
     assert wrote is True
