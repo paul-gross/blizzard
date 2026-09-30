@@ -28,8 +28,7 @@ from blizzard.wire.envelope import NodeEnvelope
 #: `secrets.token_urlsafe` byte count for the route capability token (43 URL-safe chars).
 _ROUTE_TOKEN_BYTES = 32
 
-# Crash point (``bzh:crash-point-registry``): the route and its capability-token
-# fact are durable, but the plaintext has not reached the runner; recovered by claim adoption.
+# Crash point (``bzh:crash-point-registry``): route durable, plaintext not yet delivered.
 _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE = crashpoint(
     "claim.after-persist.before-response",
     "the route + its route_token_minted fact are durable; the plaintext has not yet reached the runner",
@@ -67,12 +66,9 @@ class ClaimDeniedTerminal(Exception):
 
 
 class ClaimDeniedDependency(Exception):
-    """The chunk stands on a prerequisite that has not reached ``done`` — refused before
-    the race, mirroring :class:`ClaimDeniedTerminal`'s shape. Re-derived fresh under the
-    claim lock so a race between a peek and a claim can never slip a
-    blocked chunk through, whether the edge landed or the prerequisite finished after the
-    peek. Names the one standing edge found unmet, earliest-declared first — not every
-    unmet edge the chunk may carry."""
+    """The chunk stands on a prerequisite not yet ``done``, mirroring
+    :class:`ClaimDeniedTerminal`'s shape and re-derived under the claim lock. Names the one
+    unmet edge found, earliest-declared first."""
 
     def __init__(self, *, chunk_id: str, prerequisite_chunk_id: str) -> None:
         super().__init__(f"chunk {chunk_id} depends on unmet prerequisite {prerequisite_chunk_id}")
@@ -126,10 +122,8 @@ class ClaimService:
         # The pre-lock paused-runner peek only — every guard read inside the CAS itself
         # goes through the locked handle instead (`_claim_locked`'s own re-fetch).
         self._registry = registry
-        # The locked-transaction seam (``bzh:store-exclusive-write``): the check-live-route
-        # → record-route CAS runs inside one row-locked write transaction, never an
-        # in-process lock, so it stays correct once more than one hub process shares the
-        # store.
+        # The locked-transaction seam (``bzh:store-exclusive-write``): the route CAS runs in
+        # one row-locked write transaction, never an in-process lock.
         self._exclusive = exclusive
         # The rekey's refusal; the claim refuses through the registration it already reads.
         self._retired = retired
@@ -181,8 +175,7 @@ class ClaimService:
         chunk = current
 
         facts = handle.facts(chunk.chunk_id)
-        # Re-derive status fresh under the claim lock: a stop landing between this
-        # runner's peek and its claim POST is invisible to the peek. Checked before the
+        # Re-derived under the lock (a stop can land after the peek), and before the
         # route: a route left on a terminal chunk confers no tenure.
         status = facts.status() if facts is not None else ChunkStatus.NOT_READY
         if not holds_claim(status):
@@ -192,9 +185,7 @@ class ClaimService:
         if existing is not None:
             raise ClaimConflict(held_by_runner_id=existing.runner_id)
 
-        # Re-derived fresh under the same lock: a declared edge or a
-        # prerequisite's completion landing after this runner's peek is invisible to the
-        # peek, exactly as a terminal transition is.
+        # Re-derived under the same lock: an edge or completion can land after the peek.
         unmet = self._unmet_prerequisite(handle, chunk.chunk_id)
         if unmet is not None:
             raise ClaimDeniedDependency(chunk_id=chunk.chunk_id, prerequisite_chunk_id=unmet)
