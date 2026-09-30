@@ -129,6 +129,9 @@
  *     while the page behind it does not, and `CdkTrapFocus` keeps repeated
  *     real `Tab` presses cycling inside the panel rather than escaping to the
  *     page — real layout and focus-management claims jsdom cannot make.
+ *   - projects/fleet/src/lib/kit/kit-select.shell-sweep.spec.ts — the shared
+ *     dropdown keeps all options at full height in a capped long list, scrolls
+ *     keyboard-focused choices into view, and leaves short lists unscrolled.
  *   - projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts — the
  *     shared confirmation dialog: its Cancel and confirm controls render together
  *     in the dialog footer and the real focus trap keeps keyboard focus inside the prompt.
@@ -262,6 +265,7 @@ const SWEEPS = [
   { project: 'fleet', spec: 'projects/fleet/src/lib/garden/finding-fact-timeline.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-routines-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-dialog.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-select.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-confirm-dialog.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-tooltip.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/gardening/gardening-run-dialog.shell-sweep.spec.ts' },
