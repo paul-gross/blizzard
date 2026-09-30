@@ -26,8 +26,7 @@ export class ChunkRowView {
   /** Whether this row is the current selection. */
   readonly selected = input(false);
 
-  /** The severable work-item enrichment — resolved by the
-   * container's own query; empty before it resolves or when it fails. */
+  /** The chunk's linked work items — empty when none are known. */
   readonly linkedItems = input<readonly runnerApi.WorkItemEntry[]>([]);
 
   /** Emits this row's `chunk_id` on click/Enter/Space — same convention as `selectLease`. */

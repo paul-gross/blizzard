@@ -77,8 +77,7 @@ export class MachineDetail {
    * status, and escalation all render off it. */
   protected readonly newestLease = computed<runnerApi.LeaseView | null>(() => this.leases().at(-1) ?? null);
 
-  /** Emitted when the operator dismisses the dock — the container
-   * clears the selection, mirroring the hub header's own `dismiss`. */
+  /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
   /** The selected chunk's id — the severable detail read's subject. */

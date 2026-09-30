@@ -5,9 +5,7 @@ import type { MachineChunkStatus } from './chunk-status';
 
 /**
  * {@link ChunkCard}'s presentational sibling (`bzh:frontend-container-presentational`):
- * plain inputs only, injects nothing, and owns the mobile card's template — the
- * container keeps the per-row {@link "./chunk-title.query".injectChunkTitleQuery} read
- * and hands this component its resolved {@link linkedItems}.
+ * plain inputs only, injects nothing, and owns the mobile card's template.
  */
 @Component({
   selector: 'local-chunk-card-view',
@@ -26,8 +24,7 @@ export class ChunkCardView {
   /** Whether this card is the current selection. */
   readonly selected = input(false);
 
-  /** The severable work-item enrichment — resolved by the
-   * container's own query; empty before it resolves or when it fails. */
+  /** The chunk's linked work items — empty when none are known. */
   readonly linkedItems = input<readonly runnerApi.WorkItemEntry[]>([]);
 
   /** Emits this card's `chunk_id` on click/Enter/Space — same convention as `ChunkRow`'s `selectChunk`. */

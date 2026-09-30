@@ -42,12 +42,8 @@ export function injectRunnerDashboardQuery() {
   }));
 }
 
-/** `injectLocalPauseMutation`'s own variables — `runnerId` is carried alongside the
- * PATCH's real payload (`paused`) purely so {@link LocalPauseControl} can scope its
- * pending-override read through {@link injectPendingMutationVariables} the same way
- * every other override site does (`bzh:frontend-pending-override`), even though the
- * PATCH itself is always this runner pausing itself and never takes a runner id on
- * the wire (mirrors `chunk-pause.mutations.ts`'s `ChunkPauseVars`). */
+/** `injectLocalPauseMutation`'s variables — `paused` is the PATCH payload; `runnerId`
+ * identifies the runner pausing itself and is never sent on the wire. */
 export interface LocalPauseVars {
   readonly runnerId: string;
   readonly paused: boolean;

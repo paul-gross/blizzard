@@ -95,9 +95,7 @@ export class LocalPanelLayout {
   /** The `chunk_id` currently selected, or `null`. */
   readonly selectedChunkId = input.required<string | null>();
 
-  /** The selected chunk's attempts (oldest → newest) — the detail dock reads
-   * only the newest for its summary/status; per-attempt selection and the
-   * transcript live on the chunk detail route instead. */
+  /** The selected chunk's attempts (oldest → newest). */
   readonly selectedChunkLeases = input.required<readonly runnerApi.LeaseView[]>();
 
   readonly selectedStatus = input.required<MachineChunkStatus | null>();
