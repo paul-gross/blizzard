@@ -15017,7 +15017,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/leases": {
       "post": {
-        "description": "Land a runner's ``lease.minted`` \u2014 keeps the epoch fence in lockstep; 403 when retired.",
+        "description": "Land a runner's ``lease.minted`` \u2014 keeps the epoch fence in lockstep; 403 when retired,\n409 when its admission refuses it.",
         "operationId": "report_lease_api_fleet_chunks__chunk_id__leases_post",
         "parameters": [
           {

@@ -95,8 +95,8 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
     assert detach.status_code == 202, detach.text
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
 
-    # Another runner claims the now-ready chunk and mints its OWN lease at epoch 2 —
-    # this raises the lease floor; before it, A's epoch-1 completion was still current.
+    # Another runner claims the now-ready chunk — the claim itself reserves epoch 2 for it,
+    # raising the fence past A's epoch 1 before B reports anything — then mints at 2.
     hub.clock.advance(timedelta(seconds=1))
     claim_b = hub.client.post(
         "/api/fleet/routes",

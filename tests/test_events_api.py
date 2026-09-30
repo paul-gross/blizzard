@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunks.fence import EpochAdmission
-from tests.support import build_hub, chunk_stores, seed_chunk, seed_graph
+from tests.support import build_hub, chunk_stores, seed_chunk, seed_graph, seed_lease
 
 pytestmark = pytest.mark.component
 
@@ -92,7 +92,7 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     store.escalations.record_escalation(
         "ch_a", epoch=1, takeover_command="cd a && resume", at=at(1), admission=EpochAdmission.AT_OR_ABOVE
     )
-    store.route.record_lease("ch_a", epoch=2, runner_id="r1", at=at(5))
+    seed_lease(hub.engine, "ch_a", epoch=2, runner_id="r1", at=at(5))
 
     feed = _events(hub)
     # Severity-then-recency: critical band first (worker-lost t3 vs needs-human t4 -> needs-human

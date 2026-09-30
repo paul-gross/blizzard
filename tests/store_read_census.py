@@ -45,7 +45,7 @@ from blizzard.hub.domain.chunks.dependencies import IReadChunkDependenciesReposi
 from blizzard.hub.domain.chunks.escalations import IReadChunkEscalationsRepository
 from blizzard.hub.domain.chunks.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission
 from blizzard.hub.domain.chunks.hub_exec import IReadChunkHubExecRepository
 from blizzard.hub.domain.chunks.lifecycle import IReadChunkLifecycleRepository
 from blizzard.hub.domain.chunks.movement import IReadChunkMovementRepository
@@ -1553,7 +1553,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             token_hash="route-hash-a",
             at=_ht(88),
         )
-    write.route.record_lease(chunk_route_a, epoch=1, runner_id=HUB_RUNNER_ID, at=_ht(89))
+    write.route.record_lease_minted(chunk_route_a, epoch=1, claimant=Claimant(HUB_RUNNER_ID), at=_ht(89))
     write.route.set_runner_high_water(HUB_RUNNER_ID, seq=7, at=_ht(90))
     write.route.record_route_token(chunk_route_a, token_hash="route-hash-a2", at=_ht(91))
     with write.exclusive.locked([chunk_route_b]) as handle:

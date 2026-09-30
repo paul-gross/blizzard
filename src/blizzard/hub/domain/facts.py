@@ -21,7 +21,7 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunks.usage import IWriteChunkUsageRepository
@@ -142,11 +142,14 @@ class RunnerFactsService:
         self._retired = retired
         self._clock = clock
 
-    def record_lease_minted(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
+    def record_lease_minted(self, chunk_id: str, *, epoch: int, runner_id: str) -> FenceRefusal | None:
         """Land a runner's ``lease.minted`` — advances the fence's latest epoch. A retired
-        runner is refused with :class:`RunnerRetired` before anything lands."""
+        runner is refused with :class:`RunnerRetired` before anything lands; a mint its
+        admission refuses (``bzh:epoch-fencing``) returns its :class:`FenceRefusal`."""
         self._retired.refuse_if_retired(runner_id, action="lease report")
-        self._route.record_lease(chunk_id, epoch=epoch, runner_id=runner_id, at=self._clock.now())
+        return self._route.record_lease_minted(
+            chunk_id, epoch=epoch, claimant=Claimant(runner_id), at=self._clock.now()
+        )
 
     def record_escalation(
         self,
@@ -275,18 +278,21 @@ class FactIngestService:
             if chunk_id is None or not self._route_token_ok(chunk_id, runner_id, fact, mode=route_token_mode):
                 return False, None
         if kind == LEASE_MINTED:
-            self._route.record_lease(
+            refusal = self._route.record_lease_minted(
                 fact.require_text("chunk_id"),
                 epoch=fact.require_number("epoch"),
-                runner_id=runner_id,
+                claimant=Claimant(runner_id),
                 at=now,
             )
+            if refusal is not None:
+                return self._fenced(kind, fact, refusal)
             return True, None
         if kind == ESCALATION_RECORDED:
             escalation_id = self._escalations.record_escalation(
                 fact.require_text("chunk_id"),
                 epoch=fact.require_number("epoch"),
                 admission=EpochAdmission.AT_OR_ABOVE,
+                claimant=Claimant(runner_id),
                 takeover_command=fact.string("takeover_command"),
                 wrapped_takeover_command=fact.string("wrapped_takeover_command"),
                 at=now,
@@ -305,6 +311,7 @@ class FactIngestService:
                 runner_id=runner_id,
                 epoch=fact.require_number("epoch"),
                 admission=EpochAdmission.AT_OR_ABOVE,
+                claimant=Claimant(runner_id),
                 question=fact.require_text("question"),
                 options=fact.strings("options"),
                 asked_at=fact.instant("asked_at", now),

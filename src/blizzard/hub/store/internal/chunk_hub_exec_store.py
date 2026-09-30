@@ -30,6 +30,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     lock_chunk_row,
     next_artifact_seq,
     next_route_seq,
+    record_hub_lease,
 )
 
 
@@ -117,9 +118,7 @@ class ChunkHubExecStore:
                 return False
             if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
                 return False
-            conn.execute(
-                s.lease_facts.insert().values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
-            )
+            record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
             conn.execute(
                 s.transitions.insert().values(
                     transition_id=transition_id,

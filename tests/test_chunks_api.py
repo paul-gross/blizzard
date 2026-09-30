@@ -250,6 +250,7 @@ def test_resume_clears_the_pause_view_behind_a_hiding_status(tmp_path: Path) -> 
     """The inverse of the keystone: the still-parked chunk's `pause` clears on resume."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])
+    _claim(hub, chunk_id)
     _ask(hub, chunk_id)
     assert hub.client.post(f"/api/chunks/{chunk_id}/pause", json={"by": "alice"}).status_code == 202
 

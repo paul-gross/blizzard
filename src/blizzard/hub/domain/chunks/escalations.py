@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.work import EscalationOpen
 
 
@@ -30,6 +30,7 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         *,
         epoch: int,
         admission: EpochAdmission,
+        claimant: Claimant | None = None,
         takeover_command: str,
         at: datetime,
         decision_id: str | None = None,

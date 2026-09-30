@@ -176,6 +176,7 @@ HUB_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     TableWideAllowance("delivery_repo_landed", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("hub_node_poll", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("lease_facts", 200, _FLEET_SNAPSHOT_REASON),
+    TableWideAllowance("epoch_owners", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("questions", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("requeues", 200, _FLEET_SNAPSHOT_REASON),
     TableWideAllowance("route_created", 200, _FLEET_SNAPSHOT_REASON),

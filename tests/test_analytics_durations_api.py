@@ -24,6 +24,7 @@ from tests.support import (
     FakeWorkSource,
     HubHarness,
     build_hub,
+    claim_route,
     pointer_token,
     report_lease,
     seed_session,
@@ -185,7 +186,9 @@ def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> 
         "/api/chunks", json={"tokens": [pointer_token({"source": source, "ref": ref})]}, headers=_cookie(token)
     )
     assert resp.status_code == 201, resp.text
-    return str(resp.json()["chunk_id"])
+    chunk_id = str(resp.json()["chunk_id"])
+    claim_route(hub, chunk_id)
+    return chunk_id
 
 
 def _complete(hub, chunk_id: str, *, epoch: int, from_node_id: str, choice: str) -> None:  # type: ignore[no-untyped-def]
@@ -495,6 +498,7 @@ def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
     )
+    claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=3, seq=2)
     hub.clock.advance(timedelta(seconds=1))
     _complete(hub, chunk_id, epoch=3, from_node_id=other_nodes["triage"], choice="pass")  # graph B: triage -> done

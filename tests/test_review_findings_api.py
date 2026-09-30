@@ -18,7 +18,7 @@ from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_work_item
+from tests.support import HubHarness, build_hub, hub_store_connections, seed_lease, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -295,7 +295,7 @@ def test_a_delivery_a_restart_superseded_is_a_409_and_lands_nothing(tmp_path: Pa
     hub = build_hub(tmp_path)
     chunk_id = _seed_chunk(hub)
     _record_artifact(hub, chunk_id, content=_delta([_deferred()]))
-    chunk_stores(hub.engine, hub.clock).route.record_lease(chunk_id, epoch=2, runner_id="r1", at=hub.clock.now())
+    seed_lease(hub.engine, chunk_id, epoch=2, runner_id="r1", at=hub.clock.now())
 
     resp = _post(hub, chunk_id, epoch=1)
 

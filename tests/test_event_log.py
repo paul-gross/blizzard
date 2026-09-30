@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import EscalationOpen, EventFeed, EventRow
 from blizzard.hub.store import schema as s
-from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk, seed_graph
+from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk, seed_graph, seed_lease
 
 pytestmark = pytest.mark.unit
 
@@ -181,7 +181,7 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     store.escalations.record_escalation(
         "ch_b", epoch=1, takeover_command="cd b && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
     )
-    store.route.record_lease("ch_b", epoch=2, runner_id="r1", at=_at(20))
+    seed_lease(engine, "ch_b", epoch=2, runner_id="r1", at=_at(20))
     # ch_c: escalation then a LATER requeue -> superseded (closed).
     store.escalations.record_escalation(
         "ch_c", epoch=1, takeover_command="cd c && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE

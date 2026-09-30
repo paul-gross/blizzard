@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 
@@ -71,6 +71,7 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         node_name: str,
         epoch: int,
         admission: EpochAdmission,
+        claimant: Claimant | None = None,
         choices: list[DecisionChoice],
         at: datetime,
         artifacts: list[ArtifactRow],

@@ -18,7 +18,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 from blizzard.hub.store import schema as s
@@ -232,6 +232,7 @@ class ChunkDecisionsStore:
         node_name: str,
         epoch: int,
         admission: EpochAdmission,
+        claimant: Claimant | None = None,
         choices: list[DecisionChoice],
         at: datetime,
         artifacts: list[ArtifactRow],
@@ -241,7 +242,7 @@ class ChunkDecisionsStore:
         payload = json.dumps([{"name": c.name, "description": c.description} for c in choices])
         with self._store.write("record_decision") as conn:
             lock_chunk_row(conn, chunk_id)
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission)
+            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
             if refusal is not None:
                 return refusal
             conn.execute(

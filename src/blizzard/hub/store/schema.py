@@ -606,10 +606,27 @@ lease_facts = Table(
     Column("epoch", Integer, nullable=False),  # the fence input the transition check consumes
     Column("runner_id", String, nullable=False),
     Column("minted_at", UtcDateTime, nullable=False),
+    Column("lease_id", String, nullable=True),  # the lease the mint named; null when it named none
 )
 # (chunk_id, epoch) serves both a plain chunk_id filter and a per-attempt (chunk_id,
 # epoch) join, at no extra write cost over a single-column index.
 Index("ix_lease_facts_chunk_id_epoch", lease_facts.c.chunk_id, lease_facts.c.epoch)
+
+# --- Epoch owners -----------------------------------------------------------------
+# Who took each fencing epoch of a chunk: the hub (``runner_id`` null) or one runner. Written
+# in the same transaction as the fact that takes the epoch — a hub mint, a claim's
+# reservation, or a runner's admitted ``lease.minted``. First owner wins: the unique
+# constraint makes a second owner for one epoch unrecordable.
+epoch_owners = Table(
+    "epoch_owners",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("runner_id", String, nullable=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    UniqueConstraint("chunk_id", "epoch", name="uq_epoch_owners_chunk_id_epoch"),
+)
 
 # --- Routes (route.created / route.released) ----------------------------------
 

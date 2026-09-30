@@ -13,11 +13,11 @@ from sqlalchemy import select
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.work import EscalationOpen
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row
+from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, record_hub_lease
 
 
 class ChunkEscalationsStore:
@@ -45,6 +45,7 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        claimant: Claimant | None = None,
         takeover_command: str,
         at: datetime,
         decision_id: str | None = None,
@@ -52,7 +53,7 @@ class ChunkEscalationsStore:
     ) -> int | FenceRefusal:
         with self._store.write("record_escalation") as conn:
             lock_chunk_row(conn, chunk_id)
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission)
+            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
             if refusal is not None:
                 return refusal
             result = conn.execute(
@@ -99,6 +100,7 @@ class ChunkEscalationsStore:
         escalation's existence at this epoch. No transition: the chunk's held route and
         stuck node are untouched. Returns True iff it wrote."""
         with self._store.write("record_bounce_escalation") as conn:
+            lock_chunk_row(conn, chunk_id)
             already = conn.execute(
                 select(s.escalations.c.id).where(
                     (s.escalations.c.chunk_id == chunk_id) & (s.escalations.c.epoch == epoch)
@@ -106,9 +108,7 @@ class ChunkEscalationsStore:
             ).first()
             if already is not None:
                 return False
-            conn.execute(
-                s.lease_facts.insert().values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
-            )
+            record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
             conn.execute(
                 s.escalations.insert().values(
                     chunk_id=chunk_id, epoch=epoch, takeover_command=takeover_command, recorded_at=at

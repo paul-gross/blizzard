@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.work import AnswerOutcome, QuestionRow
 from blizzard.hub.store import schema as s
@@ -59,6 +59,7 @@ class ChunkQuestionsStore:
         runner_id: str,
         epoch: int,
         admission: EpochAdmission,
+        claimant: Claimant | None = None,
         question: str,
         options: list[str],
         asked_at: datetime,
@@ -72,7 +73,7 @@ class ChunkQuestionsStore:
             ).first()
             if exists is not None:
                 return None
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission)
+            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
             if refusal is not None:
                 return refusal
             conn.execute(

@@ -1488,10 +1488,11 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
 
     # Re-submit build -> merge a second time (bounce_cap: 1 means bounce #2 escalates).
     # Advance the clock first: same-epoch transitions tie-break by `recorded_at`.
+    # The routed-back build mints above the hub's own exit epoch (2), which the hub owns.
     hub.clock.advance(timedelta(seconds=1))
-    report_lease(hub, chunk_id, epoch=2, seq=2)
+    report_lease(hub, chunk_id, epoch=3, seq=2)
     second_build_node = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
-    _submit_build_pass(hub, chunk_id, second_build_node, 2)
+    _submit_build_pass(hub, chunk_id, second_build_node, 3)
     hub.clock.advance(timedelta(seconds=31))
     second_timeout = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert second_timeout.json()["outcome_choice"] == "failure"

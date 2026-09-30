@@ -250,10 +250,11 @@ def test_envelope_reread_is_idempotent(tmp_path: Path) -> None:
     chunk_id = _ingest(hub)
     claimed = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id)).json()["envelope"]
 
-    # The lost-apply recovery read returns the same current-node envelope.
+    # The lost-apply recovery read returns the same current-node envelope, at the chunk's
+    # newest epoch — which the claim's own reservation has since raised one past its floor.
     reread = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope").json()
     assert reread["node"]["node_id"] == claimed["node"]["node_id"]
-    assert reread["epoch"] == claimed["epoch"]
+    assert reread["epoch"] == claimed["epoch"] + 1
 
 
 # --- The hub denies a claim from a registry-paused runner outright ---

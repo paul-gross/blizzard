@@ -16,7 +16,7 @@ from blizzard.hub.api.ingest_broadcast import IngestBroadcast
 from blizzard.hub.events.broker import CHUNK_CHANGED
 from blizzard.hub.events.broker import QUESTION_ASKED as QUESTION_ASKED_EVENT
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
-from tests.support import build_hub, count_queries, emitted_events, ingest, report_lease
+from tests.support import build_hub, count_queries, emitted_events, ingest
 
 pytestmark = pytest.mark.component
 
@@ -49,9 +49,10 @@ def _claim(hub, ref: str, *, runner_id: str) -> str:  # type: ignore[no-untyped-
 
 
 def _seed_scale(hub, m: int) -> list[str]:  # type: ignore[no-untyped-def]
-    """``m`` distinct claimed chunks, each under its own runner id."""
+    """``m`` distinct chunks, each claimed by the batch's own reporting runner — the only
+    runner whose ``lease.minted`` and ``escalation.recorded`` the hub admits for them."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
-    return [_claim(hub, str(i), runner_id=f"r{i}") for i in range(m)]
+    return [_claim(hub, str(i), runner_id="counter") for i in range(m)]
 
 
 def _scaled_batch(chunk_ids: list[str]) -> RunnerFactBatch:
@@ -198,28 +199,43 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
     assert hub.client.post("/api/graphs", json={"definition_yaml": _MIGRATE_TARGET_YAML}).status_code == 201
     assert hub.client.post("/api/graphs", json={"definition_yaml": _MIGRATE_SRC_YAML}).status_code == 201
 
-    chunk_l = _claim(hub, "L", runner_id="rL")
-    chunk_q = _claim(hub, "Q", runner_id="rQ")
+    # Every chunk is held by the batch's own runner: a fact from any other runner is refused.
+    chunk_l = _claim(hub, "L", runner_id="fleet-batch")
+    chunk_q = _claim(hub, "Q", runner_id="fleet-batch")
 
     # A migrated chunk: its newest transition landed in the source graph, but it is now
     # pinned to the target — the cross-graph ``from_graph`` case.
     chunk_m = ingest(hub, [{"source": "default", "ref": "M"}])
     claim_m = hub.client.post(
         "/api/fleet/routes",
-        json={"chunk_id": chunk_m, "runner_id": "rM", "workspace_id": "w-rM", "environment_ids": ["e"]},
+        json={"chunk_id": chunk_m, "runner_id": "fleet-batch", "workspace_id": "w-fb", "environment_ids": ["e"]},
     )
     assert claim_m.status_code == 201, claim_m.text
     assess_node_id = claim_m.json()["envelope"]["node"]["node_id"]
-    report_lease(hub, chunk_m, epoch=1, seq=1, runner_id="rM")
+    # Reported on the direct route, so the batch below keeps its own seq numbering from 1.
+    minted = hub.client.post(f"/api/fleet/chunks/{chunk_m}/leases", json={"runner_id": "fleet-batch", "epoch": 1})
+    assert minted.status_code == 202, minted.text
     handoff = hub.client.post(
         f"/api/fleet/chunks/{chunk_m}/completions",
-        json={"choice": "pass", "epoch": 1, "runner_id": "rM", "from_node_id": assess_node_id, "artifacts": []},
+        json={
+            "choice": "pass",
+            "epoch": 1,
+            "runner_id": "fleet-batch",
+            "from_node_id": assess_node_id,
+            "artifacts": [],
+        },
     )
     assert handoff.status_code == 200, handoff.text
     handoff_node_id = handoff.json()["next_envelope"]["node"]["node_id"]
     migrated = hub.client.post(
         f"/api/fleet/chunks/{chunk_m}/completions",
-        json={"choice": "migrate", "epoch": 1, "runner_id": "rM", "from_node_id": handoff_node_id, "artifacts": []},
+        json={
+            "choice": "migrate",
+            "epoch": 1,
+            "runner_id": "fleet-batch",
+            "from_node_id": handoff_node_id,
+            "artifacts": [],
+        },
     )
     assert migrated.status_code == 200, migrated.text
     assert migrated.json()["outcome"] == "migrated"
@@ -248,7 +264,7 @@ def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) ->
                         "chunk_id": chunk_q,
                         "node_id": "nd_build",
                         "session_id": "sess-1",
-                        "runner_id": "rQ",
+                        "runner_id": "fleet-batch",
                         "epoch": 1,
                         "question": "Which API?",
                         "options": ["rest", "graphql"],
@@ -350,7 +366,7 @@ def test_escalation_route_query_count_is_unaffected(tmp_path: Path) -> None:
         assert resp.status_code == 202, resp.text
 
     # Includes the retired-runner guard's registry read and the write fence's lock and guard reads.
-    assert count_queries(hub.engine, call) == 75
+    assert count_queries(hub.engine, call) == 78
 
 
 def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) -> None:
@@ -366,4 +382,4 @@ def test_delete_routes_degrade_branch_query_count_is_unaffected(tmp_path: Path) 
         resp = hub.client.request("DELETE", f"/api/chunks/{chunk_id}", json={})
         assert resp.status_code == 202, resp.text
 
-    assert count_queries(hub.engine, call) == 68
+    assert count_queries(hub.engine, call) == 70

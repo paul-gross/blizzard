@@ -241,9 +241,10 @@ def test_release_invalidates_the_old_token_and_the_next_claims_token_is_accepted
 
     new_token = _claim(hub, chunk_id)
     assert new_token != old_token
-    report_lease(hub, chunk_id, epoch=1, seq=2, route_token=new_token)
+    # The fresh claim reserved epoch 2, above the detached attempt's epoch 1.
+    report_lease(hub, chunk_id, epoch=2, seq=2, route_token=new_token)
 
-    fresh = _submit(hub, chunk_id, node_id=node_id, epoch=1, route_token=new_token)
+    fresh = _submit(hub, chunk_id, node_id=node_id, epoch=2, route_token=new_token)
     assert fresh.json()["outcome"] != "failure"
 
 

@@ -791,6 +791,69 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
     assert "hub:epoch-consistent-transitions" in slugs
 
 
+def _seed_owned_chunk(conn) -> None:  # type: ignore[no-untyped-def]
+    conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
+    conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=1, runner_id="r_a", recorded_at=_NOW))
+
+
+def test_owned_epochs_with_matching_leases_are_clean(tmp_path: Path) -> None:
+    """``hub:epochs-owned`` holds for a runner lease at its own epoch, a hub lease at a
+    hub-owned one, a restart at a hub-owned one, and a reservation with no lease yet."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_owned_chunk(conn)
+        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=1, runner_id="r_a", minted_at=_NOW))
+        conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW))
+        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW))
+        conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=3, runner_id=None, recorded_at=_NOW))
+        conn.execute(
+            insert(hub.chunk_restarts).values(
+                chunk_id="ch_1", graph_id="gr_1", to_node_id="nd_a", epoch=3, restarted_by="op", recorded_at=_NOW
+            )
+        )
+        conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=4, runner_id="r_b", recorded_at=_NOW))
+    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    assert "hub:epochs-owned" not in slugs
+
+
+def test_a_lease_at_an_unowned_epoch_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_owned_chunk(conn)
+        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW))
+    assert [v.detail for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
+        "chunk ch_1 epoch 2 has no owner"
+    ]
+
+
+def test_a_restart_at_an_unowned_epoch_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_owned_chunk(conn)
+        conn.execute(
+            insert(hub.chunk_restarts).values(
+                chunk_id="ch_1", graph_id="gr_1", to_node_id="nd_a", epoch=2, restarted_by="op", recorded_at=_NOW
+            )
+        )
+    assert [v.detail for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
+        "chunk ch_1 epoch 2 has no owner"
+    ]
+
+
+def test_a_runner_lease_level_with_another_owners_epoch_is_a_violation(tmp_path: Path) -> None:
+    """A displaced attempt's mint landing at an epoch another runner — or the hub — owns."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_owned_chunk(conn)
+        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=1, runner_id="r_b", minted_at=_NOW))
+        conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW))
+        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW))
+    assert [v.detail for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
+        "chunk ch_1 epoch 1 lease by r_b but owned by r_a",
+        "chunk ch_1 epoch 2 lease by r_a but owned by the hub",
+    ]
+
+
 def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_path: Path) -> None:
     """``hub:merge-queue-single-state`` — a whole-chunk ``delivery.landed`` fact paired
     with a non-terminal newest transition reads as both landed and mid-flight;
@@ -826,6 +889,7 @@ def test_merged_into_post_merge_node_is_not_a_violation(tmp_path: Path) -> None:
     with engine.begin() as conn:
         conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
         conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW))
+        conn.execute(insert(hub.epoch_owners).values(chunk_id="ch_1", epoch=2, runner_id=None, recorded_at=_NOW))
         conn.execute(
             insert(hub.transitions).values(
                 transition_id="tr_1",

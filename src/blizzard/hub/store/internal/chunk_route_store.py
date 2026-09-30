@@ -16,12 +16,21 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunks.fence import Claimant, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.work import RouteCreatedFact, RouteHistory, RouteReleasedFact
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import conn_of, next_route_seq, route_of_conn
+from blizzard.hub.store.internal.chunk_rows import (
+    conn_of,
+    latest_epoch,
+    lock_chunk_row,
+    mint_admission,
+    next_route_seq,
+    record_epoch_owner,
+    route_of_conn,
+)
 
 _ROUTE_PREFIX = "route"
 
@@ -156,7 +165,9 @@ class ChunkRouteStore:
     def record_route_locked(self, handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
         """The claim's own route-and-token write
         (``bzh:store-exclusive-write``), on the connection its row lock was already taken
-        on, rather than a fresh transaction."""
+        on, rather than a fresh transaction. It also reserves the chunk's next epoch for the
+        claiming runner — itself a fencing write: the prior holder's writes at or below it
+        are refused from this commit on."""
         return self._record_route_conn(conn_of(handle), route, token_hash=token_hash, at=at)
 
     def _record_route_conn(self, conn, route: Route, *, token_hash: str, at: datetime) -> str:  # type: ignore[no-untyped-def]
@@ -181,6 +192,8 @@ class ChunkRouteStore:
                 minted_at=at,
             )
         )
+        reserved = latest_epoch(conn, route.chunk_id) + 1
+        record_epoch_owner(conn, route.chunk_id, reserved, EpochOwner.runner(route.runner_id), at=at)
         return route_id
 
     def record_route_released_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
@@ -208,11 +221,27 @@ class ChunkRouteStore:
                 )
             )
 
-    def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:
-        with self._store.write("record_lease") as conn:
+    def record_lease_minted(
+        self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime
+    ) -> FenceRefusal | None:
+        with self._store.write("record_lease_minted") as conn:
+            lock_chunk_row(conn, chunk_id)
+            admission = mint_admission(conn, chunk_id, epoch=epoch, runner_id=claimant.runner_id)
+            refusal = admission.refusal(claimant)
+            if refusal is not None:
+                return refusal
+            if admission.takes_ownership():
+                record_epoch_owner(conn, chunk_id, epoch, EpochOwner.runner(claimant.runner_id), at=at)
             conn.execute(
-                s.lease_facts.insert().values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
+                s.lease_facts.insert().values(
+                    chunk_id=chunk_id,
+                    epoch=epoch,
+                    runner_id=claimant.runner_id,
+                    minted_at=at,
+                    lease_id=claimant.lease_id,
+                )
             )
+            return None
 
     def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
         with self._store.write("set_runner_high_water") as conn:

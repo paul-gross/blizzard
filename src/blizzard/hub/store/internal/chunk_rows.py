@@ -19,7 +19,7 @@ from typing import Protocol, cast
 from sqlalchemy import Connection, Select, func, insert, select
 
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal, MintAdmission
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.proposals import WorkItemProposalRow
@@ -385,7 +385,8 @@ def graph_id_of(conn: Connection, chunk_id: str) -> str:
 
 def latest_epoch(conn: Connection, chunk_id: str) -> int:
     """The chunk's newest fencing epoch, read INSIDE the caller's transaction — the same
-    fold ``ChunkFacts.latest_epoch`` derives, across lease facts and operator restarts.
+    fold ``ChunkFacts.latest_epoch`` derives, across lease facts, operator restarts, and
+    epoch owners (so a claim's reservation raises it).
 
     Read here rather than handed in, so a read-then-write epoch decision cannot be
     overtaken between the two (``bzh:epoch-fencing``)."""
@@ -395,7 +396,53 @@ def latest_epoch(conn: Connection, chunk_id: str) -> int:
     restart_max = conn.execute(
         select(func.max(s.chunk_restarts.c.epoch)).where(s.chunk_restarts.c.chunk_id == chunk_id)
     ).scalar()
-    return max(lease_max or 0, restart_max or 0)
+    owner_max = conn.execute(
+        select(func.max(s.epoch_owners.c.epoch)).where(s.epoch_owners.c.chunk_id == chunk_id)
+    ).scalar()
+    return max(lease_max or 0, restart_max or 0, owner_max or 0)
+
+
+def epoch_owner(conn: Connection, chunk_id: str, epoch: int) -> EpochOwner | None:
+    """The owner recorded for one epoch of the chunk, or ``None`` while it is unowned."""
+    row = conn.execute(
+        select(s.epoch_owners.c.runner_id).where(
+            (s.epoch_owners.c.chunk_id == chunk_id) & (s.epoch_owners.c.epoch == epoch)
+        )
+    ).first()
+    if row is None:
+        return None
+    return EpochOwner.hub() if row.runner_id is None else EpochOwner.runner(row.runner_id)
+
+
+def owning_lease_id(conn: Connection, chunk_id: str, epoch: int) -> str | None:
+    """The lease that owns an epoch — the earliest admitted mint at it that named one."""
+    return conn.execute(
+        select(s.lease_facts.c.lease_id)
+        .where(
+            (s.lease_facts.c.chunk_id == chunk_id)
+            & (s.lease_facts.c.epoch == epoch)
+            & s.lease_facts.c.lease_id.is_not(None)
+        )
+        .order_by(s.lease_facts.c.id)
+        .limit(1)
+    ).scalar()
+
+
+def record_epoch_owner(conn: Connection, chunk_id: str, epoch: int, owner: EpochOwner, *, at: datetime) -> None:
+    """Record ``owner`` for the epoch unless it already has one — first owner wins. Call it
+    after :func:`lock_chunk_row`, on the write's own connection, in the transaction of the
+    fact that takes the epoch (``bzh:store-exclusive-write``); the unique constraint backs it."""
+    if epoch_owner(conn, chunk_id, epoch) is not None:
+        return
+    conn.execute(
+        s.epoch_owners.insert().values(chunk_id=chunk_id, epoch=epoch, runner_id=owner.runner_id, recorded_at=at)
+    )
+
+
+def record_hub_lease(conn: Connection, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:
+    """A hub mint: its ``lease_facts`` row and the epoch's hub ownership, together."""
+    conn.execute(s.lease_facts.insert().values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at))
+    record_epoch_owner(conn, chunk_id, epoch, EpochOwner.hub(), at=at)
 
 
 def row_exists(conn, table, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]
@@ -411,11 +458,19 @@ def chunk_is_terminal(conn: Connection, chunk_id: str) -> bool:
     return row_exists(conn, s.chunk_stopped, chunk_id) or row_exists(conn, s.chunk_completed, chunk_id)
 
 
-def fence(conn: Connection, chunk_id: str, *, epoch: int, admission: EpochAdmission) -> FenceRefusal | None:
+def fence(
+    conn: Connection,
+    chunk_id: str,
+    *,
+    epoch: int,
+    admission: EpochAdmission,
+    claimant: Claimant | None = None,
+) -> FenceRefusal | None:
     """The one in-transaction write fence (``bzh:epoch-fencing``): ``None`` when a write at
     ``epoch`` clears it, else why it was refused. Terminal comes first — a stopped or
     completed chunk, or one whose newest transition reached the reserved terminal at its
-    newest epoch, refuses at any epoch — then the epoch against ``admission``.
+    newest epoch, refuses at any epoch — then the epoch against ``admission``, then, for a
+    runner-submitted write naming its ``claimant``, whether that attempt owns ``epoch``.
 
     Call it after :func:`lock_chunk_row` and the write's replay probe, on the write's own
     connection (``bzh:store-exclusive-write``), so the verdict cannot be overtaken by the
@@ -425,7 +480,26 @@ def fence(conn: Connection, chunk_id: str, *, epoch: int, admission: EpochAdmiss
         return FenceRefusal.terminal(epoch)
     if not admission.admits(epoch, newest=newest):
         return FenceRefusal.stale(epoch, latest=newest)
+    if claimant is not None and not claimant.owns(
+        epoch_owner(conn, chunk_id, epoch), owning_lease_id=owning_lease_id(conn, chunk_id, epoch)
+    ):
+        return FenceRefusal.displaced(epoch, latest=newest)
     return None
+
+
+def mint_admission(conn: Connection, chunk_id: str, *, epoch: int, runner_id: str) -> MintAdmission:
+    """The chunk's state a runner's ``lease.minted`` at ``epoch`` is admitted against, read on
+    the minting write's own connection after :func:`lock_chunk_row`."""
+    newest = latest_epoch(conn, chunk_id)
+    route = route_of_conn(conn, chunk_id)
+    return MintAdmission(
+        epoch=epoch,
+        newest=newest,
+        terminal=chunk_is_terminal(conn, chunk_id) or _reached_terminal_at(conn, chunk_id, newest),
+        owner=epoch_owner(conn, chunk_id, epoch),
+        owning_lease_id=owning_lease_id(conn, chunk_id, epoch),
+        holds_route=route is not None and route.runner_id == runner_id,
+    )
 
 
 def _reached_terminal_at(conn: Connection, chunk_id: str, newest: int) -> bool:

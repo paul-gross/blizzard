@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import Connection, Engine, and_, func, select
+from sqlalchemy import Connection, Engine, and_, func, literal, select
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
@@ -29,6 +29,9 @@ from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
 from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
 from blizzard.runner.loop.process import IProcessProbe, LinuxProcessProbe
 from blizzard.runner.store import schema as runner
+
+# The ``lease_facts.runner_id`` a hub mint records — its own lease row, never a runner's.
+_HUB_LEASE_RUNNER_ID = "hub"
 
 
 @dataclass(frozen=True)
@@ -494,6 +497,39 @@ class EpochConsistentTransitions(QueryCheck):
                     Violation(
                         "hub:epoch-consistent-transitions",
                         f"chunk {chunk_id} transition epoch {max_epoch} exceeds latest lease {known}",
+                    )
+                )
+        return violations
+
+
+class EpochsOwned(QueryCheck):
+    """Every epoch a lease fact or a restart took has an owner row, and a runner's lease
+    fact sits at an epoch that runner owns — a lease level with another owner's epoch means
+    a displaced attempt's mint landed."""
+
+    def run(self) -> list[Violation]:
+        owners = {
+            (row.chunk_id, row.epoch): row.runner_id
+            for row in self.conn.execute(
+                select(hub.epoch_owners.c.chunk_id, hub.epoch_owners.c.epoch, hub.epoch_owners.c.runner_id)
+            )
+        }
+        violations: list[Violation] = []
+        leases = hub.lease_facts.c
+        restarts = hub.chunk_restarts.c
+        taken = [
+            *self.conn.execute(select(leases.chunk_id, leases.epoch, leases.runner_id)),
+            *self.conn.execute(select(restarts.chunk_id, restarts.epoch, literal(None))),
+        ]
+        for chunk_id, epoch, runner_id in taken:
+            if (chunk_id, epoch) not in owners:
+                violations.append(Violation("hub:epochs-owned", f"chunk {chunk_id} epoch {epoch} has no owner"))
+            elif runner_id not in (None, _HUB_LEASE_RUNNER_ID) and owners[(chunk_id, epoch)] != runner_id:
+                violations.append(
+                    Violation(
+                        "hub:epochs-owned",
+                        f"chunk {chunk_id} epoch {epoch} lease by {runner_id} but owned by "
+                        f"{owners[(chunk_id, epoch)] or 'the hub'}",
                     )
                 )
         return violations
@@ -1040,6 +1076,7 @@ class HubInvariants:
             checks: tuple[QueryCheck, ...] = (
                 OneTransitionPerNodeEpoch(conn),
                 EpochConsistentTransitions(conn),
+                EpochsOwned(conn),
                 RouteSeqUnique(conn),
                 OneLiveRoutePerChunk(conn),
                 PerRepoLandIdempotent(conn),

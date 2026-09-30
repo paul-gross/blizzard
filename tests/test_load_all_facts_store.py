@@ -30,6 +30,7 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     DecisionChoice,
+    EpochOwnerFact,
     FleetSummary,
     HubNodePollFact,
     MigrationSource,
@@ -41,7 +42,16 @@ from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
 from blizzard.hub.store.internal.chunk_facts_store import _ALL_FAMILIES, _STATUS_FAMILIES, ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
-from tests.support import build_hub, chunk_stores, count_queries, hub_store_connections, ingest, migrate_to, seed_graph
+from tests.support import (
+    build_hub,
+    chunk_stores,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    migrate_to,
+    seed_graph,
+    seed_lease,
+)
 
 pytestmark = pytest.mark.component
 
@@ -223,7 +233,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
     # so the bulk read's completeness is proven, not merely asserted.
     _mint(store, "ch_kitchen_sink")
     store.queue.record_promote("ch_kitchen_sink", at=_T0)
-    store.route.record_lease("ch_kitchen_sink", epoch=1, runner_id="r", at=_T0)
+    seed_lease(engine, "ch_kitchen_sink", epoch=1, runner_id="r", at=_T0)
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
         store.route.record_route_locked(
             handle,
@@ -478,6 +488,7 @@ def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> Non
     assert non_status == {
         "delivery_landed",
         "landed_repos",
+        "epoch_owners",
         "route_tokens_minted",
         "usage",
         "bounces",
@@ -489,6 +500,7 @@ def test_status_is_insensitive_to_every_non_status_family(tmp_path: Path) -> Non
         baseline,
         delivery_landed=True,
         landed_repos=frozenset({"acme/widget"}),
+        epoch_owners=[EpochOwnerFact(epoch=1, runner_id="r1")],
         route_tokens_minted=[RouteTokenMintedFact(token_hash="h", minted_at=_T0, seq=1)],
         usage=[
             UsageFact(
