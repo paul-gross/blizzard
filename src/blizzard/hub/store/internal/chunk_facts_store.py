@@ -175,9 +175,7 @@ class ChunkFactsStore:
 
     def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts`'s batched sibling — every id's
-        :class:`ChunkFacts` (`bzh:bulk-reconstitution`). An id that doesn't exist or is
-        ephemeral is silently dropped, the same as :meth:`load_facts` returning ``None``
-        for it."""
+        :class:`ChunkFacts` (`bzh:bulk-reconstitution`)."""
         if not chunk_ids:
             return {}
         with self._store.read("load_facts_for") as conn:

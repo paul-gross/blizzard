@@ -103,9 +103,7 @@ class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
     """Read-write routine access. Only the domain layer depends on this variant."""
 
     def create(self, routine: Routine) -> None:
-        """Insert a routine row. Uniqueness of ``name`` is enforced by
-        :class:`RoutineAuthoring` before this is called — the store's own
-        ``uq_routines_name`` is a backstop, not the refusal path."""
+        """Insert a routine row; ``uq_routines_name`` backstops a duplicate ``name``."""
         ...
 
     def edit(

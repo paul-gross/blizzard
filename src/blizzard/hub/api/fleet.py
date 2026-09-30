@@ -355,12 +355,8 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
 
 def _routine_run_or_404(chunk_id: str, services: HubServices) -> RunContext:
     """The run context that gates a worker's fleet-scoped read — 404 both for an
-    unknown chunk and for one carrying no run context (not a routine run), shared by
-    every fleet route that requires the chunk to be a routine run (garden
-    findings/proposals, and the analytics reads). Callers decide what to
-    do with the returned run: the garden reads filter by its routine and scope; the
-    analytics reads use it only to gate access, and return fleet-wide rollups over the
-    window."""
+    unknown chunk and for one carrying no run context (not a routine run), returning the
+    chunk's :class:`RunContext`."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -503,8 +499,7 @@ def get_chunk_analytics_spend_graphs(
 @router.get("/scopes", response_model=list[ScopeView])
 def get_scopes(services: Annotated[HubServices, Depends(get_services)]) -> list[ScopeView]:
     """Every scope, newest first, each marked retired or not — the
-    deployment's scope vocabulary, read by `blizzard runner scope list` so a review's
-    deferred findings can name an existing slug without a hub-interpreted default."""
+    deployment's scope vocabulary."""
     scopes = services.scopes.list_all()
     retired = services.scopes.retired_slugs()
     return [scope_view(s, retired=s.slug in retired) for s in scopes]

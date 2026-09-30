@@ -192,9 +192,7 @@ def _inheritance(base_red: bool | None) -> str:
 
 
 def _rerun_marker(repo: str, name: str, head_sha: str) -> str:
-    """The re-run signature marker name for one (repo, check name, head sha) triple — the
-    unit both the one-time re-run and the repeat-bounce refusal a later `build`/`iterate`
-    visit reads from `delivery-findings` key on."""
+    """The re-run signature marker name for one (repo, check name, head sha) triple."""
     return f"{_RERUN_MARKER_PREFIX}{repo}/{name}/{head_sha}"
 
 

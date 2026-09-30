@@ -29,9 +29,7 @@ def resolve_proposal_findings(
     """`finding_ids` resolved to their loaded `Finding` rows, in `finding_ids`' own
     order, silently dropping an id that no longer resolves; `live_only` additionally
     drops one whose current state is not `"live"`. The one walk every proposal→findings
-    reader (the accept route, the worker-facing read, the delivery-triggered exit) shares,
-    so the three cannot drift on order, missing-id handling, or
-    liveness."""
+    read shares, so none can drift on order, missing-id handling, or liveness."""
     by_id = findings.get_many(finding_ids)
     rows = (by_id.get(fid) for fid in finding_ids)
     return [f for f in rows if f is not None and (not live_only or f.state == "live")]

@@ -701,10 +701,7 @@ class FollowLatest:
 
 
 class IReadManyGraphs(Protocol):
-    """The plural reifying read :class:`IReadGraphRepository` composes rather than declares
-    directly — it already sits at ``bzh:seam-size-ceiling``'s twelve methods, so a new
-    consumer (the matched peek's bulk graph walk) re-types to just this capability,
-    mirroring :class:`~blizzard.runner.loop.hub.IChunkStatusReader`'s precedent."""
+    """The plural reifying read of graphs, composed into :class:`IReadGraphRepository`."""
 
     def get_many(self, graph_ids: Sequence[str]) -> dict[str, Graph]:
         """``{graph_id: Graph}`` for every requested id that exists, each reified in full

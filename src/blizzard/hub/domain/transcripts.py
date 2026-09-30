@@ -120,8 +120,7 @@ class IReadTranscriptSegments(Protocol):
 
     def runner_id_for_lease(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
         """The ``runner_id`` on a lease's stored segments, or ``None`` when it holds
-        none — the fleet-plane read route's own ownership signal, resolved
-        independently of the caller so the route can refuse a mismatch."""
+        none; resolved from stored segments, independent of any caller-supplied runner."""
         ...
 
     def records_for_lease(self, chunk_id: str, node_id: str, epoch: int, runner_id: str) -> list[SegmentRecordContent]:

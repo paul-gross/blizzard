@@ -249,9 +249,8 @@ def content_fingerprint(records: Sequence[Any]) -> str:
 def _provenance(rows: Sequence[Any]) -> SegmentProvenance:
     """A segment's frozen provenance: ``harness_id``/``model``/``effort``
     are identical on every stored record, so the first states them; ``harness_version`` is
-    folded per shipped window on the runner (only the window that observed it carries a
-    value) and re-folded here the same way, over every row in ``turn_range_start`` order,
-    so a later row's real value is never shadowed by an earlier window's ``None``."""
+    the last non-``None`` value over every row in ``turn_range_start`` order, so a later
+    row's real value is never shadowed by an earlier ``None``."""
     first = rows[0]
     harness_version = first.harness_version
     for row in rows:

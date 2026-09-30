@@ -19,8 +19,7 @@ class IReadChunkDeliveryRepository(Protocol):
 
     def count_landed_since(self, repo: str, since: datetime) -> int:
         """How many `delivery_repo_landed` rows `repo` has recorded strictly after
-        `since` — a routine-baseline's own "landed since" count; "landed" is this
-        table's own fact, never a commit count the hub has no seam to produce."""
+        `since`; "landed" is this table's own fact, not a commit count."""
         ...
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
