@@ -21,6 +21,7 @@ from blizzard.hub.domain.graph import (
     RetriesExhausted,
     SessionDecl,
 )
+from blizzard.hub.domain.harnesses import InvalidHarnesses, validated_harnesses
 
 # A filename's trailing extension. Bounded at 8 characters so a long dotted token — a
 # version string, a sentence-ending abbreviation — is not read as one.
@@ -120,15 +121,14 @@ class Validator:
                 self.errors.append(f"session `{name}`: `rotate.{field_name}` must be a positive number")
 
     def _check_harnesses(self, name: str, harnesses: list[str]) -> None:
-        """A session's acceptable harness set: every entry non-blank, no duplicate —
-        an authored empty list is rejected earlier, at parse."""
-        seen: set[str] = set()
-        for entry in harnesses:
-            if not entry.strip():
+        """An authored empty list is rejected earlier, at parse."""
+        try:
+            validated_harnesses(harnesses)
+        except InvalidHarnesses as exc:
+            if exc.reason == "blank":
                 self.errors.append(f"session `{name}`: `harnesses` entries must be non-empty strings")
-            elif entry in seen:
-                self.errors.append(f"session `{name}`: `harnesses` entries must be unique — duplicate `{entry}`")
-            seen.add(entry)
+            else:
+                self.errors.append(f"session `{name}`: `harnesses` entries must be unique — duplicate `{exc.entry}`")
 
     def _check_artifacts(self) -> None:
         """Every graph-scoped `artifacts:` name is legal, collides with no node's `produces:`

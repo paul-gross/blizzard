@@ -10,6 +10,7 @@ from blizzard.hub.api.graph_names import graph_by_ref
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.edit import UNSET, ChunkEdit, UnsetType
 from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.harnesses import InvalidHarnesses
 from blizzard.hub.domain.work import Chunk, IntendedMigration, MigrationMode
 from blizzard.wire.chunk import ChunkPatchRequest
 
@@ -35,7 +36,10 @@ class ChunkPatchBody:
             default_harnesses=self._default_harnesses(),
             intended_migration=intended_migration,
         )
-        self.services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
+        try:
+            self.services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
+        except InvalidHarnesses as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
     def _graph_target(self) -> Graph | None:
         ref = self.request.graph_id
@@ -59,18 +63,7 @@ class ChunkPatchBody:
 
     def _default_harnesses(self) -> list[str] | UnsetType:
         entries = self.request.default_harnesses
-        if entries is None:
-            return UNSET
-        stripped = [entry.strip() for entry in entries]
-        if any(not entry for entry in stripped):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_harnesses entries must not be blank"
-            )
-        if len(set(stripped)) != len(stripped):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_harnesses entries must be unique"
-            )
-        return stripped
+        return UNSET if entries is None else entries
 
     def _default_effort(self) -> str | None | UnsetType:
         """Nullable-with-meaning: an explicit ``null`` clears the preference, an omitted

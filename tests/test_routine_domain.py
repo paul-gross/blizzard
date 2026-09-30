@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
+from blizzard.hub.domain.harnesses import InvalidHarnesses
 from blizzard.hub.domain.routines import (
     IWriteRoutineRepository,
     IWriteRoutineScopeRepository,
@@ -229,6 +230,35 @@ def test_create_carries_a_harnesses_preference() -> None:
     assert routine.default_harnesses == ["claude_code", "codex"]
 
 
+@pytest.mark.parametrize("entries", [[" "], ["claude_code", " claude_code "]])
+def test_create_refuses_invalid_harnesses_before_minting_scope(entries: list[str]) -> None:
+    authoring, routines, scopes, _ = _authoring()
+
+    with pytest.raises(InvalidHarnesses):
+        authoring.create(
+            name="nightly",
+            graph_name="alpha",
+            default_scope_slug=ScopeSlug.parse("blizzard"),
+            default_harnesses=entries,
+        )
+
+    assert routines.by_id == {}
+    assert scopes.ensured == []
+
+
+def test_create_normalizes_harnesses() -> None:
+    authoring, _, _, _ = _authoring()
+
+    routine = authoring.create(
+        name="nightly",
+        graph_name="alpha",
+        default_scope_slug=ScopeSlug.parse("blizzard"),
+        default_harnesses=[" claude_code ", "codex"],
+    )
+
+    assert routine.default_harnesses == ["claude_code", "codex"]
+
+
 def test_edit_naming_a_different_name_is_refused_naming_the_current_one() -> None:
     authoring, _, _, _ = _authoring()
     routine = authoring.create(name="nightly", graph_name="alpha", default_scope_slug=ScopeSlug.parse("blizzard"))
@@ -256,6 +286,24 @@ def test_edit_changes_graph_scope_and_defaults() -> None:
     assert edited.default_model == ["blizzard:advanced"]
     assert edited.default_effort == "high"
     assert edited.default_harnesses == ["claude_code"]
+
+
+@pytest.mark.parametrize("entries", [["  "], ["codex", " codex "]])
+def test_edit_refuses_invalid_harnesses_before_mutating_scope(entries: list[str]) -> None:
+    authoring, routines, scopes, _ = _authoring()
+    routine = authoring.create(name="nightly", graph_name="alpha", default_scope_slug=ScopeSlug.parse("blizzard"))
+
+    with pytest.raises(InvalidHarnesses):
+        authoring.edit(
+            routine,
+            name="nightly",
+            graph_name="alpha",
+            default_scope_slug=ScopeSlug.parse("other"),
+            default_harnesses=entries,
+        )
+
+    assert routines.edited == []
+    assert scopes.ensured == ["blizzard"]
 
 
 def test_edit_naming_an_unresolved_graph_is_refused_naming_it() -> None:
