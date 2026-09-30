@@ -22,7 +22,7 @@ from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import (
     DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
     HarnessSpawnError,
-    IHarnessLifecycleAndVerdict,
+    IHarnessWorkerLifecycle,
     WorkerIdentityError,
     WorkerPreamble,
 )
@@ -337,13 +337,13 @@ class Spawner:
 
         Attempt(self.ctx, lease).escalate_no_acceptable_harness(attempted=attempted, skipped=skipped, via=via)
 
-    def _resolve_harness(self, harness_id: str, *, via: str) -> IHarnessLifecycleAndVerdict | None:
+    def _resolve_harness(self, harness_id: str, *, via: str) -> IHarnessWorkerLifecycle | None:
         """Resolve ``harness_id``, logging and returning ``None`` — never raising — when it
         is unknown or unavailable. Every owner reaching here was already confirmed resolvable
         moments earlier this same call; what still fails here is only a same-tick race or a
         fresh mint's own default."""
         try:
-            return self.ctx.harnesses.adapter(harness_id)
+            return self.ctx.harnesses.lifecycle(harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(
                 "spawn blocked by unavailable harness owner",

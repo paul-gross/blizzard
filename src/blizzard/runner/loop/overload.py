@@ -143,13 +143,12 @@ def _record(
 
 
 def _overload_adapter(ctx: LoopContext, session: SessionReference) -> IHarnessProviderOverload | None:
-    """This session's own adapter, narrowed to ``IHarnessProviderOverload`` — unlike
-    ``ctx.adapter_for``'s own ``IHarnessLifecycleAndVerdict`` slice (``bzh:seam-size-ceiling``):
-    a classifier depends on exactly the one method it calls rather than the full seam.
+    """This session's provider-overload classifier, resolved through the registry's own
+    ``provider_overload`` accessor (``bzh:seam-size-ceiling``).
     ``None`` on an unresolvable owner, never a raise: a lease already reaching this point has
     exited, and an owner this runner cannot dispatch to is `Judgement`/`Attempt`'s own
     escalation to make, not this classifier's."""
     try:
-        return ctx.harnesses.adapter(session.harness_id)
+        return ctx.harnesses.provider_overload(session.harness_id)
     except (UnknownHarnessError, UnavailableHarnessError):
         return None

@@ -14,7 +14,6 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -205,14 +204,9 @@ class LoopContext:
             return self.capabilities.get()
         return capability_snapshot(self.harnesses, self.harness_versions, self.harness_health)
 
-    def adapter_for(self, session: SessionReference) -> IHarnessLifecycleAndVerdict:
-        """Resolve an existing session's adapter from its recorded owner — may raise
-        ``UnknownHarnessError``/``UnavailableHarnessError``."""
-        return self.harnesses.adapter(session.harness_id)
-
     def transcript_source_for(self, session: SessionReference) -> IHarnessTranscriptSource:
         """Resolve an existing session's transcript source from its recorded owner — same
-        raise/guard contract as :meth:`adapter_for`."""
+        raise/guard contract as the registry's role accessors."""
         return self.harnesses.transcript_source(session.harness_id)
 
     def resolve_boundary_start(self, session: SessionReference, workdir: str | None) -> tuple[str | None, bool]:

@@ -16,7 +16,6 @@ from blizzard.runner.domain.leases import IReadLeaseLivenessRepository, LeaseRec
 from blizzard.runner.domain.usage import IWriteUsageRepository, derive_invocation_cost
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.runner.harness.adapter import IHarnessUsageAccounting
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -64,7 +63,7 @@ class UsageRecorder:
         session = lease.session
         if session is None:
             return
-        harness = self._resolved_harness(session)
+        harness = self.harnesses.usage_accounting(session.harness_id)
         model = lease.resolved_model
         needs_transcript = self.transcripts_wired and harness.needs_usage_transcript(judge_output, model=model)
         lines = self.judge_transcript_lines(lease, bindings, generation=generation) if needs_transcript else []
@@ -128,7 +127,7 @@ class UsageRecorder:
         session = lease.session
         if session is None:
             return None
-        harness = self._resolved_harness(session)
+        harness = self.harnesses.usage_accounting(session.harness_id)
         model = lease.resolved_model
         needs_transcript = (
             self.transcripts_wired and bool(output) and harness.needs_usage_transcript(output, model=model)
@@ -234,9 +233,3 @@ class UsageRecorder:
             if boundary is not None:
                 return boundary
         return None
-
-    def _resolved_harness(self, session: SessionReference) -> IHarnessUsageAccounting:
-        """Resolve ``session``'s recorded owner — may raise ``UnknownHarnessError``/
-        ``UnavailableHarnessError``; never caught here, so this can never silently record
-        against an owner it could not serve."""
-        return self.harnesses.adapter(session.harness_id)

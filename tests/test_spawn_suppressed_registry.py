@@ -42,7 +42,7 @@ def _is_harness_spawn_call(node: ast.AST) -> bool:
         and isinstance(node.func, ast.Attribute)
         and node.func.attr in _GATED_METHODS
         # Exclude calls to the Spawner funnel itself (``self.spawn``); the adapter receivers
-        # are either a resolved local name or ``ctx.adapter_for(session)``.
+        # are either a resolved local name or ``ctx.harnesses.lifecycle(session.harness_id)``.
         and not (isinstance(node.func.value, ast.Name) and node.func.value.id == "self")
     )
 

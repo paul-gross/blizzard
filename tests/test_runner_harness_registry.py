@@ -50,11 +50,36 @@ def test_registry_resolves_only_the_exact_requested_owner() -> None:
     source = FakeTranscriptSource()
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=source)})
 
-    assert registry.adapter(CLAUDE_CODE_HARNESS_ID) is adapter
+    assert registry.lifecycle(CLAUDE_CODE_HARNESS_ID) is adapter
     assert registry.transcript_source(CLAUDE_CODE_HARNESS_ID) is source
     with pytest.raises(UnknownHarnessError) as raised:
-        registry.adapter("other")
+        registry.lifecycle("other")
     assert raised.value.known == (CLAUDE_CODE_HARNESS_ID,)
+
+
+_ROLE_ACCESSORS = (
+    "lifecycle",
+    "lifecycle_and_verdict",
+    "self_test",
+    "model_resolution",
+    "usage_accounting",
+    "usage_limits",
+    "provider_overload",
+)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("accessor", _ROLE_ACCESSORS)
+def test_every_role_accessor_resolves_the_bound_adapter_and_raises_the_registry_errors(accessor: str) -> None:
+    adapter = _harness()
+    registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
+    unbound = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding()})
+
+    assert getattr(registry, accessor)(CLAUDE_CODE_HARNESS_ID) is adapter
+    with pytest.raises(UnknownHarnessError):
+        getattr(registry, accessor)("other")
+    with pytest.raises(UnavailableHarnessError):
+        getattr(unbound, accessor)(CLAUDE_CODE_HARNESS_ID)
 
 
 @pytest.mark.unit
@@ -82,8 +107,8 @@ def test_production_registry_shares_one_process_launcher_across_both_bindings(
         RunnerConfig(root=tmp_path, db_url="sqlite://"), process=LinuxProcessProbe(), executor=spawn_executor
     )
 
-    claude_launcher = vars(registry.adapter(CLAUDE_CODE_HARNESS_ID))["_launcher"]
-    opencode_launcher = vars(registry.adapter(OPENCODE_HARNESS_ID))["_launcher"]
+    claude_launcher = vars(registry.lifecycle(CLAUDE_CODE_HARNESS_ID))["_launcher"]
+    opencode_launcher = vars(registry.lifecycle(OPENCODE_HARNESS_ID))["_launcher"]
     assert claude_launcher is opencode_launcher
 
 
@@ -97,7 +122,7 @@ def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: P
 
     source = registry.transcript_source(OPENCODE_HARNESS_ID)
     assert isinstance(source, OpenCodeTranscriptSource)
-    adapter_source = vars(registry.adapter(OPENCODE_HARNESS_ID))["_transcript_source"]
+    adapter_source = vars(registry.lifecycle(OPENCODE_HARNESS_ID))["_transcript_source"]
     assert adapter_source is source
 
 
@@ -113,7 +138,7 @@ def test_production_registry_injects_a_file_price_catalog_from_worker_env_passth
 
     registry = build_production_harness_registry(config, process=LinuxProcessProbe(), executor=spawn_executor)
 
-    catalog = vars(registry.adapter(OPENCODE_HARNESS_ID))["_price_catalog"]
+    catalog = vars(registry.lifecycle(OPENCODE_HARNESS_ID))["_price_catalog"]
     assert isinstance(catalog, FileOpenCodePriceCatalog)
     assert vars(catalog)["_path"] == tmp_path / "xdg-cache" / "opencode" / "models.json"
 
@@ -130,7 +155,7 @@ def test_production_registry_binds_no_price_catalog_with_an_unresolvable_cache_r
 
     registry = build_production_harness_registry(config, process=LinuxProcessProbe(), executor=spawn_executor)
 
-    assert vars(registry.adapter(OPENCODE_HARNESS_ID))["_price_catalog"] is None
+    assert vars(registry.lifecycle(OPENCODE_HARNESS_ID))["_price_catalog"] is None
 
 
 @pytest.mark.unit
@@ -141,10 +166,10 @@ def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_openco
     registry = build_production_harness_registry(config, process=LinuxProcessProbe(), executor=spawn_executor)
 
     assert default_harness_id(registry) == OPENCODE_HARNESS_ID
-    registry.adapter(OPENCODE_HARNESS_ID)
+    registry.lifecycle(OPENCODE_HARNESS_ID)
     # A session recorded under the disabled harness resolves through the unknown-owner path.
     with pytest.raises(UnknownHarnessError):
-        registry.adapter(CLAUDE_CODE_HARNESS_ID)
+        registry.lifecycle(CLAUDE_CODE_HARNESS_ID)
 
 
 @pytest.mark.unit
@@ -157,7 +182,7 @@ def test_production_registry_omits_a_disabled_opencode(tmp_path: Path, spawn_exe
 
     assert default_harness_id(registry) == CLAUDE_CODE_HARNESS_ID
     with pytest.raises(UnknownHarnessError):
-        registry.adapter(OPENCODE_HARNESS_ID)
+        registry.lifecycle(OPENCODE_HARNESS_ID)
 
 
 @pytest.mark.unit

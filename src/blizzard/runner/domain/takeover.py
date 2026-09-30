@@ -17,13 +17,13 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import TAKEOVER_PREFIX, Id
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.owned_process import IOwnedProcessControl, kill_owned_process
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.events.publisher import IRunnerEventPublisher
-from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle, WorkerPreamble
+from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.registry import IHarnessRegistry
+from blizzard.runner.harness.registry import IHarnessLifecycleRegistry
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.loop.process import IProcessProbe, kill_owned_process
 from blizzard.wire.facts import LEASE_MINTED
 
 if TYPE_CHECKING:
@@ -222,10 +222,10 @@ class TakeoverService:
         self,
         stores: RunnerStores,
         clock: IClock,
-        process: IProcessProbe,
+        process: IOwnedProcessControl,
         *,
         local_api_url: str,
-        harnesses: IHarnessRegistry,
+        harnesses: IHarnessLifecycleRegistry,
         workspace_root: str,
         events: IRunnerEventPublisher | None = None,
     ) -> None:
@@ -267,7 +267,7 @@ class TakeoverService:
         session = reference.session
         # Resolve before the fact-before-command write: an unavailable recorded owner blocks
         # this takeover rather than opening it and then offering no usable command.
-        harness = self._resolved_harness(session)
+        harness = self._harnesses.lifecycle(session.harness_id)
 
         now = self._clock.now()
         takeover_id = Id.mint(TAKEOVER_PREFIX, self._clock).value
@@ -369,6 +369,3 @@ class TakeoverService:
         self._stores.takeover.record_takeover_end(takeover_id=takeover_id, ended_at=self._clock.now())
         if self._events is not None:
             self._events.publish_takeover_changed(scope.chunk_id, takeover_id, cause="closed")
-
-    def _resolved_harness(self, session: SessionReference) -> IHarnessWorkerLifecycle:
-        return self._harnesses.adapter(session.harness_id)
