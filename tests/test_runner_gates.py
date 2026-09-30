@@ -288,6 +288,7 @@ def _gate_parked_chunk(*, status, route_runner_id, resolved_choice):  # type: ig
     )
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("status", "resolved_choice"),
     [(ChunkStatus.WAITING_ON_HUMAN, None), (ChunkStatus.READY, "approve")],
@@ -311,6 +312,7 @@ def test_a_detached_gate_park_releases_its_envs_and_submits_nothing(tmp_path, st
     assert store.held_environment_ids() == []
 
 
+@pytest.mark.unit
 def test_a_gate_park_reassigned_to_another_runner_releases_its_envs(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
@@ -328,6 +330,7 @@ def test_a_gate_park_reassigned_to_another_runner_releases_its_envs(tmp_path):  
     assert provider.released == ["e1"]
 
 
+@pytest.mark.unit
 def test_a_stopped_gate_park_with_its_decision_present_releases_its_envs(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
