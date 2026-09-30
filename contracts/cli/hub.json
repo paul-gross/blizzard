@@ -6,6 +6,7 @@
           "help": "Read the derived transcript-event projection, every ``/events``\nfilter as a flag: a bounded page by default, or the whole filtered set streamed as\nNDJSON to stdout under ``--ndjson``.",
           "params": [
             {
+              "help": "Scope to one workflow graph.",
               "hidden": false,
               "kind": "option",
               "name": "graph_id",
@@ -17,6 +18,7 @@
               "type": "text"
             },
             {
+              "help": "Scope to one work source.",
               "hidden": false,
               "kind": "option",
               "name": "source",
@@ -28,6 +30,7 @@
               "type": "text"
             },
             {
+              "help": "Only records at/after this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -39,6 +42,7 @@
               "type": "datetime"
             },
             {
+              "help": "Only records before this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -50,6 +54,7 @@
               "type": "datetime"
             },
             {
+              "help": "The event-extraction version to read (defaults to the current version).",
               "hidden": false,
               "kind": "option",
               "name": "extractor_version",
@@ -61,6 +66,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one event kind.",
               "hidden": false,
               "kind": "option",
               "name": "kind",
@@ -72,6 +78,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one tool name.",
               "hidden": false,
               "kind": "option",
               "name": "tool",
@@ -83,6 +90,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to subjects with this prefix.",
               "hidden": false,
               "kind": "option",
               "name": "subject_prefix",
@@ -94,6 +102,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one node id.",
               "hidden": false,
               "kind": "option",
               "name": "node_id",
@@ -105,6 +114,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one harness family.",
               "hidden": false,
               "kind": "option",
               "name": "harness_id",
@@ -116,6 +126,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one harness version.",
               "hidden": false,
               "kind": "option",
               "name": "harness_version",
@@ -127,6 +138,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one model.",
               "hidden": false,
               "kind": "option",
               "name": "model",
@@ -138,6 +150,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one effort level.",
               "hidden": false,
               "kind": "option",
               "name": "effort",
@@ -149,6 +162,7 @@
               "type": "text"
             },
             {
+              "help": "Resume from a prior page's next_cursor.",
               "hidden": false,
               "kind": "option",
               "name": "cursor",
@@ -160,6 +174,7 @@
               "type": "text"
             },
             {
+              "help": "Max rows in one page (1-1000, default 200). Illegal with --ndjson.",
               "hidden": false,
               "kind": "option",
               "name": "limit",
@@ -171,6 +186,7 @@
               "type": "integer"
             },
             {
+              "help": "Stream every matching event as NDJSON to stdout, unpaged. Incompatible with --json/--cursor/--limit.",
               "hidden": false,
               "kind": "option",
               "name": "ndjson",
@@ -182,6 +198,7 @@
               "type": "boolean"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -193,6 +210,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -211,6 +229,7 @@
           "help": "Force the standing derivation sweep's own replacement unit now, rather than\nwaiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate\n(neither option given). No downtime. Prints ``derived``/``remaining``; a nonzero\n``remaining`` on a chunk/all-scoped call means running it again continues from where\nit left off.",
           "params": [
             {
+              "help": "Force one segment, regardless of its candidacy.",
               "hidden": false,
               "kind": "option",
               "name": "segment_id",
@@ -222,6 +241,7 @@
               "type": "text"
             },
             {
+              "help": "Every candidate segment of one chunk.",
               "hidden": false,
               "kind": "option",
               "name": "chunk_id",
@@ -233,6 +253,7 @@
               "type": "text"
             },
             {
+              "help": "Cap on segments derived by one call.",
               "hidden": false,
               "kind": "option",
               "name": "limit",
@@ -244,6 +265,7 @@
               "type": "integer"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -255,6 +277,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -284,6 +307,7 @@
               "type": "choice"
             },
             {
+              "help": "Scope to one workflow graph.",
               "hidden": false,
               "kind": "option",
               "name": "graph_id",
@@ -295,6 +319,7 @@
               "type": "text"
             },
             {
+              "help": "Scope to one work source.",
               "hidden": false,
               "kind": "option",
               "name": "source",
@@ -306,6 +331,7 @@
               "type": "text"
             },
             {
+              "help": "Only records at/after this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -317,6 +343,7 @@
               "type": "datetime"
             },
             {
+              "help": "Only records before this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -328,6 +355,7 @@
               "type": "datetime"
             },
             {
+              "help": "The event-extraction version to read (defaults to the current version).",
               "hidden": false,
               "kind": "option",
               "name": "extractor_version",
@@ -339,6 +367,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one event kind.",
               "hidden": false,
               "kind": "option",
               "name": "kind",
@@ -350,6 +379,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one tool name.",
               "hidden": false,
               "kind": "option",
               "name": "tool",
@@ -361,6 +391,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to subjects with this prefix.",
               "hidden": false,
               "kind": "option",
               "name": "subject_prefix",
@@ -372,6 +403,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one node id.",
               "hidden": false,
               "kind": "option",
               "name": "node_id",
@@ -383,6 +415,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one harness family.",
               "hidden": false,
               "kind": "option",
               "name": "harness_id",
@@ -394,6 +427,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one harness version.",
               "hidden": false,
               "kind": "option",
               "name": "harness_version",
@@ -405,6 +439,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one model.",
               "hidden": false,
               "kind": "option",
               "name": "model",
@@ -416,6 +451,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to one effort level.",
               "hidden": false,
               "kind": "option",
               "name": "effort",
@@ -427,6 +463,7 @@
               "type": "text"
             },
             {
+              "help": "Resume from a prior page's next_cursor (spend-chunks only).",
               "hidden": false,
               "kind": "option",
               "name": "cursor",
@@ -438,6 +475,7 @@
               "type": "text"
             },
             {
+              "help": "Max rows in one page (spend-chunks only). Illegal with --ndjson.",
               "hidden": false,
               "kind": "option",
               "name": "limit",
@@ -449,6 +487,7 @@
               "type": "integer"
             },
             {
+              "help": "Stream spend-chunks as NDJSON to stdout, unpaged (spend-chunks only). Incompatible with --json/--cursor/--limit.",
               "hidden": false,
               "kind": "option",
               "name": "ndjson",
@@ -460,6 +499,7 @@
               "type": "boolean"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -471,6 +511,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -508,6 +549,7 @@
               "type": "text"
             },
             {
+              "help": "Who is deleting (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -519,6 +561,7 @@
               "type": "text"
             },
             {
+              "help": "Skip the confirmation prompt.",
               "hidden": false,
               "kind": "option",
               "name": "yes",
@@ -530,6 +573,7 @@
               "type": "boolean"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -541,6 +585,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -581,6 +626,7 @@
               "type": "text"
             },
             {
+              "help": "Who is declaring (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -592,6 +638,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -603,6 +650,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -632,6 +680,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -643,6 +692,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -672,6 +722,7 @@
               "type": "text"
             },
             {
+              "help": "Who is completing (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -683,6 +734,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -694,6 +746,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -734,6 +787,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -745,6 +799,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -774,6 +829,7 @@
               "type": "pointer"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -785,6 +841,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -803,6 +860,7 @@
           "help": "The fleet chunk list \u2014 derived status per chunk.",
           "params": [
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -814,6 +872,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -843,6 +902,7 @@
               "type": "text"
             },
             {
+              "help": "Migration target \u2014 a graph id or name. Required unless --cancel.",
               "hidden": false,
               "kind": "option",
               "name": "to_graph",
@@ -854,6 +914,7 @@
               "type": "text"
             },
             {
+              "help": "Force landing on this node name on the target graph (forced mode). Omit for auto (name-matched).",
               "hidden": false,
               "kind": "option",
               "name": "node",
@@ -865,6 +926,7 @@
               "type": "text"
             },
             {
+              "help": "Clear the chunk's standing migration intent.",
               "hidden": false,
               "kind": "option",
               "name": "cancel",
@@ -876,6 +938,7 @@
               "type": "boolean"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -887,6 +950,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -916,6 +980,7 @@
               "type": "text"
             },
             {
+              "help": "Who is pausing (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -927,6 +992,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -938,6 +1004,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -967,6 +1034,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -978,6 +1046,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1007,6 +1076,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1018,6 +1088,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1058,6 +1129,7 @@
               "type": "text"
             },
             {
+              "help": "Who is releasing (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -1069,6 +1141,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1080,6 +1153,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1109,6 +1183,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1120,6 +1195,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1149,6 +1225,7 @@
               "type": "text"
             },
             {
+              "help": "Move CHUNK onto this graph as part of the same move \u2014 a graph id, or a name resolved to the newest enabled mint of it. Omit to restart CHUNK where it stands; naming its own pin is refused.",
               "hidden": false,
               "kind": "option",
               "name": "to_graph",
@@ -1160,6 +1237,7 @@
               "type": "text"
             },
             {
+              "help": "Node name to force CHUNK onto, on --to-graph's graph when one is given and CHUNK's own otherwise. Omit for its current node's name, or that graph's entry node if CHUNK has never moved.",
               "hidden": false,
               "kind": "option",
               "name": "node",
@@ -1171,6 +1249,7 @@
               "type": "text"
             },
             {
+              "help": "Who is restarting (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -1182,6 +1261,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1193,6 +1273,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1222,6 +1303,7 @@
               "type": "text"
             },
             {
+              "help": "Who is resuming (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -1233,6 +1315,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1244,6 +1327,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1273,6 +1357,7 @@
               "type": "text"
             },
             {
+              "help": "Repin CHUNK's workflow graph to this graph id. Legal only while CHUNK has never moved.",
               "hidden": false,
               "kind": "option",
               "name": "graph_id",
@@ -1284,6 +1369,7 @@
               "type": "text"
             },
             {
+              "help": "Repin CHUNK's default model preference. Repeatable and ORDERED \u2014 the first entry that resolves at session mint wins. An entry is a `blizzard:` tier alias (frontier/advanced/basic) or a harness-native model name.",
               "hidden": false,
               "kind": "option",
               "name": "default_model",
@@ -1295,6 +1381,7 @@
               "type": "text"
             },
             {
+              "help": "Repin CHUNK's default effort.",
               "hidden": false,
               "kind": "option",
               "name": "default_effort",
@@ -1306,6 +1393,7 @@
               "type": "text"
             },
             {
+              "help": "Repin CHUNK's default harness preference. Repeatable and ORDERED \u2014 the first entry that resolves at session mint wins.",
               "hidden": false,
               "kind": "option",
               "name": "default_harnesses",
@@ -1317,6 +1405,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1328,6 +1417,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1357,6 +1447,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1368,6 +1459,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1397,6 +1489,7 @@
               "type": "text"
             },
             {
+              "help": "Who is stopping (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -1408,6 +1501,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1419,6 +1513,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1448,6 +1543,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1459,6 +1555,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1485,6 +1582,7 @@
           "help": "List open decisions awaiting a human (gate surfacing).",
           "params": [
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1496,6 +1594,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1536,6 +1635,7 @@
               "type": "text"
             },
             {
+              "help": "Who is resolving (recorded on the resolution).",
               "hidden": false,
               "kind": "option",
               "name": "resolved_by",
@@ -1547,6 +1647,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1558,6 +1659,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1595,6 +1697,7 @@
               "type": "text"
             },
             {
+              "help": "How it was confirmed the finding no longer reproduces.",
               "hidden": false,
               "kind": "option",
               "name": "note",
@@ -1606,6 +1709,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1617,6 +1721,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1635,6 +1740,7 @@
           "help": "List findings under SCOPE \u2014 live only, unless --include-gone, which also\nsurfaces every exited finding, not just a merely `gone` one. --routine is required\nunless --source review, since a review-sourced finding carries no routine.",
           "params": [
             {
+              "help": "The routine whose findings to list. Required unless --source review.",
               "hidden": false,
               "kind": "option",
               "name": "routine",
@@ -1646,6 +1752,7 @@
               "type": "text"
             },
             {
+              "help": "The scope to filter to.",
               "hidden": false,
               "kind": "option",
               "name": "scope",
@@ -1657,6 +1764,7 @@
               "type": "text"
             },
             {
+              "help": "Narrow to routine- or review-sourced findings; absent reads both.",
               "hidden": false,
               "kind": "option",
               "name": "source",
@@ -1668,6 +1776,7 @@
               "type": "choice"
             },
             {
+              "help": "Also show every exited finding, not just a live one.",
               "hidden": false,
               "kind": "option",
               "name": "include_gone",
@@ -1679,6 +1788,7 @@
               "type": "boolean"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1690,6 +1800,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1719,6 +1830,7 @@
               "type": "text"
             },
             {
+              "help": "Why FINDING_IDS are not findings.",
               "hidden": false,
               "kind": "option",
               "name": "note",
@@ -1730,6 +1842,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1741,6 +1854,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1770,6 +1884,7 @@
               "type": "text"
             },
             {
+              "help": "Why FINDING_IDS are reopened.",
               "hidden": false,
               "kind": "option",
               "name": "note",
@@ -1781,6 +1896,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1792,6 +1908,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1821,6 +1938,7 @@
               "type": "text"
             },
             {
+              "help": "Why the finding is resolved \u2014 the work that answered it.",
               "hidden": false,
               "kind": "option",
               "name": "note",
@@ -1832,6 +1950,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1843,6 +1962,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1872,6 +1992,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1883,6 +2004,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1912,6 +2034,7 @@
               "type": "text"
             },
             {
+              "help": "The absorbing finding's id.",
               "hidden": false,
               "kind": "option",
               "name": "superseded_by",
@@ -1923,6 +2046,7 @@
               "type": "text"
             },
             {
+              "help": "How FINDING_IDS fold into --by.",
               "hidden": false,
               "kind": "option",
               "name": "note",
@@ -1934,6 +2058,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1945,6 +2070,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -1974,6 +2100,7 @@
               "type": "text"
             },
             {
+              "help": "Why FINDING_IDS won't be fixed.",
               "hidden": false,
               "kind": "option",
               "name": "note",
@@ -1985,6 +2112,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -1996,6 +2124,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2019,7 +2148,7 @@
     "garden-proposal": {
       "commands": {
         "accept": {
-          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, wrapping the proposal's own body unless\n--body-file supplies another in the \"Related findings\" template; --no-work-item\ndeclines to mint, and the decline is recorded rather than left to read as an absent\nlink.",
+          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, from the proposal's own body unless --body-file\nsupplies another; the body is wrapped in the \"Related findings\" template when the\nproposal cites findings, and minted bare otherwise. --no-work-item mints nothing and\nrecords the decline.",
           "params": [
             {
               "hidden": false,
@@ -2033,6 +2162,7 @@
               "type": "text"
             },
             {
+              "help": "Why the proposal is accepted.",
               "hidden": false,
               "kind": "option",
               "name": "reason",
@@ -2044,6 +2174,7 @@
               "type": "text"
             },
             {
+              "help": "Replace the proposal's own body, from a path or '-' for stdin, as the minted item's body (default: the proposal's own body).",
               "hidden": false,
               "kind": "option",
               "name": "body_file",
@@ -2055,6 +2186,7 @@
               "type": "text"
             },
             {
+              "help": "Decline to mint a linked work item.",
               "hidden": false,
               "kind": "option",
               "name": "no_work_item",
@@ -2066,6 +2198,7 @@
               "type": "boolean"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2077,6 +2210,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2117,6 +2251,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2128,6 +2263,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2146,6 +2282,7 @@
           "help": "Author a fresh operator garden proposal, naming zero or more findings.\n\n--body-file may be '-' to read the body from stdin. Carries no scope: a linked\nfinding keeps its own.",
           "params": [
             {
+              "help": "The proposal's title.",
               "hidden": false,
               "kind": "option",
               "name": "title",
@@ -2157,6 +2294,7 @@
               "type": "text"
             },
             {
+              "help": "The deployment's own taxonomy class.",
               "hidden": false,
               "kind": "option",
               "name": "class_",
@@ -2168,6 +2306,7 @@
               "type": "text"
             },
             {
+              "help": "Path to the proposal's body, or '-' for stdin.",
               "hidden": false,
               "kind": "option",
               "name": "body_file",
@@ -2179,6 +2318,7 @@
               "type": "text"
             },
             {
+              "help": "An existing routine to name (optional).",
               "hidden": false,
               "kind": "option",
               "name": "routine",
@@ -2190,6 +2330,7 @@
               "type": "text"
             },
             {
+              "help": "A finding id to link (repeatable).",
               "hidden": false,
               "kind": "option",
               "name": "findings",
@@ -2201,6 +2342,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2212,6 +2354,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2252,6 +2395,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2263,6 +2407,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2292,6 +2437,7 @@
               "type": "text"
             },
             {
+              "help": "Replace the title.",
               "hidden": false,
               "kind": "option",
               "name": "title",
@@ -2303,6 +2449,7 @@
               "type": "text"
             },
             {
+              "help": "Replace the class.",
               "hidden": false,
               "kind": "option",
               "name": "class_",
@@ -2314,6 +2461,7 @@
               "type": "text"
             },
             {
+              "help": "Replace the body from a path, or '-' for stdin.",
               "hidden": false,
               "kind": "option",
               "name": "body_file",
@@ -2325,6 +2473,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2336,6 +2485,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2354,6 +2504,7 @@
           "help": "List every garden proposal, newest first.",
           "params": [
             {
+              "help": "Narrow to one origin.",
               "hidden": false,
               "kind": "option",
               "name": "origin",
@@ -2365,6 +2516,7 @@
               "type": "choice"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2376,6 +2528,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2405,6 +2558,7 @@
               "type": "text"
             },
             {
+              "help": "Why the proposal is passed.",
               "hidden": false,
               "kind": "option",
               "name": "reason",
@@ -2416,6 +2570,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2427,6 +2582,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2456,6 +2612,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2467,6 +2624,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2482,10 +2640,10 @@
           "short_help": "One garden proposal's whole record."
         }
       },
-      "help": "List, inspect, pass, or accept a garden proposal.",
+      "help": "Create, list, show, edit, attach, detach, pass, or accept a garden proposal.",
       "params": [],
       "path": "hub garden-proposal",
-      "short_help": "List, inspect, pass, or accept a garden proposal."
+      "short_help": "Create, list, show, edit, attach, detach, pass, or accept a garden proposal."
     },
     "graph": {
       "commands": {
@@ -2504,6 +2662,7 @@
               "type": "text"
             },
             {
+              "help": "Who is re-enabling (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -2515,6 +2674,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2526,6 +2686,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2566,6 +2727,7 @@
               "type": "choice"
             },
             {
+              "help": "Who is setting the policy (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -2577,6 +2739,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2588,6 +2751,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2606,6 +2770,7 @@
           "help": "List every minted graph, newest first \u2014 name, graph_id, effective, retired.",
           "params": [
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2617,6 +2782,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2646,6 +2812,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2657,6 +2824,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2686,6 +2854,7 @@
               "type": "text"
             },
             {
+              "help": "Who is retiring (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -2697,6 +2866,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2708,6 +2878,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2737,6 +2908,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2748,6 +2920,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2763,9 +2936,10 @@
           "short_help": "One graph's full reified definition \u2014 session pools, nodes, and edges."
         },
         "sync": {
-          "help": "Reconcile the hub's packaged graphs into its store, minting only what changed.\n\nThe deploy verb \u2014 graphs live in the store, not on disk, so run it at\nthe end of every deploy; it is idempotent. The **hub's own** packaged set is what is\nreconciled, not this CLI's. Exits non-zero only if a packaged graph failed to load.",
+          "help": "Reconcile the hub's packaged graphs into its store, minting only what changed.\n\nIdempotent. The **hub's own** packaged set is what is reconciled, not this CLI's.\nExits non-zero only if a packaged graph failed to load. When to run it:\nhttps://github.com/paul-gross/blizzard/blob/master/docs/deployment/install.md#graph-sync-after-a-deploy",
           "params": [
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2777,6 +2951,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2812,6 +2987,7 @@
           "type": "text"
         },
         {
+          "help": "Hub runtime directory (overrides $BZ_HUB_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "dir_option",
@@ -2823,6 +2999,7 @@
           "type": "text"
         },
         {
+          "help": "Bind host (overrides config).",
           "hidden": false,
           "kind": "option",
           "name": "host_",
@@ -2834,6 +3011,7 @@
           "type": "text"
         },
         {
+          "help": "Bind port (overrides config).",
           "hidden": false,
           "kind": "option",
           "name": "port",
@@ -2845,6 +3023,7 @@
           "type": "integer"
         },
         {
+          "help": "Proceed even if the config's db_url names a database outside this directory.",
           "hidden": false,
           "kind": "option",
           "name": "allow_external_db",
@@ -2874,6 +3053,7 @@
           "type": "text"
         },
         {
+          "help": "Proceed even if the config's db_url names a database outside this directory.",
           "hidden": false,
           "kind": "option",
           "name": "allow_external_db",
@@ -2894,6 +3074,7 @@
           "help": "Author a fresh item at SOURCE, minting its resting chunk.\n\n--body-file may be '-' to read the body from stdin, so an agent can pipe a composed\nspec without shell-quoting a multi-line markdown document.",
           "params": [
             {
+              "help": "The item's title.",
               "hidden": false,
               "kind": "option",
               "name": "title",
@@ -2905,6 +3086,7 @@
               "type": "text"
             },
             {
+              "help": "Path to the item's body, or '-' for stdin.",
               "hidden": false,
               "kind": "option",
               "name": "body_file",
@@ -2916,6 +3098,7 @@
               "type": "text"
             },
             {
+              "help": "Stated priority (default normal).",
               "hidden": false,
               "kind": "option",
               "name": "priority",
@@ -2927,6 +3110,7 @@
               "type": "choice"
             },
             {
+              "help": "Work source to author at (default 'hub', the one source with an editor).",
               "hidden": false,
               "kind": "option",
               "name": "source",
@@ -2938,6 +3122,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -2949,6 +3134,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -2978,6 +3164,7 @@
               "type": "token"
             },
             {
+              "help": "Skip the confirmation prompt.",
               "hidden": false,
               "kind": "option",
               "name": "yes",
@@ -2989,6 +3176,7 @@
               "type": "boolean"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3000,6 +3188,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3029,6 +3218,7 @@
               "type": "token"
             },
             {
+              "help": "Replace the title.",
               "hidden": false,
               "kind": "option",
               "name": "title",
@@ -3040,6 +3230,7 @@
               "type": "text"
             },
             {
+              "help": "Replace the body from a path, or '-' for stdin.",
               "hidden": false,
               "kind": "option",
               "name": "body_file",
@@ -3051,6 +3242,7 @@
               "type": "text"
             },
             {
+              "help": "Replace the priority.",
               "hidden": false,
               "kind": "option",
               "name": "priority",
@@ -3062,6 +3254,7 @@
               "type": "choice"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3073,6 +3266,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3097,6 +3291,7 @@
       "help": "Log into the hub \u2014 opens the browser to authorize and stores the\nresulting session token locally. ``--paste`` uses the paste-code fallback for a\nshell with no reachable loopback listener; ``--no-browser`` still runs the loopback\nflow, printing the URL.",
       "params": [
         {
+          "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
           "hidden": false,
           "kind": "option",
           "name": "hub_url",
@@ -3108,6 +3303,7 @@
           "type": "text"
         },
         {
+          "help": "Use the paste-code flow (no local loopback listener) instead of opening a browser.",
           "hidden": false,
           "kind": "option",
           "name": "paste",
@@ -3119,6 +3315,7 @@
           "type": "boolean"
         },
         {
+          "help": "Print the login URL instead of opening it.",
           "hidden": false,
           "kind": "option",
           "name": "no_browser",
@@ -3137,6 +3334,7 @@
       "help": "Log out of the hub \u2014 deletes the locally stored session token and\nrevokes it at the hub, so it stops resolving even if it leaked. A no-op (locally)\nif never logged in; the revoke call is best-effort (a hub already unreachable, or\nan already-expired session, does not block the local cleanup).",
       "params": [
         {
+          "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
           "hidden": false,
           "kind": "option",
           "name": "hub_url",
@@ -3155,6 +3353,7 @@
       "help": "Apply pending store migrations, or reverse with --down <rev>.",
       "params": [
         {
+          "help": "Hub runtime directory (overrides $BZ_HUB_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -3166,6 +3365,7 @@
           "type": "text"
         },
         {
+          "help": "Reverse migrations down to this revision (e.g. base).",
           "hidden": false,
           "kind": "option",
           "name": "down",
@@ -3177,6 +3377,7 @@
           "type": "text"
         },
         {
+          "help": "Proceed even if the config's db_url names a database outside this directory.",
           "hidden": false,
           "kind": "option",
           "name": "allow_external_db",
@@ -3219,6 +3420,7 @@
               "type": "text"
             },
             {
+              "help": "Who is answering (recorded on the row).",
               "hidden": false,
               "kind": "option",
               "name": "answered_by",
@@ -3230,6 +3432,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3241,6 +3444,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3259,6 +3463,7 @@
           "help": "Every open (unanswered) question across the fleet.",
           "params": [
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3270,6 +3475,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3318,6 +3524,7 @@
               "type": "integer"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3329,6 +3536,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3358,6 +3566,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3369,6 +3578,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3387,6 +3597,7 @@
           "help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained\nto its whole order.",
           "params": [
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3398,6 +3609,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3451,6 +3663,7 @@
       "help": "Rotate the hub's IdP signing keypair \u2014 a fresh key signs immediately; the\nold key still verifies already-issued tokens, and no restart is needed. A no-op error under\n``auth.mode = \"none\"`` (no keypair exists). Human-plane, gated on ``user:manage`` \u2014 under\n``auth.mode = \"oauth\"`` this requires a hub session (``blizzard hub login``).",
       "params": [
         {
+          "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
           "hidden": false,
           "kind": "option",
           "name": "hub_url",
@@ -3504,6 +3717,7 @@
               "type": "text"
             },
             {
+              "help": "The routine's default model preference. Repeatable and ORDERED \u2014 the first entry that resolves at session mint wins.",
               "hidden": false,
               "kind": "option",
               "name": "default_model",
@@ -3515,6 +3729,7 @@
               "type": "text"
             },
             {
+              "help": "The routine's default effort.",
               "hidden": false,
               "kind": "option",
               "name": "default_effort",
@@ -3526,6 +3741,7 @@
               "type": "text"
             },
             {
+              "help": "The routine's default harness preference. Repeatable and ORDERED \u2014 the first entry that resolves at session mint wins.",
               "hidden": false,
               "kind": "option",
               "name": "default_harnesses",
@@ -3537,6 +3753,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3548,6 +3765,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3577,6 +3795,7 @@
               "type": "text"
             },
             {
+              "help": "The routine's graph name.",
               "hidden": false,
               "kind": "option",
               "name": "graph_name",
@@ -3588,6 +3807,7 @@
               "type": "text"
             },
             {
+              "help": "The routine's default scope slug.",
               "hidden": false,
               "kind": "option",
               "name": "default_scope_slug",
@@ -3599,6 +3819,7 @@
               "type": "text"
             },
             {
+              "help": "The routine's default model preference. Repeatable and ORDERED \u2014 the first entry that resolves at session mint wins.",
               "hidden": false,
               "kind": "option",
               "name": "default_model",
@@ -3610,6 +3831,7 @@
               "type": "text"
             },
             {
+              "help": "The routine's default effort.",
               "hidden": false,
               "kind": "option",
               "name": "default_effort",
@@ -3621,6 +3843,7 @@
               "type": "text"
             },
             {
+              "help": "The routine's default harness preference. Repeatable and ORDERED \u2014 the first entry that resolves at session mint wins.",
               "hidden": false,
               "kind": "option",
               "name": "default_harnesses",
@@ -3632,6 +3855,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3643,6 +3867,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3672,6 +3897,7 @@
               "type": "text"
             },
             {
+              "help": "Who is re-enabling (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -3683,6 +3909,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3694,6 +3921,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3712,6 +3940,7 @@
           "help": "List every routine, newest first \u2014 routine_id, name, graph, default scope.\n\nExcludes a retired routine unless --include-retired.",
           "params": [
             {
+              "help": "Include retired routines.",
               "hidden": false,
               "kind": "option",
               "name": "include_retired",
@@ -3723,6 +3952,7 @@
               "type": "boolean"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3734,6 +3964,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3763,6 +3994,7 @@
               "type": "text"
             },
             {
+              "help": "Only records at/after this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -3774,6 +4006,7 @@
               "type": "datetime"
             },
             {
+              "help": "Only records before this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -3785,6 +4018,7 @@
               "type": "datetime"
             },
             {
+              "help": "Narrow to one origin.",
               "hidden": false,
               "kind": "option",
               "name": "origin",
@@ -3796,6 +4030,7 @@
               "type": "choice"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3807,6 +4042,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3836,6 +4072,7 @@
               "type": "text"
             },
             {
+              "help": "Who is retiring (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -3847,6 +4084,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3858,6 +4096,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3887,6 +4126,7 @@
               "type": "text"
             },
             {
+              "help": "Override the routine's default scope slug \u2014 must already be linked into the routine's own set.",
               "hidden": false,
               "kind": "option",
               "name": "scope_slug",
@@ -3898,6 +4138,7 @@
               "type": "text"
             },
             {
+              "help": "delta downgrades to full when the routine/scope pair has recorded no baseline.",
               "hidden": false,
               "kind": "option",
               "name": "mode",
@@ -3909,6 +4150,7 @@
               "type": "choice"
             },
             {
+              "help": "A note appended to the run's charge as a \"This run\" section.",
               "hidden": false,
               "kind": "option",
               "name": "note",
@@ -3920,6 +4162,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -3931,6 +4174,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -3973,6 +4217,7 @@
                   "type": "text"
                 },
                 {
+                  "help": "Print the raw response body as JSON.",
                   "hidden": false,
                   "kind": "option",
                   "name": "as_json",
@@ -3984,6 +4229,7 @@
                   "type": "boolean"
                 },
                 {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
                   "hidden": false,
                   "kind": "option",
                   "name": "hub_url",
@@ -4024,6 +4270,7 @@
                   "type": "text"
                 },
                 {
+                  "help": "Print the raw response body as JSON.",
                   "hidden": false,
                   "kind": "option",
                   "name": "as_json",
@@ -4035,6 +4282,7 @@
                   "type": "boolean"
                 },
                 {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
                   "hidden": false,
                   "kind": "option",
                   "name": "hub_url",
@@ -4070,6 +4318,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4081,6 +4330,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4110,6 +4360,7 @@
               "type": "text"
             },
             {
+              "help": "Only records at/after this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -4121,6 +4372,7 @@
               "type": "datetime"
             },
             {
+              "help": "Only records before this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -4132,6 +4384,7 @@
               "type": "datetime"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4143,6 +4396,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4172,6 +4426,7 @@
               "type": "text"
             },
             {
+              "help": "Only records at/after this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -4183,6 +4438,7 @@
               "type": "datetime"
             },
             {
+              "help": "Only records before this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -4194,6 +4450,7 @@
               "type": "datetime"
             },
             {
+              "help": "The recent/older cut, in local time \u2014 a created finding's own introduced instant, not this window's.",
               "hidden": false,
               "kind": "option",
               "name": "introduced_boundary",
@@ -4205,6 +4462,7 @@
               "type": "datetime"
             },
             {
+              "help": "Each period's width, in days (default 7).",
               "hidden": false,
               "kind": "option",
               "name": "period_days",
@@ -4216,6 +4474,7 @@
               "type": "integer"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4227,6 +4486,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4253,6 +4513,7 @@
           "help": "List every run minted in --since/--until, newest first \u2014 both default to the\nlast 24 hours ending now.",
           "params": [
             {
+              "help": "Only records at/after this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "since",
@@ -4264,6 +4525,7 @@
               "type": "datetime"
             },
             {
+              "help": "Only records before this instant, read in the caller's own local time.",
               "hidden": false,
               "kind": "option",
               "name": "until",
@@ -4275,6 +4537,7 @@
               "type": "datetime"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4286,6 +4549,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4315,6 +4579,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4326,6 +4591,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4363,6 +4629,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4374,6 +4641,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4392,6 +4660,7 @@
           "help": "The fleet registry \u2014 every runner with derived liveness + paused state.\n\nExcludes a retired runner unless --all.",
           "params": [
             {
+              "help": "Include retired runners, marked.",
               "hidden": false,
               "kind": "option",
               "name": "include_retired",
@@ -4403,6 +4672,7 @@
               "type": "boolean"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4414,6 +4684,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4443,6 +4714,7 @@
               "type": "text"
             },
             {
+              "help": "Who is pausing (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -4454,6 +4726,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4465,6 +4738,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4494,6 +4768,7 @@
               "type": "text"
             },
             {
+              "help": "Who is reinstating (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -4505,6 +4780,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4516,6 +4792,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4545,6 +4822,7 @@
               "type": "text"
             },
             {
+              "help": "Who is resuming (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -4556,6 +4834,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4567,6 +4846,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4596,6 +4876,7 @@
               "type": "text"
             },
             {
+              "help": "Release every chunk the runner still holds.",
               "hidden": false,
               "kind": "option",
               "name": "force",
@@ -4607,6 +4888,7 @@
               "type": "boolean"
             },
             {
+              "help": "Who is retiring (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -4618,6 +4900,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4629,6 +4912,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4658,6 +4942,7 @@
               "type": "text"
             },
             {
+              "help": "Who is revoking (recorded on the revocation).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -4669,6 +4954,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4680,6 +4966,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4709,6 +4996,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4720,6 +5008,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4757,6 +5046,7 @@
               "type": "text"
             },
             {
+              "help": "The scope's description.",
               "hidden": false,
               "kind": "option",
               "name": "description",
@@ -4768,6 +5058,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4779,6 +5070,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4808,6 +5100,7 @@
               "type": "text"
             },
             {
+              "help": "The scope's new description.",
               "hidden": false,
               "kind": "option",
               "name": "description",
@@ -4819,6 +5112,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4830,6 +5124,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4859,6 +5154,7 @@
               "type": "text"
             },
             {
+              "help": "Who is re-enabling (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -4870,6 +5166,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4881,6 +5178,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4899,6 +5197,7 @@
           "help": "List every scope, newest first \u2014 slug, retired, description.",
           "params": [
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4910,6 +5209,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4939,6 +5239,7 @@
               "type": "text"
             },
             {
+              "help": "Who is retiring (recorded on the fact).",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -4950,6 +5251,7 @@
               "type": "text"
             },
             {
+              "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
               "name": "as_json",
@@ -4961,6 +5263,7 @@
               "type": "boolean"
             },
             {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
               "hidden": false,
               "kind": "option",
               "name": "hub_url",
@@ -4985,6 +5288,7 @@
       "help": "The fleet view: every chunk with its derived status, the runners, and open questions.",
       "params": [
         {
+          "help": "Print the raw response body as JSON.",
           "hidden": false,
           "kind": "option",
           "name": "as_json",
@@ -4996,6 +5300,7 @@
           "type": "boolean"
         },
         {
+          "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
           "hidden": false,
           "kind": "option",
           "name": "hub_url",

@@ -68,9 +68,10 @@ child environment, the same shape the other `blizzard runner` reads on this page
 ## Garden proposals
 
 `blizzard hub garden-proposal list [--origin routine-run|operator]` and `show <proposal_id>` read every proposal, or one
-by id, each naming its `origin` — a **routine's run** or an **operator** — the findings it answers (the hub enforces no
-minimum, empty or not), and the closure it carries once one exists. An operator-authored row also carries `created_by`;
-`list --origin` narrows to one origin.
+by id, each naming its `origin` — a **routine's run** or an **operator** — the findings it answers (whether it must name any is
+[`blizzard-context/domain/findings-and-proposals.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md#a-proposals-findings-are-optional)'s
+to say), and the closure it carries once one exists. Every row renders `origin=`; `routine=` appears only when the
+proposal names a routine, and `created_by=` only on an operator-authored row. `list --origin` narrows to one origin.
 
 A proposal can be authored directly, not only raised by a routine's own delivery: `blizzard hub garden-proposal create
 --title <text> --class <text> --body-file <path>|- [--routine <name>] [--finding <id>...]` mints an operator-authored
@@ -86,11 +87,11 @@ proposal, and `detach` one that is not linked — a finding may otherwise belong
 with a reason required.
 `blizzard hub garden-proposal accept <proposal_id> [--reason <text>]
 [--body-file <path>|-] [--no-work-item]` records
-agreement: by default it mints a linked hub work item, resting behind the ordinary promote gate, whose body wraps the
-proposal's own — or `--body-file`'s override (`-` for stdin) — with a "Related findings" section listing every finding
-the proposal answers (id, class, locus, and state) and naming the worker's own `blizzard runner finding list`/
-`finding get <finding_id>` reads, when it answers any at all — left bare otherwise; `--no-work-item` declines to mint,
-and the decline is recorded rather than left to read as an absent link. Acceptance itself never promotes the minted
+agreement. By default it mints a linked hub work item, resting behind the ordinary promote gate, from the proposal's
+own body — or `--body-file`'s override (`-` for stdin). The body carries a "Related findings" section listing every
+finding the proposal answers (id, class, locus, and state) and naming the worker's own `blizzard runner finding list`/
+`finding get <finding_id>` reads when the proposal answers any, and is minted bare when it answers none. `--no-work-item`
+mints nothing and records the decline. Acceptance itself never promotes the minted
 item and never changes a finding's state — but
 delivering the item it minted does: once that item closes, every finding the proposal named that is still live is
 closed to `delivered`, attributed to the proposal, requiring no verb of its own — unlike a hand `blizzard hub finding

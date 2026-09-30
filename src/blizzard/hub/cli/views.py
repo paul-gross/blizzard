@@ -111,3 +111,21 @@ class Listing:
             return
         for row in self.rows:
             yield self.line(row)
+
+
+@dataclass(frozen=True)
+class ProposalOrigin:
+    """A garden proposal's origin tokens: `origin=` always, `routine=` when named,
+    `created_by=` for an operator row that carries one (a counts row does not)."""
+
+    row: dict[str, Any]
+
+    @property
+    def rendered(self) -> str:  # ast-grep-ignore: bzh:property-delegates
+        origin = self.row["origin"]
+        tokens = [f"origin={origin}"]
+        if self.row.get("routine_name") is not None:
+            tokens.append(f"routine={self.row['routine_name']}")
+        if origin == "operator" and "created_by" in self.row:
+            tokens.append(f"created_by={self.row['created_by']}")
+        return "  ".join(tokens)

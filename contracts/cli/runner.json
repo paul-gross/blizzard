@@ -8,6 +8,7 @@
               "help": "Worker: occurrence counts by agent type over the window, as JSON.",
               "params": [
                 {
+                  "help": "Only records at/after this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "since",
@@ -19,6 +20,7 @@
                   "type": "datetime"
                 },
                 {
+                  "help": "Only records before this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "until",
@@ -37,6 +39,7 @@
               "help": "Worker: file-read occurrence counts over the window, as JSON.",
               "params": [
                 {
+                  "help": "Only records at/after this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "since",
@@ -48,6 +51,7 @@
                   "type": "datetime"
                 },
                 {
+                  "help": "Only records before this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "until",
@@ -66,6 +70,7 @@
               "help": "Worker: occurrence counts by node over the window, as JSON.",
               "params": [
                 {
+                  "help": "Only records at/after this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "since",
@@ -77,6 +82,7 @@
                   "type": "datetime"
                 },
                 {
+                  "help": "Only records before this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "until",
@@ -95,6 +101,7 @@
               "help": "Worker: skill-invocation occurrence counts over the window, as JSON.",
               "params": [
                 {
+                  "help": "Only records at/after this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "since",
@@ -106,6 +113,7 @@
                   "type": "datetime"
                 },
                 {
+                  "help": "Only records before this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "until",
@@ -132,6 +140,7 @@
               "help": "Worker: usage/cost rollups by graph over the window, as JSON.",
               "params": [
                 {
+                  "help": "Only records at/after this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "since",
@@ -143,6 +152,7 @@
                   "type": "datetime"
                 },
                 {
+                  "help": "Only records before this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "until",
@@ -161,6 +171,7 @@
               "help": "Worker: usage/cost rollups by node over the window, as JSON.",
               "params": [
                 {
+                  "help": "Only records at/after this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "since",
@@ -172,6 +183,7 @@
                   "type": "datetime"
                 },
                 {
+                  "help": "Only records before this instant, read in the caller's own local time.",
                   "hidden": false,
                   "kind": "option",
                   "name": "until",
@@ -193,17 +205,18 @@
           "short_help": "Worker: read one of the spend summaries."
         }
       },
-      "help": "Worker: read fleet-wide usage-counts and spend summaries over a window \u2014 access\nis gated server-side on the worker's own lease naming a routine-run chunk, but the\nrows returned are fleet-wide rollups, not scoped to that run.",
+      "help": "Worker: read fleet-wide usage-counts and spend summaries over a window. Only a\nroutine-run chunk's worker may read; the rows returned are fleet-wide rollups, not\nscoped to that run.",
       "params": [],
       "path": "runner analytics",
-      "short_help": "Worker: read fleet-wide usage-counts and spend summaries over a window \u2014 access is gated server-side on the worker's own lease naming a routine-run chunk, but the rows returned are fleet-wide rollups, not scoped to that run."
+      "short_help": "Worker: read fleet-wide usage-counts and spend summaries over a window."
     },
     "artifact": {
       "commands": {
         "commit": {
-          "help": "Worker: durably declare a git-commit artifact for REPO. Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only. Deliberately no\n``--forge``: the origin comes from the environment's repo manifest (pinned by\ntests/test_runner_artifact_commit_cli.py::test_commit_verb_has_no_forge_flag). Echoes a\nconfirmation naming REPO, BRANCH, and the sha on success \u2014 a silent exit 0 was\nindistinguishable from a no-op.",
+          "help": "Worker: durably declare a git-commit artifact for REPO. Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only. The origin\ncomes from the environment's repo manifest. Echoes a confirmation naming REPO, BRANCH,\nand the sha on success.",
           "params": [
             {
+              "help": "The leased environment the repo worktree lives in. Inferred while a chunk holds exactly one environment; required once it holds several.",
               "hidden": false,
               "kind": "option",
               "name": "environment_id",
@@ -215,6 +228,7 @@
               "type": "text"
             },
             {
+              "help": "The repo's name in the leased env's manifest (not an `owner/name` slug or URL) \u2014 the runner looks this up in the environment's repo manifest to find both the worktree and the origin to verify against. A name the manifest does not list is rejected outright, naming the repos that are.",
               "hidden": false,
               "kind": "option",
               "name": "repo",
@@ -226,6 +240,7 @@
               "type": "text"
             },
             {
+              "help": "The branch the commit was pushed to.",
               "hidden": false,
               "kind": "option",
               "name": "branch",
@@ -237,6 +252,7 @@
               "type": "text"
             },
             {
+              "help": "The FULL commit sha (`git rev-parse HEAD`), not an abbreviated form \u2014 verify compares it byte-exact against the forge's full sha.",
               "hidden": false,
               "kind": "option",
               "name": "commit_sha",
@@ -248,6 +264,7 @@
               "type": "text"
             },
             {
+              "help": "Always `node` \u2014 `graph` and `system` are read-only and refused.",
               "hidden": false,
               "kind": "option",
               "name": "scope",
@@ -266,6 +283,7 @@
           "help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node\nscope only. A submission *stages* the content, published into the envelope only on completion\n\u2014 read it back with ``artifact staged``. Empty stdin and any rejection exit\nnon-zero rather than silently losing the submission.",
           "params": [
             {
+              "help": "The `produces:` name this content is submitted for.",
               "hidden": false,
               "kind": "option",
               "name": "name",
@@ -277,6 +295,7 @@
               "type": "text"
             },
             {
+              "help": "Always `node` \u2014 `graph` and `system` are read-only and refused.",
               "hidden": false,
               "kind": "option",
               "name": "scope",
@@ -292,7 +311,7 @@
           "short_help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node scope only."
         },
         "get": {
-          "help": "Worker: read one artifact by NAME \u2014 a ``produces:`` name (node scope), a baked-in graph\ndeclaration (graph scope), or one of blizzard's own published documents (system scope);\nunknown is a ``404``, more than one candidate a ``409`` naming them. ``--content`` prints\nraw asset text, and errors on the ``git_commit`` kind, which carries none.\n\nServes the last *published* epoch only \u2014 a node-step's own just-submitted content is not\npublished until the node-step completes; a not-yet-published NAME 404s naming\n``artifact staged`` instead. Read it back before completion with that verb.\n\nNAME is passed literally: the CLI percent-encodes it itself, slashes\nincluded, so a slashed name (e.g. a ``merged/<owner>/<repo>`` delivery marker) is passed\nas-is, not pre-encoded.",
+          "help": "Worker: read one artifact by NAME \u2014 a ``produces:`` name (node scope), a baked-in graph\ndeclaration (graph scope), or one of blizzard's own published documents (system scope);\nunknown is a ``404``, more than one candidate a ``409`` naming them. ``--content`` prints\nraw asset text, and errors on the ``git_commit`` kind, which carries none.\n\nServes the last *published* epoch only \u2014 a node-step's own just-submitted content is not\npublished until the node-step completes; a not-yet-published NAME 404s naming\n``artifact staged`` instead. Read it back before completion with that verb.\n\nPass NAME literally, slashes included.",
           "params": [
             {
               "hidden": false,
@@ -306,6 +325,7 @@
               "type": "text"
             },
             {
+              "help": "The artifact's NAME, as an alternative to passing it positionally.",
               "hidden": false,
               "kind": "option",
               "name": "name_opt",
@@ -317,6 +337,7 @@
               "type": "text"
             },
             {
+              "help": "The producing node's name, to disambiguate a NAME more than one node emits. Neither a graph declaration nor a system artifact has a producing node, so this narrows to node scope on its own \u2014 pairing it with `--scope graph`/`--scope system` is a contradiction and is refused.",
               "hidden": false,
               "kind": "option",
               "name": "node",
@@ -328,6 +349,7 @@
               "type": "text"
             },
             {
+              "help": "Resolve NAME from one scope only \u2014 `node`, `graph`, or `system`. Omitted searches all three, and a NAME present in more than one is ambiguous the same as several producing nodes \u2014 unless `--node` settles it.",
               "hidden": false,
               "kind": "option",
               "name": "scope",
@@ -339,6 +361,7 @@
               "type": "choice"
             },
             {
+              "help": "Print the raw asset text to stdout instead of JSON (errors on a git-commit artifact).",
               "hidden": false,
               "kind": "option",
               "name": "content",
@@ -354,9 +377,10 @@
           "short_help": "Worker: read one artifact by NAME \u2014 a ``produces:`` name (node scope), a baked-in graph declaration (graph scope), or one of blizzard's own published documents (system scope); unknown is a ``404``, more than one candidate a ``409`` naming them."
         },
         "list": {
-          "help": "Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,\nplus the graph mint's own baked-in declarations and blizzard's published system-artifact\nset \u2014 ``--scope`` narrows to one. Content is elided by default, since inlining\nevery upstream asset's full text has overflowed tool output; ``--content`` restores it.\nAlso includes this node-step's own staged, not-yet-published submissions,\neach carrying ``\"staged\": true`` \u2014 everything published carries ``\"staged\": false``.",
+          "help": "Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,\nplus the graph mint's own baked-in declarations and blizzard's published system-artifact\nset \u2014 ``--scope`` narrows to one. Content is elided by default; ``--content`` includes it.\nAlso includes this node-step's own staged, not-yet-published submissions,\neach carrying ``\"staged\": true`` \u2014 everything published carries ``\"staged\": false``.",
           "params": [
             {
+              "help": "Include each artifact's full content instead of just its byte length.",
               "hidden": false,
               "kind": "option",
               "name": "content",
@@ -368,6 +392,7 @@
               "type": "boolean"
             },
             {
+              "help": "Filter to one scope \u2014 `node` (this node-step's own artifacts), `graph` (the graph mint's baked-in declarations), or `system` (blizzard's own published documents). Omitted reads all three.",
               "hidden": false,
               "kind": "option",
               "name": "scope",
@@ -386,6 +411,7 @@
           "help": "Worker: list this node-step's own staged (not-yet-published) submissions, node scope only.\nRead straight off the runner's own ``attachments`` record rather than the hub envelope,\nso a fresh ``artifact create`` shows up here immediately; ``--content`` gives the full\ntext.",
           "params": [
             {
+              "help": "Include each staged submission's full content instead of just its byte length.",
               "hidden": false,
               "kind": "option",
               "name": "content",
@@ -397,6 +423,7 @@
               "type": "boolean"
             },
             {
+              "help": "Always `node` \u2014 `graph` and `system` hold no staged submission and are refused.",
               "hidden": false,
               "kind": "option",
               "name": "scope",
@@ -432,6 +459,7 @@
           "type": "text"
         },
         {
+          "help": "Pipe-separated answer options.",
           "hidden": false,
           "kind": "option",
           "name": "options",
@@ -450,6 +478,7 @@
       "help": "Deprecated alias for ``blizzard runner artifact create``.\n\nKept working, hidden from ``--help``: it warns on stderr and delegates with identical behavior.",
       "params": [
         {
+          "help": "The `produces:` name this content is submitted for.",
           "hidden": false,
           "kind": "option",
           "name": "name",
@@ -495,6 +524,7 @@
               "type": "text"
             },
             {
+              "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
               "hidden": false,
               "kind": "option",
               "name": "directory",
@@ -559,6 +589,7 @@
           "help": "Worker: list this run's own routine's garden proposals as JSON, filtered by\nSTATE \u2014 closed ones carry their closure and pass reason.",
           "params": [
             {
+              "help": "Which of the routine's proposals to list.",
               "hidden": false,
               "kind": "option",
               "name": "state",
@@ -600,6 +631,7 @@
           "type": "text"
         },
         {
+          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "dir_option",
@@ -611,6 +643,7 @@
           "type": "text"
         },
         {
+          "help": "Bind host (overrides config).",
           "hidden": false,
           "kind": "option",
           "name": "host_",
@@ -622,6 +655,7 @@
           "type": "text"
         },
         {
+          "help": "Bind port (overrides config).",
           "hidden": false,
           "kind": "option",
           "name": "port",
@@ -658,6 +692,7 @@
       "help": "Apply pending store migrations, or reverse with --down <rev>.",
       "params": [
         {
+          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -669,6 +704,7 @@
           "type": "text"
         },
         {
+          "help": "Reverse migrations down to this revision (e.g. base).",
           "hidden": false,
           "kind": "option",
           "name": "down",
@@ -689,6 +725,7 @@
           "help": "Prove an admitted OpenCode version in a disposable git repository and retain sanitized evidence.",
           "params": [
             {
+              "help": "Explicit OpenCode executable to probe.",
               "hidden": false,
               "kind": "option",
               "name": "binary",
@@ -700,6 +737,7 @@
               "type": "file"
             },
             {
+              "help": "Explicit provider/model reference.",
               "hidden": false,
               "kind": "option",
               "name": "model",
@@ -711,6 +749,7 @@
               "type": "text"
             },
             {
+              "help": "Explicit OpenCode model variant.",
               "hidden": false,
               "kind": "option",
               "name": "variant",
@@ -722,6 +761,7 @@
               "type": "text"
             },
             {
+              "help": "Directory for sanitized proof evidence.",
               "hidden": false,
               "kind": "option",
               "name": "evidence_directory",
@@ -733,6 +773,7 @@
               "type": "directory"
             },
             {
+              "help": "Required explicit opt-in to provider-reaching probes.",
               "hidden": false,
               "kind": "option",
               "name": "live_provider",
@@ -758,6 +799,7 @@
       "help": "Declarative control: pause this runner \u2014 it starts no new workers. This runner's\n**own** brake, a pure client of its local API, so it works with the hub unreachable: a stalled\nworker is not killed, and an exhausted retry budget does not escalate, until it is cleared. No\nretry is consumed, and a live worker is left alone \u2014 this is not a drain. Distinct from the hub's\nbrake, and each is cleared where it was set.",
       "params": [
         {
+          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -769,6 +811,7 @@
           "type": "text"
         },
         {
+          "help": "Runner local API over TCP (overrides $BZ_RUNNER_URL).",
           "hidden": false,
           "kind": "option",
           "name": "runner_url",
@@ -780,6 +823,7 @@
           "type": "text"
         },
         {
+          "help": "Who is pausing (recorded on the fact).",
           "hidden": false,
           "kind": "option",
           "name": "by",
@@ -829,6 +873,7 @@
               "type": "text"
             },
             {
+              "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
               "hidden": false,
               "kind": "option",
               "name": "directory",
@@ -858,6 +903,7 @@
               "type": "text"
             },
             {
+              "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
               "hidden": false,
               "kind": "option",
               "name": "directory",
@@ -869,6 +915,7 @@
               "type": "text"
             },
             {
+              "help": "Overwrite an existing workspace-prompt.md in the runtime root.",
               "hidden": false,
               "kind": "option",
               "name": "force",
@@ -911,6 +958,7 @@
           "help": "Report which source the effective workspace prompt comes from, and how large it is.\n\nExits 1 when a source is configured but resolves to nothing \u2014 the shape a rollback to a\nwheel that does not read the configured knob produces.",
           "params": [
             {
+              "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
               "hidden": false,
               "kind": "option",
               "name": "directory",
@@ -946,6 +994,7 @@
           "type": "text"
         },
         {
+          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -957,6 +1006,7 @@
           "type": "text"
         },
         {
+          "help": "Runner local API over TCP (overrides $BZ_RUNNER_URL).",
           "hidden": false,
           "kind": "option",
           "name": "runner_url",
@@ -1000,6 +1050,7 @@
           "type": "text"
         },
         {
+          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -1011,6 +1062,7 @@
           "type": "text"
         },
         {
+          "help": "Runner local API over TCP (overrides $BZ_RUNNER_URL).",
           "hidden": false,
           "kind": "option",
           "name": "runner_url",
@@ -1035,6 +1087,7 @@
       "help": "Declarative control: clear this runner's own pause brake \u2014 it resumes spawning.\n\nThe counterpart to ``blizzard runner pause``, and local in the same way. It clears only\nthe local brake: a runner also paused at the hub stays paused until ``blizzard hub\nrunner resume <runner_id>`` clears that one too.",
       "params": [
         {
+          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -1046,6 +1099,7 @@
           "type": "text"
         },
         {
+          "help": "Runner local API over TCP (overrides $BZ_RUNNER_URL).",
           "hidden": false,
           "kind": "option",
           "name": "runner_url",
@@ -1057,6 +1111,7 @@
           "type": "text"
         },
         {
+          "help": "Who is starting it (recorded on the fact).",
           "hidden": false,
           "kind": "option",
           "name": "by",
@@ -1075,6 +1130,7 @@
       "help": "The machine-local view: capacities, held environments, open asks, escalations, open takeovers.\nEvery section is this runner's own local read, so the view renders fully with the\nhub unreachable; hub reachability is itself reported, not assumed.",
       "params": [
         {
+          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -1086,6 +1142,7 @@
           "type": "text"
         },
         {
+          "help": "Runner local API over TCP (overrides $BZ_RUNNER_URL).",
           "hidden": false,
           "kind": "option",
           "name": "runner_url",
@@ -1115,6 +1172,7 @@
           "type": "text"
         },
         {
+          "help": "Supersede a live worker attempt instead of refusing.",
           "hidden": false,
           "kind": "option",
           "name": "force",
@@ -1126,6 +1184,7 @@
           "type": "boolean"
         },
         {
+          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -1137,6 +1196,7 @@
           "type": "text"
         },
         {
+          "help": "Runner local API over TCP (overrides $BZ_RUNNER_URL).",
           "hidden": false,
           "kind": "option",
           "name": "runner_url",
@@ -1155,6 +1215,7 @@
       "help": "Run ONE synchronous reconciliation tick (REAP \u2192 PULL \u2192 FILL \u2192 ADVANCE).\n\nThe steppable-loop driver for tests and the e2e (``bzh:steppable-loop``): a single pass against the\nlive hub and workspace, then exit. Refuses on a store revision mismatch, like ``host``.",
       "params": [
         {
+          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
           "hidden": false,
           "kind": "option",
           "name": "directory",
@@ -1175,6 +1236,7 @@
           "help": "Import worker transcripts predating the outbound lane, best-effort.\n\nDriven from this runner's own lease records, never a sweep of the harness directory. Rerunnable:\nan already-imported session is skipped, and one left unfinished resumes. Writes the store\ndirectly, so run it as the runner's own user with its environment, and with the daemon stopped.",
           "params": [
             {
+              "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
               "hidden": false,
               "kind": "option",
               "name": "directory",
@@ -1186,6 +1248,7 @@
               "type": "text"
             },
             {
+              "help": "Report what would import; open, drain and ship nothing.",
               "hidden": false,
               "kind": "option",
               "name": "dry_run",
@@ -1197,6 +1260,7 @@
               "type": "boolean"
             },
             {
+              "help": "Import at most this many sessions; defer the rest.",
               "hidden": false,
               "kind": "option",
               "name": "limit",
@@ -1226,6 +1290,7 @@
               "type": "text"
             },
             {
+              "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
               "hidden": false,
               "kind": "option",
               "name": "directory",

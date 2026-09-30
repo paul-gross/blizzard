@@ -3725,7 +3725,7 @@
       },
       "GardenProposalAcceptRequest": {
         "additionalProperties": false,
-        "description": "`POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` replaces the proposal's own body as the prose the\nminted item's \"Related findings\" template wraps, when the proposal's own body should\nnot be used; ignored when `mint_work_item` is `False`.",
+        "description": "`POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` replaces the proposal's own body as the minted item's\nbody, wrapped in the \"Related findings\" template when the proposal cites findings and\nminted bare otherwise; ignored when `mint_work_item` is `False`.",
         "properties": {
           "body": {
             "anyOf": [
@@ -15941,7 +15941,7 @@
     },
     "/api/garden-proposals/{proposal_id}/accept": {
       "post": {
-        "description": "Accept the proposal at PROPOSAL_ID: mints a linked hub work item by default,\nwrapping `body` (or the proposal's own, when none is given) in the \"Related\nfindings\" template when the proposal names any finding, or left bare when it names\nnone, or records the decline when `mint_work_item` is false \u2014 never inferred from an\nabsent link. Promotes nothing and changes no finding's state. 404 unknown proposal,\n409 already closed or a raced ingest, 503 the packaged default graph retired.",
+        "description": "Accept the proposal at PROPOSAL_ID. When `mint_work_item` is true, mints a linked\nhub work item from `body` (or the proposal's own), wrapped in the \"Related findings\"\ntemplate when the proposal names findings and bare when it names none. When it is\nfalse, mints nothing and records the decline. Promotes nothing and changes no\nfinding's state. 404 unknown proposal, 409 already closed or a raced ingest, 503 the\npackaged default graph retired.",
         "operationId": "accept_garden_proposal_api_garden_proposals__proposal_id__accept_post",
         "parameters": [
           {

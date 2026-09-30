@@ -13,16 +13,14 @@ import click
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.inputs import read_body_file
-from blizzard.hub.cli.views import Listing
+from blizzard.hub.cli.views import Listing, ProposalOrigin
 
 
 class GardenProposalListing(Listing):
     empty = "no garden proposals"
 
     def line(self, row: Any) -> str:
-        origin = row["origin"]
-        who = f"created_by={row['created_by']}" if origin == "operator" else f"routine={row['routine_name']}"
-        return f"{row['proposal_id']}  class={row['class']}  origin={origin}  {who}  {row['title']}"
+        return f"{row['proposal_id']}  class={row['class']}  {ProposalOrigin(row).rendered}  {row['title']}"
 
 
 def _closure_lines(closure: dict[str, Any] | None) -> Iterator[str]:
@@ -45,10 +43,7 @@ class GardenProposalDetail:
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        origin = body["origin"]
-        yield f"{body['proposal_id']}  origin={origin}  routine={body['routine_name']}  class={body['class']}"
-        if origin == "operator":
-            yield f"  created_by={body['created_by']}"
+        yield f"{body['proposal_id']}  class={body['class']}  {ProposalOrigin(body).rendered}"
         yield f"  {body['title']}"
         yield f"  {body['body']}"
         if body["findings"]:
@@ -61,7 +56,7 @@ class GardenProposalDetail:
 
 @click.group("garden-proposal")
 def garden_proposal_group() -> None:
-    """List, inspect, pass, or accept a garden proposal."""
+    """Create, list, show, edit, attach, detach, pass, or accept a garden proposal."""
 
 
 @garden_proposal_group.command("list", cls=FleetCommand)
@@ -120,8 +115,8 @@ def garden_proposal_pass(cli: CliContext, proposal_id: str, reason: str) -> None
     "body_file",
     default=None,
     help=(
-        "Replace the proposal's own body, from a path or '-' for stdin, as the prose the minted "
-        "item's 'Related findings' template wraps (default: the proposal's own body)."
+        "Replace the proposal's own body, from a path or '-' for stdin, as the minted item's body "
+        "(default: the proposal's own body)."
     ),
 )
 @click.option("--no-work-item", "no_work_item", is_flag=True, default=False, help="Decline to mint a linked work item.")
@@ -130,10 +125,10 @@ def garden_proposal_accept(
 ) -> None:
     """Accept PROPOSAL_ID.
 
-    Mints a linked hub work item by default, wrapping the proposal's own body unless
-    --body-file supplies another in the "Related findings" template; --no-work-item
-    declines to mint, and the decline is recorded rather than left to read as an absent
-    link."""
+    Mints a linked hub work item by default, from the proposal's own body unless --body-file
+    supplies another; the body is wrapped in the "Related findings" template when the
+    proposal cites findings, and minted bare otherwise. --no-work-item mints nothing and
+    records the decline."""
     json_body: dict[str, object] = {"mint_work_item": not no_work_item}
     if reason is not None:
         json_body["reason"] = reason

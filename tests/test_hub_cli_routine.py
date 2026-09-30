@@ -1043,3 +1043,29 @@ def test_routine_proposal_counts_renders_empty_rows_distinctly(monkeypatch: pyte
 
     assert result.exit_code == 0, result.output
     assert "no proposals in this window" in result.output
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("origin", "routine_name", "expected"),
+    [
+        ("routine-run", "nightly", "origin=routine-run  routine=nightly"),
+        ("operator", "nightly", "origin=operator  routine=nightly"),
+        ("operator", None, "origin=operator  created="),
+    ],
+)
+def test_routine_proposal_counts_renders_the_origin_tokens_and_never_none(
+    monkeypatch: pytest.MonkeyPatch, origin: str, routine_name: str | None, expected: str
+) -> None:
+    row = {"origin": origin, "routine_name": routine_name, "class": "lint"}
+    body = {**_PROPOSAL_COUNTS_BODY, "rows": [{**_PROPOSAL_COUNTS_BODY["rows"][0], **row}]}
+    monkeypatch.setattr(httpx, "get", lambda url, *, params, timeout: _FakeResponse(200, body))
+    result = CliRunner().invoke(
+        hub_group,
+        ["routine", "proposal-counts", "--since", "2026-01-01T00:00:00", "--until", "2026-01-15T00:00:00"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert expected in result.output
+    assert "None" not in result.output
+    assert "created_by" not in result.output

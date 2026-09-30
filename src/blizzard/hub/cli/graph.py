@@ -120,9 +120,9 @@ def graph_mint(cli: CliContext, path: str) -> None:
 def graph_sync(cli: CliContext) -> None:
     """Reconcile the hub's packaged graphs into its store, minting only what changed.
 
-    The deploy verb — graphs live in the store, not on disk, so run it at
-    the end of every deploy; it is idempotent. The **hub's own** packaged set is what is
-    reconciled, not this CLI's. Exits non-zero only if a packaged graph failed to load."""
+    Idempotent. The **hub's own** packaged set is what is reconciled, not this CLI's.
+    Exits non-zero only if a packaged graph failed to load. When to run it:
+    https://github.com/paul-gross/blizzard/blob/master/docs/deployment/install.md#graph-sync-after-a-deploy"""
     resp = cli.post("/api/graphs/sync", "POST /graphs/sync", json_body={})
     body = resp.json()
     cli.show(body, GraphSyncListing(body.get("entries", [])))

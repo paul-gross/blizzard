@@ -14,7 +14,7 @@ import httpx
 from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import Listing
+from blizzard.hub.cli.views import Listing, ProposalOrigin
 
 _ROUTINE_MODEL_HELP = (
     "The routine's default model preference. Repeatable and ORDERED — the first entry "
@@ -407,7 +407,7 @@ def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime)
 
 @dataclass(frozen=True)
 class ProposalCountsDetail:
-    """`routine proposal-counts`'s own render — one line per routine/class
+    """`routine proposal-counts`'s own render — one line per class/origin
     pair, `created` echoed as the open/passed/accepted-with-item/accepted-without-item sum."""
 
     body: dict[str, Any]
@@ -423,7 +423,7 @@ class ProposalCountsDetail:
             return
         for row in rows:
             yield (
-                f"  {row['routine_name']}  {row['class']}  origin={row['origin']}  created={row['created']}  "
+                f"  {row['class']}  {ProposalOrigin(row).rendered}  created={row['created']}  "
                 f"open={row['open']}  passed={row['passed']}  accepted(item)={row['accepted_with_item']}  "
                 f"accepted(no item)={row['accepted_without_item']}"
             )

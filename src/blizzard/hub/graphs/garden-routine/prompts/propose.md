@@ -23,11 +23,12 @@ and if a proposal reaches for one, its body must name the tool, the rule, and wh
 
 ## Shape
 
-A `GardenProposalCandidate` is `ref`, `class`, `title`, `body`, and `findings`. `findings` is required and non-empty,
-and each entry names either an id already live on this routine — an `observed`/`gone` op in the delta carries one, or a
-neighbour scope's from `blizzard runner garden findings` that answers the same weed as this run's delta (not an
-invitation to draft for a neighbour's backlog) — or the `ref` an `add` op in this same delta carries, when it carries one: the hub mints the actual id only at delivery and
-resolves that ref against it, so citing your own run's addition needs no id you do not yet have. Read the full shape
+A `GardenProposalCandidate` is `ref`, `class`, `title`, `body`, and `findings`. `findings` may be empty on the wire, but
+this graph requires every proposal to cite at least one. Each entry names either an id already live on this routine — an
+`observed`/`gone` op in the delta carries one, or a neighbour scope's from `blizzard runner garden findings` that answers
+the same weed as this run's delta (not an invitation to draft for a neighbour's backlog) — or the `ref` an `add` op in
+this same delta carries: the hub resolves it to the minted id at delivery, so citing your own run's addition needs no id
+yet. Read the full shape
 live with `blizzard runner artifact get --scope system garden/proposal-format --content`; if that read fails or comes
 back empty, proceed on the restatement above. Publish the docket with `blizzard runner artifact create --name docket`
 (content on stdin) — even when it is empty, since an empty list is itself a statement. `class` is drawn from a closed

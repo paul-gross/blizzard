@@ -30,8 +30,8 @@ _SHORT_HELP_LIMIT = 10_000
 
 
 def _param_shape(param: click.Parameter) -> dict[str, Any]:
-    """One parameter's spelling, kind, type, and required/hidden flags."""
-    return {
+    """One parameter's spelling, kind, type, required/hidden flags, and option help."""
+    shape: dict[str, Any] = {
         "name": param.name,
         "kind": "argument" if isinstance(param, click.Argument) else "option",
         "opts": list(param.opts),
@@ -40,6 +40,9 @@ def _param_shape(param: click.Parameter) -> dict[str, Any]:
         "required": bool(param.required),
         "hidden": bool(getattr(param, "hidden", False)),
     }
+    if isinstance(param, click.Option):
+        shape["help"] = inspect.cleandoc(param.help) if param.help else ""
+    return shape
 
 
 def _node_shape(command: click.Command, path: str) -> dict[str, Any]:

@@ -15,7 +15,7 @@ mints one; `ref` names it only within its own submission, the same way a finding
   vocabulary of proposal classes and settles what any of them mean.
 - `title` — a short label for the response.
 - `body` — the case for it, in enough detail that a person can decide without re-reading the findings behind it.
-- `findings` — the findings this proposal answers. May be empty — the hub enforces no minimum, empty or not; whether a
+- `findings` — the findings this proposal answers. May be empty — the hub enforces no minimum; whether a
   submitting graph's own proposals must cite one is that graph's own propose prompt to decide, never the hub's. Each
   entry given is either a `fin_` id already live on this routine, or the
   submission-local `ref` an `add` op in a delta delivered by this same call carries — resolved against the id the hub

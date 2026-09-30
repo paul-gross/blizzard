@@ -1,5 +1,6 @@
 """Garden-proposal domain model —
-`blizzard-context:/domain/findings-and-proposals.md` owns what a proposal is and
+`blizzard-context:/domain/findings-and-proposals.md` §A proposal's origin: a routine's
+run, or an operator owns what a proposal is, and §A proposal's findings are optional
 whether it needs a finding. Named `garden_proposals`/`GardenProposal` throughout —
 never the bare `proposal`/`Proposal` a work-item proposal already claims."""
 

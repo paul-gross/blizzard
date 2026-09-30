@@ -451,8 +451,9 @@ Index("ix_finding_sets_routine_scope", finding_sets.c.routine_name, finding_sets
 
 # --- Garden proposals ---------------------------------------------
 # A proposed response — never `proposals`, so neither this nor `work_item_proposals`
-# inherits an unqualified name a call site could confuse. What a proposal is, and
-# whether it needs a finding, is `blizzard-context:/domain/findings-and-proposals.md`'s own.
+# inherits an unqualified name a call site could confuse. `blizzard-context:/domain/findings-and-proposals.md`
+# §A proposal's origin: a routine's run, or an operator owns what a proposal is;
+# §A proposal's findings are optional owns whether it needs a finding.
 
 garden_proposals = Table(
     "garden_proposals",

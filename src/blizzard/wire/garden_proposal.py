@@ -16,7 +16,7 @@ class GardenProposalCandidate(BaseModel):
     """A run's proposed response — no id, minted at delivery. `ref` is stable only
     within its own submission. Whether a submission must name any `findings` at all
     is the submitting graph's own decision, never this wire shape's (see
-    [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md))."""
+    [blizzard-context/domain/findings-and-proposals.md](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md#a-proposals-findings-are-optional))."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -79,9 +79,9 @@ class GardenProposalPassRequest(BaseModel):
 class GardenProposalAcceptRequest(BaseModel):
     """`POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`
     defaults to `True`: minting a linked hub work item is the default, and declining it
-    is the deliberate act. `body` replaces the proposal's own body as the prose the
-    minted item's "Related findings" template wraps, when the proposal's own body should
-    not be used; ignored when `mint_work_item` is `False`."""
+    is the deliberate act. `body` replaces the proposal's own body as the minted item's
+    body, wrapped in the "Related findings" template when the proposal cites findings and
+    minted bare otherwise; ignored when `mint_work_item` is `False`."""
 
     model_config = ConfigDict(extra="forbid")
 
