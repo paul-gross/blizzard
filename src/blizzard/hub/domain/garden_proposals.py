@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, NoReturn, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import GARDEN_PROPOSAL_PREFIX, Id
@@ -18,7 +18,7 @@ from blizzard.hub.domain.findings import Finding
 
 if TYPE_CHECKING:
     # Deferred to break the cycle: `garden_proposal_closure.py` itself imports
-    # `GardenProposal` from this module.
+    # `GardenProposal` and `GardenProposalAlreadyClosed` from this module.
     from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure, IReadGardenProposalClosureRepository
     from blizzard.hub.domain.routines import Routine
 
@@ -61,7 +61,7 @@ class GardenProposalFindingNotLinkedError(ValueError):
 
 
 class GardenProposalBlankFieldError(ValueError):
-    """`create`/`create_operator`/`edit` named a blank title, class, or body —
+    """`create_operator`/`edit` named a blank title, class, or body —
     the whole call is refused."""
 
     def __init__(self, field_name: str) -> None:
@@ -78,15 +78,14 @@ class GardenProposalEmptyEditError(ValueError):
         self.proposal_id = proposal_id
 
 
-class GardenProposalNotOpen(Exception):
-    """An `edit`, `attach`, or `detach` targeted a proposal that already carries a
-    closure — closure is terminal. Mirrors
-    `garden_proposal_closure.GardenProposalAlreadyClosed` in spirit, but is raised from
-    here without importing it, which would cycle back through `GardenProposal`."""
+class GardenProposalAlreadyClosed(Exception):
+    """A pass, accept, edit, attach, or detach targeted a proposal that already carries a
+    closure — closure is terminal, so no verb is retroactive."""
 
-    def __init__(self, proposal_id: str) -> None:
-        super().__init__(f"garden proposal {proposal_id} already carries a closure")
+    def __init__(self, proposal_id: str, closure: GardenProposalClosure) -> None:
+        super().__init__(f"garden proposal {proposal_id} is already {closure.closure.value}")
         self.proposal_id = proposal_id
+        self.closure = closure
 
 
 class GardenProposalOrigin(StrEnum):
@@ -190,7 +189,7 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         self,
         proposal_id: str,
         *,
-        origin: GardenProposalOrigin = GardenProposalOrigin.ROUTINE_RUN,
+        origin: GardenProposalOrigin,
         routine_name: str | None,
         created_by: str | None = None,
         class_: str,
@@ -200,19 +199,22 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         at: datetime,
     ) -> GardenProposal:
         """Insert the proposal row and its `garden_proposal_findings` link rows, in one
-        transaction. `findings` may be empty. `origin` defaults to `routine-run`."""
+        transaction. `findings` may be empty."""
         ...
 
-    def edit(self, proposal_id: str, *, title: str, class_: str, body: str) -> GardenProposal | None:
-        """Replace `title`/`class_`/`body` in place (last-write-wins, no
-        edit-history table); `None` when `proposal_id` already carries a closure. Locks
-        the proposal's own row before checking, so a close racing in cannot land in the
-        gap (`GardenProposalStore._open_check`)."""
+    def edit(self, proposal_id: str, edit: GardenProposalEdit) -> GardenProposal | None:
+        """Write only the fields `edit` gives, in place (no edit-history table), leaving
+        every `UNSET` column as it stands; `None` when `proposal_id` already carries a
+        closure. Locks the proposal's own row before checking, so a close racing in
+        cannot land in the gap (`GardenProposalStore._is_closed`). `edit`'s given fields
+        arrive already stripped and validated."""
         ...
 
     def attach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
-        """Link `finding_ids` to `proposal_id`; `None` when already
-        closed, the same row-locked check `edit` uses. `finding_ids` may be empty."""
+        """Link `finding_ids` to `proposal_id`; `None` when already closed, the same
+        row-locked check `edit` uses. Raises :class:`GardenProposalFindingAlreadyLinkedError`
+        when a finding is already linked, re-read under that same lock. `finding_ids` may
+        be empty."""
         ...
 
     def detach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
@@ -235,13 +237,10 @@ class GardenProposalEdit:
 
 
 class GardenProposalAuthoring:
-    """Create, edit, attach to, or detach from a garden proposal, from already-loaded
-    objects (`bzh:domain-takes-objects`) — the domain seam that mints and mutates
-    proposals outside delivery. `create` mints a `routine-run`-origin proposal;
-    delivery's own materialization writes its own `routine-run` rows directly and never
-    calls this. `create_operator`/`edit`/`attach`/`detach` are the operator-facing verbs.
-    Every refusal — closed-first, then blank fields or findings — is
-    decided here, never left to a caller at the edge to enforce in the right order."""
+    """The operator-facing verbs — `create_operator`, `edit`, `attach`, `detach` — over
+    already-loaded objects (`bzh:domain-takes-objects`). Delivery writes its own
+    `routine-run` rows directly. Every refusal, closed first, is decided here, never
+    left to a caller at the edge."""
 
     def __init__(
         self,
@@ -253,22 +252,6 @@ class GardenProposalAuthoring:
         self._proposals = proposals
         self._closures = closures
         self._clock = clock
-
-    def create(
-        self, *, routine_name: str, class_: str, title: str, body: str, findings: Sequence[Finding]
-    ) -> GardenProposal:
-        finding_ids = self._checked_finding_ids(findings, require_live=False)
-        return self._proposals.create(
-            Id.mint(GARDEN_PROPOSAL_PREFIX, self._clock).value,
-            origin=GardenProposalOrigin.ROUTINE_RUN,
-            routine_name=routine_name,
-            created_by=None,
-            class_=class_,
-            title=title,
-            body=body,
-            findings=finding_ids,
-            at=self._clock.now(),
-        )
 
     def create_operator(
         self,
@@ -302,59 +285,62 @@ class GardenProposalAuthoring:
         )
 
     def edit(self, proposal: GardenProposal, edit: GardenProposalEdit) -> GardenProposal:
-        """Apply `edit`'s given fields to `proposal` in place. Raises
-        :class:`GardenProposalNotOpen` first, ahead of any field problem, when `proposal`
-        already carries a closure — re-checked by the store's own row-locked guard
-        against a close racing in between — works on either origin while open. Raises
-        :class:`GardenProposalEmptyEditError` when every field is left `UNSET`, or
-        :class:`GardenProposalBlankFieldError` for a given field that is blank."""
-        if self._closures.get(proposal.proposal_id) is not None:
-            raise GardenProposalNotOpen(proposal.proposal_id)
+        """Apply only `edit`'s given fields, so a field it leaves out keeps a concurrent
+        edit's value. Raises :class:`GardenProposalAlreadyClosed` first — re-checked by
+        the store under its row lock — then :class:`GardenProposalEmptyEditError` when
+        every field is `UNSET`, or :class:`GardenProposalBlankFieldError` for a blank one."""
+        self._refuse_if_closed(proposal.proposal_id)
         if edit.title is UNSET and edit.class_ is UNSET and edit.body is UNSET:
             raise GardenProposalEmptyEditError(proposal.proposal_id)
-        title = proposal.title if edit.title is UNSET else self._stripped(edit.title, "title")
-        class_ = proposal.class_ if edit.class_ is UNSET else self._stripped(edit.class_, "class")
-        body = proposal.body if edit.body is UNSET else self._stripped(edit.body, "body")
-        updated = self._proposals.edit(proposal.proposal_id, title=title, class_=class_, body=body)
+        stripped = GardenProposalEdit(
+            title=edit.title if edit.title is UNSET else self._stripped(edit.title, "title"),
+            class_=edit.class_ if edit.class_ is UNSET else self._stripped(edit.class_, "class"),
+            body=edit.body if edit.body is UNSET else self._stripped(edit.body, "body"),
+        )
+        updated = self._proposals.edit(proposal.proposal_id, stripped)
         if updated is None:
-            raise GardenProposalNotOpen(proposal.proposal_id)
+            self._raise_already_closed(proposal.proposal_id)
         return updated
 
     def attach(self, proposal: GardenProposal, findings: Sequence[Finding]) -> GardenProposal:
-        """Link `findings` to `proposal`. Raises
-        :class:`GardenProposalNotOpen` first, ahead of any finding problem, when
-        `proposal` already carries a closure. Every named finding must be live, named at
-        most once, and not already linked to `proposal` — re-linking a finding already
-        linked to *another* proposal is allowed."""
-        if self._closures.get(proposal.proposal_id) is not None:
-            raise GardenProposalNotOpen(proposal.proposal_id)
+        """Link `findings` to `proposal`. Raises :class:`GardenProposalAlreadyClosed`
+        first; every finding must be live, named once, and not already linked to
+        `proposal` (re-made by the store under its row lock) — linked to *another*
+        proposal is allowed."""
+        self._refuse_if_closed(proposal.proposal_id)
         finding_ids = self._checked_finding_ids(findings, require_live=True)
         for finding_id in finding_ids:
             if finding_id in proposal.findings:
                 raise GardenProposalFindingAlreadyLinkedError(proposal.proposal_id, finding_id)
         updated = self._proposals.attach(proposal.proposal_id, finding_ids)
         if updated is None:
-            raise GardenProposalNotOpen(proposal.proposal_id)
+            self._raise_already_closed(proposal.proposal_id)
         return updated
 
-    def detach(self, proposal: GardenProposal, finding_ids: Sequence[str]) -> GardenProposal:
-        """Unlink `finding_ids` from `proposal`. Raises
-        :class:`GardenProposalNotOpen` first, ahead of any finding problem, when
-        `proposal` already carries a closure. Every named id must be named at most once
-        and currently linked to `proposal`; liveness is not required."""
-        if self._closures.get(proposal.proposal_id) is not None:
-            raise GardenProposalNotOpen(proposal.proposal_id)
-        seen: set[str] = set()
+    def detach(self, proposal: GardenProposal, findings: Sequence[Finding]) -> GardenProposal:
+        """Unlink `findings` from `proposal`. Raises
+        :class:`GardenProposalAlreadyClosed` first, ahead of any finding problem, when
+        `proposal` already carries a closure. Every named finding must be named at most
+        once and currently linked to `proposal`; liveness is not required."""
+        self._refuse_if_closed(proposal.proposal_id)
+        finding_ids = self._checked_finding_ids(findings, require_live=False)
         for finding_id in finding_ids:
-            if finding_id in seen:
-                raise DuplicateProposalFindingError(finding_id)
-            seen.add(finding_id)
             if finding_id not in proposal.findings:
                 raise GardenProposalFindingNotLinkedError(proposal.proposal_id, finding_id)
-        updated = self._proposals.detach(proposal.proposal_id, list(finding_ids))
+        updated = self._proposals.detach(proposal.proposal_id, finding_ids)
         if updated is None:
-            raise GardenProposalNotOpen(proposal.proposal_id)
+            self._raise_already_closed(proposal.proposal_id)
         return updated
+
+    def _refuse_if_closed(self, proposal_id: str) -> None:
+        closure = self._closures.get(proposal_id)
+        if closure is not None:
+            raise GardenProposalAlreadyClosed(proposal_id, closure)
+
+    def _raise_already_closed(self, proposal_id: str) -> NoReturn:
+        closure = self._closures.get(proposal_id)
+        assert closure is not None
+        raise GardenProposalAlreadyClosed(proposal_id, closure)
 
     @staticmethod
     def _stripped(value: str, field_name: str) -> str:
@@ -377,7 +363,7 @@ class GardenProposalAuthoring:
 
 
 class RoutineProposalState(StrEnum):
-    """Which of a routine's garden proposals `OpenGardenProposalReader.list_for_routine`
+    """Which of a routine's garden proposals `RoutineGardenProposalReader.list_for_routine`
     returns: `OPEN` (the default) excludes any proposal already closed, `CLOSED` returns
     only closed ones with their closure, `ALL` returns every proposal with its closure
     when one exists."""
@@ -387,7 +373,7 @@ class RoutineProposalState(StrEnum):
     ALL = "all"
 
 
-class OpenGardenProposalReader:
+class RoutineGardenProposalReader:
     """A routine's garden proposals, filtered by `RoutineProposalState` and paired with
     each one's closure — `list_for_routine`'s own composed reader. Open means still
     awaiting a person's pass or accept."""
@@ -397,9 +383,6 @@ class OpenGardenProposalReader:
     ) -> None:
         self._proposals = proposals
         self._closures = closures
-
-    def list_open_for_routine(self, routine_name: str) -> list[GardenProposal]:
-        return [p for p, _ in self.list_for_routine(routine_name, RoutineProposalState.OPEN)]
 
     def list_for_routine(
         self, routine_name: str, state: RoutineProposalState = RoutineProposalState.OPEN

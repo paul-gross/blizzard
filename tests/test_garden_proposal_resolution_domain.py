@@ -310,6 +310,29 @@ def test_resolves_exactly_the_proposals_live_findings_attributed_to_it() -> None
         assert entry.note
 
 
+def test_a_gone_finding_the_proposal_cites_is_left_alone_when_its_item_is_delivered() -> None:
+    closures = _FakeClosures(
+        by_item={
+            (_POINTER.source, _POINTER.ref): _closure(
+                kind=GardenProposalClosureKind.ACCEPTED, item_outcome=GardenProposalItemOutcome.MINTED
+            )
+        }
+    )
+    proposals = _FakeProposals(by_id={"gprop_1": _proposal(findings=["fin_live", "fin_gone"])})
+    findings = _FakeFindings(
+        by_id={"fin_live": _finding("fin_live", state="live"), "fin_gone": _finding("fin_gone", state="gone")}
+    )
+    repo = _RecordingWriteRepo()
+    resolution = _resolution(closures=closures, proposals=proposals, findings=findings, repo=repo)
+
+    resolution.resolve_for_item(_POINTER)
+
+    assert len(repo.batches) == 1
+    assert [e.finding_id for e in repo.batches[0]] == ["fin_live"]
+    assert findings.by_id["fin_gone"].state == "gone"
+    assert findings.by_id["fin_gone"].note is None
+
+
 def test_a_proposal_already_delivered_once_is_never_delivered_again_even_after_a_reopen() -> None:
     """A person's `reopened` fact folds a delivered finding
     back to `live` (`derive_liveness`) — a stray repeat call must not read that as "still

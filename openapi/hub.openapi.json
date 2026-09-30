@@ -6663,7 +6663,7 @@
         "type": "object"
       },
       "RoutineProposalState": {
-        "description": "Which of a routine's garden proposals `OpenGardenProposalReader.list_for_routine`\nreturns: `OPEN` (the default) excludes any proposal already closed, `CLOSED` returns\nonly closed ones with their closure, `ALL` returns every proposal with its closure\nwhen one exists.",
+        "description": "Which of a routine's garden proposals `RoutineGardenProposalReader.list_for_routine`\nreturns: `OPEN` (the default) excludes any proposal already closed, `CLOSED` returns\nonly closed ones with their closure, `ALL` returns every proposal with its closure\nwhen one exists.",
         "enum": [
           "open",
           "closed",
@@ -16047,7 +16047,7 @@
     },
     "/api/garden-proposals/{proposal_id}/detach": {
       "post": {
-        "description": "Unlink the given finding ids from PROPOSAL_ID \u2014 works on either\norigin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or\none not linked to this proposal.",
+        "description": "Unlink the given finding ids from PROPOSAL_ID \u2014 works on either\norigin while open. 404 unknown proposal, 409 already closed, 422 an unknown or\nduplicate id, or one not linked to this proposal.",
         "operationId": "detach_garden_proposal_findings_api_garden_proposals__proposal_id__detach_post",
         "parameters": [
           {

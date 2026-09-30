@@ -13,6 +13,7 @@ from sqlalchemy import Select, and_, delete, func, insert, or_, select, update
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.hub.domain.edit import UnsetType
 from blizzard.hub.domain.garden_proposal_closure import (
     GardenProposalClosureKind,
     GardenProposalCountBucket,
@@ -22,6 +23,8 @@ from blizzard.hub.domain.garden_proposal_closure import (
 from blizzard.hub.domain.garden_proposals import (
     GardenProposal,
     GardenProposalCounts,
+    GardenProposalEdit,
+    GardenProposalFindingAlreadyLinkedError,
     GardenProposalOrigin,
     GardenProposalPage,
     IWriteGardenProposalRepository,
@@ -74,7 +77,7 @@ class GardenProposalStore:
         self,
         proposal_id: str,
         *,
-        origin: GardenProposalOrigin = GardenProposalOrigin.ROUTINE_RUN,
+        origin: GardenProposalOrigin,
         routine_name: str | None,
         created_by: str | None = None,
         class_: str,
@@ -113,7 +116,7 @@ class GardenProposalStore:
             findings=list(findings),
         )
 
-    def _open_check(self, conn: Any, proposal_id: str) -> bool:
+    def _is_closed(self, conn: Any, proposal_id: str) -> bool:
         """Whether `proposal_id` already carries a closure. A bare `SELECT` here would
         race a concurrent close landing on `garden_proposal_closures` — a different
         table, so the two transactions never contend on the same row — so this first
@@ -131,23 +134,33 @@ class GardenProposalStore:
         ).first()
         return already is not None
 
-    def edit(self, proposal_id: str, *, title: str, class_: str, body: str) -> GardenProposal | None:
+    def edit(self, proposal_id: str, edit: GardenProposalEdit) -> GardenProposal | None:
+        """Writes only the columns `edit` gives — an `UNSET` one stays out of the `SET`, so
+        a concurrent edit of another column survives."""
+        given = {
+            column: value
+            for column, value in (("title", edit.title), ("class_", edit.class_), ("body", edit.body))
+            if not isinstance(value, UnsetType)
+        }
         with self._store.write("edit") as conn:
-            if self._open_check(conn, proposal_id):
+            if self._is_closed(conn, proposal_id):
                 return None
-            conn.execute(
-                update(garden_proposals)
-                .where(garden_proposals.c.proposal_id == proposal_id)
-                .values(title=title, class_=class_, body=body)
-            )
+            if given:
+                conn.execute(
+                    update(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id).values(given)
+                )
             row = conn.execute(select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)).one()
             findings = self._findings(conn, proposal_id)
         return self._of(row, findings)
 
     def attach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
         with self._store.write("attach") as conn:
-            if self._open_check(conn, proposal_id):
+            if self._is_closed(conn, proposal_id):
                 return None
+            linked = set(self._findings(conn, proposal_id))
+            for finding_id in finding_ids:
+                if finding_id in linked:
+                    raise GardenProposalFindingAlreadyLinkedError(proposal_id, finding_id)
             if finding_ids:
                 conn.execute(
                     insert(garden_proposal_findings),
@@ -159,7 +172,7 @@ class GardenProposalStore:
 
     def detach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
         with self._store.write("detach") as conn:
-            if self._open_check(conn, proposal_id):
+            if self._is_closed(conn, proposal_id):
                 return None
             if finding_ids:
                 conn.execute(

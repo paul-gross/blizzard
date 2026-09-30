@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.work import IWriteWorkItemRepository, WorkItemAuthor, WorkRef, mint_chunk
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
@@ -46,6 +47,7 @@ def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:  # type: ignor
     )
     GardenProposalStore(store).create(
         proposal_id,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="Author a docstring standard",
@@ -75,6 +77,7 @@ def _seed_proposals(hub, proposal_ids: list[str]) -> None:  # type: ignore[no-un
         )
         proposals.create(
             proposal_id,
+            origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="fix-the-source",
             title="Author a docstring standard",

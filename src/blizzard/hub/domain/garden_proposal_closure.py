@@ -14,7 +14,7 @@ from typing import NoReturn, Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.findings import Finding
-from blizzard.hub.domain.garden_proposals import GardenProposal
+from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalAlreadyClosed
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.domain.work_items import WorkItemEditService
@@ -87,16 +87,6 @@ class AcceptedGardenProposal:
 
     closure: GardenProposalClosure
     chunk_id: str | None
-
-
-class GardenProposalAlreadyClosed(Exception):
-    """A pass or accept targeted a proposal that already carries a closure — closure is
-    terminal, so neither verb is retroactive."""
-
-    def __init__(self, proposal_id: str, closure: GardenProposalClosure) -> None:
-        super().__init__(f"garden proposal {proposal_id} is already {closure.closure.value}")
-        self.proposal_id = proposal_id
-        self.closure = closure
 
 
 class GardenProposalPassReasonRequired(ValueError):

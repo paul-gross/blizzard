@@ -24,6 +24,7 @@ from blizzard.hub.domain.delete import DeleteService
 from blizzard.hub.domain.findings import FindingExitService
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.garden_proposal_resolution import GardenProposalDeliveryResolution
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import Chunk, WorkItemAuthor, WorkItemClosure, WorkItemPriority, WorkRef
 from blizzard.hub.domain.work_items import (
@@ -603,6 +604,7 @@ def _seed_accepted_proposal(engine: Engine, *, pointer: WorkRef, finding_id: str
     proposal_id = "gprop_1"
     GardenProposalStore(store).create(
         proposal_id,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="t",

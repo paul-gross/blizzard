@@ -15,7 +15,6 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_proposal_closure import (
-    GardenProposalAlreadyClosed,
     GardenProposalClosure,
     GardenProposalClosureKind,
     GardenProposalClosureService,
@@ -26,7 +25,7 @@ from blizzard.hub.domain.garden_proposal_closure import (
     _compose_minted_body,
     classify_proposal_count_bucket,
 )
-from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalOrigin
+from blizzard.hub.domain.garden_proposals import GardenProposal, GardenProposalAlreadyClosed, GardenProposalOrigin
 from blizzard.hub.domain.work_items import WorkItemEditService
 
 pytestmark = pytest.mark.unit

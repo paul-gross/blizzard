@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.work import WorkItemAuthor
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -44,7 +45,14 @@ def _seed_proposal(hub: HubHarness, *, proposal_id: str = "gprop_1", findings: l
     for finding_id in findings:
         _seed_finding(hub, finding_id)
     GardenProposalStore(hub_store_connections(hub.engine)).create(
-        proposal_id, routine_name=_ROUTINE, class_="fix-the-source", title="t", body="b", findings=findings, at=_NOW
+        proposal_id,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name=_ROUTINE,
+        class_="fix-the-source",
+        title="t",
+        body="b",
+        findings=findings,
+        at=_NOW,
     )
 
 

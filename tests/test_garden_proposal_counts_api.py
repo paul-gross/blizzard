@@ -15,6 +15,7 @@ from sqlalchemy import insert
 from blizzard.foundation.ids import ROUTINE_PREFIX, Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.routines import Routine
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.store import schema as s
@@ -72,7 +73,14 @@ def _seed_proposal(
     at: datetime,
 ) -> None:
     GardenProposalStore(hub_store_connections(hub.engine)).create(
-        proposal_id, routine_name=routine_name, class_=class_, title="t", body="b", findings=[finding_id], at=at
+        proposal_id,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name=routine_name,
+        class_=class_,
+        title="t",
+        body="b",
+        findings=[finding_id],
+        at=at,
     )
 
 
