@@ -5,9 +5,7 @@ import { type RoutineRunResponse, runRoutineApiRoutinesRoutineIdRunPost } from '
 import { runRoutineMutationKey } from '../mutation-keys';
 import { hubRoutinesKey } from '../query-keys';
 
-/** Kick off a routine run — the gardening run dialog's own submission. The
- * create-then-run ordering is `GardeningRunDialog.onSubmit`'s own fact, not
- * restated here. */
+/** Variables for running an existing routine against a scope in a given mode. */
 export interface RoutineRunVars {
   readonly routineId: string;
   readonly scopeSlug: string;

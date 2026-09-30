@@ -7,7 +7,7 @@ import type { ChunkDetail } from '../api/hub';
 import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
- * The dock header's action row at narrow widths (round 3) — a real
+ * The dock header's action row at narrow widths — a real
  * layout claim jsdom cannot make: it never actually lays out `.d-meta`/`.d-actions`'s
  * flex row, so `web:unit-test` cannot see a control pushed past the dock's own edge.
  * This mounts the header with every in-flow control live at once — a routed,

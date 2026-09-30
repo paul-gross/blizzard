@@ -178,10 +178,8 @@ export class ChunkDetail {
    * what a paused chunk's status would read with the overlay lifted, so nothing here
    * can predict whether a resumed chunk reads `running`, `delivering`, `ready`, or
    * `not_ready` without re-deriving the ladder statuses.md already owns in prose,
-   * which the rule forbids. **Detach renders no override either**, for the same
-   * non-total reason {@link ChunkDetailHeader}'s own doc comment on Detach already
-   * states: a detached `needs_human` chunk still derives `needs_human`
-   * (`src/blizzard/hub/domain/detach.py`).
+   * which the rule forbids. **Detach renders no override either** — not total; see
+   * {@link ChunkDetailHeader}.
    */
   protected readonly overrideStatus = computed<ChunkStatus | null>(() => {
     const detail = this.detail();

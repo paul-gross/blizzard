@@ -34,9 +34,8 @@ export class ChunkIssuePane {
    * Defaults to `loading` so the pane constructs without the container wiring it. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
 
-  /** Forwarded to the inner `fleet-kit-async-state` — `'center'` (the default,
-   * every existing mount's prior behavior) or `'inline'` (the runner's narrow
-   * chunk detail route). */
+  /** Placement of the inner `fleet-kit-async-state` — `'center'` (the default)
+   * or `'inline'` for a narrow host. */
   readonly placement = input<'center' | 'inline'>('center');
 
   /** The async triad's resolved state — loading/error take precedence, then no

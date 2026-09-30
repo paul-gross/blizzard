@@ -72,9 +72,7 @@ export class TranscriptViewer {
 
   /** Emitted with a {@link SidechainOpenEvent} when the operator asks to view a sidechain
    * standalone. This component always renders the
-   * sidechain inline too; a container with no standalone concept (the runner's local
-   * panel) needs no listener at all; the hub's Transcripts tab turns this into a
-   * URL-held selection. */
+   * sidechain inline too, so listening is optional. */
   readonly openStandalone = output<SidechainOpenEvent>();
 
   /** A turn's own open-standalone button, clicked directly — its path is just its own

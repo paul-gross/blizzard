@@ -41,15 +41,10 @@ export function shouldRetryTranscriptFetch(failureCount: number, error: Error): 
  * or a runner's own copy of this identically-shaped route, and `plane` only
  * namespaces the TanStack cache key ({@link chunkTranscriptsKey}) — neither this function
  * nor a mounting container branches on which plane it is. This query's own
- * `enabled: id !== null` is belt-and-suspenders, not the actual gate: a
- * chunk page passes `chunkId` unconditionally, so laziness
- * comes entirely from where the container that injects this query is mounted — only
- * inside the chunk page's Transcripts-tab branch, never for every chunk selection.
- * Permission is gated on `transcript:read` at the backend rather than here — a deep link
- * held by a viewer-role identity still issues this request once the tab is open, so the
- * 403 renders as the container's own honest state instead of the tab silently never
- * appearing (which it also doesn't, since the chunk page hides the tab option itself for
- * that identity).
+ * `enabled: id !== null` is belt-and-suspenders, not the actual gate: laziness
+ * comes from where this query is injected, not from `chunkId`.
+ * Permission is gated on `transcript:read` at the backend rather than here, so an
+ * identity without it gets a 403 the caller can render as its own state.
  *
  * `client`/`plane` are accessors, not plain values, the same as `chunkId` — not because
  * either is expected to change, but because a caller threading a signal `input.required()`

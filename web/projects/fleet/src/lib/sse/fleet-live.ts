@@ -44,10 +44,7 @@ export const HUB_EVENT_TYPES = [
  * always present; every other field is present-when-meaningful — omitted, never
  * `null`, when it does not apply (a chunk that has never transitioned carries no
  * `prev_node`, an unclaimed chunk carries no `runner_id`), which is why each is
- * declared optional rather than required-but-sometimes-absent. `graph_id` rides the
- * wire but is never rendered — the Activity feed's block row stops at the transition and
- * runner lines. Exported so the SSE contract spec's `FRAME_FIELD_SPECS`
- * can key its required/optional descriptor off this interface directly. `by` rides
+ * declared optional rather than required-but-sometimes-absent. `by` rides
  * the `deleted` cause, mirroring {@link RunnerEvent.by}. */
 export interface ChunkChanged {
   chunk_id: string;
@@ -60,14 +57,12 @@ export interface ChunkChanged {
   graph_id?: string;
   by?: string;
 }
-/** A `question-asked`/`question-answered` frame's payload. Exported —
- * see {@link ChunkChanged}. */
+/** A `question-asked`/`question-answered` frame's payload. */
 export interface QuestionEvent {
   chunk_id: string;
   question_id: string;
 }
-/** A `decision-opened`/`decision-resolved` frame's payload. Exported —
- * see {@link ChunkChanged}. */
+/** A `decision-opened`/`decision-resolved` frame's payload. */
 export interface DecisionEvent {
   chunk_id: string;
   decision_id: string;
@@ -77,7 +72,7 @@ export interface DecisionEvent {
  * but typed `string` here because {@link HubEventPayload} intersects these shapes and
  * `event-logged` carries a `kind` of its own, from an unrelated vocabulary. `by` rides
  * the four pause/resume kinds and `reason` the runner-local pair, both omitted
- * otherwise. Exported — see {@link ChunkChanged}. */
+ * otherwise. */
 export interface RunnerEvent {
   runner_id: string;
   kind: string;
@@ -88,8 +83,7 @@ export interface RunnerEvent {
  * /api/events`'s wire shape). `chunk_id` is always present, `null` rather than
  * omitted, for a runner-scoped event, and `runner_id` the same for a hub-authored one
  * (the broker's own shape) — unlike every other field on every other frame in this
- * module, both are required here, not optional, because the broker never omits either.
- * Exported — see {@link ChunkChanged}. */
+ * module, both are required here, not optional, because the broker never omits either. */
 export interface EventLoggedEvent {
   severity: string;
   kind: string;
@@ -98,11 +92,9 @@ export interface EventLoggedEvent {
 }
 /** The fact-identity stamp the hub puts on every frame — the
  * merge/dedup key a backfilled row and the live frame reporting the same underlying
- * fact share, so a consumer that reads both (the Activity feed's backfill) can
- * tell they are the same event rather than rendering it twice. Omitted on any frame
+ * fact share. Omitted on any frame
  * with no durable fact behind it (`queue-changed`, a `registered`/`heartbeat`
- * `runner-changed`, an idempotent no-op) or from a hub that predates this stamp. Exported
- * — see {@link ChunkChanged}. */
+ * `runner-changed`, an idempotent no-op) or from a hub that predates this stamp. */
 export interface KeyedEvent {
   key?: string;
 }
@@ -227,11 +219,9 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
  * One event recorded for the Activity feed: its stream arrival order
  * (`seq` — a stable, monotonic client key), its board vocabulary `type`, the parsed
  * `data`, and the client-side arrival time `at` (ms epoch; the hub frames carry no
- * timestamp of their own). Presentation — the human-readable summary — is the panel's.
+ * timestamp of their own).
  *
- * `key` rides `data.key` so the panel's backfill/live merge can
- * dedupe a backfilled row against the live frame reporting the same fact without
- * reaching back into `data` itself. Absent on a frame from a hub that predates this stamp.
+ * `key` is `data.key` ({@link KeyedEvent}), lifted to the top level. Absent on a frame from a hub that predates this stamp.
  */
 export interface LoggedEvent {
   readonly seq: number;

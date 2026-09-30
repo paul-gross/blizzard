@@ -2,14 +2,10 @@
  * Eager-shell entry point of the `fleet` shared library (`fleet/shell`,
  * `architecture/frontend-structure/eager-shell.md`, `bzh:frontend-eager-shell-entry`).
  *
- * Named re-exports, file by file, of exactly what a hub or runner shell statically
- * reaches — `main.ts`, the app root, its config and route table, and the always-on nav
- * chrome — rather than the root `fleet` barrel, which re-exports every feature area
+ * Named re-exports, file by file, of exactly what an app's eager shell statically
+ * reaches — rather than the root `fleet` barrel, which re-exports every feature area
  * whole and esbuild cannot tree-shake even when nothing on the eager path reads a given
- * export. A lazy route or an `@defer`-loaded component (the profile menu, the mobile
- * titlebar) keeps importing `fleet` as before; only a module statically reached from an
- * app's `main.ts` imports this entry point instead. `fleet/testing` is the sibling
- * precedent this follows.
+ * export. Anything reached only lazily imports the root `fleet` barrel instead.
  */
 
 export { AppShell } from './lib/app-shell/app-shell';

@@ -25,13 +25,10 @@ export interface BoardCard {
    * `cost_partial` (`src/blizzard/hub/domain/work.py`). */
   readonly costPartial: boolean;
   /** The chunk's derived spend estimate, from `ChunkSummary.cost.estimated_cost_usd` —
-   * `null` iff no summed row reported one. Folded into {@link costUsd} by
-   * {@link formatCost} for display, rather than rendered as a figure of its own. */
+   * `null` iff no summed row reported one. Already included in {@link costUsd}. */
   readonly estimatedCostUsd: number | null;
   /** The chunk's derived completion instant, from `ChunkSummary.completed_at`
-   * — null for every non-terminal status. Rendered only on a done-lane card
-   * ({@link BoardCardComponent.isDoneLane}): a status this field's own null-ness doesn't
-   * already rule out, but the lane a defensive belt-and-suspenders check still asks for. */
+   * — null for every non-terminal status. */
   readonly completedAt: string | null;
   /** The unmet prerequisite's chunk id, from `ChunkSummary.blocked` — null
    * for every card outside `not_ready`/`ready` (`blizzard-context:/domain/work/statuses.md`),

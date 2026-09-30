@@ -27,7 +27,7 @@ const ASSIGNABLE_ROLES: readonly string[] = ['pending', 'guest', 'contributor', 
  *   only a `superuser` actor may grant or revoke `admin`.
  *
  * A `403` the mutation still surfaces despite this (a stale permission between page
- * load and submit) is the container's own error state, not this component's concern.
+ * load and submit) is not this component's concern.
  */
 @Component({
   selector: 'fleet-users-table',

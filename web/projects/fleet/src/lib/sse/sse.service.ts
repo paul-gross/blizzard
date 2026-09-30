@@ -227,9 +227,7 @@ export interface SseHandle<T> {
   readonly events: Observable<SseEvent<T>>;
   /** `true` once the stream closed on a `401` — a session that expired
    * mid-stream, distinct from a transient drop (which keeps retrying instead). Set
-   * at most once; no further reconnect is scheduled once this flips. A consumer
-   * (the app root) watches this to route to `/login` within the one reconnect cycle
-   * that surfaced it, rather than an unbounded retry loop. */
+   * at most once; no further reconnect is scheduled once this flips. */
   readonly authFailed: Signal<boolean>;
   /** Close the stream and stop reconnecting. */
   close(): void;

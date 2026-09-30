@@ -4,21 +4,16 @@ import { compactRef } from '../compact-ref';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitSelectRow } from '../kit/kit-select-row';
 
-/** One row of the routine list — just enough to pick a routine (the CLI verb behind
- * the read this list serves is `hub routine list`). Selection keys on `name`
- * (`hub/store/schema.py`'s `uq_routines_name`), not `routineId` — the route param
- * this list's selection drives (`app.routes.ts`'s `routine/:routineName`) names a
- * routine the same way. `routineId` renders as its own compact ref. */
+/** One row of the routine list — just enough to pick a routine. Selection keys on
+ * `name` (unique per routine, `src/blizzard/hub/store/schema.py`), not `routineId`.
+ * `routineId` renders as its own compact ref. */
 export interface RoutineListRowVm {
   readonly routineId: string;
   readonly name: string;
   readonly graphName: string;
-  /** Whether the routine's effective graph has no effective mint — the
-   * container's own `blocked` resolution, generalized from the selected routine
-   * alone to every row in the list. */
+  /** Whether the routine's effective graph has no effective mint. */
   readonly blocked: boolean;
-  /** Whether the routine's own retire/enable brake reads retired —
-   * `ScopeRowVm.retired`'s own shape. */
+  /** Whether the routine's own retire/enable brake reads retired. */
   readonly retired: boolean;
 }
 

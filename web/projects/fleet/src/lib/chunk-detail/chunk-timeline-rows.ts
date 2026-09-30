@@ -64,9 +64,8 @@ export interface StepUsageTotal {
   readonly tokens: number;
   readonly costUsd: number;
   readonly costPartial: boolean;
-  /** The step's summed estimate, `null` iff no summed row carried one — folded into
-   * `costUsd` by {@link formatCost} for display, rather than rendered as a figure
-   * of its own. */
+  /** The step's summed estimate, `null` iff no summed row carried one; already included
+   * in `costUsd`. */
   readonly estimatedCostUsd: number | null;
   /** The step's own recorded harness identity — read off whichever of
    * its own summed rows recorded one, newest first, never derived from `model`. `null`
@@ -122,9 +121,7 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
   return [...transitions, ...migrations].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 }
 
-/** Whether `rows` spans more than one graph — a chunk that migrated. When
- * true the board labels each row with the graph it happened in; a single-graph chunk
- * shows no graph badge (it would be noise). A migration inherently crosses two graphs
+/** Whether `rows` spans more than one graph — a chunk that migrated. A migration inherently crosses two graphs
  * (its target may not yet have its own row), so its presence alone qualifies. */
 export function deriveMultiGraph(rows: readonly HistoryRow[]): boolean {
   if (rows.some((r) => r.kind === 'migration')) return true;

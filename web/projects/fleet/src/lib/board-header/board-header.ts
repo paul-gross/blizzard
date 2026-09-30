@@ -94,14 +94,11 @@ export class BoardHeader {
 
   /** The fleet-wide spend-yesterday read — `[yesterday-midnight,
    * today-midnight)`, or `null` before the first read resolves (withheld the same
-   * way as {@link spendToday}) and for every consumer that never passes one, e.g.
-   * the runner's local panel (`local-panel-layout.ts`), which has no such read. */
+   * way as {@link spendToday}) and whenever none is supplied. */
   readonly spendYesterday = input<FleetSpendView | null>(null);
 
-  /** Explicit stat cells, e.g. the runner's envs/agents capacity cells —
-   * when given, these render in place of {@link chunkStats} below, so a
-   * caller with no chunk list supplies its own stats without this component
-   * knowing anything about its domain. `null` (the hub's usage) falls through to
+  /** Explicit stat cells — when given, these render in place of
+   * {@link chunkStats} below, opaque to this component. `null` falls through to
    * the chunk-derived lane cells. */
   readonly stats = input<readonly StatCell[] | null>(null);
 
