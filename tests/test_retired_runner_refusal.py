@@ -1,5 +1,4 @@
-"""A retired runner is refused inside each domain operation it guards (component tier) —
-no HTTP layer, so the rule holds without any controller pre-check."""
+"""A retired runner is refused inside each guarded domain operation, with no HTTP layer."""
 
 from __future__ import annotations
 

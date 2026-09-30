@@ -33,8 +33,7 @@ class RunnerEnrollmentService:
 
         Takes the loaded :class:`~blizzard.hub.domain.registry.RunnerRegistration`
         rather than a bare id (``bzh:domain-takes-objects``) — the enroll endpoint
-        resolves ``runner_id`` to its row (404 if unknown) before calling this. A retired
-        runner is refused with :class:`~blizzard.hub.domain.registry.RunnerRetired`."""
+        resolves ``runner_id`` to its row (404 if unknown); a retired runner raises ``RunnerRetired``."""
         runner.refuse_if_retired(action="enrollment")
         token = secrets.token_urlsafe(_TOKEN_BYTES)
         self._registry.set_token_hash(runner.runner_id, token_hash=TokenHash(token).hex, at=self._clock.now())

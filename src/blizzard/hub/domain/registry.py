@@ -503,8 +503,7 @@ class FleetService:
 
         The runner's reported facts (``env_capacity``, ``public_url``/``redirect_uris``,
         ``capabilities``, ``subscriptions``, ``gates``) are overwritten on every registration; absent
-        values store as null/empty. A retired runner is refused with :class:`RunnerRetired`
-        before any write."""
+        values store as null/empty. A retired runner raises :class:`RunnerRetired` before any write."""
         self._guard_not_retired(runner_id, action="registration")
         created = self._registry.upsert_registration(
             runner_id,
