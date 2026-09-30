@@ -128,9 +128,23 @@ class IReadUsageRepository(Protocol):
         harness-to-subscription mapping, just the newest windows this slug reported."""
         ...
 
+    def latest_external_usage_windows_by_slug(
+        self, slugs: Sequence[str]
+    ) -> dict[str, tuple[ExternalSubscriptionUsageWindow, ...]]:
+        """:meth:`latest_external_usage_windows` for every slug in ``slugs``, in one batched read
+        (`bzh:bulk-reconstitution`) — each slug's answer exactly the singular's, including its
+        exclusion of failed-attempt rows before the newest is picked. A slug that answers no
+        windows is absent, which the caller reads as ``()``."""
+        ...
+
     def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
         """This ``slug``'s own newest attempt row, or ``None`` when never attempted —
         the runner-local diagnostics' read."""
+        ...
+
+    def latest_external_usage_attempts_by_slug(self, slugs: Sequence[str]) -> dict[str, ExternalUsageAttemptSummary]:
+        """:meth:`latest_external_usage_attempt` for every slug in ``slugs``, in one batched read
+        (`bzh:bulk-reconstitution`). A slug never attempted is absent, which the caller reads as ``None``."""
         ...
 
 

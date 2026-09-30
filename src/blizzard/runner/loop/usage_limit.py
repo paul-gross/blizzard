@@ -131,8 +131,9 @@ def _fallback_reset(ctx: LoopContext) -> datetime | None:
     is on record, which the caller reads as "no reset time known", not "no limit"."""
     now = ctx.clock.now()
     soonest: datetime | None = None
+    windows_by_slug = ctx.stores.usage.latest_external_usage_windows_by_slug([r.slug for r in ctx.subscriptions])
     for resolved in ctx.subscriptions:
-        for window in ctx.stores.usage.latest_external_usage_windows(resolved.slug):
+        for window in windows_by_slug.get(resolved.slug, ()):
             if window.utilization_pct < 100.0 or window.resets_at <= now:
                 continue
             if soonest is None or window.resets_at < soonest:
