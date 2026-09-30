@@ -4,10 +4,8 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 (``bzh:facts-not-status``): every write appends a row; nothing here derives status.
 Timestamps arrive already stamped (``bzh:injected-clock``).
 
-``activity_facts_since`` stays one bounded read per mapped fact table on one
-connection, unchanged by the seam carve — it was already many single-table reads
-folded into one ``with self._store.read(...)`` block before the carve, and stays that
-shape now."""
+``activity_facts_since`` performs one bounded read per mapped fact table on one
+connection."""
 
 from __future__ import annotations
 
@@ -46,11 +44,8 @@ def _bounded_stmt(stmt: Select[Any], *, ts_col: Any, pk_col: Any, since: datetim
 
 
 def _narrow_persisted_severity(*, kind: str, severity: str) -> EventLogSeverity:
-    """A row's ``severity`` as it was written, or the value its ``kind`` declares when it
-    was not — no migration: ingest has rejected an outside-the-vocabulary
-    pair since the fix, so this only ever narrows a row a since-fixed hub bug persisted
-    before it (``hub-node-unroutable-outcome`` once wrote ``severity="error"``). A kind
-    this table no longer recognizes narrows to ``critical``, the conservative read."""
+    """A row's recognized ``severity``, or its recognized ``kind``'s severity
+    when the stored severity is unknown. An unknown kind defaults to ``critical``."""
     narrowed = narrow_event_log_severity(severity)
     if narrowed is not None:
         return narrowed
@@ -272,10 +267,8 @@ class ChunkEventsStore:
             if since is not None:
                 stmt = stmt.where(s.event_log.c.recorded_at >= since)
             # Ranked from the domain's own vocabulary (`SEVERITY_RANK`), not restated here.
-            # Ingest has rejected a severity outside it, so `else_` is reached only by a
-            # since-fixed legacy row — `_narrow_persisted_severity`
-            # narrows the value the row is served with; its raw column value still ranks
-            # last here, a pre-existing row's SQL sort position, not its served severity.
+            # An unknown stored severity ranks last by its raw value, even though
+            # `_narrow_persisted_severity` supplies a recognized value in the response.
             severity_rank = case(
                 *[(s.event_log.c.severity == severity, rank) for severity, rank in SEVERITY_RANK.items()],
                 else_=len(SEVERITY_RANK),

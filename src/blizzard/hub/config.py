@@ -221,8 +221,7 @@ class WorkSourceConfig:
                 raise ConfigError(f"duplicate [[work_source]] name {name!r}")
             seen_names.add(name)
             if "close" in entry:
-                # closure is unconditional now — the flag that used to opt a
-                # source into it is gone, not defaulted or silently ignored.
+                # Delivered items always close; a close key is invalid.
                 raise ConfigError(
                     f"[[work_source]] {name!r} still carries a close key; closing every "
                     "delivered work item is unconditional now — delete the key"

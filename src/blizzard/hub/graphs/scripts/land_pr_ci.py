@@ -350,16 +350,13 @@ def _land() -> int:
                 continue
             if decision == _WAIT:
                 if verdict is not None:
-                    # The CI-watch case, now also entered by a clean-but-not-
-                    # green head: a degraded read falls through to the plain wait below.
+                    # A degraded CI read falls through to the plain wait below.
                     if verdict.decision == _FAILED:
                         base = Verdict.of(run, pull.repo, run.base_branch)
                         checks = verdict.failure_rows(base)
                         if any(_inheritance(check["base_red"]) == _OWN for check in checks):
-                            # At least one failing check is this chunk's own — chargeable
-                            # now, exactly as before. Any OTHER, inherited check on this
-                            # same repo rides along in the same `resolve` diagnosis rather
-                            # than forking the outcome.
+                            # Any owned failure charges this chunk; inherited failures on
+                            # the same repo accompany it in one `resolve` diagnosis.
                             failures.append(
                                 {
                                     "repo": pull.repo,

@@ -21,7 +21,7 @@ class DialectEntry:
     argument_key: str
 
 
-#: Claude Code's own normalizer stamp, now data rather than a name-only mapping.
+#: Claude Code's normalizer stamp and per-kind recognition parameters.
 _CLAUDE_CODE_JSONL_2: dict[str, DialectEntry] = {
     KIND_FILE_READ: DialectEntry(tool_name="Read", argument_key="file_path"),
     KIND_SKILL_INVOCATION: DialectEntry(tool_name="Skill", argument_key="skill"),
