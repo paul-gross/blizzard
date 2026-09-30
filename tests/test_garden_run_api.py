@@ -82,6 +82,7 @@ def _seed_delivery(
                     {"scope": "blizzard", "revisions": revisions, "measurement": measurement, "findings": findings}
                 ),
                 produced_at=produced_at,
+                seq=1,
             )
         )
         conn.execute(

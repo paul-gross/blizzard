@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from blizzard.hub.graphs.scripts.land_common import (
+    LandedRevisionUnknown,
     LandRun,
     MarkerWriteError,
     MergeDidNotLand,
@@ -320,7 +321,12 @@ def _land() -> int:
                 # A no-op landing: nothing to merge, and no poll changes that. The marker
                 # stops this repo being pending and completes the chunk's repo set.
                 print(f"{exc} — nothing to land", file=sys.stderr)
-                run.markers.record(commit["repo"], commit["commit"])
+                run.markers.record(commit["repo"], exc.landed_sha)
+                continue
+            except LandedRevisionUnknown as exc:
+                # The no-op is confirmed but its landed revision unread — another poll rereads it.
+                print(str(exc), file=sys.stderr)
+                wait = True
                 continue
             except PullRequestOpenError as exc:
                 # A create hiccup is worth another poll, not a bounce.
@@ -466,6 +472,12 @@ def _land() -> int:
         except MergeDidNotLand as exc:
             # Not an already-merged prior run (`merge` absorbs that) — a race worth re-polling.
             print(f"merge of {pull} did not land ({exc.result}); will re-poll", file=sys.stderr)
+            print(_PENDING)
+            return 0
+        except LandedRevisionUnknown as exc:
+            # Merged, but no read named its commit — the next poll recovers it through the
+            # already-merged path.
+            print(f"{exc}; will re-poll", file=sys.stderr)
             print(_PENDING)
             return 0
         run.markers.record(pull.bare_repo, landed_sha)

@@ -19,7 +19,7 @@ from blizzard.hub.domain.garden_delivery_materialize import (
     IWriteGardenDeliveryRepository,
 )
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row
+from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
 from blizzard.hub.store.schema import (
     artifacts,
     finding_facts,
@@ -232,6 +232,7 @@ class GardenDeliveryStore:
                     repo=None,
                     forge=None,
                     produced_at=plan.at,
+                    seq=next_artifact_seq(conn, plan.chunk_id),
                 )
             )
             if surviving_deltas or surviving_proposals:

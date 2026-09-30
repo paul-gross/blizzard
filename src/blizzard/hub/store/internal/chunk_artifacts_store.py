@@ -21,7 +21,13 @@ from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.delivery_read import DeliverySources
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, enqueue_close_intents, fence, lock_chunk_row
+from blizzard.hub.store.internal.chunk_rows import (
+    MARKER_PREFIX,
+    enqueue_close_intents,
+    fence,
+    lock_chunk_row,
+    next_artifact_seq,
+)
 
 
 class ChunkArtifactsStore:
@@ -32,13 +38,15 @@ class ChunkArtifactsStore:
         self._clock = clock
 
     def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
-        """Only the requested chunks and delivery families; no fleet artifact scan."""
+        """Only the requested chunks and delivery families; no fleet artifact scan. Each
+        chunk's markers arrive in durable write order (``artifacts.seq``)."""
         markers: dict[str, list[ArtifactRow]] = defaultdict(list)
         landed: dict[str, dict[str, str]] = defaultdict(dict)
         with self._store.read("delivery_sources_for") as conn:
             for batch in id_batches(chunk_ids):
                 for a in conn.execute(
-                    select(s.artifacts).where(
+                    select(s.artifacts)
+                    .where(
                         s.artifacts.c.chunk_id.in_(batch),
                         s.artifacts.c.kind == ArtifactKind.ASSET.value,
                         or_(
@@ -47,6 +55,9 @@ class ChunkArtifactsStore:
                             s.artifacts.c.name == "awaiting-external-merge",
                         ),
                     )
+                    # seq is per-chunk and not unique; chunk_id and artifact_id make the
+                    # order total without backend-dependent row order (`bzh:sql-portable`).
+                    .order_by(s.artifacts.c.chunk_id, s.artifacts.c.seq, s.artifacts.c.artifact_id)
                 ):
                     markers[a.chunk_id].append(
                         ArtifactRow(
@@ -170,6 +181,7 @@ class ChunkArtifactsStore:
                     repo=None,
                     forge=None,
                     produced_at=at,
+                    seq=next_artifact_seq(conn, chunk_id),
                 )
             )
             if name.startswith(MARKER_PREFIX):

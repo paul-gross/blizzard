@@ -34,6 +34,7 @@ def _seed_artifact(conn: sa.Connection, artifact_id: str, *, chunk_id: str, name
             kind="asset",
             data="[]",
             produced_at=_NOW,
+            seq=1,
         )
     )
 

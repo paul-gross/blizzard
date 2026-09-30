@@ -12,7 +12,10 @@ from blizzard.hub.domain.work import ChunkFacts
 
 @dataclass(frozen=True)
 class DeliverySources:
-    """The narrowed, page-keyed delivery read (not the chunk's whole artifact history)."""
+    """The narrowed, page-keyed delivery read (not the chunk's whole artifact history).
+
+    ``markers`` arrive in durable write order; :meth:`DeliveryRead.of` folds them as
+    given, so a later replacement reference supersedes an earlier one."""
 
     markers: list[ArtifactRow] = field(default_factory=list)
     legacy_landed: dict[str, str] = field(default_factory=dict)
@@ -65,8 +68,8 @@ class DeliveryRead:
         script_prs: dict[str, tuple[str, int]] = {}
         script_epochs: dict[tuple[str, int], int] = {}
         external_epochs: set[int] = set()
-        # Epoch and artifact id settle replacement references for the same repo.
-        for row in sorted(sources.markers, key=lambda r: (r.epoch, r.artifact_id)):
+        # Write order settles replacement references for the same repo.
+        for row in sources.markers:
             if row.name.startswith("merged/"):
                 landed[row.name.removeprefix("merged/")] = row.data.strip()
             elif row.name == "awaiting-external-merge":

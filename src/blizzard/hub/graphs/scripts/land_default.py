@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 
 from blizzard.hub.graphs.scripts.land_common import (
+    LandedRevisionUnknown,
     LandRun,
     MarkerWriteError,
     MergeDidNotLand,
@@ -50,9 +51,9 @@ def _land() -> int:
                 # A no-op landing, not a conflict: nothing to merge, so record the marker
                 # and carry on to the repos that do have work.
                 print(f"{exc} — nothing to land", file=sys.stderr)
-                run.markers.record(commit["repo"], commit["commit"])
+                run.markers.record(commit["repo"], exc.landed_sha)
                 continue
-            except (PullRequestOpenError, PullRequestLookupError) as exc:
+            except (PullRequestOpenError, PullRequestLookupError, LandedRevisionUnknown) as exc:
                 raise _Conflict(str(exc)) from exc
             # An already-merged PR is a prior, interrupted run's — nothing to check, since
             # the push stage below re-derives its outcome as a no-op.
@@ -67,6 +68,8 @@ def _land() -> int:
                 landed_sha = pull.merge(commit_hash)
             except MergeDidNotLand as exc:
                 raise _Conflict(f"merge of {pull} failed: {exc.result}") from exc
+            except LandedRevisionUnknown as exc:
+                raise _Conflict(str(exc)) from exc
             run.markers.record(pull.bare_repo, landed_sha)
             run.pause_for_crash_window(marker_index=marker_index, pending_count=pending_count)
     except _Conflict as exc:

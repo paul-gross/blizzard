@@ -85,6 +85,7 @@ def test_an_exact_tie_resolves_to_the_highest_artifact_id_not_to_insertion_order
                     kind="asset",
                     data=node_id,
                     produced_at=at,
+                    seq=1,
                 )
             )
 

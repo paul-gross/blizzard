@@ -38,6 +38,7 @@ def _seed_artifact(conn, artifact_id: str, *, chunk_id: str) -> None:  # type: i
             kind="asset",
             data="[]",
             produced_at=_NOW,
+            seq=1,
         )
     )
 

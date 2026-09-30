@@ -92,3 +92,35 @@ def test_old_external_merge_signal_does_not_label_a_later_auto_pr_as_human_wait(
     assert [p.number for p in view.open_prs] == [4]
     assert [p.number for p in view.closed_prs] == [3]
     assert view.awaiting_external_merge is False
+
+
+def test_same_epoch_replacement_follows_write_order_not_artifact_id() -> None:
+    """The later-written reference carries the lexically smaller id, as two ids minted in
+    one millisecond can; the markers' given order is the write order and it decides."""
+    earlier = ArtifactRow(
+        ArtifactKind.ASSET,
+        "delivery-pr/acme/one/3",
+        '{"repo":"acme/one","number":3,"url":"http://forge/acme/one/pull/3"}',
+        None,
+        None,
+        "art_zzzz",
+        "ch",
+        "nd",
+        "deliver",
+        1,
+    )
+    later = ArtifactRow(
+        ArtifactKind.ASSET,
+        "delivery-pr/acme/one/4",
+        '{"repo":"acme/one","number":4,"url":"http://forge/acme/one/pull/4"}',
+        None,
+        None,
+        "art_aaaa",
+        "ch",
+        "nd",
+        "deliver",
+        1,
+    )
+    view = DeliveryRead.of(ChunkFacts(minted=True), DeliverySources(markers=[earlier, later]))
+    assert [p.number for p in view.open_prs] == [4]
+    assert [p.number for p in view.closed_prs] == [3]

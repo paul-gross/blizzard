@@ -29,6 +29,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     fence,
     insert_proposals,
     lock_chunk_row,
+    next_artifact_seq,
     proposal_row,
 )
 
@@ -269,6 +270,7 @@ class ChunkDecisionsStore:
                         repo=row.repo,
                         forge=row.forge,
                         produced_at=at,
+                        seq=next_artifact_seq(conn, row.chunk_id),
                     )
                 )
             insert_proposals(conn, proposals, at=at)
