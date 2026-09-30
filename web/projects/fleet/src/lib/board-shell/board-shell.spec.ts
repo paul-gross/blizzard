@@ -79,8 +79,8 @@ describe('BoardShell', () => {
     const pr = el.querySelector<HTMLAnchorElement>('[data-testid="card-pr-link"]')!;
     expect(pr.href).toBe('https://forge.example/widget/pull/42');
     expect(pr.closest('button')).toBeNull();
-    expect(el.querySelector<HTMLAnchorElement>('[data-testid="card-landed-link"]')?.href).toBe('https://forge.example/service/commit/abc123');
-    expect(el.querySelector('[data-testid="card-landed-text"]')?.textContent).toContain('local def456');
+    expect(el.querySelector('[data-testid="card-landed-link"]')).toBeNull();
+    expect(el.querySelector('[data-testid="card-landed-text"]')).toBeNull();
     expect(el.querySelector('[data-testid="card-merge-wait"]')?.textContent).toContain('Awaiting your merge');
     pr.click();
     expect(selected).toEqual([]);
