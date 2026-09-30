@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.work import WorkItemCloseOutcome, WorkRef
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, build_hub, ingest
@@ -29,6 +30,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
         name=f"merged/{repo}",
         content="sha",
         at=hub.clock.now(),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
 
@@ -64,6 +66,7 @@ def test_a_replayed_landing_marker_enqueues_nothing_new(tmp_path: Path) -> None:
         name="merged/widget",
         content="sha",
         at=hub.clock.now(),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )  # the same (node_id, epoch, name) — record_hub_artifact's own idempotency guard no-ops it
 
     with hub.engine.connect() as conn:

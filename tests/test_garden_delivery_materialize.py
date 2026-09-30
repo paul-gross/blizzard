@@ -15,6 +15,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.garden_delivery import ValidatedDelivery
 from blizzard.hub.domain.garden_delivery_materialize import (
     DeliveryOutcome,
@@ -54,7 +55,7 @@ class _FakeGardenDeliveryRepo:
     delivered: list[DeliveryPlan] = field(default_factory=list)
     outcome: DeliveryOutcome = DeliveryOutcome.RECORDED
 
-    def deliver(self, plan: DeliveryPlan) -> DeliveryOutcome:
+    def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome:
         self.delivered.append(plan)
         return self.outcome
 

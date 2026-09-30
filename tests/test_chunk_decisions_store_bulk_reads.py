@@ -15,6 +15,7 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import Chunk, DecisionChoice, WorkItemMaterializationOutcome
@@ -65,6 +66,7 @@ def _record_decision(
         at=at,
         artifacts=[],
         proposals=proposals,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
 
@@ -87,6 +89,7 @@ def _transition(store: ChunkStores, chunk_id: str, decision_id: str, *, transiti
         artifacts=[],
         proposals=[],
         decision_id=decision_id,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
 

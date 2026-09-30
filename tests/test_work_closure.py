@@ -18,6 +18,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
@@ -68,6 +69,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
         name=f"merged/{repo}",
         content="sha",
         at=hub.clock.now(),
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
 
@@ -658,6 +660,7 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_closes_no_ref(tmp_path: P
         at=hub.clock.now(),
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     facts = hub.services.chunks.facts.load_facts(chunk_id)

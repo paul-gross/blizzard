@@ -25,7 +25,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_work_item
+from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_work_item
 
 pytestmark = pytest.mark.component
 
@@ -830,3 +830,34 @@ def test_every_finding_the_worker_read_shows_is_a_citable_proposal_finding(tmp_p
     _record_artifact(hub, chunk_id, name="proposals", content=_proposals(findings=shown), epoch=_EPOCH + 1)
     admitted = _post(hub, chunk_id, delta=["delta"], proposals=["proposals"], epoch=_EPOCH + 1)
     assert admitted.json()["outcome"] == "recorded", admitted.text
+
+
+# --- fenced ------------------------------------------------------------------
+
+
+def test_a_delivery_for_a_stopped_chunk_is_a_409_and_lands_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op()]))
+    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
+
+    resp = _post(hub, chunk_id, delta=["delta"])
+
+    assert resp.status_code == 409, resp.text
+    assert _finding_count(hub) == 0
+    with hub.engine.begin() as conn:
+        assert conn.execute(select(s.artifacts).where(s.artifacts.c.name == "garden-delivered")).first() is None
+
+
+def test_a_delivery_a_restart_superseded_is_a_409_and_lands_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub, _SCOPE)
+    chunk_id = _seed_chunk(hub)
+    _record_artifact(hub, chunk_id, name="delta", content=_delta(findings=[_add_op()]))
+    chunk_stores(hub.engine, hub.clock).route.record_lease(chunk_id, epoch=2, runner_id="r1", at=hub.clock.now())
+
+    resp = _post(hub, chunk_id, delta=["delta"], epoch=1)
+
+    assert resp.status_code == 409, resp.text
+    assert _finding_count(hub) == 0

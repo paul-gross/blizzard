@@ -13,6 +13,7 @@ from sqlalchemy import Engine, event
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.garden_delivery_materialize import (
     DeliveryOutcome,
     DeliveryPlan,
@@ -152,7 +153,7 @@ def test_deliver_writes_a_facts_own_actor_column(tmp_path: Path) -> None:
         proposals=[],
     )
 
-    store.deliver(plan)
+    store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     with engine.connect() as conn:
         (fact,) = conn.execute(sa.select(finding_facts)).all()
@@ -163,7 +164,7 @@ def test_deliver_writes_every_row(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
     plan = _full_plan()
 
-    outcome = store.deliver(plan)
+    outcome = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is DeliveryOutcome.RECORDED
     with engine.connect() as conn:
@@ -261,7 +262,7 @@ def test_deliver_writes_finding_sets_before_finding_facts_under_fk_enforcement(t
         proposals=[],
     )
 
-    outcome = store.deliver(plan)
+    outcome = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is DeliveryOutcome.RECORDED
 
@@ -269,10 +270,10 @@ def test_deliver_writes_finding_sets_before_finding_facts_under_fk_enforcement(t
 def test_deliver_replay_mints_nothing_new(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
     plan = _full_plan()
-    first = store.deliver(plan)
+    first = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
     assert first is DeliveryOutcome.RECORDED
 
-    second = store.deliver(plan)
+    second = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert second is DeliveryOutcome.ALREADY_RECORDED
     with engine.connect() as conn:
@@ -290,7 +291,7 @@ def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(
     `finding_sets.artifact_id`'s unique constraint with a raw IntegrityError."""
     store, engine = _store_and_engine(tmp_path)
     first = _full_plan()
-    assert store.deliver(first) is DeliveryOutcome.RECORDED
+    assert store.deliver(first, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
         chunk_id="ch_1",
@@ -313,7 +314,7 @@ def test_deliver_at_a_new_epoch_resolving_the_same_artifact_is_already_recorded(
         proposals=[],
     )
 
-    outcome = store.deliver(second)
+    outcome = store.deliver(second, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is DeliveryOutcome.ALREADY_RECORDED
     with engine.connect() as conn:
@@ -362,7 +363,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
         ],
         proposals=[],
     )
-    assert store.deliver(first) is DeliveryOutcome.RECORDED
+    assert store.deliver(first, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
         chunk_id="ch_1",
@@ -422,7 +423,7 @@ def test_deliver_with_one_delta_already_materialized_still_lands_the_other(tmp_p
         proposals=[],
     )
 
-    outcome = store.deliver(second)
+    outcome = store.deliver(second, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is DeliveryOutcome.RECORDED
     with engine.connect() as conn:
@@ -478,7 +479,7 @@ def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_cita
         ],
         proposals=[],
     )
-    assert store.deliver(first) is DeliveryOutcome.RECORDED
+    assert store.deliver(first, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
         chunk_id="ch_1",
@@ -527,7 +528,7 @@ def test_deliver_substitutes_a_dropped_deltas_minted_id_for_a_proposals_ref_cita
         ],
     )
 
-    outcome = store.deliver(second)
+    outcome = store.deliver(second, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is DeliveryOutcome.RECORDED
     with engine.connect() as conn:
@@ -544,7 +545,7 @@ def test_deliver_at_a_new_epoch_resolving_the_same_proposal_artifact_mints_no_du
     keyed `(source_artifact_id, ref)`."""
     store, engine = _store_and_engine(tmp_path)
     first = _full_plan()
-    assert store.deliver(first) is DeliveryOutcome.RECORDED
+    assert store.deliver(first, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
         chunk_id="ch_1",
@@ -568,7 +569,7 @@ def test_deliver_at_a_new_epoch_resolving_the_same_proposal_artifact_mints_no_du
         ],
     )
 
-    outcome = store.deliver(second)
+    outcome = store.deliver(second, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is DeliveryOutcome.ALREADY_RECORDED
     with engine.connect() as conn:
@@ -584,7 +585,7 @@ def test_deliver_with_one_proposal_already_delivered_still_lands_the_other(tmp_p
     """The proposal twin of the mixed-survival delta test above: a visit re-carrying an
     already-delivered proposal (`p1`) alongside a new one (`p2`) must still land `p2`."""
     store, engine = _store_and_engine(tmp_path)
-    assert store.deliver(_full_plan()) is DeliveryOutcome.RECORDED
+    assert store.deliver(_full_plan(), admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
 
     second = DeliveryPlan(
         chunk_id="ch_1",
@@ -618,7 +619,7 @@ def test_deliver_with_one_proposal_already_delivered_still_lands_the_other(tmp_p
         ],
     )
 
-    outcome = store.deliver(second)
+    outcome = store.deliver(second, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is DeliveryOutcome.RECORDED
     with engine.connect() as conn:
@@ -651,7 +652,7 @@ def test_deliver_clean_plan_records_only_the_finding_set(tmp_path: Path) -> None
         proposals=[],
     )
 
-    outcome = store.deliver(plan)
+    outcome = store.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
 
     assert outcome is DeliveryOutcome.RECORDED
     with engine.connect() as conn:

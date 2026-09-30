@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import DecisionChoice, DecisionRow, DocketEntry
 
@@ -69,17 +70,18 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         node_id: str,
         node_name: str,
         epoch: int,
+        admission: EpochAdmission,
         choices: list[DecisionChoice],
         at: datetime,
         artifacts: list[ArtifactRow],
         proposals: list[WorkItemProposalRow],
         imposed_by_runner_id: str | None,
-    ) -> None:
-        """Open a gate decision, committing any step artifacts and proposals atomically.
+    ) -> FenceRefusal | None:
+        """Open a gate decision, committing any step artifacts and proposals atomically, behind
+        the write fence (``bzh:epoch-fencing``) — a refusal writes nothing and is returned.
 
-        A graph gate passes neither (they landed with the arriving transition); a
-        runner-config gate carries them here. ``imposed_by_runner_id`` names the runner
-        whose configuration imposed the gate — ``None`` for a graph gate."""
+        A graph gate passes neither artifacts nor proposals; a runner-config gate carries them
+        here, with ``imposed_by_runner_id`` naming the runner — ``None`` for a graph gate."""
         ...
 
     def record_decision_resolution(

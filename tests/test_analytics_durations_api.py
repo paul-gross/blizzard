@@ -15,6 +15,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.work import MigrationSource
 from tests.support import (
@@ -492,6 +493,7 @@ def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration
         artifacts=[],
         proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     report_lease(hub, chunk_id, epoch=3, seq=2)
     hub.clock.advance(timedelta(seconds=1))

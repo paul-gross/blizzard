@@ -15,6 +15,7 @@ from sqlalchemy import Engine, insert, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import EscalationOpen, EventFeed, EventRow
@@ -173,17 +174,25 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         seed_chunk(conn, "ch_f", graph_id="gr_1", at=_T0)
 
     # ch_a: escalation, nothing after it -> OPEN.
-    store.escalations.record_escalation("ch_a", epoch=1, takeover_command="cd a && resume", at=_at(10))
+    store.escalations.record_escalation(
+        "ch_a", epoch=1, takeover_command="cd a && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+    )
     # ch_b: escalation then a LATER lease mint -> superseded (closed).
-    store.escalations.record_escalation("ch_b", epoch=1, takeover_command="cd b && resume", at=_at(10))
+    store.escalations.record_escalation(
+        "ch_b", epoch=1, takeover_command="cd b && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+    )
     store.route.record_lease("ch_b", epoch=2, runner_id="r1", at=_at(20))
     # ch_c: escalation then a LATER requeue -> superseded (closed).
-    store.escalations.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=_at(10))
+    store.escalations.record_escalation(
+        "ch_c", epoch=1, takeover_command="cd c && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+    )
     with store.exclusive.locked(["ch_c"]) as handle:
         store.movement.record_requeue_locked(handle, "ch_c", at=_at(20))
     # ch_d: escalation then a LATER stop -> superseded (#292). This read feeds the critical
     # `needs-human` row in `GET /api/events`, so a stopped chunk must leave it.
-    store.escalations.record_escalation("ch_d", epoch=1, takeover_command="cd d && resume", at=_at(10))
+    store.escalations.record_escalation(
+        "ch_d", epoch=1, takeover_command="cd d && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+    )
     clock.instant = _at(20)
     with store.exclusive.locked(["ch_d"]) as handle:
         store.lifecycle.record_stop_locked(handle, "ch_d", by="operator", at=_at(20))
@@ -191,10 +200,23 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
     clock.instant = _at(10)
     with store.exclusive.locked(["ch_e"]) as handle:
         store.lifecycle.record_stop_locked(handle, "ch_e", by="operator", at=_at(10))
-    store.escalations.record_escalation("ch_e", epoch=1, takeover_command="cd e && resume", at=_at(20))
+    # Seeded as a raw row: the write fence refuses an escalation on a stopped chunk, so the
+    # store cannot produce this ordering — only the read rule under test can be pinned.
+    with engine.begin() as conn:
+        conn.execute(
+            insert(s.escalations).values(
+                chunk_id="ch_e",
+                epoch=1,
+                takeover_command="cd e && resume",
+                wrapped_takeover_command="",
+                recorded_at=_at(20),
+            )
+        )
     # ch_f: escalation then the chunk REACHES DONE elsewhere -> superseded (#293). No later
     # lease is minted here, so completion is the only arm that can close it.
-    store.escalations.record_escalation("ch_f", epoch=1, takeover_command="cd f && resume", at=_at(10))
+    store.escalations.record_escalation(
+        "ch_f", epoch=1, takeover_command="cd f && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+    )
     store.movement.record_transition(
         transition_id="tr_f1",
         chunk_id="ch_f",
@@ -206,6 +228,7 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         at=_at(20),
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     # ch_f drops because it DERIVES done, not incidentally — pin the mechanism, not the count.
@@ -231,7 +254,9 @@ def test_list_open_escalations_query_count_is_independent_of_fleet_size(tmp_path
                 seed_chunk(conn, f"ch_{i}", graph_id="gr_1", at=_T0)
         store = chunk_stores(engine, FixedClock(_T0))
         for i in range(n):
-            store.escalations.record_escalation(f"ch_{i}", epoch=1, takeover_command="cd a && resume", at=_at(10))
+            store.escalations.record_escalation(
+                f"ch_{i}", epoch=1, takeover_command="cd a && resume", at=_at(10), admission=EpochAdmission.AT_OR_ABOVE
+            )
         return store, engine
 
     small, small_engine = _fleet(tmp_path / "small", 3)

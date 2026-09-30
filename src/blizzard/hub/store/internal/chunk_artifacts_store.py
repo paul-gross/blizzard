@@ -17,10 +17,11 @@ from blizzard.foundation.ids import ARTIFACT_PREFIX, Id
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.delivery_read import DeliverySources
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, chunk_is_terminal, enqueue_close_intents, latest_epoch
+from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX, enqueue_close_intents, fence, lock_chunk_row
 
 
 class ChunkArtifactsStore:
@@ -126,18 +127,24 @@ class ChunkArtifactsStore:
             )
 
     def record_hub_artifact(
-        self, chunk_id: str, *, node_id: str, node_name: str, epoch: int, name: str, content: str, at: datetime
+        self,
+        chunk_id: str,
+        *,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        name: str,
+        content: str,
+        at: datetime,
     ) -> bool:
         """Append one hub-node progress artifact **outside** a transition (#65),
         idempotent per ``(chunk, node, name, epoch)`` — the ``produces:`` re-run skip's
-        durable side, and the mid-run marker callback's write. Three guards, all
-        returning False: the row's existence absorbs a replay, a terminal chunk fact
-        (``chunk_stopped``/``chunk_completed``) absorbs a still-running ``run:`` list whose chunk was stopped
-        out from under it — regardless of epoch, since stopping mints none — and the
-        chunk's CURRENT epoch absorbs a restart that re-aimed it while the ``run:`` list —
-        and the mid-run marker callback it can still invoke — kept going
+        durable side, and the mid-run marker callback's write. Returns False, writing
+        nothing, on a replay — the row's existence — or when the write fence refuses
         (``bzh:epoch-fencing``)."""
         with self._store.write("record_hub_artifact") as conn:
+            lock_chunk_row(conn, chunk_id)
             already = conn.execute(
                 select(s.artifacts.c.artifact_id).where(
                     (s.artifacts.c.chunk_id == chunk_id)
@@ -148,9 +155,7 @@ class ChunkArtifactsStore:
             ).first()
             if already is not None:
                 return False
-            if chunk_is_terminal(conn, chunk_id):
-                return False
-            if latest_epoch(conn, chunk_id) > epoch:
+            if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
                 return False
             conn.execute(
                 s.artifacts.insert().values(

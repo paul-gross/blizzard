@@ -14,18 +14,21 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import FINDING_PREFIX, Id
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.graph import Node
 from blizzard.hub.domain.review_findings import ValidatedReviewFindings
 from blizzard.hub.domain.work import Chunk
 
 
 class ReviewFindingsOutcome(Enum):
-    """What :meth:`ReviewFindingsMaterialize.deliver` reports. Both members mean the
-    delivery is durably recorded — the distinction exists only to assert on in tests,
-    mirroring `garden_delivery_materialize.DeliveryOutcome`."""
+    """What :meth:`ReviewFindingsMaterialize.deliver` reports. The first two members mean
+    the delivery is durably recorded — the distinction exists only to assert on in tests,
+    mirroring `garden_delivery_materialize.DeliveryOutcome`; ``FENCED`` means the write
+    fence refused it (``bzh:epoch-fencing``) and nothing landed."""
 
     RECORDED = "recorded"  # this call minted every row
     ALREADY_RECORDED = "already_recorded"  # a prior call's marker was found; nothing minted
+    FENCED = "fenced"  # the chunk is terminal or the delivery's epoch is stale; nothing minted
 
 
 @dataclass(frozen=True)
@@ -87,7 +90,7 @@ class IWriteReviewFindingsRepository(Protocol):
     """Materialize one :class:`ReviewFindingsPlan`, atomically and idempotently, keyed
     on ``chunk_id`` alone: a second plan for an already-delivered chunk is dropped."""
 
-    def deliver(self, plan: ReviewFindingsPlan) -> ReviewFindingsOutcome: ...
+    def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome: ...
 
     def already_delivered(self, *, chunk_id: str) -> bool:
         """Whether ``chunk_id`` already carries a review-findings-delivered marker — the
@@ -147,4 +150,4 @@ class ReviewFindingsMaterialize:
             new_findings=new_findings,
             facts=facts,
         )
-        return self._delivery.deliver(plan)
+        return self._delivery.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)

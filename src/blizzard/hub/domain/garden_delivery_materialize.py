@@ -15,6 +15,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import FINDING_PREFIX, FINDING_SET_PREFIX, GARDEN_PROPOSAL_PREFIX, Id
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.garden_delivery import ValidatedDelivery, is_finding_id_shaped, single_repo_of
 from blizzard.hub.domain.graph import Node
 from blizzard.hub.domain.run_context import RunContext
@@ -23,13 +24,13 @@ from blizzard.wire.finding import AddFindingOp, GoneFindingOp, ObservedFindingOp
 
 
 class DeliveryOutcome(Enum):
-    """What :meth:`GardenDelivery.deliver` reports. Both members mean the delivery is
-    durably recorded (blizzard-product:/delivered/garden/machinery.md §Delivery: "a replay
-    finds it and returns `recorded` having minted nothing") — the distinction is kept only
-    because it is useful to assert on in tests, never because a caller need branch on it."""
+    """What :meth:`GardenDelivery.deliver` reports. The first two members mean the delivery is
+    durably recorded (blizzard-product:/delivered/garden/machinery.md §Delivery) — the
+    distinction only useful to assert on; ``FENCED`` means ``bzh:epoch-fencing`` refused it."""
 
     RECORDED = "recorded"  # this call minted every row
     ALREADY_RECORDED = "already_recorded"  # a prior call's marker was found; nothing minted
+    FENCED = "fenced"  # the chunk is terminal or the delivery's epoch is stale; nothing minted
 
 
 @dataclass(frozen=True)
@@ -131,7 +132,7 @@ class IWriteGardenDeliveryRepository(Protocol):
     """Materialize one :class:`DeliveryPlan`, atomically and idempotently, keyed on the
     ``(chunk_id, node_id, epoch)`` marker the plan carries."""
 
-    def deliver(self, plan: DeliveryPlan) -> DeliveryOutcome: ...
+    def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome: ...
 
     def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
         """Whether the ``(chunk_id, node_id, epoch)`` marker already exists — the same
@@ -270,4 +271,4 @@ class GardenDelivery:
             deltas=deltas,
             proposals=proposals,
         )
-        return self._delivery.deliver(plan)
+        return self._delivery.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)

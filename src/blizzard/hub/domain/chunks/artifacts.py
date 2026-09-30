@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.delivery_read import DeliverySources
 
 
@@ -37,13 +38,21 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
     """Read-write chunk-artifacts access."""
 
     def record_hub_artifact(
-        self, chunk_id: str, *, node_id: str, node_name: str, epoch: int, name: str, content: str, at: datetime
+        self,
+        chunk_id: str,
+        *,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        name: str,
+        content: str,
+        at: datetime,
     ) -> bool:
         """Append one hub-node progress artifact OUTSIDE a transition (#65).
 
         Idempotent per ``(chunk, node, name, epoch)`` natural key: a re-run that already
-        recorded this artifact writes nothing a second time. Also fenced against the
-        chunk's current epoch (``bzh:epoch-fencing``): a write at an epoch the chunk has
-        moved past writes nothing either. Ordinary artifact rows, durable exactly like a
+        recorded this artifact writes nothing a second time. Also behind the write fence
+        (``bzh:epoch-fencing``): a refused write writes nothing either. Ordinary artifact rows, durable exactly like a
         worker-produced one. Returns True iff it wrote."""
         ...

@@ -11,7 +11,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, WORK_ITEM_PROPOSAL_PREFIX, Id
 from blizzard.hub.config import ROUTE_TOKEN_WARN
@@ -19,6 +18,7 @@ from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.errors import ChunkNotFound
@@ -120,19 +120,14 @@ class DecisionService:
         if policy_rejection is not None:
             return DecisionSubmitResult.failure(policy_rejection)
 
-        if facts.status() in TERMINAL_STATUSES:
-            return DecisionSubmitResult.failure("chunk is terminal")
-        latest = facts.latest_epoch()
-        if latest is not None and submission.epoch != latest:
-            return DecisionSubmitResult.failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
-
         decision_id = Id.mint(DECISION_PREFIX, self._clock).value
-        self._decisions.record_decision(
+        refusal = self._decisions.record_decision(
             decision_id=decision_id,
             chunk_id=chunk.chunk_id,
             node_id=node.node_id,
             node_name=node.name,
             epoch=submission.epoch,
+            admission=EpochAdmission.CURRENT,
             choices=[DecisionChoice(name=c.name, description=c.description) for c in node.choices],
             at=self._clock.now(),
             artifacts=[self._row(chunk, node, submission.epoch, a) for a in submission.artifacts],
@@ -141,6 +136,8 @@ class DecisionService:
             ),
             imposed_by_runner_id=submission.runner_id,
         )
+        if refusal is not None:
+            return DecisionSubmitResult.failure(refusal.detail)
         return DecisionSubmitResult(
             response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`"),
             decision_id=decision_id,

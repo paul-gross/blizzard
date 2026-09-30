@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from tests.support import build_hub, chunk_stores, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
@@ -84,9 +85,13 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     )
 
     # ch_c: an OPEN escalation (projects into the feed as needs-human/critical).
-    store.escalations.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=at(4))
+    store.escalations.record_escalation(
+        "ch_c", epoch=1, takeover_command="cd c && resume", at=at(4), admission=EpochAdmission.AT_OR_ABOVE
+    )
     # ch_a: an escalation SUPERSEDED by a later lease mint -> excluded from the feed.
-    store.escalations.record_escalation("ch_a", epoch=1, takeover_command="cd a && resume", at=at(1))
+    store.escalations.record_escalation(
+        "ch_a", epoch=1, takeover_command="cd a && resume", at=at(1), admission=EpochAdmission.AT_OR_ABOVE
+    )
     store.route.record_lease("ch_a", epoch=2, runner_id="r1", at=at(5))
 
     feed = _events(hub)
@@ -194,7 +199,9 @@ def test_naive_since_with_open_escalation_does_not_500(tmp_path: Path) -> None:
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)
         seed_chunk(conn, "ch_c", graph_id="gr_1", at=t0)
-    store.escalations.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=t0)
+    store.escalations.record_escalation(
+        "ch_c", epoch=1, takeover_command="cd c && resume", at=t0, admission=EpochAdmission.AT_OR_ABOVE
+    )
     # `2020-01-01T00:00:00` — valid ISO-8601, no timezone offset, well before the escalation.
     feed = _events(hub, since="2020-01-01T00:00:00")
     assert [e["kind"] for e in feed] == ["needs-human"]

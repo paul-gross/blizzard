@@ -26,6 +26,7 @@ from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.event_log import EventLogService
 from blizzard.hub.domain.graph import (
@@ -343,6 +344,7 @@ class HubNodeExecutor:
             node_id=node_id,
             node_name=node_name,
             epoch=epoch,
+            admission=EpochAdmission.AT_OR_ABOVE,
             name=name,
             content=content,
             at=self._clock.now(),
@@ -416,6 +418,7 @@ class HubNodeExecutor:
                     node_id=node.node_id,
                     node_name=node.name,
                     epoch=epoch,
+                    admission=EpochAdmission.AT_OR_ABOVE,
                     name=self._log_name(1, "unconverged-delivery", None),
                     content=f"[unconverged delivery]\n{exc}\n",
                     at=self._clock.now(),
@@ -436,6 +439,7 @@ class HubNodeExecutor:
                     node_id=node.node_id,
                     node_name=node.name,
                     epoch=epoch,
+                    admission=EpochAdmission.AT_OR_ABOVE,
                     name=self._log_name(index, step.name, step.produces),
                     content=f"$ {step.command}\n[exit {result.exit_code}]\n{result.stdout}{result.stderr}",
                     at=self._clock.now(),
@@ -455,6 +459,7 @@ class HubNodeExecutor:
                         node_id=node.node_id,
                         node_name=node.name,
                         epoch=epoch,
+                        admission=EpochAdmission.AT_OR_ABOVE,
                         name=step.produces,
                         content="done",
                         at=self._clock.now(),
@@ -556,6 +561,7 @@ class HubNodeExecutor:
                 node_id=node.node_id,
                 node_name=node.name,
                 epoch=epoch,
+                admission=EpochAdmission.AT_OR_ABOVE,
                 name=_UNROUTABLE_ARTIFACT_NAME,
                 content=(
                     f"{detail}\n\n"
@@ -643,6 +649,7 @@ class HubNodeExecutor:
             to_node_id=to_node_id,
             choice_name=choice,
             epoch=hub_epoch,
+            admission=EpochAdmission.ABOVE,
             runner_id=_HUB_RUNNER_ID,
             transition_id=fresh_transition_id,
             at=self._clock.now(),

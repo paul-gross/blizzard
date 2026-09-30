@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.work import AnswerOutcome, QuestionRow
 
 
@@ -37,16 +38,17 @@ class IWriteChunkQuestionsRepository(IReadChunkQuestionsRepository, Protocol):
         session_id: str | None,
         runner_id: str,
         epoch: int,
+        admission: EpochAdmission,
         question: str,
         options: list[str],
         asked_at: datetime,
         harness_id: str | None = None,
-    ) -> None:
-        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human``.
+    ) -> FenceRefusal | None:
+        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human`` — behind the
+        write fence (``bzh:epoch-fencing``); a refusal writes nothing and is returned.
 
-        Runner-authored, forwarded up the outbound buffer; the row is the durable
-        rendezvous the answer keys off. Idempotent by ``question_id`` (a store-and-forward
-        replay re-lands the same id harmlessly)."""
+        Runner-authored, the durable rendezvous the answer keys off. Idempotent by
+        ``question_id`` (a store-and-forward replay re-lands the same id harmlessly)."""
         ...
 
     def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:

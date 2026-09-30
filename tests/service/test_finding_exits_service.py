@@ -133,9 +133,10 @@ def deliver(
     ).json()
     assert completed["response"]["outcome"] == "next", completed
 
+    epoch = g.hub.get(f"/api/chunks/{chunk_id}").json()["latest_epoch"]
     return g.hub.post(
         f"/api/chunks/{chunk_id}/garden-delivery",
-        params={"node_id": g.nodes["deliver"], "epoch": 1},
+        params={"node_id": g.nodes["deliver"], "epoch": epoch},
         json={"delta": ["delta"], "proposals": ["docket"] if proposals else []},
     )
 

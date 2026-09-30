@@ -40,6 +40,7 @@ from blizzard.hub.domain.edit import (
 )
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.garden_delivery import GardenDeliveryRejected, validate_delivery
+from blizzard.hub.domain.garden_delivery_materialize import DeliveryOutcome
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
@@ -55,6 +56,7 @@ from blizzard.hub.domain.review_findings import (
     parse_review_finding_delta,
     validate_review_findings,
 )
+from blizzard.hub.domain.review_findings_materialize import ReviewFindingsOutcome
 from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
     Chunk,
@@ -94,6 +96,9 @@ from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.work_source import WorkItemAuthorView
 
 router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal)])
+
+#: A delivery the write fence refused — a 409, never ``invalid``, which would write a failure marker.
+_FENCED_DELIVERY_DETAIL = "delivery superseded: the chunk is terminal or was restarted"
 
 
 @dataclass(frozen=True)
@@ -345,7 +350,7 @@ def record_garden_delivery(
     ``--delta``/``--proposals`` artifacts and, on success, materializes them in one
     transaction. An unresolvable run context or a failed validation is an ``invalid``
     outcome at a 200, never an error response — the graph's own ``invalid`` edge reads
-    and routes on it."""
+    and routes on it. A delivery the chunk has since been stopped or restarted past is a 409."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -402,7 +407,7 @@ def record_garden_delivery(
 
     # Both `DeliveryOutcome` members mean "durably recorded" to this route's caller
     # (see `DeliveryOutcome`'s own docstring) — a replay minting nothing is not itself news.
-    services.garden_delivery.deliver(
+    outcome = services.garden_delivery.deliver(
         validated,
         chunk=chunk,
         node=node,
@@ -410,6 +415,8 @@ def record_garden_delivery(
         delta_artifact_ids=delta_artifact_ids,
         proposal_artifact_ids=proposal_artifact_ids,
     )
+    if outcome is DeliveryOutcome.FENCED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_FENCED_DELIVERY_DETAIL)
     return GardenDeliveryResponse(outcome="recorded", detail="")
 
 
@@ -431,7 +438,8 @@ def record_review_findings_delivery(
     """The `record-findings` node's own route — validates the chunk's
     newest `review-finding-delta` artifact and, on success, materializes its `deferred`
     entries in one transaction. A malformed delta or an unresolvable node is an
-    ``invalid`` outcome at a 200, never an error response. Idempotent per chunk."""
+    ``invalid`` outcome at a 200, never an error response; a delivery the chunk has since been
+    stopped or restarted past is a 409. Idempotent per chunk."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -459,7 +467,8 @@ def record_review_findings_delivery(
     except ReviewFindingsRejected as exc:
         return ReviewFindingsDeliveryResponse(outcome="invalid", detail=str(exc))
 
-    services.review_findings.deliver(validated, chunk=chunk, node=node, epoch=epoch)
+    if services.review_findings.deliver(validated, chunk=chunk, node=node, epoch=epoch) is ReviewFindingsOutcome.FENCED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_FENCED_DELIVERY_DETAIL)
     return ReviewFindingsDeliveryResponse(outcome="recorded", detail="")
 
 

@@ -19,7 +19,9 @@ from typing import Protocol, cast
 from sqlalchemy import Connection, Select, func, insert, select
 
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.fleet import Route
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import (
     Chunk,
@@ -397,6 +399,41 @@ def chunk_is_terminal(conn: Connection, chunk_id: str) -> bool:
     write regardless of epoch (``bzh:epoch-fencing``): ``record_stop_locked`` mints no epoch,
     so the epoch guard alone cannot catch a write arriving after a stop."""
     return row_exists(conn, s.chunk_stopped, chunk_id) or row_exists(conn, s.chunk_completed, chunk_id)
+
+
+def fence(conn: Connection, chunk_id: str, *, epoch: int, admission: EpochAdmission) -> FenceRefusal | None:
+    """The one in-transaction write fence (``bzh:epoch-fencing``): ``None`` when a write at
+    ``epoch`` clears it, else why it was refused. Terminal comes first — a stopped or
+    completed chunk, or one whose newest transition reached the reserved terminal at its
+    newest epoch, refuses at any epoch — then the epoch against ``admission``.
+
+    Call it after :func:`lock_chunk_row` and the write's replay probe, on the write's own
+    connection (``bzh:store-exclusive-write``), so the verdict cannot be overtaken by the
+    stop or restart it guards against."""
+    newest = latest_epoch(conn, chunk_id)
+    if chunk_is_terminal(conn, chunk_id) or _reached_terminal_at(conn, chunk_id, newest):
+        return FenceRefusal.terminal(epoch)
+    if not admission.admits(epoch, newest=newest):
+        return FenceRefusal.stale(epoch, latest=newest)
+    return None
+
+
+def _reached_terminal_at(conn: Connection, chunk_id: str, newest: int) -> bool:
+    """Whether a transition into the reserved terminal sits at the chunk's newest epoch —
+    ``done`` reached by transition. A restart or a fresh lease mints a newer epoch, so a
+    chunk moved on from a terminal transition no longer matches."""
+    return (
+        conn.execute(
+            select(s.transitions.c.transition_id)
+            .where(
+                (s.transitions.c.chunk_id == chunk_id)
+                & (s.transitions.c.to_node_id == RESERVED_TERMINAL)
+                & (s.transitions.c.epoch >= newest)
+            )
+            .limit(1)
+        ).first()
+        is not None
+    )
 
 
 def insert_proposals(conn: Connection, proposals: list[WorkItemProposalRow], *, at: datetime) -> None:

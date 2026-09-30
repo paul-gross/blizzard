@@ -19,6 +19,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph import GraphDoc
@@ -231,6 +232,7 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
         at=hub.clock.now(),
         artifacts=[_artifact(chunk_id, node_id)],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     assert wrote is not None
@@ -259,7 +261,7 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
     assert pre_migration is not None
     source_graph_id = pre_migration.graph_id
 
-    def do_migrate() -> str | None:
+    def do_migrate() -> str | FenceRefusal | None:
         return chunks.record_migration(
             chunk_id,
             from_node_id=node_id,
@@ -273,6 +275,7 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
             at=hub.clock.now(),
             artifacts=[_artifact(chunk_id, node_id)],
             proposals=[],
+            admission=EpochAdmission.AT_OR_ABOVE,
         )
 
     assert do_migrate() is not None
@@ -322,6 +325,7 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
         at=hub.clock.now(),
         artifacts=[_artifact(chunk_id, node_id)],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     assert wrote is not None
 
@@ -403,6 +407,7 @@ def test_record_migration_with_clear_intent_clears_the_intent_atomically(tmp_pat
         artifacts=[_artifact(chunk_id, node_id)],
         proposals=[],
         clear_intent=True,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     assert wrote is not None
 
@@ -444,6 +449,7 @@ def test_record_migration_without_clear_intent_leaves_a_set_intent_untouched(tmp
         at=hub.clock.now(),
         artifacts=[],
         proposals=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
         # clear_intent defaults False — an ordinary #90 authored-choice migration,
         # which carries no intent of its own to clear.
     )
@@ -496,6 +502,7 @@ def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(t
         proposals=[],
         release_route=False,
         clear_intent=True,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     assert wrote is not None
 

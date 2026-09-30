@@ -50,11 +50,13 @@ def question_view(row: QuestionRow) -> QuestionView:
 
 @router.post("/questions", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require(QUESTION_ANSWER))])
 def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
-    """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``."""
+    """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``; 409 when fenced out."""
     if services.chunks.record.get(fact.chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {fact.chunk_id}")
     change = chunk_events.ChunkChanged.before(services, fact.chunk_id)
-    services.questions.record_asked(fact)
+    refusal = services.questions.record_asked(fact)
+    if refusal is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal.detail)
     key = f"questions:{fact.question_id}"
     services.events.publish_question_asked(fact.chunk_id, fact.question_id, key=key)
     change.publish(cause="question-asked", key=key)

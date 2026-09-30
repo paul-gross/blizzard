@@ -18,15 +18,16 @@ from sqlalchemy import func, select, update
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import HUB_EXEC_SLOT_PREFIX, Id
 from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     MARKER_PREFIX,
-    chunk_is_terminal,
     enqueue_close_intents,
+    fence,
     graph_id_of,
-    latest_epoch,
+    lock_chunk_row,
     next_route_seq,
 )
 
@@ -90,6 +91,7 @@ class ChunkHubExecStore:
         to_node_id: str,
         choice_name: str,
         epoch: int,
+        admission: EpochAdmission,
         runner_id: str,
         transition_id: str,
         at: datetime,
@@ -98,13 +100,11 @@ class ChunkHubExecStore:
     ) -> bool:
         """Record a generic hub command node's exit transition **atomically and idempotently**
         (#65) — ``ChunkDeliveryStore.finalize_delivery``'s counterpart, generalized to any
-        authored target. Three guards, all returning False: the transition's existence at
-        ``(chunk_id, from_node_id, epoch)`` absorbs a redelivery replay, a terminal chunk
-        fact (``chunk_stopped``/``chunk_completed``) absorbs a still-running ``run:`` list
-        whose chunk was stopped out from under it — regardless of epoch, since stopping
-        mints none — and the chunk's CURRENT epoch absorbs a restart that re-aimed it while
-        the ``run:`` list ran (``bzh:epoch-fencing``)."""
+        authored target. Returns False, writing nothing, on a redelivery replay — the
+        transition's existence at ``(chunk_id, from_node_id, epoch)`` — or when the write
+        fence refuses (``bzh:epoch-fencing``)."""
         with self._store.write("record_hub_step_transition") as conn:
+            lock_chunk_row(conn, chunk_id)
             already = conn.execute(
                 select(s.transitions.c.transition_id).where(
                     (s.transitions.c.chunk_id == chunk_id)
@@ -114,9 +114,7 @@ class ChunkHubExecStore:
             ).first()
             if already is not None:
                 return False
-            if chunk_is_terminal(conn, chunk_id):
-                return False
-            if latest_epoch(conn, chunk_id) >= epoch:
+            if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
                 return False
             conn.execute(
                 s.lease_facts.insert().values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)

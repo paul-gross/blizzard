@@ -40,6 +40,7 @@ from blizzard.hub.api.scopes import scope_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.hub_node import PollPolicy
+from blizzard.hub.domain.chunks.fence import FenceRefusal
 from blizzard.hub.domain.claim import (
     ClaimConflict,
     ClaimDeniedDependency,
@@ -774,7 +775,8 @@ def report_escalation(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> dict[str, str]:
-    """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``; 403 when retired."""
+    """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``; 403 when retired,
+    409 when fenced out."""
     fleet.assert_owns(report.runner_id)
     if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -786,6 +788,8 @@ def report_escalation(
         takeover_command=report.takeover_command,
         wrapped_takeover_command=report.wrapped_takeover_command,
     )
+    if isinstance(escalation_id, FenceRefusal):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=escalation_id.detail)
     change.publish(cause="escalated", key=f"escalations:{escalation_id}")
     return {"chunk_id": chunk_id}
 

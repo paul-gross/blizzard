@@ -16,6 +16,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunks.fence import EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.work import MigrationSource
 from blizzard.hub.graphs.scripts import land_pr_ci
@@ -296,6 +297,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
         artifacts=[],
         proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed node — never completed
     report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over
@@ -327,6 +329,7 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
         artifacts=[],
         proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed (entry) node
     report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over
@@ -359,6 +362,7 @@ def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tm
         artifacts=[],
         proposals=[],
         source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
     )
 
     resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))
