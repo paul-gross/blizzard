@@ -4,13 +4,17 @@ flag, read in the caller's local time and converted to UTC for the wire."""
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, overload
 
 import click
 
 from blizzard.foundation.store.utc import iso_utc
 
 
+@overload
+def utc_query_value(value: datetime) -> str: ...
+@overload
+def utc_query_value(value: None) -> None: ...
 def utc_query_value(value: datetime | None) -> str | None:
     """A bare ``--since``/``--until`` is read as the caller's own local wall clock, not
     UTC — converted (not merely relabeled) before it crosses the wire."""
