@@ -13,15 +13,7 @@ export type ChunkDetailTab = 'general' | 'node-history' | 'artifacts' | 'transcr
  * The URL is the single source of truth: the page derives its
  * state from these params and every selection writes them back, never the
  * reverse, so a link is copyable, a reload keeps its place, back/forward walk
- * the selection, and the board dock's artifact link is a plain `routerLink`
- * with no page-side wiring needed.
- *
- * The same contract fleet's shared `injectChunkUrlSelection` establishes for
- * the board and runner-local panel's own `?chunk=`, on this page's own
- * params. Owned here rather than in
- * {@link ChunkPage} so the container is left with what it is actually for —
- * the chunk reads and the operator mutations — and the router coupling lives
- * in one small, separately readable place.
+ * the selection, and any link to a selection is a plain `routerLink`.
  */
 export interface ChunkDetailSelection {
   /** The active tab. An absent or unrecognized `tab` param resolves to

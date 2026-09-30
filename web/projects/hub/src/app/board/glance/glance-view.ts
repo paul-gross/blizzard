@@ -39,9 +39,7 @@ export interface MotionRow {
   readonly pillLabel: 'run' | 'deliver';
   readonly costUsd: number;
   readonly costPartial: boolean;
-  /** The chunk's derived spend estimate — `null` iff no summed row reported one. Folded
-   * into {@link costUsd} by {@link formatCost} for display ({@link GlanceView}'s own
-   * row markup), rather than rendered as a figure of its own. */
+  /** The chunk's derived spend estimate — `null` iff no summed row reported one. */
   readonly estimatedCostUsd: number | null;
 }
 

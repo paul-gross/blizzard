@@ -10,7 +10,7 @@ import { GardeningProposalAcceptDialogView, type AcceptSubmission } from './gard
  * (`bzh:generated-client`). Minting is the default and submits in one click;
  * declining to mint is the more effortful path, gated in the view on its
  * own required reason. Closure is terminal, so a 409 (a raced second close) surfaces
- * through this container's own `submitError`.
+ * through {@link submitError}.
  *
  * The host page mounts this with `@if` around the accepting proposal, so a fresh
  * instance — and a fresh view — exists for every open.

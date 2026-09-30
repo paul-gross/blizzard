@@ -131,13 +131,8 @@ export class GardeningScopeDetail {
     return pending ? pending.retired : null;
   });
 
-  /** The selected scope's panel view model. `retired` carries the real,
-   * unoverridden flag — {@link FleetScopePanel} keys its Retire/Re-enable control
-   * choice off it, never off `renderedRetired`, so a pending lifecycle mutation's own
-   * predicted outcome can't flip which verb the next click would fire
-   * (`graph-detail.ts`'s own `retired`/`renderedRetired` split, forwarded to
-   * `GraphDetailHeader`). `renderedRetired` is the merged, overridden value, read only
-   * by the panel's lifecycle badge. */
+  /** The selected scope's panel view model: real `retired`, overridden
+   * `renderedRetired` — see `ScopePanelVm`. */
   protected readonly scopePanelVm = computed<ScopePanelVm | null>(() => {
     const scope = this.selectedScope();
     if (scope === null) return null;
