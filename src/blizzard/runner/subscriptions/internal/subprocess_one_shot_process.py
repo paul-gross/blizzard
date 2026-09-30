@@ -68,10 +68,12 @@ class SubprocessOneShotProcess:
         credential file a hard kill mid-write."""
         _signal_group(process, signal.SIGTERM)
         try:
-            return process.communicate(timeout=_TERMINATE_GRACE_SECONDS)
+            output = process.communicate(timeout=_TERMINATE_GRACE_SECONDS)
         except subprocess.TimeoutExpired:
-            _signal_group(process, signal.SIGKILL)
-            return process.communicate()
+            output = None
+        # The leader may exit on SIGTERM while a group member ignores it — always finish with SIGKILL.
+        _signal_group(process, signal.SIGKILL)
+        return output if output is not None else process.communicate()
 
 
 def _signal_group(process: subprocess.Popen[str], sig: signal.Signals) -> None:

@@ -43,7 +43,8 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   - Matches `.write_text(`, `.write_bytes(`, `open($PATH, $MODE, ...)` and `$PATH.open($MODE, ...)` (further arguments
     allowed) whose mode string contains `w`, `a`, `x`, or `+`, any `os.open` carrying a write flag (`O_WRONLY`,
     `O_RDWR`, `O_CREAT`, `O_APPEND`, `O_TRUNC`), and any `os.replace` or `os.rename`. A read (`open(path)`,
-    `open(path, "r")`, `path.read_text()`, `os.open(path, os.O_RDONLY)`) is unmatched.
+    `open(path, "r")`, `path.read_text()`, `os.open(path, os.O_RDONLY)`) is unmatched. A keyword `mode=` and `os.fdopen` are not matched — a floor,
+    not a proof.
   - No exemption stands; nothing in `runner/subscriptions/` opens a credential file for writing today.
 
 - **`bzh:store-exclusive-write`** (`rules/store-exclusive-write.yml`) — an in-process lock in `hub/` cannot enforce an

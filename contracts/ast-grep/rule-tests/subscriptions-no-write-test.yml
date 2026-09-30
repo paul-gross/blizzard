@@ -32,6 +32,11 @@ valid:
         def sample(self):
             fd = os.open(self._path, os.O_RDONLY)
             return fd
+  - |
+    class LegacySampler:
+        def sample(self):
+            fd = os.open("/creds/auth.json", os.O_RDONLY)
+            return fd
 invalid:
   - |
     class BadRenewer:
