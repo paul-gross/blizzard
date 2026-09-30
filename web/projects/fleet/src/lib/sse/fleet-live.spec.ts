@@ -255,9 +255,9 @@ describe('FleetLiveUpdates', () => {
     expect(registryHits).toHaveLength(2);
   });
 
-  it('keeps the registration and heartbeat kinds out of the event feed', () => {
-    // A runner re-registers every pull cycle, so left in the ring these would
-    // evict every event an operator actually wants within a few cycles.
+  it('keeps registration, heartbeat, and external usage out of the event feed', () => {
+    // Re-registration, heartbeat, and usage updates are not feed activity; left
+    // in the ring they would evict events an operator actually wants.
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
     const live = TestBed.inject(FleetLiveUpdates);
 
@@ -265,6 +265,7 @@ describe('FleetLiveUpdates', () => {
     source.open();
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'registered' }));
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'heartbeat' }));
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'external-usage' }));
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'paused', by: 'alice' }));
     // A frame from a hub too old to name a kind is news, not noise — it stays.
     source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1' }));
