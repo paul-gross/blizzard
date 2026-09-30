@@ -18,7 +18,9 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunks.events import IWriteChunkEventsRepository
+from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.event_log import EventLogService
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.work import (
     PendingCloseIntent,
     WorkItemCloseOutcome,
@@ -573,3 +575,51 @@ def test_sweep_replayed_over_an_already_delivered_hub_item_is_a_clean_no_op(tmp_
     assert (
         PendingCloseIntent(chunk_id=chunk_id, ref=pointer) not in hub.services.chunks.delivery.pending_close_intents()
     )
+
+
+# chunk.md — Work refs' closure keys on landing (or a by-hand done), independent of what
+# happens to the chunk afterwards, and never on reaching the reserved terminal alone.
+
+
+@pytest.mark.component
+def test_a_chunk_stopped_after_landing_still_closes_its_work_item(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+    pointer = WorkRef(source="hub", ref=created["ref"])
+    chunk_id = created["chunk_id"]
+    _land(hub, chunk_id)
+
+    chunks = hub.services.chunks
+    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "alice"}).status_code == 202
+
+    assert PendingCloseIntent(chunk_id=chunk_id, ref=pointer) in chunks.delivery.pending_close_intents()
+    hub.services.close_drain.sweep()
+
+    row = WorkItemStore(hub_store_connections(hub.engine)).get("hub", created["ref"])
+    assert row is not None
+    assert row.closure is WorkItemClosure.DELIVERED
+    assert chunks.delivery.pending_close_intents() == []
+
+
+@pytest.mark.component
+def test_a_chunk_reaching_the_terminal_with_no_landing_closes_no_ref(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+
+    cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
+        transition_id="tr_seed_terminal",
+        chunk_id=chunk_id,
+        from_node_id=None,
+        to_node_id=RESERVED_TERMINAL,
+        choice_name=None,
+        epoch=1,
+        runner_id="r1",
+        at=hub.clock.now(),
+        artifacts=[],
+        proposals=[],
+    )
+
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    assert facts is not None
+    assert facts.newest_transition_is_terminal()
+    assert hub.services.chunks.delivery.pending_close_intents() == []

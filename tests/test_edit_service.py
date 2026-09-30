@@ -36,6 +36,7 @@ from blizzard.hub.domain.work import (
     EscalationFact,
     IntendedMigration,
     MigrationMode,
+    PauseFact,
     QuestionFact,
     RouteCreatedFact,
     RouteReleasedFact,
@@ -211,6 +212,25 @@ def _needs_human_facts() -> ChunkFacts:
         promoted=True,
         routes_created=[RouteCreatedFact(created_at=_T0)],
         escalations=[EscalationFact(epoch=1, recorded_at=_T0)],
+    )
+
+
+def _paused_facts() -> ChunkFacts:
+    return ChunkFacts(
+        minted=True,
+        promoted=True,
+        routes_created=[RouteCreatedFact(created_at=_T0)],
+        pauses=[PauseFact(paused=True, set_at=_T0, set_by="alice")],
+    )
+
+
+def _delivering_facts() -> ChunkFacts:
+    return ChunkFacts(
+        minted=True,
+        promoted=True,
+        transitions=[
+            TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_T0),
+        ],
     )
 
 
@@ -433,8 +453,16 @@ _MIGRATION_TO_GR2 = IntendedMigration(mode=MigrationMode.AUTO, graph_id="gr_2", 
 
 @pytest.mark.parametrize(
     "facts_factory",
-    [_not_ready_facts, _ready_facts, _running_facts, _waiting_on_human_facts, _needs_human_facts],
-    ids=["not_ready", "ready", "running", "waiting_on_human", "needs_human"],
+    [
+        _not_ready_facts,
+        _ready_facts,
+        _running_facts,
+        _waiting_on_human_facts,
+        _needs_human_facts,
+        _paused_facts,
+        _delivering_facts,
+    ],
+    ids=["not_ready", "ready", "running", "waiting_on_human", "needs_human", "paused", "delivering"],
 )
 def test_edit_intended_migration_writes_on_every_non_terminal_status(facts_factory: object) -> None:
     repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
