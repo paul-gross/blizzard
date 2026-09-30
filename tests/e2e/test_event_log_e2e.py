@@ -448,7 +448,7 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                 page.reload(wait_until="load")
                 expect(page.get_by_test_id("activity-row")).to_have_count(len(keys))
                 assert sum("claimed" in message for message in _rail_messages(page)) == 1
-                assert hub.get("/api/activity", params={"limit": 1001}).status_code == 422
+                assert hub.get("/api/activity", params={"limit": 201}).status_code == 422
             finally:
                 browser.close()
 
