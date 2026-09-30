@@ -1,8 +1,8 @@
-"""The runner-owned OpenCode plugin scaffold (execution spec, "Runner-owned plugin")
-— content shape (unit) and its degrade-only effect on the adapter's parsed turn outcome
-(component). Its JS/TS *behavior* is proven structurally, not by running a JS engine (this
-repo's toolchain pins no node/bun): the generated source's shape — one ``try``/``catch`` per
-hook body — is the checkable surface, like ``config.py``'s scaffold is tested as text."""
+"""OpenCode plugin scaffold source and worker configuration checks.
+
+Unit tests inspect generated source and config; a fake binary compares the adapter's
+parsed output with and without a plugin reference. Neither executes the plugin hooks.
+"""
 
 from __future__ import annotations
 
@@ -59,19 +59,16 @@ def test_render_plugin_source_invokes_the_shared_heartbeat_command() -> None:
 
 
 @pytest.mark.unit
-def test_render_plugin_source_forwards_exactly_the_lease_identity_and_session_id() -> None:
-    """The acceptance bar, verbatim: the environment values reaching a tool subprocess are
-    exactly the lease identity plus the authoritative session id — nothing broader."""
+def test_render_plugin_source_names_only_lease_identity_and_session_id_env_vars() -> None:
+    """Only lease identity and session ID variable names appear in generated source."""
     source = render_plugin_source()
     names = set(_BLIZZARD_ENV_NAME.findall(source))
     assert names == set(LEASE_ENV_VARS) | {SESSION_ENV_VAR}
 
 
 @pytest.mark.unit
-def test_render_plugin_source_wraps_every_hook_body_in_try_catch() -> None:
-    """Both jobs are degrade-only: a thrown error inside either hook body is caught before
-    it can reach OpenCode's own dispatcher — the channel this pinned version cannot prove
-    live is never allowed to matter."""
+def test_render_plugin_source_contains_two_try_and_catch_blocks() -> None:
+    """The generated source contains two try blocks and two catch blocks."""
     source = render_plugin_source()
     assert source.count("try {") == 2
     assert source.count("} catch {") == 2
@@ -103,7 +100,7 @@ def test_write_plugin_persists_the_rendered_source(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_scaffolded_worker_config_carries_the_plugin_reference_and_nothing_else(tmp_path: Path) -> None:
+def test_scaffolded_worker_config_parses_the_plugin_reference(tmp_path: Path) -> None:
     plugin_path = tmp_path / PLUGIN_DIRNAME / PLUGIN_FILENAME
     write_plugin(plugin_path)
     reference = plugin_reference(plugin_path)
@@ -115,16 +112,14 @@ def test_scaffolded_worker_config_carries_the_plugin_reference_and_nothing_else(
 
 
 # --------------------------------------------------------------------------- #
-# Degrade-only (component): a plugin-bearing worker config changes nothing the adapter parses.
+# Fake-binary comparison (component): parsed output with and without a plugin reference.
 
 
 @pytest.mark.component
-def test_a_plugin_bearing_worker_config_does_not_change_the_adapters_parsed_turn(
+def test_a_plugin_reference_does_not_change_fake_binary_output_parsing(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
-    """Nothing in the adapter's code ever reads a hook's outcome (unit-test invariant above):
-    a worker config naming the scaffolded plugin — even unloaded by this fake binary — must
-    leave the parsed verdict, assessment, and usability identical to no worker config."""
+    """With a fake binary that does not load plugins, compare parsed output for both configs."""
     binary = worker_binary(tmp_path, minted_session_id="ses_plugin_proof")
     workdir = tmp_path / "e1"
     workdir.mkdir()
