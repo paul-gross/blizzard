@@ -776,3 +776,56 @@ def test_the_move_refuses_an_unnamed_node_whose_name_match_fails(tmp_path) -> No
     assert "plan" in resp.json()["detail"]
     detail = _detail(hub, chunk_id)
     assert (detail["latest_epoch"], detail["graph_id"] == target) == (2, False)
+
+
+def test_a_restart_of_a_paused_chunk_is_suppressed_not_refused(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Pause outranks the move: the restart is accepted and recorded, the chunk stays paused."""
+    hub = build_hub(tmp_path)
+    chunk_id = _mint(hub)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/pause", json={"by": "ada"}).status_code == 202
+    assert _detail(hub, chunk_id)["status"] == "paused"
+
+    resp = _restart(hub, chunk_id)
+
+    assert resp.status_code == 202, resp.text
+    detail = _detail(hub, chunk_id)
+    assert [move["epoch"] for move in detail["restarts"]] == [2]
+    assert detail["latest_epoch"] == 2
+    assert detail["status"] == "paused"
+
+
+def test_a_cross_graph_restart_of_a_never_moved_chunk_records_the_re_pin(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The re-pin is a migration row even when the chunk has never moved off its entry node."""
+    hub = build_hub(tmp_path)
+    chunk_id = _mint(hub)
+    source = _detail(hub, chunk_id)["graph_id"]
+    assert _detail(hub, chunk_id)["history"] == []
+    target = _target_graph(hub)
+
+    assert _restart(hub, chunk_id, to_graph=target).status_code == 202
+
+    detail = _detail(hub, chunk_id)
+    assert len(detail["migrations"]) == 1
+    migration = detail["migrations"][0]
+    assert (migration["from_graph_id"], migration["to_graph_id"], migration["source"]) == (source, target, "restart")
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    assert facts is not None
+    assert facts.migrations[0].epoch == facts.restarts[0].epoch == 2
+
+
+def test_every_re_entry_into_the_forced_visit_is_fresh(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The freshness rides the move's own fact, not a one-shot flag: leases minted at the
+    forced node after the restart, before any transition, all get a fresh session."""
+    hub = build_hub(tmp_path)
+    chunk_id = _mint(hub)
+    assert _restart(hub, chunk_id, node="build").status_code == 202
+
+    for epoch in (2, 3, 4):
+        node = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope").json()["node"]
+        assert node["node_name"] == "build"
+        assert node["session"] == SessionMode.FRESH.value, f"re-entry at epoch {epoch} resumed"
+        report_lease(hub, chunk_id, epoch=epoch, seq=epoch)
+
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    assert facts is not None
+    assert facts.entered_by_restart() is True
