@@ -159,6 +159,7 @@ def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # typ
         chunk_id="ch_1",
         status=ChunkStatus.RUNNING,  # resolved, awaiting the resolving transition
         latest_epoch=1,
+        route_runner_id="r1",
         decision=ChunkDecisionStatusView(
             decision_id="dec_1",
             node_id="nd_gate",
@@ -200,6 +201,7 @@ def test_unresolved_gate_keeps_waiting(tmp_path):  # type: ignore[no-untyped-def
         chunk_id="ch_1",
         status=ChunkStatus.WAITING_ON_HUMAN,
         latest_epoch=1,
+        route_runner_id="r1",
         decision=ChunkDecisionStatusView(
             decision_id="dec_1",
             node_id="nd_gate",
@@ -268,3 +270,78 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
     assert len(hub.completions) == 1
     _, submission = hub.completions[0]
     assert submission.decision_id == "dec_1" and submission.choice == "approve" and submission.epoch == 1
+
+
+def _gate_parked_chunk(*, status, route_runner_id, resolved_choice):  # type: ignore[no-untyped-def]
+    return ChunkStatusView(
+        chunk_id="ch_1",
+        status=status,
+        latest_epoch=1,
+        route_runner_id=route_runner_id,
+        decision=ChunkDecisionStatusView(
+            decision_id="dec_1",
+            node_id="nd_gate",
+            epoch=1,
+            resolved_choice=resolved_choice,
+            transitioned=False,
+        ),
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("status", "resolved_choice"),
+    [(ChunkStatus.WAITING_ON_HUMAN, None), (ChunkStatus.READY, "approve")],
+    ids=["open-decision", "resolved-decision"],
+)
+def test_a_detached_gate_park_releases_its_envs_and_submits_nothing(tmp_path, status, resolved_choice):  # type: ignore[no-untyped-def]
+    """A detach keeps the decision but drops the route: the park has nothing left to resolve here."""
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _gate_parked_chunk(status=status, route_runner_id=None, resolved_choice=resolved_choice)
+    provider = FakeProvider({"e1": "/ws/e1"})
+    ctx = make_context(
+        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
+    )
+
+    Advance(ctx).run()
+
+    assert hub.completions == []
+    assert provider.released == ["e1"]
+    assert store.held_environment_ids() == []
+
+
+@pytest.mark.unit
+def test_a_gate_park_reassigned_to_another_runner_releases_its_envs(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _gate_parked_chunk(
+        status=ChunkStatus.WAITING_ON_HUMAN, route_runner_id="r_other", resolved_choice=None
+    )
+    provider = FakeProvider({"e1": "/ws/e1"})
+    ctx = make_context(
+        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
+    )
+
+    Advance(ctx).run()
+
+    assert provider.released == ["e1"]
+
+
+@pytest.mark.unit
+def test_a_stopped_gate_park_with_its_decision_present_releases_its_envs(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _gate_parked_chunk(status=ChunkStatus.STOPPED, route_runner_id="r1", resolved_choice="approve")
+    provider = FakeProvider({"e1": "/ws/e1"})
+    ctx = make_context(
+        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
+    )
+
+    Advance(ctx).run()
+
+    assert hub.completions == []
+    assert provider.released == ["e1"]

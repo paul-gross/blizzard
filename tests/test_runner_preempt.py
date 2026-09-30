@@ -19,6 +19,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.loop.outbound import COMPLETION_KIND
 from blizzard.runner.loop.steps import Pull, Reap
+from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView, PauseView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -443,3 +444,29 @@ def test_a_second_lease_at_the_forced_node_is_fresh_too(tmp_path):  # type: igno
     assert latest is not None and latest.lease_id != "lease_2"
     assert latest.session_id == "sess-c"
     assert harness.resume_froms == [None]  # minted again, not resumed off a pool head
+
+
+def test_a_full_tick_under_the_local_brake_neither_preempts_nor_spawns_and_the_next_past_it_does(tmp_path):  # type: ignore[no-untyped-def]
+    """Driven through ``tick``, not PULL alone: no step of the pass — including FILL and ADVANCE — starts
+    a process under the brake, and the fence still stands for the first pass past it."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    _brake(store, paused=True)
+    handle = WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200)
+    harness = FakeHarness(handle=handle, verdict=None)
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = _ctx(store, _restarted_hub(), harness=harness, probe=probe)
+
+    tick(ctx)
+
+    assert probe.killed == []
+    assert harness.spawns == []
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.pid == 100
+
+    _brake(store, paused=False)
+    tick(ctx)
+
+    assert probe.killed == [100]
+    fresh = store.active_lease_for_chunk("ch_1")
+    assert fresh is not None and fresh.lease_id != "lease_1" and fresh.session_id == "sess-b"

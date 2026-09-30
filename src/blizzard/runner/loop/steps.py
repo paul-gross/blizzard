@@ -478,9 +478,9 @@ class Fill(Step):
         chunk's environments all-or-nothing, and claim the route. Either brake stops *new* claims.
         """
         ctx = self.ctx
-        InterruptedClaims(ctx).reconcile()
         hub_paused = ctx.stores.pause.hub_paused(ctx.config.runner_id)
         local_paused = ctx.stores.pause.local_paused(ctx.config.runner_id)
+        InterruptedClaims(ctx).reconcile(braked=hub_paused or local_paused)
         if hub_paused or local_paused:
             _log.info(
                 "paused — no new claims this tick",

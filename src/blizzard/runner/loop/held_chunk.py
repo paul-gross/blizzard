@@ -66,6 +66,12 @@ class HeldChunk:
             self.ctx.env_release.release_chunk(self.chunk_id)
             return
         decision = view.decision
+        if decision is not None and view.route_runner_id != self.ctx.config.runner_id:
+            # A gate park keeps its route ours, so a decision with the route elsewhere is a park
+            # detached or reassigned out from under this runner — nothing left here to resolve.
+            _log.info("gate-parked chunk no longer routed here — releasing envs", chunk_id=self.chunk_id)
+            self.ctx.env_release.release_chunk(self.chunk_id)
+            return
         if decision is not None and decision.resolved_choice is not None and not decision.transitioned:
             self._resolve_gate(decision)
             return

@@ -15,6 +15,7 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import lease_select, row_to_lease
 from blizzard.runner.store.schema import (
+    lease_closures,
     lease_context,
     lease_spawns,
     leases,
@@ -24,6 +25,23 @@ from blizzard.runner.store.schema import (
 )
 
 _log = get_logger("blizzard.runner.store")
+
+_RELEASED = "released"
+
+
+def _after_newest_release(chunk_id: str):  # type: ignore[no-untyped-def]
+    """A lease created after the chunk's newest ``released`` closure — or any lease when none exists.
+
+    A released attempt's session is discarded (detach, reassignment), so it is a read barrier on the
+    session lookups: a row older than it is never resumed, and no older ``transitioned`` session
+    surfaces in its place."""
+    newest_release = (
+        select(func.max(lease_closures.c.closed_at))
+        .where(lease_closures.c.chunk_id == chunk_id)
+        .where(lease_closures.c.reason == _RELEASED)
+        .scalar_subquery()
+    )
+    return or_(newest_release.is_(None), leases.c.created_at > newest_release)
 
 
 class LeaseSessionStore:
@@ -35,7 +53,12 @@ class LeaseSessionStore:
     # --- reads --------------------------------------------------------------
 
     def latest_session(self, chunk_id: str, node_name: str | None) -> SessionReference | None:
-        stmt = lease_select().where(leases.c.chunk_id == chunk_id).where(leases.c.session_id.is_not(None))
+        stmt = (
+            lease_select()
+            .where(leases.c.chunk_id == chunk_id)
+            .where(leases.c.session_id.is_not(None))
+            .where(_after_newest_release(chunk_id))
+        )
         if node_name is not None:
             stmt = stmt.where(lease_context.c.node_name == node_name)
         stmt = stmt.order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
@@ -50,13 +73,14 @@ class LeaseSessionStore:
     def pool_head(self, chunk_id: str, session_name: str) -> PoolHead | None:
         """The newest session-bearing lease stamping ``session_name`` — the pool's head.
 
-        Same ordering and same session-bearing filter as :meth:`latest_session`,
+        Same ordering, session-bearing filter and release barrier as :meth:`latest_session`,
         keyed on the stamped pool name rather than the node name."""
         stmt = (
             lease_select()
             .where(leases.c.chunk_id == chunk_id)
             .where(leases.c.session_id.is_not(None))
             .where(lease_context.c.session_name == session_name)
+            .where(_after_newest_release(chunk_id))
             .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
         )
         rows = self._store.all(stmt)

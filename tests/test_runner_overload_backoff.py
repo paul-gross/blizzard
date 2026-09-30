@@ -7,6 +7,7 @@ once ``resume_after`` passes. Real (tmp sqlite) store, fakes at the seams — mi
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -18,6 +19,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.loop.steps import Advance
+from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
 
 pytestmark = pytest.mark.component
@@ -130,6 +132,33 @@ def test_a_backed_off_worker_wakes_the_same_lease_epoch_and_session_after_the_de
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"  # same epoch, same session
     assert store.attempt_count("ch_1", "nd_build") == 1  # still no retry consumed
+
+
+def test_a_backed_off_worker_does_not_wake_while_the_local_brake_holds_even_past_resume_after(tmp_path):  # type: ignore[no-untyped-def]
+    """The runner's own brake starts no process — a due wake is a resume, so it waits for the brake."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    overload = ProviderOverload(detail="Overloaded: 529")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", overload=overload)
+    clock = FixedClock(_NOW)
+    _hub, ctx = _ctx(store, harness, clock=clock)
+    Advance(ctx).run()  # records, backs off
+    store.record_local_pause(
+        "r1",
+        paused=True,
+        at=clock.now(),
+        by="operator",
+        report_kind=RUNNER_LOCALLY_PAUSED,
+        report_payload=json.dumps({"runner_id": "r1", "by": "operator"}),
+    )
+    clock.advance(backoff_delay(1))
+    harness.overload = None
+
+    Advance(ctx).run()
+
+    assert harness.resumed == []
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a"
 
 
 # --- Consecutive overloads escalate, then fall through -----

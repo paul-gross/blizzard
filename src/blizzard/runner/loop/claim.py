@@ -215,8 +215,11 @@ class InterruptedClaims:
 
     ctx: LoopContext
 
-    def reconcile(self) -> None:
-        """Deliberately carries no open-takeover skip — see ``tests/test_runner_takeover.py``'s
+    def reconcile(self, *, braked: bool = False) -> None:
+        """``braked`` — either pause brake is engaged: the reclaim arm, the only one that makes a
+        new hub claim, keeps its binding instead of claiming; every other arm still runs.
+
+        Deliberately carries no open-takeover skip — see ``tests/test_runner_takeover.py``'s
         ``test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover`` and
         ``test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed``."""
         requeue_pending = self.ctx.stores.requeue.pending_requeue_chunk_ids()  # one read per FILL, not per chunk
@@ -225,10 +228,10 @@ class InterruptedClaims:
         active_chunk_ids = {lease.chunk_id for lease in self.ctx.stores.lease_record.list_active_leases()}
         for chunk_id in self.ctx.stores.environments.live_tenure_chunk_ids():
             if chunk_id not in active_chunk_ids:
-                self._reconcile_one(chunk_id, requeued=chunk_id in requeue_pending)
+                self._reconcile_one(chunk_id, requeued=chunk_id in requeue_pending, braked=braked)
             # else a live worker holds it — REAP/ADVANCE own it
 
-    def _reconcile_one(self, chunk_id: str, *, requeued: bool) -> None:
+    def _reconcile_one(self, chunk_id: str, *, requeued: bool, braked: bool) -> None:
         try:
             view = self.ctx.chunk_views.get(chunk_id)
         except ChunkNotFoundError:
@@ -256,6 +259,8 @@ class InterruptedClaims:
         if view.status == ChunkStatus.RUNNING and ours:
             self._adopt(chunk_id)  # route ours — just spawn the current node
         elif view.status == ChunkStatus.READY:
+            if braked:
+                return  # a claim is a new claim — the binding is durable; reclaimed once the brake lifts
             self._reclaim(chunk_id, bindings)  # claim never landed — claim now, reuse the binding
         elif view.route_runner_id is not None and not ours:
             self._release(chunk_id, "releasing binding — another runner won the chunk")

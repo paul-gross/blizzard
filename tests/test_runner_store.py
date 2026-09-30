@@ -186,6 +186,70 @@ def test_latest_session_returns_most_recent_session_bearing_lease(tmp_path):  # 
     assert _session_id(store, "ch_1", "review") == "sess-review-1"
 
 
+def _mint_with_session(store, *, lease, session, epoch, at, node="nd_build", node_name="build", session_name=None):  # type: ignore[no-untyped-def]
+    store.record_lease(
+        NewLease(
+            lease_id=lease,
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id=node,
+            node_name=node_name,
+            epoch=epoch,
+            runner_id="r1",
+            retries_max=2,
+            session_name=session_name,
+            created_at=at,
+        )
+    )
+    store.record_spawn(
+        lease,
+        pid=epoch,
+        process_start_time=str(epoch),
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
+        spawned_at=at,
+    )
+
+
+@pytest.mark.component
+def test_a_released_closure_discards_every_earlier_session_from_both_lookups(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint_with_session(store, lease="lease_1", session="sess-1", epoch=1, at=_NOW, session_name="pool")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+    _mint_with_session(
+        store, lease="lease_2", session="sess-2", epoch=2, at=_NOW + timedelta(minutes=1), session_name="pool"
+    )
+    store.record_closure(
+        lease_id="lease_2",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason="released",
+        closed_at=_NOW + timedelta(minutes=2),
+    )
+
+    # The older `transitioned` session must not surface in the released one's place.
+    assert store.latest_session("ch_1", None) is None
+    assert store.latest_session("ch_1", "build") is None
+    assert store.pool_head("ch_1", "pool") is None
+
+    _mint_with_session(
+        store, lease="lease_3", session="sess-3", epoch=3, at=_NOW + timedelta(minutes=3), session_name="pool"
+    )
+    assert _session_id(store, "ch_1", None) == "sess-3"
+    head = store.pool_head("ch_1", "pool")
+    assert head is not None and head.session_id == "sess-3"
+
+
+@pytest.mark.component
+def test_without_a_released_closure_an_earlier_transitioned_session_is_still_returned(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint_with_session(store, lease="lease_1", session="sess-1", epoch=1, at=_NOW, session_name="pool")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+
+    assert _session_id(store, "ch_1", None) == "sess-1"
+    head = store.pool_head("ch_1", "pool")
+    assert head is not None and head.session_id == "sess-1"
+
+
 @pytest.mark.component
 def test_latest_session_returns_none_when_no_session_or_no_match(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)

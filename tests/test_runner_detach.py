@@ -8,11 +8,13 @@ longer holds. The predicate is **route-only**, not status-based, except ``stoppe
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -20,12 +22,15 @@ from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap
 from blizzard.runner.loop.tick import tick
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
+from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
     FakeProvider,
+    claimed_outcome,
     make_context,
+    make_envelope,
     make_store,
 )
 
@@ -399,6 +404,40 @@ def test_tick_releases_a_detached_chunk_and_the_next_tick_does_not_reclaim_it(tm
     assert store.live_tenure_chunk_ids() == []
     assert store.bindings_for_chunk("ch_1") == []
     assert store.active_lease("lease_1") is None
+
+
+@pytest.mark.component
+def test_a_chunk_detached_mid_node_and_reclaimed_starts_a_fresh_session_not_a_resume(tmp_path):  # type: ignore[no-untyped-def]
+    """Detach discards the attempt's session (``domain/execution/recovery.md`` §Detach): a
+    re-claim on the same runner spawns a new session instead of resuming the detached one."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _detached_chunk()
+    clock = FixedClock(_NOW)
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(alive={(100, "start-100")}),
+        clock=clock,
+    )
+
+    Pull(ctx).run()  # the detach lands — kill, release, close `released`
+    assert store.live_tenure_chunk_ids() == []
+
+    clock.advance(timedelta(minutes=1))
+    env = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], epoch=2, session=SessionMode.RESUME
+    )
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    Fill(ctx).run()
+
+    assert len(hub.claims) == 1
+    assert harness.resume_froms == [None]
 
 
 # A chunk unknown at the hub (404) is terminal, not a transport failure:
