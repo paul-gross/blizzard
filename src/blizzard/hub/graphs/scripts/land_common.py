@@ -265,11 +265,8 @@ class LandRun:
         return title
 
     def compare(self, bare_repo: str, base: str, head: str) -> dict[str, Any] | None:
-        """The forge's comparison of ``base...head`` on ``bare_repo``.
-
-        ``None`` is an *answered* refusal — a non-200 below 500 or a malformed body — that a
-        caller cannot build on. A read that never got an answer (an exception, a 5xx) raises
-        :class:`ForgeReadDegraded`: worth another poll, never a verdict."""
+        """The forge's ``base...head`` comparison; ``None`` when answered unusably, and a read
+        with no answer (an exception, a 5xx) raises :class:`ForgeReadDegraded`."""
         repo = self.repo(bare_repo)
         try:
             status, payload = self.api("GET", f"/repos/{repo}/compare/{base}...{head}")
@@ -282,9 +279,7 @@ class LandRun:
         return payload
 
     def base_holds(self, bare_repo: str, ref: str) -> bool:
-        """Whether the base branch already holds every commit on ``ref``: the forge's
-        ``identical``/``behind`` both mean ``ref`` adds nothing. An answered refusal is
-        ``False``; a degraded read raises :class:`ForgeReadDegraded`."""
+        """Whether the base branch already holds every commit on ``ref``; a degraded read raises."""
         payload = self.compare(bare_repo, self.base_branch, ref)
         return payload is not None and payload.get("status") in {"identical", "behind"}
 
@@ -349,8 +344,7 @@ class LandRun:
 
 
 class ForgeReadDegraded(Exception):
-    """Raised when a forge read never got an answer — a network error or a 5xx — so the
-    question it asked is still open and another poll may answer it."""
+    """A forge read got no answer (network error or 5xx); another poll may."""
 
 
 class PullRequestOpenError(Exception):

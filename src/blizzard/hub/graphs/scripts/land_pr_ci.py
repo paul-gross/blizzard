@@ -4,13 +4,8 @@ runs — what eligibility turns on. ``behind`` self-heals via ``update-branch``,
 the one true LLM kick-back, everything else waits. Merges via merge commit. Honors the
 hub-command-node authoring contract (``blizzard-context:/standards/hub-nodes.md``).
 
-The submitted commit stays authoritative: before any routing, every repo's live PR head must
-be that commit or descend from it through nothing but merges of the base branch (first-parent
-chain, each merge contributing exactly the base side's own change). Any other commit on the
-head prints ``failure`` with ``delivery-findings`` and ``delivery-findings/foreign-head`` markers
-naming it, and nothing is updated or merged for any repo; an unprovable head refuses, an
-unreadable one waits. The verified head sha is the one the check read, ``update-branch`` and the
-merge all carry."""
+The submitted commit stays authoritative: a PR head that is not that commit plus base merges of its own prints
+``failure`` with foreign-head findings, and nothing is updated or merged for any repo."""
 
 from __future__ import annotations
 
@@ -46,9 +41,7 @@ _INHERITED_FAILURE = "inherited-failure"
 
 # The marker name a terminal-CI-failure or a substantive wait writes its findings under.
 _FINDINGS_NAME = "delivery-findings"
-# A foreign-advance refusal also writes here: the hub keeps only the first write per name in a
-# visit, so an earlier wait's `delivery-findings` would otherwise hide the refusal from the
-# repair worker.
+# The hub keeps the first write per name, so this survives an earlier wait's findings.
 _FOREIGN_FINDINGS_NAME = f"{_FINDINGS_NAME}/foreign-head"
 
 # The re-run signature marker's name prefix: one per (repo, check name, head sha) a
@@ -65,7 +58,7 @@ _BOUNCE = "bounce"  # dirty — a real content conflict, kick back to build
 _FAILED = "failed"  # a check run completed with a terminal conclusion — never re-poll
 _FOREIGN = "foreign-head"  # the PR head carries something beyond the submitted commit and base merges
 
-# A compare lists at most this many files; a list that long may be cut short, so it proves nothing.
+# A compare this long may be cut short.
 _COMPARE_FILES_MAX = 300
 
 # A completed check run in any of these is never going to turn green on its own, so
@@ -204,8 +197,7 @@ class Verdict:
 
 @dataclass(frozen=True)
 class HeadGate:
-    """Whether one repo's live PR head is still the submitted work. ``offenders`` names what
-    broke the rule — a commit sha, or the reason the head could not be proven."""
+    """Whether a live PR head is still the submitted work; ``offenders`` names what broke it."""
 
     offenders: list[str]
 
@@ -215,8 +207,7 @@ class HeadGate:
 
 
 def _first_parent_chain(commits: list[Any], head: str, submitted: str) -> tuple[list[dict[str, Any]], str | None]:
-    """The commits on ``head``'s first-parent path back to ``submitted``, newest first, and
-    the reason the path cannot be walked — ``None`` when it reaches ``submitted``. Pure."""
+    """``head``'s first-parent commits back to ``submitted``, and why the walk failed, if it did."""
     by_sha = {c["sha"]: c for c in commits if isinstance(c, dict) and isinstance(c.get("sha"), str)}
     chain: list[dict[str, Any]] = []
     current = head
@@ -234,8 +225,7 @@ def _first_parent_chain(commits: list[Any], head: str, submitted: str) -> tuple[
 
 
 def _changed_lines(file: dict[str, Any]) -> Counter[str] | None:
-    """The multiset of added and removed lines in one compare file's patch, or ``None`` when
-    the forge sent no patch to read. Pure."""
+    """A patch's added and removed lines, or ``None`` when the forge sent no patch."""
     patch = file.get("patch")
     if not isinstance(patch, str):
         return None
@@ -243,8 +233,7 @@ def _changed_lines(file: dict[str, Any]) -> Counter[str] | None:
 
 
 def _files_by_name(payload: dict[str, Any]) -> dict[str, dict[str, Any]] | None:
-    """A compare's files keyed by name, or ``None`` when the list may be truncated or is
-    malformed — a list that cannot be trusted whole proves nothing. Pure."""
+    """A compare's files by name, or ``None`` when the list may be truncated or malformed."""
     files = payload.get("files")
     if not isinstance(files, list) or len(files) >= _COMPARE_FILES_MAX:
         return None
@@ -254,9 +243,8 @@ def _files_by_name(payload: dict[str, Any]) -> dict[str, dict[str, Any]] | None:
 
 
 def _contribution_matches(merged: dict[str, Any], base_side: dict[str, Any]) -> bool:
-    """Whether a merge's contribution onto its first parent equals the base side's own
-    change: the same files, each with the same resulting blob, or — where the feature
-    changed the file too — the same added and removed lines. Pure; unprovable is ``False``."""
+    """Whether a merge adds exactly the base side's change: same files, each the same blob or
+    the same changed lines. Unprovable is ``False``."""
     got, want = _files_by_name(merged), _files_by_name(base_side)
     if got is None or want is None or got.keys() != want.keys():
         return False
@@ -275,9 +263,7 @@ def _contribution_matches(merged: dict[str, Any], base_side: dict[str, Any]) -> 
 def gate_head(run: LandRun, bare_repo: str, submitted: str, head: str) -> HeadGate:
     """Whether ``head`` is ``submitted`` or descends from it through base merges alone.
 
-    Reads only; raises :class:`ForgeReadDegraded` on a read that got no answer. An answered
-    response this cannot prove refuses — a false refusal costs one repair visit, a false
-    accept lands unverified work."""
+    An answer it cannot prove refuses; a read that got none raises :class:`ForgeReadDegraded`."""
     if head == submitted:
         return HeadGate([])
     ahead = run.compare(bare_repo, submitted, head)
@@ -449,9 +435,7 @@ def _land() -> int:
         return 0
 
     wait = False
-    # --- gate stage: every repo's live head is proven to still be the submitted work BEFORE
-    #     any repo is routed, so a foreign head in one repo fires no update-branch and no
-    #     merge in any other.
+    # --- gate stage: every head is proven before any repo is routed, so a foreign head fires nothing anywhere.
     resolved: list[tuple[dict[str, str], PullRequest]] = []
     foreign: list[dict[str, Any]] = []
     for commit in pending:
@@ -502,8 +486,7 @@ def _land() -> int:
         resolved.append((commit, pull))
 
     if foreign:
-        # Nothing is updated or merged for any repo. The write is unguarded: unwritten
-        # findings leave the repair worker nothing to read.
+        # Unguarded: unwritten findings leave the repair worker nothing to read.
         rendered = Findings(foreign).render()
         run.markers.post(_FINDINGS_NAME, rendered)
         run.markers.post(_FOREIGN_FINDINGS_NAME, rendered)
