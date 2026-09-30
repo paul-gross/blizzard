@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+from concurrent.futures import Executor
 from pathlib import Path
 
 import pytest
@@ -118,7 +119,9 @@ def test_scaffolded_worker_config_carries_the_plugin_reference_and_nothing_else(
 
 
 @pytest.mark.component
-def test_a_plugin_bearing_worker_config_does_not_change_the_adapters_parsed_turn(tmp_path: Path) -> None:
+def test_a_plugin_bearing_worker_config_does_not_change_the_adapters_parsed_turn(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     """Nothing in the adapter's code ever reads a hook's outcome (unit-test invariant above):
     a worker config naming the scaffolded plugin — even unloaded by this fake binary — must
     leave the parsed verdict, assessment, and usability identical to no worker config."""
@@ -140,7 +143,7 @@ def test_a_plugin_bearing_worker_config_does_not_change_the_adapters_parsed_turn
             worker_env=AllowlistedEnv.of(()),
             binary=binary,
             process=probe,
-            launcher=ProcessLauncher(probe),
+            launcher=ProcessLauncher(probe, executor=spawn_executor),
             worker_config_path=worker_config_path,
         )
         pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")

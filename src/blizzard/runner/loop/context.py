@@ -15,12 +15,12 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
+from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.capability_snapshot import (
-    HarnessHealthCache,
     HarnessVersionCache,
     TickCapabilities,
     capability_snapshot,

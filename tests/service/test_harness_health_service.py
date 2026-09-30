@@ -7,6 +7,7 @@ prove it genuinely shells out to the real mock binary, not a pure filesystem stu
 from __future__ import annotations
 
 import json
+from concurrent.futures import Executor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -14,11 +15,11 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
 from blizzard.runner.harness.process_launch import ProcessLauncher
-from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.runner.loop.process import LinuxProcessProbe
 from tests.service.support import require_mock_fleet, require_opencode_cli_surface, service_gate
 
@@ -60,7 +61,9 @@ def test_claude_code_probe_authentication_shells_out_to_the_real_binary_and_read
     assert unreachable.probe_authentication() is False  # a credential file alone is not enough
 
 
-def test_claude_code_probe_and_cache_read_available_against_the_real_mock_binary(tmp_path: Path) -> None:
+def test_claude_code_probe_and_cache_read_available_against_the_real_mock_binary(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     """``ClaudeCodeHealthProbe`` + ``HarnessHealthCache`` over the real ``mock-claude-code``
     binary: its ``--version`` answers the real observed shape, which the
     real normalizer and admitted range both accept with no corpus behind either."""
@@ -75,7 +78,7 @@ def test_claude_code_probe_and_cache_read_available_against_the_real_mock_binary
         worker_env=AllowlistedEnv.of(()),
         binary=str(mock_claude_code),
         process=process,
-        launcher=ProcessLauncher(process),
+        launcher=ProcessLauncher(process, executor=spawn_executor),
     )
     cache = HarnessHealthCache(
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)), probes={"claude_code": probe}, selftest_results=None

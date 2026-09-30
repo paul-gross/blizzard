@@ -3,7 +3,7 @@
 Claude Code's own construction stays here — this module's one approved wiring site,
 symmetric with OpenCode's own factory (`opencode_registry.build_opencode_binding`), so
 neither adapter's concrete class escapes its approved module (`tests/test_layering.py`);
-every root (`app.py`, `loop/build.py`) reaches both only through this one function."""
+the composition root reaches both only through this one function."""
 
 from __future__ import annotations
 
@@ -26,16 +26,15 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 
 
 def build_production_harness_registry(
-    config: RunnerConfig, *, executor: Executor | None = None, process: LinuxProcessProbe | None = None
+    config: RunnerConfig, *, executor: Executor, process: LinuxProcessProbe
 ) -> HarnessRegistry:
     """Build every enabled harness binding once for one graph, over one shared probe/
-    launcher pair. The process graph owns the injected executor for the lifetime of
-    every child launch; standalone callers own their short-lived registry."""
+    launcher pair. The process graph owns the injected executor and probe for the
+    lifetime of every child launch."""
     projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
     transcript_source = ClaudeCodeTranscriptSource(
         projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
     )
-    process = process or LinuxProcessProbe()
     launcher = ProcessLauncher(process, executor=executor)
     # Insertion order is claude_code then opencode: the first binding is the runner's default harness.
     bindings: dict[str, HarnessBinding] = {}

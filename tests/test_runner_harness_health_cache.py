@@ -15,12 +15,12 @@ from packaging.specifiers import SpecifierSet
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.domain.selftest_result import SelfTestResultRecord
+from blizzard.runner.harness import health_cache
 from blizzard.runner.harness.compatibility import CompatibilityClassification
 from blizzard.runner.harness.health import DeclaredDegradation, HarnessHealthCause
+from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.internal.harness_shared import normalize_opencode_version
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE, PINNED_OPENCODE_VERSION
-from blizzard.runner.loop import capability_snapshot
-from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 
 pytestmark = pytest.mark.unit
 
@@ -190,7 +190,7 @@ def test_a_version_above_every_committed_corpus_still_resolves_against_the_real_
 
 def test_a_raw_version_outside_the_admitted_range_is_incompatible() -> None:
     """A version genuinely outside the admitted range is `incompatible_version`, reached
-    through the real evaluation path — `HarnessHealthCache.refresh` (capability_snapshot.py)
+    through the real evaluation path — `HarnessHealthCache.refresh` (health_cache.py)
     into `evaluate_harness_health` (health.py) — never a synthetic evidence construction.
     No corpus entry exists for this version at all; the sibling test below pins the harder
     case where one does."""
@@ -214,9 +214,9 @@ def test_a_non_admitted_version_with_a_real_corpus_entry_still_reads_incompatibl
     manifest_dir = tmp_path / "opencode" / stray_version
     manifest_dir.mkdir(parents=True)
     (manifest_dir / "manifest.json").write_text(json.dumps({"live_evidence": {"classification": "supported"}}))
-    real_classify_offline = capability_snapshot.classify_offline
+    real_classify_offline = health_cache.classify_offline
     monkeypatch.setattr(
-        capability_snapshot,
+        health_cache,
         "classify_offline",
         lambda harness_id, version, admitted_range: real_classify_offline(
             harness_id, version, admitted_range, corpus_root=tmp_path

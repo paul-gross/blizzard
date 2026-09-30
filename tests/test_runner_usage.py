@@ -8,6 +8,7 @@ absent, never fabricated. Facts, not aggregates: a chunk's total is the hub's jo
 from __future__ import annotations
 
 import json
+from concurrent.futures import Executor
 from datetime import UTC, datetime
 
 import pytest
@@ -232,7 +233,9 @@ _SIGINT_ENVELOPE = json.dumps(
 
 
 @pytest.mark.unit
-def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_envelope(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_envelope(
+    tmp_path, spawn_executor: Executor
+):  # type: ignore[no-untyped-def]
     """The drain's own SIGINT leaves this envelope on stdout — through the REAL
     adapter, `record_worker` still reads its real cost, not the NULL-cost fallback."""
     store = _store(tmp_path)
@@ -242,7 +245,9 @@ def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_env
     _write_stdout(stdout_dir, "lease_1", 1, _SIGINT_ENVELOPE)
     worker_files = WorkerStdoutFiles(str(stdout_dir), store)
     adapter = ClaudeCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), process=FakeProbe(), launcher=ProcessLauncher(FakeProbe())
+        worker_env=AllowlistedEnv.of(()),
+        process=FakeProbe(),
+        launcher=ProcessLauncher(FakeProbe(), executor=spawn_executor),
     )
     registry = HarnessRegistry(
         {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source())}
@@ -268,7 +273,9 @@ def test_record_worker_reads_a_real_cost_off_a_sigint_error_during_execution_env
 
 
 @pytest.mark.unit
-def test_record_attempt_uses_the_judge_transcripts_actual_model_when_result_omits_it(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_attempt_uses_the_judge_transcripts_actual_model_when_result_omits_it(
+    tmp_path, spawn_executor: Executor
+):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store, resolved_model="claude-opus-5")
     store.record_boundary_open(
@@ -300,7 +307,7 @@ def test_record_attempt_uses_the_judge_transcripts_actual_model_when_result_omit
     adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe),
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
         transcript_source=transcript,
     )
     registry = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=transcript)})
@@ -371,7 +378,9 @@ def _opencode_step_finish(part_id: str, *, cost: float, input_tokens: int, outpu
 
 
 @pytest.mark.unit
-def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_billed_steps(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_billed_steps(
+    tmp_path, spawn_executor: Executor
+):  # type: ignore[no-untyped-def]
     """Through the REAL OpenCode adapter and a priced catalog, `record_worker` puts a billed
     step's cost on ``cost_usd`` and a subscription step's estimate on ``estimated_cost_usd``
     of the one outbound payload — each step priced alone, neither folded into the other."""
@@ -391,7 +400,7 @@ def test_record_worker_carries_a_real_opencode_adapters_estimate_apart_from_its_
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe),
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
         model="openai/gpt-5.6-luna",
         price_catalog=_LunaPriceCatalog(),
         transcript_source=transcript,

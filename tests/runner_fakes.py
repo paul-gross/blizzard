@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import tempfile
 import threading
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.usage import derive_invocation_cost
 from blizzard.runner.environments.provider import (
@@ -38,11 +40,13 @@ from blizzard.runner.harness.adapter import (
     WorkerIdentityError,
     WorkerPreamble,
 )
+from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
+from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.chunk_status_cache import IChunkViews, ReadThroughChunkViews
@@ -1265,8 +1269,8 @@ def make_context(
         ),
         harness_selector=HarnessSelector(harnesses=_harnesses),
         env_release=EnvironmentRelease(environments=store, clock=_clock, provider=_provider, events=events),
-        # Mirrors `LoopWiring.context`'s own composition: wired exactly when `harness`
-        # itself holds a transcript source, resolved once here.
+        # Wired exactly when `harness` itself holds a transcript source, resolved once here;
+        # `LoopWiring.context` always wires it, its graph's default harness being guarded to resolve one.
         transcripts_wired=_transcripts_wired,
         events=events,
         harnesses=_harnesses,
@@ -1392,3 +1396,56 @@ def no_retry_delay(seconds: float) -> None:
     """A ``HubProxy`` retry-delay double that never sleeps — every component test wiring a
     hub double that can answer with a retryable failure injects this via ``create_app``'s
     ``hub_retry_delay`` instead of riding the real ``time.sleep`` default."""
+
+
+@contextmanager
+def loop_graph(config: RunnerConfig, *, events: EventBroker | None = None) -> Iterator[RunnerProcess]:
+    """The composition root's process graph over ``config``, closed on exit — the one owner
+    of a graph for every test that builds a :class:`LoopContext` or a ``PeriodicDriver``."""
+    graph = build_runner_process(config, events=events)
+    try:
+        yield graph
+    finally:
+        graph.close()
+
+
+@contextmanager
+def loop_context(
+    config: RunnerConfig,
+    *,
+    broker: EventBroker | None = None,
+    workspace_prompt: str = "",
+    runner_prompt: str = "",
+) -> Iterator[LoopContext]:
+    """A :class:`LoopContext` built by ``LoopWiring.context`` over its own graph, closed on exit."""
+    with loop_graph(config, events=broker) as graph:
+        ctx = LoopWiring(config, workspace_prompt, runner_prompt, broker).context(FakeHub(), graph)
+        try:
+            yield ctx
+        finally:
+            ctx.usage_http_client.close()
+
+
+class FakeHarnessHealth:
+    """An :class:`IReadHarnessHealth` over a scripted per-harness table — for API and dashboard
+    tests that need a served health read without a real cache."""
+
+    def __init__(
+        self,
+        results: dict[str, HarnessHealthResult] | None = None,
+        *,
+        versions: dict[str, str] | None = None,
+        ranges: dict[str, str] | None = None,
+    ) -> None:
+        self._results = results or {}
+        self._versions = versions or {}
+        self._ranges = ranges or {}
+
+    def get(self, harness_id: str) -> HarnessHealthResult | None:
+        return self._results.get(harness_id)
+
+    def displayed_version(self, harness_id: str) -> str | None:
+        return self._versions.get(harness_id)
+
+    def admitted_range(self, harness_id: str) -> str | None:
+        return self._ranges.get(harness_id)

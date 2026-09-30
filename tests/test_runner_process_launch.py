@@ -41,8 +41,8 @@ def _launch(launcher: ProcessLauncher) -> LaunchedProcess:
 
 
 @pytest.mark.unit
-def test_launched_process_gets_its_own_process_group() -> None:
-    launcher = ProcessLauncher(LinuxProcessProbe())
+def test_launched_process_gets_its_own_process_group(spawn_executor: Executor) -> None:
+    launcher = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor)
     launched = _launch(launcher)
     try:
         assert launched.pgid == launched.pid
@@ -58,10 +58,8 @@ def test_launch_forks_off_the_calling_thread_onto_a_persistent_one(
 ) -> None:
     """The structural property the parent-death signal's thread scoping demands, and the
     one holding on any kernel: the fork never runs on the caller's own (tick-scoped)
-    thread, but on a persistent spawner — the module's shared one, or an injected one."""
-    executor: Executor | None = None
-    if prefix != "blizzard-spawner":
-        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=prefix)
+    thread, but on a persistent spawner — the injected executor's own worker."""
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=prefix)
     seen: list[threading.Thread] = []
     real_popen = subprocess.Popen
 
@@ -79,8 +77,7 @@ def test_launch_forks_off_the_calling_thread_onto_a_persistent_one(
     finally:
         os.killpg(launched.pgid, signal.SIGKILL)
         _reap(launched.pid)
-        if executor is not None:
-            executor.shutdown(wait=True)
+        executor.shutdown(wait=True)
 
 
 # A real child PROCESS, not a thread, performs the deferred launch and then exits outright.
@@ -89,9 +86,10 @@ import sys
 sys.path.insert(0, {src!r})
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.harness.process_launch import ProcessLauncher
+from concurrent.futures import ThreadPoolExecutor
 import os, time
 
-launcher = ProcessLauncher(LinuxProcessProbe())
+launcher = ProcessLauncher(LinuxProcessProbe(), executor=ThreadPoolExecutor(max_workers=1))
 launched = launcher.launch(
     ["sleep", "30"], cwd=None, env=dict(os.environ), stdout=None, stderr=None, defer_disarm=True
 )
@@ -186,12 +184,14 @@ def _write_fd_of(launched: LaunchedProcess) -> int:
 
 
 @pytest.mark.unit
-def test_control_pipe_eof_with_no_confirm_byte_kills_the_trampoline_instead_of_exec(tmp_path: Any) -> None:
+def test_control_pipe_eof_with_no_confirm_byte_kills_the_trampoline_instead_of_exec(
+    tmp_path: Any, spawn_executor: Executor
+) -> None:
     """`os.read` returns `b""`, not an exception, on EOF — the trampoline must tell that
     apart from a real confirm byte. This test's own process never exits, so the only signal
     reaching the trampoline is the pipe closing in-process, isolated from the PDEATHSIG race."""
     sentinel = tmp_path / "ran"
-    launcher = ProcessLauncher(LinuxProcessProbe())
+    launcher = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor)
     launched = launcher.launch(
         [sys.executable, "-c", f"import time; open({str(sentinel)!r}, 'w').close(); time.sleep(30)"],
         cwd=None,
@@ -220,10 +220,10 @@ def test_control_pipe_eof_with_no_confirm_byte_kills_the_trampoline_instead_of_e
 
 
 @pytest.mark.unit
-def test_a_worker_outlives_the_short_lived_thread_that_requested_its_launch() -> None:
+def test_a_worker_outlives_the_short_lived_thread_that_requested_its_launch(spawn_executor: Executor) -> None:
     """The production scenario: the tick thread requests a launch, then exits on a graceful
     ``driver.stop()`` while the daemon runs on — its healthy worker must still be alive."""
-    launcher = ProcessLauncher(LinuxProcessProbe())
+    launcher = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor)
     launched: list[LaunchedProcess] = []
     requester = threading.Thread(target=lambda: launched.append(_launch(launcher)), name="tick")
     requester.start()
@@ -245,7 +245,9 @@ def _reap(pid: int) -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("defer_disarm", [False, True])
-def test_a_worker_never_inherits_the_daemons_open_stdin(tmp_path: Any, defer_disarm: bool) -> None:
+def test_a_worker_never_inherits_the_daemons_open_stdin(
+    tmp_path: Any, defer_disarm: bool, spawn_executor: Executor
+) -> None:
     """A headless harness that drains piped stdin before its turn (`opencode run`) must see
     EOF at once, not block on whatever stdin the daemon was started with — here a pipe whose
     write end this test holds open for the whole launch, as a backgrounded daemon's would be."""
@@ -255,7 +257,7 @@ def test_a_worker_never_inherits_the_daemons_open_stdin(tmp_path: Any, defer_dis
     os.dup2(read_fd, 0)
     launched: LaunchedProcess | None = None
     try:
-        launched = ProcessLauncher(LinuxProcessProbe()).launch(
+        launched = ProcessLauncher(LinuxProcessProbe(), executor=spawn_executor).launch(
             [sys.executable, "-c", f"import sys; sys.stdin.read(); open({str(sentinel)!r}, 'w').close()"],
             cwd=None,
             env=dict(os.environ),

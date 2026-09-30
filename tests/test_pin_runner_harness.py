@@ -6,6 +6,8 @@ adapter: each test here pins a decision whose only defence was prose.
 
 from __future__ import annotations
 
+from concurrent.futures import Executor
+
 import pytest
 
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -16,7 +18,9 @@ from tests.runner_fakes import FakeProbe
 
 
 @pytest.mark.unit
-def test_an_unmapped_tier_alias_never_substitutes_downward(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_unmapped_tier_alias_never_substitutes_downward(
+    monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
     """Tier aliases are unordered roles, not an ordered scale: an unmapped
     entry is unresolvable, not substituted with the next tier down."""
     monkeypatch.setattr(adapter_module, "_BUILTIN_TIERS", {"blizzard:advanced": "opus", "blizzard:basic": "sonnet"})
@@ -26,7 +30,7 @@ def test_an_unmapped_tier_alias_never_substitutes_downward(monkeypatch: pytest.M
         binary="claude",
         model="claude-opus-5",
         process=probe,
-        launcher=ProcessLauncher(probe),
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
     )
 
     assert adapter.resolve_model(["blizzard:frontier"]) == "claude-opus-5"

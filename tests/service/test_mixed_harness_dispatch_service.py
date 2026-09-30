@@ -26,6 +26,7 @@ from blizzard.runner.loop.steps import Fill, Pull
 from blizzard.runner.store.schema import leases, usage_facts
 from blizzard.wire.transcript_segment import TurnSegmentView
 from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _runner_api, _runner_config
+from tests.runner_fakes import loop_graph
 from tests.service.support import (
     BUILD_SCRIPT,
     JUDGEMENT_SCRIPT,
@@ -182,9 +183,12 @@ def test_claim_revalidates_against_a_regressed_registration_through_the_real_run
 
         for key, value in fenced.items():
             monkeypatch.setenv(key, value)
-        with httpx.Client(base_url=config.hub_url, timeout=30.0, headers=config.auth_headers()) as client:
+        with (
+            httpx.Client(base_url=config.hub_url, timeout=30.0, headers=config.auth_headers()) as client,
+            loop_graph(config) as graph,
+        ):
             wiring = LoopWiring.of(config)
-            ctx = wiring.context(HttpHubClient(client))
+            ctx = wiring.context(HttpHubClient(client), graph)
             try:
                 Pull(ctx).run()  # registers this runner's true set: claude_code + opencode
                 # A stale registration for the same runner_id regresses the stored set.

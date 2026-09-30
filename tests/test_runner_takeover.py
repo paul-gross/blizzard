@@ -7,6 +7,7 @@ second slice drives REAP/ADVANCE against an open takeover."""
 
 from __future__ import annotations
 
+from concurrent.futures import Executor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
@@ -692,7 +693,7 @@ def test_takeover_env_is_bounded_to_identity_plus_path_and_home(tmp_path) -> Non
     assert set(opened.env) == {"PATH", "HOME"} | {k for k in opened.env if k.startswith("BLIZZARD_")}
 
 
-def test_takeover_path_carries_the_workers_path_prepend(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_takeover_path_carries_the_workers_path_prepend(tmp_path, monkeypatch, spawn_executor: Executor) -> None:  # type: ignore[no-untyped-def]
     """The takeover's forwarded ``PATH`` is built from the same configured
     :class:`AllowlistedEnv` the worker's own spawn/resume used, so an operator resuming a
     worker's session resolves the same ``[worker] path_prepend`` tools the worker did."""
@@ -704,7 +705,7 @@ def test_takeover_path_carries_the_workers_path_prepend(tmp_path, monkeypatch) -
     adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of((), path_prepend=("/opt/mise/shims",)),
         process=process,
-        launcher=ProcessLauncher(process),
+        launcher=ProcessLauncher(process, executor=spawn_executor),
     )
 
     opened = _service(store, harness=adapter).open(_open_scope(store), force=False)

@@ -7,6 +7,8 @@ pinned separately in ``test_runner_harness_claude_code_transcript.py``.
 
 from __future__ import annotations
 
+from concurrent.futures import Executor
+
 import pytest
 
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
@@ -62,19 +64,22 @@ def test_null_transcript_source_size_bytes_is_unknown_not_zero() -> None:
 
 
 @pytest.mark.unit
-def test_claude_code_adapter_defaults_to_the_null_transcript_source() -> None:
+def test_claude_code_adapter_defaults_to_the_null_transcript_source(spawn_executor: Executor) -> None:
     probe = FakeProbe()
     source = ClaudeCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), process=probe, launcher=ProcessLauncher(probe)
+        worker_env=AllowlistedEnv.of(()), process=probe, launcher=ProcessLauncher(probe, executor=spawn_executor)
     ).transcript_source()
     assert isinstance(source, NullTranscriptSource)
 
 
 @pytest.mark.unit
-def test_claude_code_adapter_returns_the_injected_transcript_source() -> None:
+def test_claude_code_adapter_returns_the_injected_transcript_source(spawn_executor: Executor) -> None:
     injected = NullTranscriptSource()
     probe = FakeProbe()
     adapter = ClaudeCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), transcript_source=injected, process=probe, launcher=ProcessLauncher(probe)
+        worker_env=AllowlistedEnv.of(()),
+        transcript_source=injected,
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
     )
     assert adapter.transcript_source() is injected

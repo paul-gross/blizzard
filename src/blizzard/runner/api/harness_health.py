@@ -10,8 +10,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
-from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.wire.runner_status import HarnessHealthListResponse
 from blizzard.wire.runner_status import HarnessHealthView as HarnessHealthViewWire
 
@@ -25,7 +25,7 @@ def list_harness_health(request: Request) -> HarnessHealthListResponse:
     return _harness_health_list(wiring.harnesses(), wiring.harness_health())
 
 
-def _harness_health_list(harnesses: IHarnessRegistry, health: HarnessHealthCache) -> HarnessHealthListResponse:
+def _harness_health_list(harnesses: IHarnessRegistry, health: IReadHarnessHealth) -> HarnessHealthListResponse:
     items: list[HarnessHealthViewWire] = []
     for harness_id in harnesses.known_harnesses:
         result = health.get(harness_id)
