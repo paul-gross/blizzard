@@ -340,7 +340,7 @@ nodes:
           description: A repo's PR read dirty — a real merge conflict — routed immediately, without waiting out poll_timeout; sent to resolve to base-merge without discarding the validated verify/review/pre-push spine.
           to: resolve
         failure:
-          description: A repo's check run completed with a terminal conclusion the base branch does not share on that check, poll_timeout exceeded with a repo never going cleanly mergeable, or the land script crashed; routed to resolve to diagnose and repair without discarding the validated spine.
+          description: A repo's check run completed with a terminal conclusion the base branch does not share on that check, poll_timeout exceeded with a repo never going cleanly mergeable, a PR head carrying a commit beyond the submitted one and its own base merges (a foreign advance), or the land script crashed; routed to resolve to diagnose and repair without discarding the validated spine.
           to: resolve
         inherited-failure:
           description: Every remaining check failure is inherited from the base branch and survived a one-time re-run; not this chunk's defect, so it routes straight to build to repair the base as its own commit, bypassing resolve entirely.
@@ -367,7 +367,7 @@ nodes:
           description: The blocker was mechanical — a base-merge with no semantic choices, a transient forge/CI state, or an infra crash; the change's semantics are untouched and delivery retries.
           to: deliver
         substantive:
-          description: Resolving the conflict required semantic choices; the change re-earns its verification before delivering again.
+          description: Resolving the conflict required semantic choices, or a foreign commit on the PR head was adopted as part of the change; the change re-earns its verification before delivering again.
           to: verify
         broken:
           description: The PR never went clean because CI exposed a real defect in the change itself; kicked back to build with the resolve-report findings.
