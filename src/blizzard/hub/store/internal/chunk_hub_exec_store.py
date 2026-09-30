@@ -28,6 +28,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     fence,
     graph_id_of,
     lock_chunk_row,
+    next_artifact_seq,
     next_route_seq,
 )
 
@@ -147,6 +148,7 @@ class ChunkHubExecStore:
                         repo=row.repo,
                         forge=row.forge,
                         produced_at=at,
+                        seq=next_artifact_seq(conn, row.chunk_id),
                     )
                 )
             if release_route:

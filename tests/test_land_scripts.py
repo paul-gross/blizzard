@@ -1131,9 +1131,11 @@ def _forge_with_an_empty_repo(
     other_branch: str,
     compare_status: str = "identical",
     compare_http_status: int = 200,
+    base_tip_http_status: int = 200,
 ):
     """A two-repo double: ``_REPO`` is clean and mergeable, ``other_repo``'s branch is the
-    base branch itself, so opening its PR 422s the way the forge refuses an empty PR."""
+    base branch itself, so opening its PR 422s the way the forge refuses an empty PR.
+    ``other_repo``'s base branch has moved on to ``basetip`` past the submitted commit."""
     base = f"http://forge/repos/{_REPO}"
     other_base = f"http://forge/repos/{other_repo}"
     responses = {
@@ -1166,6 +1168,7 @@ def _forge_with_an_empty_repo(
             },
         ),
         ("GET", f"{other_base}/compare/main...{other_branch}"): (compare_http_status, {"status": compare_status}),
+        ("GET", f"{other_base}/git/ref/heads/main"): (base_tip_http_status, {"object": {"sha": "basetip"}}),
     }
 
     def fake(
@@ -1216,8 +1219,140 @@ def test_a_repo_adding_no_commits_is_a_no_op_landing_and_never_blocks_its_siblin
     assert _last_line(capsys) == "landed", "an empty repo must not hold the chunk on `pending` forever"
 
     markers = _marker_posts(calls)
-    assert markers[f"merged/{other_repo}"] == "basesha", "the empty repo is accounted for, so it stops being pending"
+    assert markers[f"merged/{other_repo}"] == "basetip", (
+        "a no-op lands at the base's live tip, not the submitted commit"
+    )
     assert markers[f"merged/{_REPO}"] == "merged-sha1", "the sibling with real work still merges"
+
+
+@pytest.mark.parametrize("script", [land_pr_ci, land_default])
+def test_a_behind_base_no_op_records_the_base_tip_not_the_submitted_commit(
+    script: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    other_repo, other_branch = "acme/gadget", "stale-branch"
+    _two_repo_env(monkeypatch, other_repo=other_repo, other_branch=other_branch)
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_with_an_empty_repo(calls, other_repo=other_repo, other_branch=other_branch, compare_status="behind"),
+    )
+
+    assert script.main() == 0
+    assert _last_line(capsys) == "landed"
+    assert _marker_posts(calls)[f"merged/{other_repo}"] == "basetip"
+
+
+@pytest.mark.parametrize(("script", "outcome"), [(land_pr_ci, "pending"), (land_default, "conflict")])
+def test_an_unreadable_no_op_base_tip_writes_no_merged_marker(
+    script: Any, outcome: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    other_repo, other_branch = "acme/gadget", "stale-branch"
+    _two_repo_env(monkeypatch, other_repo=other_repo, other_branch=other_branch)
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_with_an_empty_repo(
+            calls, other_repo=other_repo, other_branch=other_branch, compare_status="behind", base_tip_http_status=500
+        ),
+    )
+
+    assert script.main() == 0
+    assert _last_line(capsys) == outcome
+    assert f"merged/{other_repo}" not in _marker_posts(calls)
+
+
+def _forge_merging_without_a_sha(
+    calls: list[tuple[str, str, dict[str, Any] | None]], *, merge_commit_sha: str | None, merged_before: bool = False
+):
+    """A one-repo double whose clean PR merges, but whose merge response carries no
+    ``sha`` — the reread after the merge is merged, carrying ``merge_commit_sha``."""
+    base = f"http://forge/repos/{_REPO}"
+    state = {"merged": merged_before}
+
+    def pull() -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "number": 1,
+            "merged": state["merged"],
+            "mergeable_state": "clean",
+            "head": {"ref": _BRANCH, "sha": "headsha"},
+            "html_url": f"http://forge/{_REPO}/pull/1",
+        }
+        if state["merged"]:
+            body["merge_commit_sha"] = merge_commit_sha
+        return body
+
+    def fake(
+        method: str,
+        url: str,
+        *,
+        token: str | None,
+        body: dict[str, Any] | None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        if url == _CALLBACK_URL:
+            return 200, {"recorded": True}
+        if url == f"{base}/pulls?state=closed&base=main&page=1&per_page=100":
+            merged = [{**pull(), "base": {"ref": "main"}, "merged_at": "t"}] if state["merged"] else []
+            return 200, merged
+        if url == f"{base}/pulls?state=open":
+            return 200, [] if state["merged"] else [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]
+        if url == f"{base}/pulls/1":
+            return 200, pull()
+        if url == f"{base}/git/ref/heads/{_BRANCH}":
+            return 200, {"object": {"sha": "headsha"}}
+        if url == f"{base}/commits/headsha/check-runs":
+            return 200, {"total_count": 1, "check_runs": [_check_run("completed", "success")]}
+        if method == "PUT" and url == f"{base}/pulls/1/merge":
+            state["merged"] = True
+            return 200, {"merged": True}
+        raise KeyError((method, url))
+
+    return fake
+
+
+@pytest.mark.parametrize("script", [land_pr_ci, land_default])
+def test_a_merge_response_without_a_sha_records_the_rereads_merge_commit(
+    script: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _set_base_env(monkeypatch, feature_title="t")
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(land_common, "forge_request", _forge_merging_without_a_sha(calls, merge_commit_sha="mc-sha"))
+
+    assert script.main() == 0
+    assert _last_line(capsys) == "landed"
+    assert _marker_posts(calls) == {f"merged/{_REPO}": "mc-sha"}
+
+
+@pytest.mark.parametrize(("script", "outcome"), [(land_pr_ci, "pending"), (land_default, "conflict")])
+def test_a_merge_whose_landed_commit_no_read_carries_writes_no_merged_marker(
+    script: Any, outcome: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _set_base_env(monkeypatch, feature_title="t")
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(land_common, "forge_request", _forge_merging_without_a_sha(calls, merge_commit_sha=None))
+
+    assert script.main() == 0
+    assert _last_line(capsys) == outcome
+    assert _marker_posts(calls) == {}, "never the PR head sha in place of the landed commit"
+
+
+def test_a_later_land_pr_ci_poll_over_the_now_merged_pr_records_its_merge_commit(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _set_base_env(monkeypatch, feature_title="t")
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(
+        land_common,
+        "forge_request",
+        _forge_merging_without_a_sha(calls, merge_commit_sha="mc-sha", merged_before=True),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "landed"
+    assert _marker_posts(calls) == {f"merged/{_REPO}": "mc-sha"}
 
 
 @pytest.mark.parametrize("compare_status, compare_http_status", [("ahead", 200), ("diverged", 200), ("identical", 500)])

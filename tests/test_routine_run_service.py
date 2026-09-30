@@ -327,6 +327,7 @@ def _seed_baseline(hub: HubHarness, *, graph_id: str, routine_name: str, scope_s
                 kind="asset",
                 data="[]",
                 produced_at=now,
+                seq=1,
             )
         )
     FindingSetStore(hub_store_connections(hub.engine)).create(

@@ -344,6 +344,9 @@ artifacts = Table(
     Column("repo", String, nullable=True),  # git_commit only
     Column("forge", String, nullable=True),  # git_commit only; null = legacy row
     Column("produced_at", UtcDateTime, nullable=False),
+    # The per-chunk durable write order, assigned under the chunk-row lock in the
+    # inserting transaction (chunk_rows.next_artifact_seq). Not unique, like route_created.seq.
+    Column("seq", Integer, nullable=False),
 )
 # (chunk_id, node_id, epoch): a chunk's artifacts inlined by chunk;
 # node_id/epoch trail so the same index still serves a chunk-only lookup as its

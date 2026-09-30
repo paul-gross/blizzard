@@ -18,7 +18,7 @@ from blizzard.hub.domain.review_findings_materialize import (
     ReviewFindingsPlan,
 )
 from blizzard.hub.store.errors import HubStoreConnections
-from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row
+from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
 from blizzard.hub.store.schema import artifacts, finding_facts, findings, scopes
 
 #: Keyed on `chunk_id` alone: a chunk owes at most one review-findings delivery.
@@ -121,6 +121,7 @@ class ReviewFindingsStore:
                     repo=None,
                     forge=None,
                     produced_at=plan.at,
+                    seq=next_artifact_seq(conn, plan.chunk_id),
                 )
             )
             return ReviewFindingsOutcome.RECORDED

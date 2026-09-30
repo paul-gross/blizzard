@@ -27,6 +27,7 @@ def _marker(conn, chunk_id: str, name: str, data: str, index: int) -> None:  # t
             kind="asset",
             data=data,
             produced_at=_NOW,
+            seq=index,
         )
     )
 

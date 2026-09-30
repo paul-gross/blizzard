@@ -365,6 +365,16 @@ def next_route_seq(conn: Connection, chunk_id: str) -> int:
     return max(created_max or 0, released_max or 0, token_max or 0) + 1
 
 
+def next_artifact_seq(conn: Connection, chunk_id: str) -> int:
+    """One past the current max ``artifacts.seq`` for this chunk — the artifacts' durable
+    write order, which a same-millisecond pair of ids cannot settle. Read-then-insert, so
+    concurrent callers are serialized by :func:`lock_chunk_row` (``bzh:sql-portable``;
+    ``tests/test_artifact_seq_concurrency.py``). Call it in the inserting transaction."""
+    lock_chunk_row(conn, chunk_id)
+    current = conn.execute(select(func.max(s.artifacts.c.seq)).where(s.artifacts.c.chunk_id == chunk_id)).scalar()
+    return (current or 0) + 1
+
+
 def graph_id_of(conn: Connection, chunk_id: str) -> str:
     """The chunk's then-current graph pin — the provenance a transition is stamped
     with. Read inside the writing transaction so a transition always

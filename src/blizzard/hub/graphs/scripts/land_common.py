@@ -279,6 +279,23 @@ class LandRun:
             return False
         return payload.get("status") in {"identical", "behind"}
 
+    def base_tip(self, bare_repo: str) -> str:
+        """``bare_repo``'s base branch's live tip, read through the git-ref route.
+
+        Raises :class:`LandedRevisionUnknown` on any unreadable answer — a degraded read
+        is never a landed revision."""
+        repo = self.repo(bare_repo)
+        try:
+            status, ref = self.api("GET", f"/repos/{repo}/git/ref/heads/{self.base_branch}")
+        except Exception as exc:
+            raise LandedRevisionUnknown(f"could not read {repo}:{self.base_branch}'s live tip: {exc}") from exc
+        if status != 200 or not isinstance(ref, dict):
+            raise LandedRevisionUnknown(f"could not read {repo}:{self.base_branch}'s live tip (HTTP {status})")
+        tip = (ref.get("object") or {}).get("sha")
+        if not isinstance(tip, str) or not tip:
+            raise LandedRevisionUnknown(f"{repo}:{self.base_branch}'s live tip read came back without a sha")
+        return tip
+
     def pending(self) -> list[dict[str, str]]:
         """The repos still to land — those with no ``merged/<repo>`` marker yet.
 
@@ -326,7 +343,20 @@ class PullRequestLookupError(Exception):
 class NothingToLand(Exception):
     """Raised when a repo's branch adds no commit its base branch lacks — a **no-op
     landing**, not a failure: no PR can be opened and no poll changes that, so a script
-    records the repo's ``merged/<repo>`` marker and moves on (``bzh:hub-node-step-idempotence``)."""
+    records the repo's ``merged/<repo>`` marker and moves on (``bzh:hub-node-step-idempotence``).
+
+    :attr:`landed_sha` is the base branch's live tip — the revision the repo's work is
+    landed at, never the submitted commit, which a base that moved on has left behind."""
+
+    def __init__(self, message: str, landed_sha: str) -> None:
+        super().__init__(message)
+        self.landed_sha = landed_sha
+
+
+class LandedRevisionUnknown(Exception):
+    """Raised when a landing is confirmed but the revision it landed at cannot be read —
+    no ``merged/<repo>`` marker may be written for it, since a guessed revision is worse
+    than none. Whether that is a conflict or worth another poll is the script's call."""
 
 
 class MergeDidNotLand(Exception):
@@ -376,7 +406,10 @@ class PullRequest:
             )
             if status != 201:
                 if run.contains(commit["repo"], branch):
-                    raise NothingToLand(f"{repo}:{branch} adds no commit {run.base_branch} does not already have")
+                    raise NothingToLand(
+                        f"{repo}:{branch} adds no commit {run.base_branch} does not already have",
+                        run.base_tip(commit["repo"]),
+                    )
                 raise PullRequestOpenError(f"could not open a PR for {repo}:{branch}: {created}")
             existing = created
         return cls._record(cls(run, commit["repo"], int(existing["number"]), {}).reread())
@@ -470,10 +503,13 @@ class PullRequest:
         return status, ((body or {}).get("message", "") if isinstance(body, dict) else "")
 
     def merge(self, sha: str, *, method: str = "merge") -> str:
-        """Merge at ``sha`` with ``method`` and return the landed commit.
+        """Merge at ``sha`` with ``method`` and return the landed commit — the merge
+        response's ``sha``, else the reread's ``merge_commit_sha``; never ``sha`` itself.
 
         An already-merged PR is a prior run's un-marked merge, a no-op to redo
-        (``bzh:hub-node-step-idempotence``); anything else raises :class:`MergeDidNotLand`."""
+        (``bzh:hub-node-step-idempotence``); anything else raises :class:`MergeDidNotLand`.
+        A confirmed merge whose landed commit neither read carries raises
+        :class:`LandedRevisionUnknown`."""
         status, result = self.run.api(
             "PUT",
             f"/repos/{self.repo}/pulls/{self.number}/merge",
@@ -484,9 +520,12 @@ class PullRequest:
                 "user": _HUB_USER,
             },
         )
-        if status == 200 and (result or {}).get("merged"):
-            return (result or {}).get("sha") or sha
+        if status == 200 and isinstance(result, dict) and result.get("merged") and result.get("sha"):
+            return result["sha"]
         landed = self.reread()
         if not landed.merged:
             raise MergeDidNotLand(result)
-        return landed.body.get("merge_commit_sha") or sha
+        merge_commit = landed.body.get("merge_commit_sha")
+        if not merge_commit:
+            raise LandedRevisionUnknown(f"{self} merged but neither read carries its landed commit")
+        return merge_commit

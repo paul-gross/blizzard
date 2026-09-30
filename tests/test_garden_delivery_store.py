@@ -226,6 +226,7 @@ def test_deliver_writes_finding_sets_before_finding_facts_under_fk_enforcement(t
                 kind="asset",
                 data="{}",
                 produced_at=_NOW,
+                seq=1,
             )
         )
     plan = DeliveryPlan(
