@@ -1061,7 +1061,7 @@
         "type": "object"
       },
       "ChunkUsageView": {
-        "description": "One node-step's usage/cost telemetry \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was\nrecorded for this invocation \u2014 never fabricated. ``estimated_cost_usd`` is the runner's own reported\nestimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.",
+        "description": "One node-step's usage/cost telemetry \u2014 one harness invocation's tokens-by-class and\ncost. ``cost_usd`` is ``None`` exactly when no billed figure was\nrecorded for this invocation \u2014 never fabricated. ``estimated_cost_usd`` is the runner's own reported\nestimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -2756,7 +2756,7 @@
         "type": "object"
       },
       "PauseStateView": {
-        "description": "The pause brake's two independent surfaces, plus their effective OR.\n\n``local_reason`` is the local brake's own reason \u2014 a usage limit, the spend ceiling, or\n``None`` on a plain operator pause \u2014 the runner-local mirror of the reason the hub already\nshows for a runner's local pause.",
+        "description": "The pause brake's two independent surfaces, plus their effective OR.\n\n``local_reason`` is the local brake's own reason \u2014 a usage limit, the spend ceiling, or\n``None`` on a plain operator pause.",
         "properties": {
           "effective": {
             "title": "Effective",

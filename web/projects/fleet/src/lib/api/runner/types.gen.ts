@@ -661,7 +661,7 @@ export type ChunkUsageTotalView = {
  * ChunkUsageView
  *
  * One node-step's usage/cost telemetry — one harness invocation's tokens-by-class and
- * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was
+ * cost. ``cost_usd`` is ``None`` exactly when no billed figure was
  * recorded for this invocation — never fabricated. ``estimated_cost_usd`` is the runner's own reported
  * estimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.
  */
@@ -1683,8 +1683,7 @@ export type OpenTakeoverView = {
  * The pause brake's two independent surfaces, plus their effective OR.
  *
  * ``local_reason`` is the local brake's own reason — a usage limit, the spend ceiling, or
- * ``None`` on a plain operator pause — the runner-local mirror of the reason the hub already
- * shows for a runner's local pause.
+ * ``None`` on a plain operator pause.
  */
 export type PauseStateView = {
     /**

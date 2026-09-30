@@ -2178,7 +2178,7 @@
         "type": "object"
       },
       "ChunkUsageView": {
-        "description": "One node-step's usage/cost telemetry \u2014 one harness invocation's tokens-by-class and\ncost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was\nrecorded for this invocation \u2014 never fabricated. ``estimated_cost_usd`` is the runner's own reported\nestimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.",
+        "description": "One node-step's usage/cost telemetry \u2014 one harness invocation's tokens-by-class and\ncost. ``cost_usd`` is ``None`` exactly when no billed figure was\nrecorded for this invocation \u2014 never fabricated. ``estimated_cost_usd`` is the runner's own reported\nestimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -6298,7 +6298,7 @@
         "type": "object"
       },
       "ReviewFindingsDeliveryResponse": {
-        "description": "The result of one `record-findings` materialization \u2014 the\n`GardenDeliveryResponse` shape: ``recorded`` durably means it, materialized now or\nreplayed; ``invalid`` carries the rejection reason in ``detail``.",
+        "description": "The result of one `record-findings` materialization \u2014 the\n`GardenDeliveryResponse` shape.",
         "properties": {
           "detail": {
             "default": "",
@@ -6995,7 +6995,7 @@
         "type": "object"
       },
       "RunnerCapability": {
-        "description": "One harness binding this runner can execute \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding. ``available`` defaults\n``True`` so a runner asserting none matches exactly as it did before this field\nexisted \u2014 never a reason to strand a pre-upgrade runner.",
+        "description": "One harness binding this runner can execute \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding. ``available`` defaults\n``True``: a runner that asserts none is treated as available.",
         "properties": {
           "available": {
             "default": true,
@@ -7322,7 +7322,7 @@
         "type": "object"
       },
       "RunnerSubscriptionDeclaration": {
-        "description": "One provider subscription the runner declares at registration \u2014 the join key\neverything else keys off. ``provider`` is stored but reaches no view; nothing reads\nit there yet.",
+        "description": "One provider subscription the runner declares at registration \u2014 the join key\neverything else keys off. ``provider`` names the subscription's provider.",
         "properties": {
           "name": {
             "title": "Name",

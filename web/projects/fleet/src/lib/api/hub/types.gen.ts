@@ -1360,7 +1360,7 @@ export type ChunkUsageTotalView = {
  * ChunkUsageView
  *
  * One node-step's usage/cost telemetry — one harness invocation's tokens-by-class and
- * cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was
+ * cost. ``cost_usd`` is ``None`` exactly when no billed figure was
  * recorded for this invocation — never fabricated. ``estimated_cost_usd`` is the runner's own reported
  * estimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported.
  */
@@ -3958,8 +3958,7 @@ export type RestartView = {
  * ReviewFindingsDeliveryResponse
  *
  * The result of one `record-findings` materialization — the
- * `GardenDeliveryResponse` shape: ``recorded`` durably means it, materialized now or
- * replayed; ``invalid`` carries the rejection reason in ``detail``.
+ * `GardenDeliveryResponse` shape.
  */
 export type ReviewFindingsDeliveryResponse = {
     /**
@@ -4441,8 +4440,7 @@ export type RunRowView = {
  * One harness binding this runner can execute — the id, its observed
  * version (``None`` when the binding exposes none), the tier ids it can resolve, and
  * whether it is this runner's default binding. ``available`` defaults
- * ``True`` so a runner asserting none matches exactly as it did before this field
- * existed — never a reason to strand a pre-upgrade runner.
+ * ``True``: a runner that asserts none is treated as available.
  */
 export type RunnerCapability = {
     /**
@@ -4686,8 +4684,7 @@ export type RunnerRetireResponse = {
  * RunnerSubscriptionDeclaration
  *
  * One provider subscription the runner declares at registration — the join key
- * everything else keys off. ``provider`` is stored but reaches no view; nothing reads
- * it there yet.
+ * everything else keys off. ``provider`` names the subscription's provider.
  */
 export type RunnerSubscriptionDeclaration = {
     /**
