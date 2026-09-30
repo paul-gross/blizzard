@@ -1102,6 +1102,65 @@
         "title": "ChunkCompleteRequest",
         "type": "object"
       },
+      "ChunkCountsView": {
+        "description": "``GET /api/chunk-counts`` \u2014 the all-time fleet count per derived status, over exactly\nthe chunks ``GET /api/chunks`` pages over. One field per chunk status, so a new status is a new field.",
+        "properties": {
+          "delivering": {
+            "title": "Delivering",
+            "type": "integer"
+          },
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "needs_human": {
+            "title": "Needs Human",
+            "type": "integer"
+          },
+          "not_ready": {
+            "title": "Not Ready",
+            "type": "integer"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "integer"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "integer"
+          },
+          "running": {
+            "title": "Running",
+            "type": "integer"
+          },
+          "stopped": {
+            "title": "Stopped",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "waiting_on_human": {
+            "title": "Waiting On Human",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "not_ready",
+          "ready",
+          "running",
+          "delivering",
+          "waiting_on_human",
+          "needs_human",
+          "paused",
+          "stopped",
+          "done"
+        ],
+        "title": "ChunkCountsView",
+        "type": "object"
+      },
       "ChunkDecisionStatusView": {
         "description": "A live gate decision's identity and resolution \u2014 no ``choices``,\nno ``docket``.",
         "properties": {
@@ -12145,6 +12204,28 @@
         ]
       }
     },
+    "/api/chunk-counts": {
+      "get": {
+        "description": "The all-time fleet count per derived status \u2014 over exactly the chunks\n``GET /api/chunks`` pages over, with no window applied.",
+        "operationId": "chunk_counts_api_chunk_counts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkCountsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Chunk Counts",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
     "/api/chunks": {
       "get": {
         "description": "The fleet chunk list \u2014 derived status per chunk, bounded and keyset-paginated.\n\nOnly the page's own rows render, but live-holder and blocked-marking derivation still\nsee the whole fleet \u2014 a pointer this page renders can be held live by a\nchunk outside it, same for a dependent's prerequisite.",
@@ -12176,6 +12257,16 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "board_window",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Board Window",
+              "type": "boolean"
             }
           }
         ],

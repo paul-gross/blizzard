@@ -186,6 +186,22 @@ class ChunksPageView(BaseModel):
     next_cursor: str | None = None
 
 
+class ChunkCountsView(BaseModel):
+    """``GET /api/chunk-counts`` — the all-time fleet count per derived status, over exactly
+    the chunks ``GET /api/chunks`` pages over. One field per chunk status, so a new status is a new field."""
+
+    total: int
+    not_ready: int
+    ready: int
+    running: int
+    delivering: int
+    waiting_on_human: int
+    needs_human: int
+    paused: int
+    stopped: int
+    done: int
+
+
 class RouteView(BaseModel):
     """A chunk's route — where it is being worked."""
 

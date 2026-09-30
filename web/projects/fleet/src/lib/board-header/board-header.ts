@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { ChunkSummary, FleetSpendView } from '../api/hub';
-import { LANES, laneFor } from '../chunk-lanes';
+import type { ChunkCountsView, FleetSpendView } from '../api/hub';
+import { LANES, laneCounts } from '../chunk-lanes';
 import { BrandMark } from '../design/brand-mark';
 import { formatCost } from '../cost-format';
 
@@ -29,15 +29,15 @@ interface SpendCellView {
 
 /**
  * The mission-control titlebar — the brand, a fleet's live counts, and a
- * connection state. Shared by the hub board (its own chunk-derived lane counts,
- * via {@link chunks}) and the runner's local panel (its own capacity cells, via
+ * connection state. Shared by the hub board (the hub's all-time lane counts,
+ * via {@link counts}) and the runner's local panel (its own capacity cells, via
  * {@link stats}) — pinned by `app-header.spec.ts`'s "renders the shared 48px board
  * header, not a bespoke local one" and `app.spec.ts`'s "renders the titlebar and nav,
  * and redirects the empty path to /board". It spans the whole window, above the rails.
  *
  * Presentational only: every cell is derived from plain inputs, never an
- * injected query. `stats`, given, renders in place of the chunk-derived lane
- * cells — the runner has no chunk list, so it supplies its own. The trailing
+ * injected query. `stats`, given, renders in place of the count-derived lane
+ * cells — the runner has no fleet counts, so it supplies its own. The trailing
  * `[header-trailing]`-selected content projection is the composable slot future
  * header controls (an avatar menu, a pause toggle) slot into without this
  * component knowing about either. All color comes from the design-token layer,
@@ -83,9 +83,10 @@ export class BoardHeader {
   /** The brand block's subtitle line. */
   readonly tagline = input('fleet hub · mission control');
 
-  /** The fleet chunk list the counts are derived from — the hub's usage; ignored
-   * once {@link stats} is given. */
-  readonly chunks = input<readonly ChunkSummary[]>([]);
+  /** The all-time fleet counts the lane cells fold from — the hub's usage; ignored
+   * once {@link stats} is given. `null` before the read resolves, when the cells are
+   * withheld rather than shown as a misleading zero. */
+  readonly counts = input<ChunkCountsView | null>(null);
 
   /** The fleet-wide spend-since read, or `null` before the first read
    * resolves — the cell withholds itself rather than show a misleading `$0.00`. */
@@ -105,7 +106,7 @@ export class BoardHeader {
    * The live fleet counts, left → right: the whole fleet, then one cell per board
    * lane in the board's own order — Ready among them, no longer a special case.
    *
-   * Every count is grouped through {@link laneFor} rather than by naming statuses
+   * Every count is folded through {@link laneCounts} rather than by naming statuses
    * here. The header sits directly above the board and must not be able to disagree
    * with it: a status this header listed and the board did not (or the reverse) would
    * be a silent contradiction, whereas a new status added to the wire is a compile
@@ -114,14 +115,11 @@ export class BoardHeader {
    * lane makes it a plain lane tally like every other cell.
    */
   protected readonly chunkStats = computed<readonly StatCell[]>(() => {
-    const chunks = this.chunks();
-    const perLane = new Map<string, number>(LANES.map((lane) => [lane.key, 0]));
-    for (const chunk of chunks) {
-      const lane = laneFor(chunk.status);
-      perLane.set(lane, (perLane.get(lane) ?? 0) + 1);
-    }
+    const counts = this.counts();
+    if (counts === null) return [];
+    const perLane = laneCounts(counts);
     return [
-      { key: 'total', label: 'Chunks', value: chunks.length },
+      { key: 'total', label: 'Chunks', value: counts.total },
       ...LANES.map((lane) => ({
         key: lane.key,
         label: lane.headerLabel,

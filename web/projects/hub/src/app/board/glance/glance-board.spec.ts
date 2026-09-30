@@ -143,12 +143,26 @@ const SPEND = {
   since: '2026-07-20T00:00:00Z',
 };
 
+const COUNTS = {
+  total: 9,
+  not_ready: 1,
+  ready: 2,
+  running: 1,
+  delivering: 0,
+  waiting_on_human: 1,
+  needs_human: 1,
+  paused: 0,
+  stopped: 1,
+  done: 3,
+};
+
 describe('GlanceBoard — attention bucketing and vitals', () => {
   let stub: RequestClientStub;
 
   beforeEach(async () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
+      if (method === 'GET' && path === '/api/chunk-counts') return COUNTS;
       if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
       if (method === 'GET' && path === '/api/questions') return QUESTIONS;
       if (method === 'GET' && path === '/api/runners') return { runners: RUNNERS };
@@ -229,6 +243,7 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/chunks') return stubError(503, { detail: 'unavailable' });
+      if (method === 'GET' && path === '/api/chunk-counts') return stubError(503, { detail: 'unavailable' });
       if (method === 'GET' && path === '/api/queue') return { entries: [] };
       if (method === 'GET' && path === '/api/questions') return [];
       if (method === 'GET' && path === '/api/runners') return { runners: [] };
@@ -242,6 +257,23 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
 
     expect(el.querySelector('[data-testid="done-today-error"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="done-today-count"]')).toBeNull();
+  });
+
+  it('takes the Done today denominator from the all-time counts, not the windowed list', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
+      if (method === 'GET' && path === '/api/chunk-counts') return { ...COUNTS, done: 200, stopped: 7 };
+      if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
+      if (method === 'GET' && path === '/api/questions') return QUESTIONS;
+      if (method === 'GET' && path === '/api/spend') return SPEND;
+      return {};
+    });
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="done-today-count"]')?.textContent).toContain('2/207');
   });
 
   it('never buckets a not_ready chunk into any glance section', async () => {
@@ -270,6 +302,7 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
         return { runners: [...RUNNERS, { ...RUNNERS[2], runner_id: 'r4', retired: true }] };
       }
       if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
+      if (method === 'GET' && path === '/api/chunk-counts') return COUNTS;
       if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
       if (method === 'GET' && path === '/api/questions') return QUESTIONS;
       return {};

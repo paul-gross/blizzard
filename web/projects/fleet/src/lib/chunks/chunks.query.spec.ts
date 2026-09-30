@@ -5,7 +5,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { client as hubClient } from '../api/hub/client.gen';
 import { settle } from '../testing/settle';
 import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
-import { injectHubChunksQuery } from './chunks.query';
+import { injectHubBoardChunksQuery } from './chunks.query';
 
 @Component({
   selector: 'fleet-test-chunks-query-host',
@@ -13,7 +13,7 @@ import { injectHubChunksQuery } from './chunks.query';
   template: '',
 })
 class TestChunksQueryHost {
-  readonly query = injectHubChunksQuery();
+  readonly query = injectHubBoardChunksQuery();
 }
 
 function chunk(id: string): unknown {
@@ -31,7 +31,7 @@ function mount() {
   return TestBed.createComponent(TestChunksQueryHost);
 }
 
-describe('injectHubChunksQuery', () => {
+describe('injectHubBoardChunksQuery', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 

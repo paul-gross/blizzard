@@ -7,7 +7,9 @@
     @if (cards().length > 0 && blink(); as tone) {
       <fleet-kit-beacon data-testid="lane-blink" [attr.data-blink]="tone" [active]="true" [tone]="tone" />
     }
-    {{ cards().length }}
+    @if (count() !== null) {
+      {{ count() }}
+    }
   </span>
 </div>
 <!-- The drag-and-drop drop list is only *armed* when the identity actually holds

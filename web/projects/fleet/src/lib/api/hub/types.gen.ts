@@ -736,6 +736,55 @@ export type ChunkCompleteRequest = {
 };
 
 /**
+ * ChunkCountsView
+ *
+ * ``GET /api/chunk-counts`` — the all-time fleet count per derived status, over exactly
+ * the chunks ``GET /api/chunks`` pages over. One field per chunk status, so a new status is a new field.
+ */
+export type ChunkCountsView = {
+    /**
+     * Delivering
+     */
+    delivering: number;
+    /**
+     * Done
+     */
+    done: number;
+    /**
+     * Needs Human
+     */
+    needs_human: number;
+    /**
+     * Not Ready
+     */
+    not_ready: number;
+    /**
+     * Paused
+     */
+    paused: number;
+    /**
+     * Ready
+     */
+    ready: number;
+    /**
+     * Running
+     */
+    running: number;
+    /**
+     * Stopped
+     */
+    stopped: number;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Waiting On Human
+     */
+    waiting_on_human: number;
+};
+
+/**
  * ChunkDecisionStatusView
  *
  * A live gate decision's identity and resolution — no ``choices``,
@@ -7077,6 +7126,22 @@ export type RepositionBacklogApiBacklogPositionPostResponses = {
 
 export type RepositionBacklogApiBacklogPositionPostResponse = RepositionBacklogApiBacklogPositionPostResponses[keyof RepositionBacklogApiBacklogPositionPostResponses];
 
+export type ChunkCountsApiChunkCountsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chunk-counts';
+};
+
+export type ChunkCountsApiChunkCountsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChunkCountsView;
+};
+
+export type ChunkCountsApiChunkCountsGetResponse = ChunkCountsApiChunkCountsGetResponses[keyof ChunkCountsApiChunkCountsGetResponses];
+
 export type ListChunksApiChunksGetData = {
     body?: never;
     path?: never;
@@ -7089,6 +7154,10 @@ export type ListChunksApiChunksGetData = {
          * Limit
          */
         limit?: number;
+        /**
+         * Board Window
+         */
+        board_window?: boolean;
     };
     url: '/api/chunks';
 };

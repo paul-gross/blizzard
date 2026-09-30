@@ -6,6 +6,10 @@
  */
 export const hubHealthKey = ['hub', 'health'] as const;
 export const hubChunksKey = ['hub', 'chunks'] as const;
+/** The board's windowed chunk list and the all-time counts — both nested under
+ * {@link hubChunksKey}, so every prefix invalidation of the chunk list refreshes them. */
+export const hubBoardChunksKey = [...hubChunksKey, 'board'] as const;
+export const hubChunkCountsKey = [...hubChunksKey, 'counts'] as const;
 export const hubQueueKey = ['hub', 'queue'] as const;
 /** The backlog's (`not_ready` list's) hub-ordered read (`GET /api/backlog`) — ranked
  * independently of the ready queue (`bzh:ranking-is-per-list`), so it gets its own

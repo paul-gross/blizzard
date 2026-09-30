@@ -36,6 +36,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     insert_chunk_rows,
     is_ephemeral_id,
 )
+from blizzard.hub.store.internal.chunk_terminal_predicates import settled_done
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
 _CURSOR_ARITY = 2
@@ -56,8 +57,10 @@ def _decode_chunk_cursor(cursor: str) -> tuple[datetime, str]:
     return minted_at, parts[1]
 
 
-def _chunk_page_stmt(after: tuple[datetime, str] | None, limit: int) -> Select[Any]:
+def _chunk_page_stmt(after: tuple[datetime, str] | None, limit: int, done_since: datetime | None) -> Select[Any]:
     stmt = select(s.chunks)
+    if done_since is not None:
+        stmt = stmt.where(~settled_done(finished_before=done_since))
     if after is not None:
         minted_at, chunk_id = after
         c = s.chunks.c
@@ -163,19 +166,19 @@ class ChunkRecordStore:
                 for r in rows
             ]
 
-    def list_page(self, *, cursor: str | None = None, limit: int) -> ChunkPage:
+    def list_page(self, *, cursor: str | None = None, limit: int, done_since: datetime | None = None) -> ChunkPage:
         """`list_all`'s bounded sibling: a SQL keyset window with
         ephemeral chunks excluded in Python after the read, so a window landing wholly
         on ephemeral rows can come back short of `limit` live chunks. Each retry doubles
         the window rather than stopping there, so a `next_cursor` walk still sees every
-        visible chunk exactly once."""
+        visible chunk exactly once; ``done_since`` narrows it in SQL (:func:`settled_done`)."""
         if limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
         after = _decode_chunk_cursor(cursor) if cursor is not None else None
         fetch = limit + 1
         with self._store.read("list_page") as conn:
             while True:
-                rows = conn.execute(_chunk_page_stmt(after, fetch)).all()
+                rows = conn.execute(_chunk_page_stmt(after, fetch, done_since)).all()
                 ephemeral: set[str] = set()
                 for batch in id_batches([r.chunk_id for r in rows]):
                     ephemeral |= ephemeral_ids_in(conn, batch)

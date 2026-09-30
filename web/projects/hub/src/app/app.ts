@@ -10,7 +10,7 @@ import {
   ViewportService,
   hasPermission,
   injectAuthProvidersQuery,
-  injectHubChunksQuery,
+  injectHubChunkCountsQuery,
   injectHubFleetSpendQuery,
   injectHubHealthQuery,
   injectLogoutMutation,
@@ -85,7 +85,7 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
 })
 export class App {
   private readonly health = injectHubHealthQuery();
-  private readonly chunksQuery = injectHubChunksQuery();
+  private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly live = inject(FleetLiveUpdates);
   private readonly viewport = inject(ViewportService);
   private readonly router = inject(Router);
@@ -218,7 +218,7 @@ export class App {
   });
 
   /** The live fleet chunk list; empty until the first read resolves. */
-  protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
+  protected readonly counts = computed(() => this.countsQuery.data() ?? null);
 
   /** Whether the SSE spine is currently connected — {@link MobileTitlebar}'s
    * live dot, the same `open` check the glance board's own vitals strip uses

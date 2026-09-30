@@ -123,6 +123,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/findings/reopen"): CHUNK_CONTROL,
     ("POST", "/api/chunks"): CHUNK_INGEST,
     ("GET", "/api/chunks"): FLEET_VIEW,
+    ("GET", "/api/chunk-counts"): FLEET_VIEW,
     ("GET", "/api/chunks/{chunk_id}"): FLEET_VIEW,
     ("POST", "/api/chunks/{chunk_id}/hub-markers"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/garden-delivery"): CHUNK_CONTROL,

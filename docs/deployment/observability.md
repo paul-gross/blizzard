@@ -83,6 +83,12 @@ naming `"malformed cursor"`. `GET /api/events` and `GET /api/activity` share thi
 default 200) but predate the cursor/`next_cursor` half of the contract — each is its own bounded, recency-ordered
 window, not a walk over the full backing set.
 
+`GET /api/chunks?board_window=true` is the board's own read: it omits every `done` chunk that finished more than 48
+hours ago, and keeps `stopped` and non-terminal chunks of any age. A windowed page can come back short of `limit`;
+`next_cursor` is still `null` exactly on the last page. Without the param the list is unfiltered. An omitted chunk still
+answers by id at `GET /api/chunks/{chunk_id}`. `GET /api/chunk-counts` serves the all-time count per derived status, plus
+a `total`, over exactly the chunks the unfiltered list pages over — the counts ignore the window.
+
 ## Demo mode
 
 `?demo=true` on any board URL hands the board to an automatic tour for an unattended screen; nothing in the UI announces

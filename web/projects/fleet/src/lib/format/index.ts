@@ -10,7 +10,7 @@ export { formatCost, formatTokens, hasCostFigure } from '../cost-format';
 export { errorMessage } from '../error-message';
 export { harnessName } from '../harness-name';
 export { nodeStepKey, parseNodeStepKey } from '../node-step';
-export { LANES, STATUS_LANE, STATUS_TONE, laneFor, type Lane } from '../chunk-lanes';
+export { LANES, STATUS_LANE, STATUS_TONE, laneCounts, laneFor, type Lane } from '../chunk-lanes';
 export {
   formatWhen,
   formatAbsolute,
