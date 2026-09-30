@@ -146,7 +146,7 @@ def operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
 @dataclass(frozen=True)
 class EventScopeFilters:
     """:class:`ScopeFilters` plus ``extractor_version`` and four provenance dimensions —
-    used by the derived-event projection. Declares nine flat query parameters."""
+    used by the derived-event projection. Declares its query parameters flat."""
 
     scope: ScopeFilters
     extractor_version: str | None

@@ -187,8 +187,7 @@ class PerSubscriptionUsageView:
     def every(cls, registration: RunnerRegistration, *, now: datetime) -> tuple[PerSubscriptionUsageView, ...]:
         """Every subscription's usage view, sorted by slug: a declared roster switches
         membership from age-gated to roster-gated — every declared slug, whatever its
-        sample or miss age. Without a roster, a slug needs a fresh sample or a fresh
-        ``credential_lapsed`` miss newer than its sample."""
+        sample or miss age. Without a roster, see :meth:`_rosterless_views`."""
         samples = {record.slug: record for record in registration.subscription_usage}
         misses = {record.slug: record for record in registration.subscription_usage_misses}
         if registration.declared_subscriptions is not None:
