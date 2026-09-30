@@ -1,4 +1,4 @@
-"""A retired runner is refused inside each guarded domain operation, with no HTTP layer."""
+"""A retired runner is refused inside each guarded domain operation."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ _RUNNER = "runner-a"
 def _retired_hub(tmp_path: Path) -> HubHarness:
     hub = build_hub(tmp_path)
     hub.services.fleet.register(_RUNNER, "ws-a")
-    writer = cast(IWriteRunnerRegistry, hub.services.registry)  # the one store instance behind both seams
+    writer = cast(IWriteRunnerRegistry, hub.services.registry)
     writer.record_lifecycle(_RUNNER, retired=True, at=hub.clock.now(), by="op")
     return hub
 
