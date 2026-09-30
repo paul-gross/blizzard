@@ -1,8 +1,5 @@
-"""Shared id-batching for every bulk read seam, hub and runner alike.
-
-Every batch read filtering a family query by a caller-supplied id selection batches
-through :func:`id_batches` so no single ``IN (...)`` bind-parameter count grows with the
-caller — every seam's batch method shares one cap and one batching loop."""
+"""Id-batching for bulk reads: :func:`id_batches` slices a caller-supplied id selection
+under one cap, so no single ``IN (...)`` bind-parameter count grows with the caller."""
 
 from __future__ import annotations
 

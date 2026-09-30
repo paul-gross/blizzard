@@ -52,9 +52,9 @@ class RouteClaimTerminalDenial(BaseModel):
 
 class RouteClaimDependencyDenial(BaseModel):
     """The 409 body: the chunk stands on a prerequisite that has not reached ``done``
-    — refused outright, not a race loss. Distinct from both other 409
-    shapes: no other runner holds this chunk and it is not terminal, it simply named a
-    prerequisite still standing."""
+    — refused outright, not a race loss. Distinct from a claim conflict
+    and a terminal chunk: no other runner holds it and it is not terminal, it simply named
+    a prerequisite still standing."""
 
     chunk_id: str
     prerequisite_chunk_id: str
@@ -64,8 +64,8 @@ class RouteClaimDependencyDenial(BaseModel):
 class RouteClaimIncompatibleDenial(BaseModel):
     """The 409 body: the claiming runner's stored capabilities can no longer run every
     statically reachable runner-owned lineage from the chunk's current node
-    — refused outright, not a race loss. Distinct from the other three 409 shapes by
-    its own ``incompatible_runner_id`` field."""
+    — refused outright, not a race loss. Distinguished by its own
+    ``incompatible_runner_id`` field."""
 
     chunk_id: str
     incompatible_runner_id: str

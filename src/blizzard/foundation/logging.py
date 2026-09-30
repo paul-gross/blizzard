@@ -79,10 +79,8 @@ class Json(LogFormat):
 
 class Console(LogFormat):
     def renderer(self) -> structlog.types.Processor:
-        """``exception_formatter`` is pinned to ``plain_traceback`` explicitly: structlog
-        otherwise picks it from whatever of rich / better-exceptions happens to be
-        installed, so the same config renders differently depending on the
-        environment."""
+        """``exception_formatter`` is pinned to ``plain_traceback``; see
+        ``test_console_leaves_the_traceback_to_its_own_renderer``."""
         return structlog.dev.ConsoleRenderer(exception_formatter=structlog.dev.plain_traceback)
 
     def exception_processors(self) -> list[structlog.types.Processor]:

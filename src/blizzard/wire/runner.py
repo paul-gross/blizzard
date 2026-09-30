@@ -14,8 +14,7 @@ class RunnerCapability(BaseModel):
     """One harness binding this runner can execute — the id, its observed
     version (``None`` when the binding exposes none), the tier ids it can resolve, and
     whether it is this runner's default binding. ``available`` defaults
-    ``True`` so a runner asserting none matches exactly as it did before this field
-    existed — never a reason to strand a pre-upgrade runner."""
+    ``True``: a runner that asserts none is treated as available."""
 
     harness_id: str
     version: str | None = None
@@ -26,8 +25,7 @@ class RunnerCapability(BaseModel):
 
 class RunnerSubscriptionDeclaration(BaseModel):
     """One provider subscription the runner declares at registration — the join key
-    everything else keys off. ``provider`` is stored but reaches no view; nothing reads
-    it there yet."""
+    everything else keys off. ``provider`` names the subscription's provider."""
 
     slug: str
     name: str
@@ -126,7 +124,7 @@ class RunnerView(BaseModel):
     subscriptions: list[SubscriptionUsageView] = []
     # The runner's reported capability snapshot — every harness/tier it can execute right now.
     capabilities: list[RunnerCapability] = []
-    # Retired — `blizzard hub runner retire`, cleared by `reinstate`; when and by whom only while retired.
+    # Whether the runner is retired; when and by whom only while retired.
     retired: bool = False
     retired_at: str | None = None
     retired_by: str | None = None

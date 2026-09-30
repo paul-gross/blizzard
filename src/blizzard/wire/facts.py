@@ -36,17 +36,15 @@ EVENT_RECORDED = "event.recorded"
 EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED = "external_subscription_usage.sampled"
 # A sampler miss, upserted per (runner_id, slug) beside the sample. Payload: {slug, name, missed_at, reason} only.
 EXTERNAL_SUBSCRIPTION_USAGE_MISSED = "external_subscription_usage.missed"
-# The one ``SampleMissReason`` value the hub derives a per-slug ``condition`` from, so neither side spells it alone.
+# The ``SampleMissReason`` value for a lapsed credential.
 CREDENTIAL_LAPSED_MISS_REASON = "credential_lapsed"
 
 
 class ExternalSubscriptionUsageWindowFact(BaseModel):
     """One complete subscription-usage window accepted from a runner fact.
 
-    The numeric fields are strict, because the samplers already refuse a ``bool``
-    where a number belongs and a backstop that coerced ``True`` to ``1.0`` would
-    admit what its own producers reject. ``resets_at`` stays lax: it crosses the
-    wire as an ISO-8601 string and is normalized to UTC at intake."""
+    The numeric fields are strict: a ``bool`` is refused where a number belongs.
+    ``resets_at`` stays lax and accepts an ISO-8601 string."""
 
     window: str = Field(strict=True)
     utilization_pct: float = Field(ge=0, le=100, allow_inf_nan=False, strict=True)

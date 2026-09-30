@@ -23,9 +23,7 @@ EventLogKind = Literal[
     "work-item-closed",
 ]
 
-#: The closed severity vocabulary both daemons author against — the single spine home a
-#: hub display concern (``SEVERITY_RANK``'s order) and every wire severity field narrow
-#: against, so neither re-enumerates the three members independently.
+#: The closed severity vocabulary; every wire severity field narrows against it.
 EventLogSeverity = Literal["critical", "warning", "info"]
 
 #: Each kind emits at exactly one severity — a function of kind, never paired independently.
