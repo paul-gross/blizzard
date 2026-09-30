@@ -397,7 +397,7 @@ def get_garden_proposals(
     run = _routine_run_or_404(chunk_id, services)
     return [
         garden_proposal_view(p, closure)
-        for p, closure in services.open_garden_proposals.list_for_routine(run.routine_name, state)
+        for p, closure in services.routine_garden_proposals.list_for_routine(run.routine_name, state)
     ]
 
 

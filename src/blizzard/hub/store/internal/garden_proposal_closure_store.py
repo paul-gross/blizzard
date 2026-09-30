@@ -41,7 +41,7 @@ def insert_garden_proposal_closure_row(
     composite write can fold this into its own transaction. Idempotent per
     ``proposal_id``: returns ``False`` and writes nothing when a closure already exists.
     Locks the proposal's own row first with the same no-op ``UPDATE``
-    ``GardenProposalStore._open_check`` uses, so this closing write and a concurrent
+    ``GardenProposalStore._is_closed`` uses, so this closing write and a concurrent
     edit/attach/detach contend on the same row instead of racing across two tables."""
     conn.execute(
         garden_proposals.update().where(garden_proposals.c.proposal_id == proposal_id).values(proposal_id=proposal_id)

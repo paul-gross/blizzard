@@ -59,7 +59,7 @@ from blizzard.hub.domain.findings import IReadFindingRepository, IReadFindingSet
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.garden_proposal_closure import IReadGardenProposalClosureRepository
 from blizzard.hub.domain.garden_proposal_resolution import resolve_proposal_findings
-from blizzard.hub.domain.garden_proposals import IReadGardenProposalRepository
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin, IReadGardenProposalRepository
 from blizzard.hub.domain.garden_run import IReadGardenRunRepository
 from blizzard.hub.domain.garden_sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden_trend import IReadGardenTrendRepository
@@ -1100,6 +1100,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     garden_proposal_1 = "gprop_hub_1"
     garden_proposal_store.create(
         garden_proposal_1,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="gardening",
         class_="remediate",
         title="fix 1",
@@ -1110,6 +1111,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     garden_proposal_2 = "gprop_hub_2"
     garden_proposal_store.create(
         garden_proposal_2,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="gardening",
         class_="remediate",
         title="fix 2",

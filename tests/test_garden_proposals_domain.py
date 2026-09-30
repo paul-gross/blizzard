@@ -1,8 +1,8 @@
-"""``GardenProposalAuthoring`` and ``OpenGardenProposalReader`` (unit tier):
-create over a fake repository — an empty ``findings`` list is accepted, a
-duplicate-naming one is refused, and a clean one mints a `gprop_` id and delegates with
-the clock's instant (``bzh:domain-core``, the ``tests/test_scope_domain.py`` shape).
-``OpenGardenProposalReader`` filters out any proposal a closure already exists for."""
+"""``GardenProposalAuthoring`` and ``RoutineGardenProposalReader`` (unit tier):
+operator create, edit, attach, and detach over a fake repository — every refusal is
+decided in the domain, and a clean call mints a `gprop_` id or delegates with the
+clock's instant (``bzh:domain-core``, the ``tests/test_scope_domain.py`` shape).
+``RoutineGardenProposalReader`` filters a routine's proposals by closure state."""
 
 from __future__ import annotations
 
@@ -13,11 +13,13 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.edit import UnsetType
 from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosure, GardenProposalClosureKind
 from blizzard.hub.domain.garden_proposals import (
     DuplicateProposalFindingError,
     GardenProposal,
+    GardenProposalAlreadyClosed,
     GardenProposalAuthoring,
     GardenProposalBlankFieldError,
     GardenProposalEdit,
@@ -25,10 +27,9 @@ from blizzard.hub.domain.garden_proposals import (
     GardenProposalFindingAlreadyLinkedError,
     GardenProposalFindingNotLinkedError,
     GardenProposalFindingNotLiveError,
-    GardenProposalNotOpen,
     GardenProposalOrigin,
     IWriteGardenProposalRepository,
-    OpenGardenProposalReader,
+    RoutineGardenProposalReader,
     RoutineProposalState,
 )
 from blizzard.hub.domain.routines import Routine
@@ -62,7 +63,7 @@ class _FakeGardenProposalRepo:
     created: list[tuple[str, GardenProposalOrigin, str | None, str | None, str, str, str, list[str], datetime]] = field(
         default_factory=list
     )
-    edited: list[tuple[str, str, str, str]] = field(default_factory=list)
+    edited: list[tuple[str, GardenProposalEdit]] = field(default_factory=list)
     attached: list[tuple[str, list[str]]] = field(default_factory=list)
     detached: list[tuple[str, list[str]]] = field(default_factory=list)
     #: Proposal ids `edit`/`attach`/`detach` treat as already closed, mirroring the
@@ -73,7 +74,7 @@ class _FakeGardenProposalRepo:
         self,
         proposal_id: str,
         *,
-        origin: GardenProposalOrigin = GardenProposalOrigin.ROUTINE_RUN,
+        origin: GardenProposalOrigin,
         routine_name: str | None,
         created_by: str | None = None,
         class_: str,
@@ -95,10 +96,13 @@ class _FakeGardenProposalRepo:
             findings=findings,
         )
 
-    def edit(self, proposal_id: str, *, title: str, class_: str, body: str) -> GardenProposal | None:
+    def edit(self, proposal_id: str, edit: GardenProposalEdit) -> GardenProposal | None:
         if proposal_id in self.closed_ids:
             return None
-        self.edited.append((proposal_id, title, class_, body))
+        self.edited.append((proposal_id, edit))
+        title = "t" if isinstance(edit.title, UnsetType) else edit.title
+        class_ = "c" if isinstance(edit.class_, UnsetType) else edit.class_
+        body = "b" if isinstance(edit.body, UnsetType) else edit.body
         return GardenProposal(
             proposal_id=proposal_id,
             origin=GardenProposalOrigin.OPERATOR,
@@ -151,89 +155,6 @@ def _as_write_repo(repo: _FakeGardenProposalRepo) -> IWriteGardenProposalReposit
     return cast(IWriteGardenProposalRepository, repo)
 
 
-def test_create_accepts_an_empty_findings_list() -> None:
-    repo = _FakeGardenProposalRepo()
-    authoring = GardenProposalAuthoring(
-        proposals=_as_write_repo(repo),
-        closures=cast(Any, _FakeGardenProposalClosureRepo()),
-        clock=FixedClock(instant=_T0),
-    )
-
-    proposal = authoring.create(routine_name="nightly", class_="fix-the-source", title="t", body="b", findings=[])
-
-    assert proposal.findings == []
-    assert repo.created == [
-        (proposal.proposal_id, GardenProposalOrigin.ROUTINE_RUN, "nightly", None, "fix-the-source", "t", "b", [], _T0)
-    ]
-
-
-def test_create_mints_a_gprop_id_and_delegates_with_the_clock_instant() -> None:
-    repo = _FakeGardenProposalRepo()
-    authoring = GardenProposalAuthoring(
-        proposals=_as_write_repo(repo),
-        closures=cast(Any, _FakeGardenProposalClosureRepo()),
-        clock=FixedClock(instant=_T0),
-    )
-
-    proposal = authoring.create(
-        routine_name="nightly",
-        class_="fix-the-source",
-        title="t",
-        body="b",
-        findings=[_finding("fin_1"), _finding("fin_2")],
-    )
-
-    assert proposal.proposal_id.startswith("gprop_")
-    assert repo.created == [
-        (
-            proposal.proposal_id,
-            GardenProposalOrigin.ROUTINE_RUN,
-            "nightly",
-            None,
-            "fix-the-source",
-            "t",
-            "b",
-            ["fin_1", "fin_2"],
-            _T0,
-        )
-    ]
-
-
-def test_create_rejects_the_same_finding_named_twice() -> None:
-    repo = _FakeGardenProposalRepo()
-    authoring = GardenProposalAuthoring(
-        proposals=_as_write_repo(repo),
-        closures=cast(Any, _FakeGardenProposalClosureRepo()),
-        clock=FixedClock(instant=_T0),
-    )
-
-    with pytest.raises(DuplicateProposalFindingError):
-        authoring.create(
-            routine_name="nightly",
-            class_="fix-the-source",
-            title="t",
-            body="b",
-            findings=[_finding("fin_1"), _finding("fin_1")],
-        )
-
-    assert repo.created == []
-
-
-def test_create_accepts_a_blank_body_matching_the_pre_operator_mint_path() -> None:
-    """`create` is the routine-run mint delivery already used before operator
-    authorship existed — it never validated blank fields, and still doesn't."""
-    repo = _FakeGardenProposalRepo()
-    authoring = GardenProposalAuthoring(
-        proposals=_as_write_repo(repo),
-        closures=cast(Any, _FakeGardenProposalClosureRepo()),
-        clock=FixedClock(instant=_T0),
-    )
-
-    proposal = authoring.create(routine_name="nightly", class_="fix-the-source", title="t", body="", findings=[])
-
-    assert proposal.body == ""
-
-
 def _routine(name: str = "nightly") -> Routine:
     return Routine(routine_id="routine_1", name=name, graph_name="g", default_scope_slug="runner", created_at=_T0)
 
@@ -250,6 +171,7 @@ def test_create_operator_mints_with_operator_origin_no_routine_and_the_callers_i
         created_by="operator", routine=None, class_="c", title="t", body="b", findings=[_finding("fin_1")]
     )
 
+    assert proposal.proposal_id.startswith("gprop_")
     assert proposal.origin is GardenProposalOrigin.OPERATOR
     assert proposal.created_by == "operator"
     assert proposal.routine_name is None
@@ -347,10 +269,10 @@ def test_edit_replaces_only_the_given_fields() -> None:
 
     authoring.edit(proposal, GardenProposalEdit(title="new title"))
 
-    assert repo.edited == [("gprop_1", "new title", proposal.class_, proposal.body)]
+    assert repo.edited == [("gprop_1", GardenProposalEdit(title="new title"))]
 
 
-def test_edit_a_closed_proposal_raises_not_open_before_reaching_the_store() -> None:
+def test_edit_a_closed_proposal_raises_already_closed_before_reaching_the_store() -> None:
     """The closures pre-check refuses before the store is ever touched."""
     repo = _FakeGardenProposalRepo()
     authoring = GardenProposalAuthoring(
@@ -360,7 +282,7 @@ def test_edit_a_closed_proposal_raises_not_open_before_reaching_the_store() -> N
     )
     proposal = _proposal("gprop_1")
 
-    with pytest.raises(GardenProposalNotOpen):
+    with pytest.raises(GardenProposalAlreadyClosed):
         authoring.edit(proposal, GardenProposalEdit(title="new title"))
 
     assert repo.edited == []
@@ -377,24 +299,24 @@ def test_edit_closed_first_wins_over_a_blank_field() -> None:
     )
     proposal = _proposal("gprop_1")
 
-    with pytest.raises(GardenProposalNotOpen):
+    with pytest.raises(GardenProposalAlreadyClosed):
         authoring.edit(proposal, GardenProposalEdit(title="   "))
 
     assert repo.edited == []
 
 
-def test_edit_a_closed_proposal_the_store_alone_detects_still_raises_not_open() -> None:
+def test_edit_a_closed_proposal_the_store_alone_detects_still_raises_already_closed() -> None:
     """The closures pre-check can miss a close that lands after it ran; the store's own
     row-locked check still catches it and the domain still raises."""
     repo = _FakeGardenProposalRepo(closed_ids={"gprop_1"})
     authoring = GardenProposalAuthoring(
         proposals=_as_write_repo(repo),
-        closures=cast(Any, _FakeGardenProposalClosureRepo()),
+        closures=cast(Any, _FakeGardenProposalClosureRepo(closed_late={"gprop_1": _closure("gprop_1")})),
         clock=FixedClock(instant=_T0),
     )
     proposal = _proposal("gprop_1")
 
-    with pytest.raises(GardenProposalNotOpen):
+    with pytest.raises(GardenProposalAlreadyClosed):
         authoring.edit(proposal, GardenProposalEdit(title="new title"))
 
     assert repo.edited == []
@@ -490,7 +412,7 @@ def test_attach_rejects_the_same_finding_named_twice() -> None:
     assert repo.attached == []
 
 
-def test_attach_a_closed_proposal_raises_not_open_before_reaching_the_store() -> None:
+def test_attach_a_closed_proposal_raises_already_closed_before_reaching_the_store() -> None:
     repo = _FakeGardenProposalRepo()
     authoring = GardenProposalAuthoring(
         proposals=_as_write_repo(repo),
@@ -499,7 +421,7 @@ def test_attach_a_closed_proposal_raises_not_open_before_reaching_the_store() ->
     )
     proposal = _proposal("gprop_1")
 
-    with pytest.raises(GardenProposalNotOpen):
+    with pytest.raises(GardenProposalAlreadyClosed):
         authoring.attach(proposal, [_finding("fin_2")])
 
     assert repo.attached == []
@@ -514,22 +436,22 @@ def test_attach_closed_first_wins_over_a_duplicate_finding() -> None:
     )
     proposal = _proposal("gprop_1")
 
-    with pytest.raises(GardenProposalNotOpen):
+    with pytest.raises(GardenProposalAlreadyClosed):
         authoring.attach(proposal, [_finding("fin_2"), _finding("fin_2")])
 
     assert repo.attached == []
 
 
-def test_attach_a_closed_proposal_the_store_alone_detects_still_raises_not_open() -> None:
+def test_attach_a_closed_proposal_the_store_alone_detects_still_raises_already_closed() -> None:
     repo = _FakeGardenProposalRepo(closed_ids={"gprop_1"})
     authoring = GardenProposalAuthoring(
         proposals=_as_write_repo(repo),
-        closures=cast(Any, _FakeGardenProposalClosureRepo()),
+        closures=cast(Any, _FakeGardenProposalClosureRepo(closed_late={"gprop_1": _closure("gprop_1")})),
         clock=FixedClock(instant=_T0),
     )
     proposal = _proposal("gprop_1")
 
-    with pytest.raises(GardenProposalNotOpen):
+    with pytest.raises(GardenProposalAlreadyClosed):
         authoring.attach(proposal, [_finding("fin_2")])
 
 
@@ -542,7 +464,7 @@ def test_detach_unlinks_a_linked_finding() -> None:
     )
     proposal = _proposal("gprop_1")  # links fin_1
 
-    authoring.detach(proposal, ["fin_1"])
+    authoring.detach(proposal, [_finding("fin_1")])
 
     assert repo.detached == [("gprop_1", ["fin_1"])]
 
@@ -557,7 +479,7 @@ def test_detach_rejects_a_finding_not_linked_to_this_proposal() -> None:
     proposal = _proposal("gprop_1")  # links fin_1 only
 
     with pytest.raises(GardenProposalFindingNotLinkedError):
-        authoring.detach(proposal, ["fin_ghost"])
+        authoring.detach(proposal, [_finding("fin_ghost")])
 
     assert repo.detached == []
 
@@ -572,12 +494,12 @@ def test_detach_rejects_the_same_finding_named_twice() -> None:
     proposal = _proposal("gprop_1")
 
     with pytest.raises(DuplicateProposalFindingError):
-        authoring.detach(proposal, ["fin_1", "fin_1"])
+        authoring.detach(proposal, [_finding("fin_1"), _finding("fin_1")])
 
     assert repo.detached == []
 
 
-def test_detach_a_closed_proposal_raises_not_open_before_reaching_the_store() -> None:
+def test_detach_a_closed_proposal_raises_already_closed_before_reaching_the_store() -> None:
     repo = _FakeGardenProposalRepo()
     authoring = GardenProposalAuthoring(
         proposals=_as_write_repo(repo),
@@ -586,23 +508,23 @@ def test_detach_a_closed_proposal_raises_not_open_before_reaching_the_store() ->
     )
     proposal = _proposal("gprop_1")
 
-    with pytest.raises(GardenProposalNotOpen):
-        authoring.detach(proposal, ["fin_1"])
+    with pytest.raises(GardenProposalAlreadyClosed):
+        authoring.detach(proposal, [_finding("fin_1")])
 
     assert repo.detached == []
 
 
-def test_detach_a_closed_proposal_the_store_alone_detects_still_raises_not_open() -> None:
+def test_detach_a_closed_proposal_the_store_alone_detects_still_raises_already_closed() -> None:
     repo = _FakeGardenProposalRepo(closed_ids={"gprop_1"})
     authoring = GardenProposalAuthoring(
         proposals=_as_write_repo(repo),
-        closures=cast(Any, _FakeGardenProposalClosureRepo()),
+        closures=cast(Any, _FakeGardenProposalClosureRepo(closed_late={"gprop_1": _closure("gprop_1")})),
         clock=FixedClock(instant=_T0),
     )
     proposal = _proposal("gprop_1")
 
-    with pytest.raises(GardenProposalNotOpen):
-        authoring.detach(proposal, ["fin_1"])
+    with pytest.raises(GardenProposalAlreadyClosed):
+        authoring.detach(proposal, [_finding("fin_1")])
 
 
 @dataclass
@@ -619,8 +541,13 @@ class _FakeReadGardenProposalRepo:
 @dataclass
 class _FakeGardenProposalClosureRepo:
     closed: dict[str, GardenProposalClosure] = field(default_factory=dict)
+    #: Land after the id's first read — a close racing the domain's pre-check.
+    closed_late: dict[str, GardenProposalClosure] = field(default_factory=dict)
 
     def get(self, proposal_id: str) -> GardenProposalClosure | None:
+        if proposal_id in self.closed_late and proposal_id not in self.closed:
+            self.closed[proposal_id] = self.closed_late[proposal_id]
+            return None
         return self.closed.get(proposal_id)
 
     def get_many(self, proposal_ids: list[str]) -> dict[str, GardenProposalClosure]:
@@ -646,29 +573,29 @@ def _closure(proposal_id: str) -> GardenProposalClosure:
 def test_open_reader_excludes_a_proposal_already_carrying_a_closure() -> None:
     proposals = _FakeReadGardenProposalRepo(by_routine={"nightly": [_proposal("gprop_1"), _proposal("gprop_2")]})
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_2": _closure("gprop_2")})
-    reader = OpenGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
+    reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
-    open_proposals = reader.list_open_for_routine("nightly")
+    open_proposals = reader.list_for_routine("nightly", RoutineProposalState.OPEN)
 
-    assert [p.proposal_id for p in open_proposals] == ["gprop_1"]
+    assert [p.proposal_id for p, _ in open_proposals] == ["gprop_1"]
 
 
 def test_open_reader_returns_everything_when_none_are_closed() -> None:
     proposals = _FakeReadGardenProposalRepo(by_routine={"nightly": [_proposal("gprop_1")]})
     closures = _FakeGardenProposalClosureRepo()
-    reader = OpenGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
+    reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
-    open_proposals = reader.list_open_for_routine("nightly")
+    open_proposals = reader.list_for_routine("nightly", RoutineProposalState.OPEN)
 
-    assert [p.proposal_id for p in open_proposals] == ["gprop_1"]
+    assert [p.proposal_id for p, _ in open_proposals] == ["gprop_1"]
 
 
 def test_open_reader_is_empty_for_a_routine_with_no_proposals() -> None:
-    reader = OpenGardenProposalReader(
+    reader = RoutineGardenProposalReader(
         proposals=cast(Any, _FakeReadGardenProposalRepo()), closures=cast(Any, _FakeGardenProposalClosureRepo())
     )
 
-    assert reader.list_open_for_routine("nightly") == []
+    assert reader.list_for_routine("nightly", RoutineProposalState.OPEN) == []
 
 
 def test_list_for_routine_closed_returns_only_closed_proposals_with_their_closure() -> None:
@@ -676,7 +603,7 @@ def test_list_for_routine_closed_returns_only_closed_proposals_with_their_closur
         by_routine={"nightly": [_proposal("gprop_open"), _proposal("gprop_closed")]}
     )
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_closed": _closure("gprop_closed")})
-    reader = OpenGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
+    reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
     rows = reader.list_for_routine("nightly", RoutineProposalState.CLOSED)
 
@@ -691,7 +618,7 @@ def test_list_for_routine_all_returns_every_proposal_with_its_closure_when_one_e
         by_routine={"nightly": [_proposal("gprop_open"), _proposal("gprop_closed")]}
     )
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_closed": _closure("gprop_closed")})
-    reader = OpenGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
+    reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
     rows = reader.list_for_routine("nightly", RoutineProposalState.ALL)
 
@@ -704,7 +631,7 @@ def test_list_for_routine_all_returns_every_proposal_with_its_closure_when_one_e
 def test_list_for_routine_defaults_to_open() -> None:
     proposals = _FakeReadGardenProposalRepo(by_routine={"nightly": [_proposal("gprop_1"), _proposal("gprop_2")]})
     closures = _FakeGardenProposalClosureRepo(closed={"gprop_2": _closure("gprop_2")})
-    reader = OpenGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
+    reader = RoutineGardenProposalReader(proposals=cast(Any, proposals), closures=cast(Any, closures))
 
     rows = reader.list_for_routine("nightly")
 

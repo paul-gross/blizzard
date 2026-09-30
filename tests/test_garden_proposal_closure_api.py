@@ -15,6 +15,7 @@ import pytest
 
 from blizzard.hub.domain.findings import IReadFindingRepository
 from blizzard.hub.domain.garden_proposal_closure import _compose_minted_body
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.events.broker import CHUNK_CHANGED, QUEUE_CHANGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -41,6 +42,7 @@ def _seed(hub: HubHarness, *, proposal_id: str = "gprop_1", body: str = "the cas
     )
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         proposal_id,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="Author a docstring standard",
@@ -136,6 +138,7 @@ def test_accept_a_proposal_citing_no_findings_mints_a_bare_item(tmp_path: Path) 
         conn.execute(s.scopes.insert().values(slug="blizzard", description="", created_at=_NOW))
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="Author a docstring standard",

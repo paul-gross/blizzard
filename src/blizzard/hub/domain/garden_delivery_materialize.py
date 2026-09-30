@@ -144,7 +144,7 @@ class IWriteGardenDeliveryRepository(Protocol):
 class GardenDelivery:
     """Turns a Phase-2 :class:`ValidatedDelivery` into a :class:`DeliveryPlan` and hands
     it to the store, one call — minting every id here (`bzh:domain-takes-objects`, the
-    pattern ``GardenProposalAuthoring.create`` already sets) rather than in the store."""
+    pattern ``GardenProposalAuthoring.create_operator`` already sets) rather than in the store."""
 
     def __init__(self, *, delivery: IWriteGardenDeliveryRepository, clock: IClock) -> None:
         self._delivery = delivery

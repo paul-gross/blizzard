@@ -1175,8 +1175,8 @@ export const attachGardenProposalFindingsApiGardenProposalsProposalIdAttachPost 
  * Detach Garden Proposal Findings
  *
  * Unlink the given finding ids from PROPOSAL_ID — works on either
- * origin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or
- * one not linked to this proposal.
+ * origin while open. 404 unknown proposal, 409 already closed, 422 an unknown or
+ * duplicate id, or one not linked to this proposal.
  */
 export const detachGardenProposalFindingsApiGardenProposalsProposalIdDetachPost = <ThrowOnError extends boolean = false>(options: Options<DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostData, ThrowOnError>): RequestResult<DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostResponses, DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostErrors, ThrowOnError> => (options.client ?? client).post<DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostResponses, DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostErrors, ThrowOnError>({
     url: '/api/garden-proposals/{proposal_id}/detach',

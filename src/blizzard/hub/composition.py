@@ -73,7 +73,7 @@ from blizzard.hub.domain.garden_proposal_resolution import AnsweredFindingsReade
 from blizzard.hub.domain.garden_proposals import (
     GardenProposalAuthoring,
     IReadGardenProposalRepository,
-    OpenGardenProposalReader,
+    RoutineGardenProposalReader,
 )
 from blizzard.hub.domain.garden_run import GardenRunService
 from blizzard.hub.domain.garden_sweeps import GardenSweepsService
@@ -269,7 +269,7 @@ class HubServices:
     #: Pass or accept a garden proposal, minting a linked hub work item by default.
     garden_proposal_closure: GardenProposalClosureService
     #: A routine's open garden proposals — closed ones filtered out.
-    open_garden_proposals: OpenGardenProposalReader
+    routine_garden_proposals: RoutineGardenProposalReader
     #: A run's identity — routine, scope, and mode; read-only (``bzh:controller-read-only``).
     run_context: IReadRunContextRepository
     #: The findings a chunk's own accepted, minted garden proposal answers
@@ -597,7 +597,7 @@ def build_services(
         garden_proposal_closure=GardenProposalClosureService(
             closures=garden_proposal_closure_store, items=materialization_edits, clock=clock
         ),
-        open_garden_proposals=OpenGardenProposalReader(
+        routine_garden_proposals=RoutineGardenProposalReader(
             proposals=garden_proposal_store, closures=garden_proposal_closure_store
         ),
         run_context=run_context_store,

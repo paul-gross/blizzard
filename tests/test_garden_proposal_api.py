@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import insert
 
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -41,10 +42,18 @@ def test_list_renders_every_proposal_newest_first(tmp_path: Path) -> None:
     _seed(hub)
     proposals = GardenProposalStore(hub_store_connections(hub.engine))
     proposals.create(
-        "gprop_old", routine_name="nightly", class_="c", title="old", body="b", findings=["fin_1"], at=_NOW
+        "gprop_old",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="old",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
     )
     proposals.create(
         "gprop_new",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
         title="new",
@@ -64,6 +73,7 @@ def test_get_renders_one_proposal(tmp_path: Path) -> None:
     _seed(hub)
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="Author a docstring standard",
@@ -98,13 +108,45 @@ def test_paged_concatenation_matches_the_full_order_through_a_created_at_tie(tmp
     hub = build_hub(tmp_path)
     _seed(hub)
     proposals = GardenProposalStore(hub_store_connections(hub.engine))
-    proposals.create("gprop_a", routine_name="nightly", class_="c", title="a", body="b", findings=["fin_1"], at=_NOW)
-    proposals.create("gprop_b", routine_name="nightly", class_="c", title="b", body="b", findings=["fin_1"], at=_NOW)
     proposals.create(
-        "gprop_c", routine_name="nightly", class_="c", title="c", body="b", findings=["fin_1"], at=_NOW.replace(hour=13)
+        "gprop_a",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="a",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
     )
     proposals.create(
-        "gprop_d", routine_name="nightly", class_="c", title="d", body="b", findings=["fin_1"], at=_NOW.replace(hour=11)
+        "gprop_b",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="b",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
+    proposals.create(
+        "gprop_c",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="c",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW.replace(hour=13),
+    )
+    proposals.create(
+        "gprop_d",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="d",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW.replace(hour=11),
     )
 
     full = hub.client.get("/api/garden-proposals")
@@ -159,12 +201,35 @@ def test_list_next_cursor_is_null_only_on_the_last_page(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed(hub)
     proposals = GardenProposalStore(hub_store_connections(hub.engine))
-    proposals.create("gprop_1", routine_name="nightly", class_="c", title="1", body="b", findings=["fin_1"], at=_NOW)
     proposals.create(
-        "gprop_2", routine_name="nightly", class_="c", title="2", body="b", findings=["fin_1"], at=_NOW.replace(hour=13)
+        "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="1",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
     )
     proposals.create(
-        "gprop_3", routine_name="nightly", class_="c", title="3", body="b", findings=["fin_1"], at=_NOW.replace(hour=14)
+        "gprop_2",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="2",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW.replace(hour=13),
+    )
+    proposals.create(
+        "gprop_3",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="3",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW.replace(hour=14),
     )
 
     first = hub.client.get("/api/garden-proposals", params={"limit": 2})

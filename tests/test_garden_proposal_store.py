@@ -13,7 +13,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind, GardenProposalItemOutcome
-from blizzard.hub.domain.garden_proposals import GardenProposalCounts, GardenProposalOrigin
+from blizzard.hub.domain.garden_proposals import GardenProposalCounts, GardenProposalEdit, GardenProposalOrigin
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -128,6 +128,7 @@ def _sized_store(tmp_path: Path, n: int) -> tuple[GardenProposalStore, Engine]:
         )
         store.create(
             f"gprop_extra_{i}",
+            origin=GardenProposalOrigin.ROUTINE_RUN,
             routine_name="nightly",
             class_="c",
             title=f"t{i}",
@@ -143,6 +144,7 @@ def test_create_then_get_round_trips(tmp_path: Path) -> None:
 
     created = store.create(
         "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="Author a docstring standard",
@@ -160,7 +162,14 @@ def test_create_with_no_findings_writes_no_link_rows(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
 
     created = store.create(
-        "gprop_1", routine_name="nightly", class_="fix-the-source", title="t", body="b", findings=[], at=_NOW
+        "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="fix-the-source",
+        title="t",
+        body="b",
+        findings=[],
+        at=_NOW,
     )
 
     assert created.findings == []
@@ -181,9 +190,19 @@ def test_get_unknown_id_is_none(tmp_path: Path) -> None:
 
 def test_list_all_orders_newest_first(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    store.create("gprop_old", routine_name="nightly", class_="c", title="old", body="b", findings=["fin_1"], at=_NOW)
+    store.create(
+        "gprop_old",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="old",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
     store.create(
         "gprop_new",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
         title="new",
@@ -199,9 +218,19 @@ def test_list_all_orders_newest_first(tmp_path: Path) -> None:
 
 def test_list_for_routine_orders_newest_first_and_excludes_other_routines(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    store.create("gprop_old", routine_name="nightly", class_="c", title="old", body="b", findings=["fin_1"], at=_NOW)
+    store.create(
+        "gprop_old",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="old",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
     store.create(
         "gprop_new",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="c",
         title="new",
@@ -210,7 +239,14 @@ def test_list_for_routine_orders_newest_first_and_excludes_other_routines(tmp_pa
         at=_NOW.replace(hour=13),
     )
     store.create(
-        "gprop_other", routine_name="other-routine", class_="c", title="other", body="b", findings=["fin_1"], at=_NOW
+        "gprop_other",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="other-routine",
+        class_="c",
+        title="other",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
     )
 
     ids = [p.proposal_id for p in store.list_for_routine("nightly")]
@@ -220,7 +256,16 @@ def test_list_for_routine_orders_newest_first_and_excludes_other_routines(tmp_pa
 
 def test_list_for_routine_is_empty_for_an_unseen_routine(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    store.create("gprop_1", routine_name="nightly", class_="c", title="t", body="b", findings=["fin_1"], at=_NOW)
+    store.create(
+        "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
 
     assert store.list_for_routine("ghost-routine") == []
 
@@ -228,14 +273,38 @@ def test_list_for_routine_is_empty_for_an_unseen_routine(tmp_path: Path) -> None
 def test_counts_by_class_groups_by_routine_and_class(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.create(
-        "gprop_1", routine_name="nightly", class_="fix-the-source", title="t1", body="b", findings=["fin_1"], at=_NOW
+        "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="fix-the-source",
+        title="t1",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
     )
     store.create(
-        "gprop_2", routine_name="nightly", class_="fix-the-source", title="t2", body="b", findings=["fin_2"], at=_NOW
+        "gprop_2",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="fix-the-source",
+        title="t2",
+        body="b",
+        findings=["fin_2"],
+        at=_NOW,
     )
-    store.create("gprop_3", routine_name="nightly", class_="wontfix", title="t3", body="b", findings=["fin_1"], at=_NOW)
+    store.create(
+        "gprop_3",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="wontfix",
+        title="t3",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
     store.create(
         "gprop_4",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="other-routine",
         class_="fix-the-source",
         title="t4",
@@ -283,10 +352,24 @@ def test_counts_by_class_since_is_inclusive_and_until_is_exclusive(tmp_path: Pat
     since = _NOW
     until = _NOW + timedelta(hours=1)
     store.create(
-        "gprop_at_since", routine_name="nightly", class_="c", title="t1", body="b", findings=["fin_1"], at=since
+        "gprop_at_since",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t1",
+        body="b",
+        findings=["fin_1"],
+        at=since,
     )
     store.create(
-        "gprop_at_until", routine_name="nightly", class_="c", title="t2", body="b", findings=["fin_2"], at=until
+        "gprop_at_until",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t2",
+        body="b",
+        findings=["fin_2"],
+        at=until,
     )
 
     rows = store.counts_by_class(since=since, until=until)
@@ -306,11 +389,45 @@ def test_counts_by_class_since_is_inclusive_and_until_is_exclusive(tmp_path: Pat
 
 def test_counts_by_class_splits_minted_and_declined_accepts(tmp_path: Path) -> None:
     store, engine = _store_and_engine(tmp_path)
-    store.create("gprop_open", routine_name="nightly", class_="c", title="t1", body="b", findings=["fin_1"], at=_NOW)
-    store.create("gprop_passed", routine_name="nightly", class_="c", title="t2", body="b", findings=["fin_2"], at=_NOW)
-    store.create("gprop_minted", routine_name="nightly", class_="c", title="t3", body="b", findings=["fin_1"], at=_NOW)
     store.create(
-        "gprop_declined", routine_name="nightly", class_="c", title="t4", body="b", findings=["fin_2"], at=_NOW
+        "gprop_open",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t1",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
+    store.create(
+        "gprop_passed",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t2",
+        body="b",
+        findings=["fin_2"],
+        at=_NOW,
+    )
+    store.create(
+        "gprop_minted",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t3",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
+    store.create(
+        "gprop_declined",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t4",
+        body="b",
+        findings=["fin_2"],
+        at=_NOW,
     )
     _pass(engine, "gprop_passed")
     _accept_mint(engine, "gprop_minted")
@@ -342,8 +459,26 @@ def test_counts_by_class_is_empty_for_a_routine_with_no_proposals_in_window(tmp_
 
 def test_counts_by_class_routine_name_filter_narrows_to_one_routine(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    store.create("gprop_1", routine_name="nightly", class_="c", title="t1", body="b", findings=["fin_1"], at=_NOW)
-    store.create("gprop_2", routine_name="other-routine", class_="c", title="t2", body="b", findings=["fin_2"], at=_NOW)
+    store.create(
+        "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t1",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
+    store.create(
+        "gprop_2",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="other-routine",
+        class_="c",
+        title="t2",
+        body="b",
+        findings=["fin_2"],
+        at=_NOW,
+    )
 
     rows = store.counts_by_class(
         since=_NOW - timedelta(hours=1), until=_NOW + timedelta(hours=1), routine_name="nightly"
@@ -381,9 +516,25 @@ def test_two_proposals_with_overlapping_findings_stay_distinguished(tmp_path: Pa
     never collapse into one row set."""
     store = _store(tmp_path)
     store.create(
-        "gprop_1", routine_name="nightly", class_="c", title="t1", body="b", findings=["fin_1", "fin_2"], at=_NOW
+        "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t1",
+        body="b",
+        findings=["fin_1", "fin_2"],
+        at=_NOW,
     )
-    store.create("gprop_2", routine_name="nightly", class_="c", title="t2", body="b", findings=["fin_1"], at=_NOW)
+    store.create(
+        "gprop_2",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="t2",
+        body="b",
+        findings=["fin_1"],
+        at=_NOW,
+    )
 
     assert set(store.get("gprop_1").findings) == {"fin_1", "fin_2"}  # type: ignore[union-attr]
     assert set(store.get("gprop_2").findings) == {"fin_1"}  # type: ignore[union-attr]
@@ -404,3 +555,24 @@ def test_list_all_and_list_for_routine_query_count_is_independent_of_proposal_co
     assert len(large.list_all()) == 9
     assert small_all_count == large_all_count
     assert small_routine_count == large_routine_count
+
+
+def test_two_edits_from_the_same_stale_view_each_keep_the_field_they_did_not_name(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.create(
+        "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="nightly",
+        class_="c",
+        title="old title",
+        body="old body",
+        findings=[],
+        at=_NOW,
+    )
+
+    store.edit("gprop_1", GardenProposalEdit(title="new title"))
+    store.edit("gprop_1", GardenProposalEdit(body="new body"))
+
+    after = store.get("gprop_1")
+    assert after is not None
+    assert (after.title, after.class_, after.body) == ("new title", "c", "new body")

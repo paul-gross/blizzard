@@ -10,7 +10,9 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from tests.support import build_hub, hub_store_connections
 
 pytestmark = pytest.mark.component
@@ -203,8 +205,15 @@ def test_retiring_deletes_nothing_findings_and_proposals_stay_readable(tmp_path:
         introduced=None,
         at=_NOW,
     )
-    proposal = hub.services.garden_proposal_authoring.create(
-        routine_name=routine["name"], class_="style", title="tidy it up", body="", findings=[finding]
+    proposal = GardenProposalStore(hub_store_connections(hub.engine)).create(
+        "gprop_1",
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name=routine["name"],
+        class_="style",
+        title="tidy it up",
+        body="",
+        findings=[finding.finding_id],
+        at=_NOW,
     )
     hub.services.garden_proposal_closure.pass_(proposal, reason="not needed", by="operator")
 

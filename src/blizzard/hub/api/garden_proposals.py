@@ -21,7 +21,6 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.edit import UNSET
 from blizzard.hub.domain.findings import Finding
 from blizzard.hub.domain.garden_proposal_closure import (
-    GardenProposalAlreadyClosed,
     GardenProposalClosure,
     GardenProposalPassReasonRequired,
 )
@@ -29,13 +28,13 @@ from blizzard.hub.domain.garden_proposal_resolution import resolve_proposal_find
 from blizzard.hub.domain.garden_proposals import (
     DuplicateProposalFindingError,
     GardenProposal,
+    GardenProposalAlreadyClosed,
     GardenProposalBlankFieldError,
     GardenProposalEdit,
     GardenProposalEmptyEditError,
     GardenProposalFindingAlreadyLinkedError,
     GardenProposalFindingNotLinkedError,
     GardenProposalFindingNotLiveError,
-    GardenProposalNotOpen,
     GardenProposalOrigin,
 )
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
@@ -278,7 +277,7 @@ def edit_garden_proposal(
         updated = services.garden_proposal_authoring.edit(proposal, edit)
     except (GardenProposalBlankFieldError, GardenProposalEmptyEditError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    except GardenProposalNotOpen as exc:
+    except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return garden_proposal_view(updated, services.garden_proposal_closures.get(proposal_id))
 
@@ -307,7 +306,7 @@ def attach_garden_proposal_findings(
         GardenProposalFindingAlreadyLinkedError,
     ) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    except GardenProposalNotOpen as exc:
+    except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return garden_proposal_view(updated, services.garden_proposal_closures.get(proposal_id))
 
@@ -323,13 +322,14 @@ def detach_garden_proposal_findings(
     services: Annotated[HubServices, Depends(get_services)],
 ) -> GardenProposalView:
     """Unlink the given finding ids from PROPOSAL_ID — works on either
-    origin while open. 404 unknown proposal, 409 already closed, 422 a duplicate id or
-    one not linked to this proposal."""
+    origin while open. 404 unknown proposal, 409 already closed, 422 an unknown or
+    duplicate id, or one not linked to this proposal."""
     proposal = _get_or_404(proposal_id, services)
+    findings = _resolve_findings_or_422(request.findings, services)
     try:
-        updated = services.garden_proposal_authoring.detach(proposal, request.findings)
+        updated = services.garden_proposal_authoring.detach(proposal, findings)
     except (DuplicateProposalFindingError, GardenProposalFindingNotLinkedError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    except GardenProposalNotOpen as exc:
+    except GardenProposalAlreadyClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return garden_proposal_view(updated, services.garden_proposal_closures.get(proposal_id))

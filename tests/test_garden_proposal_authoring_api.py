@@ -12,6 +12,7 @@ from sqlalchemy import insert
 
 from blizzard.foundation.ids import ROUTINE_PREFIX, Id
 from blizzard.hub.domain.garden_proposal_closure import GardenProposalClosureKind
+from blizzard.hub.domain.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.routines import Routine
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
@@ -64,6 +65,7 @@ def _seed_proposal(
 ) -> None:
     GardenProposalStore(hub_store_connections(hub.engine)).create(
         proposal_id,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
         routine_name="nightly",
         class_="fix-the-source",
         title="Author a docstring standard",
@@ -432,6 +434,21 @@ def test_detach_a_finding_not_linked_is_422(tmp_path: Path) -> None:
     resp = hub.client.post("/api/garden-proposals/gprop_1/detach", json={"findings": ["fin_ghost"]})
 
     assert resp.status_code == 422, resp.text
+    assert "unknown finding id" in resp.json()["detail"]
+    assert hub.client.get("/api/garden-proposals/gprop_1").json()["findings"] == ["fin_1"]
+
+
+def test_detach_a_known_finding_not_linked_to_this_proposal_is_422(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_scope(hub)
+    _seed_finding(hub, "fin_1")
+    _seed_finding(hub, "fin_2")
+    _seed_proposal(hub, findings=["fin_1"])
+
+    resp = hub.client.post("/api/garden-proposals/gprop_1/detach", json={"findings": ["fin_2"]})
+
+    assert resp.status_code == 422, resp.text
+    assert "not linked" in resp.json()["detail"]
     assert hub.client.get("/api/garden-proposals/gprop_1").json()["findings"] == ["fin_1"]
 
 
