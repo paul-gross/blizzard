@@ -12,10 +12,10 @@ from blizzard.runner.domain.leases import (
     PoolHead,
 )
 from blizzard.runner.harness.adapter import IHarnessModelResolution
+from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.wire.envelope import TIER_PREFIX, NodeConfig
 
 _log = get_logger("blizzard.runner.loop")
@@ -256,7 +256,7 @@ class HarnessSelector:
 
     harnesses: IHarnessRegistry
     #: This runner's own cross-tick health cache; ``None`` skips the health gate entirely.
-    health: HarnessHealthCache | None = None
+    health: IReadHarnessHealth | None = None
 
     def select(self, node: NodeConfig) -> HarnessSelection:
         """The earliest member of ``node.session_harnesses`` this runner can dispatch to, in

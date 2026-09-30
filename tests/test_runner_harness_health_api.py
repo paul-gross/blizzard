@@ -21,6 +21,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.compatibility import CompatibilityProbe
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.health import DeclaredDegradation
+from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_health import (
@@ -32,7 +33,6 @@ from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
 from blizzard.runner.harness.internal.opencode_probe import ADMITTED_OPENCODE_RANGE_DISPLAY
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.runner.loop.process import LinuxProcessProbe
 
 pytestmark = pytest.mark.component

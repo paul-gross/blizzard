@@ -21,13 +21,14 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.harness_registry import (
     build_production_harness_health_probes,
     build_production_harness_registry,
 )
 from blizzard.runner.harness.registry import HarnessRegistry
-from blizzard.runner.loop.capability_snapshot import HarnessHealthCache, default_harness_id
+from blizzard.runner.loop.capability_snapshot import default_harness_id
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.store.errors import RunnerStoreConnections, RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore

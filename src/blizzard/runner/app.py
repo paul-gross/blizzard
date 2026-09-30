@@ -82,12 +82,10 @@ from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
-from blizzard.runner.harness.internal.harness_registry import build_production_harness_health_probes
+from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
 from blizzard.runner.loop.build import ResumeMarking
-from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
@@ -181,7 +179,7 @@ def create_app(
     takeover: TakeoverService | None = None,
     requeue: RequeueService | None = None,
     selftests: SelfTestService | None = None,
-    harness_health: HarnessHealthCache | None = None,
+    harness_health: IReadHarnessHealth | None = None,
     attachments: AttachmentService | None = None,
     git_commit_declarations: GitCommitDeclarationService | None = None,
     asks: AskService | None = None,
@@ -256,20 +254,10 @@ def create_app(
         clock=clock,
         results=runner_stores.selftest_results if runner_stores else None,
     )
-    # The runner's own health diagnostics: `build_hosted_app` passes the one
-    # instance it also hands the loop (`HostedApp.harness_health`), so a dashboard read and
-    # the loop's own registered availability can never disagree. A caller with no shared
-    # instance to give (a standalone `create_app`, a unit test) falls back to a private one
-    # that nothing ever refreshes but this route's own reads — never a live probe either way.
-    app.state.harness_health = harness_health or HarnessHealthCache(
-        clock=clock,
-        probes=build_production_harness_health_probes(config),
-        selftest_results=runner_stores.selftest_results if runner_stores else None,
-        configured_tiers={
-            CLAUDE_CODE_HARNESS_ID: config.model_aliases,
-            OPENCODE_HARNESS_ID: config.opencode_model_aliases,
-        },
-    )
+    # The runner's own health diagnostics: `build_hosted_app` passes the one instance it also
+    # hands the loop (`HostedApp.harness_health`), so a dashboard read and the loop's own
+    # registered availability can never disagree. Absent, the route and dashboard refuse.
+    app.state.harness_health = harness_health
     # This default must **not** reach the network — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
     hub_http_client = hub_http_client or httpx.Client(

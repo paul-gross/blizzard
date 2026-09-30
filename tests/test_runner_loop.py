@@ -28,6 +28,7 @@ from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLeas
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
+from blizzard.runner.harness.health_cache import HARNESS_VERSION_REFRESH_SECONDS, HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.preamble import (
@@ -43,11 +44,7 @@ from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NullTranscriptSource
 from blizzard.runner.loop.attempt import Attempt
-from blizzard.runner.loop.capability_snapshot import (
-    HARNESS_VERSION_REFRESH_SECONDS,
-    HarnessHealthCache,
-    HarnessVersionCache,
-)
+from blizzard.runner.loop.capability_snapshot import HarnessVersionCache
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.judgement import Judgement
 from blizzard.runner.loop.produces import ProducesReconciler

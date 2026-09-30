@@ -28,11 +28,11 @@ from blizzard.runner.config import (
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
-from blizzard.runner.loop.capability_snapshot import HarnessHealthCache
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI

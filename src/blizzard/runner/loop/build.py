@@ -20,12 +20,13 @@ from blizzard.runner.composition import RunnerProcess, build_runner_process, bui
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.harness_registry import (
     build_production_harness_health_probes,
     build_production_harness_registry,
 )
-from blizzard.runner.loop.capability_snapshot import HarnessHealthCache, HarnessVersionCache, default_harness_id
+from blizzard.runner.loop.capability_snapshot import HarnessVersionCache, default_harness_id
 from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.elicitation_files import ElicitationFiles
