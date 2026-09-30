@@ -780,7 +780,8 @@ export const getChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodes
 /**
  * Submit Completion
  *
- * Apply a node-step's completion atomically; reply carries the next envelope.
+ * Apply a node-step's completion atomically; reply carries the next envelope; 403 when the
+ * submitting runner is retired.
  */
 export const submitCompletionApiFleetChunksChunkIdCompletionsPost = <ThrowOnError extends boolean = false>(options: Options<SubmitCompletionApiFleetChunksChunkIdCompletionsPostData, ThrowOnError>): RequestResult<SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponses, SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors, ThrowOnError> => (options.client ?? client).post<SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponses, SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors, ThrowOnError>({
     url: '/api/fleet/chunks/{chunk_id}/completions',
@@ -794,7 +795,8 @@ export const submitCompletionApiFleetChunksChunkIdCompletionsPost = <ThrowOnErro
 /**
  * Submit Decision
  *
- * Runner-config gate: park the chunk on a decision in place of a transition.
+ * Runner-config gate: park the chunk on a decision in place of a transition; 403 when the
+ * submitting runner is retired.
  */
 export const submitDecisionApiFleetChunksChunkIdDecisionsPost = <ThrowOnError extends boolean = false>(options: Options<SubmitDecisionApiFleetChunksChunkIdDecisionsPostData, ThrowOnError>): RequestResult<SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponses, SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors, ThrowOnError> => (options.client ?? client).post<SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponses, SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors, ThrowOnError>({
     url: '/api/fleet/chunks/{chunk_id}/decisions',
@@ -815,7 +817,7 @@ export const getEnvelopeApiFleetChunksChunkIdEnvelopeGet = <ThrowOnError extends
 /**
  * Report Escalation
  *
- * Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``.
+ * Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``; 403 when retired.
  */
 export const reportEscalationApiFleetChunksChunkIdEscalationsPost = <ThrowOnError extends boolean = false>(options: Options<ReportEscalationApiFleetChunksChunkIdEscalationsPostData, ThrowOnError>): RequestResult<ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses, ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors, ThrowOnError> => (options.client ?? client).post<ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses, ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors, ThrowOnError>({
     url: '/api/fleet/chunks/{chunk_id}/escalations',
@@ -880,7 +882,7 @@ export const hubAdvanceApiFleetChunksChunkIdHubAdvancePost = <ThrowOnError exten
 /**
  * Report Lease
  *
- * Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep.
+ * Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep; 403 when retired.
  */
 export const reportLeaseApiFleetChunksChunkIdLeasesPost = <ThrowOnError extends boolean = false>(options: Options<ReportLeaseApiFleetChunksChunkIdLeasesPostData, ThrowOnError>): RequestResult<ReportLeaseApiFleetChunksChunkIdLeasesPostResponses, ReportLeaseApiFleetChunksChunkIdLeasesPostErrors, ThrowOnError> => (options.client ?? client).post<ReportLeaseApiFleetChunksChunkIdLeasesPostResponses, ReportLeaseApiFleetChunksChunkIdLeasesPostErrors, ThrowOnError>({
     url: '/api/fleet/chunks/{chunk_id}/leases',
@@ -921,7 +923,8 @@ export const resumeChunkApiFleetChunksChunkIdResumePost = <ThrowOnError extends 
  *
  * Rotate the chunk's live route capability token — the lost-plaintext recovery for a
  * claim whose response was never read back. Confined to the live route's own runner; this route
- * presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting.
+ * presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting. 403
+ * when the route's runner is retired.
  */
 export const rekeyRouteTokenApiFleetChunksChunkIdRouteTokenPost = <ThrowOnError extends boolean = false>(options: Options<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData, ThrowOnError>): RequestResult<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, ThrowOnError> => (options.client ?? client).post<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/route-token', ...options });
 
@@ -948,7 +951,7 @@ export const getWorkItemsApiFleetChunksChunkIdWorkItemsGet = <ThrowOnError exten
  * Ingest Runner Facts
  *
  * Land runner-minted facts — idempotent on the batch's per-runner ``seq`` high-water mark,
- * with each freshly-applied fact re-broadcast on the SSE stream.
+ * with each freshly-applied fact re-broadcast on the SSE stream; 403 when the runner is retired.
  */
 export const ingestRunnerFactsApiFleetEventsPost = <ThrowOnError extends boolean = false>(options: Options<IngestRunnerFactsApiFleetEventsPostData, ThrowOnError>): RequestResult<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError>({
     url: '/api/fleet/events',
@@ -1029,7 +1032,7 @@ export const registerRunnerApiFleetRunnersPost = <ThrowOnError extends boolean =
 /**
  * Get Runner
  *
- * One runner's declarative state — the runner's own pull read.
+ * One runner's declarative state — the runner's own pull read; 403 when retired.
  */
 export const getRunnerApiFleetRunnersRunnerIdGet = <ThrowOnError extends boolean = false>(options: Options<GetRunnerApiFleetRunnersRunnerIdGetData, ThrowOnError>): RequestResult<GetRunnerApiFleetRunnersRunnerIdGetResponses, GetRunnerApiFleetRunnersRunnerIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetRunnerApiFleetRunnersRunnerIdGetResponses, GetRunnerApiFleetRunnersRunnerIdGetErrors, ThrowOnError>({ url: '/api/fleet/runners/{runner_id}', ...options });
 
@@ -1075,7 +1078,8 @@ export const getSystemArtifactRouteApiFleetSystemArtifactsNameGet = <ThrowOnErro
  * Ingest Transcript Segments
  *
  * Land the runner's batched transcript records — the transcript lane's own
- * store-and-forward push, distinct from the fact lane at ``POST /api/fleet/events``.
+ * store-and-forward push, distinct from the fact lane at ``POST /api/fleet/events``; 403 when the
+ * runner is retired.
  */
 export const ingestTranscriptSegmentsApiFleetTranscriptsPost = <ThrowOnError extends boolean = false>(options: Options<IngestTranscriptSegmentsApiFleetTranscriptsPostData, ThrowOnError>): RequestResult<IngestTranscriptSegmentsApiFleetTranscriptsPostResponses, IngestTranscriptSegmentsApiFleetTranscriptsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestTranscriptSegmentsApiFleetTranscriptsPostResponses, IngestTranscriptSegmentsApiFleetTranscriptsPostErrors, ThrowOnError>({
     url: '/api/fleet/transcripts',

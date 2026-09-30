@@ -21,7 +21,7 @@ from blizzard.hub.domain.eligibility import EligibilityCheck
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
-from blizzard.hub.domain.registry import IReadRunnerRegistry
+from blizzard.hub.domain.registry import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.work import Chunk, holds_claim
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -115,6 +115,7 @@ class ClaimService:
         artifacts: IReadChunkArtifactsRepository,
         graphs: IReadGraphRepository,
         registry: IReadRunnerRegistry,
+        retired: RetiredRunnerGuard,
         exclusive: IChunkExclusiveWrites,
         clock: IClock,
     ) -> None:
@@ -130,6 +131,8 @@ class ClaimService:
         # in-process lock, so it stays correct once more than one hub process shares the
         # store.
         self._exclusive = exclusive
+        # The rekey's refusal; the claim refuses through the registration it already reads.
+        self._retired = retired
         self._clock = clock
 
     # runner_id resolves a paused-runner guard, a domain rule (bzh:domain-takes-objects).
@@ -265,6 +268,7 @@ class ClaimService:
         way to learn it. Appends a new ``route_token_minted`` fact rather than mutating
         the prior one (``bzh:facts-not-status``); newest-fact-wins supersedes the old
         token, re-run idempotent. Takes an already-resolved route (``bzh:domain-takes-objects``)."""
+        self._retired.refuse_if_retired(route.runner_id, action="route-token rekey")
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         self._route.record_route_token(route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now())
         return route_token

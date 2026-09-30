@@ -92,9 +92,9 @@ class RunnerRegistration:
             raise RunnerRetired(self.runner_id, action=action)
 
     def is_federation_target(self, redirect_uri: str) -> bool:
-        """Whether the IdP may bounce to ``redirect_uri`` for this runner: it must not be
-        retired, and the URI must be one it registered."""
-        return not self.retired and redirect_uri in self.redirect_uris
+        """Whether the IdP may bounce to ``redirect_uri`` for this runner — the URI must be one
+        it registered. Retirement is refused separately, once the URI has matched."""
+        return redirect_uri in self.redirect_uris
 
 
 @dataclass(frozen=True)
@@ -423,6 +423,24 @@ class RunnerRetired(Exception):
         self.runner_id = runner_id
 
 
+class RetiredRunnerGuard:
+    """The id-keyed retired-runner refusal — the one domain home for every operation that
+    names a runner by id rather than a loaded registration, so a token-less caller under
+    ``warn`` is refused on each of them alike."""
+
+    def __init__(self, *, registry: IReadRunnerRegistry) -> None:
+        self._registry = registry
+
+    # runner_id resolves the retired-runner guard, a domain rule (bzh:domain-takes-objects).
+    # ast-grep-ignore: bzh:domain-takes-objects
+    def refuse_if_retired(self, runner_id: str, *, action: str) -> None:
+        """Raise :class:`RunnerRetired` when ``runner_id`` names a retired runner. An
+        unregistered runner passes — there is nothing to be retired."""
+        registration = self._registry.get_runner(runner_id)
+        if registration is not None:
+            registration.refuse_if_retired(action=action)
+
+
 class RunnerHoldsRoutes(Exception):
     """A retire without ``force`` found live routes — each held chunk and its environments."""
 
@@ -478,6 +496,7 @@ class FleetService:
         records: IReadChunkRecordRepository,
         facts: IReadChunkFactsRepository,
         detach: DetachService,
+        retired: RetiredRunnerGuard,
         clock: IClock,
         stale_after: timedelta = STALE_AFTER,
     ) -> None:
@@ -487,6 +506,7 @@ class FleetService:
         self._records = records
         self._facts = facts
         self._detach = detach
+        self._retired = retired
         self._clock = clock
         self._stale_after = stale_after
 
@@ -507,7 +527,7 @@ class FleetService:
         The runner's reported facts (``env_capacity``, ``public_url``/``redirect_uris``,
         ``capabilities``, ``subscriptions``, ``gates``) are overwritten on every registration; absent
         values store as null/empty. A retired runner raises :class:`RunnerRetired` before any write."""
-        self._guard_not_retired(runner_id, action="registration")
+        self._retired.refuse_if_retired(runner_id, action="registration")
         created = self._registry.upsert_registration(
             runner_id,
             workspace_id=workspace_id,
@@ -534,15 +554,8 @@ class FleetService:
     def heartbeat(self, runner_id: str) -> bool:
         """Refresh a runner's liveness; returns False if it is unregistered. A retired runner
         is refused with :class:`RunnerRetired` before its liveness is touched."""
-        self._guard_not_retired(runner_id, action="heartbeat")
+        self._retired.refuse_if_retired(runner_id, action="heartbeat")
         return self._registry.touch_last_seen(runner_id, at=self._clock.now())
-
-    def _guard_not_retired(self, runner_id: str, *, action: str) -> None:
-        """Resolve ``runner_id`` to the retired-runner guard, a domain rule. An unregistered
-        runner passes — there is nothing to be retired; a first registration has no object to pass."""
-        registration = self._registry.get_runner(runner_id)
-        if registration is not None:
-            registration.refuse_if_retired(action=action)
 
     def retire(self, registration: RunnerRegistration, *, by: str, force: bool) -> RetireOutcome:
         """Record the fact and revoke the token first, so claims are refused from that instant,
@@ -659,6 +672,12 @@ class FleetService:
         """One runner's derived liveness over its loaded registration
         (``bzh:domain-takes-objects``) — the edge resolves ``runner_id`` to it (404 if
         unknown) before calling this."""
+        return self._liveness(registration)
+
+    def own_liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
+        """The runner's own pull read of its liveness — refused with :class:`RunnerRetired`
+        when it is retired, unlike the operator's :meth:`get_liveness`, which still shows it."""
+        registration.refuse_if_retired(action="runner read")
         return self._liveness(registration)
 
     def list_with_liveness(self, *, include_retired: bool = False) -> list[RunnerLiveness]:

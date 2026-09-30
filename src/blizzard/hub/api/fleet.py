@@ -665,7 +665,8 @@ def rekey_route_token(
 ) -> RouteTokenRekeyResponse:
     """Rotate the chunk's live route capability token — the lost-plaintext recovery for a
     claim whose response was never read back. Confined to the live route's own runner; this route
-    presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting."""
+    presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting. 403
+    when the route's runner is retired."""
     route = services.chunks.route.route_of(chunk_id)
     if route is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"chunk {chunk_id} has no live route")
@@ -681,7 +682,8 @@ def submit_completion(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> ApplyResponse:
-    """Apply a node-step's completion atomically; reply carries the next envelope."""
+    """Apply a node-step's completion atomically; reply carries the next envelope; 403 when the
+    submitting runner is retired."""
     fleet.assert_owns(submission.runner_id)
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
@@ -732,7 +734,8 @@ def submit_decision(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> ApplyResponse:
-    """Runner-config gate: park the chunk on a decision in place of a transition."""
+    """Runner-config gate: park the chunk on a decision in place of a transition; 403 when the
+    submitting runner is retired."""
     fleet.assert_owns(submission.runner_id)
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
@@ -756,7 +759,7 @@ def report_lease(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> dict[str, str]:
-    """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep."""
+    """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep; 403 when retired."""
     fleet.assert_owns(report.runner_id)
     if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -771,7 +774,7 @@ def report_escalation(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> dict[str, str]:
-    """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``."""
+    """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``; 403 when retired."""
     fleet.assert_owns(report.runner_id)
     if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -779,6 +782,7 @@ def report_escalation(
     escalation_id = services.runner_facts.record_escalation(
         chunk_id,
         epoch=report.epoch,
+        runner_id=report.runner_id,
         takeover_command=report.takeover_command,
         wrapped_takeover_command=report.wrapped_takeover_command,
     )
@@ -793,7 +797,7 @@ def ingest_runner_facts(
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerFactAck:
     """Land runner-minted facts — idempotent on the batch's per-runner ``seq`` high-water mark,
-    with each freshly-applied fact re-broadcast on the SSE stream."""
+    with each freshly-applied fact re-broadcast on the SSE stream; 403 when the runner is retired."""
     fleet.assert_owns(batch.runner_id)
     broadcast = IngestBroadcast.before_ingest(services, batch)
     result = services.facts.ingest(batch, route_token_mode=fleet.route_token_mode)
@@ -808,7 +812,8 @@ def ingest_transcript_segments(
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> TranscriptSegmentAck:
     """Land the runner's batched transcript records — the transcript lane's own
-    store-and-forward push, distinct from the fact lane at ``POST /api/fleet/events``."""
+    store-and-forward push, distinct from the fact lane at ``POST /api/fleet/events``; 403 when the
+    runner is retired."""
     fleet.assert_owns(batch.runner_id)
     records = [
         (record.seq, transcripts_api.to_domain_record(record, runner_id=batch.runner_id)) for record in batch.records
@@ -880,19 +885,16 @@ def register_runner(
         if request.subscriptions is not None
         else None
     )
-    try:
-        first = services.fleet.register(
-            request.runner_id,
-            request.workspace_id,
-            env_capacity=request.env_capacity,
-            public_url=request.url,
-            redirect_uris=tuple(request.redirect_uris),
-            capabilities=capabilities,
-            subscriptions=subscriptions,
-            gates=tuple(request.gates),
-        )
-    except RunnerRetired as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    first = services.fleet.register(
+        request.runner_id,
+        request.workspace_id,
+        env_capacity=request.env_capacity,
+        public_url=request.url,
+        redirect_uris=tuple(request.redirect_uris),
+        capabilities=capabilities,
+        subscriptions=subscriptions,
+        gates=tuple(request.gates),
+    )
     services.events.publish_runner_changed(request.runner_id, kind="registered")
     return RunnerRegistrationResponse(runner_id=request.runner_id, first_registration=first)
 
@@ -905,10 +907,7 @@ def heartbeat_runner(
 ) -> Response:
     """Refresh a runner's liveness — the slow runner-level heartbeat. Returns 204; 403 when retired."""
     fleet.assert_owns(runner_id)
-    try:
-        alive = services.fleet.heartbeat(runner_id)
-    except RunnerRetired as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    alive = services.fleet.heartbeat(runner_id)
     if not alive:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
     services.events.publish_runner_changed(runner_id, kind="heartbeat")
@@ -921,9 +920,9 @@ def get_runner(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> RunnerView:
-    """One runner's declarative state — the runner's own pull read."""
+    """One runner's declarative state — the runner's own pull read; 403 when retired."""
     fleet.assert_owns(runner_id)
     registration = services.registry.get_runner(runner_id)
     if registration is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
-    return runners_api.runner_view(services.fleet.get_liveness(registration), now=services.clock.now())
+    return runners_api.runner_view(services.fleet.own_liveness(registration), now=services.clock.now())

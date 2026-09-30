@@ -176,10 +176,12 @@ other spawn site (restart-resume, answer-resume, requeue respawn) but never a wo
 ### Retire and reinstate
 
 `blizzard hub runner retire <runner_id>` takes a runner out of service for good: it revokes the runner's token, hides it
-from `runner list` and the board's fleet views, and refuses its registration and heartbeat (`403`) and its claims (the
-same `403` denial a paused runner gets), whatever `runner_auth_mode` is. The runner's registration and every fact
-attributed to it stay, so chunk history, transcripts, and events keep naming it. `runner list --all` (and the board's
-"show retired" chip) shows retired runners marked with when and by whom. `--by` records who retired it.
+from `runner list` and the board's fleet views, and refuses every call the runner makes to the hub with a `403`,
+whatever `runner_auth_mode` is — a claim gets the same `403` denial a paused runner gets. Federation through the runner
+stops too: `/api/auth/authorize` with the runner's client and a redirect URI it registered returns a `403`. The runner's
+registration and every fact attributed to it stay, so chunk history, transcripts, and events keep naming it.
+`runner list --all` (and the board's "show retired" chip) shows retired runners marked with when and by whom. `--by`
+records who retired it.
 
 A runner still holding chunks refuses the retire with a `409` naming each held chunk and its environments. `--force`
 records the retirement and then releases every held route through the same path `chunk detach` uses, so each chunk

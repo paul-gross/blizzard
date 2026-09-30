@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+import sqlalchemy as sa
 
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE, RUNNER_AUTH_WARN
 from blizzard.hub.domain.registry import IWriteRunnerRegistry
+from blizzard.wire.route import RouteClaimPausedDenial
 from tests.support import build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
@@ -231,27 +233,89 @@ def test_revoke_token_on_an_unenrolled_runner_is_409(tmp_path: Path) -> None:
     assert hub.client.post("/api/runners/runner-a/token-revocations", json={"by": "op"}).status_code == 409
 
 
-def test_a_retired_id_is_refused_at_registration_heartbeat_and_claim_with_no_token_under_warn(tmp_path: Path) -> None:
+def _store_rows(hub) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
+    metadata = sa.MetaData()
+    metadata.reflect(hub.engine)
+    with hub.engine.connect() as conn:
+        return {
+            name: sorted(repr(row) for row in conn.execute(sa.select(table)).all())
+            for name, table in metadata.tables.items()
+        }
+
+
+def test_a_retired_id_is_refused_on_every_runner_contact_route_with_no_token_under_warn(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _register(hub)
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
-    chunk_id = hub.client.post(
+    held = _held_chunk(hub)
+    node_id = hub.client.get(f"/api/chunks/{held}").json()["current_node_id"]
+    report_lease(hub, held, epoch=1, seq=1, runner_id="runner-a")
+    ready = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "665"})]}
     ).json()["chunk_id"]
-    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    assert _retire(hub).status_code == 200
+    assert hub.client.post(f"/api/chunks/{ready}/promote").status_code == 202
+    # Retired with its route still live, so the route-token rekey has a route to refuse on.
+    writer = cast(IWriteRunnerRegistry, hub.services.registry)
+    writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op")
+    hub.clock.advance(timedelta(seconds=5))
+    before = _store_rows(hub)
 
-    register = hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"})
-    heartbeat = hub.client.post("/api/fleet/runners/runner-a/heartbeats")
-    claim = hub.client.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "runner_id": "runner-a", "workspace_id": "ws-a", "environment_ids": ["e1"]},
-    )
+    contact = {
+        "registration": hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"}),
+        "heartbeat": hub.client.post("/api/fleet/runners/runner-a/heartbeats"),
+        "runner read": hub.client.get("/api/fleet/runners/runner-a"),
+        "fact ingest": hub.client.post(
+            "/api/fleet/events",
+            json={
+                "runner_id": "runner-a",
+                "facts": [{"seq": 2, "kind": "lease.minted", "payload": {"chunk_id": held, "epoch": 2}}],
+            },
+        ),
+        "transcript ingest": hub.client.post(
+            "/api/fleet/transcripts",
+            json={
+                "runner_id": "runner-a",
+                "records": [
+                    {
+                        "seq": 1,
+                        "segment_id": "sg_1",
+                        "chunk_id": held,
+                        "node_id": node_id,
+                        "epoch": 1,
+                        "spawn_generation": 1,
+                        "turn_range_start": 0,
+                        "turn_range_end": 0,
+                        "final": True,
+                        "normalizer_version": "claude-code-jsonl/2",
+                        "harness_version": "claude-code-1.0",
+                        "turns": [],
+                    }
+                ],
+            },
+        ),
+        "lease report": hub.client.post(f"/api/fleet/chunks/{held}/leases", json={"runner_id": "runner-a", "epoch": 2}),
+        "escalation report": hub.client.post(
+            f"/api/fleet/chunks/{held}/escalations",
+            json={"runner_id": "runner-a", "epoch": 1, "takeover_command": "claude --resume"},
+        ),
+        "completion": hub.client.post(
+            f"/api/fleet/chunks/{held}/completions",
+            json={"choice": "pass", "epoch": 1, "runner_id": "runner-a", "from_node_id": node_id, "artifacts": []},
+        ),
+        "decision": hub.client.post(
+            f"/api/fleet/chunks/{held}/decisions",
+            json={"from_node_id": node_id, "epoch": 1, "runner_id": "runner-a"},
+        ),
+        "route-token rekey": hub.client.post(f"/api/fleet/chunks/{held}/route-token"),
+        "claim": hub.client.post(
+            "/api/fleet/routes",
+            json={"chunk_id": ready, "runner_id": "runner-a", "workspace_id": "ws-a", "environment_ids": ["e1"]},
+        ),
+    }
 
-    assert register.status_code == 403, register.text
-    assert heartbeat.status_code == 403, heartbeat.text
-    assert claim.status_code == 403, claim.text
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    for action, resp in contact.items():
+        assert resp.status_code == 403, (action, resp.text)
+        assert "retired" in resp.json()["detail"], (action, resp.text)
+    assert _store_rows(hub) == before
 
 
 def test_enroll_is_refused_on_a_retired_runner_until_it_is_reinstated(tmp_path: Path) -> None:
@@ -287,3 +351,76 @@ def test_unknown_runner_is_404_on_every_verb(tmp_path: Path) -> None:
     assert _retire(hub, "ghost").status_code == 404
     assert hub.client.post("/api/runners/ghost/reinstate", json={"by": "op"}).status_code == 404
     assert hub.client.post("/api/runners/ghost/token-revocations", json={"by": "op"}).status_code == 404
+
+
+def test_the_retired_claim_refusal_parses_as_the_paused_denial_older_runners_read(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
+    chunk_id = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "666"})]}
+    ).json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert _retire(hub).status_code == 200
+
+    resp = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "runner-a", "workspace_id": "ws-a", "environment_ids": ["e1"]},
+    )
+
+    assert resp.status_code == 403
+    denial = RouteClaimPausedDenial.model_validate(resp.json())
+    assert (denial.chunk_id, denial.runner_id) == (chunk_id, "runner-a")
+    assert "retired" in denial.detail
+
+
+def test_under_warn_a_revoked_token_stays_refused_after_re_enrollment(tmp_path: Path) -> None:
+    old = _enrolled(tmp_path)
+    hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_WARN)
+    assert hub.client.post("/api/runners/runner-a/token-revocations", json={"by": "op"}).status_code == 201
+
+    new = _enroll(hub)
+
+    assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(new)).status_code == 200
+    assert hub.client.get("/api/fleet/queue/peek", headers=_bearer(old)).status_code == 401
+
+
+def test_a_forced_retire_records_the_fact_before_its_first_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+    _held_chunk(hub)
+    detach = hub.services.detach
+    release_held = detach.release_held
+    retired_at_release: list[bool] = []
+
+    def observed(chunk, *, runner_id: str) -> int | None:  # type: ignore[no-untyped-def]
+        registration = hub.services.registry.get_runner(runner_id)
+        assert registration is not None
+        retired_at_release.append(registration.retired)
+        return release_held(chunk, runner_id=runner_id)
+
+    monkeypatch.setattr(detach, "release_held", observed)
+
+    assert _retire(hub, force=True).status_code == 200
+    assert retired_at_release == [True]
+
+
+def test_retirement_and_the_pause_brake_leave_each_other_as_they_were(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub)
+
+    def state() -> tuple[bool, bool]:
+        runner = hub.client.get("/api/runners/runner-a").json()
+        return runner["hub_paused"], runner["retired"]
+
+    assert hub.client.post("/api/runners/runner-a/pause", json={"by": "op"}).status_code == 200
+    assert _retire(hub).status_code == 200
+    assert state() == (True, True)
+    assert hub.client.post("/api/runners/runner-a/resume", json={"by": "op"}).status_code == 200
+    assert state() == (False, True)
+    assert hub.client.post("/api/runners/runner-a/pause", json={"by": "op"}).status_code == 200
+    assert state() == (True, True)
+    assert hub.client.post("/api/runners/runner-a/reinstate", json={"by": "op"}).status_code == 200
+    assert state() == (True, False)

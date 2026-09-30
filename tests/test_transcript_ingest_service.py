@@ -5,11 +5,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 from sqlalchemy import text
 
 from blizzard.hub.domain import transcripts as transcripts_domain
+from blizzard.hub.domain.registry import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.transcripts import (
     RECORD_MAX_BYTES,
     REJECTED_CHUNK_BUDGET_EXCEEDED,
@@ -64,7 +66,9 @@ def _record(
 def test_replayed_batch_applies_nothing_new_and_returns_the_same_high_water(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    service = TranscriptIngestService(store=TranscriptSegmentStore(hub_store_connections(hub.engine)), clock=hub.clock)
+    service = TranscriptIngestService(
+        retired=_NO_RETIREMENTS, store=TranscriptSegmentStore(hub_store_connections(hub.engine)), clock=hub.clock
+    )
     batch = [_record(1, turn_range_start=0, turn_range_end=0), _record(2, turn_range_start=1, turn_range_end=1)]
 
     first = service.ingest("r1", batch)
@@ -80,7 +84,9 @@ def test_replayed_batch_applies_nothing_new_and_returns_the_same_high_water(tmp_
 def test_a_batch_straddling_the_mark_applies_only_whats_past_it(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
-    service = TranscriptIngestService(store=TranscriptSegmentStore(hub_store_connections(hub.engine)), clock=hub.clock)
+    service = TranscriptIngestService(
+        retired=_NO_RETIREMENTS, store=TranscriptSegmentStore(hub_store_connections(hub.engine)), clock=hub.clock
+    )
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
 
     result = service.ingest(
@@ -102,7 +108,7 @@ def test_a_re_offer_under_a_fresh_seq_dedupes_against_the_natural_key(tmp_path: 
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
 
     result = service.ingest("r1", [_record(7, turn_range_start=0, turn_range_end=0)])
@@ -120,7 +126,7 @@ def test_a_below_mark_record_the_hub_no_longer_holds_is_stored_not_reported_idem
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
     service.ingest(
         "r1", [_record(1, turn_range_start=0, turn_range_end=0), _record(2, turn_range_start=1, turn_range_end=1)]
     )
@@ -139,7 +145,7 @@ def test_a_re_offer_of_a_previously_rejected_record_is_re_adjudicated_not_falsel
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
     big = "x" * (RECORD_MAX_BYTES + 1)
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
     [entry] = store.segments_for_chunk("ch_1")
@@ -163,7 +169,7 @@ def test_a_re_offer_that_accepts_refreshes_the_first_offers_identity_fields(tmp_
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
     big = "x" * (RECORD_MAX_BYTES + 1)
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, final=False, turns_json=big)])
 
@@ -182,7 +188,7 @@ def test_a_re_offer_of_a_still_over_cap_record_stays_capped_not_applied(tmp_path
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
     big = "x" * (RECORD_MAX_BYTES + 1)
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
 
@@ -199,7 +205,7 @@ def test_a_tail_record_ingested_after_completion_reads_back_in_turn_range_order(
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
 
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0)])
     service.ingest("r1", [_record(2, turn_range_start=1, turn_range_end=1, final=True)])
@@ -213,7 +219,7 @@ def test_a_segment_is_complete_only_on_its_final_marker(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
 
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, final=False)])
     [entry] = store.segments_for_chunk("ch_1")
@@ -231,7 +237,7 @@ def test_an_oversized_record_is_rejected_acked_and_advances_the_high_water(tmp_p
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
     big = "x" * (RECORD_MAX_BYTES + 1)
 
     result = service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
@@ -268,7 +274,9 @@ def test_the_chunk_budget_cap_rejects_independently_of_the_other_two(tmp_path: P
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock, caps=TranscriptCaps(chunk_budget_max_bytes=50))
+    service = TranscriptIngestService(
+        retired=_NO_RETIREMENTS, store=store, clock=hub.clock, caps=TranscriptCaps(chunk_budget_max_bytes=50)
+    )
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json="a" * 40)])
 
     result = service.ingest("r1", [_record(2, turn_range_start=1, turn_range_end=1, turns_json="b" * 40)])
@@ -282,7 +290,9 @@ def test_the_runner_daily_rate_cap_rejects_independently_of_the_other_two(tmp_pa
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock, caps=TranscriptCaps(runner_daily_rate_max_bytes=50))
+    service = TranscriptIngestService(
+        retired=_NO_RETIREMENTS, store=store, clock=hub.clock, caps=TranscriptCaps(runner_daily_rate_max_bytes=50)
+    )
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json="a" * 40)])
 
     result = service.ingest(
@@ -298,7 +308,7 @@ def test_a_cap_rejection_leaves_a_readable_truncation_mark_even_as_the_segments_
     hub = build_hub(tmp_path)
     _seed_chunk(hub)
     store = TranscriptSegmentStore(hub_store_connections(hub.engine))
-    service = TranscriptIngestService(store=store, clock=hub.clock)
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=hub.clock)
     big = "x" * (RECORD_MAX_BYTES + 1)
 
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])
@@ -381,6 +391,14 @@ def _conforms_fake_transcript_store(x: _FakeTranscriptStore) -> IWriteTranscript
     return x
 
 
+class _NoRunners:
+    def get_runner(self, runner_id: str) -> None:
+        return None
+
+
+_NO_RETIREMENTS = RetiredRunnerGuard(registry=cast(IReadRunnerRegistry, _NoRunners()))
+
+
 class _FixedClock:
     def __init__(self, now: datetime) -> None:
         self._now = now
@@ -391,7 +409,7 @@ class _FixedClock:
 
 def test_stored_bytes_count_toward_both_caps_rejected_bytes_toward_the_daily_rate_only() -> None:
     store = _FakeTranscriptStore()
-    service = TranscriptIngestService(store=store, clock=_FixedClock(_T0))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=_FixedClock(_T0))
 
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json="a" * 100)])
     assert store.accepted[0][1] == 100
@@ -409,7 +427,7 @@ def test_stored_bytes_count_toward_both_caps_rejected_bytes_toward_the_daily_rat
 
 def test_the_record_size_cap_is_adjudicated_before_the_others() -> None:
     store = _FakeTranscriptStore()
-    service = TranscriptIngestService(store=store, clock=_FixedClock(_T0))
+    service = TranscriptIngestService(retired=_NO_RETIREMENTS, store=store, clock=_FixedClock(_T0))
     big = "x" * (RECORD_MAX_BYTES + 1)
 
     service.ingest("r1", [_record(1, turn_range_start=0, turn_range_end=0, turns_json=big)])

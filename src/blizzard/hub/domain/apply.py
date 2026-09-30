@@ -36,6 +36,7 @@ from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Graph, Node
 from blizzard.hub.domain.produces_auth import Produces
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
 from blizzard.hub.domain.proposals import WorkItemProposalRow
+from blizzard.hub.domain.registry import RetiredRunnerGuard
 from blizzard.hub.domain.route_auth import RouteToken
 from blizzard.hub.domain.work import (
     Chunk,
@@ -178,6 +179,7 @@ class ApplyService:
         escalations: IWriteChunkEscalationsRepository,
         route: IReadChunkRouteRepository,
         artifacts: IReadChunkArtifactsRepository,
+        retired: RetiredRunnerGuard,
         clock: IClock,
         hub_node_executor: HubNodeExecutor,
     ) -> None:
@@ -187,6 +189,7 @@ class ApplyService:
         self._escalations = escalations
         self._route = route
         self._artifacts = artifacts
+        self._retired = retired
         self._clock = clock
         self._hub_node_executor = hub_node_executor
 
@@ -207,6 +210,7 @@ class ApplyService:
         ``target_graph`` (#90), ``intended_target_graph`` (#124), and ``follow_latest_graph``
         (#164) all arrive pre-resolved — ``None`` meaning "names no enabled graph" — so this
         holds no graph repo of its own (``bzh:domain-takes-objects``)."""
+        self._retired.refuse_if_retired(submission.runner_id, action="completion")
         facts = self._facts.load_facts(chunk.chunk_id)
         if facts is None:
             return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")

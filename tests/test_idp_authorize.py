@@ -203,24 +203,31 @@ def test_rotate_signing_key_rotates_the_published_jwks(tmp_path: Path) -> None:
     assert before <= after
 
 
-def test_authorize_treats_a_retired_runner_as_an_unknown_client(tmp_path: Path) -> None:
+def test_authorize_refuses_a_retired_runner_distinctly_only_past_the_redirect_match(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH)
     _register_runner(hub)
     user = seed_user(hub, username="alice", role=Role.CONTRIBUTOR, email="alice@example.com")
     hub.client.cookies.set("bz_session", seed_session(hub, user))
-    redirect_uri = _DEFAULT_REDIRECT_URIS[0]
+    registered = _DEFAULT_REDIRECT_URIS[0]
 
-    def authorize(client: str) -> tuple[int, dict]:
+    def authorize(client: str, redirect_uri: str = registered) -> tuple[int, dict]:
         resp = hub.client.get(
             "/api/auth/authorize",
             params={"client": client, "redirect_uri": redirect_uri, "state": "s"},
             follow_redirects=False,
         )
-        return resp.status_code, resp.json() if resp.status_code == 400 else {}
+        return resp.status_code, resp.json() if resp.status_code in (400, 403) else {}
 
-    assert authorize("runner-a")[0] != 400
+    assert authorize("runner-a")[0] not in (400, 403)
     writer = cast(IWriteRunnerRegistry, hub.services.registry)
     writer.record_lifecycle("runner-a", retired=True, at=hub.clock.now(), by="op")
 
-    assert authorize("runner-a") == authorize("no-such-runner")
-    assert authorize("runner-a")[0] == 400
+    status_code, body = authorize("runner-a")
+    assert status_code == 403
+    assert "retired" in body["detail"]
+    unknown = authorize("no-such-runner")
+    assert unknown[0] == 400
+    assert authorize("runner-a", "https://elsewhere.example/cb") == unknown
+
+    writer.record_lifecycle("runner-a", retired=False, at=hub.clock.now(), by="op")
+    assert authorize("runner-a")[0] not in (400, 403)

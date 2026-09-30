@@ -14475,7 +14475,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/completions": {
       "post": {
-        "description": "Apply a node-step's completion atomically; reply carries the next envelope.",
+        "description": "Apply a node-step's completion atomically; reply carries the next envelope; 403 when the\nsubmitting runner is retired.",
         "operationId": "submit_completion_api_fleet_chunks__chunk_id__completions_post",
         "parameters": [
           {
@@ -14528,7 +14528,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/decisions": {
       "post": {
-        "description": "Runner-config gate: park the chunk on a decision in place of a transition.",
+        "description": "Runner-config gate: park the chunk on a decision in place of a transition; 403 when the\nsubmitting runner is retired.",
         "operationId": "submit_decision_api_fleet_chunks__chunk_id__decisions_post",
         "parameters": [
           {
@@ -14624,7 +14624,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/escalations": {
       "post": {
-        "description": "Land a runner's ``escalation.recorded`` \u2014 the chunk derives ``needs_human``.",
+        "description": "Land a runner's ``escalation.recorded`` \u2014 the chunk derives ``needs_human``; 403 when retired.",
         "operationId": "report_escalation_api_fleet_chunks__chunk_id__escalations_post",
         "parameters": [
           {
@@ -14926,7 +14926,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/leases": {
       "post": {
-        "description": "Land a runner's ``lease.minted`` \u2014 keeps the epoch fence in lockstep.",
+        "description": "Land a runner's ``lease.minted`` \u2014 keeps the epoch fence in lockstep; 403 when retired.",
         "operationId": "report_lease_api_fleet_chunks__chunk_id__leases_post",
         "parameters": [
           {
@@ -15113,7 +15113,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/route-token": {
       "post": {
-        "description": "Rotate the chunk's live route capability token \u2014 the lost-plaintext recovery for a\nclaim whose response was never read back. Confined to the live route's own runner; this route\npresents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting.",
+        "description": "Rotate the chunk's live route capability token \u2014 the lost-plaintext recovery for a\nclaim whose response was never read back. Confined to the live route's own runner; this route\npresents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting. 403\nwhen the route's runner is retired.",
         "operationId": "rekey_route_token_api_fleet_chunks__chunk_id__route_token_post",
         "parameters": [
           {
@@ -15260,7 +15260,7 @@
     },
     "/api/fleet/events": {
       "post": {
-        "description": "Land runner-minted facts \u2014 idempotent on the batch's per-runner ``seq`` high-water mark,\nwith each freshly-applied fact re-broadcast on the SSE stream.",
+        "description": "Land runner-minted facts \u2014 idempotent on the batch's per-runner ``seq`` high-water mark,\nwith each freshly-applied fact re-broadcast on the SSE stream; 403 when the runner is retired.",
         "operationId": "ingest_runner_facts_api_fleet_events_post",
         "requestBody": {
           "content": {
@@ -15491,7 +15491,7 @@
     },
     "/api/fleet/runners/{runner_id}": {
       "get": {
-        "description": "One runner's declarative state \u2014 the runner's own pull read.",
+        "description": "One runner's declarative state \u2014 the runner's own pull read; 403 when retired.",
         "operationId": "get_runner_api_fleet_runners__runner_id__get",
         "parameters": [
           {
@@ -15687,7 +15687,7 @@
     },
     "/api/fleet/transcripts": {
       "post": {
-        "description": "Land the runner's batched transcript records \u2014 the transcript lane's own\nstore-and-forward push, distinct from the fact lane at ``POST /api/fleet/events``.",
+        "description": "Land the runner's batched transcript records \u2014 the transcript lane's own\nstore-and-forward push, distinct from the fact lane at ``POST /api/fleet/events``; 403 when the\nrunner is retired.",
         "operationId": "ingest_transcript_segments_api_fleet_transcripts_post",
         "requestBody": {
           "content": {
