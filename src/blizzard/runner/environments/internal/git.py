@@ -1,8 +1,9 @@
-"""Git reset-on-acquire plumbing for the winter binding (package-private).
+"""Git plumbing shared by the workspace bindings (package-private).
 
-Removes the previous tenant's **untracked** files — the one reset step winter has no verb
-for. ``-fd``, not ``-fdx``: ignored files stay, since the dependency trees they hold cost more
-to rebuild than the tick allows (tests/test_pin_runner_misc.py). ``subprocess`` is confined here.
+The winter binding's reset-on-acquire removes the previous tenant's **untracked** files — the
+one reset step winter has no verb for. ``-fd``, not ``-fdx``: ignored files stay, since the
+dependency trees they hold cost more to rebuild than the tick allows
+(tests/test_pin_runner_misc.py). ``subprocess`` is confined here.
 """
 
 from __future__ import annotations
@@ -20,11 +21,14 @@ ENV_GIT_TIMEOUT = 60
 
 
 class EnvGitError(RuntimeError):
-    """A git reset-on-acquire operation failed."""
+    """A git operation the workspace bindings drive failed."""
 
 
 class SubprocessEnvGit:
-    """Remove untracked files from each repo worktree in a feature env."""
+    """Run git for the workspace bindings: clean untracked files, read an origin, or capture any call."""
+
+    def __init__(self, timeout: float = ENV_GIT_TIMEOUT) -> None:
+        self._timeout = timeout
 
     def clean_environment(self, env_workdir: Path) -> None:
         """``git clean -fd`` every repo worktree under ``env_workdir``."""
@@ -40,21 +44,21 @@ class SubprocessEnvGit:
         Git walks *up* from cwd to find an enclosing repository, so standing anywhere else
         yields a plausible-looking URL for another repo (tests/test_pin_runner_misc.py).
         """
-        return self._capture(repo_workdir, "remote", "get-url", "origin").strip()
+        return self.capture(repo_workdir, "remote", "get-url", "origin").strip()
 
     def _git(self, cwd: Path, *args: str) -> None:
-        self._capture(cwd, *args)
+        self.capture(cwd, *args)
 
-    def _capture(self, cwd: Path, *args: str) -> str:
+    def capture(self, cwd: Path, *args: str) -> str:
         try:
             result = subprocess.run(
-                ["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=ENV_GIT_TIMEOUT
+                ["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=self._timeout
             )
         except subprocess.TimeoutExpired as exc:
-            _log.error("git reset step timed out", args=list(args), cwd=str(cwd), timeout=ENV_GIT_TIMEOUT)
-            raise EnvGitError(f"git {' '.join(args)} timed out in {cwd} after {ENV_GIT_TIMEOUT}s") from exc
+            _log.error("git command timed out", args=list(args), cwd=str(cwd), timeout=self._timeout)
+            raise EnvGitError(f"git {' '.join(args)} timed out in {cwd} after {self._timeout}s") from exc
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
-            _log.error("git reset step failed", args=list(args), cwd=str(cwd), detail=detail)
+            _log.error("git command failed", args=list(args), cwd=str(cwd), detail=detail)
             raise EnvGitError(f"git {' '.join(args)} failed in {cwd}: {detail}")
         return result.stdout

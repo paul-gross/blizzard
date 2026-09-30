@@ -10,6 +10,7 @@ import pytest
 from blizzard.runner.config import RunnerConfig, WorkspaceRepo
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
+from blizzard.runner.environments.internal.git import EnvGitError
 from blizzard.runner.environments.provider import EnvironmentPreparationError, WorkspaceAcquisitionError
 from blizzard.runner.runtime import init_environment
 
@@ -207,3 +208,28 @@ def test_failed_clone_does_not_leave_a_partial_environment(tmp_path: Path) -> No
     assert caught.value.step == "git-worktree"
     assert not (workspace / "chunk").exists()
     assert not (workspace / "chunk--2").exists()
+
+
+_INJECTED_URL = "file:///toy.git"
+
+
+class _FailingGit:
+    """A git double that reports the expected origin, then fails `fetch` — the mid-preparation failure."""
+
+    def capture(self, cwd: Path, *args: str) -> str:
+        if args[0] == "fetch":
+            raise EnvGitError("git fetch failed: injected")
+        return _INJECTED_URL
+
+
+@pytest.mark.component
+def test_an_injected_git_failure_mid_preparation_leaves_no_partial_environment(tmp_path: Path) -> None:
+    workspace = tmp_path / "ordinary"
+    (workspace / "projects" / "toy" / ".git").mkdir(parents=True)
+    repo = WorkspaceRepo("toy", _INJECTED_URL)
+    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,), git=_FailingGit())
+    with pytest.raises(EnvironmentPreparationError) as caught:
+        provider.acquire("chunk", 1, [])
+    assert caught.value.step == "git-worktree"
+    assert "injected" in str(caught.value)
+    assert not (workspace / "chunk").exists()

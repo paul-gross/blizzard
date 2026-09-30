@@ -6,8 +6,6 @@ directly."""
 
 from __future__ import annotations
 
-import time
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import httpx
@@ -15,6 +13,7 @@ import structlog
 from fastapi import Request, status
 from fastapi.exceptions import HTTPException
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.config import RunnerConfig
@@ -31,9 +30,6 @@ _RETRYABLE_STATUSES = frozenset(
 )
 # Bounded backoff between retries — the last value repeats for any retry past it.
 _RETRY_BACKOFF_SECONDS: tuple[float, ...] = (0.5, 1.0, 2.0, 4.0, 8.0)
-# A hard cap on retry *count*, independent of the elapsed-time budget: a delay double that
-# never advances time (a test's recording no-op included) must not spin this loop forever.
-_MAX_RETRIES = len(_RETRY_BACKOFF_SECONDS)
 
 
 def _backoff(retries_so_far: int) -> float:
@@ -47,7 +43,7 @@ class HubProxy:
     config: RunnerConfig
     what: str
     client: httpx.Client
-    delay: Callable[[float], None]
+    clock: IMonotonicClock
 
     @classmethod
     def of(cls, request: Request, what: str) -> HubProxy:
@@ -60,7 +56,7 @@ class HubProxy:
                 detail="runner not wired to a hub — start via `blizzard runner host`",
             )
         wiring = RunnerWiring.of(request)
-        return cls(config, what, wiring.hub_proxy_client(), wiring.hub_retry_delay())
+        return cls(config, what, wiring.hub_proxy_client(), wiring.hub_retry_clock())
 
     def get(
         self,
@@ -112,13 +108,13 @@ class HubProxy:
         url = f"{self.config.hub_url.rstrip('/')}{path}"
         retryable = method == "GET"
         budget = timeout if timeout is not None else (_HUB_RETRY_CEILING if retryable else _HUB_TIMEOUT)
-        started = time.monotonic()
+        started = self.clock.monotonic()
         retries = 0
         while True:
             # The first attempt gets exactly `budget` (clamped to the per-attempt bound) —
             # a caller-supplied `timeout` must land on the wire unchanged, not shaved by the
             # cost of reading the clock. Only a retry's attempt is drawn from what is left.
-            remaining = budget if retries == 0 else budget - (time.monotonic() - started)
+            remaining = budget if retries == 0 else budget - (self.clock.monotonic() - started)
             attempt_timeout = max(min(_HUB_TIMEOUT, remaining), 0.001) if retryable else budget
             try:
                 upstream = self.client.request(
@@ -126,7 +122,7 @@ class HubProxy:
                 )
             except httpx.HTTPError as exc:
                 if retryable and self._may_retry(retries, budget, started):
-                    self.delay(_backoff(retries))
+                    self.clock.sleep(_backoff(retries))
                     retries += 1
                     continue
                 log = getattr(self._log(), severity)
@@ -142,17 +138,16 @@ class HubProxy:
                 raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
 
             if self._may_retry(retries, budget, started):
-                self.delay(_backoff(retries))
+                self.clock.sleep(_backoff(retries))
                 retries += 1
                 continue
             raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
 
-    @staticmethod
-    def _may_retry(retries: int, budget: float, started: float) -> bool:
-        """Whether one more attempt is worth scheduling: under the retry-count cap, and the
-        *whole* next backoff — not merely some slack — still lands inside the budget, since
-        the delay itself is never charged against the elapsed time it gates."""
-        return retries < _MAX_RETRIES and budget - (time.monotonic() - started) > _backoff(retries)
+    def _may_retry(self, retries: int, budget: float, started: float) -> bool:
+        """Whether one more attempt is worth scheduling: the *whole* next backoff — not
+        merely some slack — still lands inside the budget, since the delay itself is never
+        charged against the elapsed time it gates."""
+        return budget - (self.clock.monotonic() - started) > _backoff(retries)
 
     def _log(self) -> structlog.stdlib.BoundLogger:
         # The route module's own logger — `what` is its module name in hyphens.

@@ -152,7 +152,9 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path, 
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
         probes={
             CLAUDE_CODE_HARNESS_ID: _HealthyWithDegradationProbe(),
-            OPENCODE_HARNESS_ID: OpenCodeHealthProbe(binary=config.opencode_binary, corpus_root=tmp_path),
+            OPENCODE_HARNESS_ID: OpenCodeHealthProbe(
+                binary=config.opencode_binary, auth_path=None, corpus_root=tmp_path
+            ),
         },
         selftest_results=None,
     )
@@ -192,7 +194,7 @@ def test_admitted_range_surfaces_per_binding(tmp_path: Path, spawn_executor: Exe
         clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
         probes={
             CLAUDE_CODE_HARNESS_ID: ClaudeCodeHealthProbe(binary=config.harness_binary),
-            OPENCODE_HARNESS_ID: OpenCodeHealthProbe(binary=config.opencode_binary),
+            OPENCODE_HARNESS_ID: OpenCodeHealthProbe(binary=config.opencode_binary, auth_path=None),
         },
         selftest_results=None,
     )

@@ -273,6 +273,7 @@ def _probe(
             compactor=compactor if compactor is not None else _FakeCompactor(),
             transport=transport,
             attach_proxy_factory=LoopbackAttachProxyFactory(transport),
+            auth_source=None,
             allow_live_provider=True,
             timeout_seconds=timeout_seconds,
         ),

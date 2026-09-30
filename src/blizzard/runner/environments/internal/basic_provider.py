@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import subprocess
 from collections.abc import Callable, Sequence
 from contextlib import suppress
 from pathlib import Path
+from typing import Protocol
 
 from blizzard.runner.config import WorkspaceRepo
+from blizzard.runner.environments.internal.git import EnvGitError, SubprocessEnvGit
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -22,6 +23,15 @@ from blizzard.runner.environments.provider import (
 _MANAGED = ".blizzard-basic-env"
 _ACTIVE = ".blizzard-active"
 _REPOS_DIR = ".blizzard-manifests"
+# A first `git clone` of a large repo dwarfs the reset bound, and a timeout there would be a
+# permanent preparation failure.
+_CLONE_TIMEOUT = 300
+
+
+class _CaptureGit(Protocol):
+    """The git sub-seam the provider drives (the real subprocess, or a test fake)."""
+
+    def capture(self, cwd: Path, *args: str) -> str: ...
 
 
 class BasicWorkspaceProvider:
@@ -39,16 +49,17 @@ class BasicWorkspaceProvider:
         max_environments: int = 10,
         base_branch: str = "main",
         held_ids: Callable[[], list[str]] | None = None,
+        git: _CaptureGit | None = None,
     ) -> None:
         self._root = Path(workspace_root).resolve()
         self._repos = tuple(repos)
         self._cap = max_environments
         self._branch = base_branch
         self._held_ids = held_ids
+        self._run_git = git if git is not None else SubprocessEnvGit(timeout=_CLONE_TIMEOUT)
 
     def _git(self, cwd: Path, *args: str) -> str:
-        result = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True)
-        return result.stdout.strip()
+        return self._run_git.capture(cwd, *args).strip()
 
     def _environments(self) -> list[Path]:
         if not self._root.exists():
@@ -135,11 +146,11 @@ class BasicWorkspaceProvider:
             for env in selected:
                 (env / _ACTIVE).touch()
             return acquired
-        except (OSError, subprocess.CalledProcessError, WorkspaceAcquisitionError) as exc:
+        except (OSError, EnvGitError, WorkspaceAcquisitionError) as exc:
             for env in selected:
                 if (env / _MANAGED).exists():
                     # Preserve the preparation failure even if cleanup cannot finish.
-                    with suppress(OSError, subprocess.CalledProcessError):
+                    with suppress(OSError, EnvGitError):
                         self._remove(env)
             failing = selected[len(acquired)] if len(acquired) < len(selected) else self._root
             raise EnvironmentPreparationError(

@@ -145,6 +145,7 @@ class OpenCodeCompatibilityProbe:
         compactor: IOpenCodeCompactor,
         transport: ILoopbackTransport,
         attach_proxy_factory: IAttachProxyFactory,
+        auth_source: Path | None,
         allow_live_provider: bool = False,
         timeout_seconds: float = DEFAULT_COMMAND_TIMEOUT_SECONDS,
     ) -> None:
@@ -181,6 +182,7 @@ class OpenCodeCompatibilityProbe:
         self._compactor = compactor
         self._transport = transport
         self._attach_proxy_factory = attach_proxy_factory
+        self._auth_source = auth_source
         self._timeout_seconds = timeout_seconds
         self.admitted_range = ADMITTED_OPENCODE_RANGE_DISPLAY
         self.observed_version = "unknown"
@@ -256,7 +258,7 @@ class OpenCodeCompatibilityProbe:
                     )
                     return self._ordered_observations(observations)
 
-                if provision_disposable_auth(roots):
+                if provision_disposable_auth(roots, self._auth_source):
                     xdg = self._evidence["xdg"]
                     assert isinstance(xdg, dict)
                     xdg["auth_provisioned"] = True

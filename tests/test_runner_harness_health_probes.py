@@ -32,7 +32,7 @@ def _manifest() -> dict:
 
 
 def test_opencode_health_probe_declares_the_pinned_versions_absences() -> None:
-    probe = OpenCodeHealthProbe("opencode")
+    probe = OpenCodeHealthProbe("opencode", auth_path=None)
 
     manifest = _manifest()
     assert probe.supported_version() == ADMITTED_OPENCODE_RANGE
@@ -69,7 +69,7 @@ def test_opencode_health_probe_construction_survives_a_missing_corpus_manifest(t
     binding's real declared range (the packaging defect is a corpus problem, not a
     declaration problem); ``declared_degradations`` reads as empty since there is no
     manifest anywhere under ``corpus_root`` to read one from."""
-    probe = OpenCodeHealthProbe("opencode", corpus_root=tmp_path)
+    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus_root=tmp_path)
 
     assert probe.supported_version() == ADMITTED_OPENCODE_RANGE
     assert probe.declared_degradations() == ()
@@ -80,7 +80,7 @@ def test_opencode_health_probe_declared_degradations_come_from_the_corpus_manife
     manifest, never a hardcoded Python literal describing only one
     version — proven here by reading straight from the real, committed corpus root, the
     same one construction defaults to."""
-    probe = OpenCodeHealthProbe("opencode", corpus_root=DEFAULT_CORPUS_ROOT)
+    probe = OpenCodeHealthProbe("opencode", auth_path=None, corpus_root=DEFAULT_CORPUS_ROOT)
 
     manifest = _manifest()
     manifest_degradations = {(entry["probe"], entry["summary"]) for entry in manifest["declared_degradations"]}

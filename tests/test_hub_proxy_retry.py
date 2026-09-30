@@ -2,9 +2,8 @@
 
 Unit-tier: ``HubProxy`` is built directly (no app, no store), its ``client`` a real
 ``httpx.Client`` over ``httpx.MockTransport`` so every response is scripted with no
-socket, and its ``delay`` a recording no-op so no test sleeps — the retry-count cap
-(``_MAX_RETRIES``) bounds every scenario here to a handful of near-instant attempts
-regardless of the elapsed-time budget, since nothing here ever really waits."""
+socket, and its ``clock`` a ``ManualMonotonicClock`` whose sleeps advance its own reading —
+so no test really waits, and the elapsed-time budget alone ends every retrying scenario."""
 
 from __future__ import annotations
 
@@ -15,31 +14,22 @@ import pytest
 from fastapi.exceptions import HTTPException
 from structlog.testing import capture_logs
 
-from blizzard.runner.api import hub_proxy as hub_proxy_module
-from blizzard.runner.api.hub_proxy import _RETRY_BACKOFF_SECONDS, HubProxy
+from blizzard.foundation.clock import ManualMonotonicClock
+from blizzard.runner.api.hub_proxy import _HUB_RETRY_CEILING, _RETRY_BACKOFF_SECONDS, HubProxy
 from blizzard.runner.config import RunnerConfig
 
 _HUB_URL = "http://hub.local:8421"
 
 
-def _recording_delay() -> tuple[list[float], object]:
-    seen: list[float] = []
-
-    def delay(seconds: float) -> None:
-        seen.append(seconds)
-
-    return seen, delay
-
-
-def _proxy(tmp_path: Path, client: httpx.Client, *, delay: object = lambda seconds: None) -> HubProxy:
+def _proxy(tmp_path: Path, client: httpx.Client, clock: ManualMonotonicClock) -> HubProxy:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
-    return HubProxy(config, "test", client, delay)  # type: ignore[arg-type]
+    return HubProxy(config, "test", client, clock)
 
 
 @pytest.mark.unit
 def test_a_transport_error_then_a_gateway_502_then_a_success_returns_the_success(tmp_path: Path) -> None:
     """The scripted restart window: a connection refused, then a `502` mid-swap, then the
-    hub answers — every delay between them comes from the injected callable, not a real
+    hub answers — every delay between them comes from the injected clock, not a real
     sleep, and the eventual response is the success, not any of the failures."""
     calls: list[str] = []
 
@@ -51,15 +41,15 @@ def test_a_transport_error_then_a_gateway_502_then_a_success_returns_the_success
             return httpx.Response(502, json={"detail": "bad gateway"})
         return httpx.Response(200, json={"ok": True})
 
-    seen_delays, delay = _recording_delay()
-    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), delay=delay)
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
 
     resp = proxy.get("/api/fleet/chunks/ch_1")
 
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
     assert len(calls) == 3
-    assert seen_delays == [_RETRY_BACKOFF_SECONDS[0], _RETRY_BACKOFF_SECONDS[1]]
+    assert clock.delays == [_RETRY_BACKOFF_SECONDS[0], _RETRY_BACKOFF_SECONDS[1]]
 
 
 @pytest.mark.unit
@@ -72,8 +62,8 @@ def test_a_persistent_transport_error_exhausts_and_raises_todays_502(tmp_path: P
         calls.append(request.method)
         raise httpx.ConnectError("connection refused")
 
-    _, delay = _recording_delay()
-    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), delay=delay)
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
 
     with pytest.raises(HTTPException) as excinfo:
         proxy.get("/api/fleet/chunks/ch_1")
@@ -93,8 +83,8 @@ def test_a_persistent_gateway_status_exhausts_and_raises_the_upstream_status_and
         calls.append(request.method)
         return httpx.Response(503, json={"detail": "hub restarting"})
 
-    _, delay = _recording_delay()
-    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), delay=delay)
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
 
     with pytest.raises(HTTPException) as excinfo:
         proxy.get("/api/fleet/chunks/ch_1")
@@ -114,8 +104,8 @@ def test_a_post_is_never_retried_on_any_status(tmp_path: Path) -> None:
         calls.append(request.method)
         return httpx.Response(502, json={"detail": "bad gateway"})
 
-    _, delay = _recording_delay()
-    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), delay=delay)
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
 
     with pytest.raises(HTTPException) as excinfo:
         proxy.post("/api/fleet/chunks/ch_1/pause")
@@ -134,8 +124,8 @@ def test_a_non_gateway_status_on_a_get_raises_on_the_first_response(tmp_path: Pa
         calls.append(request.method)
         return httpx.Response(404, json={"detail": "unknown chunk"})
 
-    _, delay = _recording_delay()
-    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), delay=delay)
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
 
     with pytest.raises(HTTPException) as excinfo:
         proxy.get("/api/fleet/chunks/ch_1")
@@ -156,8 +146,8 @@ def test_a_recovered_forward_logs_once_below_error_distinct_from_a_failed_one(tm
             raise httpx.ConnectError("connection refused")
         return httpx.Response(200, json={"ok": True})
 
-    _, delay = _recording_delay()
-    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), delay=delay)
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
 
     with capture_logs() as logs:
         resp = proxy.get("/api/fleet/chunks/ch_1")
@@ -176,8 +166,8 @@ def test_an_exhausted_forwards_log_line_is_unchanged_in_level_and_fields(tmp_pat
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
-    _, delay = _recording_delay()
-    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), delay=delay)
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
 
     with capture_logs() as logs, pytest.raises(HTTPException):
         proxy.get("/api/fleet/chunks/ch_1", severity="warning", subject="ch_1")
@@ -190,40 +180,81 @@ def test_an_exhausted_forwards_log_line_is_unchanged_in_level_and_fields(tmp_pat
 
 
 @pytest.mark.unit
-def test_a_retry_is_not_scheduled_when_its_backoff_would_overrun_the_budget(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_retry_is_not_scheduled_when_its_backoff_would_overrun_the_budget(tmp_path: Path) -> None:
     """A retry is only scheduled when its *whole* backoff still lands inside the budget —
-    gating on any positive remainder (as an earlier version of this loop did) let a backoff
-    committed on a sliver of budget carry real elapsed time past the ceiling before the next
-    attempt ever fired, since the delay itself was never charged against the check that
-    authorized it. Here a fake clock advances by exactly the delay it is asked for — the
-    same relationship ``time.sleep`` has to ``time.monotonic()`` in production — so the
-    scenario is reproduced without a real wall-clock wait."""
-    clock = [0.0]
-    monkeypatch.setattr(hub_proxy_module.time, "monotonic", lambda: clock[0])
-
-    seen_delays: list[float] = []
-
-    def delay(seconds: float) -> None:
-        seen_delays.append(seconds)
-        clock[0] += seconds
+    gating on any positive remainder let a backoff committed on a sliver of budget carry
+    real elapsed time past the ceiling before the next attempt ever fired, since the delay
+    itself was never charged against the check that authorized it."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
-    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), delay=delay)
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
 
     # Budget 8.0s against the real backoff schedule (0.5, 1.0, 2.0, 4.0, 8.0): the fourth
     # backoff (4.0s) still fits (4.5s remaining), but the fifth (8.0s) does not (0.5s
-    # remaining) — the retry-count cap alone would still permit it.
+    # remaining).
     with pytest.raises(HTTPException) as excinfo:
         proxy.get("/api/fleet/chunks/ch_1", timeout=8.0)
 
     assert excinfo.value.status_code == 502
-    assert seen_delays == list(_RETRY_BACKOFF_SECONDS[:4])
-    assert sum(seen_delays) <= 8.0
-    assert clock[0] <= 8.0
+    assert clock.delays == list(_RETRY_BACKOFF_SECONDS[:4])
+    assert clock.reading <= 8.0
+
+
+@pytest.mark.unit
+def test_the_exhausted_schedule_under_the_default_ceiling_is_bounded_by_the_budget_alone(tmp_path: Path) -> None:
+    """With instantaneous attempts, the default ceiling admits every backoff that fits —
+    the last value repeating — and no count cap ends it early."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
+
+    with pytest.raises(HTTPException):
+        proxy.get("/api/fleet/chunks/ch_1")
+
+    assert clock.delays == [0.5, 1.0, 2.0, 4.0, 8.0, 8.0]
+    assert clock.reading <= _HUB_RETRY_CEILING
+
+
+@pytest.mark.unit
+def test_a_caller_supplied_timeout_permitting_fewer_retries_ends_the_schedule_sooner(tmp_path: Path) -> None:
+    """A narrower caller budget cuts the schedule at the first backoff that no longer fits."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
+
+    with pytest.raises(HTTPException):
+        proxy.get("/api/fleet/chunks/ch_1", timeout=2.0)
+
+    assert clock.delays == [0.5, 1.0]
+
+
+@pytest.mark.unit
+def test_an_attempt_that_consumes_budget_cuts_the_schedule_short(tmp_path: Path) -> None:
+    """Time an attempt itself spends counts against the budget: a transport that burns
+    6s per attempt leaves room for one backoff, not the whole schedule."""
+    clock = ManualMonotonicClock()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        clock.advance(6.0)
+        raise httpx.ConnectError("connection refused")
+
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
+
+    with pytest.raises(HTTPException):
+        proxy.get("/api/fleet/chunks/ch_1", timeout=10.0)
+
+    # 6s elapsed after attempt one: 4s left > 0.5 backoff. After the delay and attempt two,
+    # 12.5s elapsed: nothing left.
+    assert clock.delays == [0.5]
 
 
 @pytest.mark.unit
@@ -237,8 +268,8 @@ def test_a_caller_supplied_timeout_caps_every_attempt_and_the_whole_forward(tmp_
         seen_timeouts.append(request.extensions["timeout"]["pool"])
         raise httpx.ConnectError("connection refused")
 
-    _, delay = _recording_delay()
-    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), delay=delay)
+    clock = ManualMonotonicClock()
+    proxy = _proxy(tmp_path, httpx.Client(transport=httpx.MockTransport(handler)), clock)
 
     with pytest.raises(HTTPException) as excinfo:
         proxy.get("/api/fleet/chunks/ch_1", timeout=3.0)

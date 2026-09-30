@@ -33,14 +33,14 @@ def test_opencode_probe_authentication_shells_out_to_the_real_binary_and_reads_i
     mock_opencode = require_opencode_cli_surface(bin_dir)
     auth_path = tmp_path / "opencode" / "auth.json"
 
-    probe = OpenCodeHealthProbe(str(mock_opencode), auth_path=str(auth_path))
+    probe = OpenCodeHealthProbe(str(mock_opencode), auth_path=auth_path)
     assert probe.probe_authentication() is False  # the binary responds, but no credential file exists yet
 
     auth_path.parent.mkdir(parents=True, exist_ok=True)
     auth_path.write_text(json.dumps({"anthropic": {"type": "oauth"}}))
     assert probe.probe_authentication() is True
 
-    unreachable = OpenCodeHealthProbe(str(tmp_path / "no-such-binary"), auth_path=str(auth_path))
+    unreachable = OpenCodeHealthProbe(str(tmp_path / "no-such-binary"), auth_path=auth_path)
     assert unreachable.probe_authentication() is False  # a credential file alone is not enough
 
 
