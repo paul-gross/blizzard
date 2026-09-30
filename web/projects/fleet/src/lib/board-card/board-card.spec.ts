@@ -217,3 +217,33 @@ describe('BoardCardComponent blocked marking (issue #461)', () => {
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('build');
   });
 });
+
+describe('BoardCardComponent delivery block', () => {
+  const PR = { repo: 'widget', number: 42, url: 'https://forge.example/widget/pull/42' };
+  const LANDED = { repo: 'service', commit_hash: 'abc123', url: 'https://forge.example/service/commit/abc123' };
+
+  it('shows only the open PR link on a delivering chunk, never a landed hash', async () => {
+    const el = await render({ ...BASE, status: 'delivering', node: 'deliver', openPrs: [PR], landedRepos: [LANDED] });
+
+    expect(el.querySelector('[data-testid="card-pr-link"]')?.textContent).toContain('widget PR #42');
+    expect(el.querySelector('[data-testid="card-landed-link"]')).toBeNull();
+    expect(el.querySelector('[data-testid="card-landed-text"]')).toBeNull();
+  });
+
+  it('shows no delivery block on a landed done-lane chunk', async () => {
+    const el = await render({ ...BASE, status: 'done', landedRepos: [LANDED] });
+
+    expect(el.querySelector('[data-testid="card-delivery"]')).toBeNull();
+  });
+
+  it('shows no delivery block on a stopped chunk whose PR is still open', async () => {
+    const el = await render({ ...BASE, status: 'stopped', openPrs: [PR] });
+
+    expect(el.querySelector('[data-testid="card-delivery"]')).toBeNull();
+  });
+
+  it('shows the open PR link in the needs-human lane', async () => {
+    const needs = await render({ ...BASE, status: 'needs_human', openPrs: [PR] });
+    expect(needs.querySelector('[data-testid="card-pr-link"]')).not.toBeNull();
+  });
+});

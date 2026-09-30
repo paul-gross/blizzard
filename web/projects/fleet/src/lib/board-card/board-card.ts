@@ -104,6 +104,17 @@ export class BoardCardComponent {
     return STATUS_LANE[status] === 'done';
   }
 
+  /** Whether the card renders its delivery block: only in the lanes where a chunk's delivery is
+   * in flight (RUNNING, WAIT/HUMAN, NEEDS HUMAN), and only when there is an open PR to link or a
+   * merge to await. Landed commits never show here — the chunk detail owns the full history. */
+  protected showsDelivery(card: BoardCard): boolean {
+    const lane = STATUS_LANE[card.status];
+    return (
+      (lane === 'running' || lane === 'waiting' || lane === 'needs') &&
+      !!(card.openPrs?.length || card.awaitingExternalMerge)
+    );
+  }
+
   /** The upper-right node slot's label — {@link BoardCard.node} for every status
    * except `stopped`, which shows the status word instead: a stopped chunk's
    * last-active node name (e.g. "deliver") read as unhelpful noise next to
