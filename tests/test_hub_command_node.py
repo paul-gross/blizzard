@@ -1571,6 +1571,51 @@ def test_delivery_falls_back_to_the_bare_name_for_an_origin_that_names_no_owner(
     assert _commits_in(env) == [{"repo": "toy-api", "branch": "feat/x", "commit": "a" * 40}]
 
 
+def test_the_same_name_under_two_owners_stays_two_repositories() -> None:
+    """Production rows carry the bare manifest name in ``repo`` and the origin in ``forge``;
+    identity is read from the origin, so neither owner's pointer merges into or supersedes
+    the other's — at one epoch or across epochs."""
+    at_one_epoch = _env_with(
+        [
+            _commit_row(
+                node_name="build", epoch=1, commit="a" * 40, repo="widget", forge="https://github.com/owner-a/widget"
+            ),
+            _commit_row(
+                node_name="build", epoch=1, commit="b" * 40, repo="widget", forge="https://github.com/owner-b/widget"
+            ),
+        ]
+    )
+    across_epochs = _env_with(
+        [
+            _commit_row(
+                node_name="build", epoch=1, commit="a" * 40, repo="widget", forge="https://github.com/owner-a/widget"
+            ),
+            _commit_row(
+                node_name="build", epoch=2, commit="b" * 40, repo="widget", forge="https://github.com/owner-b/widget"
+            ),
+        ]
+    )
+
+    assert {c["repo"] for c in _commits_in(at_one_epoch)} == {"owner-a/widget", "owner-b/widget"}
+    assert {c["repo"] for c in _commits_in(across_epochs)} == {"owner-a/widget", "owner-b/widget"}
+
+
+def test_one_identity_declared_twice_with_different_commits_refuses_to_deliver() -> None:
+    with pytest.raises(UnconvergedDeliveryError) as exc:
+        _env_with(
+            [
+                _commit_row(
+                    node_name="build", epoch=1, commit="a" * 40, repo="widget", forge="git@github.com:acme/widget.git"
+                ),
+                _commit_row(
+                    node_name="build", epoch=1, commit="b" * 40, repo="widget", forge="https://github.com/acme/widget"
+                ),
+            ]
+        )
+
+    assert "acme/widget" in str(exc.value)
+
+
 def test_declares_git_commit_reads_the_graphs_own_intent() -> None:
     """The signal that tells a lost commit apart from one never promised. Read off the
     graph rather than the artifacts, so a code graph that produced nothing still counts

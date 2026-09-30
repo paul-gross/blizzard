@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.delivery.repo_ref import RepoRef
+from blizzard.foundation.repo_ref import RepoRef, repo_identity
 
 pytestmark = pytest.mark.unit
 
@@ -58,3 +58,18 @@ def test_returns_none_when_the_origin_names_no_owner(origin_url: str) -> None:
     organization would invent a coordinate that resolves to nothing — strictly worse than
     deferring to the configured default."""
     assert RepoRef.parse(origin_url) is None
+
+
+@pytest.mark.parametrize(
+    ("origin_url", "name", "expected"),
+    [
+        ("git@github.com:owner-a/widget.git", "widget", "owner-a/widget"),
+        ("https://github.com/owner-a/widget", "widget", "owner-a/widget"),
+        ("git@github.com:owner-b/widget.git", "widget", "owner-b/widget"),
+        ("file:///srv/repos/widget.git", "widget", "widget"),
+        (None, "widget", "widget"),
+        (None, "owner-a/widget", "owner-a/widget"),
+    ],
+)
+def test_repo_identity(origin_url: str | None, name: str, expected: str) -> None:
+    assert repo_identity(origin_url, name) == expected

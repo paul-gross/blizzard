@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.repo_ref import repo_identity
 from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationRecord
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.environments.repository import EnvBindingRecord
@@ -28,21 +29,50 @@ class DeclaredCommits:
     lease: LeaseRecord
     bindings: list[EnvBindingRecord]
     _resolved: dict[Key, GitCommitDeclarationRecord] = field(default_factory=dict)
+    _confirmed: dict[Key, SubmittedArtifact] = field(default_factory=dict)
+    _submitted: dict[str, list[SubmittedArtifact]] = field(default_factory=dict)
 
     def verify(self) -> list[SubmittedArtifact]:
         """Confirm every declaration this instance has not already resolved, in declaration
-        order. Spans **every** bound environment, since the key carries the env."""
+        order, then converge the lease's whole confirmed set by repository identity.
+
+        Spans **every** bound environment, since the key carries the env. Pointers agreeing on
+        branch and commit submit as one, named by the identity; disagreeing ones are all
+        submitted and reported — never chosen between. Only a group new or changed since the
+        last call is returned."""
         origins = self._origins()
-        artifacts: list[SubmittedArtifact] = []
+        changed = False
         for key, declared in self.ctx.stores.git_commit_declarations.git_commit_declarations_for_lease(
             self.lease.lease_id
         ).items():
             if self._resolved.get(key) == declared:
                 continue
             self._resolved[key] = declared
+            self._confirmed.pop(key, None)
             artifact = self._confirm(key, declared, origins)
             if artifact is not None:
-                artifacts.append(artifact)
+                self._confirmed[key] = artifact
+                changed = True
+        return self._converge() if changed else []
+
+    def _converge(self) -> list[SubmittedArtifact]:
+        groups: dict[str, list[tuple[Key, SubmittedArtifact]]] = {}
+        for key, artifact in self._confirmed.items():
+            groups.setdefault(artifact.name, []).append((key, artifact))
+        artifacts: list[SubmittedArtifact] = []
+        for identity, members in groups.items():
+            pointers = {(a.branch_name, a.commit_hash): a for _, a in members}
+            group = list(pointers.values())
+            if self._submitted.get(identity) == group:
+                continue
+            self._submitted[identity] = group
+            if len(group) > 1:
+                self._report(
+                    command=f"converge commit pointers for repository {identity!r}",
+                    stderr_tail="environments declare different pointers: "
+                    + "; ".join(f"{env_id!r} -> {a.branch_name}@{a.commit_hash}" for (env_id, _), a in members),
+                )
+            artifacts.extend(group)
         return artifacts
 
     def _confirm(
@@ -78,7 +108,7 @@ class DeclaredCommits:
             )
             return None
         return SubmittedArtifact(
-            name=repo,
+            name=repo_identity(origin_url, repo),
             kind=ArtifactKind.GIT_COMMIT,
             forge=origin_url,
             repo=repo,

@@ -11,7 +11,7 @@ from datetime import datetime
 
 import httpx
 
-from blizzard.hub.delivery.repo_ref import RepoRef
+from blizzard.foundation.repo_ref import RepoRef
 from blizzard.hub.domain.garden_delivery import CommitResolution
 
 
