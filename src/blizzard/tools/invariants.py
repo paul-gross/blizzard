@@ -331,7 +331,9 @@ class OneOpenPauseParkPerLease(QueryCheck):
 
     def _open_pause_parks(self) -> list[tuple[str, datetime]]:
         """The plain-query mirror of the store adapter's ``OPEN_PAUSE_PARK`` — same ``>=``
-        (a same-instant resume is a resume) and same per-lease correlation."""
+        (a same-instant resume is a resume), same per-lease correlation, and the same
+        exclusion of a closed lease's park."""
+        closed = {row[0] for row in self.conn.execute(select(runner.lease_closures.c.lease_id))}
         resumes: dict[str, list[datetime]] = {}
         for lease_id, resumed_at in self.conn.execute(
             select(runner.pause_park_resumes.c.lease_id, runner.pause_park_resumes.c.resumed_at)
@@ -342,7 +344,7 @@ class OneOpenPauseParkPerLease(QueryCheck):
             for lease_id, parked_at in self.conn.execute(
                 select(runner.pause_parks.c.lease_id, runner.pause_parks.c.parked_at)
             )
-            if not any(r >= parked_at for r in resumes.get(lease_id, ()))
+            if lease_id not in closed and not any(r >= parked_at for r in resumes.get(lease_id, ()))
         ]
 
 

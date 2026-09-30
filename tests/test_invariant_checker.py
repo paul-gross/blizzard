@@ -875,6 +875,22 @@ def test_a_repause_on_one_lease_is_not_a_violation(tmp_path: Path) -> None:
     assert RunnerInvariants(engine).run() == []
 
 
+def test_a_closed_leases_double_park_is_not_an_open_pause_park(tmp_path: Path) -> None:
+    """The checker's mirror agrees with the store predicate: a closed lease's parks are
+    closed with it, so two parks on it are no violation."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        for _ in range(2):
+            conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
+        conn.execute(
+            insert(runner.lease_closures).values(
+                lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="terminal", closed_at=_NOW
+            )
+        )
+    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    assert "runner:one-open-pause-park-per-lease" not in slugs
+
+
 def test_open_pause_parks_on_different_leases_are_not_a_violation(tmp_path: Path) -> None:
     """The invariant is per-lease: two chunks paused at once is the normal world."""
     engine = _runner_engine(tmp_path)
