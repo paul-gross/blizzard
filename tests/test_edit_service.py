@@ -30,6 +30,7 @@ from blizzard.hub.domain.edit import (
 )
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, IReadGraphRepository, Node
+from blizzard.hub.domain.harnesses import InvalidHarnesses
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -278,6 +279,24 @@ def test_set_defaults_also_writes_default_harnesses() -> None:
     )
 
     assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium", ["claude_code"])]
+
+
+@pytest.mark.parametrize("entries", [["  "], ["claude_code", " claude_code "]])
+def test_direct_edit_refuses_invalid_harnesses_without_writing(entries: list[str]) -> None:
+    repo = _FakeChunkRepo(facts=_ready_facts())
+
+    with pytest.raises(InvalidHarnesses):
+        _service(repo).edit(_CHUNK, ChunkEdit(default_model=["blizzard:basic"], default_harnesses=entries))
+
+    assert repo.defaults_set == []
+
+
+def test_direct_edit_normalizes_harnesses_before_writing() -> None:
+    repo = _FakeChunkRepo(facts=_ready_facts())
+
+    _service(repo).edit(_CHUNK, ChunkEdit(default_harnesses=[" claude_code ", "codex"]))
+
+    assert repo.defaults_set == [("chk_1", [], None, ["claude_code", "codex"])]
 
 
 def test_set_defaults_omitting_default_harnesses_leaves_it_at_its_current_value() -> None:

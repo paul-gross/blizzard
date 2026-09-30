@@ -16,6 +16,7 @@ from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunks.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
+from blizzard.hub.domain.harnesses import validated_harnesses
 from blizzard.hub.domain.work import Chunk, IntendedMigration, MigrationMode
 
 
@@ -199,6 +200,7 @@ class EditService:
 
             if default_harnesses is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "default_harnesses")
+                default_harnesses = validated_harnesses(default_harnesses)
 
             if intended_migration is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "intended_migration")

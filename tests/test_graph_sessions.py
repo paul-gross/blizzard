@@ -322,6 +322,12 @@ def test_a_duplicate_harnesses_entry_is_rejected_naming_the_rule() -> None:
     assert any("`harnesses` entries must be unique" in e for e in result.errors)
 
 
+def test_a_duplicate_harnesses_entry_after_trimming_is_rejected() -> None:
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", " claude_code "]}}))).result
+    assert not result.ok
+    assert any("`harnesses` entries must be unique" in e for e in result.errors)
+
+
 def test_a_blank_harnesses_entry_is_rejected_naming_the_rule() -> None:
     result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", "  "]}}))).result
     assert not result.ok

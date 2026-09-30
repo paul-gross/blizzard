@@ -24,6 +24,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.garden_proposals import GardenProposalCounts, GardenProposalOrigin
 from blizzard.hub.domain.garden_sweeps import GardenSweeps
 from blizzard.hub.domain.garden_trend import Trend
+from blizzard.hub.domain.harnesses import InvalidHarnesses
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.routine_baselines import RoutineBaseline
 from blizzard.hub.domain.routine_run import RoutineRetiredError, RunResult, ScopeNotRelatedError, ScopeRetiredError
@@ -69,22 +70,6 @@ def _routine_view(routine: Routine, *, retired: bool) -> RoutineView:
     )
 
 
-def _validated_harnesses(entries: list[str]) -> list[str]:
-    """``default_harnesses``'s own unique/non-blank pair — the same
-    rule ``ChunkPatchBody._default_harnesses`` raises, an empty list left as the
-    express-no-constraint clear ``default_model`` already carries."""
-    stripped = [entry.strip() for entry in entries]
-    if any(not entry for entry in stripped):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_harnesses entries must not be blank"
-        )
-    if len(set(stripped)) != len(stripped):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_harnesses entries must be unique"
-        )
-    return stripped
-
-
 @router.post(
     "/routines",
     response_model=RoutineView,
@@ -104,9 +89,9 @@ def create_routine(
             default_scope_slug=slug,
             default_model=request.default_model,
             default_effort=request.default_effort,
-            default_harnesses=_validated_harnesses(request.default_harnesses),
+            default_harnesses=request.default_harnesses,
         )
-    except (ScopeSlugError, RoutineNameTakenError, RoutineGraphUnresolvedError) as exc:
+    except (ScopeSlugError, RoutineNameTakenError, RoutineGraphUnresolvedError, InvalidHarnesses) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _routine_view(routine, retired=False)
 
@@ -408,9 +393,9 @@ def edit_routine(
             default_scope_slug=slug,
             default_model=request.default_model,
             default_effort=request.default_effort,
-            default_harnesses=_validated_harnesses(request.default_harnesses),
+            default_harnesses=request.default_harnesses,
         )
-    except (ScopeSlugError, RoutineNameImmutableError, RoutineGraphUnresolvedError) as exc:
+    except (ScopeSlugError, RoutineNameImmutableError, RoutineGraphUnresolvedError, InvalidHarnesses) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _routine_view(edited, retired=services.routines.is_retired(routine_id))
 

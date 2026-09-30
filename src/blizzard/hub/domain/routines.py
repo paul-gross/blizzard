@@ -15,6 +15,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ROUTINE_PREFIX, Id
 from blizzard.hub.domain.graph import IReadGraphRepository
+from blizzard.hub.domain.harnesses import validated_harnesses
 from blizzard.hub.domain.scopes import Scope, ScopeRegistry, ScopeSlug
 
 
@@ -186,6 +187,7 @@ class RoutineAuthoring:
         default_effort: str | None = None,
         default_harnesses: list[str] | None = None,
     ) -> Routine:
+        harnesses = validated_harnesses(default_harnesses or [])
         if self._routines.get_by_name(name) is not None:
             raise RoutineNameTakenError(name)
         self._ensure_graph_resolves(graph_name)
@@ -198,7 +200,7 @@ class RoutineAuthoring:
             created_at=self._clock.now(),
             default_model=list(default_model or []),
             default_effort=default_effort,
-            default_harnesses=list(default_harnesses or []),
+            default_harnesses=harnesses,
         )
         self._routines.create(routine)
         self._routine_scopes.link(routine.routine_id, scope.slug)
@@ -215,6 +217,7 @@ class RoutineAuthoring:
         default_effort: str | None = None,
         default_harnesses: list[str] | None = None,
     ) -> Routine:
+        harnesses = validated_harnesses(default_harnesses or [])
         if name != routine.name:
             raise RoutineNameImmutableError(routine.name)
         self._ensure_graph_resolves(graph_name)
@@ -225,7 +228,7 @@ class RoutineAuthoring:
             default_scope_slug=scope.slug,
             default_model=list(default_model or []),
             default_effort=default_effort,
-            default_harnesses=list(default_harnesses or []),
+            default_harnesses=harnesses,
         )
         # The new default is linked; a previous default is deliberately left linked —
         # the routine still sweeps it, and a set larger than its default is legal.
