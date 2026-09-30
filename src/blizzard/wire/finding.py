@@ -78,8 +78,7 @@ class FindingDelta(BaseModel):
 class DeferredReviewFindingEntry(BaseModel):
     """A `deferred` entry — a still-open should-fix finding a passing
     review leaves unanswered, the only disposition that mints. Carries the
-    `garden/finding-format` `AddFindingOp` fields plus `severity`, all required:
-    pydantic refuses a delta missing one, rather than a hand-rolled check downstream."""
+    `garden/finding-format` `AddFindingOp` fields plus `severity`, all required."""
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -93,8 +92,7 @@ class DeferredReviewFindingEntry(BaseModel):
 
 
 class FixedReviewFindingEntry(BaseModel):
-    """A `fixed` entry — the review already settled it; materialization
-    mints nothing further and reads no field beyond `ref`."""
+    """A `fixed` entry — the review already settled it; only `ref` is read."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -103,8 +101,7 @@ class FixedReviewFindingEntry(BaseModel):
 
 
 class RefutedReviewFindingEntry(BaseModel):
-    """A `refuted` entry — the review already settled it; materialization
-    mints nothing further and reads no field beyond `ref`."""
+    """A `refuted` entry — the review already settled it; only `ref` is read."""
 
     model_config = ConfigDict(extra="forbid")
 

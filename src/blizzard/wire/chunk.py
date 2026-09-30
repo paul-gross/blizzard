@@ -106,7 +106,7 @@ class ChunkUsageTotalView(BaseModel):
 
 class ChunkUsageView(BaseModel):
     """One node-step's usage/cost telemetry — one harness invocation's tokens-by-class and
-    cost, oldest first on ``ChunkDetail``. ``cost_usd`` is ``None`` exactly when no billed figure was
+    cost. ``cost_usd`` is ``None`` exactly when no billed figure was
     recorded for this invocation — never fabricated. ``estimated_cost_usd`` is the runner's own reported
     estimate for a subscription invocation, kept apart from ``cost_usd``, ``None`` when none was reported."""
 
@@ -368,8 +368,7 @@ class GardenDeliveryResponse(BaseModel):
 
 class ReviewFindingsDeliveryResponse(BaseModel):
     """The result of one `record-findings` materialization — the
-    `GardenDeliveryResponse` shape: ``recorded`` durably means it, materialized now or
-    replayed; ``invalid`` carries the rejection reason in ``detail``."""
+    `GardenDeliveryResponse` shape."""
 
     outcome: Literal["recorded", "invalid"]
     detail: str = ""

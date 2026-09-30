@@ -2,8 +2,8 @@
 
 ``HistoryRowView`` is a flat, kind-discriminated row — ``transition`` | ``migration`` |
 ``bounce`` — merged oldest-first across a chunk's three hub-side histories. The merge
-itself is ``runner/api/history.py``'s: a wire model declares shape only, never a
-projection into another model (plan: hold wire/ to its stated contract)."""
+itself is not here: a wire model declares shape only, never a projection into another
+model."""
 
 from __future__ import annotations
 

@@ -14,8 +14,7 @@ class PauseStateView(BaseModel):
     """The pause brake's two independent surfaces, plus their effective OR.
 
     ``local_reason`` is the local brake's own reason — a usage limit, the spend ceiling, or
-    ``None`` on a plain operator pause — the runner-local mirror of the reason the hub already
-    shows for a runner's local pause."""
+    ``None`` on a plain operator pause."""
 
     local: bool
     hub: bool
@@ -161,12 +160,12 @@ class HarnessHealthView(BaseModel):
     available but degraded; ``None`` only when available with no declared degradation either."""
 
     harness_id: str
-    #: Normalized when the binding's raw shape allows it, so it never looks like a non-member below.
+    #: Normalized when the binding's raw shape allows it.
     version: str | None = None
     available: bool
     cause: str | None = None
     degradations: list[str] = []
-    #: This binding's own declared admitted-version range as its literal display string; ``None`` when none.
+    #: The literal display string of the declared admitted-version range; ``None`` when none.
     admitted_range: str | None = None
 
 
