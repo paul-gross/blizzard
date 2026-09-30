@@ -24,7 +24,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.artifacts import GraphArtifactRecord
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from tests.runner_fakes import make_store, make_stores, no_retry_delay
+from tests.runner_fakes import make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -105,7 +105,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore
         config,
         runner_stores=make_stores(store),
         hub_proxy_client=httpx.Client(transport=httpx.MockTransport(router)),
-        hub_retry_delay=no_retry_delay,
+        hub_retry_clock=no_retry_clock(),
     )
     app.state.hub_router = router
     return app, store

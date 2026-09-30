@@ -18,6 +18,7 @@ from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapt
 from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
+from blizzard.runner.harness.internal.opencode_paths import resolve_opencode_auth_path
 from blizzard.runner.harness.internal.opencode_registry import build_opencode_binding
 from blizzard.runner.harness.process_launch import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -67,7 +68,11 @@ def build_production_harness_health_probes(config: RunnerConfig) -> dict[str, IH
             binary=config.harness_binary, credentials_path=config.claude_code_credentials_path
         )
     if config.opencode_enabled:
-        probes[OPENCODE_HARNESS_ID] = OpenCodeHealthProbe(
-            binary=config.opencode_binary, auth_path=config.opencode_auth_path
+        # The file a spawned worker would read: its allowlisted env, not the daemon's own.
+        auth_path = (
+            Path(config.opencode_auth_path)
+            if config.opencode_auth_path is not None
+            else resolve_opencode_auth_path(config.worker_env.variables)
         )
+        probes[OPENCODE_HARNESS_ID] = OpenCodeHealthProbe(binary=config.opencode_binary, auth_path=auth_path)
     return probes

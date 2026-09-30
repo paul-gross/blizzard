@@ -15,6 +15,7 @@ from blizzard.runner.harness.internal.harness_registry import (
     build_production_harness_health_probes,
     build_production_harness_registry,
 )
+from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
 from blizzard.runner.harness.internal.opencode_price_cache import FileOpenCodePriceCatalog
 from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.registry import (
@@ -204,3 +205,41 @@ def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> Non
     assert list(build_production_harness_health_probes(no_claude)) == [OPENCODE_HARNESS_ID]
     no_opencode = RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_enabled=False)
     assert list(build_production_harness_health_probes(no_opencode)) == [CLAUDE_CODE_HARNESS_ID]
+
+
+def _probe_auth_path(config: RunnerConfig) -> Path | None:
+    probe = build_production_harness_health_probes(config)[OPENCODE_HARNESS_ID]
+    assert isinstance(probe, OpenCodeHealthProbe)
+    return vars(probe)["_auth_path"]
+
+
+@pytest.mark.unit
+def test_production_opencode_probe_follows_the_worker_env_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A daemon ``XDG_DATA_HOME`` the worker never receives does not move the probe."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "daemon-xdg"))
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+
+    assert _probe_auth_path(config) == tmp_path / "home" / ".local" / "share" / "opencode" / "auth.json"
+
+
+@pytest.mark.unit
+def test_production_opencode_probe_follows_a_passed_through_xdg_data_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", worker_env_passthrough=("XDG_DATA_HOME",))
+
+    assert _probe_auth_path(config) == tmp_path / "xdg" / "opencode" / "auth.json"
+
+
+@pytest.mark.unit
+def test_production_opencode_probe_prefers_an_explicit_auth_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    explicit = tmp_path / "elsewhere" / "auth.json"
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_auth_path=str(explicit))
+
+    assert _probe_auth_path(config) == explicit

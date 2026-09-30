@@ -238,6 +238,7 @@ def _probe(
     compaction_no_change: bool = False,
     version_touch_path: Path | None = None,
     provider_refusal: bool = False,
+    auth_source: Path | None = None,
     process: IOpenCodeProcess | None = None,
 ) -> tuple[OpenCodeCompatibilityProbe, _RecordingScratchGit]:
     scratch = _RecordingScratchGit()
@@ -273,6 +274,7 @@ def _probe(
             compactor=compactor if compactor is not None else _FakeCompactor(),
             transport=transport,
             attach_proxy_factory=LoopbackAttachProxyFactory(transport),
+            auth_source=auth_source,
             allow_live_provider=True,
             timeout_seconds=timeout_seconds,
         ),
@@ -857,7 +859,7 @@ def test_mutating_fake_cannot_change_host_auth_file_during_version_preflight(
     monkeypatch.setenv("XDG_DATA_HOME", str(host_data))
     before = auth_source.read_bytes()
 
-    probe, _ = _probe(mock_opencode, tmp_path, mutate_auth=True)
+    probe, _ = _probe(mock_opencode, tmp_path, mutate_auth=True, auth_source=auth_source)
     report = CompatibilityDiagnostic(probe).run()
 
     assert report.admissible is True
@@ -881,6 +883,7 @@ def test_mismatched_binary_cannot_read_disposable_auth_during_version_preflight(
         version="1.18.24",
         read_auth=True,
         auth_read_marker=marker,
+        auth_source=auth_source,
     )
 
     report = CompatibilityDiagnostic(probe).run()

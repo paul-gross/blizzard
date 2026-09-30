@@ -974,7 +974,7 @@ class RunnerConfig:
             + (
                 f'auth_path = "{self.opencode_auth_path}"\n'
                 if self.opencode_auth_path is not None
-                else '# auth_path = "/path/to/auth.json"  # defaults to the OpenCode CLI\'s own discovery path\n'
+                else '# auth_path = "/path/to/auth.json"  # defaults to the path resolved from the worker env\n'
             )
             + "\n[opencode.models.aliases]\n"
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.opencode_model_aliases)

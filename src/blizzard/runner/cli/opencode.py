@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import click
@@ -12,6 +13,7 @@ from blizzard.runner.harness.internal.opencode_compaction import SubprocessOpenC
 from blizzard.runner.harness.internal.opencode_diagnostic import run_opencode_compatibility
 from blizzard.runner.harness.internal.opencode_evidence import OpenCodeEvidence, OpenCodeEvidenceError
 from blizzard.runner.harness.internal.opencode_loopback import UrllibLoopbackTransport
+from blizzard.runner.harness.internal.opencode_paths import resolve_opencode_auth_path
 from blizzard.runner.harness.internal.opencode_probe import (
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     OpenCodeCompatibilityProbe,
@@ -76,6 +78,8 @@ def opencode_compatibility(
             ),
             transport=transport,
             attach_proxy_factory=LoopbackAttachProxyFactory(transport),
+            # This short-lived command is its own composition root and runs as the operator.
+            auth_source=resolve_opencode_auth_path(os.environ),
             allow_live_provider=live_provider,
         )
         report = run_opencode_compatibility(

@@ -8,7 +8,6 @@ opencode_adapter.OpenCodeAdapter` itself."""
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from packaging.specifiers import SpecifierSet
@@ -66,25 +65,17 @@ def _degradations_from_manifest(version: str, *, corpus_root: Path) -> tuple[Dec
     return tuple(degradations)
 
 
-def _default_opencode_auth_path() -> Path:
-    """Where OpenCode's own credential discovery reads from — mirrors
-    ``opencode_scratch_config.py``'s ``auth_path`` (``<data-home>/opencode/auth.json``),
-    the same path the compatibility proof's disposable-auth provisioning copies from."""
-    data_home = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-    return Path(data_home) / "opencode" / "auth.json"
-
-
 class OpenCodeHealthProbe:
     """The OpenCode binding's :class:`~blizzard.runner.harness.adapter.IHarnessHealthProbe`.
     Dumb, like the adapter it stands beside: reports evidence, never decides availability."""
 
     def __init__(
-        self, binary: str = "opencode", *, auth_path: str | None = None, corpus_root: Path = DEFAULT_CORPUS_ROOT
+        self, binary: str = "opencode", *, auth_path: Path | None, corpus_root: Path = DEFAULT_CORPUS_ROOT
     ) -> None:
         self._binary = binary
-        # Injectable for testability (`bzh:dependency-injection`); defaults to OpenCode's
-        # own real credential-discovery path.
-        self._auth_path = Path(auth_path) if auth_path is not None else _default_opencode_auth_path()
+        # Resolved by the composition root from the env a spawned worker would read
+        # (`bzh:dependency-injection`); `None` reads as no credential.
+        self._auth_path = auth_path
         self._corpus_root = corpus_root
         # The admitted range owes at least one committed corpus manifest inside it —
         # checked here, not at import, so a misconfigured corpus only degrades this binding.
@@ -103,6 +94,8 @@ class OpenCodeHealthProbe:
         must hold a non-empty document. Neither reaches a provider, so neither proves a
         held credential is still valid."""
         if harness_shared.observe_version(self._binary) is None:
+            return False
+        if self._auth_path is None:
             return False
         try:
             return self._auth_path.stat().st_size > 0

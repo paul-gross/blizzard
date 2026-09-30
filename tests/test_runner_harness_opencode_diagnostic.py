@@ -130,6 +130,7 @@ def _probe(
         compactor=_UnreachedCompactor(),
         transport=transport,
         attach_proxy_factory=LoopbackAttachProxyFactory(transport),
+        auth_source=None,
         allow_live_provider=True,
     )
 
@@ -147,6 +148,7 @@ def test_compatibility_probe_requires_an_injected_compactor(tmp_path: Path) -> N
             process=SubprocessOpenCodeProcess(),
             transport=UrllibLoopbackTransport(),
             attach_proxy_factory=LoopbackAttachProxyFactory(UrllibLoopbackTransport()),
+            auth_source=None,
             allow_live_provider=True,
         )  # type: ignore[call-arg]
 
@@ -459,17 +461,16 @@ def test_unusable_evidence_destination_is_rejected_before_process_start(tmp_path
 
 
 def test_xdg_data_is_isolated_while_normal_auth_discovery_remains_addressable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     host_data = tmp_path / "host-data"
     auth_source = host_data / "opencode" / "auth.json"
     auth_source.parent.mkdir(parents=True)
     auth_source.write_bytes(b"synthetic auth fixture")
-    monkeypatch.setenv("XDG_DATA_HOME", str(host_data))
     roots = prepare_isolation(tmp_path / "isolated")
 
     assert not roots.auth_path.exists()
-    assert provision_disposable_auth(roots) is True
+    assert provision_disposable_auth(roots, auth_source) is True
     assert roots.auth_path.is_file()
     assert not roots.auth_path.is_symlink()
     assert roots.auth_path.read_bytes() == auth_source.read_bytes()

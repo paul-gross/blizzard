@@ -9,8 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import secrets
-import time
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -21,7 +20,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.clock import IClock, IMonotonicClock, SystemClock, SystemMonotonicClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
@@ -189,7 +188,7 @@ def create_app(
     workspace_prompts: WorkspacePromptService | None = None,
     hub_http_client: httpx.Client | None = None,
     hub_proxy_client: httpx.Client | None = None,
-    hub_retry_delay: Callable[[float], None] | None = None,
+    hub_retry_clock: IMonotonicClock | None = None,
     jti_cache: IJtiCache | None = None,
     events: EventBroker | None = None,
     clock: IClock | None = None,
@@ -274,8 +273,8 @@ def create_app(
         transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
         base_url="http://runner-hub-proxy-client-hermetic-default.invalid",
     )
-    # A test binds a recording no-op here to prove the retry schedule without sleeping.
-    app.state.hub_retry_delay = hub_retry_delay or time.sleep
+    # A test binds a `ManualMonotonicClock` here to prove the retry schedule without sleeping.
+    app.state.hub_retry_clock = hub_retry_clock or SystemMonotonicClock()
     app.state.jti_cache = jti_cache
     # The reverse-proxy trust set, empty by default — so
     # `X-Forwarded-Proto` is ignored from every peer.

@@ -8,7 +8,6 @@ mutation resolves its own single-concept service instead."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import NoReturn
 
@@ -17,7 +16,7 @@ from fastapi import Request, status
 from fastapi.exceptions import HTTPException
 from starlette.datastructures import State
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.asks import AskService
 from blizzard.runner.domain.attachments import AttachmentService
@@ -63,9 +62,9 @@ class RunnerWiring:
         client: httpx.Client | None = getattr(self.state, "hub_proxy_client", None)
         return client if client is not None else self._refuse("hub proxy client")
 
-    def hub_retry_delay(self) -> Callable[[float], None]:
-        delay: Callable[[float], None] | None = getattr(self.state, "hub_retry_delay", None)
-        return delay if delay is not None else self._refuse("hub proxy retry delay")
+    def hub_retry_clock(self) -> IMonotonicClock:
+        clock: IMonotonicClock | None = getattr(self.state, "hub_retry_clock", None)
+        return clock if clock is not None else self._refuse("hub proxy retry clock")
 
     def read_stores(self) -> RunnerReadStores:
         stores = self.maybe_read_stores()

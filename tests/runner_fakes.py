@@ -18,7 +18,7 @@ import structlog
 from sqlalchemy import Engine, MetaData
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.foundation.clock import FixedClock, IClock
+from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.composition import RunnerProcess, build_runner_process
@@ -1392,10 +1392,11 @@ def claimed_outcome(
     )
 
 
-def no_retry_delay(seconds: float) -> None:
-    """A ``HubProxy`` retry-delay double that never sleeps — every component test wiring a
-    hub double that can answer with a retryable failure injects this via ``create_app``'s
-    ``hub_retry_delay`` instead of riding the real ``time.sleep`` default."""
+def no_retry_clock() -> ManualMonotonicClock:
+    """A ``HubProxy`` retry clock whose sleeps advance its own reading instead of waiting —
+    every component test wiring a hub double that can answer with a retryable failure
+    injects one via ``create_app``'s ``hub_retry_clock`` instead of riding the real clock."""
+    return ManualMonotonicClock()
 
 
 @contextmanager

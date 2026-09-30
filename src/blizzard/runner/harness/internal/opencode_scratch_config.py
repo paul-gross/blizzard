@@ -297,13 +297,11 @@ def prepare_isolation(root: Path) -> IsolationRoots:
     return roots
 
 
-def provision_disposable_auth(roots: IsolationRoots) -> bool:
+def provision_disposable_auth(roots: IsolationRoots, auth_source: Path | None) -> bool:
     """Copy normal OpenCode auth into disposable data only after exact preflight success."""
 
-    normal_data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    auth_source = normal_data_home / "opencode" / "auth.json"
     auth_path = roots.auth_path
-    if not auth_source.is_file():
+    if auth_source is None or not auth_source.is_file():
         return False
     auth_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     # The runner copies the file byte-for-byte without parsing or retaining its contents;
