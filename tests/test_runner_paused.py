@@ -46,6 +46,7 @@ from tests.runner_fakes import (
     make_envelope,
     make_store,
     make_stores,
+    record_usage,
 )
 
 pytestmark = pytest.mark.component
@@ -1047,7 +1048,8 @@ def _sample(*, cost, kind: UsageKind = "spawn"):  # type: ignore[no-untyped-def]
 
 
 def _record_usage(store, *, lease_id="lease_1", chunk_id="ch_1", cost, recorded_at):  # type: ignore[no-untyped-def]
-    store.record_usage(
+    record_usage(
+        store,
         lease_id=lease_id,
         chunk_id=chunk_id,
         node_id="nd_build",

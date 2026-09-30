@@ -26,9 +26,11 @@ def list_subscriptions(request: Request) -> SubscriptionListResponse:
 
 
 def _subscription_list(config: RunnerConfig, usage: IReadUsageRepository) -> SubscriptionListResponse:
+    declarations = config.resolved_subscriptions()
+    attempts = usage.latest_external_usage_attempts_by_slug([d.slug for d in declarations])
     items: list[SubscriptionViewWire] = []
-    for declaration in config.resolved_subscriptions():
-        attempt = usage.latest_external_usage_attempt(declaration.slug)
+    for declaration in declarations:
+        attempt = attempts.get(declaration.slug)
         items.append(
             SubscriptionViewWire(
                 slug=declaration.slug,

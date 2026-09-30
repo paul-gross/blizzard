@@ -59,6 +59,7 @@ from tests.runner_fakes import (
     make_envelope,
     make_store,
     make_stores,
+    record_usage,
 )
 
 pytestmark = pytest.mark.component
@@ -644,7 +645,8 @@ def test_ceiling_pause_publishes_fact_changed(tmp_path: Path) -> None:
     buffers went unannounced until the backstop next polled."""
     store = _store(tmp_path)
     events = EventBroker()
-    store.record_usage(
+    record_usage(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",

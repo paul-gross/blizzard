@@ -16,7 +16,7 @@ from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.store.schema import usage_facts
-from tests.runner_fakes import make_store
+from tests.runner_fakes import make_store, record_usage
 
 pytestmark = pytest.mark.unit
 
@@ -66,7 +66,8 @@ def _sample(kind: UsageKind, *, tokens: int, cost: float, scope: int | None) -> 
 
 
 def _record(store, lease: str, *, generation: int, sample: UsageSample) -> None:  # type: ignore[no-untyped-def]
-    store.record_usage(
+    record_usage(
+        store,
         lease_id=lease,
         chunk_id="ch_1",
         node_id="nd_build",

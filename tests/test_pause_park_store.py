@@ -110,6 +110,35 @@ def test_pause_park_resumed_lease_is_not_parked(tmp_path):  # type: ignore[no-un
     assert store.pause_parked_lease_ids() == set()
 
 
+def _close_lease(store, lease_id: str, chunk_id: str = "ch_1"):  # type: ignore[no-untyped-def]
+    store.record_closure(lease_id=lease_id, chunk_id=chunk_id, node_id="nd_build", reason="terminal", closed_at=_NOW)
+
+
+def test_a_park_on_a_closed_lease_is_not_open(tmp_path):  # type: ignore[no-untyped-def]
+    """A hub-terminal chunk closes its lease with the park never resumed — the closure
+    closes the park, across every read that hands the park out."""
+    store = _store(tmp_path)
+    store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+
+    _close_lease(store, "lease_1")
+
+    assert store.open_pause_parks() == {}
+    assert store.pause_parked_lease_ids() == set()
+    assert store.parked_lease_ids() == set()
+
+
+def test_a_later_lease_on_the_same_chunk_parking_afresh_is_open(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)
+    _close_lease(store, "lease_1")
+
+    store.record_pause_park(lease_id="lease_2", chunk_id="ch_1", parked_at=_NOW + timedelta(minutes=1))
+
+    assert set(store.open_pause_parks()) == {"lease_2"}
+    assert store.parked_lease_ids() == {"lease_2"}
+
+
 def test_parked_lease_ids_is_the_union_of_ask_and_pause_parks(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
 

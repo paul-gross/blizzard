@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, and_, select
 
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.store.schema import (
@@ -82,13 +82,28 @@ OPEN_INTENT = Unsuperseded(
 )
 
 # A second pause under one lease is not masked by the first pause's resume.
-OPEN_PAUSE_PARK = Unsuperseded(
+_UNRESUMED_PAUSE_PARK = Unsuperseded(
     pause_park_resumes.c.id,
     (
         pause_park_resumes.c.lease_id == pause_parks.c.lease_id,
         pause_park_resumes.c.resumed_at >= pause_parks.c.parked_at,
     ),
 )
+
+# `bzh:open-facts-declare-closure`: a hub-terminal chunk retires its lease (`lease_closures`),
+# and a park on a closed lease stands no longer — no resume will ever follow it.
+_PAUSE_PARK_LEASE_UNCLOSED = Unclosed(pause_parks.c.lease_id, lease_closures.c.lease_id)
+
+
+class _OpenPausePark:
+    """A pause park stands until its own resume, or until its lease closes."""
+
+    @property
+    def clause(self):  # type: ignore[no-untyped-def]
+        return and_(_UNRESUMED_PAUSE_PARK.clause, _PAUSE_PARK_LEASE_UNCLOSED.clause)
+
+
+OPEN_PAUSE_PARK = _OpenPausePark()
 
 #: The pause-park half of ask/park's ``parked_lease_ids`` union — shared so the ask
 #: adapter never reaches into a sibling adapter for it.

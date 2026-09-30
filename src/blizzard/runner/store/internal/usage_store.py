@@ -6,7 +6,7 @@ import json
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 
-from sqlalchemy import Connection, and_, case, func, select
+from sqlalchemy import Connection, Row, and_, case, func, select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
@@ -14,11 +14,12 @@ from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.domain.usage import (
     ContextSampleState,
     ExternalUsageAttemptSummary,
+    InvocationCost,
     IWriteUsageRepository,
     UsageTotals,
 )
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import SessionCostBasis, UsageSample, invocation_cost
+from blizzard.runner.harness.usage import SessionCostBasis, UsageSample
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.schema import (
     context_samples,
@@ -34,6 +35,31 @@ _log = get_logger("blizzard.runner.store")
 
 # See IWriteUsageRepository.prune_external_usage_samples's own docstring for the retention contract.
 _EXTERNAL_USAGE_SAMPLE_RETENTION_WINDOW = timedelta(days=1)
+
+
+def _decode_windows(payload: str | None) -> tuple[ExternalSubscriptionUsageWindow, ...]:
+    if not payload:
+        return ()
+    decoded = json.loads(payload)
+    return tuple(
+        ExternalSubscriptionUsageWindow(
+            window=window["window"],
+            utilization_pct=window["utilization_pct"],
+            resets_at=as_utc(datetime.fromisoformat(window["resets_at"])),
+            window_seconds=window["window_seconds"],
+        )
+        for window in decoded.get("windows", [])
+    )
+
+
+def _attempt_summary(slug: str, row: Row) -> ExternalUsageAttemptSummary:
+    return ExternalUsageAttemptSummary(
+        slug=slug,
+        sampled_at=as_utc(row.sampled_at),
+        ok=row.payload is not None,
+        miss_reason=row.miss_reason,
+        renewal=row.renewal,
+    )
 
 
 class UsageStore:
@@ -62,12 +88,11 @@ class UsageStore:
             cost_partial=bool(row[5]),
         )
 
-    def _session_cost_basis(self, conn: Connection, lease_id: str) -> SessionCostBasis | None:
-        """What ``lease_id``'s session has banked; ``None`` without an identified session.
+    def session_cost_basis(self, lease_id: str) -> SessionCostBasis | None:
+        with self._store.connect() as conn:
+            return self._session_cost_basis(conn, lease_id)
 
-        Keyed on ``(harness_id, session_id)``, joined through ``leases`` because a session
-        outlives the lease it was minted under. The basis holds still only because one session
-        is driven by one lease at a time — no transaction serializes this read against the insert."""
+    def _session_cost_basis(self, conn: Connection, lease_id: str) -> SessionCostBasis | None:
         row = conn.execute(
             select(leases.c.session_id, leases.c.harness_id).where(leases.c.lease_id == lease_id)
         ).one_or_none()
@@ -110,18 +135,14 @@ class UsageStore:
         )
         with self._store.connect() as conn:
             payload = conn.execute(stmt).scalar_one_or_none()
-        if not payload:
-            return ()
-        decoded = json.loads(payload)
-        return tuple(
-            ExternalSubscriptionUsageWindow(
-                window=window["window"],
-                utilization_pct=window["utilization_pct"],
-                resets_at=as_utc(datetime.fromisoformat(window["resets_at"])),
-                window_seconds=window["window_seconds"],
-            )
-            for window in decoded.get("windows", [])
-        )
+        return _decode_windows(payload)
+
+    def latest_external_usage_windows_by_slug(
+        self, slugs: Sequence[str]
+    ) -> dict[str, tuple[ExternalSubscriptionUsageWindow, ...]]:
+        # Same rule as the singular: a NULL-payload row is a failed attempt and never hides an older window.
+        newest = self._newest_rows_by_slug(slugs, external_usage_samples.c.payload.is_not(None))
+        return {slug: windows for slug, row in newest.items() if (windows := _decode_windows(row.payload))}
 
     def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
         stmt = (
@@ -139,13 +160,48 @@ class UsageStore:
             row = conn.execute(stmt).one_or_none()
         if row is None:
             return None
-        return ExternalUsageAttemptSummary(
-            slug=slug,
-            sampled_at=as_utc(row.sampled_at),
-            ok=row.payload is not None,
-            miss_reason=row.miss_reason,
-            renewal=row.renewal,
-        )
+        return _attempt_summary(slug, row)
+
+    def latest_external_usage_attempts_by_slug(self, slugs: Sequence[str]) -> dict[str, ExternalUsageAttemptSummary]:
+        newest = self._newest_rows_by_slug(slugs, None)
+        return {slug: _attempt_summary(slug, row) for slug, row in newest.items()}
+
+    def _newest_rows_by_slug(self, slugs: Sequence[str], where: object | None) -> dict[str, Row]:
+        """Each slug's newest ``external_usage_samples`` row among those matching ``where`` — the
+        singulars' ``(sampled_at, id)`` order, kept portable by joining each slug's ``max(sampled_at)``
+        back and breaking a same-instant tie on ``id`` here."""
+        if not slugs:
+            return {}
+        samples = external_usage_samples
+        newest: dict[str, Row] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(slugs):
+                conditions = [samples.c.slug.in_(batch)]
+                if where is not None:
+                    conditions.append(where)  # type: ignore[arg-type]
+                latest = (
+                    select(samples.c.slug, func.max(samples.c.sampled_at).label("sampled_at"))
+                    .where(*conditions)
+                    .group_by(samples.c.slug)
+                    .subquery()
+                )
+                stmt = (
+                    select(
+                        samples.c.id,
+                        samples.c.slug,
+                        samples.c.sampled_at,
+                        samples.c.payload,
+                        samples.c.miss_reason,
+                        samples.c.renewal,
+                    )
+                    .join(latest, and_(samples.c.slug == latest.c.slug, samples.c.sampled_at == latest.c.sampled_at))
+                    .where(*conditions)
+                )
+                for row in conn.execute(stmt):
+                    held = newest.get(str(row.slug))
+                    if held is None or row.id > held.id:
+                        newest[str(row.slug)] = row
+        return newest
 
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:
         stmt = select(
@@ -196,6 +252,7 @@ class UsageStore:
         epoch: int,
         generation: int,
         sample: UsageSample,
+        cost: InvocationCost,
         recorded_at: datetime,
     ) -> int | None:
         # Both writes, one transaction: a usage fact the hub is never told about is never
@@ -214,13 +271,6 @@ class UsageStore:
                 # A replay of the exact same invocation — the row is already durable;
                 # write nothing a second time.
                 return None
-            # What this invocation alone cost, which is the harness's own figure only
-            # until the session has banked something for a session-scoped one to include.
-            cost_usd = invocation_cost(sample, self._session_cost_basis(conn, lease_id))
-            # `invocation_cost` rejected a backwards billed reading: withhold the estimate too,
-            # so the two readings can never diverge.
-            billed_reading_rejected = cost_usd is None and sample.cost_usd is not None
-            estimated_cost_usd = None if billed_reading_rejected else sample.estimated_cost_usd
             conn.execute(
                 usage_facts.insert().values(
                     lease_id=lease_id,
@@ -236,7 +286,7 @@ class UsageStore:
                     output_tokens=sample.output_tokens,
                     cache_read_tokens=sample.cache_read_tokens,
                     cache_create_tokens=sample.cache_create_tokens,
-                    cost_usd=cost_usd,
+                    cost_usd=cost.cost_usd,
                     reported_cost_usd=sample.cost_usd,
                     cost_is_share=True,
                     recorded_at=recorded_at,
@@ -255,10 +305,10 @@ class UsageStore:
                     "output_tokens": sample.output_tokens,
                     "cache_read_tokens": sample.cache_read_tokens,
                     "cache_create_tokens": sample.cache_create_tokens,
-                    "cost_usd": cost_usd,
+                    "cost_usd": cost.cost_usd,
                     # Never written to the runner's `usage_facts` row: only this
                     # outbound fact carries it, as computed on the sample itself.
-                    "estimated_cost_usd": estimated_cost_usd,
+                    "estimated_cost_usd": cost.estimated_cost_usd,
                 }
             )
             result = conn.execute(
@@ -270,23 +320,13 @@ class UsageStore:
                     created_at=recorded_at,
                 )
             )
-        if sample.cost_usd is not None and cost_usd is None:
-            # Absent cost here is a rejected reading, not a worker that died before its
-            # envelope — the two are indistinguishable on the board, so say so once here.
-            _log.warning(
-                "harness cost figure reads below what its session already banked",
-                lease_id=lease_id,
-                chunk_id=chunk_id,
-                generation=generation,
-                reported_cost_usd=sample.cost_usd,
-            )
         _log.info(
             "usage fact recorded",
             lease_id=lease_id,
             chunk_id=chunk_id,
             generation=generation,
             kind=sample.kind,
-            cost_usd=cost_usd,
+            cost_usd=cost.cost_usd,
         )
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0

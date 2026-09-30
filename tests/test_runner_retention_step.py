@@ -2,7 +2,7 @@
 
 Each of outbound/heartbeat/external-usage-sample retention is its own store-level
 derivation, already proven against a real store in ``tests/test_runner_store.py``. This
-file pins only the step's own contract over that: it calls every lane every tick, and one
+file pins only the step's own contract over that: it calls every lane once per floor, and one
 lane's prune raising never costs the others theirs. The worker-stdout lane is
 filesystem- rather than store-backed, so its own age-based sweep is proven directly here
 too, rather than in ``tests/test_runner_store.py``.
@@ -20,6 +20,7 @@ import sqlalchemy as sa
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.retention_floor import RETENTION_FLOOR, RetentionPasses
 from blizzard.runner.loop.steps import Retention
 from blizzard.runner.store.schema import external_usage_samples, heartbeats
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
@@ -109,7 +110,7 @@ def _usage_sample_row_count(store) -> int:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.unit
-def test_retention_prunes_all_three_lanes_every_tick(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_retention_prunes_every_lane_on_its_first_pass(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     old = _NOW - timedelta(days=8)  # past every lane's own retention window
     stale_outbound_seq = _seed_a_stale_and_a_pending_outbound_fact(store, old=old)
@@ -186,3 +187,73 @@ def test_worker_stdout_sweep_failure_does_not_cost_the_others_theirs(tmp_path) -
     assert stale_outbound_seq not in {f.seq for f in store.recent_outbound(10)}  # outbound still pruned
     assert _heartbeat_row_count(store) == 1  # heartbeat still pruned
     assert _usage_sample_row_count(store) == 1  # usage still pruned
+
+
+class _CountingLanes:
+    """Every lane's prune, counted — ``ctx`` rebuilt over stores and files that record a call."""
+
+    def __init__(self, ctx):  # type: ignore[no-untyped-def]
+        self.calls: list[str] = []
+        outer = self
+
+        class _Counting:
+            def __init__(self, inner: object, lane: str, method: str) -> None:
+                self._inner, self._lane, self._method = inner, lane, method
+
+            def __getattr__(self, name: str) -> object:
+                if name == self._method:
+
+                    def _count(*args: object, **kwargs: object) -> int:
+                        outer.calls.append(self._lane)
+                        return 0
+
+                    return _count
+                return getattr(self._inner, name)
+
+        stores = ctx.stores
+        stores = dataclasses.replace(stores, outbound=_Counting(stores.outbound, "outbound", "prune_outbound"))
+        stores = dataclasses.replace(stores, liveness=_Counting(stores.liveness, "heartbeat", "prune_heartbeats"))
+        stores = dataclasses.replace(stores, usage=_Counting(stores.usage, "usage", "prune_external_usage_samples"))
+        self.ctx = dataclasses.replace(
+            ctx,
+            stores=stores,
+            worker_files=_Counting(ctx.worker_files, "stdout", "sweep"),
+            retention_passes=RetentionPasses(),
+        )
+
+
+_ALL_LANES = ["outbound", "heartbeat", "usage", "stdout"]
+
+
+@pytest.mark.unit
+def test_a_pass_inside_the_floor_calls_no_lane_and_one_past_it_calls_every_lane(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    counting = _CountingLanes(_ctx(_store(tmp_path)))
+    clock = FixedClock(_NOW)
+    ctx = dataclasses.replace(counting.ctx, clock=clock)
+
+    Retention(ctx).run()
+    assert counting.calls == _ALL_LANES  # the first pass prunes every lane
+
+    counting.calls.clear()
+    clock.advance(RETENTION_FLOOR - timedelta(seconds=1))
+    Retention(ctx).run()
+    assert counting.calls == []  # inside the floor
+
+    clock.advance(timedelta(seconds=1))
+    Retention(ctx).run()
+    assert counting.calls == _ALL_LANES  # the floor has elapsed
+
+
+@pytest.mark.unit
+def test_a_pass_with_a_failed_lane_still_starts_the_floor(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    ctx = _ctx(store)
+    failing = _RaisingOnCall(ctx.stores.liveness, "prune_heartbeats")
+    ctx = dataclasses.replace(
+        ctx, stores=dataclasses.replace(ctx.stores, liveness=failing), retention_passes=RetentionPasses()
+    )
+
+    Retention(ctx).run()
+
+    assert ctx.retention_passes is not None
+    assert not ctx.retention_passes.due(_NOW)

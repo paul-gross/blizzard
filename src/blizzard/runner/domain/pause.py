@@ -67,7 +67,9 @@ class IReadPauseRepository(Protocol):
 
     def pause_parked_lease_ids(self) -> set[str]:
         """Leases dormant on an operator pause — a pause-park fact with no later
-        pause-resume at or after it.
+        pause-resume at or after it and no closure of its lease.
+
+        A hub-terminal chunk closes its lease, and the lease closure closes its park.
 
         The pause-park half of
         :meth:`~blizzard.runner.domain.asks.IReadAskRepository.parked_lease_ids`'s union."""
@@ -77,9 +79,9 @@ class IReadPauseRepository(Protocol):
         """Every open pause park by lease id — :meth:`pause_parked_lease_ids`'s leases, each with
         its ``parked_at`` and the elicitation its interrupt signalled. Hoisted once
         per tick (``bzh:bulk-reconstitution``) for the teardown ADVANCE completes over later
-        ticks. A lease re-parked across a crash reads its newest park. Closes on a terminal
-        chunk-end via the hub: a terminated lease is no longer active, so ADVANCE's
-        ``list_active_leases`` filter drops it out of this read from then on."""
+        ticks. A lease re-parked across a crash reads its newest park. A park closes with its
+        lease: a hub-terminal chunk closes the lease, and the closed lease's park drops out of
+        this read from then on."""
         ...
 
 

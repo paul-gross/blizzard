@@ -613,10 +613,12 @@ class Advance(Step):
 
 
 class Retention(Step):
-    """Prune every append-only observation/report lane every tick, so none grows without
+    """Prune every append-only observation/report lane once per floor, so none grows without
     bound — each lane's own retention contract lives at its own method (the
     store's `IWriteOutboundRepository.prune_outbound` and its siblings, or the filesystem
-    sweep of `WorkerStdoutFiles.sweep`), each its own isolated prune."""
+    sweep of `WorkerStdoutFiles.sweep`), each its own isolated prune. The shortest window is a
+    day, so the pass runs when none has yet or `RETENTION_FLOOR` has elapsed since the last —
+    `bzh:probe-gated-pass`'s floor-only form."""
 
     def run(self) -> None:
         """One prune per lane, each isolated (mirrors ExternalUsageSample's own per-item
@@ -624,6 +626,9 @@ class Retention(Step):
         else in the tick either way."""
         ctx = self.ctx
         now = ctx.clock.now()
+        passes = ctx.retention_passes
+        if passes is not None and not passes.due(now):
+            return
         lanes: tuple[tuple[str, Callable[[], int]], ...] = (
             ("outbound buffer", lambda: ctx.stores.outbound.prune_outbound(now=now)),
             ("heartbeat", lambda: ctx.stores.liveness.prune_heartbeats(now=now)),
@@ -640,6 +645,9 @@ class Retention(Step):
                 prune()
             except Exception as exc:  # one lane's prune failure must not skip the others
                 _log.warning("retention prune failed", lane=label, detail=str(exc))
+        # Every lane was attempted, whatever its outcome: a lane that raised retries at the next floor.
+        if passes is not None:
+            passes.record(now)
 
 
 class ContextSample(Step):
