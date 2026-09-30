@@ -18,6 +18,7 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   claims: [],
   used: 0,
   subscriptionPaces: [],
+  nowMs: Date.parse(NOW),
   ...over,
 });
 
@@ -354,13 +355,10 @@ describe('FleetView (mobile Fleet screen)', () => {
   describe('the rendered seen label (bzh:utc-instants)', () => {
     const REF = Date.parse('2026-07-16T12:00:00.000Z');
 
-    beforeEach(() => vi.spyOn(Date, 'now').mockReturnValue(REF));
-    afterEach(() => vi.restoreAllMocks());
-
     it('reads a fresh heartbeat as "seen Ns ago"', async () => {
       const fixture = TestBed.createComponent(FleetView);
       fixture.componentRef.setInput('state', 'ready');
-      fixture.componentRef.setInput('rows', [row('r1', { last_seen_at: '2026-07-16T11:59:55.000Z' })]);
+      fixture.componentRef.setInput('rows', [row('r1', { last_seen_at: '2026-07-16T11:59:55.000Z', nowMs: REF })]);
       await fixture.whenStable();
       const el = fixture.nativeElement as HTMLElement;
       expect(el.querySelector('[data-testid="mobile-fleet-runner-seen"]')?.textContent).toBe('seen 5s ago');

@@ -1,6 +1,5 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { vi } from 'vitest';
 
 import type { RunnerRow } from './runner-rows';
 import { RunnerPanelView } from './runner-view';
@@ -18,6 +17,7 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   claims: [],
   used: 0,
   subscriptionPaces: [],
+  nowMs: Date.parse(NOW),
   ...over,
 });
 
@@ -388,13 +388,10 @@ describe('RunnerPanelView', () => {
   describe('seenLabel (bzh:utc-instants)', () => {
     const REF = Date.parse('2026-07-16T12:00:00.000Z');
 
-    beforeEach(() => vi.spyOn(Date, 'now').mockReturnValue(REF));
-    afterEach(() => vi.restoreAllMocks());
-
     it('reads a fresh heartbeat as "seen Ns ago"', async () => {
       const fixture = TestBed.createComponent(RunnerPanelView);
     fixture.componentRef.setInput('state', 'ready');
-      fixture.componentRef.setInput('rows', [row('r1', { last_seen_at: '2026-07-16T11:59:55.000Z' })]);
+      fixture.componentRef.setInput('rows', [row('r1', { last_seen_at: '2026-07-16T11:59:55.000Z', nowMs: REF })]);
       await fixture.whenStable();
       const el = fixture.nativeElement as HTMLElement;
       expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('seen 5s ago');
@@ -404,7 +401,7 @@ describe('RunnerPanelView', () => {
       const fixture = TestBed.createComponent(RunnerPanelView);
     fixture.componentRef.setInput('state', 'ready');
       fixture.componentRef.setInput('rows', [
-        row('r1', { last_seen_at: '2026-07-16T17:00:00.000Z', online: false }),
+        row('r1', { last_seen_at: '2026-07-16T17:00:00.000Z', online: false, nowMs: REF }),
       ]);
       await fixture.whenStable();
       const el = fixture.nativeElement as HTMLElement;

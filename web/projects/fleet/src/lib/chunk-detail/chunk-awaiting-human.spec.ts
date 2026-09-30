@@ -352,11 +352,11 @@ describe('ChunkAwaitingHuman', () => {
     }
   });
 
-  it('disables the option chips and the Answer button while the answer mutation is pending, re-enabling once it settles', async () => {
+  it('disables the option chips and the Answer button of a question its answer is pending for, re-enabling once it settles', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
     fixture.componentRef.setInput('canAnswer', true);
-    fixture.componentRef.setInput('answerPending', true);
+    fixture.componentRef.setInput('pendingAnswerQuestionIds', ['qn_01']);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -365,11 +365,31 @@ describe('ChunkAwaitingHuman', () => {
       expect(chip.disabled).toBe(true);
     }
 
-    fixture.componentRef.setInput('answerPending', false);
+    fixture.componentRef.setInput('pendingAnswerQuestionIds', []);
     await fixture.whenStable();
 
     expect(el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(false);
     for (const chip of el.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
+      expect(chip.disabled).toBe(false);
+    }
+  });
+
+  it('leaves every other open question answerable while one question’s answer is pending', async () => {
+    const [first] = WAITING_QUESTION_DETAIL.questions!;
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...WAITING_QUESTION_DETAIL,
+      questions: [first, { ...first, question_id: 'qn_02' }],
+    });
+    fixture.componentRef.setInput('canAnswer', true);
+    fixture.componentRef.setInput('pendingAnswerQuestionIds', ['qn_01']);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const [pending, other] = [...el.querySelectorAll('[data-testid="open-question"]')];
+    expect(pending.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(true);
+    expect(other.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.disabled).toBe(false);
+    for (const chip of other.querySelectorAll<HTMLButtonElement>('[data-testid="question-option"]')) {
       expect(chip.disabled).toBe(false);
     }
   });

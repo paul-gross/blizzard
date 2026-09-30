@@ -118,9 +118,9 @@ export class ChunkDetailPanel {
    * {@link ChunkAwaitingHuman}. */
   readonly resolvePending = input(false);
 
-  /** Whether the answer-question mutation is in flight, forwarded to
+  /** The ids of the questions an answer mutation is in flight for, forwarded to
    * {@link ChunkAwaitingHuman}. */
-  readonly answerPending = input(false);
+  readonly pendingAnswerQuestionIds = input<readonly string[]>([]);
 
   /** The chunk's status as the status chip renders it, forwarded unchanged to
    * {@link ChunkDetailHeader.renderedStatus}. */

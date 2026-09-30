@@ -9,6 +9,7 @@ import { injectDeleteChunkMutation } from '../chunks/delete.mutations';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
 import {
+  type AnswerVars,
   injectAnswerQuestionMutation,
   injectResolveDecisionMutation,
   readAnswerFailure,
@@ -16,7 +17,7 @@ import {
 import { injectChunkPauseMutation, type ChunkPauseVars } from '../chunks/pause.mutations';
 import { errorMessage } from '../error-message';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
-import { chunkCompleteMutationKey, chunkPauseMutationKey } from '../mutation-keys';
+import { answerQuestionMutationKey, chunkCompleteMutationKey, chunkPauseMutationKey } from '../mutation-keys';
 import { injectPendingMutationVariables, isPendingFor } from '../mutation-pending';
 import { asyncState } from '../query-state';
 import { deriveWorkItemsState, type WorkItemsState } from './work-items-state';
@@ -95,6 +96,7 @@ export class ChunkDetail {
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
   private readonly workItemsQuery = injectHubChunkWorkItemsQuery(() => this.chunkId());
   private readonly answerMutation = injectAnswerQuestionMutation();
+  private readonly pendingAnswers = injectPendingMutationVariables<AnswerVars>(answerQuestionMutationKey);
   private readonly resolveMutation = injectResolveDecisionMutation();
   private readonly detachMutation = injectDetachChunkMutation();
   private readonly pauseMutation = injectChunkPauseMutation();
@@ -204,9 +206,11 @@ export class ChunkDetail {
    * awaiting-human gate's choice chips. */
   protected readonly resolvePending = computed(() => this.resolveMutation.isPending());
 
-  /** Whether the answer-question mutation is in flight for this chunk, threaded to the
-   * awaiting-human gate's option chips and Answer button. */
-  protected readonly answerPending = computed(() => this.answerMutation.isPending());
+  /** The ids of the questions an answer mutation is in flight for, threaded to the
+   * awaiting-human gate's option chips and Answer buttons. */
+  protected readonly pendingAnswerQuestionIds = computed(() =>
+    this.pendingAnswers().map((vars) => vars.questionId),
+  );
 
   /** The open chunk's last operator-action failure, or `null`. Reset on every new
    * attempt and whenever a different chunk opens. Shared by every action

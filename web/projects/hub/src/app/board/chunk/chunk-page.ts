@@ -21,7 +21,10 @@ import {
   ViewportService,
   errorMessage,
   hasPermission,
+  answerQuestionMutationKey,
+  type AnswerVars,
   injectAnswerQuestionMutation,
+  injectPendingMutationVariables,
   injectHubChunkDetailQuery,
   injectHubChunkWorkItemsQuery,
   injectMeQuery,
@@ -229,6 +232,7 @@ export class ChunkPage {
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
   private readonly workItemsQuery = injectHubChunkWorkItemsQuery(() => this.chunkId());
   private readonly answerMutation = injectAnswerQuestionMutation();
+  private readonly pendingAnswers = injectPendingMutationVariables<AnswerVars>(answerQuestionMutationKey);
   private readonly resolveMutation = injectResolveDecisionMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
   private readonly meQuery = injectMeQuery();
@@ -247,9 +251,11 @@ export class ChunkPage {
    * choice chips so a double tap cannot resolve the gate twice. */
   protected readonly resolvePending = computed(() => this.resolveMutation.isPending());
 
-  /** Whether the answer-question mutation is in flight, threaded to the General tab's
-   * option chips and Answer button so a double tap cannot submit the same answer twice. */
-  protected readonly answerPending = computed(() => this.answerMutation.isPending());
+  /** The ids of the questions an answer mutation is in flight for, threaded to the General
+   * tab's option chips and Answer buttons so a double tap cannot submit the same answer twice. */
+  protected readonly pendingAnswerQuestionIds = computed(() =>
+    this.pendingAnswers().map((vars) => vars.questionId),
+  );
 
   /** Whether the current identity may read a chunk's stored transcript segments
    * (`transcript:read`) — the Transcripts tab's own *option* is

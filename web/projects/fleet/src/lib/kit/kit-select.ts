@@ -47,7 +47,7 @@ export class KitSelect {
   readonly options = input.required<readonly KitChipOption[]>();
   readonly selectedValue = input<string | null>(null);
 
-  /** Names the listbox, and the trigger when no {@link label} is set. */
+  /** Names the listbox, and the trigger (with the selection) when no {@link label} is set. */
   readonly ariaLabel = input.required<string>();
 
   /** A muted prefix inside the trigger, folded into its accessible name. */
@@ -64,12 +64,16 @@ export class KitSelect {
 
   private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('triggerEl');
 
-  protected readonly selectedLabel = computed(
-    () => this.options().find((o) => o.value === this.selectedValue())?.label ?? '',
-  );
+  /** The matched option's label, else the raw value (a stale URL value matches no option), else empty. */
+  protected readonly selectedLabel = computed(() => {
+    const value = this.selectedValue();
+    return this.options().find((o) => o.value === value)?.label ?? value ?? '';
+  });
+  /** The trigger's accessible name: its label (or `ariaLabel`), then the current selection. */
   protected readonly triggerName = computed(() => {
-    const label = this.label();
-    return label ? `${label}: ${this.selectedLabel()}` : null;
+    const name = this.label() || this.ariaLabel();
+    const selected = this.selectedLabel();
+    return selected ? `${name}: ${selected}` : name;
   });
   protected readonly selection = computed(() => [this.selectedValue()].filter((v): v is string => v !== null));
 

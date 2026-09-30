@@ -42,13 +42,15 @@
                   >
                     <span>Segment {{ seg.spawn_generation }}</span>
                     @if (seg.harness_id) {
-                      <span
-                        class="tag"
+                      <fleet-kit-badge
+                        variant="pill"
+                        tone="idle"
                         data-testid="transcript-segment-harness"
                         [attr.data-harness-id]="seg.harness_id"
                         [attr.aria-label]="harnessName(seg.harness_id)"
-                        >{{ harnessName(seg.harness_id) }}</span
                       >
+                        {{ harnessName(seg.harness_id) }}
+                      </fleet-kit-badge>
                     }
                     @if (seg.truncated) {
                       <span class="tag warn">truncated</span>

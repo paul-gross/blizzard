@@ -5,6 +5,7 @@ import type { ChunkDetail } from '../api/hub';
 import { formatCost, formatTokens } from '../cost-format';
 import { harnessName } from '../harness-name';
 import { KitAsyncState } from '../kit/kit-async-state';
+import { KitBadge } from '../kit/kit-badge';
 import {
   deriveActiveRow,
   deriveHistoryRows,
@@ -51,7 +52,7 @@ import {
 @Component({
   selector: 'fleet-chunk-detail-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, RouterLink],
+  imports: [KitAsyncState, KitBadge, RouterLink],
   templateUrl: './chunk-timeline.html',
   styleUrl: './chunk-timeline.css',
 })
