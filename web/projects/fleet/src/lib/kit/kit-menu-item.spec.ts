@@ -3,7 +3,7 @@ import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { TestBed } from '@angular/core/testing';
 
 import { KitMenu, KitMenuPanel } from './kit-menu';
-import { KitMenuItem, KitMenuItemRadio } from './kit-menu-item';
+import { KitMenuItem, KitMenuItemRadio, KitMenuItemSubtitle } from './kit-menu-item';
 
 @Component({
   selector: 'fleet-test-host',
@@ -157,5 +157,43 @@ describe('KitMenuItem', () => {
     await fixture.whenStable();
 
     expect(fixture.componentInstance.choice()).toBe('two');
+  });
+});
+
+@Component({
+  selector: 'fleet-test-subtitle-host',
+  imports: [KitMenu, KitMenuPanel, KitMenuItem, KitMenuItemSubtitle],
+  template: `
+    <fleet-kit-menu ariaLabel="Menu" testid="trigger" [menu]="panel" />
+    <ng-template #panel>
+      <fleet-kit-menu-panel>
+        <fleet-kit-menu-item testid="with">
+          Runner
+          <span fleetKitMenuItemSubtitle data-testid="projected">{{ runnerName() }}</span>
+        </fleet-kit-menu-item>
+        <fleet-kit-menu-item testid="without">Plain</fleet-kit-menu-item>
+      </fleet-kit-menu-panel>
+    </ng-template>
+  `,
+})
+class SubtitleHost {
+  readonly runnerName = signal('r-claude');
+}
+
+describe('KitMenuItemSubtitle', () => {
+  it('lands a projected subtitle element on the subtitle line, and stacks no subtitle line when nothing is projected', async () => {
+    await TestBed.configureTestingModule({
+      imports: [SubtitleHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(SubtitleHost);
+    await fixture.whenStable();
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="trigger"]')?.click();
+    await fixture.whenStable();
+
+    const subtitle = inOverlay('[data-testid="with"] .subtitle');
+    expect(subtitle?.querySelector('[data-testid="projected"]')?.textContent).toBe('r-claude');
+    expect(inOverlay('[data-testid="with"] .label')?.textContent).not.toContain('r-claude');
+    expect(inOverlay('[data-testid="without"] .subtitle')).toBeNull();
   });
 });

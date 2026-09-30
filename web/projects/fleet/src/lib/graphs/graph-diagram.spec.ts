@@ -327,6 +327,15 @@ describe('GraphDiagram', () => {
       expect(loopHits[0].getAttribute('d')).toBe(visibleLoopPath.getAttribute('d'));
     });
 
+    it('keeps the svg an image with no focusable descendant', () => {
+      const fixture = mount({ ok: true, graph: LAID_OUT });
+      const svg = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="graph-diagram-svg"]') as SVGElement;
+
+      expect(svg.getAttribute('role')).toBe('img');
+      expect(svg.hasAttribute('tabindex')).toBe(false);
+      expect(svg.querySelectorAll('[tabindex], a[href], button, [role="button"], [role="application"]')).toHaveLength(0);
+    });
+
     it('renders a selection passed in from outside highlighted with no click at all (the controlled contract)', () => {
       const fixture = mount(
         { ok: true, graph: LAID_OUT },

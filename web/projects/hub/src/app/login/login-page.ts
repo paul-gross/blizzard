@@ -3,9 +3,8 @@ import { ActivatedRoute } from '@angular/router';
 import { KitAsyncState, LoginButtons, consumeReturnUrl, injectAuthProvidersQuery, safeAuthorizeReturnTo } from 'fleet';
 
 /** `localStorage` key the last provider signed in with is remembered under —
- * `localStorage`, not `sessionStorage`: a returning operator's preference
- * should survive across tabs and browser restarts, unlike the one-shot return
- * location {@link consumeReturnUrl} reads. */
+ * pinned by `login-page.spec.ts`'s "writes the last-used provider to
+ * localStorage, not sessionStorage". */
 const LAST_PROVIDER_KEY = 'fleet.auth.last-provider';
 
 /**

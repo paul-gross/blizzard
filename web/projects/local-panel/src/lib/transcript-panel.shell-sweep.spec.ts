@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
 import { stubRequestClient } from 'fleet/testing';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 
 import { TranscriptPanel } from './transcript-panel';
 
@@ -73,6 +73,15 @@ async function render(body: unknown) {
   fixture.componentRef.setInput('leaseId', 'L-903');
   await fixture.whenStable();
   return { fixture, stub };
+}
+
+/** Injects the global design tokens — a standalone component test never loads the
+ * apps' build `styles`, and a computed-color claim needs `var(--red-dim)` resolved. */
+async function loadDesignTokens(): Promise<HTMLStyleElement> {
+  const styleEl = document.createElement('style');
+  styleEl.textContent = await commands.readFile('projects/fleet/src/lib/design/tokens.css');
+  document.head.appendChild(styleEl);
+  return styleEl;
 }
 
 // 390 (a typical phone) and 320 (the narrowest common phone) — the widths this
@@ -149,4 +158,25 @@ describe('transcript panel shell sweep (web:shell-sweep, blizzard#249)', () => {
       expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
     });
   }
+
+  it('fills the hub-unreachable banner with a non-transparent background wash', async () => {
+    const tokens = await loadDesignTokens();
+    const { fixture, stub } = await render(HUB_UNREACHABLE_TRANSCRIPT);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const banner = root.querySelector<HTMLElement>('[data-testid="transcript-hub-unreachable"]');
+      expect(banner, 'no hub-unreachable banner in the DOM').not.toBeNull();
+      const background = getComputedStyle(banner!).backgroundColor;
+      expect(background).not.toBe('rgba(0, 0, 0, 0)');
+      expect(background).not.toBe('transparent');
+    } finally {
+      root.remove();
+      stub.restore();
+      tokens.remove();
+    }
+  });
 });

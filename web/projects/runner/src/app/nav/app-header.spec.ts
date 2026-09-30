@@ -153,7 +153,7 @@ describe('AppHeader', () => {
     expect(el.querySelector('[data-testid="stat-agents"]')).not.toBeNull();
   });
 
-  it('renders the shared 48px board header, not a bespoke local one (issue #131)', async () => {
+  it('renders the shared 48px board header, not a bespoke local one', async () => {
     stub = stubRequestClient(runnerClient, () => ({ items: [] }));
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;

@@ -149,39 +149,18 @@ export class ChunkDetail {
 
   /**
    * The chunk's status as it will read once a currently pending Pause or Complete
-   * settles, when that outcome is *total* over the currently rendered status
+   * settles, when that outcome is total over the rendered status
    * (`bzh:frontend-pending-override`) — `null` while nothing overrides
-   * `detail().status`, computed only from each mutation's own pending variables
-   * (`injectPendingMutationVariables`/`isPendingFor`), never a cache read or write.
-   * Merged with the real status by {@link renderedStatus}, which threads the result
-   * down to {@link ChunkDetailHeader.renderedStatus}; every other reader of
-   * `detail().status` (admissibility guards, the facts column) stays on the real
-   * server-read value.
-   *
-   * **Complete is total.** `CompleteService` always lands an operator-completion fact,
-   * which the hub's own status derivation (`ChunkFacts.status()`,
-   * `src/blizzard/hub/domain/work.py` — not this app's own `ChunkFacts` component of
-   * the same name) honors over every other status including `stopped` — `done` is
-   * reachable from any non-`done` status (`blizzard-context:/domain/work/statuses.md`),
-   * and the header already withholds Complete once the chunk already reads `done`
-   * ({@link ChunkDetailHeader.completable}), so this never has to guess there.
-   *
-   * **Pause is total only below the human-gated states**, folded exhaustively by
-   * {@link PAUSE_OVERRIDE_TOTAL} rather than an inline inequality, the same
-   * `Record<ChunkStatus, …>` idiom `chunk-lanes.ts`'s `STATUS_LANE` uses so a status
-   * added later is a compile error here instead of a silently wrong guess. `paused`
-   * ranks below `waiting_on_human`/`needs_human` in the precedence statuses.md owns, so
-   * pausing a chunk parked on either leaves its rendered status exactly where it was —
-   * the hub's `ChunkFacts.status()` branch order checks the human-gated facts before
-   * the pause fact. This reads that case as "no override" instead of guessing `paused`.
-   *
-   * **Resume renders no override at all.** `status` is the *only* status field
-   * `ChunkDetail` carries the pause overlay through — there is no second field naming
-   * what a paused chunk's status would read with the overlay lifted, so nothing here
-   * can predict whether a resumed chunk reads `running`, `delivering`, `ready`, or
-   * `not_ready` without re-deriving the ladder statuses.md already owns in prose,
-   * which the rule forbids. **Detach renders no override either** — not total; see
-   * {@link ChunkDetailHeader}.
+   * `detail().status`. Complete always predicts `done`; Pause predicts `paused` only
+   * where {@link PAUSE_OVERRIDE_TOTAL} holds; Resume and Detach predict nothing.
+   * Pinned by `chunk-detail.spec.ts`'s "renders the paused override while pending on a
+   * chunk below the human-gated states, reverting to the real status on rejection",
+   * "renders no status override while Pause is pending on a chunk already
+   * waiting_on_human/needs_human — the human-gated status wins", "renders the done
+   * override while Complete is pending, reverting to the real status on rejection",
+   * "renders no status override while Resume is pending — the pause overlay hides what
+   * status it would revert to" and "renders no status override while Detach is pending — the outcome
+   * depends on facts detach never touches".
    */
   protected readonly overrideStatus = computed<ChunkStatus | null>(() => {
     const detail = this.detail();
@@ -218,10 +197,9 @@ export class ChunkDetail {
   protected readonly actionError = signal<string | null>(null);
 
   /** The open chunk's last operator-action **outcome** — a non-failure result that still
-   * needs saying. Today that is exactly one case: a lost answer race, where
-   * the hub's 409 carries the *winning* answer. It is a channel of its own rather than a
-   * second use of {@link actionError} because the two read differently to an operator —
-   * "someone beat you to it, here is what they said" is news, not a failure to retry. */
+   * needs saying: a lost answer race, carrying the winning answer. Pinned by
+   * `chunk-detail.spec.ts`'s "renders the winner’s name and answer as an outcome when the
+   * answer race is lost". */
   protected readonly actionOutcome = signal<string | null>(null);
 
   constructor() {

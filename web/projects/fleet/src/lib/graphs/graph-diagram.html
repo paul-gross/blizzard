@@ -2,9 +2,8 @@
   @if (outcome(); as o) {
     @if (o.ok) {
       <div class="diagram-scroll" data-testid="graph-diagram-scroll">
-        <!-- role="img" keeps this subtree presentational to assistive tech (see the
-             class doc's a11y section) — a pointer-only clear affordance, not a
-             keyboard gap; the structured table below is the accessible path. -->
+        <!-- role="img": a pointer-only clear affordance, pinned by graph-diagram.spec.ts's
+             "keeps the svg an image with no focusable descendant". -->
         <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
         <svg
           [attr.viewBox]="'0 0 ' + o.graph.width + ' ' + o.graph.height"

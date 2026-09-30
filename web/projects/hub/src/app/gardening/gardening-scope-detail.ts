@@ -62,15 +62,11 @@ export class GardeningScopeDetail {
   private readonly editScopeMutation = injectEditScopeMutation();
   private readonly scopeLifecycleMutation = injectScopeLifecycleMutation();
 
-  /** Every scope slug a Retire/Enable mutation is currently pending for, and its own
-   * variables (`bzh:frontend-pending-override`) — read through the shared helper
-   * rather than `scopeLifecycleMutation.isPending()` alone, since {@link
-   * overrideRetired} below needs the fired *direction* (`retired: true` vs.
-   * `false`), not just pending-ness (`chunk-detail.ts`'s own `pendingChunkPauses`
-   * shape). This pane shows exactly one scope at a time, so there is no sibling row
-   * to distinguish pending mutations by variables the way a list surface would —
-   * {@link lifecyclePending} below still reads the mutation's bare `isPending()` for
-   * that reason, `chunk-detail.ts`'s own `pausePending` shape. */
+  /** Every scope slug a Retire/Enable mutation is currently pending for, with its
+   * variables (`bzh:frontend-pending-override`), so {@link overrideRetired} reads the
+   * fired direction; pinned by `gardening-scope-detail.spec.ts`'s "renders the retired
+   * override while Retire is pending…" and "renders the enabled override while Enable
+   * is pending…". */
   private readonly pendingScopeLifecycle = injectPendingMutationVariables<ScopeLifecycleVars>(scopeLifecycleMutationKey);
 
   private readonly routines = computed<readonly RoutineView[]>(() => this.routinesQuery.data() ?? []);

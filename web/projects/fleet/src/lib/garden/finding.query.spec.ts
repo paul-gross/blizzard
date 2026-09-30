@@ -5,7 +5,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { client as hubClient } from '../api/hub/client.gen';
 import { settle } from '../testing/settle';
 import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
-import { injectHubFindingsBucketQuery, injectHubFindingsQuery } from './finding.query';
+import { injectHubFindingQuery, injectHubFindingsBucketQuery, injectHubFindingsQuery } from './finding.query';
 
 @Component({
   selector: 'fleet-test-findings-query-host',
@@ -142,6 +142,48 @@ describe('injectHubFindingsQuery', () => {
 
     expect(fixture.componentInstance.query.isPending()).toBe(true);
     expect(stub.forRoute('/api/findings/fin_1', 'GET')).toHaveLength(0);
+  });
+});
+
+@Component({
+  selector: 'fleet-test-finding-query-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '',
+})
+class TestFindingQueryHost {
+  readonly findingId = signal<string | null>(null);
+  readonly query = injectHubFindingQuery(() => this.findingId());
+}
+
+describe('injectHubFindingQuery', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub?.restore());
+
+  /** The same failed read the fan-out drops as a missing row reaches the one-finding
+   * reader as an error, even with the fan-out already cached over that id. */
+  it('surfaces a failed single-finding read as an error, even beside a fan-out over the same id', async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/findings/fin_2') return stubError(404, { detail: 'not found' });
+      return {};
+    });
+    TestBed.configureTestingModule({
+      imports: [TestFindingsQueryHost, TestFindingQueryHost],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    });
+    const fanOut = TestBed.createComponent(TestFindingsQueryHost);
+    fanOut.componentInstance.findingIds.set(['fin_2']);
+    await settle(fanOut);
+    expect(fanOut.componentInstance.query.data()).toEqual([]);
+
+    const single = TestBed.createComponent(TestFindingQueryHost);
+    single.componentInstance.findingId.set('fin_2');
+    await settle(single);
+
+    expect(single.componentInstance.query.isError()).toBe(true);
+    expect(single.componentInstance.query.data()).toBeUndefined();
   });
 });
 

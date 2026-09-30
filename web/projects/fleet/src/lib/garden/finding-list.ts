@@ -88,12 +88,11 @@ export type FindingTriageVerb = 'resolve' | 'confirm-gone' | 'wont-fix' | 'not-a
  * gone/exited *tint* stays alongside it rather than being replaced by it: the tint
  * classifies three broad buckets at a glance, the badge names the exact state.
  *
- * The row's own headline (`.fl-summary`) is the finding's summary itself, clamped
- * to three lines — `proposal-list.ts`'s own `.pl-title` shape, so the two lists read
- * alike. It renders as plain clamped text, never through `fleet-kit-prose-block`:
- * that kit's transcript rail and `pre-wrap` body fight a line clamp, and the full
- * prose already has a home once a row is picked — `finding-panel.ts`'s own
- * `fp-summary`.
+ * The row's own headline (`.fl-summary`) is the finding's summary as plain text
+ * clamped to three lines — pinned by `finding-list.spec.ts`'s "clamps the summary
+ * headline to three lines, never through fleet-kit-prose-block" and
+ * `gardening-findings-triage.shell-sweep.spec.ts`'s "genuinely clamps a long summary
+ * to three lines…".
  */
 @Component({
   selector: 'fleet-finding-list',

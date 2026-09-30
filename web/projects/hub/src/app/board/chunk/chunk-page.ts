@@ -63,14 +63,11 @@ import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
  * `@switch` branch below, which is what keeps them lazy (split out
  * rather than folded in here to keep this file under `web:lint`'s line cap).
  *
- * Scope note, deliberate rather than an oversight: the dock's **destructive
- * and structural** operator actions — detach, pause/resume, close — are not
- * mounted here (they need the confirm affordances {@link ChunkDetailHeader}
- * carries, and a phone is a poor place to fire them). The **human-loop**
- * actions are, because answering an ask from here is the whole point of a
- * mobile board: answer, resolve, and the not-ready graph edit
- * {@link ChunkFacts} exposes all write through the same mutations the desktop
- * container uses.
+ * The dock's destructive and structural operator actions are not mounted
+ * here — pinned by `chunk-page.spec.ts`'s "mounts none of the dock's
+ * destructive or structural actions". The human-loop actions are: answer,
+ * resolve, and the not-ready graph edit {@link ChunkFacts} exposes all write
+ * through the same mutations the desktop container uses.
  */
 const BASE_TAB_OPTIONS: readonly KitTabOption[] = [
   { value: 'general', label: 'General', testid: 'tab-general' },

@@ -36,14 +36,14 @@ const CARD: BoardCard = {
 
 const WIDTHS = [800, 390, 320];
 
-async function renderCard(width: number): Promise<HTMLElement> {
+async function renderCard(width: number, card: BoardCard = CARD): Promise<HTMLElement> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [BoardCardComponent],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(BoardCardComponent);
-  fixture.componentRef.setInput('card', CARD);
+  fixture.componentRef.setInput('card', card);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
@@ -82,6 +82,26 @@ describe('board card cost figures shell sweep (web:shell-sweep)', () => {
             `width ${width}: ${ids[i]} wrapped off ${ids[i - 1]}'s line (top ${rects[i].top})`,
           ).toBeLessThan(rects[i - 1].bottom);
         }
+      } finally {
+        root.remove();
+      }
+    });
+  }
+
+  /** A done-lane card renders no status, so `.meta-right` can be its row's only child. */
+  const META_CASES: readonly { label: string; card: BoardCard }[] = [
+    { label: 'one child', card: { ...CARD, costUsd: 0, estimatedCostUsd: null, costPartial: false } },
+    { label: 'two children', card: CARD },
+  ];
+  for (const { label, card } of META_CASES) {
+    it(`sits the meta group flush with its row's end with ${label}`, async () => {
+      const root = await renderCard(390, card);
+      try {
+        const meta = root.querySelector<HTMLElement>('.meta-right');
+        const row = root.querySelector<HTMLElement>('.st-row');
+        expect(meta, 'fixture defect — .meta-right did not render').not.toBeNull();
+        expect(meta!.children.length, 'fixture defect — wrong meta child count').toBe(label === 'one child' ? 1 : 2);
+        expect(Math.abs(meta!.getBoundingClientRect().right - row!.getBoundingClientRect().right)).toBeLessThanOrEqual(0.5);
       } finally {
         root.remove();
       }

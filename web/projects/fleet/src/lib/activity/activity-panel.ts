@@ -6,7 +6,7 @@ import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import { asyncState } from '../query-state';
 import { FleetLiveUpdates, type HubEventPayload, type LoggedEvent, type RunnerChangeKind } from '../sse/fleet-live';
 import { formatClockTime } from '../when';
-import { injectHubActivityQuery } from './activity.query';
+import { ACTIVITY_LIMIT, injectHubActivityQuery } from './activity.query';
 import { ActivityFeedView, type ActivityRow } from './activity-view';
 import { summarizeChunkChange } from './chunk-change-summary';
 
@@ -27,9 +27,9 @@ const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind
 /**
  * A `runner-changed` frame as prose — e.g. `runner runner-local paused by
  * operator`, or `runner runner-local locally paused by runner-ceiling — spend ceiling
- * reached`. A kind with no phrasing above degrades to the raw kind rather than dropping
- * the row, on the same reasoning as {@link summarize}'s default: an unrecognized frame is
- * news that this board is older than the hub, and silence would hide it.
+ * reached`. A kind with no phrasing above renders as the raw kind — pinned by
+ * `activity-panel.spec.ts`'s "renders a runner-changed frame of an unrecognized kind as
+ * its raw kind, keeping the row".
  */
 function summarizeRunnerChange(data: LoggedEvent['data']): string {
   const runner = `runner ${compactRef(data.runner_id ?? '—')}`;
@@ -80,13 +80,8 @@ function summarize(event: LoggedEvent): RowSummary {
   }
 }
 
-/**
- * The rendered-row cap for the merged backfill + live feed —
- * reconciled with the backend's own `GET /api/activity` `limit` (`ACTIVITY_LIMIT`,
- * `activity.query.ts`) so the two stay the same number in one place a future reader can
- * find, rather than two caps that happen to agree by coincidence.
- */
-const RENDER_LIMIT = 200;
+/** The rendered-row cap for the merged backfill + live feed — the backfill read's own limit. */
+const RENDER_LIMIT = ACTIVITY_LIMIT;
 
 /** Shape one `GET /api/activity` row into the same {@link LoggedEvent} shape the live
  * SSE tee produces, so {@link summarize} (and {@link summarizeChunkChange}) run

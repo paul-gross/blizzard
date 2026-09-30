@@ -26,10 +26,8 @@ export interface ProposalWorkItemVm {
  * carries. `workItem` repeats the same accepted-and-minted proposal's
  * work item on every one of its finding rows, `null` otherwise.
  *
- * `state` is the row's whole classification: `FindingView.live` is deliberately not
- * carried, because it answers a different question than any of this row's callers
- * ask (`finding-state.ts` says why) and a row holding both invites the gate being
- * written against the wrong one. */
+ * `state` is the row's whole classification; pinned by `proposal-panel.spec.ts`'s
+ * "still offers every verb on a gone-flagged row, which has not exited". */
 export interface ProposalEvidenceRowVm {
   readonly findingId: string;
   readonly locus: string;

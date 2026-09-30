@@ -30,9 +30,8 @@ export interface ProposalCountsRowVm {
  * loading/error/empty states resolve independently of whichever other panel already
  * rendered `'ready'` beside it (`bzh:frontend-empty-state-gated`).
  *
- * A plain `<table>`, `routine-panel.html`'s own last-swept table — `fleet-kit-fact-list`
- * is a single-row label/value grid, not a fit for a multi-row numeric table like this
- * one.
+ * A plain `<table>`, pinned by `routine-proposal-counts.spec.ts`'s "renders one row
+ * per class with its five counts".
  */
 @Component({
   selector: 'fleet-routine-proposal-counts',

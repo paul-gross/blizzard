@@ -17,11 +17,6 @@ function clampPct(pct: number): number {
  * The reading: **top bar ahead of bottom bar = on pace to exhaust this window before it
  * resets.** Top behind bottom is the comfortable case — usage is lagging the window's
  * own clock.
- *
- * Not a `KitSlotBar` variant: that primitive renders `total` discrete filled/unfilled
- * cells (an integer occupancy count); this renders two independent continuous
- * proportions with no notion of "cells" at all — a genuinely separate primitive, not a
- * skin on the same shape.
  */
 @Component({
   selector: 'fleet-kit-pace-bar',

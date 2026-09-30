@@ -109,13 +109,10 @@
                         variant="text"
                         >{{ row.state }}</fleet-kit-badge
                       >
-                      <!-- Offered on any row that has not exited: an exit verb has nothing
-                           to do to a finding already out of the bucket, and the state beside
-                           it already says so. That includes a `gone`-flagged row, which is
-                           still open and is precisely what Confirm gone is for — hence the
-                           classification off `state`, never off the wire's `live` boolean.
-                           Withheld without `chunk:control`, the same permission the exit
-                           routes require, rather than offering a button that 403s. -->
+                      <!-- Offered on any row that has not exited, gated off `state`; pinned by
+                           `proposal-panel.spec.ts`'s "still offers every verb on a
+                           gone-flagged row, which has not exited". Withheld without
+                           `chunk:control`, the permission the exit routes require. -->
                       @if (canControl() && !isExited(row.state)) {
                         <span class="pp-finding-actions">
                           @for (action of actions; track action.verb) {

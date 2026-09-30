@@ -35,13 +35,8 @@ function chunkDetailKeys(data: RunnerEventPayload): readonly (readonly unknown[]
 }
 
 /**
- * The event → query-key invalidation registry — `local-panel`'s
- * own instance of the pattern `fleet`'s `EVENT_INVALIDATION_REGISTRY` established
- * (`sse/fleet-live.ts`), not an extension of it (`bzh:frontend-disjoint-diffs`):
- * the event union type comes from `fleet`'s runner vocabulary
- * ({@link RunnerEventType}), but the query keys each kind maps to are
- * `local-panel`'s own, so a second, cross-daemon registry lives here rather than
- * growing a `case` onto the hub's. `Record<RunnerEventType, …>`, exhaustive over
+ * The event → query-key invalidation registry — `local-panel`'s own instance
+ * (`bzh:frontend-disjoint-diffs`). `Record<RunnerEventType, …>`, exhaustive over
  * {@link RUNNER_EVENT_TYPES} — a new runner event type is a compile error here until
  * it is given a row, the same guard `fleet-live.ts` carries for the hub's own union.
  *
@@ -49,9 +44,8 @@ function chunkDetailKeys(data: RunnerEventPayload): readonly (readonly unknown[]
  * local sections (`runner`, `environments`, `asks`, `escalations`, `takeovers`,
  * `facts`) into one read, so every runner event kind stales it — each
  * kind reports a change to exactly one of those sections. `lease-changed`
- * additionally moves the `runner.capacities.used` count that same `runner` section
- * reports (`RunnerStatusService.summary` counts active leases), and is the only kind
- * that also stales the separate {@link runnerLeasesKey} read, the panel's own `GET
+ * additionally moves the `runner` section's `runner.capacities.used` count, and is
+ * the only kind that also stales the separate {@link runnerLeasesKey} read, the panel's own `GET
  * /api/leases` liveness rail. See {@link chunkDetailKeys} for the chunk-scoped key
  * every kind shares.
  */

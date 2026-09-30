@@ -52,20 +52,15 @@ class KitTooltipPanel {
  * A tooltip trigger — applied directly on the element it describes
  * (`[fleetTooltip]`, not a wrapping component), it opens a small token-styled panel
  * in a CDK overlay on hover or keyboard focus and closes it on the inverse
- * (mouseleave/blur) or `Escape`. The described text is a plain string input rather
- * than a `TemplateRef`: unlike {@link KitMenu}, a trigger directive introduces no
- * projection boundary for a content query to fail to cross, so there is nothing a
- * template would buy over a string.
+ * (mouseleave/blur) or `Escape`. The described text is a plain string input — pinned by
+ * `kit-tooltip.spec.ts`'s "opens on mouseenter and closes on mouseleave".
  *
  * `aria-describedby` is a host binding this directive owns outright: it mints the
  * panel's id itself (a simple unique-id counter) and binds it only while the panel
  * is actually open, so a consumer wires the relationship by importing this directive
  * alone, with nothing of its own to keep in sync.
  *
- * The workspace's first direct `@angular/cdk/overlay` consumer — `@angular/cdk` is
- * already a dependency via {@link KitMenu} (`@angular/cdk/menu`) and `KitDialog`
- * (`@angular/cdk/a11y`), so no new package is needed. Positioning is a minimal
- * `flexibleConnectedTo` strategy: centred above the host by default, flipping below
+ * Positioning is a minimal `flexibleConnectedTo` strategy: centred above the host by default, flipping below
  * when the panel would not fit there.
  */
 @Directive({

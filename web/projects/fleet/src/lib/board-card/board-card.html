@@ -46,10 +46,8 @@
           }
         </span>
       }
-      <!-- Pushed to the row's end via margin-left: auto rather than the row's
-           own justify-content, so it lands right-aligned whether it's carrying
-           one child or two instead of drifting to a centered gap
-           only space-between produces with three total row children. -->
+      <!-- Pushed to the row's end — pinned by `board-card-cost.shell-sweep.spec.ts`'s
+           "sits the meta group flush with its row's end with one child" and "…with two children". -->
       <span class="meta-right">
         @if (isDoneLane(card().status) && card().completedAt; as completedAt) {
           <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />

@@ -107,4 +107,13 @@ describe('LoginPage', () => {
     const items = Array.from(el.querySelectorAll('[data-testid^="login-provider-"][data-provider-type]'));
     expect(items[0].getAttribute('data-testid')).toBe('login-provider-oidc-co');
   });
+
+  it('writes the last-used provider to localStorage, not sessionStorage', async () => {
+    const fixture = await mount([{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }]);
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="login-provider-oidc-co"]')?.click();
+    await settle(fixture);
+
+    expect(localStorage.getItem('fleet.auth.last-provider')).toBe('oidc-co');
+    expect(sessionStorage.getItem('fleet.auth.last-provider')).toBeNull();
+  });
 });

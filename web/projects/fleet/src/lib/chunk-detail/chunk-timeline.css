@@ -212,22 +212,10 @@ a.gr:focus-visible {
   white-space: nowrap;
   pointer-events: auto;
 }
-/* A history step's own usage — its own full-width row under the step's main
-   cells, not squeezed onto the same line as the verdict/timestamp.
-   The node-history column is one third of the detail panel (chunk-detail-panel.ts's
-   three-way split) — often only ~300px wide, sometimes narrower still — so
-   reserving a fixed column on the *shared* row starves the 1fr verdict track and
-   clips or overlaps neighboring cells. Spanning the full row width instead gives
-   this line the whole column's width, usually comfortable for the two
-   fixed-width cells inside it. min-width: 0 stops this spanning item from
-   forcing the row wider than the column actually has (grid's default is to let a
-   spanning item's own content floor win); flex-wrap: wrap is the fallback for
-   whatever's left over — the token cell and the cost cell each keep their own
-   nowrap (a figure's own text never breaks), but the pair as a whole can drop
-   the cost onto its own line rather than overflow the column. `1 / -1`
-   still spans all four of `.timeline`'s subgridded tracks under `.step`;
-   checked (not assumed) that `min-width: 0` keeps this spanning item
-   from contributing back into their shared sizing. */
+/* A history step's own usage, on its own full-width row under the step's main
+   cells — pinned by `chunk-timeline-provenance.shell-sweep.spec.ts`'s "gives each
+   step's usage its own full-width row under an unclipped verdict at 390px"/"…320px".
+   The token and cost cells each keep their own nowrap; the pair wraps as a whole. */
 .step-usage {
   grid-column: 1 / -1;
   min-width: 0;

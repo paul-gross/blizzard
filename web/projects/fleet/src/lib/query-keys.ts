@@ -58,10 +58,9 @@ export function hubFindingsKey(findingIds: readonly string[]): readonly unknown[
 }
 
 /** One finding read on its own through `GET /api/findings/{finding_id}` — the
- * detail pane's read, as distinct from {@link hubFindingsKey}'s joined fan-out.
- * It carries its own prefix because the two reads answer a failed request
- * differently (the fan-out drops a failure, this one surfaces it), and a shared
- * key would let whichever mounted first decide that for both. */
+ * detail pane's read, under its own prefix apart from {@link hubFindingsKey}'s
+ * joined fan-out; pinned by `finding.query.spec.ts`'s "surfaces a failed
+ * single-finding read as an error, even beside a fan-out over the same id". */
 export const hubFindingPrefixKey = ['hub', 'finding'] as const;
 
 /** @see hubFindingPrefixKey */
@@ -216,19 +215,12 @@ export function chunkTranscriptsKey(plane: TranscriptPlane, chunkId: string | nu
   return [plane, 'chunk', chunkId, 'transcripts'];
 }
 
-/** One segment's decompressed turns, keyed by plane, chunk, and segment
- * id, plus whether the segment is `final` — the placement, not just the id pair, is what
- * decides whether a `chunk-changed` SSE event refetches it. A `final` segment's content
- * is immutable and the (chunkId, segmentId) pair already uniquely identifies it, so it
- * gets its own top-level prefix, *not* nested
- * under the plane's chunk-key prefix — nesting it there would mean every SSE event on the
- * chunk refetches an already-rendered segment's content, a decompress+parse+per-turn-
- * validate for no reason, defeating this query's own `refetchInterval: false`
- * (`transcript-segments.query.ts`). A non-`final` (open) segment has no such immutability
- * guarantee — an operator watching it live needs its content to keep refreshing — so it
- * stays under the plane's chunk-key prefix, the same live signal the index itself
- * refetches on. Finality isn't known in advance of the index read, so a caller that
- * hasn't resolved it yet passes `final: false`, the safe (still-live) default. */
+/** One segment's decompressed turns, keyed by plane, chunk, and segment id, plus
+ * whether the segment is `final`. A `final` segment sits under its own top-level
+ * prefix and an open one under the plane's chunk-key prefix, so only the open one
+ * refetches on a `chunk-changed` event; pinned by `transcript-segments.query.spec.ts`'s
+ * "refetches an open segment on the chunk key's invalidation, but never a final one".
+ * A caller that has not resolved finality yet passes `final: false`. */
 export function chunkTranscriptSegmentKey(
   plane: TranscriptPlane,
   chunkId: string | null,

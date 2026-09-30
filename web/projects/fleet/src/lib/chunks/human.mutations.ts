@@ -20,14 +20,11 @@ export interface AnswerVars {
 }
 
 /**
- * Read a losing answer's 409 body — the winning {@link AnswerResult}.
- *
- * The hub's first-write-wins arbitration answers a beaten writer with the *winning row*,
- * not an error message: `{won: false, answer, answered_by, …}` and no `detail` field at
- * all. That is why this exists rather than the shared `errorMessage()` fold, which reads
- * only `detail` and so turned the one response carrying real news into a generic
- * "Answer failed." Returns `null` for anything that is not that shape, so a genuine
- * transport or 404 failure still falls through to the error path.
+ * Read a losing answer's 409 body — the winning {@link AnswerResult}, which carries no
+ * `detail` field — or `null` for any other failure. Pinned by `chunk-detail.spec.ts`'s
+ * "renders the winner’s name and answer as an outcome when the answer race is lost" and
+ * `chunk-page.spec.ts`'s "renders a lost answer race as an outcome naming the winner, not
+ * "Answer failed."".
  */
 function readAnswerConflict(error: unknown): AnswerResult | null {
   if (!error || typeof error !== 'object') return null;
@@ -47,12 +44,11 @@ export interface AnswerFailure {
 }
 
 /**
- * Fold an answer mutation's `onError` into the channel it belongs on.
- *
- * The one owner of both the branch and the sentence, because **two** surfaces answer a
- * question — the desktop dock and the mobile chunk page — and a board that got only half
- * of this is worse than one that got none: it would render the return trail while still
- * reporting the race it is most likely to lose as "Answer failed."
+ * Fold an answer mutation's `onError` into the channel it belongs on, for both surfaces
+ * that answer a question. Pinned per surface by `chunk-detail.spec.ts`'s "renders the
+ * winner’s name and answer as an outcome when the answer race is lost" and
+ * `chunk-page.spec.ts`'s "renders a lost answer race as an outcome naming the winner, not
+ * "Answer failed."".
  */
 export function readAnswerFailure(error: unknown): AnswerFailure {
   const winner = readAnswerConflict(error);

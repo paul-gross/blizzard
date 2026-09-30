@@ -32,11 +32,9 @@ import { LocalSubscriptions } from './local-subscriptions';
  * (and the URL's), so a detail screen is deep-linkable and the
  * device back button walks out of it like any other navigation.
  *
- * {@link LocalPauseControl} is likewise **not** mounted here —
- * a deliberate scope decision, not an oversight: #133 shipped desktop-only,
- * so a mobile operator sees neither the local pause toggle nor the "paused
- * by hub" badge today. Mounting it (and wiring a home for it in this single
- * scrolling column) is left to the next mobile chunk.
+ * {@link LocalPauseControl} is not mounted here — pinned by
+ * `local-panel-mobile.spec.ts`'s "mounts no local pause control or paused-by-hub
+ * badge".
  *
  * Owns no titlebar: the shared `MobileTitlebar` chrome — its
  * live dot, its overflow menu, and the signed-in identity/logout row inside

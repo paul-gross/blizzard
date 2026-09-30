@@ -198,6 +198,23 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('fleet-chunk-detail-artifacts')).toBeNull();
   });
 
+  it("mounts none of the dock's destructive or structural actions", async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector('fleet-chunk-detail-header')).toBeNull();
+    for (const testid of [
+      'pause-chunk',
+      'resume-chunk',
+      'detach-chunk',
+      'complete-chunk',
+      'delete-chunk',
+      'chunk-actions-menu',
+      'detail-close',
+    ]) {
+      expect(el.querySelector(`[data-testid="${testid}"]`), testid).toBeNull();
+    }
+  });
+
   it('switches to the Artifacts tab on click, writing ?tab=artifacts with no full reload, and back again', async () => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);

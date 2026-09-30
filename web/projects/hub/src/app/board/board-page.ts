@@ -175,22 +175,12 @@ export class BoardPage {
 
   /**
    * {@link chunks}, with each pending-promote chunk's status overridden to `'ready'`
-   * (`bzh:frontend-pending-override`) — this is what actually moves its card into the READY
-   * lane while `promoteChunk` is in flight, since {@link BoardShell} groups every card by
-   * its `status` field alone. The override is total and always safe here: a chunk resting
-   * at `not_ready` has no other status that could simultaneously outrank a promote
-   * (`blizzard-context:/domain/work/statuses.md`), so there is no "not predictable, fall
-   * back to disabled" case to guard for. Fed to `BoardShell` in place of {@link chunks}
-   * itself; {@link boardState} and {@link selected} stay off the real list, since neither
-   * cares about a card's rendered status. Purely computed off `pendingPromotes`' own
-   * variables — nothing here touches the query cache, so a rejected promote reverts to
-   * `not_ready` for free the instant `isPending()` flips false.
-   *
-   * Also drops any chunk with a pending delete — {@link pendingDeletes} — entirely, rather
-   * than overriding a field: a chunk mid-delete has no predictable *status* to render (the
-   * override is about ceasing to exist, not becoming some other status), and the item's own
-   * table asks for it "hidden from lists" outright. A rejected delete reverts it to visible
-   * for free the same way the status override reverts, once `isPending()` flips false.
+   * (`bzh:frontend-pending-override`, total per `blizzard-context:/domain/work/statuses.md`)
+   * and each pending-delete chunk dropped — pinned by `board-page.spec.ts`'s "moves only the
+   * clicked card into READY while its mutation is pending, restoring it to BACKLOG once
+   * settled" and "drops the row while its delete is pending, and restores it once the delete
+   * settles". Fed to `BoardShell` in place of {@link chunks}; {@link boardState} and
+   * {@link selected} stay off the real list.
    */
   protected readonly boardChunks = computed<readonly ChunkSummary[]>(() => {
     const pendingPromoted = this.pendingPromotes();

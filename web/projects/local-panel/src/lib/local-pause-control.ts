@@ -23,15 +23,11 @@ import { injectLocalPauseMutation, injectRunnerDashboardQuery, type LocalPauseVa
  *
  * The toggle button flips only the **local** brake (`PATCH /api/runner`,
  * through the generated client — `bzh:generated-client`). The hub's own
- * brake (`hub_paused`) is out of scope here (`blizzard hub runner resume` clears
- * it, per the issue) and this control never implies it can touch it: when
- * `hub_paused` is set, a badge says so explicitly, regardless of what the
- * local toggle is doing — an operator whose local brake is off still sees
- * why the runner is not filling, instead of the toggle looking broken. The
- * badge reads `tone="waiting"`, the same tone `chunk-lanes.ts`'s
- * `STATUS_TONE` gives every other `paused` status on the board — not
- * `"needs"`, which would make the identical condition read as an alarm here
- * and a wait everywhere else.
+ * brake (`hub_paused`, cleared by `blizzard hub runner resume`) is out of scope
+ * here: when `hub_paused` is set, a badge says so, regardless of the local
+ * toggle. The badge's tone is pinned by `local-pause-control.spec.ts`'s
+ * "renders the paused-by-hub badge with the shared "waiting" tone, not "needs"
+ * — the same tone the board gives every other paused status".
  *
  * A failed PATCH is surfaced, not swallowed — the same "report, don't
  * swallow" convention `chunk-detail.ts`'s pause/resume/detach mutations
