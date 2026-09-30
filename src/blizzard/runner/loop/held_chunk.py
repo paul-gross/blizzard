@@ -47,7 +47,7 @@ class HeldChunk:
     def drive(self) -> None:
         """Drive a chunk the runner holds with no active lease.
 
-        Four shapes share this poll, all holding environments: a hub node polled toward its
+        Four shapes share this poll, all holding environments until a terminal outcome: a hub node polled toward its
         terminal outcome, a resolved gate, a chunk moved to a higher epoch, and an unknown one."""
         try:
             view = self.ctx.chunk_views.get(self.chunk_id)
@@ -59,6 +59,10 @@ class HeldChunk:
             return
         if view.status == ChunkStatus.DONE:
             _log.info("delivery landed — releasing envs", chunk_id=self.chunk_id)
+            self.ctx.env_release.release_chunk(self.chunk_id)
+            return
+        if view.status == ChunkStatus.STOPPED:
+            _log.info("held chunk stopped — releasing envs", chunk_id=self.chunk_id)
             self.ctx.env_release.release_chunk(self.chunk_id)
             return
         decision = view.decision

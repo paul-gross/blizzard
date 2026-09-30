@@ -2559,6 +2559,30 @@ def test_poll_hub_node_releases_on_done(tmp_path):  # type: ignore[no-untyped-de
 
 
 @pytest.mark.unit
+def test_poll_hub_node_releases_on_stopped(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    # A chunk stopped while parked at a hub node: a binding but no active lease.
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1",
+        status=ChunkStatus.STOPPED,
+        latest_epoch=1,
+    )
+    provider = FakeProvider({"e1": "/ws/e1"})
+    ctx = make_context(
+        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
+    )
+
+    Advance(ctx).run()
+
+    assert provider.released == ["e1"]
+    assert store.held_environment_ids() == []
+    Advance(ctx).run()  # a further tick has nothing left to poll
+    assert hub.hub_advance_calls == []
+
+
+@pytest.mark.unit
 def test_poll_hub_node_waits_while_delivering(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
