@@ -58,8 +58,8 @@ export interface RunSubmission {
 export class GardeningRunDialogView {
   readonly routineName = input.required<string>();
 
-  /** Every non-retired scope, previously-swept-by-this-routine first — the
-   * container's own ordering. */
+  /** Every non-retired scope, previously-swept-by-this-routine first;
+   * rendered in the order given. */
   readonly scopes = input.required<readonly ScopeView[]>();
 
   readonly sweptSlugs = input.required<ReadonlySet<string>>();

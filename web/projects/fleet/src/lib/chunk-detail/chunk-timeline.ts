@@ -59,12 +59,9 @@ export class ChunkTimeline {
   /** The chunk aggregate to render (its recorded history, current node, and usage). */
   readonly detail = input.required<ChunkDetail>();
 
-  /** Whether to render this component's own "Node history" heading. `true`
-   * (the default) is kept for the dock (`chunk-detail-panel.ts`'s `.d-sec`),
-   * which has no panel chrome of its own and relies on the heading both
-   * visually and as its `aria-labelledby` target; a consumer already
-   * wrapped in a titled `<fleet-kit-panel label="node history">`
-   * sets this `false`. */
+  /** Whether to render this component's own "Node history" heading, which
+   * also serves as an `aria-labelledby` target. Set `false` when the host
+   * already titles the section. */
   readonly heading = input(true);
 
   /** Whether a row carrying a real join key activates by mouse/Enter/Space, emitting
@@ -116,10 +113,8 @@ export class ChunkTimeline {
 
   protected readonly historyRows = computed<readonly HistoryRow[]>(() => deriveHistoryRows(this.detail()));
 
-  /** Whether the timeline spans more than one graph — a chunk that migrated.
-   * When true the board labels each row with the graph it happened in; a single-graph
-   * chunk shows no graph badge (it would be noise). A migration inherently crosses two
-   * graphs (its target may not yet have its own row), so its presence alone qualifies. */
+  /** When true, each row is labelled with its graph; a single-graph chunk shows no
+   * graph badge (it would be noise). See {@link deriveMultiGraph}. */
   protected readonly multiGraph = computed<boolean>(() => deriveMultiGraph(this.historyRows()));
 
   /** The node currently in flight, as a synthetic timeline row — `RUN` while a worker

@@ -21,8 +21,7 @@ import {
 import { hubFindingPrefixKey, hubFindingsBucketPrefixKey, hubFindingsKey } from '../query-keys';
 
 /** `POST /api/findings/{verb}` — the shared vars shape every human-driven exit and
- * `reopen` take (`FindingExitRequest`'s own note: every finding named exits, or
- * reopens, together, one call, carrying the same required note). */
+ * `reopen` take; mirrors `FindingExitRequest` (`src/blizzard/wire/finding.py`). */
 export interface FindingExitVars {
   readonly findingIds: readonly string[];
   readonly note: string;

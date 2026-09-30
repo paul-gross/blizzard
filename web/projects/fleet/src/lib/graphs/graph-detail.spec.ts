@@ -44,7 +44,7 @@ describe('GraphDetail', () => {
   async function mount(graphId: string, route: (m: string, p: string) => unknown, me: unknown = OPERATOR_ME_RESPONSE) {
     // Every mount resolves `/api/me` (the graph-edit gate reads it); the per-test
     // `route` handles the graph reads. `me` defaults to the full-permission operator so
-    // the lifecycle controls render, exactly as before the #93 gating landed.
+    // the lifecycle controls render.
     stub = stubRequestClient(hubClient, (m, p) => {
       if (m === 'GET' && p === '/api/me') return me;
       return route(m, p);

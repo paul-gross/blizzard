@@ -14,9 +14,8 @@ export const EMPTY_SCOPE_SELECTION: ScopeSelection = '';
  * {@link GardeningRunDialogView} ahead of the 400-line ceiling rather than after it.
  * Lists the routine's own related, non-retired scopes, previously-swept first.
  *
- * Presentational only: renders `scopes()` (the container's own ordering) and
- * `selection()`, and re-emits every change through `selectionChange` — the container
- * decides what a selection means.
+ * Presentational only: renders `scopes()` in the order given and `selection()`,
+ * and re-emits every change through `selectionChange`.
  */
 @Component({
   selector: 'app-gardening-run-scope-field',
@@ -27,7 +26,7 @@ export const EMPTY_SCOPE_SELECTION: ScopeSelection = '';
 })
 export class GardeningRunScopeField {
   /** The routine's own related, non-retired scopes, previously-swept-by-this-routine
-   * first — the container's own ordering; this field renders it verbatim. */
+   * first; rendered in the order given. */
   readonly scopes = input.required<readonly ScopeView[]>();
 
   /** The scope slugs this routine has previously swept — renders a "previously swept"

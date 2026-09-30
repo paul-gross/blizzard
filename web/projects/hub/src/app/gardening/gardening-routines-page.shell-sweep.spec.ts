@@ -10,7 +10,7 @@ import { GardeningRoutineDetail } from './gardening-routine-detail';
 import { GardeningRoutinesPage } from './gardening-routines-page';
 
 /**
- * The gardening routines container's own `.gr-layout` two-column split
+ * The gardening routines page's `.gr-layout` two-column split
  * (`gardening-routines-page.css`) — the master/detail grid
  * `routine-panel.shell-sweep.spec.ts` never mounts, since it stands `FleetRoutinePanel`
  * up in isolation. A real, headless-Chromium proof that the `@media (max-width:

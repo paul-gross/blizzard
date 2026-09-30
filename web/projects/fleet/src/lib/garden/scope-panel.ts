@@ -26,10 +26,9 @@ export interface ScopePanelVm {
    * pending lifecycle mutation's own predicted outcome can never flip which verb the
    * next click would fire. */
   readonly retired: boolean;
-  /** The lifecycle badge's rendered value — the container's own applied result
-   * (`bzh:frontend-pending-override`): the `retired` flag a currently pending
-   * Retire/Enable predicts, already merged with the real {@link retired} where
-   * nothing overrides it (`graph-detail-header.ts`'s own `renderedRetired`). */
+  /** The lifecycle badge's rendered value — which may be a pending Retire/Enable's
+   * predicted `retired` flag rather than the real {@link retired}
+   * (`bzh:frontend-pending-override`). */
   readonly renderedRetired: boolean;
   /** Every routine linked to this scope, each marked whether it defaults here
    * — `null` while the relation read is still pending. */

@@ -8,8 +8,8 @@ import { GardeningProposalPassDialogView } from './gardening-proposal-pass-dialo
  * `blizzard hub garden-proposal pass <id> --reason <text>`'s own UI: a single
  * required-reason field, submitted through `injectPassGardenProposalMutation`
  * (`bzh:generated-client`). Closure is terminal, so a 409 (a raced second close) is a
- * real outcome, not an impossible one — it surfaces through this container's own
- * `submitError`, exactly the mutation's `errorMessage` fallback shape every other
+ * real outcome, not an impossible one — it surfaces through {@link submitError},
+ * exactly the mutation's `errorMessage` fallback shape every other
  * mutation in this app already answers with.
  *
  * The host page mounts this with `@if` around the passing proposal

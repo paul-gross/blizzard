@@ -10,7 +10,7 @@ import { GardeningProposalDetail } from './gardening-proposal-detail';
 import { GardeningProposalsPage } from './gardening-proposals-page';
 
 /**
- * The garden proposal docket container's own `.gp-layout` two-column split
+ * The garden proposal docket's `.gp-layout` two-column split
  * (`gardening-proposals-page.css`) — a real-Chromium proof that the `@media
  * (max-width: 720px)` rule and viewport-driven visibility turn it into a mobile
  * list/detail drill-down (`bzh:narrow-viewport-tier-rule`): jsdom parses the CSS

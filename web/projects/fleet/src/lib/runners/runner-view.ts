@@ -34,22 +34,15 @@ export class RunnerPanelView {
    * copy until the read resolves. */
   readonly state = input.required<KitAsyncStateValue>();
 
-  /** Whether to render the hub pause/resume brake — the container passes
-   * `hasPermission(me, 'runner:pause')`. Admin-tier: a `contributor` sees the registry
+  /** Whether to render the hub pause/resume brake — the identity's
+   * `runner:pause` permission. Admin-tier: a `contributor` sees the registry
    * and its liveness/paused badges but not the toggle it could only 403 on. Defaults
    * `false` so the brake stays withheld until permission is confirmed (no flash of a
-   * control the identity cannot use). Under `auth.mode = "none"` the implicit operator
-   * holds every permission, so the brake renders exactly as before. */
+   * control the identity cannot use). */
   readonly canPause = input(false);
 
-  /** The runner ids whose hub pause/resume mutation the container's shared
-   * `pauseMutation` is currently in flight for (`injectPendingMutationVariables`) — a
-   * plain id list rather than a field folded onto {@link RunnerRow} itself, since that
-   * type is `injectRunnerRows()`'s own shared fold and reused by the mobile Fleet
-   * view, which carries no pause-pending concept of its own. Scoping the toggle's
-   * `disabled` state to this list is what keeps a sibling row's button enabled while
-   * only the row that was clicked disables — the one `pauseMutation` instance fires
-   * once per row, so its bare `isPending()` would freeze every row alike. */
+  /** The runner ids with a pause/resume currently in flight — only those rows'
+   * toggles disable, so every other row's stays enabled. */
   readonly pendingRunnerIds = input<readonly string[]>([]);
 
   /** The panel's last pause/resume failure, or `null` — rendered as a visible inline

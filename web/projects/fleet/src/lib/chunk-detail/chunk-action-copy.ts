@@ -1,8 +1,7 @@
 /** The claim-vocabulary (bzh:claim-vocabulary) copy table, transcribed for the chunk detail dock's action controls. */
 
-/** One action's copy: its menu label, its menu subtitle (`null` for Pause/Resume, which
- * render as the dock's primary button rather than a menu item), and the full text a
- * `KitTooltip` on the control renders. */
+/** One action's copy: its short label, its subtitle (`null` when the action has
+ * none), and its full explanatory text. */
 export interface ChunkActionCopy {
   readonly label: string;
   readonly subtitle: string | null;

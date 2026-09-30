@@ -19,12 +19,11 @@ import { injectChunkTranscriptSegmentQuery, injectChunkTranscriptsQuery, Transcr
  * inputs, never defaulted, so a mounting app states which plane it reads from rather than
  * this component guessing or branching on it.
  *
- * `:host { display: contents }` (round-2 regression fix) — this component
+ * `:host { display: contents }` — this component
  * contributes no box of its own, so its single child (`fleet-chunk-transcripts-tab`)
- * becomes a direct flex item of the mounting page's own body the way it was before this
- * container existed. Without it, the tab's own `:host { flex: 1; min-height: 0 }`
- * (`chunk-transcripts-tab.ts`) has no flex ancestor to apply against — this container's
- * own box, laid out in normal block flow — and resolves to `height: auto`, which breaks
+ * is a direct flex item of whatever flex body mounts it. Without it, the tab's
+ * `:host { flex: 1; min-height: 0 }` has no flex ancestor to apply against — this
+ * component's box, laid out in normal block flow — and resolves to `height: auto`, which breaks
  * the tab's internal `height: 100%` chain all the way down to `.tx-view`'s scroll
  * container, so a long segment becomes unreachable, clipped by the page's own
  * `overflow: hidden` with nothing to scroll.
@@ -37,16 +36,15 @@ import { injectChunkTranscriptSegmentQuery, injectChunkTranscriptsQuery, Transcr
   styleUrl: './chunk-transcripts-container.css',
 })
 export class ChunkTranscriptsContainer {
-  /** Which daemon's API this instance reads from — the hub app passes `hubClient`,
-   * the runner app its own `runnerClient`; both generated clients share this structural
-   * shape (`bzh:generated-client`). */
+  /** The generated API client this instance reads transcripts through
+   * (`bzh:generated-client`). */
   readonly client = input.required<Client>();
 
   /** Namespaces this instance's TanStack cache keys — see {@link client}'s own doc. */
   readonly plane = input.required<TranscriptPlane>();
 
-  /** `ChunkPage.chunkId()`'s own type — nullable everywhere else that field is threaded
-   * — so the query's own `enabled: id !== null` stays the real gate
+  /** The chunk whose transcripts to read, or `null` while none is known — nullable
+   * so the query's own `enabled: id !== null` stays the real gate
    * rather than a `?? ''` sentinel that could pass it with an empty id. */
   readonly chunkId = input.required<string | null>();
   readonly history = input.required<readonly TransitionView[]>();

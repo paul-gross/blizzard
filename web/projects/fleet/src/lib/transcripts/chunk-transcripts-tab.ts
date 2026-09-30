@@ -17,13 +17,12 @@ import { type SidechainOpenEvent, TranscriptViewer } from './transcript-viewer';
  * component) — a nav of node-history steps, each holding its segments, beside a
  * lazily-fetched segment viewer. Mirrors `ChunkArtifactsTab`'s nav-beside-viewer shape
  * and, like it, is presentational (`bzh:frontend-container-presentational`):
- * the two queries behind this tab (the index on open, one segment's turns only once
- * opened) live on {@link ChunkTranscriptsContainer}, which passes their resolved state
- * down as inputs — nothing about a chunk's transcripts is in `detail()`'s own payload
+ * the two reads behind this tab (the index on open, one segment's turns only once
+ * opened) arrive as resolved-state inputs — nothing about a chunk's transcripts is in `detail()`'s own payload
  * (pinned at `test_chunk_detail_carries_no_transcript_field`).
  *
- * {@link indexState}/{@link segmentState} are that container's own `asyncState()` folds over
- * its two queries (`bzh:frontend-empty-state-gated`); {@link isForbidden} is carried
+ * {@link indexState}/{@link segmentState} are the two reads' resolved async states
+ * (`bzh:frontend-empty-state-gated`); {@link isForbidden} is carried
  * separately since a 403 on the index read is its own honest state, not a generic error.
  *
  * The open segment's seam buttons, truncated/turn-cap banners, and turn list all render

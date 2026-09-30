@@ -43,13 +43,8 @@ export class FleetView {
    * without `runner:pause` (admin-tier). */
   readonly canPause = input(false);
 
-  /** The runner ids whose hub pause/resume mutation the container's shared
-   * `pauseMutation` is currently in flight for — a plain id list rather than a
-   * field folded onto {@link RunnerRow} itself, mirroring `RunnerPanelView`'s own
-   * `pendingRunnerIds`. Scoping the toggle's `disabled` state to this list is what
-   * keeps a sibling row's button enabled while only the row that was tapped
-   * disables — the one `pauseMutation` instance fires once per row, so its bare
-   * `isPending()` would freeze every row alike. */
+  /** The runner ids with a pause/resume currently in flight — only those rows'
+   * toggles disable. */
   readonly pendingRunnerIds = input<readonly string[]>([]);
 
   /** The page's last pause/resume failure, or `null` — rendered as a visible inline

@@ -75,10 +75,9 @@ export class ChunkDetailHeader {
   /** The chunk aggregate to render (identity, status, current node, pause, route). */
   readonly detail = input.required<ChunkDetail>();
 
-  /** The chunk's status as the header's own status chip renders it — the container's
-   * already-applied result (`bzh:frontend-pending-override`, `chunk-detail.ts`'s
-   * `overrideStatus`/`renderedStatus`): a currently pending Pause/Complete's predicted
-   * outcome where one overrides, else the real `detail().status`. Never consulted by
+  /** The chunk's status as the header's status chip renders it — which may be a
+   * pending action's predicted outcome rather than `detail().status`
+   * (`bzh:frontend-pending-override`). Never consulted by
    * {@link pausable}/{@link completable}/{@link deletable}: those gate what the *next*
    * click is admissible to fire against the server-read status, which an in-flight
    * mutation's own predicted outcome must not perturb. */

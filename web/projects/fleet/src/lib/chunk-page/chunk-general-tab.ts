@@ -76,13 +76,12 @@ export class ChunkGeneralTab {
   readonly answerPending = input(false);
 
   /** The graphs view's own path segments, forwarded to {@link ChunkFacts} and
-   * {@link ChunkTimeline} — `null` (the default, the runner's rendering) withholds
-   * the link; the hub passes `['/graphs']`, the only app with that route. */
+   * {@link ChunkTimeline} — `null` (the default) withholds
+   * the link. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
-  /** Forwarded to {@link ChunkIssuePane}'s own `placement` — `'center'` (the
-   * default, the hub's rendering) or `'inline'`, the runner's narrow chunk
-   * detail route. */
+  /** The issue pane's placement — `'center'` (the default) or `'inline'` for a
+   * narrow host. */
   readonly issuePanePlacement = input<'center' | 'inline'>('center');
 
   /** Whether General includes its node-history summary. Defaults to `true`; a caller
