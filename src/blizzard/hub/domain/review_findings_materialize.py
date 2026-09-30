@@ -85,9 +85,7 @@ class ReviewFindingsPlan:
 
 class IWriteReviewFindingsRepository(Protocol):
     """Materialize one :class:`ReviewFindingsPlan`, atomically and idempotently, keyed
-    on ``chunk_id`` alone — not ``(chunk_id, node_id, epoch)``, since a
-    chunk may reach `record-findings` more than once only through a rare post-landing
-    repair round, whose deferred findings this idempotence key deliberately drops."""
+    on ``chunk_id`` alone: a second plan for an already-delivered chunk is dropped."""
 
     def deliver(self, plan: ReviewFindingsPlan) -> ReviewFindingsOutcome: ...
 

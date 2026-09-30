@@ -21,9 +21,8 @@ from blizzard.wire.envelope import TIER_PREFIX
 @dataclass(frozen=True)
 class EligibilityCheck:
     """Whether ``capabilities`` can execute every runner-owned session lineage statically
-    reachable from ``node`` — the pure predicate a later claim/peek gate reads. ``node`` is
-    already resolved by the caller (the chunk's current node, or the graph's entry node if
-    the chunk has not moved); this walks forward from whatever it is handed."""
+    reachable from ``node`` — a pure predicate. ``node`` is
+    already resolved by the caller; this walks forward from whatever it is handed."""
 
     chunk: Chunk
     graph: Graph
@@ -37,7 +36,7 @@ class EligibilityCheck:
     @property
     def _available_capabilities(self) -> list[RunnerCapability]:  # ast-grep-ignore: bzh:property-delegates
         """Capabilities health has withdrawn from selection satisfy no
-        lineage — a runner's own diagnostics still see them; a claim or peek never does."""
+        lineage."""
         return [capability for capability in self.capabilities if capability.available]
 
     def _reachable_runner_nodes(self) -> list[Node]:
@@ -66,9 +65,7 @@ class EligibilityCheck:
     def _lineage_satisfied(self, node: Node) -> bool:
         """Whether some reported capability could serve ``node``'s effective session,
         mirroring :class:`~blizzard.runner.loop.session.HarnessSelector`'s gate against a
-        static snapshot rather than a live adapter — including its carve-out: a single
-        acceptable harness skips the model check only when nothing in ``session.model`` is
-        an authored (``blizzard:``-namespaced) tier, never a guessed native name."""
+        static snapshot rather than a live adapter."""
         session = EffectiveSession.of(self.chunk, self.graph, node)
         available = self._available_capabilities
         if not session.harnesses:

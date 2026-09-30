@@ -15570,7 +15570,7 @@
     },
     "/api/fleet/scopes": {
       "get": {
-        "description": "Every scope, newest first, each marked retired or not \u2014 the\ndeployment's scope vocabulary, read by `blizzard runner scope list` so a review's\ndeferred findings can name an existing slug without a hub-interpreted default.",
+        "description": "Every scope, newest first, each marked retired or not \u2014 the\ndeployment's scope vocabulary.",
         "operationId": "get_scopes_api_fleet_scopes_get",
         "responses": {
           "200": {

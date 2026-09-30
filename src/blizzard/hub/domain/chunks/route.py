@@ -33,8 +33,7 @@ class IReadChunkRouteRepository(Protocol):
 
     def live_routes_of_runner(self, runner_id: str) -> list[Route]:
         """Every live route ``runner_id`` holds, ordered by chunk id — a runner's holdings,
-        each carrying its environments. Not a hot-path read: retirement asks it once per verb,
-        so it narrows by the runner's own route history rather than a live-set prefilter."""
+        each carrying its environments. Not a hot-path read."""
         ...
 
     def runner_high_water(self, runner_id: str) -> int:
@@ -56,9 +55,8 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
 
     def record_route_released_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
         """Append the ``route.released`` fact, on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``) — detach and requeue race claim's own
-        ``route_of`` guard read exactly as the migrated writers do. Returns the
-        freshly-written ``route_released.id`` (the activity-feed's key)."""
+        (``bzh:store-exclusive-write``). Returns the freshly-written
+        ``route_released.id`` (the activity-feed's key)."""
         ...
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:

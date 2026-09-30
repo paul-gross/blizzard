@@ -27,8 +27,7 @@ class IReadUserRepository(Protocol):
         ...
 
     def list_all(self) -> list[User]:
-        """Every user, for the admin page's own listing — the one caller
-        that ever needs the whole table rather than a single lookup."""
+        """Every user in the table."""
         ...
 
 

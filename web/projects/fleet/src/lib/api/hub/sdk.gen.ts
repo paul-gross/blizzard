@@ -1044,8 +1044,7 @@ export const heartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPost = <ThrowOnErro
  * Get Scopes
  *
  * Every scope, newest first, each marked retired or not — the
- * deployment's scope vocabulary, read by `blizzard runner scope list` so a review's
- * deferred findings can name an existing slug without a hub-interpreted default.
+ * deployment's scope vocabulary.
  */
 export const getScopesApiFleetScopesGet = <ThrowOnError extends boolean = false>(options?: Options<GetScopesApiFleetScopesGetData, ThrowOnError>): RequestResult<GetScopesApiFleetScopesGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetScopesApiFleetScopesGetResponses, unknown, ThrowOnError>({ url: '/api/fleet/scopes', ...options });
 

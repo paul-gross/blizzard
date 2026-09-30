@@ -206,7 +206,7 @@ class IWriteGardenProposalRepository(IReadGardenProposalRepository, Protocol):
         """Write only the fields `edit` gives, in place (no edit-history table), leaving
         every `UNSET` column as it stands; `None` when `proposal_id` already carries a
         closure. Locks the proposal's own row before checking, so a close racing in
-        cannot land in the gap (`GardenProposalStore._is_closed`). `edit`'s given fields
+        cannot land in the gap. `edit`'s given fields
         arrive already stripped and validated."""
         ...
 
@@ -238,8 +238,7 @@ class GardenProposalEdit:
 
 class GardenProposalAuthoring:
     """The operator-facing verbs — `create_operator`, `edit`, `attach`, `detach` — over
-    already-loaded objects (`bzh:domain-takes-objects`). Delivery writes its own
-    `routine-run` rows directly. Every refusal, closed first, is decided here, never
+    already-loaded objects (`bzh:domain-takes-objects`). Every refusal, closed first, is decided here, never
     left to a caller at the edge."""
 
     def __init__(

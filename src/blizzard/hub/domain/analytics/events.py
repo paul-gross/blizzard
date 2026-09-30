@@ -134,8 +134,7 @@ class IReadTranscriptEvents(Protocol):
 
     def visible_segment_ids(self, *, chunk_id: str | None = None) -> frozenset[str]:
         """Every segment id the hub's own read path would show today — final, not
-        superseded, and pointing at a chunk that exists — narrowed to ``chunk_id`` when given
-        (the re-derive route's chunk-scoped call)."""
+        superseded, and pointing at a chunk that exists — narrowed to ``chunk_id`` when given."""
         ...
 
     def derived_segment_ids(self) -> frozenset[str]:

@@ -1,10 +1,7 @@
 """The work-source seam — one binding per named source, one shape for every kind.
 
-For a configured, credentialed binding a work item's contents are **never stored**: the
-pointer is the durable referent, the item is fetched fresh from the forge. The built-in
-``hub`` source is the one exception — its own store *is* the item's system
-of record, so its "fetch" is a read of durable state, not a forge round-trip; every other
-binding still keeps the pass-through contract this docstring describes. A binding also
+A work item's contents are **never stored** by the seam: the pointer is the durable
+referent, the item is fetched fresh from its source. A binding also
 owns parsing its own ingest-token form, its label, and its browser addresses
 (``bzh:domain-core``). ``parse`` returns ``None`` for "not my token" rather than raising,
 so a registry can loop over every binding."""

@@ -24,8 +24,7 @@ class IReadChunkArtifactsRepository(Protocol):
 
     def latest_artifact(self, chunk_id: str, name: str) -> ArtifactRow | None:
         """The chunk's newest artifact row named ``name`` — highest epoch, then latest
-        ``produced_at`` — the garden-delivery route's own
-        by-name resolution. ``None`` when no artifact of that name exists."""
+        ``produced_at``. ``None`` when no artifact of that name exists."""
         ...
 
     def has_hub_artifact(self, chunk_id: str, *, node_id: str, epoch: int, name: str) -> bool:

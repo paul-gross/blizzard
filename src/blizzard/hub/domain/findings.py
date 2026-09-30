@@ -203,9 +203,7 @@ class IReadFindingRepository(Protocol):
 
     def list_by_source(self, *, scope_slug: str, source: str, include_gone: bool = False) -> list[Finding]:
         """Every finding under `scope_slug` carrying `source` — filtered
-        on `ix_findings_scope_source`, indexed unlike `list_across_routines`. The garden
-        bucket's own union reads a routine's own findings through `list_for` and a
-        scope's `source="review"` findings through this, side by side."""
+        on `ix_findings_scope_source`, indexed unlike `list_across_routines`."""
         ...
 
     def count_by_class(self, routine_name: str, class_: str) -> int:
@@ -232,10 +230,8 @@ class IReadFindingRepository(Protocol):
         ...
 
     def has_delivery_for_proposal(self, proposal_id: str) -> bool:
-        """Whether any fact already carries `proposal_id` — delivery-triggered closure's
-        own once-only gate, kind-agnostic so a proposal
-        delivered before `delivered` existed (its fact stamped `resolved`) still gates,
-        independent of any one finding's current state so a later reopen is never
+        """Whether any fact already carries `proposal_id` — kind-agnostic, and
+        independent of any one finding's current state, so a later reopen is never
         silently redone."""
         ...
 
@@ -280,8 +276,7 @@ class IWriteFindingRepository(IReadFindingRepository, Protocol):
 
 @dataclass(frozen=True)
 class FactEntry:
-    """One `record_facts` row — the bulk-write shape `FindingExitService`
-    builds one of per finding, per verb."""
+    """One `record_facts` row — the bulk-write shape for a single finding's fact."""
 
     finding_id: str
     kind: str
@@ -293,9 +288,8 @@ class FactEntry:
 
 
 class IFindingExitResolver(Protocol):
-    """`FindingExitService.deliver`'s own narrowed shape — delivery-triggered closure,
-    not an exit itself, so that collaborator depends on a
-    Protocol like every other one it takes."""
+    """Closes findings on a delivered proposal, recording `note` and `actor` as each
+    finding's fact; not an exit itself."""
 
     def deliver(
         self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None

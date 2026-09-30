@@ -58,8 +58,7 @@ class ClaimDeniedPaused(Exception):
 class ClaimDeniedTerminal(Exception):
     """The chunk is already terminal ({done, stopped}) — refused before the race,
     mirroring :class:`ClaimDeniedPaused`'s shape: this is not a race loss, the chunk
-    can never be claimed again. Closes the peek-then-claim window by
-    re-deriving status fresh, under the claim lock, rather than trusting the peek."""
+    can never be claimed again. Status is re-derived fresh under the claim lock."""
 
     def __init__(self, *, chunk_id: str, status: ChunkStatus) -> None:
         super().__init__(f"chunk {chunk_id} is {status.value}, not claimable")

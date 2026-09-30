@@ -55,8 +55,7 @@ class IReadChunkWorkRefsRepository(Protocol):
 
     def live_work_refs(self) -> dict[WorkRef, ChunkStatus]:
         """Every work ref held by a live (non-terminal) chunk, with that chunk's
-        derived status — the inverse of :meth:`find_live_holder`, for the
-        forge-status reconciler's desired-state sweep."""
+        derived status — the inverse of :meth:`find_live_holder`."""
         ...
 
 
