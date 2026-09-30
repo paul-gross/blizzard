@@ -10,6 +10,7 @@ the same for ``RunnerStatusService.escalations()`` (runner-API read path)."""
 
 from __future__ import annotations
 
+from concurrent.futures import Executor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -329,7 +330,7 @@ def test_a_full_tick_is_still_flat_at_n1_and_n10_with_transcript_shipping_on(tmp
 # --- RunnerStatusService.escalations() ---------------------------------------------
 
 
-def _status_service(store: SqlAlchemyRunnerStore) -> RunnerStatusService:
+def _status_service(spawn_executor: Executor, store: SqlAlchemyRunnerStore) -> RunnerStatusService:
     probe = FakeProbe()
     return RunnerStatusService(
         make_read_stores(store),
@@ -348,7 +349,7 @@ def _status_service(store: SqlAlchemyRunnerStore) -> RunnerStatusService:
                         binary="claude",
                         permission_mode="bypassPermissions",
                         process=probe,
-                        launcher=ProcessLauncher(probe),
+                        launcher=ProcessLauncher(probe, executor=spawn_executor),
                     )
                 )
             }
@@ -388,18 +389,20 @@ def _seed_escalated_lease(store: SqlAlchemyRunnerStore, i: int, *, at: datetime)
     )
 
 
-def test_escalations_statement_count_is_flat_across_1_and_10_open_escalations(tmp_path: Path) -> None:
+def test_escalations_statement_count_is_flat_across_1_and_10_open_escalations(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     """Resolving every parked escalation's resume command must read the fleet's held
     bindings once, not once per escalation (`bindings_for_chunk` per escalation would slope
     with the open-escalation count)."""
     store, engine = _store(tmp_path / "one")
     _seed_escalated_lease(store, 0, at=_NOW)
-    one = support.count_queries(engine, lambda: _status_service(store).escalations())
+    one = support.count_queries(engine, lambda: _status_service(spawn_executor, store).escalations())
 
     store2, engine2 = _store(tmp_path / "ten")
     for i in range(10):
         _seed_escalated_lease(store2, i, at=_NOW)
-    ten = support.count_queries(engine2, lambda: _status_service(store2).escalations())
+    ten = support.count_queries(engine2, lambda: _status_service(spawn_executor, store2).escalations())
 
     assert one == ten
-    assert len(_status_service(store2).escalations()) == 10
+    assert len(_status_service(spawn_executor, store2).escalations()) == 10

@@ -6,6 +6,7 @@ linking, and ``read_raw_lines``'s round trip through ``OpenCodeAdapter.sum_trans
 from __future__ import annotations
 
 import json
+from concurrent.futures import Executor
 from typing import Any
 
 import pytest
@@ -498,7 +499,7 @@ def test_a_child_export_that_fails_once_then_succeeds() -> None:
 
 
 @pytest.mark.unit
-def test_read_raw_lines_returns_the_range_and_round_trips_through_the_adapter() -> None:
+def test_read_raw_lines_returns_the_range_and_round_trips_through_the_adapter(spawn_executor: Executor) -> None:
     exporter = FakeExporter(
         {
             "sess-1": _export(
@@ -536,7 +537,10 @@ def test_read_raw_lines_returns_the_range_and_round_trips_through_the_adapter() 
 
     process = FakeProbe()
     adapter = OpenCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), binary="opencode", process=process, launcher=ProcessLauncher(process)
+        worker_env=AllowlistedEnv.of(()),
+        binary="opencode",
+        process=process,
+        launcher=ProcessLauncher(process, executor=spawn_executor),
     )
     usage = adapter.sum_transcript_usage(lines, "resume")
     assert usage.input_tokens == 20

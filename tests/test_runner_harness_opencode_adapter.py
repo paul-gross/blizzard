@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import subprocess
+from concurrent.futures import Executor
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -78,9 +79,9 @@ def _opencode_resolves_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shutil, "which", lambda binary, path=None: f"/usr/bin/{binary}")
 
 
-def _adapter(**kwargs: Any) -> OpenCodeAdapter:
+def _adapter(spawn_executor: Executor, **kwargs: Any) -> OpenCodeAdapter:
     process = kwargs.setdefault("process", FakeProbe())
-    kwargs.setdefault("launcher", ProcessLauncher(process))
+    kwargs.setdefault("launcher", ProcessLauncher(process, executor=spawn_executor))
     kwargs.setdefault("worker_env", AllowlistedEnv.of(()))
     return OpenCodeAdapter(**kwargs)
 
@@ -161,74 +162,74 @@ def test_takeover_argv_has_no_format_json_and_no_auto() -> None:
 
 
 @pytest.mark.unit
-def test_resolve_model_strict_maps_a_configured_tier() -> None:
-    adapter = _adapter(model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),))
+def test_resolve_model_strict_maps_a_configured_tier(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),))
     assert adapter.resolve_model_strict(["blizzard:frontier"]) == "openai/gpt-5.6-luna"
 
 
 @pytest.mark.unit
-def test_resolve_model_strict_returns_none_for_an_unmapped_tier() -> None:
+def test_resolve_model_strict_returns_none_for_an_unmapped_tier(spawn_executor: Executor) -> None:
     # No built-in OpenCode tiers (unlike Claude Code): an unmapped tier resolves to
     # nothing, which is the contract a multi-harness selection reads.
-    adapter = _adapter()
+    adapter = _adapter(spawn_executor)
     assert adapter.resolve_model_strict(["blizzard:frontier"]) is None
 
 
 @pytest.mark.unit
-def test_resolve_model_falls_back_to_the_adapter_default_when_nothing_resolves() -> None:
-    adapter = _adapter(model="openai/gpt-5.6-luna")
+def test_resolve_model_falls_back_to_the_adapter_default_when_nothing_resolves(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna")
     assert adapter.resolve_model(["blizzard:frontier"]) == "openai/gpt-5.6-luna"
 
 
 @pytest.mark.unit
-def test_resolve_model_falls_back_to_empty_string_with_no_configured_default() -> None:
+def test_resolve_model_falls_back_to_empty_string_with_no_configured_default(spawn_executor: Executor) -> None:
     # Empty is legitimate for OpenCode: it lets OpenCode resolve its own configured
     # default rather than Blizzard inventing one.
-    adapter = _adapter()
+    adapter = _adapter(spawn_executor)
     assert adapter.resolve_model(["blizzard:frontier"]) == ""
 
 
 @pytest.mark.unit
-def test_resolve_model_accepts_a_bare_valid_provider_model_reference() -> None:
-    adapter = _adapter()
+def test_resolve_model_accepts_a_bare_valid_provider_model_reference(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor)
     assert adapter.resolve_model_strict(["openai/gpt-5.6-luna"]) == "openai/gpt-5.6-luna"
 
 
 @pytest.mark.unit
-def test_resolve_model_skips_a_malformed_native_reference() -> None:
-    adapter = _adapter(model_aliases=(("blizzard:basic", "openai/gpt-5.6-mini"),))
+def test_resolve_model_skips_a_malformed_native_reference(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, model_aliases=(("blizzard:basic", "openai/gpt-5.6-mini"),))
     # Not `provider/model` shaped (no slash) — this belongs to another harness's own
     # native vocabulary (e.g. Claude Code's bare `opus`), never handed to this CLI.
     assert adapter.resolve_model(["opus", "blizzard:basic"]) == "openai/gpt-5.6-mini"
 
 
 @pytest.mark.unit
-def test_resolve_effort_passes_through_the_well_known_ordinal() -> None:
-    adapter = _adapter()
+def test_resolve_effort_passes_through_the_well_known_ordinal(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor)
     assert adapter.resolve_effort("max") == "max"
 
 
 @pytest.mark.unit
-def test_resolve_effort_maps_a_configured_alias() -> None:
-    adapter = _adapter(effort_aliases=(("high", "xhigh"),))
+def test_resolve_effort_maps_a_configured_alias(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, effort_aliases=(("high", "xhigh"),))
     assert adapter.resolve_effort("high") == "xhigh"
 
 
 @pytest.mark.unit
-def test_resolve_effort_drops_an_unrecognized_value() -> None:
-    adapter = _adapter()
+def test_resolve_effort_drops_an_unrecognized_value(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor)
     assert adapter.resolve_effort("ludicrous") is None
 
 
 @pytest.mark.unit
-def test_resolve_effort_of_none_is_none() -> None:
-    assert _adapter().resolve_effort(None) is None
+def test_resolve_effort_of_none_is_none(spawn_executor: Executor) -> None:
+    assert _adapter(spawn_executor).resolve_effort(None) is None
 
 
 @pytest.mark.unit
-def test_resolve_compaction_window_is_always_unsupported() -> None:
+def test_resolve_compaction_window_is_always_unsupported(spawn_executor: Executor) -> None:
     # No numeric translation is ever invented, regardless of the value's shape.
-    adapter = _adapter()
+    adapter = _adapter(spawn_executor)
     assert adapter.resolve_compaction_window("auto") is None
     assert adapter.resolve_compaction_window("200000") is None
     assert adapter.resolve_compaction_window(None) is None
@@ -239,28 +240,29 @@ def test_resolve_compaction_window_is_always_unsupported() -> None:
 
 
 @pytest.mark.unit
-def test_resolvable_tier_ids_is_empty_with_no_config_at_all() -> None:
+def test_resolvable_tier_ids_is_empty_with_no_config_at_all(spawn_executor: Executor) -> None:
     # No built-in OpenCode tiers (unlike Claude Code's three): with nothing configured,
     # nothing is resolvable.
-    adapter = _adapter()
+    adapter = _adapter(spawn_executor)
     assert adapter.resolvable_tier_ids() == ()
 
 
 @pytest.mark.unit
-def test_resolvable_tier_ids_names_a_configured_alias() -> None:
-    adapter = _adapter(model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),))
+def test_resolvable_tier_ids_names_a_configured_alias(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),))
     assert set(adapter.resolvable_tier_ids()) == {"blizzard:frontier"}
 
 
 @pytest.mark.unit
-def test_resolvable_tier_ids_merges_every_configured_alias_once() -> None:
+def test_resolvable_tier_ids_merges_every_configured_alias_once(spawn_executor: Executor) -> None:
     # Override-by-key precedence, matching `_resolve_one_model`: two distinct aliases
     # both appear, each exactly once.
     adapter = _adapter(
+        spawn_executor=spawn_executor,
         model_aliases=(
             ("blizzard:frontier", "openai/gpt-5.6-luna"),
             ("blizzard:basic", "openai/gpt-5.6-mini"),
-        )
+        ),
     )
     tiers = adapter.resolvable_tier_ids()
     assert tiers.count("blizzard:frontier") == 1
@@ -272,8 +274,8 @@ def test_resolvable_tier_ids_merges_every_configured_alias_once() -> None:
 
 
 @pytest.mark.unit
-def test_harness_selector_skips_opencode_when_its_tier_is_unmapped() -> None:
-    adapter = _adapter()  # no model_aliases at all
+def test_harness_selector_skips_opencode_when_its_tier_is_unmapped(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor)  # no model_aliases at all
     registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     envelope = make_envelope(
         "ch_1",
@@ -296,8 +298,8 @@ def test_harness_selector_skips_opencode_when_its_tier_is_unmapped() -> None:
 
 
 @pytest.mark.unit
-def test_harness_selector_picks_opencode_once_its_tier_is_mapped() -> None:
-    adapter = _adapter(model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),))
+def test_harness_selector_picks_opencode_once_its_tier_is_mapped(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, model_aliases=(("blizzard:frontier", "openai/gpt-5.6-luna"),))
     registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     envelope = make_envelope(
         "ch_1",
@@ -318,26 +320,28 @@ def test_harness_selector_picks_opencode_once_its_tier_is_mapped() -> None:
 
 
 @pytest.mark.unit
-def test_resume_command_is_the_literal_takeover() -> None:
-    cmd = _adapter(binary="opencode").resume_command("/ws/e1", "ses-x")
+def test_resume_command_is_the_literal_takeover(spawn_executor: Executor) -> None:
+    cmd = _adapter(spawn_executor, binary="opencode").resume_command("/ws/e1", "ses-x")
     assert cmd == "cd /ws/e1 && opencode --session ses-x"
 
 
 @pytest.mark.unit
-def test_resume_command_carries_model_and_variant() -> None:
-    cmd = _adapter(binary="opencode").resume_command("/ws/e1", "ses-x", model="openai/gpt-5.6", effort="max")
+def test_resume_command_carries_model_and_variant(spawn_executor: Executor) -> None:
+    cmd = _adapter(spawn_executor, binary="opencode").resume_command(
+        "/ws/e1", "ses-x", model="openai/gpt-5.6", effort="max"
+    )
     assert cmd == "cd /ws/e1 && opencode --session ses-x --model openai/gpt-5.6 --variant max"
 
 
 @pytest.mark.unit
-def test_resume_command_is_identical_attended_or_not() -> None:
-    adapter = _adapter(binary="opencode")
+def test_resume_command_is_identical_attended_or_not(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, binary="opencode")
     assert adapter.resume_command("/ws/e1", "ses-x", attended=True) == adapter.resume_command("/ws/e1", "ses-x")
 
 
 @pytest.mark.unit
-def test_honors_session_hint_is_false() -> None:
-    assert _adapter().honors_session_hint() is False
+def test_honors_session_hint_is_false(spawn_executor: Executor) -> None:
+    assert _adapter(spawn_executor).honors_session_hint() is False
 
 
 # --------------------------------------------------------------------------- #
@@ -345,8 +349,8 @@ def test_honors_session_hint_is_false() -> None:
 
 
 @pytest.mark.unit
-def test_spawn_without_a_stdout_path_raises() -> None:
-    adapter = _adapter(binary="opencode")
+def test_spawn_without_a_stdout_path_raises(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, binary="opencode")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     with pytest.raises(HarnessSpawnError):
         adapter.spawn(envelope, _preamble("/ws/e1"), session_hint="hint")
@@ -357,12 +361,12 @@ def test_spawn_without_a_stdout_path_raises() -> None:
 
 
 @pytest.mark.component
-def test_fresh_spawn_reads_the_minted_session_id_from_stdout(tmp_path: Path) -> None:
+def test_fresh_spawn_reads_the_minted_session_id_from_stdout(tmp_path: Path, spawn_executor: Executor) -> None:
     binary = worker_binary(tmp_path, minted_session_id="ses_minted_abc")
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(binary=binary, process=LinuxProcessProbe())
+    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
@@ -376,12 +380,12 @@ def test_fresh_spawn_reads_the_minted_session_id_from_stdout(tmp_path: Path) -> 
 
 
 @pytest.mark.component
-def test_fresh_spawn_never_passes_the_hint_as_session_id(tmp_path: Path) -> None:
+def test_fresh_spawn_never_passes_the_hint_as_session_id(tmp_path: Path, spawn_executor: Executor) -> None:
     binary = worker_binary(tmp_path, minted_session_id="ses_self_assigned")
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(binary=binary, process=LinuxProcessProbe())
+    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(
@@ -396,7 +400,7 @@ def test_fresh_spawn_never_passes_the_hint_as_session_id(tmp_path: Path) -> None
 
 
 @pytest.mark.component
-def test_fresh_spawn_writes_stderr_to_the_injected_path(tmp_path: Path) -> None:
+def test_fresh_spawn_writes_stderr_to_the_injected_path(tmp_path: Path, spawn_executor: Executor) -> None:
     """``spawn`` honors ``preamble.stderr_path`` the same way Claude Code's binding does —
     every OpenCode failure event otherwise reports an empty stderr tail even though the
     runner already allocated the file."""
@@ -405,7 +409,7 @@ def test_fresh_spawn_writes_stderr_to_the_injected_path(tmp_path: Path) -> None:
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
     stderr_path = tmp_path / "lease-1.stderr"
-    adapter = _adapter(binary=binary, process=LinuxProcessProbe())
+    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(
@@ -421,12 +425,12 @@ def test_fresh_spawn_writes_stderr_to_the_injected_path(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_fresh_spawn_raises_identity_error_on_malformed_first_record(tmp_path: Path) -> None:
+def test_fresh_spawn_raises_identity_error_on_malformed_first_record(tmp_path: Path, spawn_executor: Executor) -> None:
     binary = worker_binary(tmp_path, malformed_first_line=True)
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(binary=binary, process=LinuxProcessProbe())
+    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
@@ -437,12 +441,14 @@ def test_fresh_spawn_raises_identity_error_on_malformed_first_record(tmp_path: P
 
 
 @pytest.mark.component
-def test_fresh_spawn_raises_identity_error_when_the_process_exits_first(tmp_path: Path) -> None:
+def test_fresh_spawn_raises_identity_error_when_the_process_exits_first(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     binary = worker_binary(tmp_path, exit_before_output=True)
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(binary=binary, process=LinuxProcessProbe())
+    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
@@ -453,7 +459,7 @@ def test_fresh_spawn_raises_identity_error_when_the_process_exits_first(tmp_path
 
 
 @pytest.mark.component
-def test_fresh_spawn_identity_error_carries_the_workers_own_stderr(tmp_path: Path) -> None:
+def test_fresh_spawn_identity_error_carries_the_workers_own_stderr(tmp_path: Path, spawn_executor: Executor) -> None:
     """A dead-before-identity worker's real cause lives only in its own stderr capture —
     surfaced on the raised error, since it is otherwise lost the moment the lease is marked
     identity-failed and the group is killed."""
@@ -463,7 +469,7 @@ def test_fresh_spawn_identity_error_carries_the_workers_own_stderr(tmp_path: Pat
     stdout_path.write_bytes(b"")
     stderr_path = tmp_path / "lease-1.stderr"
     stderr_path.write_text("Traceback (most recent call last):\nRuntimeError: mock-opencode blew up\n")
-    adapter = _adapter(binary="opencode", process=FakeProbe(alive=set()))  # already gone
+    adapter = _adapter(spawn_executor, binary="opencode", process=FakeProbe(alive=set()))  # already gone
     pending = _PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
@@ -478,13 +484,15 @@ def test_fresh_spawn_identity_error_carries_the_workers_own_stderr(tmp_path: Pat
 
 
 @pytest.mark.component
-def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path) -> None:
+def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path, spawn_executor: Executor) -> None:
     """A live process that has written nothing yet is a plain timeout, not a crash."""
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
     stdout_path.write_bytes(b"")
-    adapter = _adapter(binary="opencode", process=FakeProbe(alive={(4242, "start-token")}))
+    adapter = _adapter(
+        spawn_executor=spawn_executor, binary="opencode", process=FakeProbe(alive={(4242, "start-token")})
+    )
     pending = _PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
@@ -499,7 +507,9 @@ def test_fresh_spawn_raises_identity_error_on_timeout(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_identity(tmp_path: Path) -> None:
+def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_identity(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     """A worker that flushed its identity record then exited fast is a SUCCESS — the
     valid record is checked before liveness, not after, so this must not raise even though
     the process is already dead by the time ``await_identity`` looks."""
@@ -516,7 +526,7 @@ def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_ide
         ).encode()
         + b"\n"
     )
-    adapter = _adapter(binary="opencode", process=FakeProbe(alive=set()))  # already gone
+    adapter = _adapter(spawn_executor, binary="opencode", process=FakeProbe(alive=set()))  # already gone
     pending = _PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
@@ -532,7 +542,7 @@ def test_fresh_spawn_succeeds_when_the_process_already_exited_after_flushing_ide
 
 
 @pytest.mark.component
-def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path) -> None:
+def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path, spawn_executor: Executor) -> None:
     """Identity arrives on the worker's own SHARED stdout — an earlier writer (a tool
     banner, a stray line) may put non-JSON ahead of the real first record. Byte zero need
     not be it: the handshake skips leading noise and finds identity further down."""
@@ -545,7 +555,9 @@ def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path) -> None:
         }
     )
     stdout_path.write_text(f"A tool banner opencode never asked for\nnot json either\n{identity_line}\n")
-    adapter = _adapter(binary="opencode", process=FakeProbe(alive={(4242, "start-token")}))
+    adapter = _adapter(
+        spawn_executor=spawn_executor, binary="opencode", process=FakeProbe(alive={(4242, "start-token")})
+    )
     pending = _PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
@@ -561,13 +573,15 @@ def test_first_event_tolerates_leading_non_json_lines(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_first_event_raises_once_the_leading_noise_bound_is_exceeded(tmp_path: Path) -> None:
+def test_first_event_raises_once_the_leading_noise_bound_is_exceeded(tmp_path: Path, spawn_executor: Executor) -> None:
     """The leading-noise tolerance is bounded: a permanently noisy stream with no valid
     identity in the first ``_MAX_IDENTITY_PREAMBLE_LINES`` lines fails the handshake
     outright, rather than waiting on ``await_identity``'s own timeout."""
     stdout_path = tmp_path / "lease-1.stdout"
     stdout_path.write_text("not json\n" * (_MAX_IDENTITY_PREAMBLE_LINES + 1))
-    adapter = _adapter(binary="opencode", process=FakeProbe(alive={(4242, "start-token")}))
+    adapter = _adapter(
+        spawn_executor=spawn_executor, binary="opencode", process=FakeProbe(alive={(4242, "start-token")})
+    )
     pending = _PendingOpenCodeIdentity(
         pid=4242,
         pgid=4242,
@@ -582,13 +596,13 @@ def test_first_event_raises_once_the_leading_noise_bound_is_exceeded(tmp_path: P
 
 
 @pytest.mark.component
-def test_resume_spawn_never_performs_the_handshake(tmp_path: Path) -> None:
+def test_resume_spawn_never_performs_the_handshake(tmp_path: Path, spawn_executor: Executor) -> None:
     """A resume already knows its session id — no polling, an instant `WorkerHandle`."""
     binary = worker_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(binary=binary, process=LinuxProcessProbe())
+    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(
@@ -602,11 +616,13 @@ def test_resume_spawn_never_performs_the_handshake(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_judge_and_resume_with_message_launch_against_the_recorded_session(tmp_path: Path) -> None:
+def test_judge_and_resume_with_message_launch_against_the_recorded_session(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     binary = worker_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
-    adapter = _adapter(binary=binary, process=LinuxProcessProbe())
+    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
 
     judge_handle = adapter.judge(str(workdir), "ses_recorded", "assess", str(workdir / "judge-output.json"))
     judge_handle.confirm_durable()  # real component tests stand in for `Judgement._elicit`'s own call
@@ -623,12 +639,14 @@ def test_judge_and_resume_with_message_launch_against_the_recorded_session(tmp_p
 
 
 @pytest.mark.component
-def test_spawn_launches_through_the_process_launcher_with_its_own_group(tmp_path: Path) -> None:
+def test_spawn_launches_through_the_process_launcher_with_its_own_group(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     binary = worker_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(binary=binary, process=LinuxProcessProbe())
+    adapter = _adapter(spawn_executor, binary=binary, process=LinuxProcessProbe())
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     pending = adapter.spawn(envelope, _preamble(str(workdir), stdout_path=str(stdout_path)), session_hint="hint")
@@ -656,13 +674,15 @@ def _fake_popen_capturing(captured: dict[str, list[str]]) -> object:
 
 
 @pytest.mark.unit
-def test_spawn_pins_the_resolved_model_at_mint_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_spawn_pins_the_resolved_model_at_mint_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(binary="opencode")
+    adapter = _adapter(spawn_executor, binary="opencode")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     adapter.spawn(
@@ -679,14 +699,14 @@ def test_spawn_pins_the_resolved_model_at_mint_only(tmp_path: Path, monkeypatch:
 
 @pytest.mark.unit
 def test_spawn_with_resume_from_omits_model_and_carries_session(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
     captured: dict[str, list[str]] = {}
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     workdir = tmp_path / "e1"
     workdir.mkdir()
     stdout_path = tmp_path / "lease-1.stdout"
-    adapter = _adapter(binary="opencode")
+    adapter = _adapter(spawn_executor, binary="opencode")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
 
     handle = adapter.spawn(
@@ -706,6 +726,7 @@ def test_spawn_with_resume_from_omits_model_and_carries_session(
 @pytest.mark.unit
 def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durable(
     monkeypatch: pytest.MonkeyPatch,
+    spawn_executor: Executor,
 ) -> None:
     """A resume gets the same ownership a fresh spawn or judge gets — the
     launcher's own recorded start time, and a real disarm signal, not
@@ -714,7 +735,10 @@ def test_resume_with_message_stamps_process_start_time_and_a_real_confirm_durabl
     monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
     probe = FakeProbe(alive={(9_999_999, "fake-resume-start-time")})
     adapter = OpenCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), binary="opencode", process=probe, launcher=ProcessLauncher(probe)
+        worker_env=AllowlistedEnv.of(()),
+        binary="opencode",
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
     )
 
     resumed = adapter.resume_with_message("/ws", "ses_recorded", "continue")
@@ -761,9 +785,11 @@ _EXPECTED_USAGE: dict[str, tuple[int, int, int, int, float | None]] = {
 
 @pytest.mark.unit
 @pytest.mark.parametrize("name,payload", _fixtures(), ids=lambda item: item if isinstance(item, str) else "fixture")
-def test_verdict_and_assessment_match_the_expected_shape_for_every_fixture(name: str, payload: dict[str, Any]) -> None:
+def test_verdict_and_assessment_match_the_expected_shape_for_every_fixture(
+    name: str, payload: dict[str, Any], spawn_executor: Executor
+) -> None:
     output = _jsonl(payload["events"])
-    adapter = _adapter()
+    adapter = _adapter(spawn_executor)
 
     expected_verdict, expected_assessment = _EXPECTED_VERDICT_AND_ASSESSMENT[name]
     assert adapter.parse_verdict(output) == expected_verdict
@@ -772,16 +798,20 @@ def test_verdict_and_assessment_match_the_expected_shape_for_every_fixture(name:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("name,payload", _fixtures(), ids=lambda item: item if isinstance(item, str) else "fixture")
-def test_has_usable_output_matches_the_expected_shape_for_every_fixture(name: str, payload: dict[str, Any]) -> None:
+def test_has_usable_output_matches_the_expected_shape_for_every_fixture(
+    name: str, payload: dict[str, Any], spawn_executor: Executor
+) -> None:
     output = _jsonl(payload["events"])
-    assert _adapter().has_usable_output(output) is _EXPECTED_USABLE[name]
+    assert _adapter(spawn_executor).has_usable_output(output) is _EXPECTED_USABLE[name]
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("name,payload", _fixtures(), ids=lambda item: item if isinstance(item, str) else "fixture")
-def test_parse_usage_matches_the_expected_shape_for_every_fixture(name: str, payload: dict[str, Any]) -> None:
+def test_parse_usage_matches_the_expected_shape_for_every_fixture(
+    name: str, payload: dict[str, Any], spawn_executor: Executor
+) -> None:
     output = _jsonl(payload["events"])
-    sample = _adapter().parse_usage(output, "spawn")
+    sample = _adapter(spawn_executor).parse_usage(output, "spawn")
 
     expected = _EXPECTED_USAGE[name]
     if expected is None:
@@ -799,12 +829,12 @@ def test_parse_usage_matches_the_expected_shape_for_every_fixture(name: str, pay
 
 
 @pytest.mark.unit
-def test_verdict_body_never_carries_tool_output_or_child_session_text() -> None:
+def test_verdict_body_never_carries_tool_output_or_child_session_text(spawn_executor: Executor) -> None:
     # `child_session`'s tool call and its child's conversation must never leak into the
     # root turn's verdict body — the corpus's sharpest exclusion case.
     payload = _fixture("child_session")
     output = _jsonl(payload["events"])
-    adapter = _adapter()
+    adapter = _adapter(spawn_executor)
 
     assert adapter.parse_verdict(output) is None
     assert adapter.parse_assessment(output) == ""
@@ -824,8 +854,8 @@ def test_verdict_body_never_carries_tool_output_or_child_session_text() -> None:
 
 
 @pytest.mark.unit
-def test_parse_usage_and_has_usable_output_tolerate_malformed_capture() -> None:
-    adapter = _adapter()
+def test_parse_usage_and_has_usable_output_tolerate_malformed_capture(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor)
     assert adapter.parse_verdict("not json at all") is None
     assert adapter.parse_assessment("not json at all") == ""
     assert adapter.has_usable_output("not json at all") is False
@@ -833,13 +863,13 @@ def test_parse_usage_and_has_usable_output_tolerate_malformed_capture() -> None:
 
 
 @pytest.mark.unit
-def test_parse_events_skips_one_malformed_trailing_line_and_keeps_the_rest() -> None:
+def test_parse_events_skips_one_malformed_trailing_line_and_keeps_the_rest(spawn_executor: Executor) -> None:
     """A killed-mid-write worker can leave one truncated line behind an otherwise-complete
     capture; OpenCode has no transcript fallback to re-derive a lost verdict from, so
     skipping just that one bad line is the entire tolerance this binding can offer."""
     payload = _fixture("success")
     output = _jsonl(payload["events"]) + "\nnot json at all, and truncated besides"
-    adapter = _adapter()
+    adapter = _adapter(spawn_executor)
 
     assert adapter.parse_verdict(output) == "pass"
     assert adapter.has_usable_output(output) is True
@@ -855,13 +885,15 @@ def test_parse_events_skips_one_malformed_trailing_line_and_keeps_the_rest() -> 
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_dedups_a_step_described_by_both_event_and_exported_message() -> None:
+def test_sum_transcript_usage_dedups_a_step_described_by_both_event_and_exported_message(
+    spawn_executor: Executor,
+) -> None:
     # `child_session` exercises this: the root's one completed step ("prt_child_finish")
     # is described both by the process's stdout event and the exported message.
     payload = _fixture("child_session")
     event_lines = [json.dumps(event) for event in payload["events"]]
     message_lines = [json.dumps(message) for message in payload["export"]["messages"]]
-    adapter = _adapter()
+    adapter = _adapter(spawn_executor)
 
     events_only = adapter.sum_transcript_usage(event_lines, "spawn")
     mixed = adapter.sum_transcript_usage(event_lines + message_lines, "spawn")
@@ -879,11 +911,11 @@ def test_sum_transcript_usage_dedups_a_step_described_by_both_event_and_exported
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_skips_tokenless_user_messages_without_raising() -> None:
+def test_sum_transcript_usage_skips_tokenless_user_messages_without_raising(spawn_executor: Executor) -> None:
     payload = _fixture("success")
     lines = [json.dumps(message) for message in payload["export"]["messages"]]  # includes the user message
 
-    sample = _adapter().sum_transcript_usage(lines, "spawn")
+    sample = _adapter(spawn_executor).sum_transcript_usage(lines, "spawn")
 
     assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens) == (
         120,
@@ -895,14 +927,16 @@ def test_sum_transcript_usage_skips_tokenless_user_messages_without_raising() ->
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_recovers_step_finish_from_a_message_with_an_empty_tool_title() -> None:
+def test_sum_transcript_usage_recovers_step_finish_from_a_message_with_an_empty_tool_title(
+    spawn_executor: Executor,
+) -> None:
     # A tool that matched nothing reports `"title": ""`; that part must not cost its message's usage.
     message = _fixture("success")["export"]["messages"][1]
     message["parts"] = [part for part in message["parts"] if part["id"] in ("prt_success_glob", "prt_success_finish")]
     assert [part["type"] for part in message["parts"]] == ["tool", "step-finish"]
     lines = [json.dumps(message)]
 
-    sample = _adapter().sum_transcript_usage(lines, "spawn")
+    sample = _adapter(spawn_executor).sum_transcript_usage(lines, "spawn")
 
     assert (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens) == (
         120,
@@ -914,8 +948,8 @@ def test_sum_transcript_usage_recovers_step_finish_from_a_message_with_an_empty_
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_ignores_unparseable_lines() -> None:
-    sample = _adapter().sum_transcript_usage(
+def test_sum_transcript_usage_ignores_unparseable_lines(spawn_executor: Executor) -> None:
+    sample = _adapter(spawn_executor).sum_transcript_usage(
         ["", "not json", "{}", '{"type": "future_event", "sessionID": "x"}'], "spawn"
     )
 
@@ -1009,10 +1043,10 @@ _ZERO_TOKENS = {"input": 40, "output": 8, "reasoning": 0, "cache": {"read": 0, "
 
 
 @pytest.mark.unit
-def test_parse_usage_estimates_an_all_zero_cost_step_when_its_model_is_priced() -> None:
+def test_parse_usage_estimates_an_all_zero_cost_step_when_its_model_is_priced(spawn_executor: Executor) -> None:
     payload = _fixture("permission_denial")
     output = _jsonl(payload["events"])
-    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+    adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
 
     sample = adapter.parse_usage(output, "spawn")
 
@@ -1022,10 +1056,10 @@ def test_parse_usage_estimates_an_all_zero_cost_step_when_its_model_is_priced() 
 
 
 @pytest.mark.unit
-def test_parse_usage_leaves_a_non_zero_cost_step_billed_with_no_estimate() -> None:
+def test_parse_usage_leaves_a_non_zero_cost_step_billed_with_no_estimate(spawn_executor: Executor) -> None:
     payload = _fixture("success")
     output = _jsonl(payload["events"])
-    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+    adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
 
     sample = adapter.parse_usage(output, "spawn")
 
@@ -1035,7 +1069,9 @@ def test_parse_usage_leaves_a_non_zero_cost_step_billed_with_no_estimate() -> No
 
 
 @pytest.mark.unit
-def test_parse_usage_reports_both_a_billed_and_an_estimated_amount_for_a_mixed_invocation() -> None:
+def test_parse_usage_reports_both_a_billed_and_an_estimated_amount_for_a_mixed_invocation(
+    spawn_executor: Executor,
+) -> None:
     events = [
         _step_finish_event(
             session_id="ses_mixed",
@@ -1048,7 +1084,7 @@ def test_parse_usage_reports_both_a_billed_and_an_estimated_amount_for_a_mixed_i
             session_id="ses_mixed", part_id="prt_zero", message_id="msg_zero", cost=0.0, tokens=_ZERO_TOKENS
         ),
     ]
-    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+    adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
 
     sample = adapter.parse_usage(_jsonl(events), "spawn")
 
@@ -1058,7 +1094,9 @@ def test_parse_usage_reports_both_a_billed_and_an_estimated_amount_for_a_mixed_i
 
 
 @pytest.mark.unit
-def test_parse_usage_prices_two_steps_on_either_side_of_a_tier_threshold_at_their_own_rate() -> None:
+def test_parse_usage_prices_two_steps_on_either_side_of_a_tier_threshold_at_their_own_rate(
+    spawn_executor: Executor,
+) -> None:
     # F = input + cache.read + cache.write: 40 stays under the 100 tier, 150 clears it.
     below = {"input": 40, "output": 10, "reasoning": 0, "cache": {"read": 0, "write": 0}}
     above = {"input": 150, "output": 10, "reasoning": 0, "cache": {"read": 0, "write": 0}}
@@ -1066,7 +1104,9 @@ def test_parse_usage_prices_two_steps_on_either_side_of_a_tier_threshold_at_thei
         _step_finish_event(session_id="ses_tier", part_id="prt_below", message_id="msg_below", cost=0.0, tokens=below),
         _step_finish_event(session_id="ses_tier", part_id="prt_above", message_id="msg_above", cost=0.0, tokens=above),
     ]
-    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog(tiers=(_LUNA_TIER,)))
+    adapter = _adapter(
+        spawn_executor=spawn_executor, model="openai/gpt-5.6-luna", price_catalog=_luna_catalog(tiers=(_LUNA_TIER,))
+    )
 
     sample = adapter.parse_usage(_jsonl(events), "spawn")
 
@@ -1078,11 +1118,13 @@ def test_parse_usage_prices_two_steps_on_either_side_of_a_tier_threshold_at_thei
 
 
 @pytest.mark.unit
-def test_parse_usage_gives_no_estimate_when_the_invocation_model_does_not_parse() -> None:
+def test_parse_usage_gives_no_estimate_when_the_invocation_model_does_not_parse(spawn_executor: Executor) -> None:
     payload = _fixture("permission_denial")
     output = _jsonl(payload["events"])
     # No slash: not a valid `provider/model` reference, so the fallback label is unknown.
-    adapter = _adapter(model="not-a-valid-model-reference", price_catalog=_luna_catalog())
+    adapter = _adapter(
+        spawn_executor=spawn_executor, model="not-a-valid-model-reference", price_catalog=_luna_catalog()
+    )
 
     sample = adapter.parse_usage(output, "spawn")
 
@@ -1091,10 +1133,10 @@ def test_parse_usage_gives_no_estimate_when_the_invocation_model_does_not_parse(
 
 
 @pytest.mark.unit
-def test_parse_usage_gives_no_estimate_with_no_catalog_injected() -> None:
+def test_parse_usage_gives_no_estimate_with_no_catalog_injected(spawn_executor: Executor) -> None:
     payload = _fixture("permission_denial")
     output = _jsonl(payload["events"])
-    adapter = _adapter(model="openai/gpt-5.6-luna")  # no price_catalog kwarg at all
+    adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna")  # no price_catalog kwarg at all
 
     sample = adapter.parse_usage(output, "spawn")
 
@@ -1103,11 +1145,13 @@ def test_parse_usage_gives_no_estimate_with_no_catalog_injected() -> None:
 
 
 @pytest.mark.unit
-def test_parse_usage_leaves_a_zero_cost_step_unknown_when_the_cache_file_is_missing(tmp_path: Path) -> None:
+def test_parse_usage_leaves_a_zero_cost_step_unknown_when_the_cache_file_is_missing(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     payload = _fixture("permission_denial")
     output = _jsonl(payload["events"])
     catalog = FileOpenCodePriceCatalog(tmp_path / "does-not-exist" / "models.json")
-    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=catalog)
+    adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna", price_catalog=catalog)
 
     sample = adapter.parse_usage(output, "spawn")
 
@@ -1117,7 +1161,9 @@ def test_parse_usage_leaves_a_zero_cost_step_unknown_when_the_cache_file_is_miss
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_estimates_a_zero_cost_step_from_its_own_export_message_model() -> None:
+def test_sum_transcript_usage_estimates_a_zero_cost_step_from_its_own_export_message_model(
+    spawn_executor: Executor,
+) -> None:
     # The invocation's own model resolves to a provider the catalog has no entry for — the
     # estimate can only have come from the exported message's own providerID/modelID.
     line = json.dumps(
@@ -1131,7 +1177,7 @@ def test_sum_transcript_usage_estimates_a_zero_cost_step_from_its_own_export_mes
             tokens=_ZERO_TOKENS,
         )
     )
-    adapter = _adapter(model="anthropic/claude-unpriced", price_catalog=_luna_catalog())
+    adapter = _adapter(spawn_executor, model="anthropic/claude-unpriced", price_catalog=_luna_catalog())
 
     sample = adapter.sum_transcript_usage([line], "spawn")
 
@@ -1140,7 +1186,7 @@ def test_sum_transcript_usage_estimates_a_zero_cost_step_from_its_own_export_mes
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_never_bills_but_may_still_carry_an_estimate() -> None:
+def test_sum_transcript_usage_never_bills_but_may_still_carry_an_estimate(spawn_executor: Executor) -> None:
     line = json.dumps(
         _export_message(
             session_id="ses_export",
@@ -1152,7 +1198,7 @@ def test_sum_transcript_usage_never_bills_but_may_still_carry_an_estimate() -> N
             tokens=_ZERO_TOKENS,
         )
     )
-    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+    adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
 
     sample = adapter.sum_transcript_usage([line], "spawn")
 
@@ -1161,7 +1207,9 @@ def test_sum_transcript_usage_never_bills_but_may_still_carry_an_estimate() -> N
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_drops_the_estimate_entirely_when_any_step_reported_a_real_cost() -> None:
+def test_sum_transcript_usage_drops_the_estimate_entirely_when_any_step_reported_a_real_cost(
+    spawn_executor: Executor,
+) -> None:
     """A dropped billed amount is never hidden behind an estimate: once one step's
     real cost is unrecoverable on this fallback path, the whole sample stays without one,
     even though another step in the same transcript was priceable."""
@@ -1187,7 +1235,7 @@ def test_sum_transcript_usage_drops_the_estimate_entirely_when_any_step_reported
             tokens=_ZERO_TOKENS,
         )
     )
-    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+    adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
 
     sample = adapter.sum_transcript_usage([billed_line, zero_line], "spawn")
 
@@ -1196,7 +1244,9 @@ def test_sum_transcript_usage_drops_the_estimate_entirely_when_any_step_reported
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_gives_no_estimate_when_one_zero_cost_steps_model_is_unpriced() -> None:
+def test_sum_transcript_usage_gives_no_estimate_when_one_zero_cost_steps_model_is_unpriced(
+    spawn_executor: Executor,
+) -> None:
     """A partial estimate is never reported as complete: one step priced, another whose
     own exported model the catalog has no entry for, leaves the whole sample without one."""
     priced_line = json.dumps(
@@ -1221,7 +1271,7 @@ def test_sum_transcript_usage_gives_no_estimate_when_one_zero_cost_steps_model_i
             tokens=_ZERO_TOKENS,
         )
     )
-    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
+    adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna", price_catalog=_luna_catalog())
 
     sample = adapter.sum_transcript_usage([priced_line, unpriced_line], "spawn")
 
@@ -1230,7 +1280,9 @@ def test_sum_transcript_usage_gives_no_estimate_when_one_zero_cost_steps_model_i
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_keeps_an_export_lines_model_when_a_run_event_repeats_the_step() -> None:
+def test_sum_transcript_usage_keeps_an_export_lines_model_when_a_run_event_repeats_the_step(
+    spawn_executor: Executor,
+) -> None:
     # One step as an export naming its priced model, then as a run event naming none;
     # the invocation's own model is unpriced, so only the export's pair can price it.
     export_line = json.dumps(
@@ -1247,7 +1299,7 @@ def test_sum_transcript_usage_keeps_an_export_lines_model_when_a_run_event_repea
     event_line = json.dumps(
         _step_finish_event(session_id="ses_dup", part_id="prt_dup", message_id="msg_dup", cost=0.0, tokens=_ZERO_TOKENS)
     )
-    adapter = _adapter(model="anthropic/claude-unpriced", price_catalog=_luna_catalog())
+    adapter = _adapter(spawn_executor, model="anthropic/claude-unpriced", price_catalog=_luna_catalog())
 
     sample = adapter.sum_transcript_usage([export_line, event_line], "spawn")
 
@@ -1255,7 +1307,9 @@ def test_sum_transcript_usage_keeps_an_export_lines_model_when_a_run_event_repea
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_records_the_exports_model_over_a_passed_in_or_configured_one() -> None:
+def test_sum_transcript_usage_records_the_exports_model_over_a_passed_in_or_configured_one(
+    spawn_executor: Executor,
+) -> None:
     line = json.dumps(
         _export_message(
             session_id="ses_obs",
@@ -1267,25 +1321,32 @@ def test_sum_transcript_usage_records_the_exports_model_over_a_passed_in_or_conf
             tokens=_ZERO_TOKENS,
         )
     )
-    adapter = _adapter(model="anthropic/claude-configured")
+    adapter = _adapter(spawn_executor, model="anthropic/claude-configured")
 
     assert adapter.sum_transcript_usage([line], "spawn", model="anthropic/claude-passed").model == "openai/gpt-5.6-luna"
     assert adapter.sum_transcript_usage([line], "spawn").model == "openai/gpt-5.6-luna"
 
 
 @pytest.mark.unit
-def test_sum_transcript_usage_keeps_the_fallback_chain_when_no_export_names_a_model() -> None:
+def test_sum_transcript_usage_keeps_the_fallback_chain_when_no_export_names_a_model(spawn_executor: Executor) -> None:
     event_line = json.dumps(
         _step_finish_event(session_id="ses_ev", part_id="prt_ev", message_id="msg_ev", cost=0.0, tokens=_ZERO_TOKENS)
     )
 
-    assert _adapter(model="anthropic/c").sum_transcript_usage([event_line], "spawn", model="p/m").model == "p/m"
-    assert _adapter(model="anthropic/c").sum_transcript_usage([event_line], "spawn").model == "anthropic/c"
-    assert _adapter().sum_transcript_usage([event_line], "spawn").model == "opencode"
+    assert (
+        _adapter(spawn_executor, model="anthropic/c").sum_transcript_usage([event_line], "spawn", model="p/m").model
+        == "p/m"
+    )
+    assert (
+        _adapter(spawn_executor, model="anthropic/c").sum_transcript_usage([event_line], "spawn").model == "anthropic/c"
+    )
+    assert _adapter(spawn_executor).sum_transcript_usage([event_line], "spawn").model == "opencode"
 
 
 @pytest.mark.unit
-def test_parse_usage_over_run_events_keeps_the_fallback_chain_since_run_events_carry_no_model() -> None:
+def test_parse_usage_over_run_events_keeps_the_fallback_chain_since_run_events_carry_no_model(
+    spawn_executor: Executor,
+) -> None:
     """A run event names no provider/model (only an export does), so `parse_usage` has
     nothing of its own to observe: the passed-in model, then the configured one, then the
     bare harness label — and, with no model at all, no invented estimate and no raise."""
@@ -1293,18 +1354,20 @@ def test_parse_usage_over_run_events_keeps_the_fallback_chain_since_run_events_c
         [_step_finish_event(session_id="ses_ev", part_id="prt_ev", message_id="msg_ev", cost=0.0, tokens=_ZERO_TOKENS)]
     )
 
-    passed = _adapter(model="anthropic/c", price_catalog=_luna_catalog()).parse_usage(
+    passed = _adapter(spawn_executor, model="anthropic/c", price_catalog=_luna_catalog()).parse_usage(
         output, "spawn", model="openai/gpt-5.6-luna"
     )
     assert passed is not None
     assert passed.model == "openai/gpt-5.6-luna"
     assert passed.estimated_cost_usd == pytest.approx((40 * 0.20 + 8 * 1.20) / 1_000_000)
 
-    configured = _adapter(model="anthropic/c", price_catalog=_luna_catalog()).parse_usage(output, "spawn")
+    configured = _adapter(
+        spawn_executor=spawn_executor, model="anthropic/c", price_catalog=_luna_catalog()
+    ).parse_usage(output, "spawn")
     assert configured is not None
     assert configured.model == "anthropic/c"
 
-    bare = _adapter(price_catalog=_luna_catalog()).parse_usage(output, "spawn")
+    bare = _adapter(spawn_executor, price_catalog=_luna_catalog()).parse_usage(output, "spawn")
     assert bare is not None
     assert bare.model == "opencode"
     assert bare.estimated_cost_usd is None
@@ -1312,7 +1375,7 @@ def test_parse_usage_over_run_events_keeps_the_fallback_chain_since_run_events_c
 
 
 @pytest.mark.unit
-def test_observed_model_reads_the_exports_provider_and_model_as_one_reference() -> None:
+def test_observed_model_reads_the_exports_provider_and_model_as_one_reference(spawn_executor: Executor) -> None:
     line = json.dumps(
         _export_message(
             session_id="ses_obs",
@@ -1325,11 +1388,11 @@ def test_observed_model_reads_the_exports_provider_and_model_as_one_reference() 
         )
     )
 
-    assert _adapter(model="anthropic/claude-configured").observed_model([line]) == "openai/gpt-5.6-luna"
+    assert _adapter(spawn_executor, model="anthropic/claude-configured").observed_model([line]) == "openai/gpt-5.6-luna"
 
 
 @pytest.mark.unit
-def test_observed_model_is_none_for_run_events_and_model_less_exports() -> None:
+def test_observed_model_is_none_for_run_events_and_model_less_exports(spawn_executor: Executor) -> None:
     """Never the configured default — a run event names nothing, and an export whose
     `message.info` leaves the pair unset names nothing either."""
     model_less = _export_message(
@@ -1354,7 +1417,7 @@ def test_observed_model_is_none_for_run_events_and_model_less_exports() -> None:
         ),
         json.dumps(model_less),
     ]
-    adapter = _adapter(model="anthropic/claude-configured")
+    adapter = _adapter(spawn_executor, model="anthropic/claude-configured")
 
     assert adapter.observed_model(lines) is None
     assert adapter.observed_model([]) is None
@@ -1371,7 +1434,7 @@ class _CountingPriceCatalog:
 
 
 @pytest.mark.unit
-def test_parse_usage_looks_a_model_up_once_however_many_zero_cost_steps_it_prices() -> None:
+def test_parse_usage_looks_a_model_up_once_however_many_zero_cost_steps_it_prices(spawn_executor: Executor) -> None:
     events = [
         _step_finish_event(
             session_id="ses_memo", part_id=f"prt_{i}", message_id=f"msg_{i}", cost=0.0, tokens=_ZERO_TOKENS
@@ -1379,7 +1442,7 @@ def test_parse_usage_looks_a_model_up_once_however_many_zero_cost_steps_it_price
         for i in range(5)
     ]
     catalog = _CountingPriceCatalog(_luna_catalog())
-    adapter = _adapter(model="openai/gpt-5.6-luna", price_catalog=catalog)
+    adapter = _adapter(spawn_executor, model="openai/gpt-5.6-luna", price_catalog=catalog)
 
     sample = adapter.parse_usage(_jsonl(events), "spawn")
 
@@ -1392,11 +1455,11 @@ def test_parse_usage_looks_a_model_up_once_however_many_zero_cost_steps_it_price
 
 
 @pytest.mark.unit
-def test_classify_usage_limit_reads_the_captured_go_upsell_event() -> None:
+def test_classify_usage_limit_reads_the_captured_go_upsell_event(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     output = json.dumps(USAGE_LIMIT_EVENT)
 
-    limit = _adapter().classify_usage_limit(output, [], now)
+    limit = _adapter(spawn_executor).classify_usage_limit(output, [], now)
 
     assert limit is not None
     assert "usage limit" in limit.detail.lower()
@@ -1404,16 +1467,16 @@ def test_classify_usage_limit_reads_the_captured_go_upsell_event() -> None:
 
 
 @pytest.mark.unit
-def test_classify_usage_limit_is_none_for_an_ordinary_provider_error() -> None:
+def test_classify_usage_limit_is_none_for_an_ordinary_provider_error(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     payload = _fixture("provider_error")
     output = _jsonl(payload["events"])
 
-    assert _adapter().classify_usage_limit(output, [], now) is None
+    assert _adapter(spawn_executor).classify_usage_limit(output, [], now) is None
 
 
 @pytest.mark.unit
-def test_classify_usage_limit_is_none_for_a_429_that_does_not_name_a_usage_limit() -> None:
+def test_classify_usage_limit_is_none_for_a_429_that_does_not_name_a_usage_limit(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     output = json.dumps(
         {
@@ -1423,11 +1486,11 @@ def test_classify_usage_limit_is_none_for_a_429_that_does_not_name_a_usage_limit
         }
     )
 
-    assert _adapter().classify_usage_limit(output, [], now) is None
+    assert _adapter(spawn_executor).classify_usage_limit(output, [], now) is None
 
 
 @pytest.mark.unit
-def test_classify_usage_limit_none_reset_for_an_unparseable_duration_never_raises() -> None:
+def test_classify_usage_limit_none_reset_for_an_unparseable_duration_never_raises(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
     output = json.dumps(
         {
@@ -1437,23 +1500,23 @@ def test_classify_usage_limit_none_reset_for_an_unparseable_duration_never_raise
         }
     )
 
-    limit = _adapter().classify_usage_limit(output, [], now)
+    limit = _adapter(spawn_executor).classify_usage_limit(output, [], now)
 
     assert limit is not None
     assert limit.resets_at is None
 
 
 @pytest.mark.unit
-def test_classify_usage_limit_tolerates_malformed_capture() -> None:
+def test_classify_usage_limit_tolerates_malformed_capture(spawn_executor: Executor) -> None:
     now = datetime(2026, 9, 5, 19, 0, tzinfo=UTC)
-    assert _adapter().classify_usage_limit("not json at all", [], now) is None
+    assert _adapter(spawn_executor).classify_usage_limit("not json at all", [], now) is None
 
 
 # --- classify_provider_overload ------------------------------
 
 
 @pytest.mark.unit
-def test_classify_provider_overload_reads_a_529_status_code() -> None:
+def test_classify_provider_overload_reads_a_529_status_code(spawn_executor: Executor) -> None:
     output = json.dumps(
         {
             "type": "error",
@@ -1462,14 +1525,16 @@ def test_classify_provider_overload_reads_a_529_status_code() -> None:
         }
     )
 
-    overload = _adapter().classify_provider_overload(output, [])
+    overload = _adapter(spawn_executor).classify_provider_overload(output, [])
 
     assert overload is not None
     assert overload.detail == "Overloaded"
 
 
 @pytest.mark.unit
-def test_classify_provider_overload_reads_an_overloaded_error_name_without_a_529_status() -> None:
+def test_classify_provider_overload_reads_an_overloaded_error_name_without_a_529_status(
+    spawn_executor: Executor,
+) -> None:
     output = json.dumps(
         {
             "type": "error",
@@ -1478,11 +1543,11 @@ def test_classify_provider_overload_reads_an_overloaded_error_name_without_a_529
         }
     )
 
-    assert _adapter().classify_provider_overload(output, []) is not None
+    assert _adapter(spawn_executor).classify_provider_overload(output, []) is not None
 
 
 @pytest.mark.unit
-def test_classify_provider_overload_never_calls_the_transcript_reader() -> None:
+def test_classify_provider_overload_never_calls_the_transcript_reader(spawn_executor: Executor) -> None:
     output = json.dumps(
         {
             "type": "error",
@@ -1495,26 +1560,26 @@ def test_classify_provider_overload_never_calls_the_transcript_reader() -> None:
         def __iter__(self) -> Any:
             raise AssertionError("classify_provider_overload must not read the transcript range")
 
-    overload = _adapter().classify_provider_overload(output, _ExplodingLines())
+    overload = _adapter(spawn_executor).classify_provider_overload(output, _ExplodingLines())
 
     assert overload is not None
 
 
 @pytest.mark.unit
-def test_classify_provider_overload_is_none_for_an_ordinary_provider_error() -> None:
+def test_classify_provider_overload_is_none_for_an_ordinary_provider_error(spawn_executor: Executor) -> None:
     payload = _fixture("provider_error")
     output = _jsonl(payload["events"])
 
-    assert _adapter().classify_provider_overload(output, []) is None
+    assert _adapter(spawn_executor).classify_provider_overload(output, []) is None
 
 
 @pytest.mark.unit
-def test_classify_provider_overload_is_none_for_a_429_usage_limit_refusal() -> None:
+def test_classify_provider_overload_is_none_for_a_429_usage_limit_refusal(spawn_executor: Executor) -> None:
     output = json.dumps(USAGE_LIMIT_EVENT)
 
-    assert _adapter().classify_provider_overload(output, []) is None
+    assert _adapter(spawn_executor).classify_provider_overload(output, []) is None
 
 
 @pytest.mark.unit
-def test_classify_provider_overload_tolerates_malformed_capture() -> None:
-    assert _adapter().classify_provider_overload("not json at all", []) is None
+def test_classify_provider_overload_tolerates_malformed_capture(spawn_executor: Executor) -> None:
+    assert _adapter(spawn_executor).classify_provider_overload("not json at all", []) is None

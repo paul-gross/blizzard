@@ -304,7 +304,7 @@ def test_hosted_winter_reacquire_updates_worker_declarations_on_the_shared_provi
     graph = build_runner_process(config)
     hosted = build_hosted_app(config, process_graph=graph)
     try:
-        loop = LoopWiring(config, "", "", process_graph=graph).context(FakeHub())
+        loop = LoopWiring(config, "", "").context(FakeHub(), graph)
         try:
             assert hosted.app.state.workspace_provider is loop.provider is provider
             loop.provider.acquire("ch_1", 1, held_ids=[])

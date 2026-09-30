@@ -229,7 +229,6 @@ _RUNNER_STORE_ERRORS_FILE = _RUNNER_STORE_DIR / "errors.py"
 _RUNNER_STORE_MIGRATIONS_DIR = _RUNNER_STORE_DIR / "migrations"
 _RUNNER_COMPOSITION_FILE = _RUNNER_DIR / "composition.py"
 _RUNNER_APP_FILE = _RUNNER_DIR / "app.py"
-_RUNNER_LOOP_BUILD_FILE = _RUNNER_DIR / "loop" / "build.py"
 
 # AC3: every file outside the store's own package that still
 # names ``sqlalchemy`` — each an accepted, individually-justified exception, not the
@@ -237,12 +236,10 @@ _RUNNER_LOOP_BUILD_FILE = _RUNNER_DIR / "loop" / "build.py"
 # a tuple narrows to only those names.
 _SQLALCHEMY_EXCEPTIONS: dict[Path, tuple[str, ...] | None] = {
     # Engine only, for DI typing — shared with hub/composition.py, permanently out of
-    # scope (plan's "Out of scope": "Engine in a composition root"). ``app.py`` and
-    # ``loop/build.py`` are composition roots too (each opens its own engine), so
-    # the same exception covers the handles they hand their own callers to dispose.
+    # scope (plan's "Out of scope": "Engine in a composition root"). ``app.py`` holds the
+    # graph's engine only as the handle it hands its own callers to dispose.
     _RUNNER_COMPOSITION_FILE: ("Engine",),
     _RUNNER_APP_FILE: ("Engine",),
-    _RUNNER_LOOP_BUILD_FILE: ("Engine",),
     # IntegrityError only, for the replay-check catch: the collision itself IS the
     # business-logic check, so this one name stays local instead of the table-bound form.
     _RUNNER_DIR / "auth" / "internal" / "jti_cache_repository.py": ("IntegrityError",),
@@ -316,6 +313,35 @@ def test_composition_is_the_only_module_naming_a_concrete_runner_store_adapter()
                 if hit:
                     violations.append(f"{path.relative_to(_REPO_ROOT)} imports {sorted(hit)}")
     assert not violations, f"I — only runner/composition.py may name a concrete runner-store adapter: {violations}"
+
+
+#: The runner's process-graph collaborators, built once by ``build_runner_process``.
+_RUNNER_GRAPH_CONSTRUCTORS = frozenset({"build_stores", "build_production_harness_registry", "HarnessHealthCache"})
+
+
+def _called_names(tree: ast.AST) -> list[tuple[str, int]]:
+    calls: list[tuple[str, int]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
+            if name is not None:
+                calls.append((name, node.lineno))
+    return calls
+
+
+def test_composition_is_the_only_module_constructing_the_runner_process_graph_collaborators() -> None:
+    """I: the process-graph constructors are called from ``runner/composition.py`` and nowhere
+    else under ``src/`` — every other root takes the one ``RunnerProcess`` graph."""
+    violations: list[str] = []
+    for path in sorted(_SRC_DIR.rglob("*.py")):
+        if path == _RUNNER_COMPOSITION_FILE:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for name, lineno in _called_names(tree):
+            if name in _RUNNER_GRAPH_CONSTRUCTORS:
+                violations.append(f"{path.relative_to(_REPO_ROOT)}:{lineno} calls {name}")
+    assert not violations, f"I — only runner/composition.py may construct the runner process graph: {violations}"
 
 
 # The one roster of composition roots: modules that wire adapters, and so may import any

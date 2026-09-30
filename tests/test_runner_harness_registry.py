@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from concurrent.futures import Executor
 from pathlib import Path
 
 import pytest
 
 from blizzard.runner.app import create_app_for_export
-from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
@@ -17,7 +17,6 @@ from blizzard.runner.harness.internal.harness_registry import (
 )
 from blizzard.runner.harness.internal.opencode_price_cache import FileOpenCodePriceCatalog
 from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
-from blizzard.runner.harness.process_launch import _SPAWN_EXECUTOR
 from blizzard.runner.harness.registry import (
     HarnessBinding,
     HarnessRegistry,
@@ -25,6 +24,7 @@ from blizzard.runner.harness.registry import (
     UnknownHarnessError,
 )
 from blizzard.runner.loop.capability_snapshot import default_harness_id
+from blizzard.runner.loop.process import LinuxProcessProbe
 from tests.runner_fakes import FakeHarness, FakeTranscriptSource
 
 
@@ -74,9 +74,13 @@ def test_export_app_has_an_empty_hermetic_harness_registry() -> None:
 
 
 @pytest.mark.unit
-def test_production_registry_shares_one_process_launcher_across_both_bindings(tmp_path: Path) -> None:
+def test_production_registry_shares_one_process_launcher_across_both_bindings(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     """Both bindings inherit ONE runner-side launcher — an identity check, not equality."""
-    registry = build_production_harness_registry(RunnerConfig(root=tmp_path, db_url="sqlite://"))
+    registry = build_production_harness_registry(
+        RunnerConfig(root=tmp_path, db_url="sqlite://"), process=LinuxProcessProbe(), executor=spawn_executor
+    )
 
     claude_launcher = vars(registry.adapter(CLAUDE_CODE_HARNESS_ID))["_launcher"]
     opencode_launcher = vars(registry.adapter(OPENCODE_HARNESS_ID))["_launcher"]
@@ -84,10 +88,12 @@ def test_production_registry_shares_one_process_launcher_across_both_bindings(tm
 
 
 @pytest.mark.unit
-def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: Path) -> None:
+def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: Path, spawn_executor: Executor) -> None:
     """OpenCode's binding now names a real transcript source on both the adapter and
     the binding — no longer the ``UnavailableHarnessError`` an unset binding used to raise."""
-    registry = build_production_harness_registry(RunnerConfig(root=tmp_path, db_url="sqlite://"))
+    registry = build_production_harness_registry(
+        RunnerConfig(root=tmp_path, db_url="sqlite://"), process=LinuxProcessProbe(), executor=spawn_executor
+    )
 
     source = registry.transcript_source(OPENCODE_HARNESS_ID)
     assert isinstance(source, OpenCodeTranscriptSource)
@@ -97,7 +103,7 @@ def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: P
 
 @pytest.mark.unit
 def test_production_registry_injects_a_file_price_catalog_from_worker_env_passthrough(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
     """The OpenCode binding's price catalog is resolved from the same
     ``[worker] env_passthrough`` the worker's own environment is built from — never a
@@ -105,7 +111,7 @@ def test_production_registry_injects_a_file_price_catalog_from_worker_env_passth
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", worker_env_passthrough=("XDG_CACHE_HOME",))
 
-    registry = build_production_harness_registry(config)
+    registry = build_production_harness_registry(config, process=LinuxProcessProbe(), executor=spawn_executor)
 
     catalog = vars(registry.adapter(OPENCODE_HARNESS_ID))["_price_catalog"]
     assert isinstance(catalog, FileOpenCodePriceCatalog)
@@ -114,7 +120,7 @@ def test_production_registry_injects_a_file_price_catalog_from_worker_env_passth
 
 @pytest.mark.unit
 def test_production_registry_binds_no_price_catalog_with_an_unresolvable_cache_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
     """Neither ``XDG_CACHE_HOME`` nor ``HOME`` reaching the worker leaves the cache root
     unresolvable, so the binding skips the catalog entirely rather than one rooted at cwd."""
@@ -122,29 +128,17 @@ def test_production_registry_binds_no_price_catalog_with_an_unresolvable_cache_r
     monkeypatch.delenv("HOME", raising=False)
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
 
-    registry = build_production_harness_registry(config)
+    registry = build_production_harness_registry(config, process=LinuxProcessProbe(), executor=spawn_executor)
 
     assert vars(registry.adapter(OPENCODE_HARNESS_ID))["_price_catalog"] is None
 
 
 @pytest.mark.unit
-def test_production_registry_injects_its_own_executor_not_the_module_default(tmp_path: Path) -> None:
-    """`bzh:dependency-injection`: the one production composition root builds and injects
-    its own long-lived executor explicitly, rather than falling back to
-    ``ProcessLauncher``'s module-level default — that default backs tests only."""
-    graph = build_runner_process(RunnerConfig(root=tmp_path, db_url="sqlite://"))
-    try:
-        launcher = vars(graph.harnesses.adapter(CLAUDE_CODE_HARNESS_ID))["_launcher"]
-        assert vars(launcher)["_executor"] is graph.executor
-        assert graph.executor is not _SPAWN_EXECUTOR
-    finally:
-        graph.close()
-
-
-@pytest.mark.unit
-def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_opencode(tmp_path: Path) -> None:
+def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_opencode(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", claude_code_enabled=False)
-    registry = build_production_harness_registry(config)
+    registry = build_production_harness_registry(config, process=LinuxProcessProbe(), executor=spawn_executor)
 
     assert default_harness_id(registry) == OPENCODE_HARNESS_ID
     registry.adapter(OPENCODE_HARNESS_ID)
@@ -154,9 +148,11 @@ def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_openco
 
 
 @pytest.mark.unit
-def test_production_registry_omits_a_disabled_opencode(tmp_path: Path) -> None:
+def test_production_registry_omits_a_disabled_opencode(tmp_path: Path, spawn_executor: Executor) -> None:
     registry = build_production_harness_registry(
-        RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_enabled=False)
+        RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_enabled=False),
+        process=LinuxProcessProbe(),
+        executor=spawn_executor,
     )
 
     assert default_harness_id(registry) == CLAUDE_CODE_HARNESS_ID
@@ -165,10 +161,14 @@ def test_production_registry_omits_a_disabled_opencode(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_production_registry_defaults_to_claude_code_with_both_enabled(tmp_path: Path) -> None:
-    assert default_harness_id(build_production_harness_registry(RunnerConfig(root=tmp_path, db_url="sqlite://"))) == (
-        CLAUDE_CODE_HARNESS_ID
-    )
+def test_production_registry_defaults_to_claude_code_with_both_enabled(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
+    assert default_harness_id(
+        build_production_harness_registry(
+            RunnerConfig(root=tmp_path, db_url="sqlite://"), process=LinuxProcessProbe(), executor=spawn_executor
+        )
+    ) == (CLAUDE_CODE_HARNESS_ID)
 
 
 @pytest.mark.unit

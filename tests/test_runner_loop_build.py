@@ -28,7 +28,6 @@ from blizzard.runner.config import (
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -36,7 +35,7 @@ from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
-from tests.runner_fakes import FakeHub, FakeProbe, make_store, make_stores
+from tests.runner_fakes import FakeHub, FakeProbe, loop_context, loop_graph, make_store, make_stores
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -52,18 +51,17 @@ def test_basic_provider_wired_with_shared_absolute_root_and_capacity(tmp_path: P
         max_environments=3,
     )
     hosted = build_hosted_app(config).app
-    loop = LoopWiring(config, "", "").context(FakeHub())
-
-    assert isinstance(hosted.state.workspace_provider, BasicWorkspaceProvider)
-    assert isinstance(loop.provider, BasicWorkspaceProvider)
-    assert loop.config.env_capacity == 3
-    assert loop.config.workspace_root == ""
-    assert loop.usage.workspace_root == loop.config.workspace_root
-    assert hosted.state.workspace_provider._root == loop.provider._root == tmp_path / "scratch"
-    assert SpawnCwd.of_session(loop.config.workspace_root, str(tmp_path / "scratch" / "chunk")) == str(
-        tmp_path / "scratch" / "chunk"
-    )
-    assert hosted.state.runner_status._env_pool == ()
+    with loop_context(config) as loop:
+        assert isinstance(hosted.state.workspace_provider, BasicWorkspaceProvider)
+        assert isinstance(loop.provider, BasicWorkspaceProvider)
+        assert loop.config.env_capacity == 3
+        assert loop.config.workspace_root == ""
+        assert loop.usage.workspace_root == loop.config.workspace_root
+        assert hosted.state.workspace_provider._root == loop.provider._root == tmp_path / "scratch"
+        assert SpawnCwd.of_session(loop.config.workspace_root, str(tmp_path / "scratch" / "chunk")) == str(
+            tmp_path / "scratch" / "chunk"
+        )
+        assert hosted.state.runner_status._env_pool == ()
 
 
 @pytest.mark.unit
@@ -75,10 +73,9 @@ def test_basic_default_root_is_shared_with_transcript_usage(tmp_path: Path) -> N
         workspace_repos=(WorkspaceRepo("toy", "file:///tmp/toy.git"),),
     )
 
-    loop = LoopWiring(config, "", "").context(FakeHub())
-
-    assert loop.config.workspace_root == ""
-    assert loop.usage.workspace_root == loop.config.workspace_root
+    with loop_context(config) as loop:
+        assert loop.config.workspace_root == ""
+        assert loop.usage.workspace_root == loop.config.workspace_root
 
 
 def _seeded_running_lease_store(tmp_path: Path):  # type: ignore[no-untyped-def]
@@ -118,11 +115,11 @@ def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: P
         worker_env_passthrough=("MY_HARNESS_QUIRK", "ANOTHER_VAR"),
     )
 
-    ctx = LoopWiring(config, "", "").context(FakeHub())
-    harness = ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
+    with loop_context(config) as ctx:
+        harness = ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
 
-    assert isinstance(harness, ClaudeCodeAdapter)
-    assert harness._worker_env.passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
+        assert isinstance(harness, ClaudeCodeAdapter)
+        assert harness._worker_env.passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
 
 
 @pytest.mark.unit
@@ -144,14 +141,13 @@ def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tm
         external_usage_sample_interval_seconds=123,
     )
 
-    ctx = LoopWiring(config, "", "").context(FakeHub())
-
-    assert isinstance(ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID), ClaudeCodeAdapter)
-    assert [s.slug for s in ctx.subscriptions] == [LEGACY_ANTHROPIC_SLUG]
-    resolved = ctx.subscriptions[0]
-    assert resolved.sample_interval_seconds == 123
-    assert isinstance(resolved.sampler, AnthropicSubscriptionSampler)
-    assert resolved.sampler._credentials_path == scratch
+    with loop_context(config) as ctx:
+        assert isinstance(ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID), ClaudeCodeAdapter)
+        assert [s.slug for s in ctx.subscriptions] == [LEGACY_ANTHROPIC_SLUG]
+        resolved = ctx.subscriptions[0]
+        assert resolved.sample_interval_seconds == 123
+        assert isinstance(resolved.sampler, AnthropicSubscriptionSampler)
+        assert resolved.sampler._credentials_path == scratch
 
 
 @pytest.mark.unit
@@ -169,14 +165,13 @@ def test_the_loops_declared_subscriptions_share_one_root_owned_http_client(tmp_p
         ),
     )
 
-    ctx = LoopWiring(config, "", "").context(FakeHub())
-
-    assert [s.slug for s in ctx.subscriptions] == ["anthropic", "codex"]
-    first_sampler, second_sampler = (s.sampler for s in ctx.subscriptions)
-    assert isinstance(first_sampler, AnthropicSubscriptionSampler)
-    assert isinstance(second_sampler, OpenAISubscriptionSampler)
-    assert first_sampler._http_client is ctx.usage_http_client
-    assert second_sampler._http_client is ctx.usage_http_client
+    with loop_context(config) as ctx:
+        assert [s.slug for s in ctx.subscriptions] == ["anthropic", "codex"]
+        first_sampler, second_sampler = (s.sampler for s in ctx.subscriptions)
+        assert isinstance(first_sampler, AnthropicSubscriptionSampler)
+        assert isinstance(second_sampler, OpenAISubscriptionSampler)
+        assert first_sampler._http_client is ctx.usage_http_client
+        assert second_sampler._http_client is ctx.usage_http_client
 
 
 @pytest.mark.unit
@@ -188,10 +183,9 @@ def test_the_loops_usage_http_client_is_not_built_merely_by_composing_the_contex
         root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
     )
 
-    ctx = LoopWiring(config, "", "").context(FakeHub())
-
-    assert isinstance(ctx.usage_http_client, _LazyUsageHttpClient)
-    assert ctx.usage_http_client._client is None
+    with loop_context(config) as ctx:
+        assert isinstance(ctx.usage_http_client, _LazyUsageHttpClient)
+        assert ctx.usage_http_client._client is None
 
 
 @pytest.mark.unit
@@ -202,14 +196,14 @@ def test_the_loops_usage_http_client_owner_closes_a_client_it_actually_built(tmp
         root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
     )
 
-    ctx = LoopWiring(config, "", "").context(FakeHub())
-    assert isinstance(ctx.usage_http_client, _LazyUsageHttpClient)
-    client = ctx.usage_http_client()
-    assert not client.is_closed
+    with loop_context(config) as ctx:
+        assert isinstance(ctx.usage_http_client, _LazyUsageHttpClient)
+        client = ctx.usage_http_client()
+        assert not client.is_closed
 
-    ctx.usage_http_client.close()
+        ctx.usage_http_client.close()
 
-    assert client.is_closed
+        assert client.is_closed
 
 
 @pytest.mark.unit
@@ -226,12 +220,12 @@ def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_pa
         harness_permission_mode="acceptEdits",
     )
 
-    ctx = LoopWiring(config, "", "").context(FakeHub())
-    harness = ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
+    with loop_context(config) as ctx:
+        harness = ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
 
-    assert isinstance(harness, ClaudeCodeAdapter)
-    assert harness._settings_path == settings
-    assert harness._permission_mode == "acceptEdits"
+        assert isinstance(harness, ClaudeCodeAdapter)
+        assert harness._settings_path == settings
+        assert harness._permission_mode == "acceptEdits"
 
 
 @pytest.mark.unit
@@ -265,10 +259,9 @@ def test_loop_wiring_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -
     unresolved_root = tmp_path / "nested" / ".." / "runner"
 
     config = RunnerConfig.load(unresolved_root)
-    ctx = LoopWiring(config, "", "").context(FakeHub())
-
-    assert ".." not in ctx.config.runner_dir
-    assert ctx.config.runner_dir == str(real_root.resolve())
+    with loop_context(config) as ctx:
+        assert ".." not in ctx.config.runner_dir
+        assert ctx.config.runner_dir == str(real_root.resolve())
 
 
 @pytest.mark.unit
@@ -278,9 +271,8 @@ def test_loop_wiring_of_defaults_to_no_broker(tmp_path: Path) -> None:
     store-free/export app and every other path with no stream to feed."""
     config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
 
-    ctx = LoopWiring.of(config).context(FakeHub())
-
-    assert ctx.events is None
+    with loop_context(config) as ctx:
+        assert ctx.events is None
 
 
 @pytest.mark.unit
@@ -290,22 +282,22 @@ def test_loop_wiring_of_threads_the_broker_into_the_loop_context(tmp_path: Path)
     config = RunnerConfig(root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path))
     broker = EventBroker()
 
-    ctx = LoopWiring.of(config, broker=broker).context(FakeHub())
-
-    assert ctx.events is broker
+    with loop_context(config, broker=broker) as ctx:
+        assert ctx.events is broker
 
 
 @pytest.mark.unit
-def test_periodic_driver_threads_the_broker_into_its_own_loop_wiring(tmp_path: Path) -> None:
-    """The same broker the ``host`` verb passes to ``build_hosted_app``
-    also reaches ``PeriodicDriver``'s own ``LoopWiring`` — the second of the two
-    composition paths a single instance must reach."""
+def test_periodic_driver_threads_the_graph_broker_into_its_own_loop_wiring(tmp_path: Path) -> None:
+    """The broker the graph carries — the one ``host`` also gives ``build_hosted_app`` —
+    reaches ``PeriodicDriver``'s own ``LoopWiring``, the second of the two composition
+    paths a single instance must reach."""
     config = RunnerConfig(
         root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
     )
     broker = EventBroker()
 
-    driver = PeriodicDriver(config, interval_seconds=30.0, broker=broker)
+    with loop_graph(config, events=broker) as graph:
+        driver = PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
 
     assert driver._wiring.events is broker
 
@@ -316,36 +308,24 @@ def test_periodic_driver_defaults_to_no_broker(tmp_path: Path) -> None:
         root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
     )
 
-    driver = PeriodicDriver(config, interval_seconds=30.0)
+    with loop_graph(config) as graph:
+        driver = PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
 
     assert driver._wiring.events is None
 
 
 @pytest.mark.unit
-def test_periodic_driver_threads_its_harness_health_cache_into_its_own_loop_wiring(tmp_path: Path) -> None:
-    """The same ``HarnessHealthCache`` instance ``host`` also hands the
-    served app (``HostedApp.harness_health``) must reach the loop's own context too — one
-    shared source of truth, not two independently-refreshing caches that can disagree."""
+def test_context_health_is_the_graphs_own_cache(tmp_path: Path) -> None:
     config = RunnerConfig(
         root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
     )
-    health = HarnessHealthCache(clock=FixedClock(_NOW), probes={}, selftest_results=None)
 
-    driver = PeriodicDriver(config, interval_seconds=30.0, harness_health=health)
-
-    assert driver._harness_health is health
-
-
-@pytest.mark.unit
-def test_context_reuses_an_injected_health_cache_rather_than_building_its_own(tmp_path: Path) -> None:
-    config = RunnerConfig(
-        root=tmp_path, db_url=RunnerConfig.default_db_url(tmp_path), workspace_root=str(tmp_path / "workspace")
-    )
-    health = HarnessHealthCache(clock=FixedClock(_NOW), probes={}, selftest_results=None)
-
-    ctx = LoopWiring(config, "", "").context(FakeHub(), health_cache=health)
-
-    assert ctx.harness_health is health
+    with loop_graph(config) as graph:
+        ctx = LoopWiring(config, "", "").context(FakeHub(), graph)
+        try:
+            assert ctx.harness_health is graph.health
+        finally:
+            ctx.usage_http_client.close()
 
 
 @pytest.mark.unit
@@ -378,7 +358,7 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
     graph = build_runner_process(config, events=EventBroker())
     hosted = build_hosted_app(config, process_graph=graph)
     try:
-        ctx = LoopWiring(config, "", "", graph.events, graph).context(FakeHub())
+        ctx = LoopWiring(config, "", "", graph.events).context(FakeHub(), graph)
         try:
             assert hosted.app.state.workspace_provider is ctx.provider is graph.provider
             assert hosted.app.state.harnesses is ctx.harnesses is graph.harnesses
@@ -471,8 +451,8 @@ def test_periodic_driver_resolves_prompts_eagerly_at_construction(tmp_path: Path
         runner_prompt_file="does-not-exist.md",
     )
 
-    with pytest.raises(ConfigError):
-        PeriodicDriver(config, interval_seconds=30.0)
+    with loop_graph(config) as graph, pytest.raises(ConfigError):
+        PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
 
 
 @pytest.mark.unit
@@ -549,6 +529,5 @@ def test_both_roots_boot_with_a_single_enabled_harness(
     )
 
     build_hosted_app(config)
-    loop = LoopWiring(config, "", "").context(FakeHub())
-
-    assert loop.harnesses.known_harnesses == expected
+    with loop_context(config) as loop:
+        assert loop.harnesses.known_harnesses == expected

@@ -113,6 +113,7 @@ from blizzard.runner.domain.takeover import IReadTakeoverRepository
 from blizzard.runner.domain.usage import IReadUsageRepository
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
+from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
@@ -755,7 +756,16 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
 }
 
 #: Runner ``IRead*`` methods with no SQL behind them at all, each reasoned below.
+_HARNESS_HEALTH_EXEMPTION = (
+    "blizzard.runner.harness.health_cache.HarnessHealthCache implements this over an in-memory "
+    "per-harness result table — no SQL, and not part of blizzard.runner.composition.build_stores's "
+    "bundle."
+)
+
 RUNNER_EXEMPTIONS: dict[tuple[type, str], str] = {
+    (IReadHarnessHealth, "get"): _HARNESS_HEALTH_EXEMPTION,
+    (IReadHarnessHealth, "displayed_version"): _HARNESS_HEALTH_EXEMPTION,
+    (IReadHarnessHealth, "admitted_range"): _HARNESS_HEALTH_EXEMPTION,
     (IReadArchivedTranscriptRepository, "read_turns"): (
         "blizzard.runner.transcripts.internal.http_archived_transcript_repository."
         "HttpArchivedTranscriptRepository implements this over httpx against the hub's "

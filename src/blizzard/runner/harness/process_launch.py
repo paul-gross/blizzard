@@ -15,7 +15,7 @@ import signal
 import subprocess
 import sys
 from collections.abc import Callable
-from concurrent.futures import Executor, ThreadPoolExecutor
+from concurrent.futures import Executor
 from dataclasses import dataclass
 from typing import IO, Protocol
 
@@ -38,9 +38,6 @@ def _die_with_parent() -> None:
     by the child's later ``setsid()``."""
     _PRCTL(_PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
 
-
-# A no-DI-friction test default (`bzh:dependency-injection`) — the composition root injects its own.
-_SPAWN_EXECUTOR: Executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
 
 # The interposed trampoline — its own tiny `ctypes` call, in its own exec'd process.
 _TRAMPOLINE_SOURCE = """
@@ -106,13 +103,12 @@ class IProcessLauncher(Protocol):
 
 class ProcessLauncher:
     """The one production :class:`IProcessLauncher` — every adapter launches through this.
-    ``executor`` defaults to :data:`_SPAWN_EXECUTOR` for a test that doesn't care to wire
-    one; the composition root always injects its own instead, so both bindings share
-    ONE executor without depending on this module-level default."""
+    ``executor`` is required: the composition root injects the one it owns, so both
+    bindings share it."""
 
-    def __init__(self, process: IProcessProbe, *, executor: Executor | None = None) -> None:
+    def __init__(self, process: IProcessProbe, *, executor: Executor) -> None:
         self._process = process
-        self._executor = executor if executor is not None else _SPAWN_EXECUTOR
+        self._executor = executor
 
     def launch(
         self,
@@ -184,8 +180,8 @@ class ProcessLauncher:
         stderr: IO[bytes] | int | None,
         pass_fds: tuple[int, ...] = (),
     ) -> subprocess.Popen[bytes]:
-        # fork()/exec() runs on `self._executor`'s worker thread, not the caller's (see
-        # `_SPAWN_EXECUTOR`); this call blocks for it, so the caller's own timing is unchanged.
+        # fork()/exec() runs on `self._executor`'s worker thread, not the caller's;
+        # this call blocks for it, so the caller's own timing is unchanged.
         return self._executor.submit(
             subprocess.Popen,  # argv is adapter-composed, never shell-interpreted
             argv,

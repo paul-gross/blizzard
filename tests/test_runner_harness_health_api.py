@@ -9,6 +9,7 @@ on the injected cache itself before reading the route, standing in for that tick
 
 from __future__ import annotations
 
+from concurrent.futures import Executor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -65,11 +66,14 @@ class _HealthyWithDegradationProbe:
         return (DeclaredDegradation(probe=CompatibilityProbe.USAGE_COST, summary="no cost figure on some turns"),)
 
 
-def test_reports_missing_binary_for_an_unresolvable_configured_path(tmp_path: Path) -> None:
+def test_reports_missing_binary_for_an_unresolvable_configured_path(tmp_path: Path, spawn_executor: Executor) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", harness_binary=str(tmp_path / "no-such-claude-binary"))
     probe = LinuxProcessProbe()
     adapter = ClaudeCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), binary=config.harness_binary, process=probe, launcher=ProcessLauncher(probe)
+        worker_env=AllowlistedEnv.of(()),
+        binary=config.harness_binary,
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
     )
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     health = HarnessHealthCache(
@@ -90,11 +94,14 @@ def test_reports_missing_binary_for_an_unresolvable_configured_path(tmp_path: Pa
     assert items[0]["cause"] == "missing_binary"
 
 
-def test_reports_available_with_a_declared_degradation(tmp_path: Path) -> None:
+def test_reports_available_with_a_declared_degradation(tmp_path: Path, spawn_executor: Executor) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     probe = LinuxProcessProbe()
     adapter = ClaudeCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), binary=config.harness_binary, process=probe, launcher=ProcessLauncher(probe)
+        worker_env=AllowlistedEnv.of(()),
+        binary=config.harness_binary,
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
     )
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     health = HarnessHealthCache(
@@ -115,7 +122,7 @@ def test_reports_available_with_a_declared_degradation(tmp_path: Path) -> None:
     assert items[0]["degradations"] == ["no cost figure on some turns"]
 
 
-def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path) -> None:
+def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path, spawn_executor: Executor) -> None:
     """A missing corpus manifest for an admitted OpenCode version degrades that binding
     alone — `OpenCodeHealthProbe` construction never raises over it, and
     it neither prevents Claude Code's own entry, in the same registry and cache, from
@@ -126,7 +133,7 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path) 
     cache, and the route all surviving the corpus defect intact."""
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", opencode_binary=str(tmp_path / "no-such-opencode-binary"))
     process = LinuxProcessProbe()
-    launcher = ProcessLauncher(process)
+    launcher = ProcessLauncher(process, executor=spawn_executor)
     claude_adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()), binary=config.harness_binary, process=process, launcher=launcher
     )
@@ -162,13 +169,13 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path) 
     assert items[OPENCODE_HARNESS_ID]["cause"] == "missing_binary"
 
 
-def test_admitted_range_surfaces_per_binding(tmp_path: Path) -> None:
+def test_admitted_range_surfaces_per_binding(tmp_path: Path, spawn_executor: Executor) -> None:
     """``admitted_range`` is populated from each binding's own
     `supported_version()` display string — both Claude Code and OpenCode
     declare one today, each its own literal."""
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     process = LinuxProcessProbe()
-    launcher = ProcessLauncher(process)
+    launcher = ProcessLauncher(process, executor=spawn_executor)
     claude_adapter = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()), binary=config.harness_binary, process=process, launcher=launcher
     )

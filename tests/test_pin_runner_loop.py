@@ -18,7 +18,6 @@ from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopConfig, ResolvedSubscription
 from blizzard.runner.loop.judgement import Judgement
@@ -36,6 +35,7 @@ from tests.runner_fakes import (
     FakeProvider,
     FakeWorktreeGit,
     claimed_outcome,
+    loop_context,
     make_context,
     make_envelope,
     make_store,
@@ -273,11 +273,12 @@ def test_loop_wiring_uses_the_injected_prompts_and_never_re_derives_them(tmp_pat
     )
 
     try:
-        ctx = LoopWiring(config, "ws prose", "runner prose").context(FakeHub())
+        with loop_context(config, workspace_prompt="ws prose", runner_prompt="runner prose") as ctx:
+            prompts = (ctx.config.workspace_prompt, ctx.config.runner_prompt)
     except ConfigError as exc:  # pragma: no cover - the pinned regression
         pytest.fail(f"the prompts were re-derived here instead of taken from the caller: {exc}")
 
-    assert (ctx.config.workspace_prompt, ctx.config.runner_prompt) == ("ws prose", "runner prose")
+    assert prompts == ("ws prose", "runner prose")
 
 
 # The external-subscription-usage sample is the tick's LAST step.

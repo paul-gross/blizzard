@@ -7,6 +7,7 @@ mapping are the point."""
 
 from __future__ import annotations
 
+from concurrent.futures import Executor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -535,7 +536,7 @@ def test_an_escalated_leases_harness_version_reads_the_generations_own_recorded_
 @pytest.mark.component
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
 def test_the_escalation_paste_string_carries_no_permission_mode_even_when_configured(
-    tmp_path: Path, workspace_root: str, expected_cwd: str
+    tmp_path: Path, workspace_root: str, expected_cwd: str, spawn_executor: Executor
 ) -> None:
     """Pins the paste surface to the REAL adapter: a human running
     ``resume_command`` in a bare terminal must stay at the interactive permission
@@ -559,7 +560,7 @@ def test_the_escalation_paste_string_carries_no_permission_mode_even_when_config
                         binary="claude",
                         permission_mode="bypassPermissions",
                         process=probe,
-                        launcher=ProcessLauncher(probe),
+                        launcher=ProcessLauncher(probe, executor=spawn_executor),
                     )
                 )
             }

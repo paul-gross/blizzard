@@ -6,6 +6,7 @@ parse and the transcript fallback — a pinned lease never pays for the read."""
 from __future__ import annotations
 
 import json
+from concurrent.futures import Executor
 from datetime import UTC, datetime
 
 import pytest
@@ -126,7 +127,7 @@ _EXPORT_LINE = json.dumps(
 )
 
 
-def _opencode_recorder(tmp_path, store, *, transcripts_wired: bool = True):  # type: ignore[no-untyped-def]
+def _opencode_recorder(spawn_executor: Executor, tmp_path, store, *, transcripts_wired: bool = True):  # type: ignore[no-untyped-def]
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()
     (stdout_dir / "lease_1.1.stdout").write_text(_RUN_EVENT_STDOUT)
@@ -135,7 +136,7 @@ def _opencode_recorder(tmp_path, store, *, transcripts_wired: bool = True):  # t
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe),
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
         transcript_source=source,
         price_catalog=_LunaPriceCatalog(),
     )
@@ -153,10 +154,12 @@ def _opencode_recorder(tmp_path, store, *, transcripts_wired: bool = True):  # t
     return recorder, source
 
 
-def test_an_unpinned_opencode_generation_is_priced_from_the_model_its_export_names(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_an_unpinned_opencode_generation_is_priced_from_the_model_its_export_names(
+    tmp_path, spawn_executor: Executor
+) -> None:  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, harness_id=OPENCODE_HARNESS_ID, resolved_model=None)
-    recorder, source = _opencode_recorder(tmp_path, store)
+    recorder, source = _opencode_recorder(spawn_executor, tmp_path, store)
     lease = store.active_lease("lease_1")
     assert lease is not None
 
@@ -173,10 +176,10 @@ def test_an_unpinned_opencode_generation_is_priced_from_the_model_its_export_nam
     assert len(source.read_raw_lines_calls) == 1
 
 
-def test_a_pinned_generation_reads_no_transcript_for_an_observation(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_pinned_generation_reads_no_transcript_for_an_observation(tmp_path, spawn_executor: Executor) -> None:  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, harness_id=OPENCODE_HARNESS_ID, resolved_model="openai/gpt-5.6-luna")
-    recorder, source = _opencode_recorder(tmp_path, store)
+    recorder, source = _opencode_recorder(spawn_executor, tmp_path, store)
     lease = store.active_lease("lease_1")
     assert lease is not None
 
@@ -189,10 +192,10 @@ def test_a_pinned_generation_reads_no_transcript_for_an_observation(tmp_path) ->
     assert source.read_raw_lines_calls == []
 
 
-def test_an_unpinned_generation_with_the_lane_unwired_is_never_observed(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_an_unpinned_generation_with_the_lane_unwired_is_never_observed(tmp_path, spawn_executor: Executor) -> None:  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     _seed_lease(store, harness_id=OPENCODE_HARNESS_ID, resolved_model=None)
-    recorder, source = _opencode_recorder(tmp_path, store, transcripts_wired=False)
+    recorder, source = _opencode_recorder(spawn_executor, tmp_path, store, transcripts_wired=False)
     lease = store.active_lease("lease_1")
     assert lease is not None
 
@@ -284,7 +287,9 @@ def test_a_pinned_lease_hands_its_stamp_to_both_samples_without_observing(tmp_pa
     assert source.read_raw_lines_calls == []
 
 
-def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one_fact(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one_fact(
+    tmp_path, spawn_executor: Executor
+) -> None:  # type: ignore[no-untyped-def]
     capture = repo_root() / "src/blizzard/runner/harness/contracts/opencode/1.18.32"
     child = "ses_f6070f70bffeyvhNqEiKNcjN1F"
     exporter = FakeExporter({child: (capture / f"child_{child}.json").read_text()})
@@ -298,7 +303,7 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
     adapter = OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
-        launcher=ProcessLauncher(probe),
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
         descendant_usage=OpenCodeDescendantUsage(exporter),
     )
     source = FakeTranscriptSource(lines_by_session={})
@@ -319,7 +324,9 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
     recorder.record_worker(lease, bindings=[])
 
     [payload] = _usage_payloads(store)
-    solo = OpenCodeAdapter(worker_env=AllowlistedEnv.of(()), process=probe, launcher=ProcessLauncher(probe))
+    solo = OpenCodeAdapter(
+        worker_env=AllowlistedEnv.of(()), process=probe, launcher=ProcessLauncher(probe, executor=spawn_executor)
+    )
     root_steps = solo.parse_usage(generation, "spawn")
     assert root_steps is not None
     assert payload["input_tokens"] > root_steps.input_tokens

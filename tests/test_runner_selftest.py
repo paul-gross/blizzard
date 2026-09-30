@@ -12,6 +12,7 @@ import stat
 import threading
 import time
 from collections.abc import Iterator, Sequence
+from concurrent.futures import Executor
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -151,11 +152,14 @@ def _fake_opencode_binary(tmp_path: Path) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _app_with_harness(tmp_path: Path, binary: str) -> TestClient:
+def _app_with_harness(spawn_executor: Executor, tmp_path: Path, binary: str) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     probe = LinuxProcessProbe()
     adapter = ClaudeCodeAdapter(
-        worker_env=AllowlistedEnv.of(()), binary=binary, process=probe, launcher=ProcessLauncher(probe)
+        worker_env=AllowlistedEnv.of(()),
+        binary=binary,
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor),
     )
     harnesses = HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter)})
     return TestClient(create_app(config, harnesses=harnesses))
@@ -174,9 +178,11 @@ def _poll_until_done(client: TestClient, selftest_id: str, timeout: float = 20.0
 
 
 @pytest.mark.component
-def test_selftest_runs_every_check_against_the_fake_harness_and_passes(tmp_path: Path) -> None:
+def test_selftest_runs_every_check_against_the_fake_harness_and_passes(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     binary = _fake_binary(tmp_path / "bin")
-    client = _app_with_harness(tmp_path / "runner", binary)
+    client = _app_with_harness(spawn_executor, tmp_path / "runner", binary)
 
     start = client.post("/api/selftests", json={"harness": "claude_code"})
     assert start.status_code == 201, start.text
@@ -201,9 +207,9 @@ def test_selftest_runs_every_check_against_the_fake_harness_and_passes(tmp_path:
 
 
 @pytest.mark.component
-def test_selftest_reports_the_failing_checks_on_a_drifted_harness(tmp_path: Path) -> None:
+def test_selftest_reports_the_failing_checks_on_a_drifted_harness(tmp_path: Path, spawn_executor: Executor) -> None:
     binary = _fake_binary(tmp_path / "bin", source=_BROKEN_HARNESS)
-    client = _app_with_harness(tmp_path / "runner", binary)
+    client = _app_with_harness(spawn_executor, tmp_path / "runner", binary)
 
     start = client.post("/api/selftests", json={"harness": "claude_code"})
     run = _poll_until_done(client, start.json()["id"])
@@ -221,11 +227,13 @@ def test_selftest_reports_the_failing_checks_on_a_drifted_harness(tmp_path: Path
 
 
 @pytest.mark.component
-def test_selftest_skips_downstream_checks_when_the_binary_cannot_spawn(tmp_path: Path) -> None:
+def test_selftest_skips_downstream_checks_when_the_binary_cannot_spawn(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
     # A missing binary (an uninstalled/renamed harness — the sharpest drift case)
     # fails the checks runner before a single subprocess starts.
     missing_binary = str(tmp_path / "no-such-harness")
-    client = _app_with_harness(tmp_path / "runner", missing_binary)
+    client = _app_with_harness(spawn_executor, tmp_path / "runner", missing_binary)
 
     start = client.post("/api/selftests", json={"harness": "claude_code"})
     run = _poll_until_done(client, start.json()["id"])
@@ -240,9 +248,9 @@ def test_selftest_skips_downstream_checks_when_the_binary_cannot_spawn(tmp_path:
 
 
 @pytest.mark.component
-def test_unknown_harness_is_rejected_naming_the_configured_ones(tmp_path: Path) -> None:
+def test_unknown_harness_is_rejected_naming_the_configured_ones(tmp_path: Path, spawn_executor: Executor) -> None:
     binary = _fake_binary(tmp_path / "bin")
-    client = _app_with_harness(tmp_path / "runner", binary)
+    client = _app_with_harness(spawn_executor, tmp_path / "runner", binary)
 
     resp = client.post("/api/selftests", json={"harness": "codex"})
 
@@ -264,8 +272,8 @@ def test_unknown_harness_on_the_store_free_app_names_no_configured_harnesses(tmp
 
 
 @pytest.mark.component
-def test_get_unknown_selftest_id_is_404(tmp_path: Path) -> None:
-    client = _app_with_harness(tmp_path / "runner", _fake_binary(tmp_path / "bin"))
+def test_get_unknown_selftest_id_is_404(tmp_path: Path, spawn_executor: Executor) -> None:
+    client = _app_with_harness(spawn_executor, tmp_path / "runner", _fake_binary(tmp_path / "bin"))
 
     resp = client.get("/api/selftests/self_does_not_exist")
 
@@ -736,7 +744,7 @@ def test_cli_selftest_rejects_an_unknown_harness(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path) -> None:
+def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path, spawn_executor: Executor) -> None:
     """Proven against the REAL, production-composed two-harness registry, never
     hand-written fakes: both `claude_code` and `opencode` must pass every check, including
     OpenCode's own stdout-injection requirement on spawn and resume."""
@@ -746,7 +754,7 @@ def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path) -> N
         harness_binary=_fake_binary(tmp_path / "claude-bin"),
         opencode_binary=_fake_opencode_binary(tmp_path / "opencode-bin"),
     )
-    harnesses = build_production_harness_registry(config)
+    harnesses = build_production_harness_registry(config, process=LinuxProcessProbe(), executor=spawn_executor)
     client = TestClient(create_app(config, harnesses=harnesses))
 
     for harness_id in (CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID):

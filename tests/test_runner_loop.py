@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import shlex
+from concurrent.futures import Executor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -519,7 +520,7 @@ def test_harness_selection_empty_model_preference_selects_first_available_member
 
 
 @pytest.mark.unit
-def test_harness_selection_single_member_selects_regardless_of_model_resolvability():  # type: ignore[no-untyped-def]
+def test_harness_selection_single_member_selects_regardless_of_model_resolvability(spawn_executor: Executor):  # type: ignore[no-untyped-def]
     """The single-member exception: with nothing else to select, the model check never
     runs at all, and `resolve_model`'s own left-to-right-then-adapter-default fallback is
     left to compute the stamp exactly as it does today."""
@@ -528,7 +529,7 @@ def test_harness_selection_single_member_selects_regardless_of_model_resolvabili
         binary="claude",
         model="claude-opus-5",
         process=FakeProbe(),
-        launcher=ProcessLauncher(FakeProbe()),
+        launcher=ProcessLauncher(FakeProbe(), executor=spawn_executor),
     )
     registry = HarnessRegistry({"h1": HarnessBinding(adapter=adapter, transcript_source=NullTranscriptSource())})
     envelope = make_envelope(
@@ -564,13 +565,13 @@ def test_harness_selection_single_member_with_an_authored_tier_it_cannot_map_is_
 
 
 @pytest.mark.unit
-def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_other_harness():  # type: ignore[no-untyped-def]
+def test_harness_selection_native_name_in_a_two_member_set_does_not_match_the_other_harness(spawn_executor: Executor):  # type: ignore[no-untyped-def]
     claude = ClaudeCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         binary="claude",
         model="claude-opus-5",
         process=FakeProbe(),
-        launcher=ProcessLauncher(FakeProbe()),
+        launcher=ProcessLauncher(FakeProbe(), executor=spawn_executor),
     )
     foreign = FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None)
     foreign.resolved_model_strict = None  # "sonnet" means nothing to a harness that isn't claude_code

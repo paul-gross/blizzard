@@ -8,6 +8,8 @@ identity vars — see ``_strip_worker_identity_env``.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -24,6 +26,18 @@ from tests.repo_files import install_repo_read_guard
 
 # Install before test-module imports so collection-time reads are covered too.
 install_repo_read_guard()
+
+
+@pytest.fixture(scope="session")
+def spawn_executor() -> Iterator[Executor]:
+    """The one executor every test ``ProcessLauncher`` forks through — the composition root's
+    own single-worker shape, owned by the session rather than by any test module."""
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
+    try:
+        yield executor
+    finally:
+        executor.shutdown(wait=True)
+
 
 #: The six verification tiers declared in ``pyproject.toml``'s ``markers`` list.
 _TIER_MARKERS = frozenset({"unit", "component", "service", "e2e", "crash_sweep", "journey"})
