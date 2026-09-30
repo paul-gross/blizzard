@@ -16,10 +16,10 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, Id
+from blizzard.foundation.repo_ref import repo_identity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
-from blizzard.hub.delivery.repo_ref import RepoRef
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.artifacts import IWriteChunkArtifactsRepository
@@ -130,10 +130,11 @@ class UnconvergedDeliveryError(RuntimeError):
 
 @dataclass(frozen=True)
 class GitCommits:
-    """A chunk's ``git_commit`` artifacts resolved to one row per **repo**.
+    """A chunk's ``git_commit`` artifacts resolved to one row per repository **identity**.
 
-    Delivery's identity for a git pointer is the repo alone, so a rewritten branch
-    supersedes the orphaned one."""
+    Delivery's identity for a git pointer is :func:`~blizzard.foundation.repo_ref.repo_identity` —
+    ``owner/name`` when the origin names an owner, else the bare name — so a rewritten branch
+    supersedes the orphaned one while the same name under two owners stays two repositories."""
 
     rows: list[ArtifactRow]
 
@@ -141,39 +142,37 @@ class GitCommits:
     def of(cls, artifacts: list[ArtifactRow]) -> GitCommits:
         """Newest epoch wins; a tie at one epoch resolves to the later row unless the two
         name different branches, which raises :class:`UnconvergedDeliveryError`."""
-        latest: dict[str | None, ArtifactRow] = {}
+        latest: dict[str, ArtifactRow] = {}
         for row in artifacts:
             if row.kind is not ArtifactKind.GIT_COMMIT:
                 continue
-            current = latest.get(row.repo)
+            identity = cls._identity(row)
+            current = latest.get(identity)
             if current is None or row.epoch > current.epoch:
-                latest[row.repo] = row
+                latest[identity] = row
             elif row.epoch == current.epoch and row.data != current.data:
                 raise UnconvergedDeliveryError(
-                    f"repo {row.repo!r} has two different branches declared at epoch {row.epoch} "
+                    f"repo {identity!r} has two different branches declared at epoch {row.epoch} "
                     f"({current.data!r} and {row.data!r}) — the environments' work was never "
                     f"rolled up into one branch per repo, so there is no single thing to deliver"
                 )
             elif row.epoch == current.epoch:
-                latest[row.repo] = row  # identical re-declaration: a correction, not a second unit
+                latest[identity] = row  # identical re-declaration: a correction, not a second unit
         return cls(list(latest.values()))
 
     @property
     def payload(self) -> list[dict[str, str | None]]:
-        """:data:`ENV_GIT_COMMITS`'s content, owner-qualified when the declaring repo's
-        origin encodes one, so a chunk spanning two owners addresses each correctly."""
+        """:data:`ENV_GIT_COMMITS`'s content: ``repo`` is the row's identity — owner-qualified when
+        its origin encodes one, so a chunk spanning two owners addresses each correctly, else the
+        bare name for the script's configured-owner fallback to qualify."""
         return [
-            {"repo": self._repo(row), "branch": row.data.partition(":")[0], "commit": row.data.partition(":")[2]}
+            {"repo": self._identity(row), "branch": row.data.partition(":")[0], "commit": row.data.partition(":")[2]}
             for row in self.rows
         ]
 
     @staticmethod
-    def _repo(row: ArtifactRow) -> str | None:
-        """How delivery addresses one repo: ``owner/name`` read from its origin (see
-        :mod:`~blizzard.hub.delivery.repo_ref`), else the bare name for the script's
-        configured-owner fallback to qualify."""
-        ref = RepoRef.parse(row.forge) if row.forge else None
-        return ref.qualified if ref else row.repo
+    def _identity(row: ArtifactRow) -> str:
+        return repo_identity(row.forge, row.repo or row.name)
 
 
 @dataclass(frozen=True)

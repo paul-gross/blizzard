@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-__all__ = ["RepoRef"]
+__all__ = ["RepoRef", "repo_identity"]
 
 # `scp`-style ssh remotes — `git@host:owner/name(.git)` — which urllib does not parse as
 # a URL at all (no `//`), and which are the dominant form in practice.
@@ -64,3 +64,14 @@ class RepoRef:
     def qualified(self) -> str:
         """``owner/name`` — what a forge's REST route takes."""
         return f"{self.owner}/{self.name}"
+
+
+def repo_identity(origin_url: str | None, name: str) -> str:
+    """The one identity a commit pointer's repository is known by.
+
+    The ``owner/name`` coordinate ``origin_url`` encodes when it names an owner; otherwise ``name``
+    as given, so a name already qualified (a stored row with no origin) passes through unchanged.
+    Delivery addresses a repo by this coordinate alone, so two origins that share it are one
+    repository here and two that differ are two."""
+    ref = RepoRef.parse(origin_url) if origin_url else None
+    return ref.qualified if ref else name

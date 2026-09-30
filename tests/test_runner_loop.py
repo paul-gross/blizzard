@@ -3710,6 +3710,72 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
     _chunk_id, submission = hub.completions[0]
     branches = sorted(a.branch_name or "" for a in submission.artifacts if a.kind is ArtifactKind.GIT_COMMIT)
     assert branches == ["feat/from-e1", "feat/from-e2"]
+    reports = [f.payload for f in hub.pushed if f.kind == EVENT_RECORDED]
+    failed = [r for r in reports if r["kind"] == "command-failed" and "converge" in r["detail"]["command"]]
+    assert failed, "disagreeing pointers must be reported"
+    assert "'e1'" in failed[0]["detail"]["stderr_tail"] and "'e2'" in failed[0]["detail"]["stderr_tail"]
+
+
+def _two_env_commit_submission(tmp_path, *, origins, commits):  # type: ignore[no-untyped-def]
+    """Drive the harvest for a chunk holding ``e1`` and ``e2``, each declaring ``toy-api`` at
+    ``commits[env]`` against ``origins[env]``; returns the submitted pointers and the hub."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    for env in ("e1", "e2"):
+        store.record_git_commit_declaration(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            node_id="nd_build",
+            epoch=1,
+            environment_id=env,
+            repo="toy-api",
+            branch="feat/x",
+            commit=commits[env],
+            declared_at=_NOW,
+        )
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    provider = FakeProvider(
+        {"e1": "/ws/e1", "e2": "/ws/e2"},
+        repos={env: [("toy-api", origins[env])] for env in ("e1", "e2")},
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        worktree_git=FakeWorktreeGit(),
+    )
+    Advance(ctx).run()
+    Advance(ctx).run()
+    Pull(ctx).run()
+    _chunk_id, submission = hub.completions[0]
+    return [a for a in submission.artifacts if a.kind is ArtifactKind.GIT_COMMIT], hub
+
+
+@pytest.mark.unit
+def test_agreeing_pointers_from_two_envs_converge_to_one_named_by_identity(tmp_path):  # type: ignore[no-untyped-def]
+    pointers, _hub = _two_env_commit_submission(
+        tmp_path,
+        origins={"e1": "git@github.com:acme/toy-api.git", "e2": "https://github.com/acme/toy-api"},
+        commits={"e1": "aaa111", "e2": "aaa111"},
+    )
+
+    assert [(a.name, a.repo) for a in pointers] == [("acme/toy-api", "toy-api")]
+
+
+@pytest.mark.unit
+def test_one_name_at_two_owners_submits_two_identities(tmp_path):  # type: ignore[no-untyped-def]
+    pointers, _hub = _two_env_commit_submission(
+        tmp_path,
+        origins={"e1": "https://github.com/owner-a/toy-api", "e2": "https://github.com/owner-b/toy-api"},
+        commits={"e1": "aaa111", "e2": "aaa111"},
+    )
+
+    assert sorted(a.name for a in pointers) == ["owner-a/toy-api", "owner-b/toy-api"]
 
 
 @pytest.mark.unit
