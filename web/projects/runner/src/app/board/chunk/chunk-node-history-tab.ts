@@ -14,9 +14,7 @@ import { type ArtifactView, ChunkArtifactBody, ChunkTimelineSelection, KitAsyncS
  * timeline (list) and artifacts (detail) content and passes it no `drilldown` — the
  * runner's own always-both-panes presentation is the shell's default with nothing set.
  *
- * `graphLinkBase` is left at {@link ChunkTimelineSelection}'s own `null` default — the
- * runner has no `/graphs` route to point a multi-graph row's badge at
- * (`ChunkFacts.graphLinkBase`'s own doc comment states the same reason).
+ * `graphLinkBase` is left at its `null` default — see `ChunkFacts.graphLinkBase`.
  *
  * Presentational (`bzh:frontend-container-presentational`): {@link ChunkDetailPage} owns
  * the `?step=` selection and the per-step artifact filter, forwarding both down —
