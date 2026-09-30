@@ -395,7 +395,7 @@ export const detachChunkApiChunksChunkIdDetachPost = <ThrowOnError extends boole
  * ``--delta``/``--proposals`` artifacts and, on success, materializes them in one
  * transaction. An unresolvable run context or a failed validation is an ``invalid``
  * outcome at a 200, never an error response — the graph's own ``invalid`` edge reads
- * and routes on it.
+ * and routes on it. A delivery the chunk has since been stopped or restarted past is a 409.
  */
 export const recordGardenDeliveryApiChunksChunkIdGardenDeliveryPost = <ThrowOnError extends boolean = false>(options: Options<RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostData, ThrowOnError>): RequestResult<RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses, RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors, ThrowOnError> => (options.client ?? client).post<RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses, RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/garden-delivery',
@@ -518,7 +518,8 @@ export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boole
  * The `record-findings` node's own route — validates the chunk's
  * newest `review-finding-delta` artifact and, on success, materializes its `deferred`
  * entries in one transaction. A malformed delta or an unresolvable node is an
- * ``invalid`` outcome at a 200, never an error response. Idempotent per chunk.
+ * ``invalid`` outcome at a 200, never an error response; a delivery the chunk has since been
+ * stopped or restarted past is a 409. Idempotent per chunk.
  */
 export const recordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPost = <ThrowOnError extends boolean = false>(options: Options<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostData, ThrowOnError>): RequestResult<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses, RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors, ThrowOnError> => (options.client ?? client).post<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses, RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/review-findings-delivery', ...options });
 
@@ -817,7 +818,8 @@ export const getEnvelopeApiFleetChunksChunkIdEnvelopeGet = <ThrowOnError extends
 /**
  * Report Escalation
  *
- * Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``; 403 when retired.
+ * Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``; 403 when retired,
+ * 409 when fenced out.
  */
 export const reportEscalationApiFleetChunksChunkIdEscalationsPost = <ThrowOnError extends boolean = false>(options: Options<ReportEscalationApiFleetChunksChunkIdEscalationsPostData, ThrowOnError>): RequestResult<ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses, ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors, ThrowOnError> => (options.client ?? client).post<ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses, ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors, ThrowOnError>({
     url: '/api/fleet/chunks/{chunk_id}/escalations',
@@ -1320,7 +1322,7 @@ export const listOpenQuestionsApiQuestionsGet = <ThrowOnError extends boolean = 
 /**
  * Ask Question
  *
- * Land a ``question.asked`` row — the chunk parks ``waiting_on_human``.
+ * Land a ``question.asked`` row — the chunk parks ``waiting_on_human``; 409 when fenced out.
  */
 export const askQuestionApiQuestionsPost = <ThrowOnError extends boolean = false>(options: Options<AskQuestionApiQuestionsPostData, ThrowOnError>): RequestResult<AskQuestionApiQuestionsPostResponses, AskQuestionApiQuestionsPostErrors, ThrowOnError> => (options.client ?? client).post<AskQuestionApiQuestionsPostResponses, AskQuestionApiQuestionsPostErrors, ThrowOnError>({
     url: '/api/questions',
