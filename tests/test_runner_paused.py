@@ -1650,6 +1650,30 @@ def test_usage_limit_reason_fallback_skips_a_failed_samples_null_payload(tmp_pat
     assert payload["reason"] == f"usage limit: {CLAUDE_CODE_HARNESS_ID} (resets 2026-07-13T15:00Z)"
 
 
+def test_a_usage_limit_brake_is_not_lifted_by_the_reset_time_passing(tmp_path):  # type: ignore[no-untyped-def]
+    """Only an operator clears the brake; the runner never lifts it, even once the reset it reported has passed."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    limit = UsageLimit(resets_at=_NOW + timedelta(hours=1), detail="limited")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass", usage_limit=limit)
+    clock = FixedClock(_NOW)
+    ctx = make_context(
+        store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe(), clock=clock
+    )
+    Advance(ctx).run()
+    assert store.local_paused("r1") is True
+
+    clock.advance(timedelta(hours=3))
+    harness.usage_limit = None
+    tick(ctx)
+
+    assert store.local_paused("r1") is True
+    assert harness.resumed == []
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+
+
 def test_ceiling_pause_still_engages_and_behaves_unmodified(tmp_path):  # type: ignore[no-untyped-def]
     """`PauseService.engage` carries the ceiling's own behavior unchanged — the migration
     off a direct store call changes no observable fact."""
@@ -1673,3 +1697,70 @@ def test_ceiling_pause_still_engages_and_behaves_unmodified(tmp_path):  # type: 
     payload = json.loads(reports[0].payload)
     assert payload["by"] == "runner-ceiling"
     assert "5.00" in payload["reason"] and "7.00" in payload["reason"]
+
+
+# --------------------------------------------------------------------------- #
+# The interrupted-claim reclaim is a new claim — either brake stops it.
+# --------------------------------------------------------------------------- #
+
+
+def _ctx_with_a_crash_left_binding(tmp_path, *, route_runner_id: str | None = None):  # type: ignore[no-untyped-def]
+    """A binding left by a crash between env acquire and claim, on a chunk the hub still reads READY."""
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.READY, latest_epoch=1, route_runner_id=route_runner_id
+    )
+    env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    hub.queue = []  # nothing new to fill — only the interrupted-claim reclaim could act
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
+    provider = FakeProvider({"e1": "/ws/e1"})
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+    return ctx, hub, store, harness, provider
+
+
+def test_a_locally_paused_runner_does_not_reclaim_a_crash_left_binding_until_it_starts(tmp_path):  # type: ignore[no-untyped-def]
+    ctx, hub, store, harness, provider = _ctx_with_a_crash_left_binding(tmp_path)
+    _pause_locally(store, ctx, paused=True)
+
+    Fill(ctx).run()
+
+    assert hub.claims == []
+    assert harness.spawns == []
+    assert provider.released == []
+    assert store.held_environment_ids() == ["e1"]  # kept, so the reclaim can happen later
+
+    _pause_locally(store, ctx, paused=False)
+    Fill(ctx).run()
+
+    assert len(hub.claims) == 1
+    assert len(harness.spawns) == 1
+
+
+def test_a_hub_paused_runner_does_not_reclaim_a_crash_left_binding(tmp_path):  # type: ignore[no-untyped-def]
+    ctx, hub, store, harness, _provider = _ctx_with_a_crash_left_binding(tmp_path)
+    hub.paused = True
+    Pull(ctx).run()  # mirror the hub's brake on
+
+    Fill(ctx).run()
+
+    assert hub.claims == []
+    assert harness.spawns == []
+    assert store.held_environment_ids() == ["e1"]
+
+
+def test_a_locally_paused_runner_still_releases_a_binding_another_runner_won(tmp_path):  # type: ignore[no-untyped-def]
+    ctx, hub, store, harness, provider = _ctx_with_a_crash_left_binding(tmp_path)
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id="r_other"
+    )
+    _pause_locally(store, ctx, paused=True)
+
+    Fill(ctx).run()
+
+    assert hub.claims == []
+    assert harness.spawns == []
+    assert store.held_environment_ids() == []
+    assert provider.released != []
