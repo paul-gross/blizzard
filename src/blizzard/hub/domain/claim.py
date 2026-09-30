@@ -18,7 +18,7 @@ from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunks.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.eligibility import EligibilityCheck
-from blizzard.hub.domain.envelope import Envelope
+from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.registry import IReadRunnerRegistry
@@ -238,6 +238,7 @@ class ClaimService:
             node=node,
             artifacts=self._artifacts.load_artifacts(chunk.chunk_id),
             epoch=epoch,
+            arrival_addendum=Arrival.of_facts(graph, facts).addendum,
             entered_by_restart=facts is not None and facts.entered_by_restart(),
         ).wire
         return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
