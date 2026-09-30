@@ -5,21 +5,16 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import click
 import httpx
 
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
-
-
-def _utc_query_value(value: datetime | None) -> str | None:
-    """See `blizzard.cli.window.utc_query_value`."""
-    return iso_utc(value.astimezone(UTC)) if value is not None else None
 
 
 class RunListing(Listing):
@@ -39,13 +34,13 @@ def run_group() -> None:
 
 
 @run_group.command("list", cls=FleetCommand)
-@click.option("--since", default=None, type=click.DateTime(), help="The window's start, in local time.")
-@click.option("--until", default=None, type=click.DateTime(), help="The window's end, in local time (exclusive).")
+@since_option()
+@until_option()
 def run_list(cli: CliContext, since: datetime | None, until: datetime | None) -> None:
     """List every run minted in --since/--until, newest first — both default to the
     last 24 hours ending now."""
     params = {
-        k: v for k, v in {"since": _utc_query_value(since), "until": _utc_query_value(until)}.items() if v is not None
+        k: v for k, v in {"since": utc_query_value(since), "until": utc_query_value(until)}.items() if v is not None
     }
     resp = cli.send("get", "/api/runs", params=params)
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:

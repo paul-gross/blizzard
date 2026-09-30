@@ -174,9 +174,8 @@ def tick_cmd(directory: str) -> None:
 @contextmanager
 def read_stores(config: RunnerConfig) -> Iterator[RunnerReadStores]:
     """The runner's read-only store bundle for a short-lived CLI verb — builds its own
-    engine and disposes it on exit, mirroring `daemon.py`'s `uds_client`
-    precedent for a composition-root helper another module calls into rather than
-    repeating the construction."""
+    engine and disposes it on exit, so a caller never holds
+    the engine past the bundle's use."""
     engine = create_engine_from_url(config.db_url)
     try:
         yield build_read_stores(engine, errors=RunnerStoreErrorFactory(get_logger("blizzard.runner.store")))
