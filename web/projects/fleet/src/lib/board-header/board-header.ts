@@ -31,10 +31,9 @@ interface SpendCellView {
  * The mission-control titlebar — the brand, a fleet's live counts, and a
  * connection state. Shared by the hub board (its own chunk-derived lane counts,
  * via {@link chunks}) and the runner's local panel (its own capacity cells, via
- * {@link stats}) — one header, one 48px chrome, rather than each app rendering its
- * own bespoke bar. It spans the whole window above whatever it sits
- * over, so it lives here rather than inside a routed page: a header nested in a
- * content column would only span that column, leaving the rails to start above it.
+ * {@link stats}) — pinned by `app-header.spec.ts`'s "renders the shared 48px board
+ * header, not a bespoke local one" and `app.spec.ts`'s "renders the titlebar and nav,
+ * and redirects the empty path to /board". It spans the whole window, above the rails.
  *
  * Presentational only: every cell is derived from plain inputs, never an
  * injected query. `stats`, given, renders in place of the chunk-derived lane

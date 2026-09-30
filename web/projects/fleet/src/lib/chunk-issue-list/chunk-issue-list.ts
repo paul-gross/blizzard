@@ -94,13 +94,12 @@ export class ChunkIssueList {
     return item.title?.trim() || '—';
   }
 
-  /** Which idiom an entry renders in — `source` discriminates, the one
-   * field every entry carries regardless of fetch outcome. `author` and `web_url` were
-   * each tried first and each has a combination where it goes absent for a genuine hub
-   * entry — `author` on any errored fetch, `web_url` once no live chunk holds the
-   * pointer, and *both at once* for an errored fetch with no live holder — so no
-   * optional-field combination is a safe discriminator; `source` is required on the
-   * wire and never null. */
+  /** Which idiom an entry renders in, discriminated by the required `source` field.
+   * Pinned by `chunk-issue-list.spec.ts`'s "a successfully fetched hub entry on a terminal
+   * chunk still renders the hub idiom — author alone is enough", "an errored hub entry
+   * still routes in-app — web_url discriminates the idiom, never author alone" and "an
+   * errored hub entry with no live chunk holder still renders the hub idiom — source
+   * discriminates, not author or web_url". */
   protected isHubEntry(item: WorkItemEntry): boolean {
     return item.source === HUB_SOURCE_NAME;
   }

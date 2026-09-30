@@ -54,11 +54,9 @@ export function injectHubFindingsQuery(findingIds: () => readonly string[]) {
  * surface takes when the finding it names is the whole surface, so a 404 or a 500
  * has to reach the reader as an error state.
  *
- * Deliberately not {@link injectHubFindingsQuery} with a one-element list: that
- * fan-out swallows a failed read to protect the docket's other evidence rows, which
- * on a single id turns "this finding could not be read" into a successful empty
- * result indistinguishable from "nothing is selected". Same endpoint, opposite
- * bargain, so it carries its own cache key ({@link hubFindingKey}).
+ * Carries its own cache key ({@link hubFindingKey}); pinned by
+ * `finding.query.spec.ts`'s "surfaces a failed single-finding read as an error, even
+ * beside a fan-out over the same id".
  *
  * Stays disabled while `findingId()` is null — the caller's own "nothing selected"
  * rest state is branched before this read is consulted, `bzh:frontend-empty-state-gated`.

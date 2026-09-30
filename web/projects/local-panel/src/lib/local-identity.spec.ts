@@ -74,6 +74,7 @@ describe('LocalIdentity', () => {
     expect(el.querySelector('[data-testid="identity-logout"]')).toBeNull();
     expect(el.querySelectorAll('button')).toHaveLength(0);
     expect(fixture.nativeElement.getAttribute('role')).toBe('presentation');
+    expect(fixture.nativeElement.hasAttribute('aria-hidden')).toBe(false);
   });
 
   it('carries no role in the default control shape, where it is header chrome', async () => {

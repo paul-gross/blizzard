@@ -48,17 +48,9 @@ export function isFindingGoneFlagged(state: string): boolean {
   return state === 'gone';
 }
 
-/** A finding state → badge tone, so every surface that shows the state shows it the
- * same color — the list row and the detail title today. Borrows the shared `Tone`
- * ladder rather than inventing a findings-specific one (`graph-explorer-list.ts`'s
- * own `LIFECYCLE_TONE` shape), and follows the outflow/withdrawn split above rather
- * than a per-state opinion: a still-open finding reads amber (`live`, the work left
- * to do) or amber-hi (`gone`, flagged and literally waiting on a person to confirm);
- * an outflow exit reads green, the ground having actually moved; a withdrawn exit
- * reads dim, since nothing changed but somebody's judgment. `delivered`
- * reads `takeover`'s tone rather than borrowing `resolved`'s: it is a delivery's own
- * claim, not yet the routine's own confirmation that the ground moved — "something
- * else must happen before this continues" is exactly that wait. */
+/** A finding state → badge tone, on the shared `Tone` ladder, so every surface that
+ * shows the state shows it the same color; pinned by `finding-state.spec.ts`'s "tones
+ * each state by open, delivered, outflow, or withdrawn". */
 const STATE_TONE: Readonly<Record<string, Tone>> = {
   live: 'running',
   gone: 'waiting',
@@ -71,8 +63,8 @@ const STATE_TONE: Readonly<Record<string, Tone>> = {
 };
 
 /** {@link STATE_TONE}'s lookup, falling back to `idle` for a state this build does
- * not know — the wire's own set can grow ahead of this file, and an unknown state
- * should render plainly rather than crash the row it rides on. */
+ * not know; pinned by `finding-state.spec.ts`'s "falls back to idle for a state this
+ * build does not know". */
 export function findingStateTone(state: string): Tone {
   return STATE_TONE[state] ?? 'idle';
 }

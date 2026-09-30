@@ -5,21 +5,12 @@ import { compactRef } from '../compact-ref';
 import { KitBadge } from '../kit/kit-badge';
 
 /**
- * The blocked marking — a chunk's `BlockedView`, rendered beside
- * its unchanged status wherever a chunk is listed: the board card, the dock
- * header, and the routed chunk page header. One component rather than three
- * copies: the three sites share no status component today, so this is
- * the shared piece, its chrome from {@link KitBadge} on the existing
+ * The blocked marking — a chunk's `BlockedView`, rendered as a {@link KitBadge} on the
  * `waiting` tone (blocked is not a status and never widens `Tone`).
  *
- * Two render modes, matched to what each site can already do, decided by
- * {@link asLink} — a decision independent of {@link linkBase}, which only ever
- * carries the route's path segments: `false` (the default) is the
- * button that emits {@link selectChunk} with the prerequisite id — the board
- * card and the dock header both already select a chunk into the dock this way,
- * one hop rather than a navigation. `true` renders a `routerLink` under
- * `linkBase` instead — the routed chunk page has no dock to select into, so it
- * navigates the way `ChunkDetailHeader`'s own identity link already does.
+ * Two render modes, decided by {@link asLink}: `false` (the default) is a button that
+ * emits {@link selectChunk} with the prerequisite id; `true` renders a `routerLink`
+ * under {@link linkBase}, which carries only the route's path segments.
  */
 @Component({
   selector: 'fleet-chunk-blocked',

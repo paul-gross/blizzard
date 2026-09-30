@@ -77,9 +77,7 @@ export class ChunkTranscriptsContainer {
 
   /** One query, whose key placement (two keys) is chosen once finality is
    * actually known — `selectedSegmentFinal()`'s `null` holds it disabled until then, so the
-   * segment is read once rather than once per placement. One instance, not one per
-   * placement: two gated instances read the segment exactly as often, and only spread the
-   * one decision this component makes across two fields and a selector between them. */
+   * segment is read exactly once. */
   protected readonly segmentQuery = injectChunkTranscriptSegmentQuery(
     () => this.client(),
     () => this.plane(),

@@ -55,8 +55,8 @@ const LIFECYCLE_TONE: Readonly<Record<VersionLabel, Tone>> = {
  * full lineage newest-first, each row carrying its `graph_id`, `created_at`, and an
  * **effective** / **superseded** / **retired** badge — the `graphs` row itself is
  * never mutated (still insert-only), the marker is the `effective`/`retired` facts
- * `GET /api/graphs` derives (reversible lifecycle brake, layered on top
- * of the pre-#101 `effective` derivation). Any version, effective, superseded, or
+ * `GET /api/graphs` derives (a reversible lifecycle brake, layered on top
+ * of the `effective` derivation). Any version, effective, superseded, or
  * retired, is selectable and opens identically (`selectGraph`); retiring/re-enabling
  * itself is driven from the detail view (`graph-detail.ts`), not this list.
  *
@@ -70,21 +70,12 @@ const LIFECYCLE_TONE: Readonly<Record<VersionLabel, Tone>> = {
  * `run-list.css`'s own doc comment spells out, stepped down one tier for the
  * lineage rows since they sit a level below the group headline.
  *
- * Retired versions are **filtered out by default** ({@link showRetired}) — a
- * retired version is one deliberately taken out of name resolution, so
- * carrying it in the default list makes every lineage read longer than the set an
- * operator can actually pin work to. The filter is a chip above the list rather than
- * a hidden preference, and it names how many versions it is holding back, so the
- * omission is never silent. Two things are never hidden: a group whose *only*
- * versions are retired still disappears entirely (there is nothing left to show),
- * but the currently selected version always survives the filter — deep-linking
- * straight to a retired graph's detail must still reveal its row, exactly as
+ * Retired versions are **filtered out by default** ({@link showRetired}), toggled by a
+ * chip above the list that names how many it holds back — pinned by
+ * `graph-explorer-list.spec.ts`'s "filters retired versions out of a lineage by default,
+ * and brings them back with the filter". A group whose only versions are retired
+ * disappears entirely; the currently selected version always survives the filter, as
  * {@link isExpanded} reveals its group.
- *
- * Filtering here, in the presentational list, and not in the query: the hub serves
- * the whole lineage on purpose (`GET /api/graphs` derives `retired` rather than
- * omitting the row), and the toggle has to be able to bring them straight back
- * without a refetch.
  *
  * Presentational only: `graphs`/`selectedGraphId` are plain inputs, no query
  * injection (`bzh:frontend-container-presentational`) — {@link GraphExplorer}
@@ -109,7 +100,7 @@ export class GraphExplorerList {
    * of a group's effective version when its header expands the group. */
   readonly selectGraph = output<string>();
 
-  /** Whether retired versions are listed. Off by default — see the class doc. */
+  /** Whether retired versions are listed. Off by default. */
   protected readonly showRetired = signal(false);
 
   /** The summaries the list actually renders: every one of them when

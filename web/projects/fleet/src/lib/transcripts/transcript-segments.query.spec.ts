@@ -7,7 +7,7 @@ import type { Client } from '../api/hub/client';
 import { client as hubClient } from '../api/hub/client.gen';
 import * as runnerApi from '../api/runner';
 import { client as runnerClient } from '../api/runner/client.gen';
-import type { TranscriptPlane } from '../query-keys';
+import { type TranscriptPlane, hubChunkKey } from '../query-keys';
 import { settle } from '../testing/settle';
 import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import {
@@ -124,6 +124,29 @@ describe('injectHubChunkTranscriptSegmentQuery', () => {
     // ran, so the segment's content is fetched once rather than once per placement.
     expect(stub.forRoute('/api/chunks/ch_1/transcripts/seg-1', 'GET')).toHaveLength(1);
     expect(fixture.componentInstance.query.data()?.segment_id).toBe('s1');
+  });
+
+  it("refetches an open segment on the chunk key's invalidation, but never a final one", async () => {
+    stub = stubRequestClient(hubClient, () => ({ segment_id: 's', final: false, truncated: false, turns: [] }));
+    const queryClient = new QueryClient();
+    TestBed.configureTestingModule({
+      imports: [TestTranscriptSegmentQueryHost],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
+    });
+    const open = TestBed.createComponent(TestTranscriptSegmentQueryHost);
+    open.componentInstance.segmentId.set('seg-open');
+    const closed = TestBed.createComponent(TestTranscriptSegmentQueryHost);
+    closed.componentInstance.final.set(true);
+    closed.componentInstance.segmentId.set('seg-final');
+    await settle(open);
+    await settle(closed);
+
+    await queryClient.invalidateQueries({ queryKey: hubChunkKey('ch_1') });
+    await settle(open);
+    await settle(closed);
+
+    expect(stub.forRoute('/api/chunks/ch_1/transcripts/seg-open', 'GET')).toHaveLength(2);
+    expect(stub.forRoute('/api/chunks/ch_1/transcripts/seg-final', 'GET')).toHaveLength(1);
   });
 });
 

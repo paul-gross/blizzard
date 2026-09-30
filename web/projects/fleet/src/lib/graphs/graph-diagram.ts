@@ -20,8 +20,8 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
 /**
  * The graph diagram — a static SVG DAG rendered from one immutable `GraphView`,
  * mounted above `graph-detail.ts`'s structured table (the ever-present fallback
- * surface). Layout runs once per input graph via `computed()` (spike #71: no live
- * re-layout, no pan/zoom in v1 — horizontal overflow scrolls in `.diagram-scroll`);
+ * surface). Layout runs once per input graph via `computed()` — no live re-layout, no
+ * pan/zoom; horizontal overflow scrolls in `.diagram-scroll`;
  * a layout failure or degenerate graph (see {@link layoutGraph}) shows an
  * unobtrusive notice instead of the diagram, never a broken page.
  *
@@ -31,10 +31,8 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
  * component does not draw.
  *
  * Colors are CSS classes bound to `tokens.css` custom properties (`--cyan`,
- * `--amber`, `--red`, `--green`, `--label-dim`), never baked into SVG attributes —
- * the spike explicitly calls out the prototype's re-render-on-theme bug
- * (`spike71/part2.html`) as the thing to avoid: a theme switch here re-styles
- * without recomputing layout.
+ * `--amber`, `--red`, `--green`, `--label-dim`), never baked into SVG attributes, so a
+ * theme switch re-styles without recomputing layout.
  *
  * Selectable and **fully controlled**: `selection` in, `selectionChange` out. This
  * component never holds its own copy of "what is selected" — `graph-diagram-view.ts`
@@ -46,14 +44,9 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
  * clears the selection — every node/edge click stops propagation before it gets
  * there.
  *
- * The `<svg>` keeps `role="img"`, so its subtree is presentational to assistive
- * tech and the click targets here are a pointer affordance only — a deliberate
- * choice, not an oversight: `graph-detail.ts`'s ever-present structured table
- * covers the edges/choices list for keyboard and screen-reader access, but a
- * node's prompt/judgement text and an edge's prompt addendum live only behind
- * this diagram's node/edge selection. Making the diagram a focusable
- * widget tree (roving tabindex, `role="application"`, Enter/Space) is real work
- * the issue this shipped under did not ask for.
+ * The `<svg>` keeps `role="img"` and its click targets are a pointer affordance only —
+ * pinned by `graph-diagram.spec.ts`'s "keeps the svg an image with no focusable
+ * descendant".
  */
 @Component({
   selector: 'fleet-graph-diagram',

@@ -18,11 +18,9 @@
 .banner.archived {
   color: var(--cyan);
 }
-/* The hub-unreachable state — local-info.ts's visible-degrade
-   banner precedent (.fleet-strip.stale::after): a filled red-background wash, not
-   KitAsyncState's error variant, which is plain red text with no background —
-   too subtle for a state this deliberately prominent (closer in spirit to "we
-   don't know" than to a routine status line). */
+/* The hub-unreachable state's filled wash — pinned by
+   `transcript-panel.shell-sweep.spec.ts`'s "fills the hub-unreachable banner with a
+   non-transparent background wash". */
 .degrade-banner {
   margin: 0;
   padding: 8px 10px;

@@ -15,15 +15,10 @@ import { CdkMenuItem, CdkMenuItemRadio } from '@angular/cdk/menu';
 /**
  * Marks the element a consumer projects into {@link KitMenuItem}'s subtitle
  * slot — the `fleetKitMenuItemSubtitle` attribute is both the projection
- * selector and this directive's own, the same marker-directive shape
- * {@link KitPanelHeader} (`kit-panel.ts`) already establishes for a slot. It
- * carries no behavior. A projection slot, not a string input: `KitMenuItem`'s
- * own template has no CDK content query of its own to collide with (the
- * `hostDirectives`-based `CdkMenuItem` wiring above governs `CdkMenu`'s query
- * for *items*, not what an item itself projects), and a slot keeps an
- * interpolated runner/node name in the caller's own view rather than forcing
- * it through an input. Import it alongside `KitMenuItem` wherever a
- * `fleetKitMenuItemSubtitle` element is projected.
+ * selector and this directive's own. It carries no behavior. A projection slot,
+ * pinned by `kit-menu-item.spec.ts`'s "lands a projected subtitle element on the
+ * subtitle line, and stacks no subtitle line when nothing is projected". Import it
+ * alongside `KitMenuItem` wherever a `fleetKitMenuItemSubtitle` element is projected.
  */
 @Directive({ selector: '[fleetKitMenuItemSubtitle]' })
 export class KitMenuItemSubtitle {}

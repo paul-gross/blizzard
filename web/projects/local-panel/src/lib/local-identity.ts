@@ -34,13 +34,9 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername 
  * component's template boundary, so a menu item rendered in *here* would never
  * register with the panel out there.
  *
- * `role="presentation"` removes the host *element* from the accessibility tree
- * but not its text: a screen reader still reaches "signed in / alice" as content
- * of the menu. That is deliberate. The alternative, `aria-hidden="true"`, would
- * close the content model completely at the cost of hiding the signed-in
- * identity from exactly the users who cannot see it rendered — a worse trade for
- * a row that is genuinely informative. What mattered was removing the
- * *focusable* control, which is done.
+ * `role="presentation"` removes the host element from the accessibility tree
+ * but not its text — pinned by `local-identity.spec.ts`'s "drops its own button
+ * and goes presentational in the label shape, for inside a menu".
  */
 @Component({
   selector: 'local-identity',

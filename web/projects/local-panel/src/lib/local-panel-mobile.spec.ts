@@ -91,6 +91,15 @@ describe('LocalPanelMobile', () => {
     ]);
   });
 
+  it('mounts no local pause control or paused-by-hub badge', async () => {
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('local-pause-control')).toBeNull();
+    expect(el.querySelector('[data-testid="pause-control"]')).toBeNull();
+    expect(el.querySelector('[data-testid="hub-paused-badge"]')).toBeNull();
+  });
+
   it('renders the machine info section off its own query, no props needed', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;

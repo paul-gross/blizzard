@@ -1,11 +1,7 @@
 /*
- * Eager-shell entry point of the `fleet` shared library (`fleet/shell`,
- * `architecture/frontend-structure/eager-shell.md`, `bzh:frontend-eager-shell-entry`).
- *
- * Named re-exports, file by file, of exactly what an app's eager shell statically
- * reaches — rather than the root `fleet` barrel, which re-exports every feature area
- * whole and esbuild cannot tree-shake even when nothing on the eager path reads a given
- * export. Anything reached only lazily imports the root `fleet` barrel instead.
+ * Eager-shell entry point of the `fleet` shared library (`fleet/shell`):
+ * named re-exports of exactly what an app's eager shell statically reaches
+ * (`bzh:frontend-eager-shell-entry`, gated by `web:bundle-composition`).
  */
 
 export { AppShell } from './lib/app-shell/app-shell';

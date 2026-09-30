@@ -182,4 +182,42 @@ describe('chunk timeline harness-provenance layout shell sweep (web:shell-sweep,
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
+
+  for (const width of [390, 320]) {
+    it(`gives each step's usage its own full-width row under an unclipped verdict at ${width}px`, async () => {
+      await TestBed.configureTestingModule({
+        imports: [ChunkTimeline],
+        providers: [provideZonelessChangeDetection(), provideRouter([])],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(ChunkTimeline);
+      fixture.componentRef.setInput('detail', DETAIL);
+      await fixture.whenStable();
+      const root = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(root);
+      await fixture.whenStable();
+
+      try {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const steps = [...root.querySelectorAll<HTMLElement>('[data-testid="history-step"]')];
+        expect(steps.length, 'fixture defect — no history steps rendered').toBeGreaterThan(0);
+        for (const step of steps) {
+          const usage = step.querySelector<HTMLElement>('[data-testid="history-step-usage"]')!;
+          const verdict = step.querySelector<HTMLElement>('[data-testid="history-choice"]')!;
+          const jg = step.querySelector<HTMLElement>('.jg')!;
+          const usageRect = usage.getBoundingClientRect();
+          const verdictRect = verdict.getBoundingClientRect();
+          const style = getComputedStyle(step);
+          const contentWidth = step.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+
+          expect(usageRect.top, 'usage shares the verdict line').toBeGreaterThanOrEqual(verdictRect.bottom - 0.5);
+          expect(usageRect.width, 'usage does not span the full row').toBeGreaterThanOrEqual(contentWidth - 1);
+          expect(verdictRect.right, 'verdict clipped past its cell').toBeLessThanOrEqual(jg.getBoundingClientRect().right + 0.5);
+        }
+      } finally {
+        root.remove();
+      }
+    });
+  }
 });

@@ -231,4 +231,14 @@ describe('ActivityPanel', () => {
 
     expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('runner runner-local paused by operator');
   });
+
+  it('renders a runner-changed frame of an unrecognized kind as its raw kind, keeping the row', async () => {
+    const fixture = await render([]);
+    log.set([{ seq: 1, type: 'runner-changed', data: { runner_id: 'runner-local', kind: 'quarantined', by: 'operator' }, at: 0 }]);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('runner runner-local quarantined by operator');
+  });
 });

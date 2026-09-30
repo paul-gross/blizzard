@@ -480,7 +480,7 @@ describe('GardeningFindingsPage', () => {
     });
   });
 
-  describe('a finding with a pending triage mutation drops from a state-filtered list (Part B)', () => {
+  describe('a finding with a pending triage mutation drops from a state-filtered list', () => {
     /** `gardening-finding-triage-dialog.ts` owns and fires the six triage mutations,
      * not this page — a `mutationKey`-scoped read is exactly what lets this list see
      * another component's in-flight mutation without owning it, so this fires it from

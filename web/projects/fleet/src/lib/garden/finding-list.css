@@ -40,10 +40,8 @@
   color: var(--text);
   min-width: 0;
   overflow-wrap: anywhere;
-  /* The row's own headline — `proposal-list.css`'s own `.pl-title` shape, clamped
-   * to three lines so the two lists read alike: real summaries are long
-   * multi-sentence agent prose, and the clamp is load-bearing (the full text reads
-   * in `fleet-finding-panel` once the row is picked). */
+  /* Clamped to three lines; pinned by `gardening-findings-triage.shell-sweep.spec.ts`'s
+   * "genuinely clamps a long summary to three lines…". */
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;

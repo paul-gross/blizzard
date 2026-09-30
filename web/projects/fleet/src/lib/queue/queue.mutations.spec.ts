@@ -4,6 +4,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { vi } from 'vitest';
 
 import { client as hubClient } from '../api/hub/client.gen';
+import { hubQueueKey } from '../query-keys';
 import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation } from './queue.mutations';
 
@@ -25,6 +26,19 @@ describe('injectRepositionQueueMutation', () => {
   });
 
   afterEach(() => stub.restore());
+
+  it('posts only the single anchor move, never an order composed from the cached queue', async () => {
+    queryClient.setQueryData(hubQueueKey, {
+      entries: [{ chunk_id: 'ch_a' }, { chunk_id: 'ch_b' }, { chunk_id: 'ch_c' }],
+    });
+    const mutation = TestBed.runInInjectionContext(() => injectRepositionQueueMutation());
+
+    await mutation.mutateAsync({ chunkId: 'ch_c', afterChunkId: 'ch_a' });
+
+    const posts = stub.forRoute('/api/queue/position', 'POST');
+    expect(posts).toHaveLength(1);
+    expect(posts[0].body).toEqual({ chunk_id: 'ch_c', after_chunk_id: 'ch_a' });
+  });
 
   it('preserves submission order across hook instances when the first POST is slow', async () => {
     const firstPost = deferred<unknown>();

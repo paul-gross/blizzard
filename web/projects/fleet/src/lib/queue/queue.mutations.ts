@@ -24,11 +24,9 @@ export interface RepositionVars {
  * `POST /api/queue/position` — a single-chunk reposition against an **anchor**,
  * through the generated client (bzh:generated-client).
  *
- * The board expresses one move at a time, so this sends exactly that and lets the
- * hub place it: no whole-order array composed client-side off a possibly-stale
- * cached queue, where a chunk enqueued between the read and the write would be
- * silently dropped out of the order. On success it invalidates the queue and the fleet list; the live stream
- * will also fire `queue-changed`, so this is belt-and-braces.
+ * Sends exactly the one anchor move and lets the hub place it — pinned by
+ * `queue.mutations.spec.ts`'s "posts only the single anchor move, never an order composed
+ * from the cached queue". On settle it invalidates the queue and the fleet list.
  */
 export function injectRepositionQueueMutation(onError?: (error: Error) => void) {
   const queryClient = inject(QueryClient);
