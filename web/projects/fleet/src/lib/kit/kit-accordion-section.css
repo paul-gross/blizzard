@@ -62,9 +62,7 @@
 }
 /* Zero-padded, the same "consumer decides" contract `kit-panel.ts`'s own
    `.p-body` establishes — projected content that is itself a list of full-bleed
-   interactive rows needs this edge unpadded, or its own rows would float
-   inset from it exactly the way this section's rows once did before that fix
-   (`design/tokens.css`'s own note on the interaction-state scale). Plain
+    interactive rows needs this edge unpadded so the rows reach the edge. Plain
    projected content (a paragraph, a single control) pads itself instead. */
 .acc-body {
   padding: 0;

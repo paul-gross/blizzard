@@ -10,8 +10,7 @@ export type ScopeSelection = string;
 export const EMPTY_SCOPE_SELECTION: ScopeSelection = '';
 
 /**
- * The gardening run dialog's scope field — split out of
- * {@link GardeningRunDialogView} ahead of the 400-line ceiling rather than after it.
+ * The gardening run dialog's scope field.
  * Lists the routine's own related, non-retired scopes, previously-swept first.
  *
  * Presentational only: renders `scopes()` in the order given and `selection()`,

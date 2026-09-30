@@ -56,8 +56,7 @@ export class AppHeader {
    * every other `401` degrades in its own region and the dashboard poll itself can
    * still be `ok`. Falls through to the dashboard read's own state — `ok` once it
    * resolves, `offline` on a failed read, `connecting…` for the pending gap before
-   * the first read settles — otherwise. Moved verbatim from `LocalPanel`'s own
-   * computed, which no longer renders a header to feed it. */
+    * the first read settles — otherwise. */
   protected readonly connection = computed<string>(() => {
     const streamState = this.liveUpdates.status();
     if (streamState === 'reconnecting') return 'reconnecting…';
@@ -71,8 +70,7 @@ export class AppHeader {
    * environments pool, active agent leases/capacity off the runner section's
    * `capacities`. Withheld (`[]`) until the dashboard read has resolved at
    * least once, the same stance the hub header's own `spendToday` cell takes
-   * rather than show a misleading `Envs 0/0`. Moved verbatim from
-   * `LocalPanel`'s own computed. */
+    * rather than show a misleading `Envs 0/0`. */
   protected readonly headerStats = computed<readonly StatCell[]>(() => {
     if (this.dashboardQuery.isPending()) return [];
     const envs = this.dashboardQuery.data()?.environments?.items ?? [];

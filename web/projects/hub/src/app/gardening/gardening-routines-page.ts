@@ -20,9 +20,7 @@ import { isRoutineBlocked } from './gardening-effective-graph';
 /**
  * The `/gardening/routines` sub-tab (`plans/garden/user-interface.md` §Declaring
  * and running a routine) — the routine list, beside a `<router-outlet>` holding
- * whichever routine the URL names (`gardening-routine-detail.ts`). Split off this
- * page's own combined routines-and-scopes surface; routines
- * and scopes are unrelated concepts that only used to share a tab.
+ * whichever routine the URL names (`gardening-routine-detail.ts`).
  *
  * `gardening-scopes-page.ts`'s own parent-list/child-detail shape, for the same
  * reason: nesting the detail under the list is what keeps this component — and

@@ -7,12 +7,10 @@ import { ChunkDetailHeader } from './chunk-detail-header';
 
 /**
  * The chunk detail dock header's `⋯` overflow menu — its own panel contents
- * (Detach, Complete, Delete: rendering, gating, confirm-emit), split out of
- * `chunk-detail-header.spec.ts` because `KitMenuPanel` renders into a CDK
+ * (Detach, Complete, Delete: rendering, gating, confirm-emit). `KitMenuPanel` renders into a CDK
  * overlay attached to `document.body`, not the fixture's own DOM subtree
  * (`kit-menu.spec.ts`'s own convention) — a genuinely different harness shape
- * from the rest of that file, which never has to open anything. Pause/Resume
- * stay in the original file: they are not in the menu.
+ * from the non-menu header tests. Pause/Resume are not in the menu.
  */
 
 const ISSUE_DETAIL: ChunkDetail = {

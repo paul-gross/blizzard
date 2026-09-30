@@ -15,8 +15,7 @@ export interface ActivityRow {
 }
 
 /**
- * The Activity feed panel's presentational half (split from
- * `activity-panel.ts`, `bzh:frontend-container-presentational`) — a scrolling,
+ * The Activity feed panel's presentational half (`bzh:frontend-container-presentational`) — a scrolling,
  * newest-first feed of recent fleet events with a running count.
  *
  * Renders exactly the rows and async state it is handed; injects no query or live

@@ -11,9 +11,12 @@ file is the in-repo operator reference for running it.
 every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gate` ast-grep scan
 (`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, hub↔runner wire compatibility against the PR's
 merge-base (`gate / hub↔runner wire compatibility`, PR-only — see below), the `web/` frontend checks (eslint, vitest,
-structural gate, generated-client drift), and the process-reference prose lint (`gate / process-reference lint`,
-`styles/Blizzard/ProcessReference.yml` against `.vale.ini`). Every gate check is seams-mocked and token-free, needing no
-real forge, no tokens, and no network beyond package installs.
+structural gate, generated-client drift), and the Vale prose lint (`gate / process-reference and change-history lint`,
+`styles/Blizzard/ProcessReference.yml` and `styles/Blizzard/ChangeHistory.yml` against `.vale.ini`). The
+`mise run process-ref-lint` command covers Markdown, configured Python and `src/` YAML, and web TypeScript/CSS;
+generated API clients are excluded and `.html` templates are outside Vale's configured extensions. The change-history
+rule flags crisp provenance phrases in prose; regression fixture explanations using “used to” are not flagged. Every
+gate check is seams-mocked and token-free, needing no real forge, no tokens, and no network beyond package installs.
 
 `mise run gate` ([`scripts/ci-gate.sh`](../scripts/ci-gate.sh)) reproduces the whole merge gate in one command before
 pushing. The gate's exact individual commands:

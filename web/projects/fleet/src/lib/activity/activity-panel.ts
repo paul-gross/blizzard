@@ -114,15 +114,13 @@ function fromActivity(row: ActivityView, seq: number): LoggedEvent {
 }
 
 /**
- * The Activity feed panel's **container** (split from the formerly
- * presentational `activity-panel.ts` — `bzh:frontend-container-presentational`).
+ * The Activity feed panel's **container** (`bzh:frontend-container-presentational`).
  *
  * Owns two independent reads of the same underlying feed and merges them into one
  * rendered list:
  *
- * - The **live** tee: {@link FleetLiveUpdates}'s bounded SSE ring, unchanged from
- *   before this phase — still the sanctioned bridge from the transport to the query
- *   cache, and still the source the broker's connect-time replay lands in for free.
+ * - The **live** tee: {@link FleetLiveUpdates}'s bounded SSE ring, the bridge from
+ *   transport to query cache and the destination for the broker's connect-time replay.
  * - The **backfill**: {@link injectHubActivityQuery}, a one-shot `GET /api/activity`
  *   read on mount, so the feed shows recent history immediately rather than starting
  *   empty and filling in only as new frames arrive.

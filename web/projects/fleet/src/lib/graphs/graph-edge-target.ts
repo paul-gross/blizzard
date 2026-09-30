@@ -3,14 +3,8 @@ import type { GraphView } from '../api/hub';
 /**
  * What one choice's `to:` names — resolved from the wire's plain-string
  * `to_node_name` into the three things it can mean, and the structural kind that
- * follows from which one it is. Split out of `graph-layout.ts` (`web:lint`
- * 400-line cap, the same reason `graph-diagram-node-shape.ts` and
- * `graph-diagram-start.ts` were split out of the diagram component) into its own
- * cohesive unit — this mirrors the backend's own split, where `ChoiceTarget` is a
- * dataclass separate from the graph module it lives beside
- * (`src/blizzard/hub/domain/graph.py`). `graph-layout.ts` re-exports
- * {@link EdgeKind} and {@link EdgeTarget} so no consumer outside this pair has to
- * know the type moved.
+ * follows from which one it is. `graph-layout.ts` re-exports
+ * {@link EdgeKind} and {@link EdgeTarget} so consumers use one type entrypoint.
  */
 
 /** A node's declaration in `graph.nodes` names the terminal a choice can point at

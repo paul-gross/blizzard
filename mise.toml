@@ -70,7 +70,7 @@ description = "Export the hub and runner OpenAPI specs to ./openapi (frontend co
 run = "uv run blizzard-export-openapi --out-dir openapi"
 
 [tasks."process-ref-lint"]
-description = "Process-reference prose lint"
+description = "blizzard:process-ref-lint — Vale prose gate for process references and change-history narration"
 run = "vale --output=line ."
 
 [tasks.wire-compat]
@@ -78,7 +78,7 @@ description = "blizzard:wire-compat — fail on a breaking change to the hub↔r
 run = "uv run blizzard-wire-compat --baseline merge-base --against origin/master"
 
 [tasks.gate]
-description = "Run the local equivalent of the PR-to-master merge gate (ruff, pyright, process-ref-lint, pytest, spec/client drift, eslint, vitest)"
+description = "Run the local equivalent of the PR-to-master merge gate (ruff, pyright, Vale prose lint, pytest, spec/client drift, eslint, vitest)"
 run = "./scripts/ci-gate.sh"
 
 [tasks.build]

@@ -182,8 +182,8 @@ def _status_of(hub, chunk_id: str) -> str:  # type: ignore[no-untyped-def]
 def test_ingest_batch_frame_sequence_matches_per_fact_publish(tmp_path: Path) -> None:
     """An interleaved batch across three chunks — a lease re-mint, an escalation, a
     question asked-then-answered, and an escalation on a chunk with a cross-graph newest
-    transition — proves the loaded-once-per-batch state reproduces exactly what
-    independent per-fact reloads produced before this change (``bzh:bulk-reconstitution``):
+    transition — proves the loaded-once-per-batch state preserves the per-fact
+    publish contract (``bzh:bulk-reconstitution``):
     one frame per applied fact in batch order, each with its own cause and key, a
     question-asked frame just before its chunk-changed, the ``route_created:<id>`` key on
     the lease re-mint, ``prev_status`` fixed to the pre-batch snapshot, and — since publish

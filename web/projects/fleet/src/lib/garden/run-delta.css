@@ -40,9 +40,8 @@
 .rd-set-revisions {
   margin: 0;
   color: var(--label);
-  /* Full `repo@sha` provenance belongs here (`run-list.css`'s own doc comment on why
-   * it was dropped from the list row) — wrapped rather than left to overflow the
-   * pane the way an unbroken 40-char SHA once did. */
+   /* Full `repo@sha` provenance belongs here; wrap an unbroken 40-char SHA
+    * so it cannot overflow the pane. */
   overflow-wrap: anywhere;
   min-width: 0;
 }

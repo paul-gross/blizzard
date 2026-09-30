@@ -4,13 +4,8 @@ import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, Viewp
 import { injectRunnerDashboardQuery, injectRunnerSessionQuery, LocalIdentity, signedInUsername } from 'local-panel';
 
 /**
- * The runner's mobile titlebar — hoisted out of
- * `LocalPanelMobile` (its old home) up to the app root (`../app.ts`), the
- * same shelf the hub's own {@link FleetMobileTitlebar} wrapper
- * (`hub/src/app/nav/mobile-titlebar.ts`) sits on. It used to render *inside*
- * the routed mobile panel, so `/events` (which never mounts `LocalPanelMobile`)
- * had no titlebar at all — mounted here instead, `AppShell` (`fleet`)
- * enforces it above the routed content on every route.
+ * The runner's mobile titlebar sits at the app root (`../app.ts`),
+ * where `AppShell` (`fleet`) keeps it above the routed content on every route.
  *
  * A thin wrapper around the shared {@link FleetMobileTitlebar},
  * mirroring the hub's own wrapper in shape: this layer supplies the runner's
@@ -18,13 +13,11 @@ import { injectRunnerDashboardQuery, injectRunnerSessionQuery, LocalIdentity, si
  * panel (a `CdkMenu` cannot see items projected across an `<ng-content>`
  * boundary, so the panel has to be declared here rather than passed through).
  * Unlike the hub's wrapper, this one also carries the signed-in identity row
- * and its `Log out` item — moved verbatim from `LocalPanelMobile`, since the
+ * and its `Log out` item, since the
  * runner (unlike the hub) has its own local session concept independent of
  * the hub's.
  *
- * {@link hubReachable} and {@link signedIn} — and the queries backing them —
- * moved here verbatim from `LocalPanelMobile`, which no longer renders a
- * titlebar to feed them. TanStack dedupes query-key injections, so this
+ * TanStack dedupes query-key injections, so this
  * component injecting the same dashboard/session queries `LocalPanel`'s other
  * rails (and `local-info`) also inject costs no extra network request.
  */
