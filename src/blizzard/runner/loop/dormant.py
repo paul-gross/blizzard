@@ -13,16 +13,16 @@ from blizzard.runner.domain.elicitation import ElicitationRecord
 from blizzard.runner.domain.invocation_boundaries import WORKER_STARTING_KINDS
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.overload import OverloadFactRecord
+from blizzard.runner.domain.owned_process import kill_owned_process, owned_process_alive
 from blizzard.runner.domain.pause import PauseParkRecord
 from blizzard.runner.environments.repository import EnvBindingRecord
-from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
+from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.process import kill_owned_process, owned_process_alive
 from blizzard.runner.loop.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.loop.spawn import Spawner
 
@@ -429,7 +429,7 @@ class DormantSession:
         lease = self.lease
         if Spawner(self.ctx).suppressed(via="resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
             return
-        harness: IHarnessLifecycleAndVerdict | None = None
+        harness: IHarnessWorkerLifecycle | None = None
         if lease.session is not None:
             harness = self._resolve_harness(via="restart-resume")
             if harness is None:
@@ -463,7 +463,7 @@ class DormantSession:
             pid=pid,
         )
 
-    def _resolve_harness(self, *, via: str) -> IHarnessLifecycleAndVerdict | None:
+    def _resolve_harness(self, *, via: str) -> IHarnessWorkerLifecycle | None:
         """Resolve the dormant session's recorded owner; escalate the chunk in place via
         :meth:`Attempt.escalate_owner_unresolvable` and return ``None`` — never raising —
         when it is unknown or unavailable. :meth:`park_on_ask` uses
@@ -472,19 +472,19 @@ class DormantSession:
         session = lease.session
         assert session is not None
         try:
-            return self.ctx.adapter_for(session)
+            return self.ctx.harnesses.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             Attempt(self.ctx, lease).escalate_owner_unresolvable(session=session, exc=exc, via=via)
             return None
 
-    def _resolve_harness_for_usage_only(self, *, via: str) -> IHarnessLifecycleAndVerdict | None:
+    def _resolve_harness_for_usage_only(self, *, via: str) -> IHarnessWorkerLifecycle | None:
         """Resolve the dormant session's recorded owner, logging and returning ``None`` —
         never escalating, never raising — when it is unknown or unavailable."""
         lease = self.lease
         session = lease.session
         assert session is not None
         try:
-            return self.ctx.adapter_for(session)
+            return self.ctx.harnesses.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(
                 "dormant session usage record blocked by unavailable harness owner",
@@ -511,7 +511,7 @@ class DormantSession:
         message: str,
         bindings: list[EnvBindingRecord],
         *,
-        harness: IHarnessLifecycleAndVerdict,
+        harness: IHarnessWorkerLifecycle,
         at: datetime | None = None,
     ) -> tuple[int, datetime]:
         """Deliver ``message`` into the dormant session and record the new pid under the same

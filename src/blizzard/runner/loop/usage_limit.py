@@ -146,13 +146,12 @@ def _minute_precision(value: datetime) -> str:
 
 
 def _usage_limit_adapter(ctx: LoopContext, session: SessionReference) -> IHarnessUsageLimits | None:
-    """This session's own adapter, narrowed to ``IHarnessUsageLimits`` — unlike
-    ``ctx.adapter_for``'s own ``IHarnessLifecycleAndVerdict`` slice (``bzh:seam-size-ceiling``):
-    a classifier depends on exactly the one method it calls rather than the full seam.
+    """This session's usage-limit classifier, resolved through the registry's own
+    ``usage_limits`` accessor (``bzh:seam-size-ceiling``).
     ``None`` on an unresolvable owner, never a raise: a lease already reaching this point has
     exited, and an owner this runner cannot dispatch to is `Judgement`/`Attempt`'s own
     escalation to make, not this classifier's."""
     try:
-        return ctx.harnesses.adapter(session.harness_id)
+        return ctx.harnesses.usage_limits(session.harness_id)
     except (UnknownHarnessError, UnavailableHarnessError):
         return None

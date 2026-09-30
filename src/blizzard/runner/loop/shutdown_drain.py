@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import LeaseRecord
-from blizzard.runner.loop.process import IProcessProbe, interrupt_owned_process
+from blizzard.runner.domain.owned_process import IOwnedProcessControl, interrupt_owned_process
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -28,7 +28,7 @@ _POLL_INTERVAL_SECONDS = 0.5
 class ShutdownDrain:
     """SIGINTs, then waits out (bounded), every marked lease's process group."""
 
-    process: IProcessProbe
+    process: IOwnedProcessControl
     clock: IClock
     sleep: Callable[[float], None]
     deadline_seconds: float = SHUTDOWN_DRAIN_DEADLINE

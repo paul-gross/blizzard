@@ -11,7 +11,6 @@ from blizzard.runner.domain.leases import (
     LeaseRecord,
     PoolHead,
 )
-from blizzard.runner.harness.adapter import IHarnessModelResolution
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -109,7 +108,7 @@ class SessionResolver:
             if resume.lease is None:
                 return (None, None, None)
             return (resume.lease.resolved_model, resume.lease.resolved_effort, resume.lease.resolved_compaction_window)
-        harness = self._resolved_harness(harness_id)
+        harness = self.harnesses.model_resolution(harness_id)
         model = harness.resolve_model(node.session_model)
         return (
             model,
@@ -151,7 +150,7 @@ class SessionResolver:
         including an unresolvable transcript source, is never a breach — the owner's own
         unresolvable read is the one exception, itself always a breach."""
         try:
-            harness = self.harnesses.adapter(head.session.harness_id)
+            harness = self.harnesses.model_resolution(head.session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(
                 "session pool rotation check blocked by unavailable harness owner",
@@ -202,16 +201,10 @@ class SessionResolver:
         exception that says why not. :meth:`_plain_resume`'s own check; :meth:`_rotation_breach`
         keeps its inline resolve since it needs the adapter itself for the checks past it."""
         try:
-            self.harnesses.adapter(harness_id)
+            self.harnesses.model_resolution(harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             return exc
         return None
-
-    def _resolved_harness(self, harness_id: str) -> IHarnessModelResolution:
-        """Resolve ``harness_id``, raising ``UnknownHarnessError``/``UnavailableHarnessError``
-        on an unknown or unavailable one — callable only where the id is already guaranteed
-        to resolve."""
-        return self.harnesses.adapter(harness_id)
 
     def _resolve_transcript_source(self, session: SessionReference) -> IHarnessTranscriptSource | None:
         """Resolve ``session``'s transcript source, logging and returning ``None`` — never
@@ -271,7 +264,7 @@ class HarnessSelector:
         skipped: list[SkippedHarness] = []
         for harness_id in members:
             try:
-                adapter = self.harnesses.adapter(harness_id)
+                adapter = self.harnesses.model_resolution(harness_id)
             except UnknownHarnessError:
                 skipped.append(SkippedHarness(harness_id, "unknown"))
                 continue

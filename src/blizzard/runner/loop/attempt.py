@@ -11,15 +11,15 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.owned_process import interrupt_owned_process, kill_owned_process
 from blizzard.runner.domain.takeover import TakeoverCommand
-from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
+from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.outbound import OutboundFacts
-from blizzard.runner.loop.process import interrupt_owned_process, kill_owned_process
 from blizzard.runner.loop.session import SkippedHarness
 from blizzard.runner.loop.spawn import Environments, Spawner
 from blizzard.runner.loop.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
@@ -587,11 +587,11 @@ class Attempt:
                 chunk_id=self.lease.chunk_id,
             )
 
-    def _resolve_harness(self, session: SessionReference, *, via: str) -> IHarnessLifecycleAndVerdict | None:
+    def _resolve_harness(self, session: SessionReference, *, via: str) -> IHarnessWorkerLifecycle | None:
         """Resolve ``session``'s recorded owner, logging and returning ``None`` — never
         raising — when it is unknown or unavailable."""
         try:
-            return self.ctx.adapter_for(session)
+            return self.ctx.harnesses.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             _log.error(
                 "attempt step blocked by unavailable harness owner",
@@ -613,7 +613,7 @@ class Attempt:
         if session is None:
             return None
         try:
-            self.ctx.adapter_for(session)
+            self.ctx.harnesses.lifecycle(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             return session, exc
         return None

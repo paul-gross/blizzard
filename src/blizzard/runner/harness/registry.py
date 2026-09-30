@@ -10,7 +10,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.harness.adapter import (
+    IHarnessAdapter,
+    IHarnessLifecycleAndVerdict,
+    IHarnessModelResolution,
+    IHarnessProviderOverload,
+    IHarnessSelfTestSeam,
+    IHarnessUsageAccounting,
+    IHarnessUsageLimits,
+    IHarnessWorkerLifecycle,
+)
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 
 
@@ -40,13 +49,30 @@ class HarnessBinding:
     transcript_source: IHarnessTranscriptSource | None = None
 
 
-class IHarnessRegistry(Protocol):
-    """Resolve one harness's seams by its exact stable id."""
+class IHarnessLifecycleRegistry(Protocol):
+    """The lifecycle-only slice of the registry — what a domain service resolves."""
+
+    def lifecycle(self, harness_id: str) -> IHarnessWorkerLifecycle: ...
+
+
+class IHarnessRegistry(IHarnessLifecycleRegistry, Protocol):
+    """Resolve one harness's seams by its exact stable id, each narrowed to the role
+    its consumer calls (``bzh:seam-size-ceiling``)."""
 
     @property
     def known_harnesses(self) -> tuple[str, ...]: ...
 
-    def adapter(self, harness_id: str) -> IHarnessAdapter: ...
+    def lifecycle_and_verdict(self, harness_id: str) -> IHarnessLifecycleAndVerdict: ...
+
+    def self_test(self, harness_id: str) -> IHarnessSelfTestSeam: ...
+
+    def model_resolution(self, harness_id: str) -> IHarnessModelResolution: ...
+
+    def usage_accounting(self, harness_id: str) -> IHarnessUsageAccounting: ...
+
+    def usage_limits(self, harness_id: str) -> IHarnessUsageLimits: ...
+
+    def provider_overload(self, harness_id: str) -> IHarnessProviderOverload: ...
 
     def transcript_source(self, harness_id: str) -> IHarnessTranscriptSource: ...
 
@@ -61,17 +87,38 @@ class HarnessRegistry:
     def known_harnesses(self) -> tuple[str, ...]:
         return tuple(self._bindings)
 
-    def adapter(self, harness_id: str) -> IHarnessAdapter:
-        binding = self._binding(harness_id)
-        if binding.adapter is None:
-            raise UnavailableHarnessError(harness_id, "adapter")
-        return binding.adapter
+    def lifecycle(self, harness_id: str) -> IHarnessWorkerLifecycle:
+        return self._adapter(harness_id)
+
+    def lifecycle_and_verdict(self, harness_id: str) -> IHarnessLifecycleAndVerdict:
+        return self._adapter(harness_id)
+
+    def self_test(self, harness_id: str) -> IHarnessSelfTestSeam:
+        return self._adapter(harness_id)
+
+    def model_resolution(self, harness_id: str) -> IHarnessModelResolution:
+        return self._adapter(harness_id)
+
+    def usage_accounting(self, harness_id: str) -> IHarnessUsageAccounting:
+        return self._adapter(harness_id)
+
+    def usage_limits(self, harness_id: str) -> IHarnessUsageLimits:
+        return self._adapter(harness_id)
+
+    def provider_overload(self, harness_id: str) -> IHarnessProviderOverload:
+        return self._adapter(harness_id)
 
     def transcript_source(self, harness_id: str) -> IHarnessTranscriptSource:
         binding = self._binding(harness_id)
         if binding.transcript_source is None:
             raise UnavailableHarnessError(harness_id, "transcript source")
         return binding.transcript_source
+
+    def _adapter(self, harness_id: str) -> IHarnessAdapter:
+        binding = self._binding(harness_id)
+        if binding.adapter is None:
+            raise UnavailableHarnessError(harness_id, "adapter")
+        return binding.adapter
 
     def _binding(self, harness_id: str) -> HarnessBinding:
         binding = self._bindings.get(harness_id)

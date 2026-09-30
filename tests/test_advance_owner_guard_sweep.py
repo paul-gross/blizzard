@@ -1,4 +1,4 @@
-"""Every other ``adapter_for``/``harnesses.adapter`` call ``Advance.run()`` (or a step it
+"""Every other registry role-accessor call (``harnesses.lifecycle`` and its siblings) ``Advance.run()`` (or a step it
 shares a per-lease loop with) reaches escalates the chunk in place rather than raising or
 resuming blind. ``Judgement._elicit``/``collect`` share the same guard ``DormantSession``'s
 three wakes reuse; ``TranscriptPump``'s segment read logs instead (tested apart);

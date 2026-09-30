@@ -15,7 +15,8 @@ import time
 import pytest
 
 from blizzard.foundation.process import ProcStat
-from blizzard.runner.loop.process import LinuxProcessProbe, interrupt_owned_process, kill_owned_process
+from blizzard.runner.domain.owned_process import interrupt_owned_process, kill_owned_process
+from blizzard.runner.loop.process import LinuxProcessProbe
 from tests.runner_fakes import FakeProbe
 
 _START = "start-token"

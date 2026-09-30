@@ -116,7 +116,7 @@ def test_loop_wiring_threads_worker_env_passthrough_into_the_adapter(tmp_path: P
     )
 
     with loop_context(config) as ctx:
-        harness = ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
+        harness = ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
 
         assert isinstance(harness, ClaudeCodeAdapter)
         assert harness._worker_env.passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
@@ -142,7 +142,7 @@ def test_loop_wiring_threads_external_usage_credentials_path_into_the_sampler(tm
     )
 
     with loop_context(config) as ctx:
-        assert isinstance(ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID), ClaudeCodeAdapter)
+        assert isinstance(ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID), ClaudeCodeAdapter)
         assert [s.slug for s in ctx.subscriptions] == [LEGACY_ANTHROPIC_SLUG]
         resolved = ctx.subscriptions[0]
         assert resolved.sample_interval_seconds == 123
@@ -221,7 +221,7 @@ def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_pa
     )
 
     with loop_context(config) as ctx:
-        harness = ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
+        harness = ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
 
         assert isinstance(harness, ClaudeCodeAdapter)
         assert harness._settings_path == settings
@@ -242,7 +242,7 @@ def test_hosted_app_threads_the_worker_settings_path_and_permission_mode(tmp_pat
 
     app = build_hosted_app(RunnerConfig.load(tmp_path)).app
 
-    harness = app.state.harnesses.adapter(CLAUDE_CODE_HARNESS_ID)
+    harness = app.state.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
     assert isinstance(harness, ClaudeCodeAdapter)
     assert harness._settings_path == settings
     assert " --permission-mode acceptEdits" in harness.resume_command("/w", "s-1", attended=True)

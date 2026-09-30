@@ -223,6 +223,13 @@ def test_no_runner_domain_module_imports_from_runner_store() -> None:
     assert not violations, f"G — runner/domain/ must not import from runner/store/: {violations}"
 
 
+def test_no_runner_domain_module_imports_from_runner_loop_or_api() -> None:
+    """A domain module owns its own seam Protocol — it never reaches outward into
+    ``runner/loop/`` or ``runner/api/`` for one."""
+    violations = _violations(_RUNNER_DOMAIN_DIR, ("blizzard.runner.loop", "blizzard.runner.api"))
+    assert not violations, f"runner/domain/ must not import from runner/loop/ or runner/api/: {violations}"
+
+
 _RUNNER_STORE_INTERNAL_DIR = _RUNNER_STORE_DIR / "internal"
 _RUNNER_STORE_SCHEMA_FILE = _RUNNER_STORE_DIR / "schema.py"
 _RUNNER_STORE_ERRORS_FILE = _RUNNER_STORE_DIR / "errors.py"

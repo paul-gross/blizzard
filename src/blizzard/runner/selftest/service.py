@@ -58,7 +58,7 @@ class SelfTestService:
 
     def start(self, harness: str) -> SelfTestRun:
         """Mint a run and begin it in a background thread; returns immediately."""
-        adapter = self._harnesses.adapter(harness)
+        adapter = self._harnesses.self_test(harness)
         run = SelfTestRun(id=Id.mint(SELFTEST_PREFIX, self._clock).value, harness=harness)
         with self._lock:
             self._runs[run.id] = run

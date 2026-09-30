@@ -445,7 +445,7 @@ class Judgement:
         session = lease.session
         if session is None:
             return
-        harness = self.ctx.adapter_for(session)
+        harness = self.ctx.harnesses.lifecycle_and_verdict(session.harness_id)
         choice = harness.parse_verdict(output)
         if choice is None:
             # Ask-during-judgement: the worker escalated instead of returning a verdict. The
@@ -530,7 +530,7 @@ class Judgement:
         :meth:`Attempt.escalate_owner_unresolvable` and return ``None`` — never raising —
         when it is unknown or unavailable."""
         try:
-            return self.ctx.adapter_for(session)
+            return self.ctx.harnesses.lifecycle_and_verdict(session.harness_id)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:
             Attempt(self.ctx, self.lease).escalate_owner_unresolvable(session=session, exc=exc, via=via)
             return None

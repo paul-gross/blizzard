@@ -59,16 +59,15 @@ def capability_snapshot(
     default_id = default_harness_id(harnesses)
     snapshot: list[RunnerCapability] = []
     for harness_id in harnesses.known_harnesses:
-        adapter = harnesses.adapter(harness_id)
-        version = (
-            versions.get(harness_id, adapter.observe_version) if versions is not None else adapter.observe_version()
-        )
-        result = health.refresh(harness_id, adapter=adapter, observed_version=version) if health is not None else None
+        observe_version = harnesses.lifecycle(harness_id).observe_version
+        model = harnesses.model_resolution(harness_id)
+        version = versions.get(harness_id, observe_version) if versions is not None else observe_version()
+        result = health.refresh(harness_id, adapter=model, observed_version=version) if health is not None else None
         snapshot.append(
             RunnerCapability(
                 harness_id=harness_id,
                 version=version,
-                tiers=list(adapter.resolvable_tier_ids()),
+                tiers=list(model.resolvable_tier_ids()),
                 default=harness_id == default_id,
                 available=result.available if result is not None else True,
             )

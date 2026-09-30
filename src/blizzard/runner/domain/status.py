@@ -14,9 +14,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.runner.domain.asks import AskRecord
 from blizzard.runner.domain.outbound import OutboundFactRecord
 from blizzard.runner.environments.repository import EnvBindingRecord, group_bindings_by_chunk
-from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
-from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.stores import RunnerReadStores
 
@@ -149,7 +147,7 @@ class RunnerStatusService:
         max_agents: int,
         hub_url: str,
         env_pool: tuple[str, ...],
-        harnesses: IHarnessRegistry,
+        harnesses: IHarnessLifecycleRegistry,
         workspace_root: str,
         gates: tuple[str, ...] = (),
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
@@ -257,7 +255,7 @@ class RunnerStatusService:
                     # Composed from the escalation's own stamps, not a fresh
                     # resolution: the operator lands in the configuration it ran with.
                     try:
-                        resume_command = self._resolved_harness(session).resume_command(
+                        resume_command = self._harnesses.lifecycle(session.harness_id).resume_command(
                             SpawnCwd.of_session(self._workspace_root, bindings[0].workdir),
                             session.session_id,
                             model=escalation.resolved_model,
@@ -283,6 +281,3 @@ class RunnerStatusService:
                 )
             )
         return views
-
-    def _resolved_harness(self, session: SessionReference) -> IHarnessWorkerLifecycle:
-        return self._harnesses.adapter(session.harness_id)

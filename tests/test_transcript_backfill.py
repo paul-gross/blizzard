@@ -97,7 +97,7 @@ def _with_source(ctx, source: FakeTranscriptSource):  # type: ignore[no-untyped-
         harnesses=HarnessRegistry(
             {
                 CLAUDE_CODE_HARNESS_ID: HarnessBinding(
-                    adapter=ctx.harnesses.adapter(CLAUDE_CODE_HARNESS_ID), transcript_source=source
+                    adapter=ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID), transcript_source=source
                 )
             }
         ),
