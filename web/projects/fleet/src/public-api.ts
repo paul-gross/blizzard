@@ -64,7 +64,6 @@ export {
   type TranscriptPlane,
 } from './lib/query-keys';
 export * from './lib/query-state';
-export { errorMessage } from './lib/error-message';
 export {
   promoteChunkMutationKey,
   repositionQueueMutationKey,

@@ -5,9 +5,6 @@
 
 export { injectMeQuery, hasPermission } from './me.query';
 export { injectAuthProvidersQuery } from './providers.query';
-export { injectLogoutMutation } from './logout.mutation';
-export { redirectToLogin, consumeReturnUrl, safeAuthorizeReturnTo } from './auth-redirect';
-export { provideAuthInterceptor } from './auth.interceptor';
+export { consumeReturnUrl, safeAuthorizeReturnTo } from './auth-redirect';
 export { LoginButtons } from './login-buttons';
-export { PendingLobby } from './pending-lobby';
 export type { MeResponse, ProviderSummary } from '../api/hub';

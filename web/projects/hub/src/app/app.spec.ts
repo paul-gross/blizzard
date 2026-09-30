@@ -8,12 +8,12 @@ import {
   FleetLiveUpdates,
   ViewportService,
   hubClient,
-  provideAuthInterceptor,
   type EventSourceFactory,
   type FleetEventSource,
   type MeResponse,
   type ProviderSummary,
 } from 'fleet';
+import { provideAuthInterceptor } from 'fleet/shell';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
