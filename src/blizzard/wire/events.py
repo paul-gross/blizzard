@@ -1,6 +1,6 @@
 """Operational event-log wire bodies — the ``GET /api/events`` read.
 
-A typed, severity-ranked record of the operationally-significant things that happen to
+A typed record of the operationally-significant things that happen to
 runners and workers, with the currently-open escalations projected into the same feed as
 one more event kind. A projected escalation row carries a **negative** ``id``.
 """
@@ -33,6 +33,6 @@ class EventView(BaseModel):
 
 
 class EventsResponse(BaseModel):
-    """The operational event feed, newest-and-most-severe first (bounded)."""
+    """The operational event feed, newest first (bounded)."""
 
     events: list[EventView] = []

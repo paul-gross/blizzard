@@ -6,8 +6,7 @@ from typing import cast, get_args
 
 import pytest
 
-from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
-from blizzard.hub.domain.work import SEVERITY_RANK
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from tests.event_log_kind_census import EVENT_LOG_KIND_CENSUS as CENSUS
 from tests.event_log_kind_census import Projected, Recorded
 from tests.repo_files import repo_root
@@ -22,10 +21,10 @@ def test_census_names_exactly_the_declared_kinds() -> None:
     assert set(CENSUS) == set(get_args(EventLogKind))
 
 
-def test_every_census_severity_matches_the_vocabulary_and_the_closed_rank() -> None:
+def test_every_census_severity_matches_the_vocabulary() -> None:
     for kind, disposition in CENSUS.items():
         assert disposition.severity == EVENT_LOG_SEVERITY[cast(EventLogKind, kind)]
-        assert disposition.severity in SEVERITY_RANK
+        assert disposition.severity in get_args(EventLogSeverity)
 
 
 def test_every_disposition_is_recorded_or_projected_with_a_real_site() -> None:

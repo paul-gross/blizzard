@@ -43,7 +43,7 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
  * the filtered feed, so selecting a runner/chunk never makes the other chips vanish
  * (that derivation lives in `events-panel.ts`). An empty id array hides its row.
  *
- * Default sort is the server's (severity-then-recency, `GET /api/events`), so this
+ * Default sort is the server's (newest-first by recency, `GET /api/events`), so this
  * renders events as-received rather than re-sorting client-side.
  *
  * Each row is a **time-first grid** — time, chunk, severity, kind, runner, message,

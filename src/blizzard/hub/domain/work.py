@@ -7,7 +7,7 @@ The derivations are pure functions over already-loaded domain facts
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -495,7 +495,7 @@ class UsageFact:
 
 @dataclass(frozen=True)
 class EventRow:
-    """One ``event_log`` row — a durable, typed, severity-ranked operational fact.
+    """One ``event_log`` row — a durable, typed operational fact.
     ``chunk_id``/``runner_id`` are ``None`` for a runner-scoped/hub-authored event,
     respectively; ``detail`` is the event-specific payload, already decoded from JSON. A
     negative ``id`` marks a row :class:`EventFeed` synthesized rather than read."""
@@ -526,10 +526,6 @@ class EscalationOpen:
 #: Default cap on ``list_events`` — an unbounded read of an append-only table is an unbounded response.
 DEFAULT_EVENT_LIST_LIMIT = 200
 
-#: The closed severity vocabulary's sort order — critical first
-#: (``blizzard-context:/domain/operations.md``).
-SEVERITY_RANK: Mapping[EventLogSeverity, int] = {"critical": 0, "warning": 1, "info": 2}
-
 _EVENT_NEEDS_HUMAN: EventLogKind = "needs-human"
 
 
@@ -537,8 +533,7 @@ _EVENT_NEEDS_HUMAN: EventLogKind = "needs-human"
 class EventFeed:
     """``event_log`` rows unified with every currently-open escalation.
 
-    Sorted severity-then-recency: critical before warning before info, newest
-    ``recorded_at`` first within a band."""
+    Sorted newest ``recorded_at`` first, ``id`` descending as the tiebreak, whatever the severity."""
 
     rows: list[EventRow]
 
@@ -546,7 +541,7 @@ class EventFeed:
     def of(cls, events: list[EventRow], escalations: list[EscalationOpen]) -> EventFeed:
         projected = [cls._projected(i, esc) for i, esc in enumerate(escalations)]
         merged = [*events, *projected]
-        return cls(sorted(merged, key=lambda e: (SEVERITY_RANK[e.severity], -e.recorded_at.timestamp())))
+        return cls(sorted(merged, key=lambda e: (e.recorded_at, e.id), reverse=True))
 
     @staticmethod
     def _projected(index: int, esc: EscalationOpen) -> EventRow:

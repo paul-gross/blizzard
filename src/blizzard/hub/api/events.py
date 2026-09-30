@@ -88,7 +88,7 @@ def list_events(
     since: Annotated[datetime | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=FEED_MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> EventsResponse:
-    """The ``event_log`` unified with open escalations, most-severe-newest first, bounded.
+    """The ``event_log`` unified with open escalations, newest first, bounded.
 
     The ``severity`` / ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half;
     the open-escalation projection is always unioned in. A tz-naive ``since`` is coerced to UTC so the

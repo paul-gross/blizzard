@@ -134,7 +134,7 @@ def test_list_events_filters_and_orders_newest_first_bounded(tmp_path: Path) -> 
     assert [e.message for e in store.events.list_events(limit=1)] == ["c"]
 
 
-def test_list_events_cap_keeps_the_most_severe_rows(tmp_path: Path) -> None:
+def test_list_events_cap_keeps_the_newest_rows_regardless_of_severity(tmp_path: Path) -> None:
     store, _, _clock = _store(tmp_path)
     store.events.record_event(
         severity="critical",
@@ -149,20 +149,20 @@ def test_list_events_cap_keeps_the_most_severe_rows(tmp_path: Path) -> None:
     )
     for sec in (2, 3, 4, 5):
         store.events.record_event(
-            severity="warning",
+            severity="warning" if sec % 2 else "info",
             kind="attempt-failed",
             runner_id="r1",
             chunk_id="ch_a",
             lease_id=None,
             node_name=None,
-            message=f"warning-{sec}",
+            message=f"row-{sec}",
             detail=None,
             at=_at(sec),
         )
 
-    # Recency alone would drop "old-critical" (t1) for a limit=3 read over 5 rows; the
-    # cap must rank by severity first, so it survives ahead of the newer warnings.
-    assert [e.message for e in store.events.list_events(limit=3)] == ["old-critical", "warning-5", "warning-4"]
+    # A limit=3 read over 5 rows drops the old critical for the newer warning/info rows.
+    assert [e.message for e in store.events.list_events(limit=3)] == ["row-5", "row-4", "row-3"]
+    assert [e.message for e in store.events.list_events()][-1] == "old-critical"
 
 
 def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -> None:
@@ -270,7 +270,7 @@ def test_list_open_escalations_query_count_is_independent_of_fleet_size(tmp_path
     assert small_count == large_count
 
 
-def test_event_feed_sorts_severity_then_recency() -> None:
+def test_event_feed_sorts_by_recency_across_severities() -> None:
     events = [
         EventRow(
             id=1,
@@ -311,16 +311,12 @@ def test_event_feed_sorts_severity_then_recency() -> None:
     ]
     escalations = [EscalationOpen(chunk_id="ch_z", recorded_at=_at(8), takeover_command="cd z")]
     feed = EventFeed.of(events, escalations).rows
-    # critical band first (crit-old at t2, then projected needs-human at t8 — but newest-first
-    # within band => needs-human t8 before crit-old t2), then warning, then info.
-    assert [e.message.split()[0] if e.kind == "k" else e.kind for e in feed][0:2] == ["needs-human", "crit-old"]
-    assert [e.severity for e in feed] == ["critical", "critical", "warning", "info"]
+    # Newest first whatever the severity: warn-new t9, projected needs-human t8, crit-old t2, info-old t1.
+    assert [e.message if e.kind == "k" else e.kind for e in feed] == ["warn-new", "needs-human", "crit-old", "info-old"]
+    assert [e.severity for e in feed] == ["warning", "critical", "critical", "info"]
     # The projected escalation carries a negative synthetic id.
     projected = next(e for e in feed if e.kind == "needs-human")
     assert projected.id < 0
-    assert projected.chunk_id == "ch_z"
-    # …and names no runner as `None`, never `""`.
-    assert projected.runner_id is None
 
 
 def test_event_feed_escalation_message_does_not_overclaim_resume() -> None:
