@@ -24,11 +24,11 @@ class IReadChunkDeliveryRepository(Protocol):
         ...
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
-        """Every ``(chunk_id, ref)`` pair carrying a pending, **due** ``close_intents`` row;
-        a chunk in the ephemeral set is excluded
-        even if its intent enqueued before it was grouped or deleted. An intent with no
-        prior attempt is always due; one with prior attempts backs off exponentially,
-        capped at an hour, from its own ``close_intent_attempts`` history."""
+        """Every ``(chunk_id, ref)`` pair carrying a pending ``close_intents`` row,
+        due or not, with its own ``close_intent_attempts`` history; a chunk in the ephemeral
+        set is excluded even if its intent enqueued before it was grouped or deleted.
+        Whether an intent is due is the drainer's call (``close_intent_is_due``), never
+        this read's."""
         ...
 
     def unmaterialized_proposals(self) -> list[WorkItemProposalRow]:

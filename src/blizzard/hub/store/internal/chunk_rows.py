@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, cast
 
-from sqlalchemy import Connection, func, insert, select
+from sqlalchemy import Connection, Select, func, insert, select
 
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.fleet import Route
@@ -218,20 +218,31 @@ def insert_materialization_row(
     return True
 
 
+_EPHEMERAL_TABLES = (s.chunk_grouped, s.chunk_deleted)
+"""The tables whose chunk ids are gone from every read — the one place the ephemeral set is
+declared; the subquery helper and the id-set helpers below all derive from it."""
+
+
+def ephemeral_ids_select() -> Select:  # type: ignore[type-arg]
+    """The ephemeral set as a ``chunk_id`` subquery for a ``NOT IN`` — the union of
+    grouped-away and deleted chunks, for a read that filters in SQL rather than fetching
+    :func:`ephemeral_ids`; widened here so every consumer inherits the exclusion."""
+    first, *rest = (select(t.c.chunk_id) for t in _EPHEMERAL_TABLES)
+    return first.union(*rest)  # type: ignore[return-value]
+
+
 def ephemeral_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
     """Every chunk id gone from every read — the union of grouped-away
     and deleted chunks; widened here so every consumer across every seam inherits the
     exclusion."""
-    grouped = {r.chunk_id for r in conn.execute(select(s.chunk_grouped.c.chunk_id)).all()}
-    deleted = {r.chunk_id for r in conn.execute(select(s.chunk_deleted.c.chunk_id)).all()}
-    return grouped | deleted
+    return {r.chunk_id for table in _EPHEMERAL_TABLES for r in conn.execute(select(table.c.chunk_id)).all()}
 
 
 def is_ephemeral_id(conn, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]
     """Whether ``chunk_id`` alone is grouped-away or deleted — a single-id call site's
     narrow sibling of :func:`ephemeral_ids`, two targeted existence checks rather than
     that helper's unfiltered scan of both tables."""
-    return row_exists(conn, s.chunk_grouped, chunk_id) or row_exists(conn, s.chunk_deleted, chunk_id)
+    return any(row_exists(conn, table, chunk_id) for table in _EPHEMERAL_TABLES)
 
 
 def ephemeral_ids_in(conn, batch: Sequence[str]) -> set[str]:  # type: ignore[no-untyped-def]
@@ -245,10 +256,8 @@ def ephemeral_ids_in(conn, batch: Sequence[str]) -> set[str]:  # type: ignore[no
         return {chunk_id} if is_ephemeral_id(conn, chunk_id) else set()
     return {
         r.chunk_id
-        for r in conn.execute(select(s.chunk_grouped.c.chunk_id).where(s.chunk_grouped.c.chunk_id.in_(batch))).all()
-    } | {
-        r.chunk_id
-        for r in conn.execute(select(s.chunk_deleted.c.chunk_id).where(s.chunk_deleted.c.chunk_id.in_(batch))).all()
+        for table in _EPHEMERAL_TABLES
+        for r in conn.execute(select(table.c.chunk_id).where(table.c.chunk_id.in_(batch))).all()
     }
 
 

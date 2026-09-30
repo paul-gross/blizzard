@@ -18,6 +18,8 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.fleet import Route
+from blizzard.hub.domain.graph import RESERVED_TERMINAL
+from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.queue import ChunkNotFound
 from blizzard.hub.domain.work import (
     Chunk,
@@ -26,6 +28,7 @@ from blizzard.hub.domain.work import (
     WorkItemClosure,
     WorkRef,
 )
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
@@ -90,6 +93,58 @@ def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
     assert chunks.delivery.pending_close_intents() == []
 
 
+def test_a_grouped_chunk_is_excluded_from_pending_close_intents(tmp_path: Path) -> None:
+    chunks, _, _, engine = _stores(tmp_path)
+    pointer = WorkRef(source="default", ref="1")
+    _mint(chunks, "ch_1")
+    _mint(chunks, "ch_2", work_refs=[pointer])
+    chunks.artifacts.record_hub_artifact(
+        "ch_2", node_id="nd_deliver", node_name="deliver", epoch=1, name="merged/widget", content="sha", at=_T0
+    )
+    assert chunks.delivery.pending_close_intents() == [PendingCloseIntent(chunk_id="ch_2", ref=pointer)]
+
+    with engine.begin() as conn:
+        record_grouped_row_conn(conn, "ch_2", grouped_into="ch_1", at=_at(1))
+
+    assert chunks.delivery.pending_close_intents() == []
+
+
+def test_a_deleted_chunk_is_excluded_from_unmaterialized_proposals(tmp_path: Path) -> None:
+    chunks, _, _, engine = _stores(tmp_path)
+    _mint(chunks, "ch_1")
+    chunks.movement.record_transition(
+        transition_id="tr_1",
+        chunk_id="ch_1",
+        from_node_id="nd_1",
+        to_node_id=RESERVED_TERMINAL,
+        choice_name="pass",
+        epoch=1,
+        runner_id="r1",
+        at=_T0,
+        artifacts=[],
+        proposals=[
+            WorkItemProposalRow(
+                proposal_id="wip_1",
+                chunk_id="ch_1",
+                node_id="nd_1",
+                node_name="build",
+                epoch=1,
+                ordinal=0,
+                kind="create",
+                data="{}",
+                runner_id="r1",
+            )
+        ],
+    )
+    assert [r.proposal_id for r in chunks.delivery.unmaterialized_proposals()] == ["wip_1"]
+
+    # A delivered chunk is past `DeleteService`'s reach, so the deleted fact is seeded directly.
+    with engine.begin() as conn:
+        conn.execute(s.chunk_deleted.insert().values(chunk_id="ch_1", deleted_at=_T0, deleted_by="operator"))
+
+    assert chunks.delivery.unmaterialized_proposals() == []
+
+
 # --- refusal at every status outside PRE_CLAIM_STATUSES, success at both members ---
 
 
@@ -127,12 +182,12 @@ def _make_waiting_on_human(chunks: ChunkStores, chunk_id: str) -> None:
 
 def _make_stopped(chunks: ChunkStores, chunk_id: str) -> None:
     with chunks.exclusive.locked([chunk_id]) as handle:
-        chunks.lifecycle.record_stop_locked(handle, chunk_id, by="alice")
+        chunks.lifecycle.record_stop_locked(handle, chunk_id, by="alice", at=_at(0))
 
 
 def _make_done(chunks: ChunkStores, chunk_id: str) -> None:
     with chunks.exclusive.locked([chunk_id]) as handle:
-        chunks.lifecycle.record_completion_locked(handle, chunk_id, by="alice")
+        chunks.lifecycle.record_completion_locked(handle, chunk_id, by="alice", at=_at(0))
 
 
 @pytest.mark.parametrize(

@@ -10,7 +10,6 @@ from datetime import datetime
 
 from sqlalchemy import update
 
-from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunks.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.store import schema as s
@@ -27,9 +26,8 @@ from blizzard.hub.store.internal.chunk_rows import (
 class ChunkLifecycleStore:
     """The chunk's terminal and paused/resumed facts."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
-        self._clock = clock
 
     def is_ephemeral(self, chunk_id: str) -> bool:
         with self._store.read("is_ephemeral") as conn:
@@ -44,18 +42,17 @@ class ChunkLifecycleStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 
-    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str) -> int:
+    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact, release any live route, and release any
         held fleet-wide hub-exec slot — all on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), so a ``kill -9`` cannot leave the chunk durably
         ``stopped`` with its route still live. The route check runs against this same
         connection (:func:`route_of_conn`), so there is no read-then-write race. ``at`` is
-        stamped from the injected clock after the row lock the caller already took — a
-        claim that wins the row lock first still mints a route sorting newer than this
-        release, since the release's own timestamp is never older than the wait it just
-        cleared. The slot release is unconditional."""
+        passed in, stamped by the caller after the row lock — a claim that wins the row
+        lock first still mints a route sorting newer than this release, since the
+        release's own timestamp is never older than the wait it just cleared. The slot
+        release is unconditional."""
         conn = conn_of(handle)
-        at = self._clock.now()
         result = conn.execute(s.chunk_stopped.insert().values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
         if route_of_conn(conn, chunk_id) is not None:
             conn.execute(
@@ -69,16 +66,15 @@ class ChunkLifecycleStore:
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
-    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str) -> int:
+    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.completed`` fact, release any live route, and release any
         held fleet-wide hub-exec slot — all on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), mirroring :meth:`record_stop_locked`, so a
         ``kill -9`` cannot leave the chunk durably ``done`` with its route still live. The
         caller has already checked the chunk is not already ``done`` — this always writes
-        a fresh row. ``at`` is stamped from the injected clock after the row lock the
-        caller already took — see :meth:`record_stop_locked` for why the ordering matters."""
+        a fresh row. ``at`` is passed in, stamped by the caller after the row lock — see
+        :meth:`record_stop_locked` for why the ordering matters."""
         conn = conn_of(handle)
-        at = self._clock.now()
         result = conn.execute(s.chunk_completed.insert().values(chunk_id=chunk_id, completed_at=at, completed_by=by))
         if route_of_conn(conn, chunk_id) is not None:
             conn.execute(

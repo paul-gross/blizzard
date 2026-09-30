@@ -14,16 +14,15 @@ from datetime import datetime
 
 from sqlalchemy import func, insert, select, update
 
-from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunks.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import PendingCloseIntent, WorkItemCloseOutcome, WorkItemMaterializationOutcome, WorkRef
-from blizzard.hub.domain.work_closure import close_intent_is_due
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
+    ephemeral_ids_select,
     graph_id_of,
     insert_materialization_row,
     next_route_seq,
@@ -34,9 +33,8 @@ from blizzard.hub.store.internal.chunk_rows import (
 class ChunkDeliveryStore:
     """The chunk's landing, closure, and work-item-materialization facts."""
 
-    def __init__(self, store: HubStoreConnections, clock: IClock) -> None:
+    def __init__(self, store: HubStoreConnections) -> None:
         self._store = store
-        self._clock = clock
 
     def landed_repos(self, chunk_id: str) -> set[str]:
         with self._store.read("landed_repos") as conn:
@@ -57,9 +55,8 @@ class ChunkDeliveryStore:
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every pending, non-ephemeral intent's own backoff history in one flat, outer-
-        joined, already-aggregated read — never one query per intent.
-        ``close_intent_is_due`` applies the domain's own due rule to each row."""
-        ephemeral = select(s.chunk_grouped.c.chunk_id).union(select(s.chunk_deleted.c.chunk_id))
+        joined, already-aggregated read — never one query per intent. Due-ness is not decided
+        here: the drainer applies ``close_intent_is_due`` to the history each row carries."""
         attempts = (
             select(
                 s.close_intent_attempts.c.intent_id,
@@ -81,14 +78,18 @@ class ChunkDeliveryStore:
                 )
                 .select_from(s.close_intents.outerjoin(attempts, attempts.c.intent_id == s.close_intents.c.id))
                 .where(s.close_intents.c.retired_at.is_(None))
-                .where(s.close_intents.c.chunk_id.not_in(ephemeral))
+                .where(s.close_intents.c.chunk_id.not_in(ephemeral_ids_select()))
                 .order_by(s.close_intents.c.id)  # An explicit total order (`bzh:sql-portable`)
             ).all()
-        now = self._clock.now()
         return [
-            PendingCloseIntent(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref), intent_id=row.id)
+            PendingCloseIntent(
+                chunk_id=row.chunk_id,
+                ref=WorkRef(source=row.source, ref=row.ref),
+                intent_id=row.id,
+                attempt_count=row.attempt_count or 0,
+                last_attempt_at=row.last_attempt_at,
+            )
             for row in rows
-            if close_intent_is_due(now, attempt_count=row.attempt_count, last_attempt_at=row.last_attempt_at)
         ]
 
     def record_close_attempt_skipped(self, intent_id: int, *, at: datetime) -> None:
@@ -104,14 +105,13 @@ class ChunkDeliveryStore:
         proposal ever written, payload included, on every pass. A read transaction: this
         writes nothing."""
         delivered = select(s.transitions.c.chunk_id).where(s.transitions.c.to_node_id == RESERVED_TERMINAL)
-        ephemeral = select(s.chunk_grouped.c.chunk_id).union(select(s.chunk_deleted.c.chunk_id))
         judged = select(s.work_item_materializations.c.proposal_id)
         struck = select(s.work_item_strikes.c.proposal_id)
         with self._store.read("unmaterialized_proposals") as conn:
             rows = conn.execute(
                 select(s.work_item_proposals)
                 .where(s.work_item_proposals.c.chunk_id.in_(delivered))
-                .where(s.work_item_proposals.c.chunk_id.not_in(ephemeral))
+                .where(s.work_item_proposals.c.chunk_id.not_in(ephemeral_ids_select()))
                 .where(s.work_item_proposals.c.proposal_id.not_in(judged))
                 .where(s.work_item_proposals.c.proposal_id.not_in(struck))
             ).all()

@@ -40,7 +40,7 @@ CLOSE_DRAIN_BACKOFF_CAP_SECONDS = 3600
 def close_intent_is_due(now: datetime, *, attempt_count: int | None, last_attempt_at: datetime | None) -> bool:
     """Due with no prior attempt at all; otherwise due once
     ``min(base x 2^(n-1), cap)`` seconds have passed since the last one — a pure domain
-    rule (``bzh:domain-core``), applied by the store's read over an already-aggregated row."""
+    rule (``bzh:domain-core``), applied by ``CloseIntentDrainer.sweep`` over each pending intent's history."""
     if not attempt_count or last_attempt_at is None:
         return True
     threshold = min(CLOSE_DRAIN_BACKOFF_BASE_SECONDS * (2 ** (attempt_count - 1)), CLOSE_DRAIN_BACKOFF_CAP_SECONDS)
@@ -69,7 +69,10 @@ class CloseIntentDrainer:
         and counted rather than raised — a ``gone`` or ``failed`` outcome is itself an
         informative result. One aggregate INFO summary per pass (``bzh:structlog-logging``)."""
         closed = gone = failed = skipped = 0
+        now = self._clock.now()
         for intent in self._delivery.pending_close_intents():
+            if not close_intent_is_due(now, attempt_count=intent.attempt_count, last_attempt_at=intent.last_attempt_at):
+                continue
             closer = self._work_sources.closer(intent.ref.source)
             if closer is None:
                 skipped += 1
