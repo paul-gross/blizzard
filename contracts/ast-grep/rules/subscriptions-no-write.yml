@@ -14,9 +14,20 @@ rule:
   any:
     - pattern: $X.write_text($$$ARGS)
     - pattern: $X.write_bytes($$$ARGS)
-    - pattern: open($PATH, $MODE)
-    - pattern: open($PATH, $MODE, $$$REST)
-    - pattern: $X.open($MODE)
+    - pattern: os.replace($$$ARGS)
+    - pattern: os.rename($$$ARGS)
+    - all:
+        - pattern: os.open($$$ARGS)
+        - regex: '(?s).*\bO_(WRONLY|RDWR|CREAT|APPEND|TRUNC)\b.*'
+    # `os.open` is excluded here: `$X.open($MODE, ...)` would bind its path as the mode.
+    - all:
+        - not:
+            pattern: os.open($$$ARGS)
+        - any:
+            - pattern: open($PATH, $MODE)
+            - pattern: open($PATH, $MODE, $$$REST)
+            - pattern: $X.open($MODE)
+            - pattern: $X.open($MODE, $$$REST)
 constraints:
   MODE:
-    regex: "['\"][^'\"]*[wax][^'\"]*['\"]"
+    regex: "['\"][^'\"]*[wax+][^'\"]*['\"]"
