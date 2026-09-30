@@ -234,3 +234,58 @@ def test_retiring_deletes_nothing_findings_and_proposals_stay_readable(tmp_path:
         },
     )
     assert trend.status_code == 200, trend.text
+
+
+def _mint_scope(hub, slug: str) -> None:  # type: ignore[no-untyped-def]
+    resp = hub.client.post("/api/scopes", json={"slug": slug, "description": ""})
+    assert resp.status_code == 201, resp.text
+
+
+def test_a_retired_routine_stays_editable(tmp_path: Path) -> None:
+    """Retiring only stops the routine running: its defaults still change."""
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create_routine(hub)
+    hub.client.post(f"/api/routines/{routine['routine_id']}/retire", json={})
+
+    resp = hub.client.patch(
+        f"/api/routines/{routine['routine_id']}",
+        json={
+            "name": routine["name"],
+            "graph_name": "alpha",
+            "default_scope_slug": "blizzard",
+            "default_effort": "high",
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["default_effort"] == "high"
+    assert resp.json()["retired"] is True
+    assert hub.client.get(f"/api/routines/{routine['routine_id']}").json()["default_effort"] == "high"
+
+
+def test_a_scope_links_into_a_retired_routine(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create_routine(hub)
+    _mint_scope(hub, "extra")
+    hub.client.post(f"/api/routines/{routine['routine_id']}/retire", json={})
+
+    resp = hub.client.put(f"/api/routines/{routine['routine_id']}/scopes/extra")
+
+    assert resp.status_code == 204, resp.text
+    assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["blizzard", "extra"]
+
+
+def test_a_scope_unlinks_from_a_retired_routine(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create_routine(hub)
+    _mint_scope(hub, "extra")
+    hub.client.put(f"/api/routines/{routine['routine_id']}/scopes/extra")
+    hub.client.post(f"/api/routines/{routine['routine_id']}/retire", json={})
+
+    resp = hub.client.delete(f"/api/routines/{routine['routine_id']}/scopes/extra")
+
+    assert resp.status_code == 204, resp.text
+    assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["blizzard"]

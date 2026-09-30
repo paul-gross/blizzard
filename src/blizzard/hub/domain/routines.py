@@ -122,8 +122,8 @@ class IWriteRoutineRepository(IReadRoutineRepository, Protocol):
         ...
 
     def record_lifecycle(self, routine_id: str, *, retired: bool, at: datetime, by: str) -> None:
-        """Append a ``routine.retired``/``routine.enabled`` fact — newest-fact-wins
-        . Never touches the ``routines`` row itself."""
+        """Append a ``routine.retired``/``routine.enabled`` fact — newest-fact-wins.
+        Never touches the ``routines`` row itself."""
         ...
 
 
