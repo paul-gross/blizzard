@@ -116,6 +116,31 @@ def test_effective_bundle_environment_reaches_identity_and_fallback_launches(
 
 
 @pytest.mark.unit
+def test_relative_companions_resolve_in_content_from_snapshot_not_worker_cwd(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
+    effective = tmp_path / "effective"
+    (effective / "prompts").mkdir(parents=True)
+    (effective / "prompts" / "agent.txt").write_text("snapshot prompt")
+    config = effective / "opencode.json"
+    document = {
+        "permission": {"question": "deny"},
+        "plugin": [],
+        "agent": {"x": {"prompt": "{file:./prompts/agent.txt}"}},
+    }
+    config.write_text(json.dumps(document))
+    adapter = _adapter(spawn_executor, worker_config_path=str(config), effective_config_dir=str(effective))
+
+    child = adapter.identity_env(_preamble(str(tmp_path / "other-cwd")), "ch_1", "ses_1")
+    assert child["OPENCODE_CONFIG"] == str(config)
+    assert child["OPENCODE_CONFIG_DIR"] == str(effective)
+    assert json.loads(child["OPENCODE_CONFIG_CONTENT"])["agent"]["x"]["prompt"] == (
+        f"{{file:{effective / 'prompts' / 'agent.txt'}}}"
+    )
+    assert json.loads(config.read_text()) == document
+
+
+@pytest.mark.unit
 def test_effective_bundle_is_delivered_to_every_launch_kind(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
 ) -> None:
@@ -150,6 +175,47 @@ def test_effective_bundle_is_delivered_to_every_launch_kind(
         assert env["OPENCODE_CONFIG"] == str(config)
         assert env["OPENCODE_CONFIG_CONTENT"] == config.read_text()
         assert env["OPENCODE_CONFIG_DIR"] == str(effective)
+
+
+@pytest.mark.component
+def test_real_child_process_receives_effective_bundle_on_every_launch(tmp_path: Path, spawn_executor: Executor) -> None:
+    capture = tmp_path / "launches.jsonl"
+    binary = worker_binary(tmp_path, capture_path=capture)
+    effective = tmp_path / "effective"
+    effective.mkdir()
+    config = effective / "opencode.json"
+    config.write_text('{"permission":{"question":"deny"},"plugin":[]}')
+    workdir = tmp_path / "project"
+    workdir.mkdir()
+    adapter = _adapter(
+        spawn_executor,
+        binary=binary,
+        process=LinuxProcessProbe(),
+        worker_config_path=str(config),
+        effective_config_dir=str(effective),
+    )
+    preamble = _preamble(str(workdir), stdout_path=str(tmp_path / "fresh.jsonl"))
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    fresh = adapter.spawn(envelope, preamble, None)
+    fresh.confirm_durable()
+    fresh_handle = fresh.await_identity(5)
+    os.waitpid(fresh_handle.pid, 0)
+    resumed = adapter.spawn(envelope, preamble, None, resume_from=fresh_handle.session_id)
+    resumed.confirm_durable()
+    os.waitpid(resumed.pid, 0)
+    nudge = adapter.resume_with_message(str(workdir), fresh_handle.session_id, "continue")
+    nudge.confirm_durable()
+    os.waitpid(nudge.pid, 0)
+    judge = adapter.judge(str(workdir), fresh_handle.session_id, "assess", str(tmp_path / "judge.jsonl"))
+    judge.confirm_durable()
+    os.waitpid(judge.pid, 0)
+
+    recorded = [json.loads(line) for line in capture.read_text().splitlines()]
+    assert len(recorded) == 4
+    for launch in recorded:
+        assert launch["config"] == str(config)
+        assert launch["content"] == config.read_text()
+        assert launch["directory"] == str(effective)
 
 
 # --------------------------------------------------------------------------- #

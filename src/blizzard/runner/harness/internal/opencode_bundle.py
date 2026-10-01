@@ -36,6 +36,29 @@ def file_substitutions(document: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(match.strip() for text in _strings(document) for match in _FILE_SUBSTITUTION.findall(text))
 
 
+def content_with_snapshot_references(content: str, effective_dir: Path) -> str:
+    """Resolve relative companions for the cwd-relative CONFIG_CONTENT loader."""
+    document = json.loads(content)
+
+    def resolve(value: Any) -> Any:
+        if isinstance(value, str):
+
+            def reference(match: re.Match[str]) -> str:
+                path = match.group(1).strip()
+                if Path(path).is_absolute() or path.startswith("~"):
+                    return match.group(0)
+                return "{file:" + str((effective_dir / path).resolve()) + "}"
+
+            return _FILE_SUBSTITUTION.sub(reference, value)
+        if isinstance(value, list):
+            return [resolve(item) for item in value]
+        if isinstance(value, dict):
+            return {key: resolve(item) for key, item in value.items()}
+        return value
+
+    return json.dumps(resolve(document), indent=2, sort_keys=True) + "\n" if file_substitutions(document) else content
+
+
 OPENCODE_BUNDLE_LAYOUT = HarnessLayout(
     dirname="opencode",
     entry_points=(

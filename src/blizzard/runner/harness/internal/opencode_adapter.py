@@ -14,6 +14,7 @@ import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import (
@@ -28,7 +29,7 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal import harness_shared
-from blizzard.runner.harness.internal.opencode_bundle import check_ambient_plugins
+from blizzard.runner.harness.internal.opencode_bundle import check_ambient_plugins, content_with_snapshot_references
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.internal.opencode_descendant_usage import DescendantStep, OpenCodeDescendantUsage
 from blizzard.runner.harness.internal.opencode_price_cache import (
@@ -507,15 +508,18 @@ class OpenCodeAdapter:
             # its serialized content, as the compatibility proof's `configuration_isolation` probe established.
             env["OPENCODE_CONFIG"] = self._worker_config_path
             with open(self._worker_config_path, encoding="utf-8") as f:
-                env["OPENCODE_CONFIG_CONTENT"] = f.read()
+                content = f.read()
+            env["OPENCODE_CONFIG_CONTENT"] = (
+                content_with_snapshot_references(content, Path(self._effective_config_dir))
+                if self._effective_config_dir
+                else content
+            )
             if self._effective_config_dir:
                 env["OPENCODE_CONFIG_DIR"] = self._effective_config_dir
         return env
 
     def _check_plugins(self, cwd: str, env: dict[str, str]) -> None:
         if self._effective_config_dir:
-            from pathlib import Path
-
             check_ambient_plugins(Path(self._effective_config_dir), Path(cwd), env)
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
