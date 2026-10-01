@@ -54,7 +54,10 @@ def test_a_bundled_runners_mock_worker_runs_the_operators_and_the_runners_hooks(
 
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))
+        spec = mock_hub_chunk_spec(_WORK_REF_URL)
+        # The scripted build makes no tool call of its own, and only a tool call fires the PostToolUse hooks.
+        spec["nodes"]["build"]["prompt"] = 'tool_call("Bash", {"command": "true"})\n' + spec["nodes"]["build"]["prompt"]
+        resp = hub.post("/_seed/chunk", json=spec)
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
         config = dataclasses.replace(
