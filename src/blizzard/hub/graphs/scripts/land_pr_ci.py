@@ -198,7 +198,6 @@ class HeadGate:
 
     offenders: list[str]
 
-    @property
     def admitted(self) -> bool:
         return not self.offenders
 
@@ -466,7 +465,7 @@ def _land() -> int:
                 print(f"{pull}: {exc}; re-polling", file=sys.stderr)
                 wait = True
                 continue
-            if not gate.admitted:
+            if not gate.admitted():
                 print(f"{pull}'s head {pull.head_sha} is not the submitted commit plus base merges", file=sys.stderr)
                 foreign.append(
                     {
