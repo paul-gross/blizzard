@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import MigrationSource
+from blizzard.hub.domain.work import MigrationSource, UsageFact
 
 
 @dataclass(frozen=True)
@@ -37,6 +37,7 @@ class TransitionRecord:
     to_node_id: str
     from_node_id: str | None = None
     decision_id: str | None = None
+    choice_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,7 @@ class MigrationRecord:
     landed_node_id: str | None = None
     source: MigrationSource | None = None
     decision_id: str | None = None
+    choice_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +89,8 @@ class DecisionResolutionRecord:
 
     decision_id: str
     resolved_at: datetime
+    #: The resolved choice's name — never its description.
+    choice: str | None = None
 
 
 @dataclass(frozen=True)
@@ -107,6 +111,71 @@ class ChunkStoppedRecord:
 @dataclass(frozen=True)
 class ChunkCompletedRecord:
     recorded_at: datetime
+
+
+@dataclass(frozen=True)
+class QuestionRecord:
+    """A ``questions`` row with its answer's instant; the question and answer text never ride."""
+
+    question_id: str
+    epoch: int
+    asked_at: datetime
+    answered_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PauseRecord:
+    """A pause fact: ``paused`` sets it, ``paused=False`` lifts it. Carries no ``set_by``."""
+
+    id: str
+    paused: bool
+    set_at: datetime
+
+
+@dataclass(frozen=True)
+class HubExecSlotRecord:
+    """A ``hub_exec_slot`` row — keyed by node, with no epoch."""
+
+    slot_id: str
+    node_id: str
+    acquired_at: datetime
+    released_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class HubPollRecord:
+    """A ``hub_node_poll`` row, recorded at the epoch the chunk arrived at the hub node with."""
+
+    id: str
+    node_id: str
+    epoch: int
+    polled_at: datetime
+
+
+@dataclass(frozen=True)
+class BounceRecord:
+    """A ``chunk_bounces`` row, without its envelope."""
+
+    epoch: int
+    cause: str
+    recorded_at: datetime
+
+
+@dataclass(frozen=True)
+class RouteCreatedRecord:
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class PromotionRecord:
+    promoted_at: datetime
+
+
+@dataclass(frozen=True)
+class PrerequisiteMetRecord:
+    """The instant a prerequisite completed, resolved by the hydrator from the prerequisite's own facts."""
+
+    met_at: datetime
 
 
 @dataclass(frozen=True)
@@ -131,3 +200,15 @@ class StepFacts:
     route_released: tuple[RouteReleasedRecord, ...] = ()
     chunk_stopped: tuple[ChunkStoppedRecord, ...] = ()
     chunk_completed: tuple[ChunkCompletedRecord, ...] = ()
+    questions: tuple[QuestionRecord, ...] = ()
+    pauses: tuple[PauseRecord, ...] = ()
+    hub_exec_slots: tuple[HubExecSlotRecord, ...] = ()
+    hub_polls: tuple[HubPollRecord, ...] = ()
+    bounces: tuple[BounceRecord, ...] = ()
+    routes_created: tuple[RouteCreatedRecord, ...] = ()
+    promotions: tuple[PromotionRecord, ...] = ()
+    prerequisites_met: tuple[PrerequisiteMetRecord, ...] = ()
+    usage: tuple[UsageFact, ...] = ()
+    #: The chunk's work items as pre-rendered source-native tokens (``acme#42``) — the label is a
+    #: configured binding, so it is rendered by the hydrator rather than rebuilt here.
+    work_refs: tuple[str, ...] = ()
