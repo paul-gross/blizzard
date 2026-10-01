@@ -10,22 +10,12 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from blizzard.runner.harness.internal.claude_code_denials import CLAUDE_CODE_DENIED_TOOLS
+
 #: The command a worker's PostToolUse hook runs — a pure client of the local API.
 HEARTBEAT_HOOK_COMMAND = "blizzard runner heartbeat"
 #: The command a worker's SessionEnd hook runs — the "declared done" signal.
 SESSION_END_HOOK_COMMAND = "blizzard runner session-end"
-
-#: Tools that defer work to a future turn a headless worker never gets;
-#: ``TaskOutput``/``TaskStop``/backgrounded ``Bash`` stay reachable on purpose.
-DENIED_TOOLS = (
-    "ScheduleWakeup",
-    "Monitor",
-    "CronCreate",
-    "CronDelete",
-    "CronList",
-    "RemoteTrigger",
-    "EndConversation",
-)
 
 
 @dataclass(frozen=True)
@@ -50,7 +40,7 @@ class WorkerSettings:
                     {"hooks": [{"type": "command", "command": self.session_end}]},
                 ],
             },
-            "permissions": {"deny": list(DENIED_TOOLS)},
+            "permissions": {"deny": list(CLAUDE_CODE_DENIED_TOOLS)},
         }
 
     @property
