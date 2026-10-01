@@ -5,7 +5,7 @@ its earliest ``lease_facts`` row, a ``runner_id`` of ``hub`` meaning hub-owned.
 ``downgrade()`` drops the table and the column, and the owners with them.
 
 Revision ID: 20260930_1000_epoch_owners
-Revises: 20260929_1100_drop_open_pr_facts
+Revises: 20260930_1000_artifact_seq
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260930_1000_epoch_owners"
-down_revision: str | None = "20260929_1100_drop_open_pr_facts"
+down_revision: str | None = "20260930_1000_artifact_seq"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

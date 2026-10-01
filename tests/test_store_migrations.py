@@ -794,7 +794,7 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
     assert _nullable() is True
 
 
-_PRE_EPOCH_OWNERS = "20260929_1100_drop_open_pr_facts"
+_PRE_EPOCH_OWNERS = "20260930_1000_artifact_seq"
 
 
 def test_epoch_owners_backfill_restarts_to_the_hub_and_runner_epochs_to_their_earliest_runner(
@@ -1138,7 +1138,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
     ("hub", "20260914_1000_hub_harness_provenance", "chunks", ("default_harnesses",)),
     ("hub", "20260914_1000_hub_harness_provenance", "routines", ("default_harnesses",)),
     ("hub", "20260916_1000_hub_authored_harnesses", "runner_registrations", ("capabilities",)),
-    ("hub", "20260929_1100_drop_open_pr_facts", "lease_facts", ("lease_id",)),
+    ("hub", "20260930_1000_artifact_seq", "lease_facts", ("lease_id",)),
     # runner tree — instance 6
     (
         "runner",
