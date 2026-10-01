@@ -21,6 +21,10 @@ EventLogKind = Literal[
     "worker-context-warned",
     "attempt-abandoned",
     "work-item-closed",
+    "trace-export-failed",
+    "trace-export-recovered",
+    "trace-window-skipped",
+    "trace-config-rejected",
 ]
 
 #: The closed severity vocabulary; every wire severity field narrows against it.
@@ -41,6 +45,10 @@ EVENT_LOG_SEVERITY: Mapping[EventLogKind, EventLogSeverity] = {
     "worker-context-warned": "warning",
     "attempt-abandoned": "info",
     "work-item-closed": "info",
+    "trace-export-failed": "warning",
+    "trace-export-recovered": "info",
+    "trace-window-skipped": "warning",
+    "trace-config-rejected": "warning",
 }
 
 _EVENT_LOG_KINDS = frozenset(get_args(EventLogKind))

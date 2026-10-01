@@ -49,4 +49,8 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "worker-context-warned": Recorded("runner/loop/steps.py:ContextSample._event", "warning"),
     "attempt-abandoned": Recorded("runner/loop/attempt.py:Attempt.fail", "info"),
     "work-item-closed": Recorded("hub/domain/work_closure.py:CloseIntentDrainer.sweep", "info"),
+    "trace-export-failed": Recorded("hub/domain/tracing/sweep.py:TraceExportSweep.sweep", "warning"),
+    "trace-export-recovered": Recorded("hub/domain/tracing/sweep.py:TraceExportSweep.sweep", "info"),
+    "trace-window-skipped": Recorded("hub/domain/tracing/sweep.py:TraceExportSweep.sweep", "warning"),
+    "trace-config-rejected": Recorded("hub/app.py:_announce_rejected_tracing", "warning"),
 }

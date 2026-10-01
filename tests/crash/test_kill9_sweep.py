@@ -10,6 +10,8 @@ from __future__ import annotations
 import contextlib
 import os
 import signal
+import subprocess
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,8 +64,9 @@ from tests.crash.support import (
     write_runner_config,
 )
 from tests.crash_points import discover_crash_points
+from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.support import free_port
+from tests.support import free_port, write_work_sources
 
 pytestmark = pytest.mark.crash_sweep
 
@@ -85,6 +88,7 @@ _DEDICATED_PREFIXES = (
     "preempt.",
     "close.",
     "usagelimit.",
+    "trace.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -118,6 +122,9 @@ _CLOSE_POINTS = [p for p in _ALL_POINTS if p.startswith("close.")]
 # or judge generation as usage-limited. Swept by
 # `test_kill9_at_usage_limit_crash_point`.
 _USAGE_LIMIT_POINTS = [p for p in _ALL_POINTS if p.startswith("usagelimit.")]
+# `trace.*` fires inside the HUB's trace export sweep, between the exporter's acceptance and
+# the cursor-row append. Swept by `test_kill9_at_trace_crash_point`.
+_TRACE_POINTS = [p for p in _ALL_POINTS if p.startswith("trace.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -191,6 +198,10 @@ _CLOSE_CI_SUBSET = ("close.after-close.before-record",)
 _USAGE_LIMIT_CI_SUBSET = ("usagelimit.worker-after-brake.before-park",)
 
 
+# The trace CI subset: the family's lone member is its own CI representative.
+_TRACE_CI_SUBSET = ("trace.after-export.before-cursor",)
+
+
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
     if os.environ.get("BLIZZARD_CRASH_SWEEP_CI") != "1":
@@ -217,6 +228,7 @@ _DECLARE_COMMIT_SWEEP = _select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSE
 _PREEMPT_SWEEP = _select(_PREEMPT_POINTS, _PREEMPT_CI_SUBSET)
 _CLOSE_SWEEP = _select(_CLOSE_POINTS, _CLOSE_CI_SUBSET)
 _USAGE_LIMIT_SWEEP = _select(_USAGE_LIMIT_POINTS, _USAGE_LIMIT_CI_SUBSET)
+_TRACE_SWEEP = _select(_TRACE_POINTS, _TRACE_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -240,6 +252,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_PREEMPT_POINTS, _PREEMPT_CI_SUBSET))
         | set(_select(_CLOSE_POINTS, _CLOSE_CI_SUBSET))
         | set(_select(_USAGE_LIMIT_POINTS, _USAGE_LIMIT_CI_SUBSET))
+        | set(_select(_TRACE_POINTS, _TRACE_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -3170,3 +3183,125 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         hub.close()
         terminate(runner_proc)
         terminate(hub_proc)
+
+
+# --- The trace export sweep — the hub tells closed steps to an in-test OTLP sink ---
+
+#: Every closed step is exported on the next pass, and a pass runs every second.
+_TRACE_SWEEP_SECONDS = 1
+
+
+def _scaffold_traced_hub(hub_dir: Path) -> None:
+    """Scaffold the hub with no configured work source and the trace sweep tuned to a fast,
+    zero-settle cadence — its ``[tracing]`` knobs set before the hub ever starts."""
+    hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
+    subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
+    write_work_sources(hub_dir, ())
+    toml = hub_dir / "blizzard-hub.toml"
+    text = toml.read_text()
+    for commented, live in (
+        ("# sweep_seconds = 60", f"sweep_seconds = {_TRACE_SWEEP_SECONDS}"),
+        ("# settle_seconds = 300", "settle_seconds = 0"),
+    ):
+        assert commented in text, f"scaffolded hub config no longer renders {commented!r}"
+        text = text.replace(commented, live, 1)
+    toml.write_text(text)
+
+
+def _trace_cursor_rows(hub_dir: Path) -> list[tuple[int, int]]:
+    """Every ``trace_cursor`` row as ``(id, span_count)``, oldest first."""
+    engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(hub_schema.trace_cursor.c.id, hub_schema.trace_cursor.c.span_count).order_by(
+                    hub_schema.trace_cursor.c.id
+                )
+            ).all()
+    finally:
+        engine.dispose()
+    return [(row.id, row.span_count) for row in rows]
+
+
+def _wait_requests(sink: OtlpSink, count: int, *, timeout: float) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and len(sink.requests) < count:
+        time.sleep(0.25)
+
+
+@pytest.mark.parametrize("point", _TRACE_SWEEP)
+def test_kill9_at_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` after the exporter accepted a batch but before its cursor row lands
+    re-sends the same span ids on the next pass, and one cursor row then covers them."""
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+    _scaffold_traced_hub(hub_dir)
+
+    with otlp_sink() as sink:
+        # Tracing is on from the hub's first start, before any step closes: the cursor
+        # opens at enable time, so a step closed earlier would never be told.
+        otel_env = {"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": sink.traces_endpoint}
+        hub_proc = start_hub(
+            hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point, extra_env=otel_env
+        )
+        runner_proc = None
+        hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+        try:
+            await_http(hub, "/api/health", proc=hub_proc)
+            chunk_id, _ = _ingest_close_intent_chunk(hub)
+            write_runner_config(
+                runner_dir,
+                workspace=crash_env.workspace,
+                bin_dir=crash_env.bin_dir,
+                hub_port=hub_port,
+                port=runner_port,
+            )
+            runner_proc = start_runner(runner_dir, crash_point=None)
+
+            code = wait_death(hub_proc, timeout=90.0)
+            assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+            _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+
+            killed_requests = len(sink.requests)
+            assert killed_requests == 1, f"expected one accepted export before the kill, saw {killed_requests}"
+            told_once = [span.span_id for span in sink.spans()]
+            assert told_once, "the export accepted before the kill carried no spans"
+            assert all(count == 0 for _, count in _trace_cursor_rows(hub_dir)), (
+                "a cursor row recorded spans the killed pass never got to record"
+            )
+
+            hub_proc = start_hub(
+                hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, extra_env=otel_env
+            )
+            await_http(hub, "/api/health", proc=hub_proc)
+            status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+            assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
+            _wait_requests(sink, killed_requests + 1, timeout=30.0)
+            # Let any step that closed after the re-send be told too, so every cursor row is final.
+            time.sleep(_TRACE_SWEEP_SECONDS * 3)
+            _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        finally:
+            hub.close()
+            terminate(runner_proc)
+            terminate(hub_proc)
+
+        resent = [
+            span.span_id
+            for request in sink.requests[killed_requests : killed_requests + 1]
+            for rs in request.resource_spans
+            for ss in rs.scope_spans
+            for span in ss.spans
+        ]
+        all_ids = [span.span_id for span in sink.spans()]
+        twice = {span_id: all_ids.count(span_id) for span_id in told_once}
+        assert all(count == 2 for count in twice.values()), f"span ids not told exactly twice: {twice}"
+        assert set(told_once) <= set(resent), "the first pass after restart did not re-send the killed batch"
+
+        advancing = [count for _, count in _trace_cursor_rows(hub_dir) if count > 0]
+        assert advancing, "no cursor row recorded the re-sent batch"
+        assert advancing[0] == len(resent), (
+            f"the first advancing cursor row covers {advancing[0]} spans, not the re-sent {len(resent)}"
+        )
+        assert sum(advancing) == len(sink.spans()) - len(told_once), (
+            "cursor rows do not cover each post-restart span exactly once"
+        )

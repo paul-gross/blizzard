@@ -55,9 +55,12 @@ from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_hub_core, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
 from blizzard.hub.domain.registry import RunnerRetired
+from blizzard.hub.domain.tracing.attributes import resource_attributes
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.trace_export.internal.otlp import OtlpTraceExporter
+from blizzard.hub.trace_export.settings import TracingSettings
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
@@ -105,7 +108,8 @@ class Sweep:
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
         """The forge-status sweep a work source opts into, plus the always-on
-        event-derivation, delivery-materialization, and close-drain sweeps — none on the
+        event-derivation, delivery-materialization, and close-drain sweeps, plus the trace-export
+        sweep when tracing is enabled — none on the
         store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
         here so their recurring cadence decorrelates from its second pass
         on."""
@@ -142,6 +146,15 @@ class Sweep:
             "blizzard.hub.work_closure",
             jitter_seconds=random.uniform(0, CLOSE_DRAIN_INTERVAL_SECONDS),
         )
+        if services.trace_export is not None:
+            every = app.state.config.tracing.sweep_seconds
+            yield cls(
+                services.trace_export,
+                every,
+                app.state.shutdown,
+                "blizzard.hub.trace_export",
+                jitter_seconds=random.uniform(0, every),
+            )
 
     async def _wait(self, timeout: float) -> None:
         with contextlib.suppress(TimeoutError):
@@ -288,6 +301,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         close_forge_writes_enabled=config.close_forge_writes_enabled,
     )
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
+    tracing = TracingSettings.of(os.environ)
 
     # The provider-login seam is built only under `oauth`: under `none`
     # there is no login mechanism to serve.
@@ -310,16 +324,41 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         signing_keys_dir=signing_keys_dir,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=_transcript_caps(config),
+        # No exporter is built unless OpenTelemetry's own variables enable tracing.
+        trace_exporter=(
+            OtlpTraceExporter(resource=resource_attributes(os.environ, __version__)) if tracing.enabled() else None
+        ),
+        tracing=config.tracing,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
         OrphanedProviders.of(config, services).check()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
+        _announce_rejected_tracing(tracing, services)
     app = create_app(config, readiness=readiness, services=services)
+    # The parsed enablement, kept for the trace-status read.
+    app.state.tracing = tracing
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
     return app
+
+
+def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) -> None:
+    """A rejected tracing setting never stops startup: the hub serves with tracing off and
+    records one hub-wide ``trace-config-rejected`` per start, naming the setting."""
+    if tracing.state != "rejected":
+        return
+    services.event_log.record(
+        kind="trace-config-rejected",
+        runner_id=None,
+        chunk_id=None,
+        lease_id=None,
+        node_name=None,
+        message=tracing.rejection_message,
+        detail={"setting": tracing.setting, "value": tracing.value},
+        at=services.clock.now(),
+    )
 
 
 @dataclass(frozen=True)

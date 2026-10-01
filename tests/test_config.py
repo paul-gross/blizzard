@@ -16,7 +16,7 @@ import pytest
 from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
 from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
-from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, WorkSourceConfig
+from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, TracingConfig, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
 from blizzard.runner.config import (
     DEFAULT_RUNNER_CEILING_WINDOW_HOURS,
@@ -1920,3 +1920,72 @@ def test_a_short_or_malformed_session_secret_is_rejected_without_echoing_it(
     with pytest.raises(ConfigError, match="_TEST_SESSION_SECRET") as excinfo:
         RunnerConfig.load(tmp_path / "runner")
     assert value not in str(excinfo.value)
+
+
+@pytest.mark.unit
+def test_tracing_defaults_apply_when_the_table_is_absent(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(f'db_url = "{HubConfig.default_db_url(root)}"\n')
+    assert HubConfig.load(root).tracing == TracingConfig(
+        sweep_seconds=60, settle_seconds=300, batch_limit=200, max_lag_seconds=86400, replay_max_window=604800
+    )
+
+
+@pytest.mark.unit
+def test_tracing_scaffold_renders_every_knob_commented_at_its_default(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    text = HubConfig.scaffold(root).to_toml()
+    assert "[tracing]\n" in text
+    for key, value in dataclasses.asdict(TracingConfig()).items():
+        assert f"# {key} = {value}\n" in text
+    (root / "blizzard-hub.toml").write_text(text)
+    assert HubConfig.load(root).tracing == TracingConfig()
+
+
+@pytest.mark.unit
+def test_tracing_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    tracing = TracingConfig(
+        sweep_seconds=5, settle_seconds=0, batch_limit=10, max_lag_seconds=3600, replay_max_window=7200
+    )
+    config = dataclasses.replace(HubConfig.scaffold(root), tracing=tracing)
+    (root / "blizzard-hub.toml").write_text(config.to_toml())
+    assert HubConfig.load(root).tracing == tracing
+
+
+@pytest.mark.unit
+def test_tracing_parses_from_a_hand_written_table(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(
+        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nsettle_seconds = 0\nbatch_limit = 50\n'
+    )
+    tracing = HubConfig.load(root).tracing
+    assert tracing.settle_seconds == 0
+    assert tracing.batch_limit == 50
+    assert tracing.sweep_seconds == 60
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("sweep_seconds", "0"),
+        ("settle_seconds", "-1"),
+        ("batch_limit", "0"),
+        ("max_lag_seconds", '"1d"'),
+        ("replay_max_window", "true"),
+        ("sweep_seconds", "1.5"),
+    ],
+)
+def test_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value: str) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(
+        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\n{key} = {value}\n'
+    )
+    with pytest.raises(HubConfigError, match=f"tracing.{key}"):
+        HubConfig.load(root)
