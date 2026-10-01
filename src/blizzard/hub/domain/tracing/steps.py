@@ -146,7 +146,7 @@ def _gate_close(facts: StepFacts, decision: DecisionRecord) -> StepClose | None:
 
 def _hub_start(facts: StepFacts, minted_at: datetime) -> datetime:
     """The latest fact that placed the chunk on the hub node before the step's exit."""
-    placed = [a for a in movement_arrivals(facts) if a.recorded_at <= minted_at]
+    placed = [a for a in movement_arrivals(facts) if a.recorded_at < minted_at]
     if not placed:
         return minted_at
     start = placed[-1].recorded_at
