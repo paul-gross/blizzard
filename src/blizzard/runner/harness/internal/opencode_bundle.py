@@ -1,7 +1,4 @@
-"""OpenCode's slice of the operator harness-config bundle.
-
-OpenCode resolves a ``{file:…}`` substitution relative to the config file's directory, so
-``opencode.json`` declares an extractor for those references."""
+"""OpenCode bundle composition, plugin collision checks and snapshot references."""
 
 from __future__ import annotations
 
@@ -112,7 +109,6 @@ def _merge_plugins(found: dict[str, Path], incoming: Mapping[str, Path]) -> None
 
 
 def ambient_plugin_sources(cwd: Path, env: Mapping[str, str]) -> dict[str, Path]:
-    """Reject duplicate identities across the user and cwd-visible project scopes."""
     home = Path(env.get("HOME", str(Path.home())))
     user = Path(env.get("XDG_CONFIG_HOME", str(home / ".config"))) / "opencode"
     scopes = [user]
@@ -142,7 +138,6 @@ def ambient_plugin_sources(cwd: Path, env: Mapping[str, str]) -> dict[str, Path]
 
 
 def check_ambient_plugins(effective_dir: Path, cwd: Path, env: Mapping[str, str]) -> None:
-    """Fail before launch when the native loader would register two copies of a plugin."""
     document = json.loads((effective_dir / "opencode.json").read_text(encoding="utf-8"))
     found = _plugins(document, effective_dir / "opencode.json")
     _merge_plugins(found, _directory_plugins(effective_dir / "plugins"))
