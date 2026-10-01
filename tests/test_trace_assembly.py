@@ -564,3 +564,31 @@ def test_requeue_marks_claimable_and_unrelated_helpers_import() -> None:
     )
     queue = _by_name(_step(facts))["queue wait"]
     assert (queue.start, queue.end) == (fx.at(8), fx.at(12))
+
+
+def test_a_move_back_onto_the_same_node_is_next_not_retry() -> None:
+    facts = fx.make_facts(
+        transitions=(fx.to("g1", "build", 30, 1), fx.to("g1", "gate", 90, 2)),
+        **fx.merge(fx.runner_epoch(1, 10), fx.runner_epoch(2, 50)),
+    )
+    steps = identify_steps(facts)
+    (link,) = assemble_step(facts, steps[1])[0].links
+    assert link.attributes[attr.LINK_REASON] == "next"
+
+
+def test_a_hub_node_step_names_the_hub_executor() -> None:
+    facts = _hub_facts(transitions=(fx.to("g1", "build", 100, 2),))
+    root = _step(facts)[0]
+    assert root.attributes[attr.NODE_EXECUTOR] == "hub"
+    assert attr.RUNNER_ID not in root.attributes
+
+
+def test_gate_choice_comes_from_the_resolution() -> None:
+    facts = fx.make_facts(
+        decisions=(DecisionRecord("d1", "g1-gate", 1, fx.at(20)),),
+        decision_resolutions=(DecisionResolutionRecord("d1", fx.at(40), choice="approve"),),
+        transitions=(fx.to("g1", "build", 500, 2, decision_id="d1"),),
+        **fx.runner_epoch(1, 10),
+    )
+    root = _step(facts, 1)[0]
+    assert root.attributes[attr.STEP_CHOICE] == "approve"
