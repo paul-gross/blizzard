@@ -43,6 +43,7 @@ def build_production_harness_registry(
         adapter = ClaudeCodeAdapter(
             binary=config.harness_binary,
             settings_path=config.worker_settings_path,
+            autonomy=config.autonomy,
             permission_mode=config.harness_permission_mode,
             worker_env=config.worker_env,
             model_aliases=config.model_aliases,

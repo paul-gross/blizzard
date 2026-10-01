@@ -41,6 +41,7 @@ def build_opencode_binding(
         model_aliases=config.opencode_model_aliases,
         effort_aliases=config.opencode_effort_aliases,
         worker_config_path=config.opencode_worker_config_path,
+        autonomy=config.autonomy,
         transcript_source=transcript_source,
         price_catalog=price_catalog,
         descendant_usage=OpenCodeDescendantUsage(exporter),

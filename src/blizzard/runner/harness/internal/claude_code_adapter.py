@@ -25,6 +25,7 @@ from blizzard.runner.harness.adapter import (
     WorkerHandle,
     WorkerPreamble,
 )
+from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.overload import ProviderOverload
@@ -69,6 +70,14 @@ _RATE_LIMIT_RESET_RE = re.compile(r"resets\s+(\d{1,2}):(\d{2})\s*([ap]m)\s*\(([^
 # An overloaded synthetic record's own text names the status or the provider's own error
 # name — never a generic 5xx: any other server error stays unclassified.
 _OVERLOAD_TEXT_RE = re.compile(r"529|overloaded", re.IGNORECASE)
+
+
+# Claude Code's own vocabulary for each runner-wide autonomy value (`--permission-mode`).
+_PERMISSION_MODES = {
+    Autonomy.Normal: "manual",
+    Autonomy.Auto: "auto",
+    Autonomy.Dangerous: "bypassPermissions",
+}
 
 
 def _matches_model(expected: str, observed: str) -> bool:
@@ -145,6 +154,7 @@ class ClaudeCodeAdapter:
         binary: str = "claude",
         *,
         settings_path: str | None = None,
+        autonomy: Autonomy = Autonomy.Dangerous,
         permission_mode: str | None = None,
         model: str = DEFAULT_WORKER_MODEL,
         worker_env: AllowlistedEnv,
@@ -164,9 +174,10 @@ class ClaudeCodeAdapter:
         # Values already logged as unrecognized, so the notice fires once per value.
         self._unrecognized_efforts: set[str] = set()
         self._unrecognized_compaction_windows: set[str] = set()
-        # A non-interactive worker has no one to approve tool use, so the default mode
-        # lets it inspect but never build. ``None`` omits the flag.
-        self._permission_mode = permission_mode
+        # The legacy `harness_permission_mode` override: a non-empty string replaces the
+        # mapped flags entirely, an empty one omits them, `None` defers to `autonomy`.
+        self._autonomy = autonomy
+        self._permission_override = permission_mode
         # The one allowlisted env (``bzh:worker-env-allowlist``) every child this adapter
         # launches is built from — the declared passthrough plus any `PATH` prepend.
         self._worker_env = worker_env
@@ -285,8 +296,7 @@ class ClaudeCodeAdapter:
             cmd += ["--session-id", session_id]
         if self._settings_path:
             cmd += ["--settings", self._settings_path]
-        if self._permission_mode:
-            cmd += ["--permission-mode", self._permission_mode]
+        cmd += self._permission_args()
         # The preamble is composed in the core; the adapter only concatenates it ahead of
         # the envelope prompt (``bzh:deterministic-shell``).
         cmd.append("\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part))
@@ -353,8 +363,7 @@ class ClaudeCodeAdapter:
         # `test_judge_prefix_matches_resume_with_messages_settings_and_effort`.
         if self._settings_path:
             cmd += ["--settings", self._settings_path]
-        if self._permission_mode:
-            cmd += ["--permission-mode", self._permission_mode]
+        cmd += self._permission_args()
         cmd.append(judgement_prompt)
         env = (
             self.identity_env(preamble, chunk_id, session_id, elicitation=True)
@@ -408,8 +417,7 @@ class ClaudeCodeAdapter:
         # on its own, and a resume does not carry the original spawn's `--settings`.
         if self._settings_path:
             cmd += ["--settings", self._settings_path]
-        if self._permission_mode:
-            cmd += ["--permission-mode", self._permission_mode]
+        cmd += self._permission_args()
         cmd.append(message)
         # Re-supply the per-lease identity: a resume inherits none of the spawn env, and
         # the token plaintext is never persisted, so the caller re-mints it.
@@ -429,6 +437,18 @@ class ClaudeCodeAdapter:
             confirm_durable=launched.confirm_durable,
         )
 
+    def _permission_args(self, *, attended: bool = False) -> list[str]:
+        """The one owner of the permission argv: the legacy override when set, else the
+        mapped autonomy. ``--permission-prompts none`` denies anything that would prompt, so
+        it rides only the unattended ``Normal`` mapping — an attended takeover has an operator
+        to answer."""
+        if self._permission_override is not None:
+            return ["--permission-mode", self._permission_override] if self._permission_override else []
+        args = ["--permission-mode", _PERMISSION_MODES[self._autonomy]]
+        if self._autonomy is Autonomy.Normal and not attended:
+            args += ["--permission-prompts", "none"]
+        return args
+
     def resume_command(
         self,
         session_cwd: str,
@@ -440,9 +460,9 @@ class ClaudeCodeAdapter:
     ) -> str:
         # Asserted only for the ATTENDED composition: the unattended string is
         # run in a bare terminal, so it stays at the interactive permission default.
-        mode = self._permission_mode if attended else None
-        parts = (("model", model), ("effort", effort), ("permission-mode", mode))
-        flags = "".join(f" --{name} {value}" for name, value in parts if value)
+        flags = "".join(f" --{name} {value}" for name, value in (("model", model), ("effort", effort)) if value)
+        if attended:
+            flags += "".join(f" {arg}" for arg in self._permission_args(attended=True))
         return f"cd {session_cwd} && {self._binary} --resume {session_id}{flags}"
 
     def parse_verdict(self, output: str) -> str | None:

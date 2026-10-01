@@ -112,9 +112,9 @@ def test_the_advertised_paste_string_never_carries_the_permission_mode(spawn_exe
 
 
 @pytest.mark.unit
-def test_resume_command_without_a_permission_mode_stays_bare(spawn_executor: Executor) -> None:
+def test_resume_command_with_an_empty_permission_override_stays_bare(spawn_executor: Executor) -> None:
     assert (
-        _adapter(spawn_executor, binary="claude").resume_command("/ws/e1", "sess-x", attended=True)
+        _adapter(spawn_executor, binary="claude", permission_mode="").resume_command("/ws/e1", "sess-x", attended=True)
         == "cd /ws/e1 && claude --resume sess-x"
     )
 
@@ -725,7 +725,7 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path, spawn_executor: 
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
     os.waitpid(handle.pid, 0)  # let the fire-and-forget child finish
     assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")  # ran in the acquired workdir
-    assert "--permission-mode" not in (workdir / "argv.txt").read_text()  # omitted when unset
+    assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()  # the autonomy default
     assert "--model claude-opus-5" in (workdir / "argv.txt").read_text()  # pinned Opus, not the ambient default
 
 
