@@ -364,7 +364,10 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
         ]
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
-        with mock_runner(bin_dir, _free_port(), hub_port) as runner, sync_playwright() as pw:
+        with (
+            mock_runner(bin_dir, _free_port(), hub_port, runner_id="activity-pusher") as runner,
+            sync_playwright() as pw,
+        ):
             assert runner.post("/_drive/register").status_code == 200
             browser = pw.chromium.launch(headless=True)
             page = browser.new_page()
