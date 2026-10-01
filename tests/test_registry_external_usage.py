@@ -224,9 +224,7 @@ def test_a_lapsed_sibling_does_not_blank_a_healthy_ones_view() -> None:
     assert healthy_view.condition is None
 
 
-# --------------------------------------------------------------------------- #
 # The declared-roster path — membership is roster-gated, not age-gated.
-# --------------------------------------------------------------------------- #
 
 
 def _declared(*slugs: str) -> tuple[DeclaredSubscription, ...]:

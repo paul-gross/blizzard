@@ -1,11 +1,7 @@
-"""Epoch ownership fences a displaced attempt level with its successor (component tier).
+"""Component checks for epoch ownership after restart or reclaim.
 
-``bzh:epoch-fencing``: level is displaced. A restart takes the next epoch for the hub, and a
-claim reserves it for its claimant, so a displaced runner's buffered ``lease.minted`` — and
-every completion, decision, question, or escalation it then submits at that epoch — is
-refused, never recorded, however the drain orders it. Every case runs with
-``route_token_mode=warn`` and presents a valid or absent route token, so the owner check
-alone does the refusing."""
+Displaced mints and writes at the successor's epoch are refused regardless of
+drain order (``bzh:epoch-fencing``). Warn-mode route tokens isolate this fence."""
 
 from __future__ import annotations
 
@@ -315,6 +311,5 @@ def test_several_displaced_mints_above_the_reservation_are_refused(tmp_path: Pat
 
     assert b.mint(2)
     _b_completes(chunk, b)
-    # B's next node-step takes the fresh epoch A never got to own.
     assert b.mint(3)
     assert b.complete(chunk.nodes["review"], epoch=3)["outcome"] == "done"

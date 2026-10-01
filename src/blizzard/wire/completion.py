@@ -22,16 +22,14 @@ class SubmittedArtifact(BaseModel):
 
     name: str
     kind: ArtifactKind
-    # git_commit variant — the branch is pushed to the forge before submission. `forge` is
-    # the worker's own declared origin.
+    # Pushed git_commit; forge is the worker's declared origin.
     forge: str | None = None
     repo: str | None = None
     branch_name: str | None = None
     commit_hash: str | None = None
     # asset variant
     content: str | None = None
-    # True when this asset's content came from an explicit attach rather
-    # than the judgement assessment fallback.
+    # Explicit attach, rather than the judgement fallback.
     attached: bool = False
 
 
@@ -138,19 +136,14 @@ class CompletionSubmission(BaseModel):
     epoch: int  # the executing lease's fence, checked against the chunk's latest
     runner_id: str
     from_node_id: str
-    # The runner-executed check facts — ``(command, passed)`` per command;
-    # empty for a node with no ``checks:``.
+    # Runner-executed checks; empty when no checks are declared.
     check_results: list[CheckResult] = []
     artifacts: list[SubmittedArtifact] = []
-    # Proposed work items (`create` or `update`, discriminated on `kind`) riding this
-    # completion — legal only from a node declaring `proposes_work_items`.
+    # Legal only from nodes declaring `proposes_work_items`.
     proposals: list[WorkItemProposal] = []
-    # Set only on a gate-resolving transition. Its presence is what makes a transition
-    # out of a human-judged node legal; without it the transition is rejected.
+    # Required to transition out of a human-judged gate.
     decision_id: str | None = None
-    # The route capability token stamped at enqueue — evidence the submitter
-    # still holds the chunk's live route. Optional: the hub does not reject on it.
+    # Enqueue-time route token; optional, not hub-enforced.
     route_token: str | None = None
-    # The submitting attempt's lease — matched against its epoch's owning lease when both
-    # are known. Optional: a submission without it is matched on its runner alone.
+    # Optional owning-lease check; absent it, match the runner alone.
     lease_id: str | None = None

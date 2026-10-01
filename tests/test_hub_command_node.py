@@ -634,7 +634,6 @@ def test_produces_marker_skips_an_already_run_step(tmp_path: Path) -> None:
     apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
     assert apply.json()["outcome"] == "hub_node_taken"
 
-    # The step's own command never ran — skipped on the pre-existing marker.
     assert runner.calls == []
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
@@ -642,11 +641,8 @@ def test_produces_marker_skips_an_already_run_step(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Path) -> None:
-    """The mid-run marker callback (#65) mints its epoch before the ``run:`` list starts
-    and keeps it live for the whole run. A restart landing inside that window has
-    already re-aimed the chunk, so a marker the stale run still tries to write must be
-    refused — not just the exit transition (``bzh:epoch-fencing``): a `merged/<repo>`
-    marker also marks a repo landed, which a superseded run must not get to do."""
+    """A restart during ``run:`` fences a stale merged marker and its landing
+    side effect (``bzh:epoch-fencing``)."""
     runner = FakeHubCommandRunner()
     workdir = FakeHubWorkdir()
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
@@ -674,11 +670,8 @@ def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Pa
 
 @pytest.mark.component
 def test_a_stopped_chunk_fences_out_a_still_running_marker_write(tmp_path: Path) -> None:
-    """``record_stop`` mints no epoch, so the ``run:`` list's still-live
-    epoch is exactly the chunk's newest — the epoch guard alone is inert against a stop,
-    unlike the restart case above. The regardless-of-epoch half of ``bzh:epoch-fencing``
-    is the only fence a marker write arriving after a stop has, and it must still hold:
-    no artifact row, no repo landed, no close enqueued."""
+    """Stop mints no epoch: terminality must fence the still-current run's marker
+    (``bzh:epoch-fencing``), landing and close intent."""
     runner = FakeHubCommandRunner()
     workdir = FakeHubWorkdir()
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
@@ -866,8 +859,7 @@ def test_nonzero_exit_maps_to_default_failure_edge(tmp_path: Path) -> None:
     assert detail["current_node_name"] == "build"
 
 
-#: `merge` authors only `success`, so a non-zero exit here defaults to `failure`, which
-#: no edge names.
+#: No `failure` edge for a non-zero merge exit.
 _UNROUTABLE_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
     """        failure:
           description: Failed to land.
@@ -883,11 +875,8 @@ def _event_logged_frames(hub, *, since: int = 0) -> list[dict]:  # type: ignore[
 
 @pytest.mark.component
 def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> None:
-    """A step exiting non-zero into an outcome the graph never authored strands the
-    node, re-polling the identical failure forever with no retry/bounce consumed —
-    but must announce itself exactly once per (node, epoch), not flood the event feed —
-    and publishes exactly one ``critical`` ``event-logged`` frame per node epoch, none on
-    a repeat visit at the same epoch (event-recording-publishes AC3)."""
+    """An unroutable failure strands the node but emits one critical event per
+    (node, epoch), even on repeat polls (event-recording-publishes AC3)."""
     runner = FakeHubCommandRunner()
     runner.arm("land-the-repo", CommandResult(exit_code=1, stdout="", stderr="boom"))
     hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
@@ -897,8 +886,7 @@ def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> No
     apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
     assert apply.json()["outcome"] == "hub_node_taken"
 
-    # Stranded on `merge`: nothing routed, so the node still holds the chunk — and it
-    # reads as a healthy `delivering`, which is exactly why the announcement matters.
+    # Unrouted `merge` still reads as `delivering`.
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "delivering"
     assert detail["current_node_name"] == "merge"
@@ -1494,9 +1482,8 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     assert detail["status"] == "running"  # below the cap (1) — routed back, not escalated
     assert len(detail["bounces"]) == 1
 
-    # Re-submit build -> merge a second time (bounce_cap: 1 means bounce #2 escalates).
-    # Advance the clock first: same-epoch transitions tie-break by `recorded_at`.
-    # The routed-back build mints above the hub's own exit epoch (2), which the hub owns.
+    # Bounce #2 escalates; advance the clock for the transition tie-break.
+    # Build mints above the hub-owned exit epoch (2).
     hub.clock.advance(timedelta(seconds=1))
     report_lease(hub, chunk_id, epoch=3, seq=2)
     second_build_node = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
