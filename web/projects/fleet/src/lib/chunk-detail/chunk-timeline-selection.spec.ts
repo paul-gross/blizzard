@@ -97,6 +97,7 @@ const TWO_GRAPH_DETAIL: ChunkDetail = {
       landed_node_name: 'build',
       choice_name: 'migrate',
       model: 'claude-sonnet-5',
+      epoch: 2,
       recorded_at: '2026-07-13T00:00:02Z',
     },
   ],
@@ -213,9 +214,12 @@ describe('ChunkTimelineSelection', () => {
     expect(el.querySelector('[data-testid="selection-active"]')?.getAttribute('role')).toBe('button');
   });
 
-  it('never makes a migration row activatable (D1)', async () => {
+  it.each(['restart', 'intent', 'follow-latest', null])('leaves %s migrations inert even with an origin node', async (source) => {
     const fixture = TestBed.createComponent(ChunkTimelineSelection);
-    fixture.componentRef.setInput('detail', TWO_GRAPH_DETAIL);
+    fixture.componentRef.setInput('detail', {
+      ...TWO_GRAPH_DETAIL,
+      migrations: [{ ...TWO_GRAPH_DETAIL.migrations![0], source }],
+    });
     const emitted: (string | null)[] = [];
     fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
     await fixture.whenStable();
@@ -223,8 +227,44 @@ describe('ChunkTimelineSelection', () => {
 
     const migration = el.querySelector('[data-testid="selection-migration-step"]') as HTMLElement;
     expect(migration.getAttribute('role')).toBeNull();
+    expect(migration.getAttribute('data-step-key')).toBeNull();
     migration.click();
     expect(emitted).toEqual([]);
+  });
+
+  it('activates the producing triage step by click, Enter and Space and marks it selected', async () => {
+    const fixture = TestBed.createComponent(ChunkTimelineSelection);
+    fixture.componentRef.setInput('detail', {
+      ...TWO_GRAPH_DETAIL,
+      migrations: [{ ...TWO_GRAPH_DETAIL.migrations![0], source: 'authored-edge' }],
+    });
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
+    await fixture.whenStable();
+    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="selection-migration-step"]') as HTMLElement;
+    expect(row.getAttribute('data-step-key')).toBe('nd_s_review:2');
+    expect(row.getAttribute('role')).toBe('button');
+    row.click();
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    expect(emitted).toEqual(['nd_s_review:2', 'nd_s_review:2', 'nd_s_review:2']);
+    fixture.componentRef.setInput('selectedKey', 'nd_s_review:2');
+    await fixture.whenStable();
+    expect(row.classList.contains('selected')).toBe(true);
+    row.click();
+    expect(emitted.at(-1)).toBeNull();
+  });
+
+  it.each(['intent', 'follow-latest', 'restart', 'authored-edge'])('keeps a null-origin %s migration unkeyed', async (source) => {
+    const fixture = TestBed.createComponent(ChunkTimelineSelection);
+    fixture.componentRef.setInput('detail', {
+      ...TWO_GRAPH_DETAIL,
+      migrations: [{ ...TWO_GRAPH_DETAIL.migrations![0], from_node_id: null, source }],
+    });
+    await fixture.whenStable();
+    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="selection-migration-step"]') as HTMLElement;
+    expect(row.getAttribute('role')).toBeNull();
+    expect(row.getAttribute('data-step-key')).toBeNull();
   });
 
   it('renders no heading of its own', async () => {

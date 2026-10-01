@@ -240,8 +240,9 @@ class TransitionView(BaseModel):
 class MigrationView(BaseModel):
     """One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto
     ``landed_node`` in ``to_graph`` — its own step, never a transition. A transition-borne source ends
-    the attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the
-    re-pinned model, null when the chunk kept its own. ``source`` attributes it."""
+    the attempt and re-queues; ``restart`` preempts it and keeps the route. ``model`` is the
+    re-pinned model, null when the chunk kept its own. ``source`` attributes it, and ``epoch``
+    records the submitting step's epoch for an authored-edge migration."""
 
     from_node_id: str | None
     from_node_name: str | None = None
@@ -254,6 +255,7 @@ class MigrationView(BaseModel):
     choice_name: str | None = None
     model: str | None = None
     source: str | None = None
+    epoch: int
     recorded_at: str
 
 

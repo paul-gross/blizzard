@@ -506,6 +506,7 @@ class ChunkHistoryView:
                 choice_name=m.choice_name,
                 model=m.model,
                 source=m.source.value if m.source is not None else None,
+                epoch=m.epoch,
                 recorded_at=iso_utc(m.recorded_at),
             )
             for m in sorted(self.facts.migrations, key=lambda m: (m.recorded_at, m.epoch))
