@@ -115,6 +115,43 @@ def test_effective_bundle_environment_reaches_identity_and_fallback_launches(
         assert env["OPENCODE_CONFIG_DIR"] == str(effective)
 
 
+@pytest.mark.unit
+def test_effective_bundle_is_delivered_to_every_launch_kind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
+    effective = tmp_path / "effective"
+    effective.mkdir()
+    config = effective / "opencode.json"
+    config.write_text('{"permission":{"question":"deny"},"plugin":[]}')
+    workdir = tmp_path / "project"
+    workdir.mkdir()
+    captured: list[dict[str, str]] = []
+
+    class FakeProcess:
+        pid = 9999999
+
+    def launch(cmd: list[str], **kwargs: Any) -> FakeProcess:
+        captured.append(kwargs["env"])
+        return FakeProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", launch)
+    adapter = _adapter(spawn_executor, worker_config_path=str(config), effective_config_dir=str(effective))
+    preamble = _preamble(str(workdir), stdout_path=str(tmp_path / "spawn.out"))
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    adapter.spawn(envelope, preamble, None)
+    adapter.spawn(envelope, preamble, None, resume_from="ses_prior")
+    adapter.resume_with_message(str(workdir), "ses_prior", "continue", preamble=preamble)
+    adapter.judge(str(workdir), "ses_prior", "assess", str(tmp_path / "judge.out"), preamble=preamble)
+    adapter.resume_with_message(str(workdir), "ses_prior", "continue")
+    adapter.judge(str(workdir), "ses_prior", "assess", str(tmp_path / "fallback.out"))
+
+    assert len(captured) == 6
+    for env in captured:
+        assert env["OPENCODE_CONFIG"] == str(config)
+        assert env["OPENCODE_CONFIG_CONTENT"] == config.read_text()
+        assert env["OPENCODE_CONFIG_DIR"] == str(effective)
+
+
 # --------------------------------------------------------------------------- #
 # The one command builder: every non-interactive kind carries `--format json`.
 

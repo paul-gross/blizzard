@@ -154,6 +154,12 @@ def _compose(composition: HarnessComposition, worker_config_path: Path) -> None:
     operator_plugins = _plugins(document, native)
     _merge_plugins(operator_plugins, _directory_plugins(source / "plugins"))
     runner_plugins = _plugins(worker, worker_config_path)
+    for identity, runner_path in runner_plugins.items():
+        if identity in operator_plugins:
+            operator_path = operator_plugins[identity]
+            raise HarnessBundleError(
+                operator_path, f"duplicate plugin {identity!r} at {operator_path} and {runner_path}"
+            )
     _merge_plugins(operator_plugins, runner_plugins)
     document["permission"] = {**permission, **worker["permission"]}
     document["plugin"] = [*document.get("plugin", []), *worker["plugin"]]

@@ -51,6 +51,22 @@ def test_collision_keeps_previous_snapshot(tmp_path: Path) -> None:
     assert published_snapshot(runtime) == first.path.resolve()
 
 
+def test_runner_plugin_collision_names_native_source_and_keeps_snapshot(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
+    worker = json.loads((runtime / "opencode-worker-config.json").read_text())
+    native = bundle / "opencode" / "opencode.json"
+    shutil.rmtree(bundle / "opencode" / "prompts")
+    native.write_text(json.dumps({"plugin": worker["plugin"]}))
+
+    with pytest.raises(HarnessBundleError) as raised:
+        publish_harness_bundle(bundle, runtime)
+    assert raised.value.path == native
+    assert str(runtime / "opencode-worker-config.json") in str(raised.value)
+    assert published_snapshot(runtime) == first.path.resolve()
+
+
 def test_plugin_identities_across_scopes(tmp_path: Path) -> None:
     assert plugin_identity("@vendor/extra@1.2") == "@vendor/extra"
     assert plugin_identity("file:///tmp/Extra.ts") == "extra"
@@ -75,6 +91,28 @@ def test_plugin_identities_across_scopes(tmp_path: Path) -> None:
     user.mkdir(parents=True)
     (user / "opencode.jsonc").write_text('// user plugins\n{"plugin": ["file:///elsewhere/extra.js",],}')
     with pytest.raises(HarnessBundleError, match=r"extra\.ts.*opencode\.jsonc"):
+        check_ambient_plugins(snapshot.path / "opencode", project, {"HOME": str(home)})
+
+
+def test_ambient_directory_plugins_collide_with_operator_and_each_other(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    (bundle / "opencode" / "plugins").mkdir()
+    (bundle / "opencode" / "plugins" / "duplicate.ts").write_text("export const Plugin = () => ({})")
+    snapshot = publish_harness_bundle(bundle, runtime)
+    project = tmp_path / "project"
+    local_plugins = project / ".opencode" / "plugins"
+    local_plugins.mkdir(parents=True)
+    (local_plugins / "DUPLICATE.js").write_text("export const Plugin = () => ({})")
+    home = tmp_path / "home"
+    global_plugins = home / ".config" / "opencode" / "plugins"
+    global_plugins.mkdir(parents=True)
+    with pytest.raises(HarnessBundleError, match=r"duplicate\.ts.*DUPLICATE\.js"):
+        check_ambient_plugins(snapshot.path / "opencode", project, {"HOME": str(home)})
+    (bundle / "opencode" / "plugins" / "duplicate.ts").unlink()
+    snapshot = publish_harness_bundle(bundle, runtime)
+    (global_plugins / "duplicate.mjs").write_text("export const Plugin = () => ({})")
+    with pytest.raises(HarnessBundleError, match=r"duplicate\.mjs.*DUPLICATE\.js"):
         check_ambient_plugins(snapshot.path / "opencode", project, {"HOME": str(home)})
 
 
