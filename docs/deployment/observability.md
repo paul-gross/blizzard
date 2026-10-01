@@ -28,10 +28,11 @@ alongside that remedy; either way, clearing the escalation still takes one of th
 existing session to name — every member of the node's acceptable harness set ([worker-spawn.md](./worker-spawn.md) owns
 that set and its resolution) is unknown, unavailable, **unhealthy**, or resolves none of the session's model preference.
 **Unhealthy** is distinct from unavailable: a bound harness with every capability wired can still fail its own computed
-health — a missing binary, an incompatible or unknown observed version, failed authentication, an unmapped configured
-tier, or a recorded selftest failure, all visible with their cause in this runner's own `GET /api/harness-health`
-diagnostics, never in this escalation. The chunk escalates in place rather than minting under the runner's default
-harness; with no session ever spawned, the escalation carries no takeover command either.
+health — a missing binary, an incompatible or unknown observed version, failed authentication, a `config_conflict` (an
+ambient setting that defeats the runner's own wiring), an unmapped configured tier, or a recorded selftest failure, all
+visible with their cause in this runner's own `GET /api/harness-health` diagnostics, never in this escalation. The chunk
+escalates in place rather than minting under the runner's default harness; with no session ever spawned, the escalation
+carries no takeover command either.
 
 Escalations appear in the same feed as a needs-human event kind — one row, one surface; a row leaves when its escalation
 is superseded by any of a requeue, an operator `chunk restart`, the next attempt's lease, or the chunk ending `stopped`
@@ -71,9 +72,9 @@ occurrences (including distinct claims and node transitions), questions and deci
 pause/resume facts — newest-first, bounded by `since` (default 24 hours back) and `limit` (default 200, refused past
 200), gated like `GET /api/events`. Activity orders by pure recency, the event log being the triage view. The rail
 continues live over the same stream: only chunk frames with causes represented in the durable activity read enter the
-feed. Lease and usage telemetry still refresh chunk and spend views but do not repeat a transition row. Frames sharing
-a fact-identity key occupy one row across event types, replay, and backfill; a claim reads as “claimed” rather than as
-the chunk's previous transition.
+feed. Lease and usage telemetry still refresh chunk and spend views but do not repeat a transition row. Frames sharing a
+fact-identity key occupy one row across event types, replay, and backfill; a claim reads as “claimed” rather than as the
+chunk's previous transition.
 
 ## List pagination
 
@@ -89,8 +90,8 @@ over the full backing set.
 `GET /api/chunks?board_window=true` is the board's own read: it omits every `done` chunk that finished more than 48
 hours ago, and keeps `stopped` and non-terminal chunks of any age. A windowed page can come back short of `limit`;
 `next_cursor` is still `null` exactly on the last page. Without the param the list is unfiltered. An omitted chunk still
-answers by id at `GET /api/chunks/{chunk_id}`. `GET /api/chunk-counts` serves the all-time count per derived status, plus
-a `total`, over exactly the chunks the unfiltered list pages over — the counts ignore the window.
+answers by id at `GET /api/chunks/{chunk_id}`. `GET /api/chunk-counts` serves the all-time count per derived status,
+plus a `total`, over exactly the chunks the unfiltered list pages over — the counts ignore the window.
 
 ## Demo mode
 

@@ -29,6 +29,7 @@ from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
@@ -228,6 +229,32 @@ def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_pa
         assert isinstance(harness, ClaudeCodeAdapter)
         assert harness._settings_path == settings
         assert harness._permission_override == "acceptEdits"
+
+
+@pytest.mark.unit
+def test_process_graph_delivers_the_published_snapshot_to_the_claude_code_adapter(tmp_path: Path) -> None:
+    """The snapshot's real (resolved) path, never the ``current`` symlink, reaches the adapter."""
+    bundle = tmp_path / "bundle"
+    (bundle / "claude-code").mkdir(parents=True)
+    (bundle / "claude-code" / "mcp.json").write_text("{}")
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_root=str(tmp_path / "workspace"),
+        worker_settings_path=str(tmp_path / "worker-settings.json"),
+    )
+    snapshot = publish_harness_bundle(bundle, tmp_path)
+
+    graph = build_runner_process(config, bundle=snapshot)
+    try:
+        adapter = graph.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
+        assert isinstance(adapter, ClaudeCodeAdapter)
+        argv = adapter._settings_args()
+    finally:
+        graph.close()
+
+    effective = snapshot.path.resolve() / "claude-code"
+    assert argv == ["--settings", str(effective / "settings.json"), f"--mcp-config={effective / 'mcp.json'}"]
 
 
 @pytest.mark.unit

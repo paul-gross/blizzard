@@ -15,6 +15,7 @@ from packaging.specifiers import SpecifierSet
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.internal import harness_shared
+from blizzard.runner.harness.internal.claude_code_ambient import AmbientSources, detect_ambient_conflicts
 from blizzard.runner.subscriptions.subscription_sampler import ANTHROPIC_DEFAULT_CREDENTIALS_PATH
 
 # Currently >=2.1,<3.0, corpus-free: membership via `version_admitted` admits it alone.
@@ -49,8 +50,19 @@ class ClaudeCodeHealthProbe:
     IHarnessHealthProbe`. Dumb, like the adapter it stands beside: reports evidence,
     never decides availability."""
 
-    def __init__(self, binary: str = "claude", *, credentials_path: str | None = None) -> None:
+    def __init__(
+        self,
+        binary: str = "claude",
+        *,
+        credentials_path: str | None = None,
+        ambient_sources: AmbientSources | None = None,
+        permission_mode: str | None = None,
+    ) -> None:
         self._binary = binary
+        # Injected search locations and the resolved permission mode (`bzh:dependency-injection`):
+        # the probe never consults the daemon's own ambient state.
+        self._ambient_sources = ambient_sources
+        self._permission_mode = permission_mode
         # Injectable for testability (`bzh:dependency-injection`); defaults to the same
         # OAuth credential file `AnthropicSubscriptionSampler` already reads for usage sampling.
         self._credentials_path = Path(credentials_path or ANTHROPIC_DEFAULT_CREDENTIALS_PATH)
@@ -82,6 +94,12 @@ class ClaudeCodeHealthProbe:
             return False
         access_token = oauth.get("accessToken")
         return isinstance(access_token, str) and bool(access_token)
+
+    def config_conflicts(self) -> tuple[str, ...]:
+        if self._ambient_sources is None:
+            return ()
+        found = detect_ambient_conflicts(self._ambient_sources, self._permission_mode)
+        return tuple(str(conflict) for conflict in found)
 
     def supported_version(self) -> SpecifierSet:
         return ADMITTED_CLAUDE_CODE_RANGE

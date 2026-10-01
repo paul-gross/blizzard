@@ -205,3 +205,20 @@ def test_priority_order_reports_only_the_highest_priority_cause(
     result = evaluate_harness_health(_evidence(**overrides))
     assert result.available is False
     assert result.cause is expected_cause
+
+
+def test_a_config_conflict_withholds_availability() -> None:
+    result = evaluate_harness_health(_evidence(config_conflicts=("managed settings /etc/x.json: disableAllHooks",)))
+
+    assert result.available is False
+    assert result.cause is HarnessHealthCause.CONFIG_CONFLICT
+
+
+def test_config_conflict_ranks_after_authentication_failure_and_before_unmapped_tier() -> None:
+    conflicts = ("managed settings /etc/x.json: disableAllHooks",)
+
+    unauthenticated = evaluate_harness_health(_evidence(authenticated=False, config_conflicts=conflicts))
+    unmapped = evaluate_harness_health(_evidence(unmapped_tiers=("opus",), config_conflicts=conflicts))
+
+    assert unauthenticated.cause is HarnessHealthCause.AUTHENTICATION_FAILURE
+    assert unmapped.cause is HarnessHealthCause.CONFIG_CONFLICT

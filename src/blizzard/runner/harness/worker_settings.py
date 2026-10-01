@@ -41,6 +41,9 @@ class WorkerSettings:
                 ],
             },
             "permissions": {"deny": list(CLAUDE_CODE_DENIED_TOOLS)},
+            # Neutralizes an ambient user- or project-level `disableAllHooks: true`, which would
+            # otherwise silence the two hooks above without any signal.
+            "disableAllHooks": False,
         }
 
     @property

@@ -381,6 +381,12 @@ class IHarnessHealthProbe(Protocol):
         a health check indefinitely."""
         ...
 
+    def config_conflicts(self) -> tuple[str, ...]:
+        """Ambient settings this binding's worker would load that defeat the runner's required
+        wiring, each rendered as its file and key (never content); empty when none or when the
+        binding has no such check. Bounded and non-raising."""
+        ...
+
     def supported_version(self) -> SpecifierSet | None:
         """This binding's declared admitted-version range as a semver ``SpecifierSet``, or
         ``None`` when it declares no range at all. Checked through

@@ -19,6 +19,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.loop.capability_snapshot import HarnessVersionCache, default_harness_id
 from blizzard.runner.loop.chunk_status_cache import ReadThroughChunkViews
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
@@ -85,11 +86,15 @@ class LoopWiring:
     runner_prompt: str
     #: The SSE broker a standalone verb hands to the graph it builds; absent when none is served.
     events: EventBroker | None = None
+    #: The harness-config snapshot this process published, delivered to the graph it builds.
+    bundle: BundleSnapshot | None = None
 
     @classmethod
-    def of(cls, config: RunnerConfig, *, broker: EventBroker | None = None) -> LoopWiring:
+    def of(
+        cls, config: RunnerConfig, *, broker: EventBroker | None = None, bundle: BundleSnapshot | None = None
+    ) -> LoopWiring:
         """Read the prompt files now, on the calling thread."""
-        return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt(), broker)
+        return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt(), broker, bundle)
 
     def context(self, hub: IHubClient, graph: RunnerProcess, *, sweep_worker_scratch: bool = False) -> LoopContext:
         """Wire a :class:`LoopContext` over ``graph``, the process's one composition-root graph;
@@ -233,7 +238,7 @@ class LoopWiring:
         """Build the process graph, the hub client and one context over them, run ``use``,
         and close all three — the standalone verbs' one shared lifecycle."""
         config = self.config
-        graph = build_runner_process(config, events=self.events)
+        graph = build_runner_process(config, events=self.events, bundle=self.bundle)
         try:
             with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
                 ctx = self.context(HttpHubClient(client), graph)

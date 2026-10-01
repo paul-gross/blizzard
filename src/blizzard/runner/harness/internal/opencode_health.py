@@ -102,6 +102,9 @@ class OpenCodeHealthProbe:
         except OSError:
             return False
 
+    def config_conflicts(self) -> tuple[str, ...]:
+        return ()
+
     def supported_version(self) -> SpecifierSet:
         return ADMITTED_OPENCODE_RANGE
 

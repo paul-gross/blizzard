@@ -13,8 +13,11 @@ from pathlib import Path
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
+from blizzard.runner.harness.ambient_conflicts import claude_code_ambient_sources, claude_code_permission_mode
+from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.claude_code_bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.internal.claude_code_health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.internal.opencode_health import OpenCodeHealthProbe
@@ -27,11 +30,11 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 
 
 def build_production_harness_registry(
-    config: RunnerConfig, *, executor: Executor, process: LinuxProcessProbe
+    config: RunnerConfig, *, executor: Executor, process: LinuxProcessProbe, bundle: BundleSnapshot | None = None
 ) -> HarnessRegistry:
     """Build every enabled harness binding once for one graph, over one shared probe/
     launcher pair. The process graph owns the injected executor and probe for the
-    lifetime of every child launch."""
+    lifetime of every child launch. ``bundle`` is the snapshot this process published at startup."""
     projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
     transcript_source = ClaudeCodeTranscriptSource(
         projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
@@ -43,6 +46,7 @@ def build_production_harness_registry(
         adapter = ClaudeCodeAdapter(
             binary=config.harness_binary,
             settings_path=config.worker_settings_path,
+            bundle=ClaudeCodeBundleDelivery.of(bundle),
             autonomy=config.autonomy,
             permission_mode=config.harness_permission_mode,
             worker_env=config.worker_env,
@@ -66,7 +70,10 @@ def build_production_harness_health_probes(config: RunnerConfig) -> dict[str, IH
     probes: dict[str, IHarnessHealthProbe] = {}
     if config.claude_code_enabled:
         probes[CLAUDE_CODE_HARNESS_ID] = ClaudeCodeHealthProbe(
-            binary=config.harness_binary, credentials_path=config.claude_code_credentials_path
+            binary=config.harness_binary,
+            credentials_path=config.claude_code_credentials_path,
+            ambient_sources=claude_code_ambient_sources(config),
+            permission_mode=claude_code_permission_mode(config),
         )
     if config.opencode_enabled:
         # The file a spawned worker would read: its allowlisted env, not the daemon's own.

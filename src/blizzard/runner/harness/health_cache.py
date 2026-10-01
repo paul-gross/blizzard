@@ -12,11 +12,14 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.admission import classify_offline
 from blizzard.runner.harness.admission import version_admitted as harness_version_admitted
 from blizzard.runner.harness.health import HarnessHealthEvidence, HarnessHealthResult, evaluate_harness_health
+
+_log = get_logger("blizzard.runner.harness.health_cache")
 
 
 class _ResolvesModelStrict(Protocol):
@@ -104,6 +107,7 @@ class HarnessHealthCache:
             if normalized_version is None
             else supported_version is not None and harness_version_admitted(normalized_version, supported_version)
         )
+        conflicts = probe.config_conflicts()
         result = evaluate_harness_health(
             HarnessHealthEvidence(
                 harness_id=harness_id,
@@ -120,8 +124,11 @@ class HarnessHealthCache:
                 selftest_failed=(latest.status == "failed") if latest is not None else None,
                 corpus_backed=classifies_offline,
                 degradations=probe.declared_degradations(),
+                config_conflicts=conflicts,
             )
         )
+        if conflicts:
+            _log.warning("harness config conflict", harness_id=harness_id, conflicts=list(conflicts))
         self._results[harness_id] = result
         self._computed_at[harness_id] = now
         self._last_version[harness_id] = observed_version

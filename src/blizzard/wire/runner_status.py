@@ -156,7 +156,7 @@ class HarnessHealthView(BaseModel):
     """One configured harness binding's own computed health —
     ``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of
     ``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,
-    ``unmapped_tier``, or ``selftest_failure`` when unavailable; ``declared_degradation`` when
+    ``config_conflict``, ``unmapped_tier``, or ``selftest_failure`` when unavailable; ``declared_degradation`` when
     available but degraded; ``None`` only when available with no declared degradation either."""
 
     harness_id: str

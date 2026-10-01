@@ -41,6 +41,9 @@ class _FakeProbe:
         self.calls += 1
         return self.binary
 
+    def config_conflicts(self) -> tuple[str, ...]:
+        return ()
+
     def probe_authentication(self) -> bool:
         return self.authenticated
 

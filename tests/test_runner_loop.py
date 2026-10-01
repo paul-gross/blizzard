@@ -467,6 +467,9 @@ def test_harness_selection_skips_a_member_health_has_withdrawn():  # type: ignor
         def binary_present(self) -> bool:
             return False
 
+        def config_conflicts(self) -> tuple[str, ...]:
+            return ()
+
         def probe_authentication(self) -> bool:
             return True
 

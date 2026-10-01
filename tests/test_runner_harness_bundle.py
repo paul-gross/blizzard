@@ -357,3 +357,80 @@ def test_status_without_a_bundle_names_the_generated_files(tmp_path: Path) -> No
     assert "config_dir: none" in result.output
     assert "worker-settings.json" in result.output
     assert "opencode-worker-config.json" in result.output
+
+
+# --------------------------------------------------------------------------- #
+# Claude Code composition at publish.
+
+
+def _published_settings(runtime: Path) -> dict[str, object]:
+    snapshot = published_snapshot(runtime)
+    assert snapshot is not None
+    return json.loads((snapshot / "claude-code" / "settings.json").read_text())
+
+
+def test_snapshot_settings_hold_the_operators_keys_and_the_runners_wiring(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    operator = {"model": "opus", "hooks": {"PostToolUse": [{"hooks": [{"type": "command", "command": "mine"}]}]}}
+    (bundle / "claude-code" / "settings.json").write_text(json.dumps(operator))
+    runtime = _runtime(tmp_path, bundle)
+
+    assert CliRunner().invoke(runner_group, ["tick", "--dir", str(runtime)]).exit_code == 0
+
+    settings = _published_settings(runtime)
+    assert settings["model"] == "opus"
+    commands = [h["command"] for g in settings["hooks"]["PostToolUse"] for h in g["hooks"]]  # type: ignore[index]
+    assert commands == ["mine", "blizzard runner heartbeat"]
+    assert "Monitor" in settings["permissions"]["deny"]  # type: ignore[index]
+    assert settings["disableAllHooks"] is False
+
+
+def test_snapshot_settings_exist_when_the_operator_supplied_none(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    (bundle / "claude-code").mkdir(parents=True)
+    (bundle / "claude-code" / "mcp.json").write_text("{}")
+    runtime = _runtime(tmp_path, bundle)
+
+    CliRunner().invoke(runner_group, ["tick", "--dir", str(runtime)])
+
+    assert "SessionEnd" in _published_settings(runtime)["hooks"]  # type: ignore[operator]
+
+
+@pytest.mark.parametrize("command", ["tick", "host"])
+def test_a_collision_fails_startup_naming_the_native_path_and_keeps_current(tmp_path: Path, command: str) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path, bundle)
+    CliRunner().invoke(runner_group, ["tick", "--dir", str(runtime)])
+    before = published_snapshot(runtime)
+    (bundle / "claude-code" / "settings.json").write_text(json.dumps({"permissions": {"allow": ["Read", "Monitor"]}}))
+
+    result = CliRunner().invoke(runner_group, [command, "--dir", str(runtime)])
+
+    assert result.exit_code != 0
+    assert str(bundle / "claude-code" / "settings.json") in result.output
+    assert "permissions.allow[1]" in result.output
+    assert published_snapshot(runtime) == before
+
+
+def test_the_operators_source_tree_is_byte_identical_after_composition(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path, bundle)
+    before = _fingerprint(bundle)
+
+    CliRunner().invoke(runner_group, ["tick", "--dir", str(runtime)])
+
+    assert _fingerprint(bundle) == before
+
+
+def test_status_prints_the_effective_settings_path_and_flags_without_contents(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    (bundle / "claude-code" / "mcp.json").write_text("{}")
+    runtime = _runtime(tmp_path, bundle)
+    CliRunner().invoke(runner_group, ["tick", "--dir", str(runtime)])
+
+    result = CliRunner().invoke(runner_group, ["harness", "status", "--dir", str(runtime)])
+
+    snapshot = published_snapshot(runtime)
+    assert f"claude-code effective settings: {snapshot}/claude-code/settings.json" in result.output
+    assert f"--mcp-config={snapshot}/claude-code/mcp.json" in result.output
+    assert _SECRET not in result.output
