@@ -7,6 +7,7 @@ the winter service band ``BZ_*_PORT`` env overrides the bind port.
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 from pathlib import Path
 
@@ -1878,3 +1879,44 @@ def test_runner_claude_code_binary_is_honored_without_the_legacy_key(tmp_path: P
 def test_runner_legacy_harness_binary_alone_is_still_honored(tmp_path: Path) -> None:
     _write_runner_config(tmp_path, 'harness_binary = "/opt/legacy-claude"\n')
     assert RunnerConfig.load(tmp_path).harness_binary == "/opt/legacy-claude"
+
+
+@pytest.mark.unit
+def test_session_secret_env_round_trips_by_name_and_resolves_the_secret(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    monkeypatch.setenv("_TEST_SESSION_SECRET", base64.b64encode(b"s" * 48).decode())
+    edited = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        session_secret_env="_TEST_SESSION_SECRET",
+        session_secret=b"s" * 48,
+    )
+    toml = edited.to_toml()
+    assert 'session_secret_env = "_TEST_SESSION_SECRET"' in toml
+    assert "ssss" not in toml
+    (root / "blizzard-runner.toml").write_text(toml)
+    loaded = RunnerConfig.load(root)
+    assert (loaded.session_secret_env, loaded.session_secret) == ("_TEST_SESSION_SECRET", b"s" * 48)
+
+
+@pytest.mark.unit
+def test_session_secret_unset_resolves_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BZ_RUNNER_SESSION_SECRET", raising=False)
+    _write_runner_config(tmp_path / "runner", "")
+    loaded = RunnerConfig.load(tmp_path / "runner")
+    assert (loaded.session_secret_env, loaded.session_secret) == ("BZ_RUNNER_SESSION_SECRET", b"")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", [base64.b64encode(b"x" * 31).decode(), "not base64 at all!"])
+def test_a_short_or_malformed_session_secret_is_rejected_without_echoing_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv("_TEST_SESSION_SECRET", value)
+    _write_runner_config(tmp_path / "runner", 'session_secret_env = "_TEST_SESSION_SECRET"\n')
+    with pytest.raises(ConfigError, match="_TEST_SESSION_SECRET") as excinfo:
+        RunnerConfig.load(tmp_path / "runner")
+    assert value not in str(excinfo.value)

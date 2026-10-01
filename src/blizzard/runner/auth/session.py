@@ -1,8 +1,10 @@
 """The runner's own local session — a signed, stateless ``HttpOnly`` cookie.
 
-A small JSON payload HMAC-signed with a per-process secret minted at daemon startup
-(``bzh:injected-clock`` for the timestamps), so it costs no store schema and a restart
-invalidates every live session (pinned by ``tests/test_pin_runner_misc.py``)."""
+A small JSON payload HMAC-signed with the runner's session secret (``bzh:injected-clock`` for
+the timestamps), so it costs no store schema. The secret is read from the env var the config
+names, so a session survives a restart until its TTL; with none configured the daemon mints a
+fresh per-process secret and a restart invalidates every live session (pinned by
+``tests/test_pin_runner_misc.py``). Each runner needs its own secret."""
 
 from __future__ import annotations
 

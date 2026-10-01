@@ -6,11 +6,13 @@ the offline ``migrate`` verb read it back. The store URL is the single portabili
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +78,10 @@ DEFAULT_BASE_BRANCH = "main"
 # The env var NAMING this runner's hub bearer token — the toml round-trips the
 # variable name only, never the secret.
 DEFAULT_TOKEN_ENV = "BZ_HUB_TOKEN"
+# The env var NAMING the secret that signs this runner's session cookie, likewise name-only in the toml.
+DEFAULT_SESSION_SECRET_ENV = "BZ_RUNNER_SESSION_SECRET"
+# HMAC-SHA256's block-safe floor: a decoded secret shorter than this is refused at load.
+MIN_SESSION_SECRET_BYTES = 32
 DEFAULT_ENV_POOL: tuple[str, ...] = ("e1",)
 DEFAULT_MAX_ENVIRONMENTS = 10
 # The runner-ceiling rolling window's default length — a ceiling with no
@@ -98,6 +104,22 @@ DEFAULT_WORKER_STDOUT_RETENTION_DAYS = 14
 
 class ConfigError(RuntimeError):
     """A runtime directory is missing its config — it was never initialized."""
+
+
+def resolve_session_secret(env_name: str) -> bytes:
+    """The session-signing secret held (base64) in the env var *env_name*; ``b""`` when unset or
+    empty. A value that is not base64 or decodes under :data:`MIN_SESSION_SECRET_BYTES` raises a
+    :class:`ConfigError` naming the variable and never the value."""
+    raw = os.environ.get(env_name, "").strip()
+    if not raw:
+        return b""
+    try:
+        decoded = base64.b64decode(raw, validate=True)
+    except (binascii.Error, ValueError):
+        raise ConfigError(f"{env_name} must be base64 (e.g. `openssl rand -base64 48`)") from None
+    if len(decoded) < MIN_SESSION_SECRET_BYTES:
+        raise ConfigError(f"{env_name} must decode to at least {MIN_SESSION_SECRET_BYTES} bytes")
+    return decoded
 
 
 @dataclass(frozen=True)
@@ -496,6 +518,10 @@ class RunnerConfig:
     #: the resolved secret, and empty is a valid state.
     token_env: str = DEFAULT_TOKEN_ENV
     hub_token: str = ""
+    #: Names the env var carrying the session-signing secret; :attr:`session_secret` is the
+    #: resolved bytes, empty meaning a fresh random secret per process.
+    session_secret_env: str = DEFAULT_SESSION_SECRET_ENV
+    session_secret: bytes = field(default=b"", repr=False)
     workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
     workspace_provider: str = "winter"
     workspace_repos: tuple[WorkspaceRepo, ...] = ()
@@ -840,6 +866,9 @@ class RunnerConfig:
             "\n# Names the env var carrying this runner's hub bearer token;\n"
             "# the secret itself lives in the runtime env file, never here.\n"
             f'token_env = "{self.token_env}"\n'
+            "\n# Names the env var carrying the secret that signs this runner's session cookie\n"
+            "# (base64, >= 32 bytes decoded; unique per runner). Unset = a fresh secret each start.\n"
+            f'session_secret_env = "{self.session_secret_env}"\n'
             f'runner_id = "{self.runner_id}"\n'
             f'workspace_id = "{self.workspace_id}"\n'
             f'workspace_root = "{self.workspace_root}"\n'
@@ -1043,6 +1072,7 @@ class RunnerConfig:
             raise ConfigError(f"{root} is not an initialized runner runtime (run `blizzard runner init {root}`)")
         raw = tomllib.loads(path.read_text())
         token_env = str(raw.get("token_env", DEFAULT_TOKEN_ENV))
+        session_secret_env = str(raw.get("session_secret_env", DEFAULT_SESSION_SECRET_ENV))
         spend = Spend.of(raw.get("cost"))
         usage = ExternalUsage.of(raw.get("external_subscription_usage"))
         context = Context.of(raw.get("context"))
@@ -1086,6 +1116,8 @@ class RunnerConfig:
             hub_url=str(raw.get("hub_url", DEFAULT_HUB_URL)),
             token_env=token_env,
             hub_token=os.environ.get(token_env, ""),
+            session_secret_env=session_secret_env,
+            session_secret=resolve_session_secret(session_secret_env),
             runner_id=str(raw.get("runner_id", DEFAULT_RUNNER_ID)),
             workspace_id=str(raw.get("workspace_id", DEFAULT_WORKSPACE_ID)),
             workspace_root=str(raw.get("workspace_root", "")),
