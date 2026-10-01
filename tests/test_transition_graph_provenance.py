@@ -19,7 +19,7 @@ from blizzard.hub.api.chunk_views import ChunkHistoryView
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.domain.graph import Graph, GraphDoc, GraphSummary
 from blizzard.hub.domain.graph_authoring import Reification
-from blizzard.hub.domain.work import ChunkFacts, TransitionFact
+from blizzard.hub.domain.work import ChunkFacts, MigrationFact, MigrationSource, TransitionFact
 from blizzard.hub.store import schema as s
 from tests.support import build_hub
 
@@ -121,6 +121,97 @@ def test_history_view_resolves_each_step_name_against_its_own_graph() -> None:
     assert [(v.from_node_name, v.to_node_name) for v in views] == [("build", "review"), ("triage", "fix")]
     # No raw-id degradation: every name resolved against its own graph.
     assert all(v.from_node_name is not None and v.to_node_name is not None for v in views)
+
+
+def test_migration_view_projects_both_graphs_and_orders_tied_instants_by_epoch() -> None:
+    source = _two_node_graph("build", "review", other_executor="runner")
+    target = _two_node_graph("triage", "fix", other_executor="runner")
+    build = source.node_by_name("build")
+    review = source.node_by_name("review")
+    triage = target.node_by_name("triage")
+    fix = target.node_by_name("fix")
+    assert build is not None and review is not None and triage is not None and fix is not None
+    tied_at = datetime(2026, 1, 1, 1, tzinfo=UTC)
+    later_at = datetime(2026, 1, 1, 2, tzinfo=UTC)
+    facts = ChunkFacts(
+        minted=True,
+        migrations=[
+            MigrationFact(
+                from_node_id=review.node_id,
+                from_graph_id=source.graph_id,
+                to_graph_id=target.graph_id,
+                landed_node_id=fix.node_id,
+                choice_name=None,
+                model=None,
+                epoch=1,
+                recorded_at=later_at,
+                source=MigrationSource.FOLLOW_LATEST,
+            ),
+            MigrationFact(
+                from_node_id=None,
+                from_graph_id=target.graph_id,
+                to_graph_id=source.graph_id,
+                landed_node_id=review.node_id,
+                choice_name=None,
+                model=None,
+                epoch=4,
+                recorded_at=tied_at,
+                source=None,
+            ),
+            MigrationFact(
+                from_node_id=build.node_id,
+                from_graph_id=source.graph_id,
+                to_graph_id=target.graph_id,
+                landed_node_id=triage.node_id,
+                choice_name="basic",
+                model="selected-model",
+                epoch=2,
+                recorded_at=tied_at,
+                source=MigrationSource.AUTHORED_EDGE,
+            ),
+        ],
+    )
+    names = GraphNames(_GraphLookup({source.graph_id: source, target.graph_id: target}))  # type: ignore[arg-type]
+
+    views = ChunkHistoryView(facts, names).migrations()
+
+    assert [v.epoch for v in views] == [2, 4, 1]
+    assert views[0].model_dump() == {
+        "from_node_id": build.node_id,
+        "from_node_name": "build",
+        "from_graph_id": source.graph_id,
+        "from_graph_name": source.name,
+        "to_graph_id": target.graph_id,
+        "to_graph_name": target.name,
+        "landed_node_id": triage.node_id,
+        "landed_node_name": "triage",
+        "choice_name": "basic",
+        "model": "selected-model",
+        "source": "authored-edge",
+        "epoch": 2,
+        "recorded_at": tied_at.isoformat(),
+    }
+    assert views[1].model_dump() == {
+        "from_node_id": None,
+        "from_node_name": None,
+        "from_graph_id": target.graph_id,
+        "from_graph_name": target.name,
+        "to_graph_id": source.graph_id,
+        "to_graph_name": source.name,
+        "landed_node_id": review.node_id,
+        "landed_node_name": "review",
+        "choice_name": None,
+        "model": None,
+        "source": None,
+        "epoch": 4,
+        "recorded_at": tied_at.isoformat(),
+    }
+    assert (views[2].from_node_name, views[2].landed_node_name, views[2].source, views[2].recorded_at) == (
+        "review",
+        "fix",
+        "follow-latest",
+        later_at.isoformat(),
+    )
 
 
 # Component — per-graph executor hydration in load_facts
