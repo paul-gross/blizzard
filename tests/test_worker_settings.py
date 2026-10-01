@@ -6,8 +6,11 @@ whose effect only a live harness shows (``blizzard:manual-worker-deny-list``).
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
+from blizzard.runner.harness.internal.opencode_worker_config import render_worker_config
 from blizzard.runner.harness.worker_settings import WorkerSettings
 
 pytestmark = pytest.mark.unit
@@ -30,3 +33,11 @@ def test_worker_settings_deny_list_excludes_the_sanctioned_polling_tools() -> No
     deny = WorkerSettings.of().document["permissions"]["deny"]
     assert "TaskOutput" not in deny
     assert "TaskStop" not in deny
+
+
+def test_each_harness_denies_none_of_the_other_harnesss_tools() -> None:
+    claude_denied = set(WorkerSettings.of().document["permissions"]["deny"])
+    opencode_denied = set(cast("dict[str, str]", render_worker_config()["permission"]))
+    assert claude_denied
+    assert opencode_denied
+    assert not claude_denied & opencode_denied
