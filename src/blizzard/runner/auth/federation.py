@@ -25,7 +25,7 @@ from blizzard.foundation.return_to import ReturnTo
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
 from blizzard.runner.auth.roles import LocalRole
-from blizzard.runner.auth.session import SESSION_COOKIE_NAME, SESSION_TTL, RunnerSession, SessionCookie
+from blizzard.runner.auth.session import SESSION_TTL, CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.auth.validate import FederationToken, FederationTokenError
 from blizzard.runner.config import CALLBACK_PATH, RunnerConfig
 
@@ -33,8 +33,6 @@ _log = get_logger("blizzard.runner.auth")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-_BOUNCE_STATE_COOKIE = "bz_runner_bounce_state"
-_BOUNCE_RETURN_COOKIE = "bz_runner_bounce_return"
 _BOUNCE_COOKIE_MAX_AGE = 600  # 10 minutes — generous for a slow hub/provider round trip
 
 #: Origins a browser treats as potentially trustworthy whatever the scheme, so ``Secure`` holds over plain http.
@@ -101,7 +99,7 @@ class HumanLane:
             return _IMPLICIT_SESSION
         if not self.gated:
             return _IMPLICIT_SESSION
-        cookie = self.request.cookies.get(SESSION_COOKIE_NAME)
+        cookie = self.request.cookies.get(self.request.app.state.cookie_names.session)
         if cookie is None:
             return None
         clock: IClock = self.request.app.state.clock
@@ -136,12 +134,16 @@ class Bounce:
         return Origin(self.request, self.request.app.state.trusted_proxies)
 
     @property
+    def names(self) -> CookieNames:
+        return self.request.app.state.cookie_names
+
+    @property
     def state(self) -> str | None:
-        return self.request.cookies.get(_BOUNCE_STATE_COOKIE)
+        return self.request.cookies.get(self.names.bounce_state)
 
     @property
     def return_to(self) -> str:
-        return ReturnTo(self.request.cookies.get(_BOUNCE_RETURN_COOKIE)).safe
+        return ReturnTo(self.request.cookies.get(self.names.bounce_return)).safe
 
     @property
     def policy(self) -> tuple[Literal["lax", "none"], bool]:  # ast-grep-ignore: bzh:property-delegates
@@ -155,14 +157,17 @@ class Bounce:
 
     def issue(self, response: Response, *, state: str, return_to: str) -> None:
         samesite, secure = self.policy
-        for name, value in ((_BOUNCE_STATE_COOKIE, state), (_BOUNCE_RETURN_COOKIE, ReturnTo(return_to).safe)):
+        for name, value in (
+            (self.names.bounce_state, state),
+            (self.names.bounce_return, ReturnTo(return_to).safe),
+        ):
             response.set_cookie(
                 name, value, httponly=True, samesite=samesite, secure=secure, max_age=_BOUNCE_COOKIE_MAX_AGE
             )
 
     def clear(self, response: Response) -> None:
-        response.delete_cookie(_BOUNCE_STATE_COOKIE)
-        response.delete_cookie(_BOUNCE_RETURN_COOKIE)
+        response.delete_cookie(self.names.bounce_state)
+        response.delete_cookie(self.names.bounce_return)
 
     def matches(self, presented: str | None) -> bool:
         expected = self.state
@@ -266,7 +271,7 @@ async def callback(request: Request) -> Response:
     response = RedirectResponse(bounce.return_to, status_code=303)
     bounce.clear(response)
     response.set_cookie(
-        SESSION_COOKIE_NAME,
+        bounce.names.session,
         cookie_value,
         httponly=True,
         samesite="lax",
@@ -277,13 +282,13 @@ async def callback(request: Request) -> Response:
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(response: Response) -> Response:
+def logout(request: Request, response: Response) -> Response:
     """Clear the runner's own session cookie. Public, like the bounce it complements:
     logging out cannot itself require a live session, and clearing an absent cookie is a harmless no-op.
     The session is a **stateless** signed cookie, so there is nothing server-side to revoke — deleting
     it *is* the logout. If the hub session is still live, the next visit silently re-authenticates
     through the bounce; ending fleet-wide access is hub logout, which stops renewals."""
-    response.delete_cookie(SESSION_COOKIE_NAME)
+    response.delete_cookie(request.app.state.cookie_names.session)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 

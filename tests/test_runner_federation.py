@@ -5,6 +5,7 @@ fallback (component tier), and per-request declared-origin selection."""
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -21,6 +22,7 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.app import create_app
 from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
+from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.registry import HarnessRegistry
@@ -32,6 +34,7 @@ pytestmark = pytest.mark.component
 
 _KID = "hub-kid-1"
 _RUNNER_ID = "runner-a"
+_NAMES = CookieNames(_RUNNER_ID)
 _TAILNET = "https://tailnet.example:8431"
 _LOOPBACK = "http://127.0.0.1:8431"
 
@@ -79,13 +82,14 @@ def _build_app(
     base_url: str | None = None,
     extra_public_urls: tuple[str, ...] = (),
     canonical_url: str = "https://runner-a.example",
+    runner_id: str = _RUNNER_ID,
 ) -> TestClient:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     metadata.create_all(engine)
     config = RunnerConfig(
         root=tmp_path,
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
-        runner_id=_RUNNER_ID,
+        runner_id=runner_id,
         hub_url="http://hub.example",
         public_urls=tuple(url for url in (canonical_url, *extra_public_urls) if url),
         trusted_proxies=trusted_proxies,
@@ -169,7 +173,7 @@ def test_login_redirects_to_the_hub_authorize_endpoint_with_this_runners_own_cal
     assert params["client"] == [_RUNNER_ID]
     assert params["redirect_uri"] == ["https://runner-a.example/api/auth/callback"]
     assert params["response_mode"] == ["form_post"]
-    assert "bz_runner_bounce_state" in resp.cookies
+    assert _NAMES.bounce_state in resp.cookies
 
 
 def test_the_full_bounce_mints_a_runner_session_and_unlocks_the_web_surface(tmp_path: Path) -> None:
@@ -177,9 +181,9 @@ def test_the_full_bounce_mints_a_runner_session_and_unlocks_the_web_surface(tmp_
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
 
     login_resp = client.get("/api/auth/login?return_to=/", follow_redirects=False)
-    state = login_resp.cookies["bz_runner_bounce_state"]
-    client.cookies.set("bz_runner_bounce_state", state)
-    client.cookies.set("bz_runner_bounce_return", "/")
+    state = login_resp.cookies[_NAMES.bounce_state]
+    client.cookies.set(_NAMES.bounce_state, state)
+    client.cookies.set(_NAMES.bounce_return, "/")
 
     token = _sign(private_key, jti="jti-bounce-1")
     callback_resp = client.post(
@@ -190,9 +194,9 @@ def test_the_full_bounce_mints_a_runner_session_and_unlocks_the_web_surface(tmp_
     )
     assert callback_resp.status_code == 303
     assert callback_resp.headers["location"] == "/"
-    assert "bz_runner_session" in callback_resp.cookies
+    assert _NAMES.session in callback_resp.cookies
 
-    client.cookies.set("bz_runner_session", callback_resp.cookies["bz_runner_session"])
+    client.cookies.set(_NAMES.session, callback_resp.cookies[_NAMES.session])
     gated = client.get("/")
     assert gated.status_code == 200
 
@@ -200,7 +204,7 @@ def test_the_full_bounce_mints_a_runner_session_and_unlocks_the_web_surface(tmp_
 def test_a_state_mismatch_is_refused(tmp_path: Path) -> None:
     private_key, jwk = _keypair()
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
-    client.cookies.set("bz_runner_bounce_state", "expected-state")
+    client.cookies.set(_NAMES.bounce_state, "expected-state")
     token = _sign(private_key)
     resp = client.post(
         "/api/auth/callback",
@@ -215,7 +219,7 @@ def test_a_replayed_jti_is_refused_at_the_callback(tmp_path: Path) -> None:
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
     token = _sign(private_key, jti="jti-replay-1")
 
-    client.cookies.set("bz_runner_bounce_state", "s1")
+    client.cookies.set(_NAMES.bounce_state, "s1")
     first = client.post(
         "/api/auth/callback",
         content=f"token={token}&state=s1",
@@ -224,7 +228,7 @@ def test_a_replayed_jti_is_refused_at_the_callback(tmp_path: Path) -> None:
     )
     assert first.status_code == 303
 
-    client.cookies.set("bz_runner_bounce_state", "s2")
+    client.cookies.set(_NAMES.bounce_state, "s2")
     second = client.post(
         "/api/auth/callback",
         content=f"token={token}&state=s2",
@@ -236,9 +240,9 @@ def test_a_replayed_jti_is_refused_at_the_callback(tmp_path: Path) -> None:
 def _bounce_in(client: TestClient, private_key: object, *, jti: str) -> None:
     """Drive the full SSO bounce so ``client`` holds a live runner session cookie."""
     login_resp = client.get("/api/auth/login?return_to=/", follow_redirects=False)
-    state = login_resp.cookies["bz_runner_bounce_state"]
-    client.cookies.set("bz_runner_bounce_state", state)
-    client.cookies.set("bz_runner_bounce_return", "/")
+    state = login_resp.cookies[_NAMES.bounce_state]
+    client.cookies.set(_NAMES.bounce_state, state)
+    client.cookies.set(_NAMES.bounce_return, "/")
     token = _sign(private_key, jti=jti)
     callback_resp = client.post(
         "/api/auth/callback",
@@ -247,7 +251,7 @@ def _bounce_in(client: TestClient, private_key: object, *, jti: str) -> None:
         follow_redirects=False,
     )
     assert callback_resp.status_code == 303
-    client.cookies.set("bz_runner_session", callback_resp.cookies["bz_runner_session"])
+    client.cookies.set(_NAMES.session, callback_resp.cookies[_NAMES.session])
 
 
 def test_logout_clears_the_session_and_the_next_visit_bounces(tmp_path: Path) -> None:
@@ -267,8 +271,8 @@ def test_logout_clears_the_session_and_the_next_visit_bounces(tmp_path: Path) ->
     # The response clears the session cookie (empty value, immediate expiry) — a browser
     # drops it, so model that on the jar before the next visit.
     set_cookie = logout_resp.headers["set-cookie"]
-    assert "bz_runner_session=" in set_cookie and "Max-Age=0" in set_cookie
-    client.cookies.delete("bz_runner_session")
+    assert f"{_NAMES.session}=" in set_cookie and "Max-Age=0" in set_cookie
+    client.cookies.delete(_NAMES.session)
 
     bounce = client.get("/", follow_redirects=False)
     assert bounce.status_code in (302, 307)
@@ -324,7 +328,7 @@ _DIRECT_IP = "203.0.113.9"
 def _bounce_callback(client: TestClient, private_key: object, *, headers: dict[str, str]):
     """Run the SSO callback leg with a valid round-tripped state and token, returning
     the response so a test can inspect the minted session cookie's attributes."""
-    client.cookies.set("bz_runner_bounce_state", "s-fwd")
+    client.cookies.set(_NAMES.bounce_state, "s-fwd")
     token = _sign(private_key, jti="jti-fwd-1")
     return client.post(
         "/api/auth/callback",
@@ -340,7 +344,7 @@ def test_callback_mints_a_secure_cookie_on_forwarded_proto_https_from_a_trusted_
     resp = _bounce_callback(client, private_key, headers={"x-forwarded-proto": "https"})
     assert resp.status_code == 303
     set_cookie = resp.headers["set-cookie"]
-    assert "bz_runner_session=" in set_cookie
+    assert f"{_NAMES.session}=" in set_cookie
     assert "Secure" in set_cookie
 
 
@@ -377,7 +381,7 @@ def test_bounce_cookies_are_samesite_none_secure_on_a_loopback_runner(tmp_path: 
     )
     resp = client.get("/api/auth/login", follow_redirects=False)
     header = _bounce_set_cookie_headers(resp)
-    assert "bz_runner_bounce_state" in header
+    assert _NAMES.bounce_state in header
     assert "samesite=none" in header.lower()
     assert "secure" in header.lower()
 
@@ -399,7 +403,7 @@ def test_bounce_cookies_stay_lax_on_a_plain_http_non_loopback_runner(tmp_path: P
     client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, base_url="http://runner-a.example")
     resp = client.get("/api/auth/login", follow_redirects=False)
     header = _bounce_set_cookie_headers(resp).lower()
-    assert "bz_runner_bounce_state" in header
+    assert _NAMES.bounce_state in header
     assert "samesite=lax" in header
     assert "secure" not in header
 
@@ -439,7 +443,7 @@ def test_login_rehomes_an_undeclared_loopback_alias_before_setting_bounce_cookie
         resp = client.get("/api/auth/login?return_to=/board", follow_redirects=False)
     assert resp.status_code == 307
     assert resp.headers["location"] == "https://runner-a.example/api/auth/login?return_to=%2Fboard&rehomed=true"
-    assert "bz_runner_bounce_state" not in _bounce_set_cookie_headers(resp)
+    assert _NAMES.bounce_state not in _bounce_set_cookie_headers(resp)
     warned = [entry for entry in logs if entry["log_level"] == "warning"]
     assert [(entry["arrived_host"], entry["rehoming_to"]) for entry in warned] == [
         ("localhost:8431", "https://runner-a.example")
@@ -455,7 +459,7 @@ def test_the_rehomed_login_bounces_from_the_canonical_origin_with_its_callback(t
     location = urlparse(resp.headers["location"])
     assert location.path == "/api/auth/authorize"
     assert parse_qs(location.query)["redirect_uri"] == ["https://runner-a.example/api/auth/callback"]
-    assert "bz_runner_bounce_state" in _bounce_set_cookie_headers(resp)
+    assert _NAMES.bounce_state in _bounce_set_cookie_headers(resp)
     assert not [entry for entry in logs if entry["log_level"] == "warning"]
 
 
@@ -514,7 +518,7 @@ def test_bounce_cookies_are_samesite_none_secure_on_a_proxied_declared_https_ori
     )
     resp = client.get("/api/auth/login", follow_redirects=False, headers={"x-forwarded-proto": "https"})
     header = _bounce_set_cookie_headers(resp).lower()
-    assert "bz_runner_bounce_state" in header
+    assert _NAMES.bounce_state in header
     assert "samesite=none" in header
     assert "secure" in header
 
@@ -563,3 +567,29 @@ def test_a_proxy_that_rewrites_host_falls_back_and_is_not_silent(tmp_path: Path)
     assert warned
     assert warned[0]["arrived_host"] == "127.0.0.1:8431"
     assert _TAILNET in warned[0]["declared"]
+
+
+def test_a_runner_id_outside_the_cookie_name_token_set_still_yields_valid_names() -> None:
+    names = CookieNames('runner a/1;x=é,"')
+    for name in (names.session, names.bounce_state, names.bounce_return):
+        assert re.fullmatch(r"[A-Za-z0-9!#$%&'*+.^_`|~-]+", name)
+
+
+def test_two_runners_mint_differently_named_session_cookies_and_ignore_each_others(tmp_path: Path) -> None:
+    private_key, jwk = _keypair()
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    client_a = _build_app(tmp_path / "a", oauth_enabled=True, jwk=jwk)
+    client_b = _build_app(tmp_path / "b", oauth_enabled=True, jwk=jwk, runner_id="runner-b")
+    names_b = CookieNames("runner-b")
+    assert names_b.session != _NAMES.session
+
+    _bounce_in(client_a, private_key, jti="jti-ns-a")
+    cookie_a = next(c.value for c in client_a.cookies.jar if c.name == _NAMES.session)
+    # Runner B ignores A's cookie, even replayed under A's name.
+    client_b.cookies.set(_NAMES.session, cookie_a)
+    assert client_b.get("/api/environments").status_code == 401
+    # Nor does A's session value authenticate when presented under B's name.
+    client_b.cookies.clear()
+    client_b.cookies.set(names_b.session, cookie_a)
+    assert client_b.get("/api/environments").status_code == 401

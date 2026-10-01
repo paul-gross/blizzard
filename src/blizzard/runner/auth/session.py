@@ -10,16 +10,42 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from blizzard.auth_core import Role
 from blizzard.foundation.store.utc import iso_utc
 
-SESSION_COOKIE_NAME = "bz_runner_session"
+_COOKIE_NAME_UNSAFE = re.compile(r"[^A-Za-z0-9!#$%&'*+.^_`|~-]")
 #: Runner sessions are short: hours, not days — renewal is a silent bounce
 #: through the hub, so a short TTL costs nothing but an invisible round trip.
 SESSION_TTL = timedelta(hours=8)
+
+
+@dataclass(frozen=True)
+class CookieNames:
+    """The runner's cookie names, namespaced by ``runner_id``. Browsers scope cookies by host and
+    ignore the port, so two same-host runners would otherwise share one jar and overwrite each
+    other's session. Characters outside the RFC 6265 cookie-name ``token`` set become ``_``."""
+
+    runner_id: str
+
+    @property
+    def _suffix(self) -> str:
+        return _COOKIE_NAME_UNSAFE.sub("_", self.runner_id)
+
+    @property
+    def session(self) -> str:
+        return f"bz_runner_session_{self._suffix}"
+
+    @property
+    def bounce_state(self) -> str:
+        return f"bz_runner_bounce_state_{self._suffix}"
+
+    @property
+    def bounce_return(self) -> str:
+        return f"bz_runner_bounce_return_{self._suffix}"
 
 
 @dataclass(frozen=True)
