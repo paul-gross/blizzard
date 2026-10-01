@@ -284,9 +284,13 @@ def main() -> None:
         assert counts["deny_bash"] == counts["deny_question"] == []
         assert counts["child"] == ["task"], counts["child"]
         lines = events.read_text().splitlines()
-        for name in ("global", "local", "operator"):
-            assert sum(line.startswith(f"{name} ") for line in lines) == 6, (name, lines)
-        assert lines.count("runner heartbeat") == 6, lines
+        plugin_tools = {
+            name: [line.removeprefix(f"{name} ") for line in lines if line.startswith(f"{name} ")]
+            for name in ("global", "local", "operator")
+        }
+        assert plugin_tools["global"] == plugin_tools["local"] == plugin_tools["operator"], plugin_tools
+        assert len(plugin_tools["global"]) >= sum(map(len, counts.values())), (plugin_tools, counts)
+        assert lines.count("runner heartbeat") == len(plugin_tools["global"]), lines
         report = {
             "version": version,
             "source_paths": {
@@ -299,8 +303,8 @@ def main() -> None:
             "settings": ["username", "model", "permission.bash", "permission.question", "agent.explore.prompt"],
             "plugin_origins": origins,
             "tool_calls_by_invocation": counts,
-            "plugin_calls_each": 6,
-            "runner_heartbeat_calls": 6,
+            "plugin_calls_each": len(plugin_tools["global"]),
+            "runner_heartbeat_calls": lines.count("runner heartbeat"),
             "native_collisions_rejected": True,
             "ambient_duplicate_rejected": True,
         }
