@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -115,7 +116,7 @@ def _target_yaml() -> str:
 
 
 def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
-    tmp_path: Path, chromium_available: bool
+    tmp_path: Path, chromium_available: bool, fleet_traces: FleetCollector, subtests: pytest.Subtests
 ) -> None:
     """A worker's cross-graph choice migrates the chunk, which then lands under the target graph."""
     bin_dir = _mock_bin_dir()
@@ -148,7 +149,10 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
     (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+    ):
         # Mint the target first (so the source's cross-graph choice resolves at mint without a
         # warning), then the source that ingest pins.
         target = hub.post("/api/graphs", json={"definition_yaml": _target_yaml()})
@@ -190,6 +194,34 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
         # The forge reports the PR merged — delivery's land step ran under the target graph.
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
+
+        # Fleet truth, as the trace backend sees it: the source step ends `migrated`, and the target graph's first
+        # step links back to it by `migration` — the steps ran under different graphs.
+        with subtests.test(msg="fleet traces"):
+            fleet_traces.require()
+            traces = fleet_traces.traces(roots=3)
+            assert_skeleton(
+                traces,
+                [
+                    StepExpect(
+                        "step build",
+                        "migrated",
+                        "graph:triage-delivery",
+                        children=("queue wait", "claim"),
+                        attributes=(("blizzard.graph.name", "default-delivery"),),
+                    ),
+                    StepExpect(
+                        "step build",
+                        "transitioned",
+                        "deliver",
+                        # The migration re-queues the chunk, so this is the first step after a new route.
+                        children=("queue wait", "claim"),
+                        link="migration",
+                        attributes=(("blizzard.graph.name", "triage-delivery"),),
+                    ),
+                    StepExpect("step deliver", "transitioned", "done", children=("hub exec",), link="next"),
+                ],
+            )
 
         # The two-graph history renders on the served board (MUST-FIX-3), when a Chromium
         # is present; when absent the git + fleet truth below still run.

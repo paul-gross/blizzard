@@ -40,6 +40,7 @@ from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.domain.work import UsageFact
 from tests import trace_fixtures as fx
 from tests.repo_files import repo_root
+from tests.trace_contract_support import PARAMETERIZED_NAMES, dictionary, otlp_type, required_by_role, role_of_name
 
 pytestmark = pytest.mark.unit
 
@@ -51,9 +52,6 @@ _VERSIONING_DOC = _ROOT / "docs" / "versioning.md"
 _REGEN_VARIABLE = "BLIZZARD_REGEN_TRACE_CONTRACT"
 _REGEN_COMMAND = f"{_REGEN_VARIABLE}=1 uv run pytest tests/test_trace_contract.py"
 _ATTRIBUTE_TYPES = {"string", "int", "double", "bool", "string[]"}
-_PARAMETERIZED_NAMES = {"step": "step <node>", "gate": "gate <node>"}
-
-_OTLP_TYPE_OF = {str: "string", bool: "bool", int: "int", float: "double"}
 
 
 def _graph() -> Any:
@@ -220,10 +218,6 @@ def _golden() -> dict[str, list[dict[str, Any]]]:
     return {path.stem: json.loads(path.read_text()) for path in sorted(_GOLDEN_DIR.glob("*.json"))}
 
 
-def _dictionary() -> dict[str, Any]:
-    return json.loads((_CONTRACT_DIR / "dictionary.json").read_text())
-
-
 @pytest.fixture(scope="module", autouse=True)
 def _regenerate_if_asked() -> None:
     if os.environ.get(_REGEN_VARIABLE) != "1":
@@ -235,14 +229,6 @@ def _regenerate_if_asked() -> None:
         (_GOLDEN_DIR / f"{name}.json").write_text(text)
 
 
-def _role_of(span: dict[str, Any]) -> str:
-    name = span["name"]
-    for role in _PARAMETERIZED_NAMES:
-        if name.startswith(f"{role} "):
-            return role
-    return next(entry["role"] for entry in _dictionary()["spans"] if entry["name"] == name)
-
-
 def _observed() -> tuple[set[str], set[str], set[str], set[str], set[tuple[str, str]]]:
     names: set[str] = set()
     events: set[str] = set()
@@ -251,8 +237,8 @@ def _observed() -> tuple[set[str], set[str], set[str], set[str], set[tuple[str, 
     carried: set[tuple[str, str]] = set()
     for spans in _golden().values():
         for span in spans:
-            role = _role_of(span)
-            names.add(_PARAMETERIZED_NAMES.get(role) or span["name"])
+            role = role_of_name(span["name"])
+            names.add(PARAMETERIZED_NAMES.get(role) or span["name"])
             for key in span["attributes"]:
                 keys.add(key)
                 carried.add((role, key))
@@ -281,14 +267,14 @@ def test_the_live_assembly_equals_the_golden() -> None:
 
 
 def test_the_dictionary_names_exactly_the_attributes_the_code_declares() -> None:
-    d = _dictionary()
+    d = dictionary()
     named = {a["name"] for a in d["attributes"]} | {a["name"] for a in d["resource_attributes"]}
     assert named == attr.DECLARED_ATTRIBUTES
     assert {a["name"] for a in d["resource_attributes"]} == set(attr.resource_attributes({}, "0"))
 
 
 def test_the_dictionary_constants_equal_the_code_constants() -> None:
-    d = _dictionary()
+    d = dictionary()
     assert d["instrumentation_scope"] == {
         "name": attr.INSTRUMENTATION_SCOPE,
         "version": attr.INSTRUMENTATION_SCOPE_VERSION,
@@ -299,7 +285,7 @@ def test_the_dictionary_constants_equal_the_code_constants() -> None:
 
 
 def test_the_dictionary_roles_are_the_code_roles() -> None:
-    d = _dictionary()
+    d = dictionary()
     assert {entry["role"] for entry in d["spans"]} == {role.value for role in SpanRole}
     for entry in d["attributes"]:
         assert entry["type"] in _ATTRIBUTE_TYPES, entry["name"]
@@ -307,7 +293,7 @@ def test_the_dictionary_roles_are_the_code_roles() -> None:
 
 
 def test_the_golden_shape_is_the_dictionary_shape() -> None:
-    d = _dictionary()
+    d = dictionary()
     names, events, reasons, keys, carried = _observed()
     assert names == {entry["name"] for entry in d["spans"]}
     assert events == set(d["event_names"])
@@ -318,11 +304,10 @@ def test_the_golden_shape_is_the_dictionary_shape() -> None:
 
 
 def test_a_required_attribute_rides_every_span_that_carries_it() -> None:
-    d = _dictionary()
-    required = {a["name"]: a["on"] for a in d["attributes"] if not a["optional"]}
+    required = required_by_role()
     for spans in _golden().values():
         for span in spans:
-            role = _role_of(span)
+            role = role_of_name(span["name"])
             for key, on in required.items():
                 if role in on:
                     assert key in span["attributes"], f"{span['name']} lacks required {key}"
@@ -333,13 +318,7 @@ def test_a_required_attribute_rides_every_span_that_carries_it() -> None:
 
 
 def test_every_golden_value_has_its_dictionary_type() -> None:
-    types = {a["name"]: a["type"] for a in _dictionary()["attributes"]}
-
-    def otlp_type(value: object) -> str:
-        if isinstance(value, list):
-            assert all(isinstance(v, str) for v in value)
-            return "string[]"
-        return _OTLP_TYPE_OF[type(value)]
+    types = {a["name"]: a["type"] for a in dictionary()["attributes"]}
 
     for spans in _golden().values():
         for span in spans:
@@ -351,7 +330,7 @@ def test_every_golden_value_has_its_dictionary_type() -> None:
 
 
 def test_the_id_vectors_reproduce_through_the_derivation() -> None:
-    ids = _dictionary()["ids"]
+    ids = dictionary()["ids"]
     assert ids["hash"] == "sha256"
     assert ids["trace"]["bytes"] == 16
     assert ids["span"]["bytes"] == 8
@@ -364,8 +343,8 @@ def test_the_id_vectors_reproduce_through_the_derivation() -> None:
         assert DerivedContext.of(key, role, vector["discriminator"]).trace_flags == 1
 
 
-def test_the_trace_id_prefix_and_span_prefix_match_the_dictionary() -> None:
-    ids = _dictionary()["ids"]
+def test_the_trace_id_prefix_and_span_prefix_match_thedictionary() -> None:
+    ids = dictionary()["ids"]
     key = StepKey.attempt("ch_x", 1)
     assert f"{trace_id(key):032x}" == hashlib.sha256((ids["trace"]["prefix"] + "ch_x/1").encode()).hexdigest()[:32]
     expected = hashlib.sha256((ids["span"]["prefix"] + "ch_x/1/step/").encode()).hexdigest()[:16]
@@ -387,25 +366,25 @@ def _unticked(cell: str) -> str:
     return cell.strip("`")
 
 
-def test_the_published_attribute_table_is_the_dictionary() -> None:
+def test_the_published_attribute_table_is_thedictionary() -> None:
     rows = _table_rows(_TRACING_DOC.read_text(), "## Attributes")
     published = [(_unticked(r[0]), _unticked(r[1]), r[2]) for r in rows]
-    d = _dictionary()
+    d = dictionary()
     authored = [(a["name"], a["type"], a["meaning"]) for a in d["attributes"]]
     assert published == authored
 
 
-def test_the_published_resource_table_is_the_dictionary() -> None:
+def test_the_published_resource_table_is_thedictionary() -> None:
     rows = _table_rows(_TRACING_DOC.read_text(), "## Resource attributes")
     published = [(_unticked(r[0]), _unticked(r[1]), r[2]) for r in rows]
-    authored = [(a["name"], a["type"], a["meaning"]) for a in _dictionary()["resource_attributes"]]
+    authored = [(a["name"], a["type"], a["meaning"]) for a in dictionary()["resource_attributes"]]
     assert published == authored
 
 
-def test_the_published_span_table_is_the_dictionary() -> None:
+def test_the_published_span_table_is_thedictionary() -> None:
     rows = _table_rows(_TRACING_DOC.read_text(), "## Spans")
     published = [(_unticked(r[0]), _unticked(r[1]), r[2]) for r in rows]
-    authored = [(s["name"], s["role"], s["meaning"]) for s in _dictionary()["spans"]]
+    authored = [(s["name"], s["role"], s["meaning"]) for s in dictionary()["spans"]]
     assert published == authored
 
 

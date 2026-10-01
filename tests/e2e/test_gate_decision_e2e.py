@@ -7,6 +7,7 @@ sibling ``blizzard-mock`` worktree provisioned."""
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -18,6 +19,7 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
+from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton, unix_ns
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -136,7 +138,9 @@ def _blizzard(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run([str(Path(sys.executable).parent / "blizzard"), *args], capture_output=True, text=True)
 
 
-def test_graph_gate_parks_a_decision_then_decide_delivers(tmp_path: Path) -> None:
+def test_graph_gate_parks_a_decision_then_decide_delivers(
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+) -> None:
     """A human gate ahead of deliver parks a decision; `hub decision resolve` approves and it lands."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
@@ -169,7 +173,10 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(tmp_path: Path) -> Non
 
     forge_port, hub_port = _free_port(), _free_port()
     hub_url = f"http://127.0.0.1:{hub_port}"
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+    ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "gate", "body": "the chunk"})
         assert issue.status_code == 201, issue.text
@@ -208,8 +215,11 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(tmp_path: Path) -> Non
         assert decision_id in listed.stdout, f"`hub decision list` did not list the open decision:\n{listed.stdout}"
 
         # A human approves at the hub — the real `blizzard hub decision resolve` verb (first-write-wins).
-        decided = _blizzard("hub", "decision", "resolve", decision_id, "approve", "--by", "alice", "--hub-url", hub_url)
+        decided = _blizzard(
+            "hub", "decision", "resolve", decision_id, "approve", "--by", "alice", "--hub-url", hub_url, "--json"
+        )
         assert decided.returncode == 0, f"hub decision resolve failed:\n{decided.stderr}"
+        resolved_at = json.loads(decided.stdout)["resolved_at"]
 
         # The holding runner records the resolving transition; deliver lands the chunk.
         status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 90.0)
@@ -219,6 +229,21 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(tmp_path: Path) -> Non
         assert hub.get("/api/decisions").json()["decisions"] == []
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
+
+        # Fleet truth, as the trace backend sees it: the build, the human's decision (its own trace, ending when
+        # they decided and followed by the pickup), and the hub's deliver step.
+        with subtests.test(msg="fleet traces"):
+            fleet_traces.require()
+            traces = fleet_traces.traces(roots=3, decision_ids=[decision_id])
+            assert_skeleton(
+                traces,
+                [
+                    StepExpect("step build", "transitioned", "approve-gate", children=("queue wait", "claim")),
+                    StepExpect("gate approve-gate", "decided", "deliver", children=("decision pickup",), link="next"),
+                    StepExpect("step deliver", "transitioned", "done", children=("hub exec",), link="next"),
+                ],
+            )
+            assert traces[1].root.end_ns == unix_ns(resolved_at), "the gate span ends when the person decided"
 
     # Git truth: the build commit the gate approved is on the bare origin's main.
     tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
