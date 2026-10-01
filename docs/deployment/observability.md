@@ -112,3 +112,6 @@ document, `demo_reload_after` the backstop; both reloads happen between chunks, 
 comes back. The screen is held awake via the Screen Wake Lock API, re-acquired when the tab becomes visible again; the
 lock needs a secure context, so a plain-HTTP hub falls back to the display's own idle timer — the usual reason a kiosk
 still blanks.
+
+The shape a chunk's steps take as traces — spans, attributes, ids and what never leaves — is in
+[tracing.md](./tracing.md).

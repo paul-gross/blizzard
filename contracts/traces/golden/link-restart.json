@@ -1,0 +1,85 @@
+[
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 1,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.to_node.name": "review",
+      "blizzard.step.visit": 1,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 0,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 0
+    },
+    "end": "2026-01-01T00:00:30Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "step build",
+    "parent_span_id": null,
+    "span_id": "88d23b1ca9cc34d2",
+    "start": "2026-01-01T00:00:10Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-review",
+      "blizzard.node.name": "review",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 6,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.preceded_by": "restart",
+      "blizzard.step.to_node.name": "gate",
+      "blizzard.step.visit": 2,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 0,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 0
+    },
+    "end": "2026-01-01T00:01:30Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "restart"
+        },
+        "span_id": "88d23b1ca9cc34d2",
+        "trace_id": "914265ea3262e40441fa95402ba66e6d"
+      }
+    ],
+    "name": "step review",
+    "parent_span_id": null,
+    "span_id": "26173a1e6a83cd9a",
+    "start": "2026-01-01T00:00:50Z",
+    "status": "UNSET",
+    "trace_id": "f6c8664d55df18b6c4034872c36028d4"
+  }
+]

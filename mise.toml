@@ -77,6 +77,12 @@ run = "vale --output=line ."
 description = "blizzard:wire-compat — fail on a breaking change to the hub↔runner wire surface (bzh:fleet-wire-additive), diffed against this branch's merge-base with origin/master"
 run = "uv run blizzard-wire-compat --baseline merge-base --against origin/master"
 
+[tasks.collector-config-check]
+description = "blizzard:collector-config — validate the example operator collector config (packaging/otel-collector/collector.yaml) with the pinned otelcol-contrib. Local-only: the binary is ~390 MB and the CI gate is network-free."
+tools = { "github:open-telemetry/opentelemetry-collector-releases" = { version = "0.162.0", asset_pattern = "otelcol-contrib_*", bin = "otelcol-contrib" } }
+env = { TRACE_STORE_ENDPOINT = "tempo.example:4317", TRACE_STORE_INSECURE = "false", HOSTED_TRACES_ENDPOINT = "https://api.example.com", HOSTED_TRACES_API_KEY = "placeholder" }
+run = "otelcol-contrib validate --config=packaging/otel-collector/collector.yaml"
+
 [tasks.gate]
 description = "Run the local equivalent of the PR-to-master merge gate (ruff, pyright, Vale prose lint, pytest, spec/client drift, eslint, vitest)"
 run = "./scripts/ci-gate.sh"

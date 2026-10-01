@@ -1,0 +1,639 @@
+[
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.harness.id": "claude-code",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 20,
+      "blizzard.step.cache_read_tokens": 2000,
+      "blizzard.step.choice": "pass",
+      "blizzard.step.cost.estimated": true,
+      "blizzard.step.cost.partial": true,
+      "blizzard.step.cost.usd": 0.75,
+      "blizzard.step.epoch": 1,
+      "blizzard.step.input_tokens": 200,
+      "blizzard.step.models": [
+        "claude-x"
+      ],
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.output_tokens": 100,
+      "blizzard.step.to_node.name": "review",
+      "blizzard.step.visit": 1,
+      "blizzard.step.wait.ask_ms": 2000,
+      "blizzard.step.wait.claim_ms": 7000,
+      "blizzard.step.wait.pause_ms": 3000,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 1000
+    },
+    "end": "2026-01-01T00:00:30Z",
+    "events": [
+      {
+        "attributes": {
+          "blizzard.harness.id": "claude-code",
+          "blizzard.harness.version": "2.0",
+          "blizzard.invocation.cache_create_tokens": 10,
+          "blizzard.invocation.cache_read_tokens": 1000,
+          "blizzard.invocation.cost.estimated": true,
+          "blizzard.invocation.cost.usd": 0.75,
+          "blizzard.invocation.input_tokens": 100,
+          "blizzard.invocation.kind": "spawn",
+          "blizzard.invocation.output_tokens": 50,
+          "gen_ai.response.model": "claude-x",
+          "gen_ai.usage.cache_creation.input_tokens": 10,
+          "gen_ai.usage.cache_read.input_tokens": 1000,
+          "gen_ai.usage.input_tokens": 1110,
+          "gen_ai.usage.output_tokens": 50
+        },
+        "name": "invocation",
+        "time": "2026-01-01T00:00:14Z"
+      },
+      {
+        "attributes": {
+          "blizzard.harness.id": "claude-code",
+          "blizzard.invocation.cache_create_tokens": 10,
+          "blizzard.invocation.cache_read_tokens": 1000,
+          "blizzard.invocation.input_tokens": 100,
+          "blizzard.invocation.kind": "spawn",
+          "blizzard.invocation.output_tokens": 50,
+          "gen_ai.response.model": "claude-x",
+          "gen_ai.usage.cache_creation.input_tokens": 10,
+          "gen_ai.usage.cache_read.input_tokens": 1000,
+          "gen_ai.usage.input_tokens": 1110,
+          "gen_ai.usage.output_tokens": 50
+        },
+        "name": "invocation",
+        "time": "2026-01-01T00:00:22Z"
+      }
+    ],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "step build",
+    "parent_span_id": null,
+    "span_id": "88d23b1ca9cc34d2",
+    "start": "2026-01-01T00:00:10Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.harness.id": "claude-code",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.choice": "pass",
+      "blizzard.step.epoch": 1,
+      "blizzard.step.models": [
+        "claude-x"
+      ],
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.to_node.name": "review",
+      "blizzard.step.visit": 1
+    },
+    "end": "2026-01-01T00:00:03Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "queue wait",
+    "parent_span_id": "88d23b1ca9cc34d2",
+    "span_id": "f9bd60eae4dd84f7",
+    "start": "2026-01-01T00:00:02Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.harness.id": "claude-code",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.choice": "pass",
+      "blizzard.step.epoch": 1,
+      "blizzard.step.models": [
+        "claude-x"
+      ],
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.to_node.name": "review",
+      "blizzard.step.visit": 1
+    },
+    "end": "2026-01-01T00:00:10Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "claim",
+    "parent_span_id": "88d23b1ca9cc34d2",
+    "span_id": "43fdab531371e04c",
+    "start": "2026-01-01T00:00:03Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.ask.answered": true,
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.harness.id": "claude-code",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.choice": "pass",
+      "blizzard.step.epoch": 1,
+      "blizzard.step.models": [
+        "claude-x"
+      ],
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.to_node.name": "review",
+      "blizzard.step.visit": 1
+    },
+    "end": "2026-01-01T00:00:18Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "ask",
+    "parent_span_id": "88d23b1ca9cc34d2",
+    "span_id": "dda4afb651e1a008",
+    "start": "2026-01-01T00:00:16Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.ask.answered": true,
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.clock_skew": true,
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.harness.id": "claude-code",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.choice": "pass",
+      "blizzard.step.epoch": 1,
+      "blizzard.step.models": [
+        "claude-x"
+      ],
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.to_node.name": "review",
+      "blizzard.step.visit": 1
+    },
+    "end": "2026-01-01T00:00:20Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "ask",
+    "parent_span_id": "88d23b1ca9cc34d2",
+    "span_id": "7318776fe1e87ef4",
+    "start": "2026-01-01T00:00:20Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.harness.id": "claude-code",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.choice": "pass",
+      "blizzard.step.epoch": 1,
+      "blizzard.step.models": [
+        "claude-x"
+      ],
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.to_node.name": "review",
+      "blizzard.step.visit": 1
+    },
+    "end": "2026-01-01T00:00:15Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "pause",
+    "parent_span_id": "88d23b1ca9cc34d2",
+    "span_id": "28925f2e5e1689dc",
+    "start": "2026-01-01T00:00:12Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.bounce.cause": "conflict",
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-review",
+      "blizzard.node.name": "review",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.choice": "fail",
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 2,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.to_node.name": "build",
+      "blizzard.step.visit": 1,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 3000,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 17000
+    },
+    "end": "2026-01-01T00:00:55Z",
+    "events": [
+      {
+        "attributes": {
+          "blizzard.bounce.cause": "conflict"
+        },
+        "name": "bounce",
+        "time": "2026-01-01T00:00:50Z"
+      }
+    ],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "next"
+        },
+        "span_id": "88d23b1ca9cc34d2",
+        "trace_id": "914265ea3262e40441fa95402ba66e6d"
+      }
+    ],
+    "name": "step review",
+    "parent_span_id": null,
+    "span_id": "4577b46a05cd43d6",
+    "start": "2026-01-01T00:00:35Z",
+    "status": "UNSET",
+    "trace_id": "5b8556e70b0484ae1c9dd2fe54e005dd"
+  },
+  {
+    "attributes": {
+      "blizzard.bounce.cause": "conflict",
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-review",
+      "blizzard.node.name": "review",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.choice": "fail",
+      "blizzard.step.epoch": 2,
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.to_node.name": "build",
+      "blizzard.step.visit": 1
+    },
+    "end": "2026-01-01T00:00:32Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "queue wait",
+    "parent_span_id": "4577b46a05cd43d6",
+    "span_id": "2eedf631921023c2",
+    "start": "2026-01-01T00:00:15Z",
+    "status": "UNSET",
+    "trace_id": "5b8556e70b0484ae1c9dd2fe54e005dd"
+  },
+  {
+    "attributes": {
+      "blizzard.bounce.cause": "conflict",
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-review",
+      "blizzard.node.name": "review",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.choice": "fail",
+      "blizzard.step.epoch": 2,
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.to_node.name": "build",
+      "blizzard.step.visit": 1
+    },
+    "end": "2026-01-01T00:00:35Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "claim",
+    "parent_span_id": "4577b46a05cd43d6",
+    "span_id": "5e9b89656eac66bc",
+    "start": "2026-01-01T00:00:32Z",
+    "status": "UNSET",
+    "trace_id": "5b8556e70b0484ae1c9dd2fe54e005dd"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 3,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.preceded_by": "requeue",
+      "blizzard.step.to_node.name": "gate",
+      "blizzard.step.visit": 2,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 0,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 0
+    },
+    "end": "2026-01-01T00:01:10Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "bounce"
+        },
+        "span_id": "4577b46a05cd43d6",
+        "trace_id": "5b8556e70b0484ae1c9dd2fe54e005dd"
+      }
+    ],
+    "name": "step build",
+    "parent_span_id": null,
+    "span_id": "74b20379223e78cb",
+    "start": "2026-01-01T00:01:00Z",
+    "status": "UNSET",
+    "trace_id": "0d338bce0f63eb7ab7992a965d508c04"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "human",
+      "blizzard.node.id": "g1-gate",
+      "blizzard.node.name": "gate",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.choice": "approve",
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 3,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.outcome": "decided",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.to_node.name": "verify",
+      "blizzard.step.visit": 1,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 0,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 20000,
+      "blizzard.step.wait.queue_ms": 0
+    },
+    "end": "2026-01-01T00:01:40Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "next"
+        },
+        "span_id": "74b20379223e78cb",
+        "trace_id": "0d338bce0f63eb7ab7992a965d508c04"
+      }
+    ],
+    "name": "gate gate",
+    "parent_span_id": null,
+    "span_id": "820ad9ec286b8378",
+    "start": "2026-01-01T00:01:11Z",
+    "status": "UNSET",
+    "trace_id": "e40a6cf32b4e1b4480b5938f528b3cd1"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "human",
+      "blizzard.node.id": "g1-gate",
+      "blizzard.node.name": "gate",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.choice": "approve",
+      "blizzard.step.epoch": 3,
+      "blizzard.step.outcome": "decided",
+      "blizzard.step.to_node.name": "verify",
+      "blizzard.step.visit": 1
+    },
+    "end": "2026-01-01T00:02:00Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "decision pickup",
+    "parent_span_id": "820ad9ec286b8378",
+    "span_id": "aa6deedf536cbbf9",
+    "start": "2026-01-01T00:01:40Z",
+    "status": "UNSET",
+    "trace_id": "e40a6cf32b4e1b4480b5938f528b3cd1"
+  },
+  {
+    "attributes": {
+      "blizzard.bounce.cause": "checks",
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "hub",
+      "blizzard.node.id": "g1-verify",
+      "blizzard.node.name": "verify",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 4,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.to_node.name": "build",
+      "blizzard.step.visit": 1,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 0,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 0
+    },
+    "end": "2026-01-01T00:02:10Z",
+    "events": [
+      {
+        "attributes": {},
+        "name": "hub poll pending",
+        "time": "2026-01-01T00:02:02Z"
+      },
+      {
+        "attributes": {},
+        "name": "hub poll pending",
+        "time": "2026-01-01T00:02:04Z"
+      },
+      {
+        "attributes": {
+          "blizzard.bounce.cause": "checks"
+        },
+        "name": "bounce",
+        "time": "2026-01-01T00:02:06Z"
+      }
+    ],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "next"
+        },
+        "span_id": "820ad9ec286b8378",
+        "trace_id": "e40a6cf32b4e1b4480b5938f528b3cd1"
+      }
+    ],
+    "name": "step verify",
+    "parent_span_id": null,
+    "span_id": "4840c1f1fc5718b2",
+    "start": "2026-01-01T00:02:00Z",
+    "status": "UNSET",
+    "trace_id": "051031d65b3fa101a511c88d81202ab6"
+  },
+  {
+    "attributes": {
+      "blizzard.bounce.cause": "checks",
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "hub",
+      "blizzard.node.id": "g1-verify",
+      "blizzard.node.name": "verify",
+      "blizzard.step.epoch": 4,
+      "blizzard.step.outcome": "transitioned",
+      "blizzard.step.to_node.name": "build",
+      "blizzard.step.visit": 1
+    },
+    "end": "2026-01-01T00:02:05Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "hub exec",
+    "parent_span_id": "4840c1f1fc5718b2",
+    "span_id": "e22f40e991178577",
+    "start": "2026-01-01T00:02:03Z",
+    "status": "UNSET",
+    "trace_id": "051031d65b3fa101a511c88d81202ab6"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "acme#42"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.cache_create_tokens": 0,
+      "blizzard.step.cache_read_tokens": 0,
+      "blizzard.step.cost.estimated": false,
+      "blizzard.step.cost.partial": false,
+      "blizzard.step.cost.usd": 0.0,
+      "blizzard.step.epoch": 5,
+      "blizzard.step.input_tokens": 0,
+      "blizzard.step.outcome": "escalated",
+      "blizzard.step.output_tokens": 0,
+      "blizzard.step.visit": 3,
+      "blizzard.step.wait.ask_ms": 0,
+      "blizzard.step.wait.claim_ms": 0,
+      "blizzard.step.wait.pause_ms": 0,
+      "blizzard.step.wait.pickup_ms": 0,
+      "blizzard.step.wait.queue_ms": 0
+    },
+    "end": "2026-01-01T00:02:30Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [
+      {
+        "attributes": {
+          "blizzard.link.reason": "bounce"
+        },
+        "span_id": "4840c1f1fc5718b2",
+        "trace_id": "051031d65b3fa101a511c88d81202ab6"
+      }
+    ],
+    "name": "step build",
+    "parent_span_id": null,
+    "span_id": "dc95b1cea6e3ae76",
+    "start": "2026-01-01T00:02:20Z",
+    "status": "ERROR",
+    "trace_id": "ab7589710e4df09216b59b8931d5ea9f"
+  }
+]
