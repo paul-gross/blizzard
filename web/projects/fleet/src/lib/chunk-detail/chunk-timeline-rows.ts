@@ -12,8 +12,8 @@ import { formatAbsolute, formatWhen } from '../when';
  * view-model text once rather than the template re-deriving it from a raw instant.
  *
  * {@link key} is this step's join key ({@link nodeStepKey} of its `(nodeId, epoch)`) —
- * `null` for a migration row, which cannot key that join (synthetic `epoch: 0`,
- * nullable `nodeId`, and no artifact or transcript is ever stored under either). */
+ * `null` for migrations without a worker step (non-authored sources or no origin node).
+ * Authored-edge migrations join the producing step at their real epoch. */
 export interface HistoryRow {
   readonly kind: 'transition' | 'migration';
   readonly key: string | null;
@@ -105,8 +105,8 @@ export function deriveHistoryRows(detail: ChunkDetail): readonly HistoryRow[] {
   // and re-queued at `to_graph/landed_node`, woven into the same timeline by time.
   const migrations: HistoryRow[] = (detail.migrations ?? []).map((m) => ({
     kind: 'migration' as const,
-    key: null, // A migration's synthetic epoch/nullable nodeId cannot key the join.
-    epoch: 0,
+    key: m.source === 'authored-edge' && m.from_node_id !== null ? nodeStepKey(m.from_node_id, m.epoch) : null,
+    epoch: m.epoch,
     nodeId: m.from_node_id,
     nodeName: m.from_node_name ?? m.from_node_id ?? '·',
     graphName: m.from_graph_name ?? m.from_graph_id,

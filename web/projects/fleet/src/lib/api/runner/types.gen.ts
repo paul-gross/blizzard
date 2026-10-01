@@ -1594,6 +1594,10 @@ export type MigrationView = {
      */
     choice_name?: string | null;
     /**
+     * Epoch
+     */
+    epoch: number;
+    /**
      * From Graph Id
      */
     from_graph_id: string;

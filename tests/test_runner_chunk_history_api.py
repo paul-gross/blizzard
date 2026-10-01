@@ -76,6 +76,7 @@ _DETAIL: dict[str, object] = {
             "landed_node_name": "build",
             "choice_name": "route",
             "source": "authored-edge",
+            "epoch": 1,
             "recorded_at": "2026-07-21T09:00:00+00:00",
         }
     ],
@@ -139,6 +140,7 @@ def test_a_migration_becomes_its_own_row_with_a_graph_hop_label() -> None:
                 landed_node_name="build",
                 choice_name="route",
                 source="authored-edge",
+                epoch=1,
                 recorded_at="2026-07-21T09:00:00+00:00",
             )
         ],

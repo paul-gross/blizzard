@@ -39,7 +39,7 @@ const STEP_ARTIFACT: ArtifactView = {
   recorded_at: '2026-08-09T00:00:00.000Z',
 };
 
-async function render(options: { selectedKey?: string | null; stepArtifacts?: readonly ArtifactView[] } = {}) {
+async function render(options: { detail?: hubApi.ChunkDetail; selectedKey?: string | null; stepArtifacts?: readonly ArtifactView[] } = {}) {
   // `ChunkTimelineSelection` renders a `RouterLink` on a multi-graph row — NG0201 without
   // a router provided, even though this chunk's single-graph history never reaches it.
   await TestBed.configureTestingModule({
@@ -47,7 +47,7 @@ async function render(options: { selectedKey?: string | null; stepArtifacts?: re
     providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkNodeHistoryTab);
-  fixture.componentRef.setInput('detail', DETAIL);
+  fixture.componentRef.setInput('detail', options.detail ?? DETAIL);
   fixture.componentRef.setInput('selectedKey', options.selectedKey ?? null);
   fixture.componentRef.setInput('stepArtifacts', options.stepArtifacts ?? []);
   await fixture.whenStable();
@@ -84,6 +84,31 @@ describe('ChunkNodeHistoryTab', () => {
 
     (el.querySelector('[data-testid="selection-step"]') as HTMLElement).click();
     expect(emitted).toEqual(['nd_build:1']);
+  });
+
+  it('selects an authored-edge migration and renders its step artifact', async () => {
+    const migrationDetail: hubApi.ChunkDetail = {
+      ...DETAIL,
+      migrations: [{
+        from_node_id: 'nd_triage', from_node_name: 'triage', from_graph_id: 'gr_default',
+        to_graph_id: 'gr_1', choice_name: 'basic', source: 'authored-edge', epoch: 3,
+        recorded_at: '2026-08-09T00:00:01.000Z',
+      }],
+    };
+    const artifact: ArtifactView = {
+      ...STEP_ARTIFACT, key: 'triage.triage-findings.3', node_id: 'nd_triage',
+      node_name: 'triage', epoch: 3, name: 'triage-findings', content: 'basic lane rationale',
+    };
+    const fixture = await render({ detail: migrationDetail, stepArtifacts: [artifact] });
+    const emitted: (string | null)[] = [];
+    fixture.componentInstance.pickStep.subscribe((key) => emitted.push(key));
+    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="selection-migration-step"]') as HTMLElement;
+    row.click();
+    expect(emitted).toEqual(['nd_triage:3']);
+    fixture.componentRef.setInput('selectedKey', 'nd_triage:3');
+    await fixture.whenStable();
+    expect(row.classList.contains('selected')).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="node-history-artifact-content"]')?.textContent).toContain('basic lane rationale');
   });
 
   it('shows a hint and no step panel when no step is selected', async () => {

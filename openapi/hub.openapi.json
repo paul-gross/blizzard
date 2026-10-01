@@ -5306,6 +5306,10 @@
             ],
             "title": "Choice Name"
           },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
           "from_graph_id": {
             "title": "From Graph Id",
             "type": "string"
@@ -5411,6 +5415,7 @@
           "from_node_id",
           "from_graph_id",
           "to_graph_id",
+          "epoch",
           "recorded_at"
         ],
         "title": "MigrationView",

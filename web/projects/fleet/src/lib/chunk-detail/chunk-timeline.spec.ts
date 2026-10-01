@@ -155,6 +155,7 @@ const TWO_GRAPH_DETAIL: ChunkDetail = {
       landed_node_name: 'build',
       choice_name: 'migrate',
       model: 'claude-sonnet-5',
+      epoch: 2,
       recorded_at: '2026-07-13T00:00:02Z',
     },
   ],
@@ -424,6 +425,20 @@ describe('ChunkTimeline', () => {
     expect(activeLink.getAttribute('href')).toBe(
       `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_t_build:1`,
     );
+    expect(el.querySelector('[data-testid="history-migration-step"] a.step-link')).toBeNull();
+
+    const authoredFixture = TestBed.createComponent(ChunkTimeline);
+    authoredFixture.componentRef.setInput('detail', {
+      ...TWO_GRAPH_DETAIL,
+      migrations: [{ ...TWO_GRAPH_DETAIL.migrations![0], source: 'authored-edge' }],
+    });
+    await authoredFixture.whenStable();
+    const migrationLink = (authoredFixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="history-migration-step"] a.step-link',
+    ) as HTMLAnchorElement;
+    expect(migrationLink.getAttribute('href')).toBe(
+      `/board/chunk/${TWO_GRAPH_DETAIL.chunk_id}?tab=node-history&step=nd_s_review:2`,
+    );
 
     (el.querySelector('[data-testid="history-step"]') as HTMLElement).click();
     expect(emitted).toEqual([]);
@@ -479,7 +494,7 @@ describe('ChunkTimeline', () => {
     expect(emitted).toEqual([]);
   });
 
-  it('renders a null-keyed row inert — no anchor, no tabindex, no hover-keyed class (a migration, or an active row with no epoch yet)', async () => {
+  it('renders a null-keyed row inert — no anchor, no tabindex, no hover-keyed class (a non-worker migration or an active row with no epoch yet)', async () => {
     const migrationFixture = TestBed.createComponent(ChunkTimeline);
     migrationFixture.componentRef.setInput('detail', { ...TWO_GRAPH_DETAIL, status: 'ready' });
     await migrationFixture.whenStable();
@@ -522,7 +537,7 @@ describe('ChunkTimeline', () => {
     expect(router.url).toBe(startUrl);
   });
 
-  it('makes a transition row and the active row activatable, but never a migration row (D1)', async () => {
+  it('makes a transition and active row activatable while a non-worker migration stays inert', async () => {
     const fixture = TestBed.createComponent(ChunkTimeline);
     // TWO_GRAPH_DETAIL's own status is 'ready' (no node in flight) — 'running' gives it
     // an active row too, so both activatable shapes are exercised in one fixture.
@@ -543,7 +558,7 @@ describe('ChunkTimeline', () => {
     expect(migration.getAttribute('role')).toBeNull();
     expect(migration.getAttribute('tabindex')).toBeNull();
     migration.click();
-    expect(emitted).toEqual(['nd_s_build:1']); // unchanged — a migration row emits nothing
+    expect(emitted).toEqual(['nd_s_build:1']);
 
     const active = el.querySelector('[data-testid="history-active"]') as HTMLElement;
     expect(active.getAttribute('role')).toBe('button');

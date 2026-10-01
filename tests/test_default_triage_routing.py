@@ -74,6 +74,11 @@ def test_the_basic_choice_lands_the_chunk_at_bas_dwf_build(tmp_path: Path) -> No
     assert detail["graph_id"] == bas_dwf_id
     assert detail["current_node_name"] == "build"  # entry landing — bas-dwf has no triage node
     assert detail["status"] == "ready"  # re-queued under the lane, claimable
+    migration = detail["migrations"][0]
+    artifact = next(a for a in detail["artifacts"] if a["name"] == "triage-findings")
+    assert migration["source"] == "authored-edge"
+    assert (migration["from_node_id"], migration["epoch"]) == (node_id, 1)
+    assert (artifact["node_id"], artifact["epoch"], artifact["content"]) == (node_id, 1, "routing rationale")
 
 
 def test_the_advanced_choice_lands_the_chunk_at_adv_dwf_plan(tmp_path: Path) -> None:

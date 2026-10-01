@@ -372,6 +372,7 @@ def test_a_policy_migration_is_attributed_to_the_policy_in_history(tmp_path: Pat
     assert [m.source for m in facts.migrations] == [MigrationSource.FOLLOW_LATEST]
     migrations = hub.client.get(f"/api/chunks/{chunk_id}").json()["migrations"]
     assert [m["source"] for m in migrations] == ["follow-latest"]
+    assert [m["epoch"] for m in migrations] == [facts.migrations[0].epoch]
 
 
 @pytest.mark.component
