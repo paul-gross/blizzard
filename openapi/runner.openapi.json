@@ -2582,7 +2582,7 @@
         "type": "string"
       },
       "MigrationView": {
-        "description": "One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition. A transition-borne source ends\nthe attempt and re-queues; ``restart`` preempts it and keeps the route (#371). ``model`` is the\nre-pinned model, null when the chunk kept its own. ``source`` attributes it.",
+        "description": "One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition. A transition-borne source ends\nthe attempt and re-queues; ``restart`` preempts it and keeps the route. ``model`` is the\nre-pinned model, null when the chunk kept its own. ``source`` attributes it, and ``epoch``\nrecords the submitting step's epoch for an authored-edge migration.",
         "properties": {
           "choice_name": {
             "anyOf": [
