@@ -1,6 +1,4 @@
-"""Artifacts' durable write order — ``seq`` on ``artifacts``, a per-chunk counter. The
-backfill assigns 1..n per chunk by ``(epoch, produced_at, artifact_id)``, the best
-order the pre-``seq`` rows carry.
+"""Artifacts' per-chunk ``seq``; backfill orders by epoch, time, then id.
 
 Revision ID: 20260930_1000_artifact_seq
 Revises: 20260929_1100_drop_open_pr_facts

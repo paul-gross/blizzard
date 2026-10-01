@@ -1305,8 +1305,7 @@ def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_p
 
 
 def test_usage_limited_worker_generation_engages_the_brake_and_parks_no_retry_no_epoch(tmp_path):  # type: ignore[no-untyped-def]
-    """Reconstructs the 2026-09-05 shape: a spawn generation whose harness classifies it
-    as usage-limited engages the brake instead of being judged, failed, or retried."""
+    """A usage-limited worker engages the brake without judgement or retry."""
     store = _store(tmp_path)
     _seed_exited_lease(store)  # no resume intent, no elicitation — a plain exited worker
 
@@ -1340,8 +1339,7 @@ def test_usage_limited_worker_generation_engages_the_brake_and_parks_no_retry_no
 
 
 def test_usage_limited_worker_generation_logs_the_harnesss_own_detail(tmp_path):  # type: ignore[no-untyped-def]
-    """The harness's own free-text explanation must not be silently
-    dropped at engagement, even though it never rides the brake's fixed reason string."""
+    """Keep the harness's free-text detail in the engagement log."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
 
@@ -1367,11 +1365,8 @@ def test_usage_limited_worker_generation_logs_the_harnesss_own_detail(tmp_path):
 
 
 def test_usage_limited_judge_elicitation_engages_the_brake_and_parks(tmp_path):  # type: ignore[no-untyped-def]
-    """A judge elicitation's own exit, classified usage-limited: no failed attempt, and the
-    elicitation record is left standing rather than cleared or left for `_lost`'s
-    staleness-bound relaunching — `on_unpause` reads it back to tell a
-    judge-side park from a worker-side one, and clearing here would erase that signal for a
-    crash landing before a fresh elicitation launches."""
+    """A usage-limited judge leaves its elicitation record for unpause to distinguish
+    a judge-side park from a worker-side one, without spending an attempt."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
 
@@ -1408,10 +1403,7 @@ def test_usage_limited_judge_elicitation_engages_the_brake_and_parks(tmp_path): 
 
 
 def test_usage_limited_judge_park_relaunches_a_fresh_elicitation_after_unpause(tmp_path):  # type: ignore[no-untyped-def]
-    """Unpausing a judge-usage-limit park must re-run `Judgement` — a
-    fresh elicitation — never the ordinary worker wake, since the worker's own turn already
-    finished before its verdict elicitation hit the limit; there is nothing left for a
-    "continue your task" message to say."""
+    """Unpausing a judge-side park elicits a fresh verdict, not a worker wake."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
 
@@ -1456,8 +1448,7 @@ def test_usage_limited_judge_park_relaunches_a_fresh_elicitation_after_unpause(t
 
 
 def test_usage_limit_pause_resumes_the_same_lease_in_place_after_unpause(tmp_path):  # type: ignore[no-untyped-def]
-    """After `blizzard runner start`, a usage-limit-parked lease wakes the same session
-    under the same epoch — no retry, no new spawn identity."""
+    """Unpause wakes the same session and epoch without consuming a retry."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
 
@@ -1495,8 +1486,7 @@ def test_usage_limit_pause_resumes_the_same_lease_in_place_after_unpause(tmp_pat
 
 
 def test_usage_limit_already_engaged_brake_keeps_its_original_reason(tmp_path):  # type: ignore[no-untyped-def]
-    """The brake is engage-once: a runner already paused for some other cause parks
-    the usage-limited lease but never overwrites the standing reason."""
+    """A usage limit does not overwrite an already-engaged brake's reason."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
 
@@ -1523,8 +1513,7 @@ def test_usage_limit_already_engaged_brake_keeps_its_original_reason(tmp_path): 
 
 
 def test_usage_limit_reason_falls_back_to_the_sampled_resets_at(tmp_path):  # type: ignore[no-untyped-def]
-    """No reset time from the classifier: the reason falls back to the soonest future
-    reset among every declared subscription's own latest-sampled, exhausted windows."""
+    """With no classifier reset, use the soonest future exhausted-window reset."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
     store.record_external_usage_attempt(
@@ -1588,9 +1577,7 @@ def test_usage_limit_reason_falls_back_to_the_sampled_resets_at(tmp_path):  # ty
 
 
 def test_usage_limit_reason_fallback_skips_a_failed_samples_null_payload(tmp_path):  # type: ignore[no-untyped-def]
-    """The newest sample row can be a recorded failed-sample attempt
-    (a NULL payload, e.g. a missing-credentials soft failure) — the fallback must read past
-    it to an older, still-valid 100%-utilized window rather than going reset-less."""
+    """A failed sample's NULL payload must not shadow an older valid exhausted window."""
     store = _store(tmp_path)
     _seed_exited_lease(store)
     store.record_external_usage_attempt(
@@ -1699,9 +1686,7 @@ def test_ceiling_pause_still_engages_and_behaves_unmodified(tmp_path):  # type: 
     assert "5.00" in payload["reason"] and "7.00" in payload["reason"]
 
 
-# --------------------------------------------------------------------------- #
-# The interrupted-claim reclaim is a new claim — either brake stops it.
-# --------------------------------------------------------------------------- #
+# Interrupted-claim reclaim is a new claim, stopped by either brake.
 
 
 def _ctx_with_a_crash_left_binding(tmp_path, *, route_runner_id: str | None = None):  # type: ignore[no-untyped-def]

@@ -12,11 +12,9 @@ from dataclasses import dataclass
 
 __all__ = ["RepoRef", "repo_identity"]
 
-# `scp`-style ssh remotes — `git@host:owner/name(.git)` — which urllib does not parse as
-# a URL at all (no `//`), and which are the dominant form in practice.
+# `scp`-style ssh remotes lack the `//` a URL parser needs.
 _SCP_LIKE = re.compile(r"^(?:[^@/]+@)?(?P<host>[^:/]+):(?P<path>.+)$")
-# Anything with an explicit scheme: `https://host/owner/name`, `ssh://git@host/owner/name`,
-# `file:///path/to/name.git`, … The netloc may carry userinfo and a port.
+# The netloc of an explicit-scheme URL may carry userinfo and a port.
 _WITH_SCHEME = re.compile(r"^(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*)://(?P<netloc>[^/]*)(?P<path>/.*)?$")
 
 
@@ -71,7 +69,6 @@ def repo_identity(origin_url: str | None, name: str) -> str:
 
     The ``owner/name`` coordinate ``origin_url`` encodes when it names an owner; otherwise ``name``
     as given, so a name already qualified (a stored row with no origin) passes through unchanged.
-    Delivery addresses a repo by this coordinate alone, so two origins that share it are one
-    repository here and two that differ are two."""
+    Delivery addresses a repo by this coordinate alone."""
     ref = RepoRef.parse(origin_url) if origin_url else None
     return ref.qualified if ref else name

@@ -50,29 +50,24 @@ graph_nodes = Table(
     Column("prompt", Text, nullable=True),  # inlined text, never a path
     Column("judgement_prompt", Text, nullable=True),  # the verdict-elicitation prompt; null at a gate/hub node
     Column("session", String, nullable=False),  # resume | fresh
-    # The targeted-resume source node name — the parsed ``<name>`` of a
-    # ``session: resume:<name>`` form; null for bare ``resume``/``fresh``.
+    # Target of ``session: resume:<name>``; null for bare resume/fresh.
     Column("session_source", String, nullable=True),
     Column("judged_by", String, nullable=False),  # worker | human
     Column("retries_max", Integer, nullable=True),
     Column("retries_exhausted", String, nullable=True),  # escalate
     Column("produces", Text, nullable=True),  # JSON list of artifact names; e.g. review's `review-findings`
     Column("checks", Text, nullable=True),  # JSON list of check commands, runner-run at worker exit (#114)
-    # Where the runner runs this node's ``checks:`` and the per-check timeout (#114) — null
-    # runs at the env workdir root / accepts the check-runner's default timeout.
+    # Null uses the env workdir / default check timeout (#114).
     Column("checks_cwd", String, nullable=True),
     Column("checks_timeout", Integer, nullable=True),
     # The kick-back cap (#64) — null accepts the fleet default (``graph.DEFAULT_BOUNCE_CAP``).
     Column("bounce_cap", Integer, nullable=True),
-    # The generic hub command node's declared commands (#65) — JSON list of
-    # ``{command, name, produces}``; null/empty on every other node.
+    # Hub commands (#65), JSON ``{command, name, produces}`` list.
     Column("run", Text, nullable=True),
-    # The pending-poll cadence (#66) — null accepts the executor's own default
-    # (``hub_node.DEFAULT_POLL_INTERVAL`` / ``DEFAULT_POLL_TIMEOUT``).
+    # Pending-poll cadence (#66); null uses the executor defaults.
     Column("poll_interval_seconds", Integer, nullable=True),
     Column("poll_timeout_seconds", Integer, nullable=True),
-    # Whether this node's completion may carry proposed work items — null/false is
-    # off, the default for every node predating the policy.
+    # Null/false disallows proposed work items.
     Column("proposes_work_items", Boolean, nullable=True),
 )
 Index("ix_graph_nodes_graph_id", graph_nodes.c.graph_id)
@@ -84,8 +79,7 @@ graph_choices = Table(
     Column("node_id", String, ForeignKey("graph_nodes.node_id"), nullable=False),
     Column("name", String, nullable=False),
     Column("description", Text, nullable=False),
-    # Whether this choice is gated on green checks (#114) — null/false is ungated (every
-    # pre-#114 choice). The hub backstop and the runner-local gate both read it.
+    # Null/false is ungated (#114).
     Column("requires_checks", Boolean, nullable=True),
 )
 Index("ix_graph_choices_node_id", graph_choices.c.node_id)
@@ -98,38 +92,32 @@ graph_edges = Table(
     Column("choice_id", String, ForeignKey("graph_choices.choice_id"), nullable=False),
     Column("to_node_name", String, nullable=False),  # a node name, the reserved 'done', or 'graph:<name>' (#90)
     Column("prompt_addendum", Text, nullable=True),  # inlined arrival context
-    # The optional per-choice model override applied when a cross-graph migration edge
-    # (#90) re-pins the chunk — null keeps the chunk's current model.
+    # Cross-graph model override (#90); null keeps the current model.
     Column("to_graph_model", String, nullable=True),
 )
 Index("ix_graph_edges_from_node_id", graph_edges.c.from_node_id)
 
-# The graph-level named-session declarations — one row per `sessions:` entry,
-# keyed `(graph_id, name)`, since `name` is what every reference resolves by.
+# Named sessions keyed by `(graph_id, name)`.
 graph_sessions = Table(
     "graph_sessions",
     metadata,
     Column("graph_id", String, ForeignKey("graphs.graph_id"), primary_key=True),
     Column("name", String, primary_key=True),
     Column("ordinal", Integer, nullable=False),  # authored `sessions:` position, display-only
-    # The prioritized model preference list — JSON `list[str]` of opaque preference strings.
-    # The hub never interprets an entry (``bzh:pluggable-seams``).
+    # Opaque JSON model preferences (``bzh:pluggable-seams``).
     Column("model", Text, nullable=True),
     Column("effort", String, nullable=True),  # a single aliased value; null declares none
-    # The rotation bounds — all nullable and independently declared; a declaration with no
-    # `rotate:` at all leaves all three null and bounds nothing.
+    # Independent rotation bounds; null means unbounded.
     Column("rotate_max_context_tokens", Integer, nullable=True),
     Column("rotate_max_transcript_bytes", Integer, nullable=True),
     Column("rotate_max_invocations", Integer, nullable=True),
     # The compaction window, opaque like `effort`; null declares none.
     Column("compaction_window", String, nullable=True),
-    # The session's acceptable harness set — JSON `list[str]`, authored
-    # order, the `model` column's own shape. Null declares no constraint.
+    # Ordered JSON harness preferences; null is unconstrained.
     Column("harnesses", Text, nullable=True),
 )
 
-# The graph-scoped `artifacts:` declarations — the `graph_sessions` shape, one row
-# per entry keyed `(graph_id, name)`, not a JSON column on `graphs`.
+# Graph artifacts keyed by `(graph_id, name)`.
 graph_artifacts = Table(
     "graph_artifacts",
     metadata,
@@ -140,7 +128,6 @@ graph_artifacts = Table(
 )
 
 # --- Graph lifecycle facts (graph.retired / graph.enabled) -------------------
-# The reversible retire/re-enable brake over one graph_id: append-only, newest-fact-wins.
 
 graph_lifecycle_facts = Table(
     "graph_lifecycle_facts",
@@ -153,21 +140,18 @@ graph_lifecycle_facts = Table(
 )
 Index("ix_graph_lifecycle_facts_graph_id", graph_lifecycle_facts.c.graph_id)
 
-# The per-graph follow-latest policy — append-only, newest-fact-wins.
-# `follow_latest` is **tri-state**: NULL (or no row at all) inherits the hub setting.
+# Follow-latest policy: newest fact wins; null inherits the hub setting.
 graph_policy_facts = Table(
     "graph_policy_facts",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),
-    Column("follow_latest", Boolean, nullable=True),  # tri-state: null inherits the hub setting
+    Column("follow_latest", Boolean, nullable=True),
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
 )
 
-# --- Scopes (an operator-authored slug the hub stores and hands back) ---
-# The slug is the primary key: mint-on-name means a different slug is a different
-# bucket by design, so it is already the stable, immutable, groupable key.
+# --- Scopes (operator-authored, slug-keyed buckets) ---
 
 scopes = Table(
     "scopes",
@@ -177,8 +161,7 @@ scopes = Table(
     Column("created_at", UtcDateTime, nullable=False),
 )
 
-# The reversible retire/enable brake over one scope slug — the
-# graph_lifecycle_facts shape: append-only, newest-fact-wins.
+# Scope retire/enable facts: append-only, newest wins.
 scope_lifecycle_facts = Table(
     "scope_lifecycle_facts",
     metadata,
@@ -189,9 +172,7 @@ scope_lifecycle_facts = Table(
     Column("set_by", String, nullable=False),
 )
 
-# --- Routines (an operator-authored graph + default-scope + run-defaults pointer)
-# — a mutable entity row: name/graph/default scope/model/effort edit in place, so
-# `routine_id` is a surrogate key the name's own lineage survives under.
+# --- Routines (mutable graph, scope and run defaults; surrogate id) ---
 
 routines = Table(
     "routines",
@@ -200,20 +181,16 @@ routines = Table(
     Column("name", String, nullable=False),
     Column("graph_name", String, nullable=False),  # a graph *name*, not a graph_id
     Column("default_scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
-    # The routine's default model preference (JSON list[str]) and effort — the
-    # chunks.default_model/default_effort shape. Both nullable and minted
-    # empty: an empty preference means express none.
+    # Nullable JSON model preferences and effort; empty means express none.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
-    # The routine's default harness preference — the `default_model`
-    # shape: JSON `list[str]`, nullable, minted empty meaning express none.
+    # Nullable JSON harness preferences; empty means express none.
     Column("default_harnesses", Text, nullable=True),
     Column("created_at", UtcDateTime, nullable=False),
     UniqueConstraint("name", name="uq_routines_name"),
 )
 
-# The many-to-many between a routine and every scope its runs may write into —
-# mutable like garden_proposal_findings, not append-only like scope_lifecycle_facts.
+# Mutable routine-to-scope membership.
 
 routine_scopes = Table(
     "routine_scopes",
@@ -243,18 +220,14 @@ chunks = Table(
     Column("chunk_id", String, primary_key=True),  # ch_<ulid>
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),  # pinned at mint
     Column("minted_at", UtcDateTime, nullable=False),
-    # RETAINED AND UNREAD (superseded by `default_model`/`default_effort`):
-    # a new row carries the migration's `server_default`. Never read it as a current fact.
+    # Retained, unread legacy column; inserts use the migration's server default.
     Column("model", String, nullable=False),
-    # The chunk's **default** model preference (JSON `list[str]`) and effort.
-    # Both nullable and minted empty: an empty preference means *express none*.
+    # Nullable JSON model preferences and effort; empty means express none.
     Column("default_model", Text, nullable=True),
     Column("default_effort", String, nullable=True),
-    # The chunk's default harness preference — the `default_model` shape:
-    # JSON `list[str]`, nullable, minted empty meaning express none.
+    # Nullable JSON harness preferences; empty means express none.
     Column("default_harnesses", Text, nullable=True),
-    # The chunk's standing intent to migrate at its next transition — a JSON
-    # `{"mode", "graph_id", "node_name"}` blob, read whole; NULL while no intent is set.
+    # Next-transition migration intent, JSON; null while unset.
     Column("intended_migration", Text, nullable=True),
 )
 # (minted_at, chunk_id) for newest-first bounded reads since a timestamp.
@@ -269,8 +242,7 @@ chunk_work_refs = Table(
     Column("ref", String, nullable=False),
 )
 Index("ix_chunk_work_refs_chunk_id", chunk_work_refs.c.chunk_id)
-# (source, ref) also serves a source-only filter via its leading column — no separate
-# single-column source index.
+# Leading source column also serves source-only filters.
 Index("ix_chunk_work_refs_source_ref", chunk_work_refs.c.source, chunk_work_refs.c.ref)
 
 # --- Movement record (transition.recorded) ------------------------------------
@@ -280,8 +252,7 @@ transitions = Table(
     metadata,
     Column("transition_id", String, primary_key=True),  # tr_<ulid>
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    # The graph this transition happened in — so a later cross-graph migration
-    # never strands its node ids against the new pin. No ForeignKey, like its siblings.
+    # Historical graph pin; not a FK to the chunk's mutable pin.
     Column("graph_id", String, nullable=False),
     Column("from_node_id", String, nullable=True),  # null on the first transition out of entry
     Column("to_node_id", String, nullable=False),  # a node_id, or 'done' terminal
@@ -291,16 +262,13 @@ transitions = Table(
     Column("runner_id", String, nullable=False),  # reporting author, or the hub coordinator
     Column("recorded_at", UtcDateTime, nullable=False),
 )
-# (chunk_id, epoch) serves both a plain chunk_id filter and a per-attempt (chunk_id,
-# epoch) join, at no extra write cost over a single-column index.
+# Leading chunk_id also serves chunk-only filters.
 Index("ix_transitions_chunk_id_epoch", transitions.c.chunk_id, transitions.c.epoch)
 
-# (recorded_at, transition_id) for newest-first bounded reads since a timestamp — this
-# table is the one high-volume source among the tables such a read spans.
+# Newest-first bounded reads on the high-volume transition table.
 Index("ix_transitions_recorded_at_transition_id", transitions.c.recorded_at, transitions.c.transition_id)
 
-# The delivery-materialization sweep's own candidate read — every pass
-# scans for `to_node_id == RESERVED_TERMINAL` across the whole table.
+# Delivery-materialization candidates target the terminal node.
 Index("ix_transitions_to_node_id", transitions.c.to_node_id)
 
 # --- Cross-graph migration record (chunk_migrations) ---------------
@@ -320,8 +288,7 @@ chunk_migrations = Table(
     Column("model_after", String, nullable=True),  # the re-pinned model, or null (kept current)
     Column("epoch", Integer, nullable=False),  # the submitting fence; the natural-key third part
     Column("recorded_at", UtcDateTime, nullable=False),
-    # What moved the chunk: authored-edge | intent | follow-latest | restart.
-    # Nullable — a row predating the discriminator stays honestly unattributed.
+    # Migration cause; null for legacy rows.
     Column("source", String, nullable=True),
 )
 Index("ix_chunk_migrations_chunk_id", chunk_migrations.c.chunk_id)
@@ -344,42 +311,31 @@ artifacts = Table(
     Column("repo", String, nullable=True),  # git_commit only
     Column("forge", String, nullable=True),  # git_commit only; null = legacy row
     Column("produced_at", UtcDateTime, nullable=False),
-    # The per-chunk durable write order, assigned under the chunk-row lock in the
-    # inserting transaction (chunk_rows.next_artifact_seq). Not unique, like route_created.seq.
+    # Durable write order, assigned under the chunk-row lock; not unique.
     Column("seq", Integer, nullable=False),
 )
-# (chunk_id, node_id, epoch): a chunk's artifacts inlined by chunk;
-# node_id/epoch trail so the same index still serves a chunk-only lookup as its
-# leading-column prefix.
+# Leading chunk_id also serves chunk-only artifact reads.
 Index("ix_artifacts_chunk_id_node_id_epoch", artifacts.c.chunk_id, artifacts.c.node_id, artifacts.c.epoch)
 
 # --- Findings and finding sets -----------------------------------
-# A finding is a durable observation a routine's run recorded — first class the way an
-# artifact is (blizzard-product:/delivered/garden/machinery.md §Findings are artifacts). This
-# table carries no live/last_seen_at/observed_count column: finding_facts is
-# append-only, and every reader derives them fresh, newest-fact-wins, the
-# scope_lifecycle_facts shape.
+# Finding liveness and observation counts derive from append-only finding_facts.
 
 findings = Table(
     "findings",
     metadata,
     Column("finding_id", String, primary_key=True),  # fin_<ulid>
-    # A routine's own name, not its surrogate id; null for a `source="review"` finding,
-    # which carries no routine lineage.
+    # Routine name; null for review-sourced findings.
     Column("routine_name", String, nullable=True),
     Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
     Column("class", String, key="class_", nullable=False),  # the deployment's own vocabulary; opaque to the hub
     Column("locus", String, nullable=False),  # a repo-relative path, optionally :line/::symbol; opaque to the hub
     Column("summary", Text, nullable=False),
     Column("introduced", String, nullable=True),  # best-effort blame commit; null when not resolvable
-    # `introduced`'s own authored instant — nullable, never backfilled: null
-    # wherever unresolved, by design.
+    # Authored instant, null when unresolved; never backfilled.
     Column("introduced_at", UtcDateTime, nullable=True),
-    # "routine" (a routine's run raised it) or "review" (a delivery lane's review raised
-    # it) — a finding's home, not its liveness.
+    # Origin of the finding, not its liveness.
     Column("source", String, nullable=False, server_default="routine"),
-    # blizzard's own closed severity vocabulary (blocking/should-fix) — null for a
-    # routine-sourced finding, which carries no severity of its own.
+    # Review severity; null for routine-sourced findings.
     Column("severity", String, nullable=True),
     # The chunk whose review raised this finding — null for a routine-sourced finding.
     Column("raised_by_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=True),
@@ -388,13 +344,10 @@ findings = Table(
 
 Index("ix_findings_routine_scope", findings.c.routine_name, findings.c.scope_slug)
 Index("ix_findings_routine_class", findings.c.routine_name, findings.c.class_)
-# The garden bucket's widened read: a review-sourced finding on the
-# same scope filters on this index instead of `ix_findings_routine_scope` above.
+# Scope/source index includes review-sourced findings in garden reads.
 Index("ix_findings_scope_source", findings.c.scope_slug, findings.c.source)
 
-# One row per `add`/`observed`/`gone`/`delivered`/exit/`reopened` transformation a delivered
-# list or a person applied to a finding — first-recorded,
-# last-seen, and the observed count are reads over this table, never a cached summary on `findings`.
+# Append-only finding changes; first/last seen and counts derive here.
 
 finding_facts = Table(
     "finding_facts",
@@ -406,17 +359,13 @@ finding_facts = Table(
     Column("note", Text, nullable=True),  # gone's/delivered's/an exit's/reopened's note; null for add/observed
     # Who recorded a human-driven fact — null for a run-driven add/observed/gone.
     Column("actor", String, nullable=True),
-    # The proposal a `delivered` fact answered — null for a
-    # hand resolution, and null again on the `resolved` fact a later run settles it to.
+    # Proposal answered by a delivered fact; null for hand/later resolutions.
     Column("proposal_id", String, ForeignKey("garden_proposals.proposal_id"), nullable=True),
     # The absorbing finding, set only on a `superseded` fact.
     Column("superseded_by", String, ForeignKey("findings.finding_id"), nullable=True),
-    # The delivered list this fact belongs to — written by delivery for
-    # the `add`/`observed`/`gone` facts it materializes; null for a person's exit verb,
-    # which belongs to no run. No backfill: a fact predating this column reads back null.
+    # Delivery set for add/observed/gone; null for exits and legacy facts.
     Column("finding_set_id", String, ForeignKey("finding_sets.finding_set_id"), nullable=True),
-    # An `add` fact's own submission-local ref — null for every other kind, and null on
-    # any fact predating this column.
+    # Submission-local ref on add facts; null otherwise.
     Column("ref", String, nullable=True),
     CheckConstraint(
         "kind IN ('add', 'observed', 'gone', 'delivered', 'resolved', 'gone-confirmed', 'wont-fix',"
@@ -427,13 +376,10 @@ finding_facts = Table(
 
 Index("ix_finding_facts_finding_id_id", finding_facts.c.finding_id, finding_facts.c.id)
 
-# A run's own delta reads every fact belonging to one delivered set, once per set, on
-# every `GET /api/runs/{chunk_id}` — unindexed like no other fact-table
-# filter column here.
+# Run detail reads facts by delivered set.
 Index("ix_finding_facts_finding_set_id", finding_facts.c.finding_set_id)
 
-# The set a delivered finding list mints, one per artifact — scope, the
-# per-repository revisions, and the routine's measurement live here, never per finding.
+# One delivered set per artifact, holding scope, revisions and measurement.
 
 finding_sets = Table(
     "finding_sets",
@@ -442,8 +388,7 @@ finding_sets = Table(
     Column("artifact_id", String, ForeignKey("artifacts.artifact_id"), nullable=False, unique=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the run that delivered it
     Column("scope_slug", String, ForeignKey("scopes.slug"), nullable=False),
-    # The routine that recorded this set, by name — a chunk may hold pointers from more
-    # than one source, so joining through it to a work item's routine is ambiguous.
+    # Routine name; a chunk's mixed-source pointers cannot identify it.
     Column("routine_name", String, nullable=False, server_default=""),
     Column("revisions", Text, nullable=False),  # JSON {repo: revision} (`bzh:sql-portable`)
     Column("measurement", Text, nullable=True),  # opaque, routine-strategy-defined; null when none was recorded
@@ -452,22 +397,15 @@ finding_sets = Table(
 Index("ix_finding_sets_chunk_id", finding_sets.c.chunk_id)
 Index("ix_finding_sets_routine_scope", finding_sets.c.routine_name, finding_sets.c.scope_slug)
 
-# --- Garden proposals ---------------------------------------------
-# A proposed response — never `proposals`, so neither this nor `work_item_proposals`
-# inherits an unqualified name a call site could confuse. `blizzard-context:/domain/findings-and-proposals.md`
-# §A proposal's origin: a routine's run, or an operator owns what a proposal is;
-# §A proposal's findings are optional owns whether it needs a finding.
+# --- Garden proposals (distinct from work-item proposals) --------
 
 garden_proposals = Table(
     "garden_proposals",
     metadata,
     Column("proposal_id", String, primary_key=True),  # gprop_<ulid>
-    # `routine-run` (the routine's own run raised it) or `operator` (an operator
-    # authored it directly) — a mint-time fact, fixed at insert and never
-    # inferred from a null `routine_name`.
+    # Mint-time origin, never inferred from routine_name.
     Column("origin", String, nullable=False, server_default="routine-run"),
-    # Named by the routine's own name — required for `routine-run`, optional for
-    # `operator`. Nullable so an operator proposal citing no routine stores none.
+    # Required for routine-run; optional for operator origin.
     Column("routine_name", String, nullable=True),
     # The identity that authored an `operator` proposal — null for `routine-run`.
     Column("created_by", String, nullable=True),
@@ -475,10 +413,7 @@ garden_proposals = Table(
     Column("title", String, nullable=False),
     Column("body", Text, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
-    # A delivered proposal's idempotence key: the artifact it was delivered from plus
-    # its submission-local `ref` — null for a proposal minted outside delivery
-    # (`GardenProposalAuthoring`), which carries no source artifact. No
-    # `ForeignKey` — SQLite cannot drop an FK column.
+    # Delivery idempotence key; null outside delivery. No FK (SQLite drop-column).
     Column("source_artifact_id", String, nullable=True),
     Column("ref", String, nullable=True),
     CheckConstraint("origin IN ('routine-run', 'operator')", name="ck_garden_proposals_origin"),
@@ -498,9 +433,7 @@ Index(
     unique=True,
 )
 
-# The findings a proposal answers — a join, not a JSON list, so which-work-resolved-
-# which-findings is a query rather than a scan (`bzh:sql-portable`). May carry no rows at
-# all for a proposal citing none.
+# Optional finding links as queryable joins (``bzh:sql-portable``).
 
 garden_proposal_findings = Table(
     "garden_proposal_findings",
@@ -511,12 +444,7 @@ garden_proposal_findings = Table(
 
 Index("ix_garden_proposal_findings_finding_id", garden_proposal_findings.c.finding_id)
 
-# --- Garden proposal closures --------------------------------------
-# The record both closing verbs leave — pass or accept. A durable fact, not a status
-# column on `garden_proposals` itself: closing writes only this row, never a flag on the
-# mutable proposal (which does carry edit/attach/detach verbs while open),
-# so closure is terminal the moment it exists, and the unique `proposal_id` makes a
-# second close fail at the write rather than in a read-then-write gap.
+# --- Garden proposal closures (terminal, unique per proposal) -----
 
 garden_proposal_closures = Table(
     "garden_proposal_closures",
@@ -533,8 +461,7 @@ garden_proposal_closures = Table(
     UniqueConstraint("proposal_id", name="uq_garden_proposal_closures_proposal_id"),
 )
 
-# The reverse read a delivered item's own `(source, ref)` needs.
-# Unique, so `find_by_item`'s `one_or_none()` is DB-enforced, not merely assumed.
+# Unique reverse item lookup for `find_by_item`.
 Index(
     "ix_garden_proposal_closures_source_ref",
     garden_proposal_closures.c.source,
@@ -556,17 +483,12 @@ work_item_proposals = Table(
     Column("kind", String, nullable=False),  # create | update
     Column("data", Text, nullable=False),  # JSON object, kind-shaped
     Column("proposed_at", UtcDateTime, nullable=False),
-    # The proposing runner — nullable, no backfill: a row written before
-    # this column existed carries no proposer, and materializes as unresolved for it.
+    # Null legacy proposer materializes as unresolved.
     Column("runner_id", String, nullable=True),
-    # No unique constraint narrower than the primary key — a proposal list is multi-row per
-    # (chunk, node, epoch); the caller-side replay probe already denies a partial rewrite.
 )
 Index("ix_work_item_proposals_chunk_id", work_item_proposals.c.chunk_id)
 
-# --- Proposal materialization outcomes -------------------------
-# One row per proposal's terminal judgment — created / updated / unresolved — recorded
-# once and never re-judged; a transient failure records nothing and is retried.
+# --- Proposal materialization outcomes (terminal, once per proposal) ---
 
 work_item_materializations = Table(
     "work_item_materializations",
@@ -581,11 +503,7 @@ work_item_materializations = Table(
     UniqueConstraint("proposal_id", name="uq_work_item_materializations_proposal_id"),
 )
 
-# --- Proposal strikes -------------------------------------------
-# A gate resolution's refusal of a proposal, recorded before materialization ever
-# judges it — never a `work_item_materializations` outcome, never a mutation of
-# the proposal's own row. `unmaterialized_proposals` excludes a struck proposal_id
-# forever, so the sweep never materializes it.
+# --- Proposal strikes (exclude from future materialization sweeps) ---
 
 work_item_strikes = Table(
     "work_item_strikes",
@@ -608,15 +526,10 @@ lease_facts = Table(
     Column("minted_at", UtcDateTime, nullable=False),
     Column("lease_id", String, nullable=True),  # the lease the mint named; null when it named none
 )
-# (chunk_id, epoch) serves both a plain chunk_id filter and a per-attempt (chunk_id,
-# epoch) join, at no extra write cost over a single-column index.
+# Leading chunk_id also serves chunk-only filters.
 Index("ix_lease_facts_chunk_id_epoch", lease_facts.c.chunk_id, lease_facts.c.epoch)
 
-# --- Epoch owners -----------------------------------------------------------------
-# Who took each fencing epoch of a chunk: the hub (``runner_id`` null) or one runner. Written
-# in the same transaction as the fact that takes the epoch — a hub mint, a claim's
-# reservation, or a runner's admitted ``lease.minted``. First owner wins: the unique
-# constraint makes a second owner for one epoch unrecordable.
+# --- Epoch owners (first owner wins; null runner_id means hub) -----
 epoch_owners = Table(
     "epoch_owners",
     metadata,
@@ -667,9 +580,7 @@ route_released = Table(
     Column("seq", Integer, nullable=False),
 )
 Index("ix_route_released_chunk_id", route_released.c.chunk_id)
-# (released_at, id) for newest-first bounded reads since a timestamp, portable
-# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
-# rowid as a tie-break).
+# Explicit id tie-break for portable newest-first reads.
 Index("ix_route_released_released_at_id", route_released.c.released_at, route_released.c.id)
 
 # --- Route capability tokens (route_token_minted) ----------------
@@ -809,9 +720,7 @@ chunk_promoted = Table(
     Column("promoted_at", UtcDateTime, nullable=False),  # not_ready -> ready
 )
 Index("ix_chunk_promoted_chunk_id", chunk_promoted.c.chunk_id)
-# (promoted_at, id) for newest-first bounded reads since a timestamp, portable
-# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
-# rowid as a tie-break).
+# Explicit id tie-break for portable newest-first reads.
 Index("ix_chunk_promoted_promoted_at_id", chunk_promoted.c.promoted_at, chunk_promoted.c.id)
 
 # --- Facts that make the derivation precedence correct (shaped) -------------
@@ -826,9 +735,7 @@ chunk_stopped = Table(
     Column("stopped_by", String, nullable=True),
 )
 Index("ix_chunk_stopped_chunk_id", chunk_stopped.c.chunk_id)
-# (stopped_at, id) for newest-first bounded reads since a timestamp, portable
-# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
-# rowid as a tie-break).
+# Explicit id tie-break for portable newest-first reads.
 Index("ix_chunk_stopped_stopped_at_id", chunk_stopped.c.stopped_at, chunk_stopped.c.id)
 
 # An operator's manual completion — outranks a ``chunk_stopped`` row recorded
@@ -842,9 +749,7 @@ chunk_completed = Table(
     Column("completed_by", String, nullable=False),
 )
 Index("ix_chunk_completed_chunk_id", chunk_completed.c.chunk_id)
-# (completed_at, id) for newest-first bounded reads since a timestamp, portable
-# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
-# rowid as a tie-break).
+# Explicit id tie-break for portable newest-first reads.
 Index("ix_chunk_completed_completed_at_id", chunk_completed.c.completed_at, chunk_completed.c.id)
 
 # The fact that makes an unacquired chunk ephemeral by deletion — a
@@ -857,9 +762,7 @@ chunk_deleted = Table(
     Column("deleted_at", UtcDateTime, nullable=False),
     Column("deleted_by", String, nullable=False),
 )
-# (deleted_at, id) for newest-first bounded reads since a timestamp, portable
-# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
-# rowid as a tie-break).
+# Explicit id tie-break for portable newest-first reads.
 Index("ix_chunk_deleted_deleted_at_id", chunk_deleted.c.deleted_at, chunk_deleted.c.id)
 
 # --- Chunk dependency edges --------------------------------------
@@ -895,9 +798,7 @@ escalations = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_escalations_chunk_id", escalations.c.chunk_id)
-# (recorded_at, id) for newest-first bounded reads since a timestamp, portable
-# across sqlite and postgres (`bzh:sql-portable`; only sqlite implicitly appends the
-# rowid as a tie-break).
+# Explicit id tie-break for portable newest-first reads.
 Index("ix_escalations_recorded_at_id", escalations.c.recorded_at, escalations.c.id)
 
 # --- Usage facts (usage.recorded) --------------------------------

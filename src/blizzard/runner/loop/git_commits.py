@@ -22,8 +22,8 @@ class DeclaredCommits:
     """This lease's declared git commits, confirmed **read-only** against the
     origin each declaring environment's manifest names.
 
-    Never mutates git and never infers a branch off residue. A declaration that does not
-    verify is reported as a ``command-failed`` event, never silently dropped."""
+    Never mutates git or infers branches from residue. Invalid declarations produce
+    ``command-failed`` events."""
 
     ctx: LoopContext
     lease: LeaseRecord
@@ -36,10 +36,8 @@ class DeclaredCommits:
         """Confirm every declaration this instance has not already resolved, in declaration
         order, then converge the lease's whole confirmed set by repository identity.
 
-        Spans **every** bound environment, since the key carries the env. Pointers agreeing on
-        branch and commit submit as one, named by the identity; disagreeing ones are all
-        submitted and reported — never chosen between. Only a group new or changed since the
-        last call is returned."""
+        Pointers agreeing on branch and commit submit as one; disagreeing pointers are
+        all submitted and reported. Return only groups new or changed since the last call."""
         origins = self._origins()
         changed = False
         for key, declared in self.ctx.stores.git_commit_declarations.git_commit_declarations_for_lease(

@@ -66,11 +66,14 @@ swept the next time the runner starts.
 default page — the cap keeps the newest rows, whatever their severity. The board's Events tab renders the feed live over
 the SSE spine (`/api/events/stream`), each row linking to its chunk.
 
-`GET /api/activity` is a second read the board's Activity feed rail backfills from on page load, merging three durable
-sources — chunk status changes, the event log, and runner pause/resume — newest-first, bounded by `since` (default 24
-hours back) and `limit` (default 200, refused past 1000), gated like `GET /api/events`. Activity orders by pure recency,
-the event log being the triage view; after backfill the rail continues live over the same stream, deduped by each
-frame's fact-identity key rather than by timestamp.
+`GET /api/activity` is a second read the board's Activity feed rail backfills from on page load, merging durable chunk
+occurrences (including distinct claims and node transitions), questions and decisions, event-log rows, and runner
+pause/resume facts — newest-first, bounded by `since` (default 24 hours back) and `limit` (default 200, refused past
+200), gated like `GET /api/events`. Activity orders by pure recency, the event log being the triage view. The rail
+continues live over the same stream: only chunk frames with causes represented in the durable activity read enter the
+feed. Lease and usage telemetry still refresh chunk and spend views but do not repeat a transition row. Frames sharing
+a fact-identity key occupy one row across event types, replay, and backfill; a claim reads as “claimed” rather than as
+the chunk's previous transition.
 
 ## List pagination
 
@@ -79,9 +82,9 @@ Every bulk list the hub serves — `GET /api/chunks`, `/api/queue`, `/api/backlo
 used: an optional `cursor` and a `limit` (`ge=1, le=1000`, default 200 — an over-ceiling or zero `limit` is refused with
 a `422`, never silently clamped). The response is an envelope carrying the page's rows alongside `next_cursor`, which is
 `null` exactly on the last page; a caller wanting every row follows it to exhaustion. An undecodable `cursor` is a `422`
-naming `"malformed cursor"`. `GET /api/events` and `GET /api/activity` share this same `limit` ceiling (`le=1000`,
-default 200) but predate the cursor/`next_cursor` half of the contract — each is its own bounded, recency-ordered
-window, not a walk over the full backing set.
+naming `"malformed cursor"`. `GET /api/events` and `GET /api/activity` instead cap `limit` at 200 (also their default)
+and predate the cursor/`next_cursor` half of the contract — each is its own bounded, recency-ordered window, not a walk
+over the full backing set.
 
 `GET /api/chunks?board_window=true` is the board's own read: it omits every `done` chunk that finished more than 48
 hours ago, and keeps `stopped` and non-terminal chunks of any age. A windowed page can come back short of `limit`;

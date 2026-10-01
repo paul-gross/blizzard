@@ -155,10 +155,21 @@ const MUTED_RUNNER_KINDS: ReadonlySet<string> = new Set<RunnerChangeKind>([
   'external-usage',
 ]);
 
+/** Causes represented by the chunk fact sources in `activity_facts_since`. A
+ * chunk-scoped telemetry fact can repeat the last transition's status and key;
+ * neither makes that fact another activity occurrence. */
+const ACTIVITY_CHUNK_CAUSES: ReadonlySet<string> = new Set([
+  'minted', 'promoted', 'grouped', 'claimed', 'node-completed', 'hub-advanced',
+  'migrated', 'restarted', 'decision-submitted', 'decision-resolved',
+  'question-asked', 'question-answered', 'escalated', 'requeued', 'detached',
+  'paused', 'resumed', 'stopped', 'completed', 'deleted',
+]);
+
 /** Whether a frame belongs in the Activity feed — see {@link NO_DURABLE_FACT_TYPES} and
  * {@link MUTED_RUNNER_KINDS}. */
 function isLoggable(type: string, data: HubEventPayload): boolean {
   if (NO_DURABLE_FACT_TYPES.has(type)) return false;
+  if (type === 'chunk-changed') return ACTIVITY_CHUNK_CAUSES.has(data.cause ?? '');
   return type !== 'runner-changed' || !MUTED_RUNNER_KINDS.has(data.kind ?? '');
 }
 
@@ -312,8 +323,17 @@ export class FleetLiveUpdates {
    * a `seq`, so the panel's row keys stay dense. */
   private record(type: string, data: HubEventPayload): void {
     if (!isLoggable(type, data)) return;
-    const entry: LoggedEvent = { seq: ++this.seq, type, data, at: Date.now(), key: data.key };
     this._log.update((prev) => {
+      // A question/decision notification and its chunk frame report the same
+      // fact. Prefer the latter's fuller state regardless of arrival order;
+      // replayed keyed frames also occupy just one slot in this bounded ring.
+      const existing = data.key ? prev.findIndex((event) => event.key === data.key) : -1;
+      if (existing >= 0) {
+        if (prev[existing].type === 'chunk-changed' && type !== 'chunk-changed') return prev;
+        const replacement: LoggedEvent = { seq: prev[existing].seq, at: prev[existing].at, type, data, key: data.key };
+        return [...prev.slice(0, existing), replacement, ...prev.slice(existing + 1)];
+      }
+      const entry: LoggedEvent = { seq: ++this.seq, type, data, at: Date.now(), key: data.key };
       const next = [...prev, entry];
       return next.length > LOG_LIMIT ? next.slice(next.length - LOG_LIMIT) : next;
     });

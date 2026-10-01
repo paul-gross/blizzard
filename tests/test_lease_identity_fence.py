@@ -1,11 +1,7 @@
-"""Lease identity on the wire: a runner names its lease on every write, and the hub matches it
-against the epoch's owning lease (component tier).
+"""Component checks for the owning lease on mint and subsequent writes.
 
-``bzh:epoch-fencing``: level is displaced. A runner stamps its lease id onto its
-``lease.minted`` and its completion; the hub records the first admitted mint's lease as the
-epoch's owning lease, and a write naming a different lease at that epoch is refused. A write
-naming none falls back to the runner match, so a runner that predates the field keeps working.
-Every case runs with ``route_token_mode=warn``."""
+A different lease is displaced; a lease-less write falls back to runner identity
+(``bzh:epoch-fencing``). Warn-mode route tokens isolate the lease check."""
 
 from __future__ import annotations
 

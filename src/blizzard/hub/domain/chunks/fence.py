@@ -1,10 +1,8 @@
 """The write fence's vocabulary (``bzh:epoch-fencing``).
 
-A store adapter derives the fence inside the transaction that records a write and answers
-with these types; the domain caller maps a refusal to its own failure result. The rule
-itself lives in ``blizzard-context``'s ``fencing.md`` — this module names the epochs a
-write admits, who owns an epoch, whether a runner's attempt owns one, whether a
-``lease.minted`` may take one, and the reason a write was refused."""
+Store adapters derive the fence in the writing transaction; domain callers map a
+refusal to their own failure result. The rule lives in ``blizzard-context``'s
+``fencing.md``."""
 
 from __future__ import annotations
 

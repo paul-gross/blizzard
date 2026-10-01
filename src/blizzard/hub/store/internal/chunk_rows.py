@@ -1,11 +1,8 @@
-"""Shared SQL infrastructure for the chunk-seam adapters.
+"""Package-private SQL helpers shared by the ``chunks``-rooted seam adapters.
 
-Every ``chunk_<seam>_store.py`` adapter in this package is a thin, independently
-constructed class over the same ``chunks``-rooted schema; the column codecs, the
-question-query builder, the four composite-write free functions ``work_item_store.py``
-also reaches for, and the private row/id helpers more than one adapter needs, live here
-so no seam re-derives another seam's own reading or writing. Everything below is
-package-private — imported by the adapters in this directory, never by a domain caller.
+Column codecs, question queries and composite-write helpers live here so adapters
+do not re-derive another seam's reads or writes. Domain callers never import this
+module.
 """
 
 from __future__ import annotations
@@ -130,8 +127,7 @@ DEFAULT_MODEL = ModelColumn()
 DEFAULT_HARNESSES = ModelColumn()
 QUESTIONS = QuestionQuery()
 
-# The generic ``merged/<repo>`` landing marker — mirrors domain/work.py's own
-# copy (``LandedRepos``'s), which reads it back; each side owns its own constant.
+# The ``merged/<repo>`` marker also appears in domain/work.py's ``LandedRepos``.
 MARKER_PREFIX = "merged/"
 
 
@@ -277,12 +273,9 @@ def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # t
 
 
 def route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
-    """:meth:`~blizzard.hub.store.internal.chunk_route_store.ChunkRouteStore.route_of`'s
-    query body, taking an already-open ``conn`` so a write transaction elsewhere (the
-    lifecycle adapter's own ``record_stop_locked``/``record_completion_locked``) can resolve the same
-    question inside its own commit. Delegates the tie-break to
-    :attr:`~blizzard.hub.domain.work.RouteHistory.newest`, so route liveness has exactly
-    one answer at a same-instant tie."""
+    """Resolve the live route on the caller's connection, even inside a write.
+
+    :attr:`~blizzard.hub.domain.work.RouteHistory.newest` owns same-instant ties."""
     # (created_at, seq) desc — must stay in lockstep with the key
     # `RouteHistory.newest` orders by; that property, not this query, owns it.
     created = conn.execute(
@@ -336,14 +329,10 @@ class _LockedConnection(Protocol):
 
 
 def conn_of(handle: ILockedChunkRead) -> Connection:
-    """A ``*_locked`` write method's own recovery of the real connection behind a
-    domain-held :class:`ILockedChunkRead` handle — package-private; the domain layer
-    never imports this, and this module never imports the handle's concrete class back,
-    so the two sides stay acyclic. The one narrowly-typed cast this recovery needs: any
-    real handle a locked write method receives is a store-built
-    :class:`~blizzard.hub.store.internal.chunk_exclusive_store.LockedChunkTransaction`,
-    which satisfies :class:`_LockedConnection`; only a test fake missing ``conn``
-    entirely would fail it, and only at the point it is actually used."""
+    """Recover the connection from a domain-held :class:`ILockedChunkRead`.
+
+    Real handles are store-built ``LockedChunkTransaction`` instances; this cast
+    keeps their concrete type out of the domain and avoids a cyclic import."""
     return cast(_LockedConnection, handle).conn
 
 
@@ -384,12 +373,10 @@ def graph_id_of(conn: Connection, chunk_id: str) -> str:
 
 
 def latest_epoch(conn: Connection, chunk_id: str) -> int:
-    """The chunk's newest fencing epoch, read INSIDE the caller's transaction — the same
-    fold ``ChunkFacts.latest_epoch`` derives, across lease facts, operator restarts, and
-    epoch owners (so a claim's reservation raises it).
+    """The newest lease, restart or ownership epoch, read in the writing transaction.
 
-    Read here rather than handed in, so a read-then-write epoch decision cannot be
-    overtaken between the two (``bzh:epoch-fencing``)."""
+    A claim's reservation raises the fence; reading here prevents an overtaken
+    read-then-write decision (``bzh:epoch-fencing``)."""
     lease_max = conn.execute(
         select(func.max(s.lease_facts.c.epoch)).where(s.lease_facts.c.chunk_id == chunk_id)
     ).scalar()
@@ -466,15 +453,10 @@ def fence(
     admission: EpochAdmission,
     claimant: Claimant | None = None,
 ) -> FenceRefusal | None:
-    """The one in-transaction write fence (``bzh:epoch-fencing``): ``None`` when a write at
-    ``epoch`` clears it, else why it was refused. Terminal comes first — a stopped or
-    completed chunk, or one whose newest transition reached the reserved terminal at its
-    newest epoch, refuses at any epoch — then the epoch against ``admission``, then, for a
-    runner-submitted write naming its ``claimant``, whether that attempt owns ``epoch``.
+    """The in-transaction write fence (``bzh:epoch-fencing``).
 
-    Call it after :func:`lock_chunk_row` and the write's replay probe, on the write's own
-    connection (``bzh:store-exclusive-write``), so the verdict cannot be overtaken by the
-    stop or restart it guards against."""
+    After :func:`lock_chunk_row` and the replay probe, refuse terminal chunks,
+    then stale epochs, then displaced claimants. ``None`` admits the write."""
     newest = latest_epoch(conn, chunk_id)
     if chunk_is_terminal(conn, chunk_id) or _reached_terminal_at(conn, chunk_id, newest):
         return FenceRefusal.terminal(epoch)
@@ -539,12 +521,10 @@ def insert_proposals(conn: Connection, proposals: list[WorkItemProposalRow], *, 
 
 
 def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> None:
-    """Enqueue one pending close intent per this chunk's still-open work ref — called,
-    inside the caller's own transaction, from every write
-    that lands or completes a chunk, across the movement/delivery/lifecycle/decisions/
-    artifacts/hub_exec seams. A chunk in the ephemeral set enqueues nothing; a ref
-    already carrying a terminal ``work_item_closures`` outcome is skipped; a replayed
-    landing writes nothing new (unique on ``chunk_id, source, ref``)."""
+    """Enqueue open work refs on the landing/completion write's transaction.
+
+    Ephemeral chunks and terminally closed refs enqueue nothing; the unique
+    ``(chunk_id, source, ref)`` key prevents replay duplicates."""
     if is_ephemeral_id(conn, chunk_id):
         return
     refs = conn.execute(

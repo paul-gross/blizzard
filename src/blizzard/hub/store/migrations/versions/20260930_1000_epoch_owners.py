@@ -1,8 +1,5 @@
-"""Epoch owners — one owner per fencing epoch, backfilled — and the lease a mint named.
-
-Every restart epoch becomes hub-owned; every epoch still unowned then takes the runner of
-its earliest ``lease_facts`` row, a ``runner_id`` of ``hub`` meaning hub-owned.
-``downgrade()`` drops the table and the column, and the owners with them.
+"""Backfill epoch owners: restarts and ``hub`` leases are hub-owned; other
+epochs take their earliest lease's runner.
 
 Revision ID: 20260930_1000_epoch_owners
 Revises: 20260930_1000_artifact_seq
@@ -26,8 +23,7 @@ _LEASES = "lease_facts"
 _LEASE_ID = "lease_id"
 _HUB_RUNNER_ID = "hub"
 
-# Frozen literals (``bzh:frozen-revisions``): the created table as it stands here, and narrow
-# read stubs of the two tables the backfill selects from.
+# Frozen table and backfill read stubs (``bzh:frozen-revisions``).
 _frozen = sa.MetaData()
 sa.Table("chunks", _frozen, sa.Column("chunk_id", sa.String, primary_key=True))
 epoch_owners = sa.Table(

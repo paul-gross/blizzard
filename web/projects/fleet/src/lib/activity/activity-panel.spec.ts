@@ -111,6 +111,25 @@ describe('ActivityPanel', () => {
     expect(el.querySelector('[data-testid="activity-message"]')?.textContent?.trim()).toBe('C-alp → running');
   });
 
+  it('renders a claim from its cause rather than the last transition, across live and reload-equivalent backfill', async () => {
+    const fixture = await render([
+      { type: 'chunk-changed', key: 'route_created:1', at: '2020-01-01T00:00:01Z', chunk_id: 'ch_alp', cause: 'claimed', runner_id: 'runner-one' },
+      { type: 'chunk-changed', key: 'transitions:1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_alp', cause: 'node-completed' },
+    ]);
+    const el = fixture.nativeElement as HTMLElement;
+    expect([...el.querySelectorAll('[data-testid="activity-message"]')].map((node) => node.textContent?.trim()))
+      .toEqual(['C-alp claimed', 'C-alp']);
+    log.set([
+      { seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_alp', cause: 'claimed', runner_id: 'runner-one', status: 'running', prev_node: 'build', node: 'verify', key: 'route_created:1' }, at: Date.parse('2020-01-01T00:00:01Z'), key: 'route_created:1' },
+      { seq: 2, type: 'chunk-changed', data: { chunk_id: 'ch_alp', cause: 'node-completed', status: 'running', prev_node: 'build', node: 'verify', key: 'transitions:1' }, at: Date.parse('2020-01-01T00:00:00Z'), key: 'transitions:1' },
+    ]);
+    fixture.detectChanges();
+    expect(el.querySelectorAll('[data-testid="activity-row"]')).toHaveLength(2);
+    expect([...el.querySelectorAll('[data-testid="activity-message"]')].map((node) => node.textContent?.trim()))
+      .toEqual(['C-alp claimed', 'C-alp build → running → verify']);
+    expect(el.querySelector('[data-testid="activity-detail"]')?.textContent?.trim()).toBe('runner-one');
+  });
+
   it('never collides two keyless live frames with each other (a hub older than Phase 2 stamps no key)', async () => {
     const fixture = await render([]);
     log.set([

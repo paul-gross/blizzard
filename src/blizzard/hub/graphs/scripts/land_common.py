@@ -19,8 +19,7 @@ from typing import Any
 
 _HUB_USER = "blizzard-hub"
 
-# The mid-run marker callback's token header — a **delivery** credential,
-# restated rather than imported to keep this package pure stdlib.
+# Delivery credential, restated to keep this package pure stdlib.
 _MARKER_TOKEN_HEADER = "X-Blizzard-Marker-Token"
 _ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 
@@ -37,16 +36,13 @@ _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
 _ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
 _ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
 
-# Test-only instrumentation for the mid-script crash sweep: the between-repo window is a
-# wall-clock race a `kill -9` must land inside, so a positive value widens it.
+# Test-only pause to widen the between-repo crash window.
 _ENV_TEST_PAUSE_AFTER_FIRST_MARKER = "BZ_HUB_LAND_TEST_PAUSE_SECONDS"
 
-# GitHub caps PR/issue titles at 256 characters; a resolved feature title longer than
-# that is truncated with an ellipsis so PR creation never fails on an over-long title.
+# GitHub's PR title limit; longer titles get an ellipsis.
 _PR_TITLE_MAX = 256
 
-# The marker POST is retried on a connection failure or a 5xx, with a short fixed backoff
-# so a genuinely failing write does not stall the node forever.
+# Retry marker POST connection failures and 5xx with bounded backoff.
 _MARKER_WRITE_ATTEMPTS = 3
 _MARKER_RETRY_BACKOFF_SECONDS = 0.05
 
@@ -360,12 +356,9 @@ class PullRequestLookupError(Exception):
 
 
 class NothingToLand(Exception):
-    """Raised when a repo's branch adds no commit its base branch lacks — a **no-op
-    landing**, not a failure: no PR can be opened and no poll changes that, so a script
-    records the repo's ``merged/<repo>`` marker and moves on (``bzh:hub-node-step-idempotence``).
-
-    :attr:`landed_sha` is the base branch's live tip — the revision the repo's work is
-    landed at, never the submitted commit, which a base that moved on has left behind."""
+    """No-op landing: the base already holds the branch's commits, so record a
+    ``merged/<repo>`` marker (``bzh:hub-node-step-idempotence``).
+    :attr:`landed_sha` is the base's live tip, not the submitted commit."""
 
     def __init__(self, message: str, landed_sha: str) -> None:
         super().__init__(message)
@@ -522,13 +515,10 @@ class PullRequest:
         return status, ((body or {}).get("message", "") if isinstance(body, dict) else "")
 
     def merge(self, sha: str, *, method: str = "merge") -> str:
-        """Merge at ``sha`` with ``method`` and return the landed commit — the merge
-        response's ``sha``, else the reread's ``merge_commit_sha``; never ``sha`` itself.
+        """Merge at ``sha`` and return the landed commit from the response or reread.
 
-        An already-merged PR is a prior run's un-marked merge, a no-op to redo
-        (``bzh:hub-node-step-idempotence``); anything else raises :class:`MergeDidNotLand`.
-        A confirmed merge whose landed commit neither read carries raises
-        :class:`LandedRevisionUnknown`."""
+        Already-merged PRs are not remerged; an unconfirmed merge raises
+        :class:`MergeDidNotLand`, an unknown landed revision :class:`LandedRevisionUnknown`."""
         status, result = self.run.api(
             "PUT",
             f"/repos/{self.repo}/pulls/{self.number}/merge",
