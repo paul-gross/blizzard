@@ -28,7 +28,7 @@ from blizzard.hub.domain.chunks.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunks.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunks.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunks.route import IReadChunkRouteRepository
 from blizzard.hub.domain.envelope import Arrival, Envelope
@@ -313,6 +313,7 @@ class ApplyService:
             choice_name=submission.choice,
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
+            claimant=Claimant(submission.runner_id, submission.lease_id),
             runner_id=submission.runner_id,
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submission.artifacts],
@@ -386,6 +387,7 @@ class ApplyService:
             choice_name=submission.choice,
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
+            claimant=Claimant(submission.runner_id, submission.lease_id),
             runner_id=submission.runner_id,
             at=self._clock.now(),
             artifacts=[],  # the decision's artifacts already landed
@@ -431,6 +433,7 @@ class ApplyService:
                     chunk.chunk_id,
                     epoch=submission.epoch,
                     admission=EpochAdmission.CURRENT,
+                    claimant=Claimant(submission.runner_id, submission.lease_id),
                     takeover_command=(
                         f"cross-graph target `{edge.target_graph}` names no enabled graph — mint a graph "
                         f"named `{edge.target_graph}` (or edit the choice), then requeue this chunk"
@@ -576,6 +579,7 @@ class ApplyService:
             source=source,
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
+            claimant=Claimant(submission.runner_id, submission.lease_id),
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in artifacts],
             proposals=self._proposal_rows(
@@ -625,7 +629,9 @@ class ApplyService:
             # A transition INTO a human-judged node opens a graph gate: park on a decision
             # carrying the node's choice set. Only on the real apply, never a replay.
             if is_fresh_apply:
-                self._open_graph_gate_decision(chunk, to_node, epoch=submission.epoch)
+                self._open_graph_gate_decision(
+                    chunk, to_node, epoch=submission.epoch, claimant=Claimant(submission.runner_id, submission.lease_id)
+                )
             return ApplyResult.parked(to_node, transition_id)
 
         arrival = Arrival(edge) if edge is not None else Arrival.of_choice(graph, from_node, submission.choice)
@@ -639,7 +645,7 @@ class ApplyService:
         )
         return ApplyResult.advance(envelope.wire, transition_id)
 
-    def _open_graph_gate_decision(self, chunk: Chunk, gate_node: Node, *, epoch: int) -> None:
+    def _open_graph_gate_decision(self, chunk: Chunk, gate_node: Node, *, epoch: int, claimant: Claimant) -> None:
         """Open the graph gate's decision on arrival — idempotent per (chunk, node, epoch).
 
         The node's own choices become the decision's; no artifacts are attached (they
@@ -656,6 +662,7 @@ class ApplyService:
             node_name=gate_node.name,
             epoch=epoch,
             admission=EpochAdmission.CURRENT,
+            claimant=claimant,
             choices=[DecisionChoice(name=c.name, description=c.description) for c in gate_node.choices],
             at=self._clock.now(),
             artifacts=[],

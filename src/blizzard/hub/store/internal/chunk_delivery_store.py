@@ -25,8 +25,10 @@ from blizzard.hub.store.internal.chunk_rows import (
     ephemeral_ids_select,
     graph_id_of,
     insert_materialization_row,
+    lock_chunk_row,
     next_route_seq,
     proposal_row,
+    record_hub_lease,
 )
 
 
@@ -148,14 +150,13 @@ class ChunkDeliveryStore:
         The hub lease, ``delivery.landed``, the terminal transition and the route release
         are one transaction; guarded by ``delivery.landed``, True only when it wrote."""
         with self._store.write("finalize_delivery") as conn:
+            lock_chunk_row(conn, chunk_id)
             already = conn.execute(
                 select(s.delivery_landed.c.id).where(s.delivery_landed.c.chunk_id == chunk_id)
             ).first()
             if already is not None:
                 return False
-            conn.execute(
-                s.lease_facts.insert().values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
-            )
+            record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
             conn.execute(s.delivery_landed.insert().values(chunk_id=chunk_id, landed_at=at))
             conn.execute(
                 s.transitions.insert().values(

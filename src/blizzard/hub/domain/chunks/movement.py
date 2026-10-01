@@ -9,7 +9,7 @@ from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import MigrationSource
 
@@ -43,6 +43,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         choice_name: str | None,
         epoch: int,
         admission: EpochAdmission,
+        claimant: Claimant | None = None,
         runner_id: str,
         at: datetime,
         artifacts: list[ArtifactRow],
@@ -67,6 +68,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         model: str | None,
         epoch: int,
         admission: EpochAdmission,
+        claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[ArtifactRow],
         proposals: list[WorkItemProposalRow],

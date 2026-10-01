@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, emitted_events, pointer_token, report_lease
+from tests.support import build_hub, claim_route, emitted_events, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -72,6 +72,8 @@ _BUILD_ARTIFACT = {
 def test_question_ask_and_answer_emit_typed_events(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    claim_route(hub, chunk_id)  # a question is admitted only from the runner owning its epoch
 
     ask = hub.client.post(
         "/api/questions",

@@ -501,6 +501,7 @@ class Judgement:
             runner_id=self.ctx.config.runner_id,
             artifacts=artifacts,
             route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
+            lease_id=lease.lease_id,
         )
         OutboundFacts(self.ctx).decision(lease, submission, at=self.ctx.clock.now())
         _log.info("runner-config gate: decision buffered", chunk_id=lease.chunk_id, node=lease.node_name)
@@ -520,6 +521,7 @@ class Judgement:
             check_results=[CheckResult(command=r.command, passed=r.passed) for r in checks],
             artifacts=artifacts,
             route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
+            lease_id=lease.lease_id,
         )
         OutboundFacts(self.ctx).completion(lease, submission, at=self.ctx.clock.now())
         _CP_AFTER_BUFFER.reached()

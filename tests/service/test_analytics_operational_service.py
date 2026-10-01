@@ -62,6 +62,12 @@ def test_the_three_datasets_reflect_a_real_completed_step_over_a_live_hub(tmp_pa
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         chunk_id = _ingest(forge, hub, "analytics operational datasets over a real hub")
         node_id = _entry_node_id(hub, chunk_id)
+        # The claim reserves epoch 1 for r1 — the epoch its mint and completion land at.
+        claim = hub.post(
+            "/api/fleet/routes",
+            json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": []},
+        )
+        assert claim.status_code == 201, claim.text
 
         lease = hub.post(
             "/api/fleet/events",

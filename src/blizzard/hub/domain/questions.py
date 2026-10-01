@@ -12,7 +12,7 @@ from datetime import datetime
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.questions import IWriteChunkQuestionsRepository
 from blizzard.hub.domain.work import AnswerOutcome
 from blizzard.wire.question import QuestionAsked
@@ -39,6 +39,7 @@ class QuestionService:
             runner_id=fact.runner_id,
             epoch=fact.epoch,
             admission=EpochAdmission.AT_OR_ABOVE,
+            claimant=Claimant(fact.runner_id, fact.lease_id),
             question=fact.question,
             options=fact.options,
             asked_at=self._asked_at(fact.asked_at),

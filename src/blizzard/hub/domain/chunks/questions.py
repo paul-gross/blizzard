@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.work import AnswerOutcome, QuestionRow
 
 
@@ -39,6 +39,7 @@ class IWriteChunkQuestionsRepository(IReadChunkQuestionsRepository, Protocol):
         runner_id: str,
         epoch: int,
         admission: EpochAdmission,
+        claimant: Claimant | None = None,
         question: str,
         options: list[str],
         asked_at: datetime,

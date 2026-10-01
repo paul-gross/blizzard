@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunks.fence import Claimant, FenceRefusal
 from blizzard.hub.domain.fleet import Route
 
 
@@ -65,7 +66,14 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
         :attr:`RouteHistory.newest_token` supersedes it with no separate revocation step."""
         ...
 
-    def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None: ...
+    def record_lease_minted(
+        self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime
+    ) -> FenceRefusal | None:
+        """Land a runner's ``lease.minted`` under the chunk's row lock, admitted by
+        :class:`MintAdmission` — ``None`` when it landed (the first mint at an unowned epoch
+        taking it for ``claimant``'s runner), else the refusal, which lands nothing."""
+        ...
+
     def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
         """Advance a runner's applied-seq high-water mark (upsert)."""
         ...

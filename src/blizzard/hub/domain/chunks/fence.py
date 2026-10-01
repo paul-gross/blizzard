@@ -2,8 +2,9 @@
 
 A store adapter derives the fence inside the transaction that records a write and answers
 with these types; the domain caller maps a refusal to its own failure result. The rule
-itself lives in ``blizzard-context``'s ``fencing.md`` — this module only names the epochs
-a write admits and the reason one was refused."""
+itself lives in ``blizzard-context``'s ``fencing.md`` — this module names the epochs a
+write admits, who owns an epoch, whether a runner's attempt owns one, whether a
+``lease.minted`` may take one, and the reason a write was refused."""
 
 from __future__ import annotations
 
@@ -46,3 +47,80 @@ class FenceRefusal:
     @classmethod
     def stale(cls, epoch: int, *, latest: int) -> FenceRefusal:
         return cls(epoch=epoch, latest=latest, detail=f"stale epoch {epoch}; chunk is at {latest}")
+
+    @classmethod
+    def displaced(cls, epoch: int, *, latest: int) -> FenceRefusal:
+        """The write's attempt does not own its epoch — another party took it first."""
+        return cls(epoch=epoch, latest=latest, detail=f"displaced attempt: epoch {epoch} is not this attempt's")
+
+
+@dataclass(frozen=True)
+class EpochOwner:
+    """Who took one epoch of a chunk — the hub (``runner_id`` ``None``) or one runner.
+    The first owner recorded for an epoch is its owner for good."""
+
+    runner_id: str | None
+
+    @classmethod
+    def hub(cls) -> EpochOwner:
+        return cls(runner_id=None)
+
+    @classmethod
+    def runner(cls, runner_id: str) -> EpochOwner:
+        return cls(runner_id=runner_id)
+
+    def is_hub(self) -> bool:
+        return self.runner_id is None
+
+
+@dataclass(frozen=True)
+class Claimant:
+    """The runner attempt a runner-submitted write speaks for — its runner, and the lease
+    it names when it names one. A fenced seam write handed a ``claimant`` is refused unless
+    this attempt owns the write's epoch; a hub-originated write passes none."""
+
+    runner_id: str
+    lease_id: str | None = None
+
+    def owns(self, owner: EpochOwner | None, *, owning_lease_id: str | None) -> bool:
+        """Whether this attempt owns an epoch owned by ``owner``. An unowned or hub-owned
+        epoch is never a runner attempt's; a runner-owned one is when the runners match
+        and — only when both the epoch's owning lease and this write's lease are known —
+        the leases match too."""
+        if owner is None or owner.is_hub() or owner.runner_id != self.runner_id:
+            return False
+        return owning_lease_id is None or self.lease_id is None or owning_lease_id == self.lease_id
+
+
+@dataclass(frozen=True)
+class MintAdmission:
+    """Whether a runner's ``lease.minted`` at ``epoch`` may land, given the chunk's state
+    read inside the minting write's own transaction."""
+
+    epoch: int
+    newest: int
+    terminal: bool
+    owner: EpochOwner | None
+    owning_lease_id: str | None
+    holds_route: bool
+
+    def refusal(self, claimant: Claimant) -> FenceRefusal | None:
+        """``None`` when the mint lands. A mint on a terminal chunk or below the newest
+        epoch is refused; an owned epoch lands only for its own attempt; an unowned one
+        lands only above the newest epoch, and only for the live route's holder — which
+        then takes it (:meth:`takes_ownership`)."""
+        if self.terminal:
+            return FenceRefusal.terminal(self.epoch)
+        if not EpochAdmission.AT_OR_ABOVE.admits(self.epoch, newest=self.newest):
+            return FenceRefusal.stale(self.epoch, latest=self.newest)
+        if self.owner is not None:
+            if claimant.owns(self.owner, owning_lease_id=self.owning_lease_id):
+                return None
+            return FenceRefusal.displaced(self.epoch, latest=self.newest)
+        if self.epoch > self.newest and self.holds_route:
+            return None
+        return FenceRefusal.displaced(self.epoch, latest=self.newest)
+
+    def takes_ownership(self) -> bool:
+        """Whether an admitted mint records its runner as the epoch's owner."""
+        return self.owner is None

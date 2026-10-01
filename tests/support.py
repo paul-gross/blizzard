@@ -917,6 +917,17 @@ def assert_all_timestamps_utc(payload: object) -> None:
             assert_all_timestamps_utc(item)
 
 
+def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> dict:
+    """Claim ``chunk_id`` for ``runner_id`` through POST /routes — the route a runner must hold
+    before its first ``lease.minted`` above the claim's reservation is admitted."""
+    resp = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": runner_id, "workspace_id": "w1", "environment_ids": ["env-a"]},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 def report_lease(
     hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1", route_token: str | None = None
 ) -> dict:
@@ -978,6 +989,21 @@ def seed_graph(conn: sa.Connection, graph_id: str, *, at: datetime) -> None:
 def seed_chunk(conn: sa.Connection, chunk_id: str, *, graph_id: str, at: datetime) -> None:
     """Seed one ``chunks`` parent row — the FK a seeded route/pointer/etc. needs."""
     conn.execute(sa.insert(_CHUNKS).values(chunk_id=chunk_id, graph_id=graph_id, minted_at=at))
+
+
+def seed_lease(engine: Engine, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:
+    """Seed one hub ``lease_facts`` row with its epoch's owner — a runner's, or the hub's for
+    ``runner_id`` ``hub`` — the shape an admitted mint leaves, for a test that only needs the
+    chunk's fence at ``epoch``. Head-schema only."""
+    with engine.begin() as conn:
+        conn.execute(
+            sa.insert(schema.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
+        )
+        conn.execute(
+            sa.insert(schema.epoch_owners).values(
+                chunk_id=chunk_id, epoch=epoch, runner_id=None if runner_id == "hub" else runner_id, recorded_at=at
+            )
+        )
 
 
 def seed_work_item(

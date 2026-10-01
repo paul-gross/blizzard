@@ -40,7 +40,12 @@ class OutboundFacts:
     def lease_minted(self, chunk_id: str, lease_id: str, *, epoch: int, at: datetime) -> None:
         """Buffered ahead of any completion minted under it: the drain is strict FIFO, and this
         is the fence input the hub's completion check consumes."""
-        payload = {"chunk_id": chunk_id, "epoch": epoch, "route_token": self.ctx.stores.tokens.route_token(chunk_id)}
+        payload = {
+            "chunk_id": chunk_id,
+            "epoch": epoch,
+            "lease_id": lease_id,
+            "route_token": self.ctx.stores.tokens.route_token(chunk_id),
+        }
         self._enqueue(LEASE_MINTED, chunk_id, lease_id, payload, at)
 
     def escalation(self, lease: LeaseRecord, *, takeover: str, wrapped_takeover: str, at: datetime) -> None:
@@ -48,6 +53,7 @@ class OutboundFacts:
         payload = {
             "chunk_id": lease.chunk_id,
             "epoch": lease.epoch,
+            "lease_id": lease.lease_id,
             "takeover_command": takeover,
             "wrapped_takeover_command": wrapped_takeover,
             "route_token": self.ctx.stores.tokens.route_token(lease.chunk_id),
@@ -62,6 +68,7 @@ class OutboundFacts:
             "session_id": ask.session_id or lease.session_id,
             "harness_id": ask.harness_id or lease.harness_id,
             "epoch": lease.epoch,
+            "lease_id": lease.lease_id,
             "question": ask.question,
             "options": ask.options,
             "asked_at": iso_utc(ask.asked_at),

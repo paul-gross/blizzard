@@ -986,7 +986,13 @@ def test_fill_reports_lease_mint_to_hub(tmp_path):  # type: ignore[no-untyped-de
     # flusher reports it up to POST /events, so it is not pushed inline at spawn.
     buffered = [b for b in store.pending_outbound() if b.kind == LEASE_MINTED]
     assert len(buffered) == 1
-    assert json.loads(buffered[0].payload) == {"chunk_id": "ch_1", "epoch": 1, "route_token": "rtok_test"}
+    assert json.loads(buffered[0].payload) == {
+        "chunk_id": "ch_1",
+        "epoch": 1,
+        "lease_id": buffered[0].lease_id,
+        "route_token": "rtok_test",
+    }
+    assert buffered[0].lease_id is not None
     Pull(ctx).run()
     assert [(f.kind, f.payload["epoch"]) for f in hub.pushed] == [(LEASE_MINTED, 1)]
 

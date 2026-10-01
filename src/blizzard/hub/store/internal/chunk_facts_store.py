@@ -24,6 +24,7 @@ from blizzard.hub.domain.work import (
     BounceFact,
     ChunkFacts,
     DecisionFact,
+    EpochOwnerFact,
     EscalationFact,
     HubNodePollFact,
     LeaseFact,
@@ -54,6 +55,7 @@ _ALL_FAMILIES: frozenset[str] = frozenset(
         "landed_repos",
         "escalations",
         "leases",
+        "epoch_owners",
         "transitions",
         "routes_created",
         "routes_released",
@@ -92,9 +94,10 @@ _STATUS_FAMILIES: frozenset[str] = frozenset(
 
 
 #: The families a :class:`~blizzard.wire.chunk.ChunkStatusView` reaches — :attr:`_STATUS_FAMILIES`
-#: plus ``usage`` (for :meth:`~blizzard.hub.domain.work.ChunkFacts.usage_total`, the one
-#: reach ``status()`` itself doesn't make). :meth:`ChunkFactsStore.status_facts_for`'s narrowing.
-_TICK_STATUS_FAMILIES: frozenset[str] = _STATUS_FAMILIES | frozenset({"usage"})
+#: plus ``usage`` (for :meth:`~blizzard.hub.domain.work.ChunkFacts.usage_total`) and
+#: ``epoch_owners`` (for :meth:`~blizzard.hub.domain.work.ChunkFacts.latest_epoch`), the
+#: reaches ``status()`` itself doesn't make. :meth:`ChunkFactsStore.status_facts_for`'s narrowing.
+_TICK_STATUS_FAMILIES: frozenset[str] = _STATUS_FAMILIES | frozenset({"usage", "epoch_owners"})
 
 
 def _rows(conn, table, batch: Sequence[str] | None, *columns):  # type: ignore[no-untyped-def]
@@ -255,6 +258,11 @@ class ChunkFactsStore:
         if "leases" in families:
             for lease in _rows(conn, s.lease_facts, batch):
                 leases[lease.chunk_id].append(LeaseFact(epoch=lease.epoch, minted_at=lease.minted_at))
+
+        epoch_owners: dict[str, list[EpochOwnerFact]] = defaultdict(list)
+        if "epoch_owners" in families:
+            for owner in _rows(conn, s.epoch_owners, batch):
+                epoch_owners[owner.chunk_id].append(EpochOwnerFact(epoch=owner.epoch, runner_id=owner.runner_id))
 
         escalations: dict[str, list[EscalationFact]] = defaultdict(list)
         if "escalations" in families:
@@ -443,6 +451,7 @@ class ChunkFactsStore:
                 landed_repos=frozenset(landed_repos[chunk_id]),
                 escalations=escalations[chunk_id],
                 leases=leases[chunk_id],
+                epoch_owners=epoch_owners[chunk_id],
                 transitions=transitions[chunk_id],
                 routes_created=routes_created[chunk_id],
                 routes_released=routes_released[chunk_id],

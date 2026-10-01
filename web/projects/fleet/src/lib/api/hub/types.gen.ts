@@ -1544,6 +1544,10 @@ export type CompletionSubmission = {
      */
     from_node_id: string;
     /**
+     * Lease Id
+     */
+    lease_id?: string | null;
+    /**
      * Proposals
      */
     proposals?: Array<CreateWorkItemProposal | UpdateWorkItemProposal>;
@@ -1659,6 +1663,10 @@ export type DecisionSubmission = {
      * From Node Id
      */
     from_node_id: string;
+    /**
+     * Lease Id
+     */
+    lease_id?: string | null;
     /**
      * Proposals
      */
@@ -1915,6 +1923,10 @@ export type EscalationReport = {
      * Epoch
      */
     epoch: number;
+    /**
+     * Lease Id
+     */
+    lease_id?: string | null;
     /**
      * Runner Id
      */
@@ -3254,6 +3266,10 @@ export type LeaseMintReport = {
      */
     epoch: number;
     /**
+     * Lease Id
+     */
+    lease_id?: string | null;
+    /**
      * Runner Id
      */
     runner_id: string;
@@ -3667,6 +3683,10 @@ export type QuestionAsked = {
      * Harness Id
      */
     harness_id?: string | null;
+    /**
+     * Lease Id
+     */
+    lease_id?: string | null;
     /**
      * Node Id
      */

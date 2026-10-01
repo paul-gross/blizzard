@@ -126,6 +126,7 @@ class HeldChunk:
 
         Reuses the parked step's epoch — no new lease was minted while parked — and references
         the decision id, which is what makes a transition out of a human-judged node legal."""
+        parked = self.ctx.stores.lease_record.latest_lease_for_chunk(self.chunk_id)
         submission = CompletionSubmission(
             choice=decision.resolved_choice or "",
             epoch=decision.epoch,
@@ -135,6 +136,7 @@ class HeldChunk:
             decision_id=decision.decision_id,
             # Not buffered, so stamped directly at submit.
             route_token=self.ctx.stores.tokens.route_token(self.chunk_id),
+            lease_id=parked.lease_id if parked is not None and parked.epoch == decision.epoch else None,
         )
         try:
             response = self.ctx.hub.submit_completion(self.chunk_id, submission)

@@ -23,6 +23,8 @@ class QuestionAsked(BaseModel):
     harness_id: str | None = None
     runner_id: str
     epoch: int
+    # The parked attempt's lease — matched against the epoch's owning lease when both are known.
+    lease_id: str | None = None
     question: str
     options: list[str] = []
     asked_at: str  # ISO-8601 instant the ask was recorded (reap clock stops here)

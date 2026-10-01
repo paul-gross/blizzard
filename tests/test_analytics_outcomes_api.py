@@ -26,6 +26,7 @@ from tests.support import (
     FakeWorkSource,
     HubHarness,
     build_hub,
+    claim_route,
     pointer_token,
     report_lease,
     seed_session,
@@ -131,7 +132,9 @@ def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> 
         "/api/chunks", json={"tokens": [pointer_token({"source": source, "ref": ref})]}, headers=_cookie(token)
     )
     assert resp.status_code == 201, resp.text
-    return str(resp.json()["chunk_id"])
+    chunk_id = str(resp.json()["chunk_id"])
+    claim_route(hub, chunk_id)
+    return chunk_id
 
 
 def _complete(hub, chunk_id: str, *, epoch: int, from_node_id: str, choice: str) -> None:  # type: ignore[no-untyped-def]
@@ -299,6 +302,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
     )
+    claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed node — never completed
     report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over
 
@@ -331,6 +335,7 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
     )
+    claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed (entry) node
     report_lease(hub, chunk_id, epoch=3, seq=3)  # proves epoch 2 is over
 

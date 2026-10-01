@@ -57,6 +57,8 @@ class LeaseMintReport(BaseModel):
 
     epoch: int
     runner_id: str
+    # The minted lease — recorded as the epoch's owning lease when it is the first to name one.
+    lease_id: str | None = None
 
 
 class EscalationReport(BaseModel):
@@ -66,6 +68,7 @@ class EscalationReport(BaseModel):
 
     epoch: int
     runner_id: str
+    lease_id: str | None = None
     takeover_command: str = ""
     wrapped_takeover_command: str = ""
 

@@ -760,11 +760,16 @@ def report_lease(
     services: Annotated[HubServices, Depends(get_services)],
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> dict[str, str]:
-    """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep; 403 when retired."""
+    """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep; 403 when retired,
+    409 when its admission refuses it."""
     fleet.assert_owns(report.runner_id)
     if services.chunks.record.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    services.runner_facts.record_lease_minted(chunk_id, epoch=report.epoch, runner_id=report.runner_id)
+    refusal = services.runner_facts.record_lease_minted(
+        chunk_id, epoch=report.epoch, runner_id=report.runner_id, lease_id=report.lease_id
+    )
+    if refusal is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=refusal.detail)
     return {"chunk_id": chunk_id}
 
 

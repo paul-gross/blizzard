@@ -178,6 +178,16 @@ def _submit_decision(hub: HubHarness, chunk_id: str, node_id: str, *, runner_id:
     return resp.json()
 
 
+def _owned_by(hub: HubHarness, chunk_id: str, runner_id: str, *, epoch: int) -> None:
+    """Record ``runner_id`` as ``epoch``'s owner straight in the store, so a submission from it
+    clears the fence while another runner still holds the route — isolating the stamp's
+    source from the route without the fence refusing the non-holder first."""
+    with hub.engine.begin() as conn:
+        conn.execute(
+            sa.insert(s.epoch_owners).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, recorded_at=_T0)
+        )
+
+
 def _stored_runner_ids(hub: HubHarness, chunk_id: str) -> list[str | None]:
     with hub.engine.connect() as conn:
         rows = conn.execute(
@@ -246,8 +256,9 @@ def test_upgrade_adds_runner_id_and_materializations_leaving_existing_rows_reada
 def test_runner_id_is_stamped_on_a_transition_and_is_the_submissions_not_the_routes(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, nodes = _ingest(hub, _DELIVER_TO_DONE_YAML, claim_runner="r-route")
+    _owned_by(hub, chunk_id, "r-submit", epoch=2)
 
-    _complete(hub, chunk_id, nodes["build"], choice="pass", runner_id="r-submit")
+    _complete(hub, chunk_id, nodes["build"], choice="pass", runner_id="r-submit", epoch=2)
 
     assert _stored_runner_ids(hub, chunk_id) == ["r-submit"]
 
@@ -255,8 +266,9 @@ def test_runner_id_is_stamped_on_a_transition_and_is_the_submissions_not_the_rou
 def test_runner_id_is_stamped_on_a_decision_open(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, nodes = _ingest(hub, _GATE_YAML, claim_runner="r-route")
+    _owned_by(hub, chunk_id, "r-submit", epoch=2)
 
-    _submit_decision(hub, chunk_id, nodes["build"], runner_id="r-submit")
+    _submit_decision(hub, chunk_id, nodes["build"], runner_id="r-submit", epoch=2)
 
     assert _stored_runner_ids(hub, chunk_id) == ["r-submit"]
 
@@ -265,8 +277,9 @@ def test_runner_id_is_stamped_on_a_cross_graph_migration(tmp_path: Path) -> None
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _TARGET_YAML}).status_code == 201
     chunk_id, nodes = _ingest(hub, _TRIAGE_YAML, claim_runner="r-route")
+    _owned_by(hub, chunk_id, "r-submit", epoch=2)
 
-    _complete(hub, chunk_id, nodes["build"], choice="migrate", runner_id="r-submit")
+    _complete(hub, chunk_id, nodes["build"], choice="migrate", runner_id="r-submit", epoch=2)
 
     assert _stored_runner_ids(hub, chunk_id) == ["r-submit"]
 

@@ -20,7 +20,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import MIGRATION_PREFIX, Id
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.chunks.exclusive import ILockedChunkRead
-from blizzard.hub.domain.chunks.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.work import MigrationSource
@@ -38,6 +38,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     lock_chunk_row,
     next_artifact_seq,
     next_route_seq,
+    record_epoch_owner,
 )
 
 
@@ -78,6 +79,7 @@ class ChunkMovementStore:
         choice_name: str | None,
         epoch: int,
         admission: EpochAdmission,
+        claimant: Claimant | None = None,
         runner_id: str,
         at: datetime,
         artifacts: list[ArtifactRow],
@@ -86,7 +88,7 @@ class ChunkMovementStore:
     ) -> FenceRefusal | None:
         with self._store.write("record_transition") as conn:
             lock_chunk_row(conn, chunk_id)
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission)
+            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
             if refusal is not None:
                 return refusal
             conn.execute(
@@ -138,6 +140,7 @@ class ChunkMovementStore:
         model: str | None,
         epoch: int,
         admission: EpochAdmission,
+        claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[ArtifactRow],
         proposals: list[WorkItemProposalRow],
@@ -155,7 +158,7 @@ class ChunkMovementStore:
             lock_chunk_row(conn, chunk_id)
             if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
                 return None
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission)
+            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
             if refusal is not None:
                 return refusal
             resolved_migration_id = (
@@ -292,6 +295,7 @@ class ChunkMovementStore:
                 recorded_at=at,
             )
         )
+        record_epoch_owner(conn, chunk_id, epoch, EpochOwner.hub(), at=at)
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 

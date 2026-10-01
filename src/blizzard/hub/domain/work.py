@@ -288,6 +288,14 @@ class LeaseFact:
 
 
 @dataclass(frozen=True)
+class EpochOwnerFact:
+    """One fencing epoch's recorded owner — ``runner_id`` ``None`` meaning the hub."""
+
+    epoch: int
+    runner_id: str | None
+
+
+@dataclass(frozen=True)
 class TransitionFact:
     """A ``transition.recorded`` fact with its target node's executor, resolved by the
     hydrating repository so the derivation stays a pure function. ``from_node_id`` and
@@ -709,6 +717,8 @@ class ChunkFacts:
     landed_repos: frozenset[str] = field(default_factory=frozenset)
     escalations: list[EscalationFact] = field(default_factory=list)
     leases: list[LeaseFact] = field(default_factory=list)
+    # The chunk's epoch owners — a claim's reservation among them, so it raises the fence.
+    epoch_owners: list[EpochOwnerFact] = field(default_factory=list)
     transitions: list[TransitionFact] = field(default_factory=list)
     routes_created: list[RouteCreatedFact] = field(default_factory=list)
     routes_released: list[RouteReleasedFact] = field(default_factory=list)
@@ -769,11 +779,16 @@ class ChunkFacts:
         return max(self.restarts, key=lambda r: (r.recorded_at, r.epoch))
 
     def latest_epoch(self) -> int | None:
-        """The chunk's latest fencing epoch — the newest across its leases and restarts.
+        """The chunk's latest fencing epoch — the newest across its leases, restarts, and
+        epoch owners.
 
-        A restart mints an epoch with no attempt behind it (#370): the fence has to rise
-        the moment the move lands, ahead of the re-entry's own lease."""
-        epochs = [lease.epoch for lease in self.leases] + [restart.epoch for restart in self.restarts]
+        A restart mints an epoch with no attempt behind it (#370), and a claim reserves one
+        before its lease is reported: the fence has to rise the moment either lands."""
+        epochs = (
+            [lease.epoch for lease in self.leases]
+            + [restart.epoch for restart in self.restarts]
+            + [owner.epoch for owner in self.epoch_owners]
+        )
         return max(epochs) if epochs else None
 
     def latest_movement(self) -> Movement | None:

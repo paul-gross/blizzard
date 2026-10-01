@@ -892,7 +892,8 @@ export const hubAdvanceApiFleetChunksChunkIdHubAdvancePost = <ThrowOnError exten
 /**
  * Report Lease
  *
- * Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep; 403 when retired.
+ * Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep; 403 when retired,
+ * 409 when its admission refuses it.
  */
 export const reportLeaseApiFleetChunksChunkIdLeasesPost = <ThrowOnError extends boolean = false>(options: Options<ReportLeaseApiFleetChunksChunkIdLeasesPostData, ThrowOnError>): RequestResult<ReportLeaseApiFleetChunksChunkIdLeasesPostResponses, ReportLeaseApiFleetChunksChunkIdLeasesPostErrors, ThrowOnError> => (options.client ?? client).post<ReportLeaseApiFleetChunksChunkIdLeasesPostResponses, ReportLeaseApiFleetChunksChunkIdLeasesPostErrors, ThrowOnError>({
     url: '/api/fleet/chunks/{chunk_id}/leases',
