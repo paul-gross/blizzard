@@ -27,6 +27,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.hub.domain.claim",
     "blizzard.hub.domain.apply",
     "blizzard.hub.domain.work_closure",
+    "blizzard.hub.domain.tracing.sweep",
 )
 
 

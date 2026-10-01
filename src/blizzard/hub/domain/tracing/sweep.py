@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
@@ -28,6 +29,13 @@ from blizzard.hub.domain.tracing.spans import SpanRecord
 from blizzard.hub.domain.tracing.window import read_window
 
 _log = get_logger("blizzard.hub.trace_export")
+
+# The exporter accepted the batch; the cursor row that records it is not yet appended.
+# Recovered by the next pass re-reading the same steps from the unmoved cursor and re-sending them.
+_CP_TRACE_AFTER_EXPORT_BEFORE_CURSOR = crashpoint(
+    "trace.after-export.before-cursor",
+    "the exporter accepted the batch; the cursor row that records it is not yet appended",
+)
 
 _FAILED: EventLogKind = "trace-export-failed"
 _RECOVERED: EventLogKind = "trace-export-recovered"
@@ -92,6 +100,7 @@ class TraceExportSweep:
         if not self._export(spans):
             self._failed(now, len(window.steps))
             return
+        _CP_TRACE_AFTER_EXPORT_BEFORE_CURSOR.reached()
         self._steps.append_cursor(TraceCursorRecord(window.position, len(spans), self._clock.now()))
         self._recovered()
         _log.info("trace export sweep completed", steps=len(window.steps), spans=len(spans))
