@@ -52,8 +52,9 @@ def test_a_configured_session_secret_survives_a_restart_and_the_fallback_does_no
     session = RunnerSession(username="alice", role=Role.ADMIN, issued_at=now, expires_at=now + timedelta(hours=8))
 
     def secret_of(config: RunnerConfig) -> bytes:
-        with TestClient(create_app(config)) as client:
-            return client.app.state.session_secret
+        app = create_app(config)
+        with TestClient(app):
+            return app.state.session_secret
 
     configured = RunnerConfig(root=tmp_path, db_url="sqlite://", session_secret=b"k" * 48)
     cookie = SessionCookie(secret_of(configured)).mint(session)
