@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import ast
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -636,3 +639,22 @@ def test_each_blizzard_class_is_constructed_once_across_the_hub_composition_root
         name: where for name, where in sites.items() if len(where) > 1 and name not in _REPEATABLE_CONSTRUCTIONS
     }
     assert not duplicated, f"constructed more than once across the composition roots: {duplicated}"
+
+
+def _loaded_after_importing(module: str) -> set[str]:
+    code = f"import sys, json; import {module}; print(json.dumps(sorted(sys.modules)))"
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    return set(json.loads(result.stdout))
+
+
+def test_trace_ids_load_no_driver_or_hub_store() -> None:
+    """The runner imports the id derivation, so it loads nothing but the standard library and the kernel."""
+    loaded = _loaded_after_importing("blizzard.foundation.trace_ids")
+    heavy = {m for m in loaded if m.split(".")[0] in ("sqlalchemy", "httpx") or m.startswith("blizzard.hub")}
+    assert not heavy, heavy
+
+
+def test_trace_step_rules_load_no_http_driver_or_hub_store() -> None:
+    loaded = _loaded_after_importing("blizzard.hub.domain.tracing.steps")
+    heavy = {m for m in loaded if m.split(".")[0] == "httpx" or m.startswith("blizzard.hub.store")}
+    assert not heavy, heavy
