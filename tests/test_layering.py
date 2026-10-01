@@ -658,3 +658,9 @@ def test_trace_step_rules_load_no_http_driver_or_hub_store() -> None:
     loaded = _loaded_after_importing("blizzard.hub.domain.tracing.steps")
     heavy = {m for m in loaded if m.split(".")[0] == "httpx" or m.startswith("blizzard.hub.store")}
     assert not heavy, heavy
+
+
+def test_trace_assembly_loads_no_http_driver_opentelemetry_or_hub_store() -> None:
+    loaded = _loaded_after_importing("blizzard.hub.domain.tracing.assembly")
+    heavy = {m for m in loaded if m.split(".")[0] in ("httpx", "opentelemetry") or m.startswith("blizzard.hub.store")}
+    assert not heavy, heavy
