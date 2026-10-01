@@ -9,8 +9,9 @@ import click
 
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.harness.ambient_conflicts import claude_code_config_conflicts
 from blizzard.runner.harness.bundle import published_snapshot
-from blizzard.runner.harness.bundle_layouts import inspect_harness_bundle
+from blizzard.runner.harness.bundle_layouts import claude_code_delivery, inspect_harness_bundle
 
 
 @click.group("harness")
@@ -41,13 +42,17 @@ def harness_status(directory: str) -> None:
     try:
         config = RunnerConfig.load(Path(directory))
         click.echo(f"autonomy: {config.autonomy} (from {_autonomy_source(config)})")
+        if config.claude_code_enabled:
+            for conflict in claude_code_config_conflicts(config):
+                click.echo(f"claude-code config conflict: {conflict}")
         if config.harness_config_dir is None:
             click.echo("config_dir: none")
             click.echo(f"worker settings file in effect: {config.worker_settings_path}")
             click.echo(f"opencode worker config in effect: {config.opencode_worker_config_path}")
             return
         click.echo(f"config_dir: {config.harness_config_dir}")
-        for source in inspect_harness_bundle(config.harness_config_dir):
+        sources = inspect_harness_bundle(config.harness_config_dir)
+        for source in sources:
             click.echo(f"{source.dirname}: source {source.source_dir}; entry points: {', '.join(source.entry_points)}")
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -55,3 +60,8 @@ def harness_status(directory: str) -> None:
     if snapshot is None:
         raise click.ClickException("config_dir is configured but no snapshot is published; restart the runner")
     click.echo(f"snapshot: {snapshot}")
+    delivery = claude_code_delivery(snapshot, sources)
+    if delivery is not None:
+        settings, flags = delivery
+        click.echo(f"claude-code effective settings: {settings}")
+        click.echo(f"claude-code flags: {' '.join(flags)}")

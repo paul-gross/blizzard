@@ -24,6 +24,7 @@ class HarnessHealthCause(StrEnum):
     INCOMPATIBLE_VERSION = "incompatible_version"
     UNKNOWN_VERSION = "unknown_version"
     AUTHENTICATION_FAILURE = "authentication_failure"
+    CONFIG_CONFLICT = "config_conflict"
     UNMAPPED_TIER = "unmapped_tier"
     SELFTEST_FAILURE = "selftest_failure"
     DECLARED_DEGRADATION = "declared_degradation"
@@ -65,6 +66,8 @@ class HarnessHealthEvidence:
     #: Whether this binding backs its admitted range with a committed corpus; defaults `True` (fail closed).
     corpus_backed: bool = True
     degradations: tuple[DeclaredDegradation, ...] = ()
+    #: Ambient settings defeating the runner's wiring, as file and key; non-empty withholds availability.
+    config_conflicts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,8 @@ def evaluate_harness_health(evidence: HarnessHealthEvidence) -> HarnessHealthRes
             return _unavailable(evidence, HarnessHealthCause.UNKNOWN_VERSION)
     if not evidence.authenticated:
         return _unavailable(evidence, HarnessHealthCause.AUTHENTICATION_FAILURE)
+    if evidence.config_conflicts:
+        return _unavailable(evidence, HarnessHealthCause.CONFIG_CONFLICT)
     if evidence.unmapped_tiers:
         return _unavailable(evidence, HarnessHealthCause.UNMAPPED_TIER)
     if evidence.selftest_failed is True:

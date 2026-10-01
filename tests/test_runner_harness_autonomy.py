@@ -24,6 +24,7 @@ from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.claude_code_bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.internal.claude_code_denials import CLAUDE_CODE_DENIED_TOOLS
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.process_launch import LaunchedProcess
@@ -256,6 +257,62 @@ def test_claude_code_still_delivers_the_settings_file_under_every_autonomy(tmp_p
 
     for kind, argv in _unattended(adapter, tmp_path, launcher).items():
         assert _flag(argv, "--settings") == "/runner/worker-settings.json", kind
+
+
+# --------------------------------------------------------------------------- #
+# A published bundle: the composed settings and companion flags ride every unattended kind.
+
+
+def _delivery(tmp_path: Path, *, companions: bool) -> ClaudeCodeBundleDelivery:
+    root = tmp_path / "snap"
+    return ClaudeCodeBundleDelivery(
+        root / "settings.json",
+        root / "mcp.json" if companions else None,
+        root / "agents.json" if companions else None,
+        root / "plugins" if companions else None,
+    )
+
+
+@pytest.mark.parametrize("autonomy", _ALL)
+def test_a_bundle_delivers_settings_and_companions_on_every_unattended_kind(tmp_path: Path, autonomy: Autonomy) -> None:
+    launcher = _RecordingLauncher()
+    delivery = _delivery(tmp_path, companions=True)
+    adapter = _claude(launcher, autonomy=autonomy, settings_path="/runner/worker-settings.json", bundle=delivery)
+
+    for kind, argv in _unattended(adapter, tmp_path, launcher).items():
+        assert _flag(argv, "--settings") == str(delivery.settings), kind
+        assert f"--mcp-config={delivery.mcp_config}" in argv, kind
+        assert _flag(argv, "--agents") == str(delivery.agents), kind
+        assert _flag(argv, "--plugin-dir") == str(delivery.plugins), kind
+        assert "/runner/worker-settings.json" not in argv, kind
+
+
+def test_a_bundle_without_companions_passes_only_the_settings(tmp_path: Path) -> None:
+    launcher = _RecordingLauncher()
+    adapter = _claude(launcher, bundle=_delivery(tmp_path, companions=False))
+
+    for kind, argv in _unattended(adapter, tmp_path, launcher).items():
+        assert _flag(argv, "--settings") is not None, kind
+        assert not [a for a in argv if a.startswith(("--mcp-config", "--agents", "--plugin-dir"))], kind
+
+
+def test_the_prompt_stays_the_final_argument_with_a_bundle(tmp_path: Path) -> None:
+    launcher = _RecordingLauncher()
+    adapter = _claude(launcher, bundle=_delivery(tmp_path, companions=True))
+
+    argvs = _unattended(adapter, tmp_path, launcher)
+
+    assert argvs["nudge"][-1] == "go on"
+    assert argvs["judge"][-1] == "judge it"
+
+
+def test_takeover_command_carries_no_bundle_flags(tmp_path: Path) -> None:
+    adapter = _claude(_RecordingLauncher(), bundle=_delivery(tmp_path, companions=True))
+
+    command = adapter.resume_command("/w", "s-1", attended=True)
+
+    assert "--settings" not in command
+    assert "--mcp-config" not in command
 
 
 # --------------------------------------------------------------------------- #

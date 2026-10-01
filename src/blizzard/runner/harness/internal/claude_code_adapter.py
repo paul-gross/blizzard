@@ -28,6 +28,8 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal import harness_shared
+from blizzard.runner.harness.internal.claude_code_bundle import ClaudeCodeBundleDelivery
+from blizzard.runner.harness.internal.claude_code_settings_compose import PERMISSION_MODES
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -70,14 +72,6 @@ _RATE_LIMIT_RESET_RE = re.compile(r"resets\s+(\d{1,2}):(\d{2})\s*([ap]m)\s*\(([^
 # An overloaded synthetic record's own text names the status or the provider's own error
 # name — never a generic 5xx: any other server error stays unclassified.
 _OVERLOAD_TEXT_RE = re.compile(r"529|overloaded", re.IGNORECASE)
-
-
-# Claude Code's own vocabulary for each runner-wide autonomy value (`--permission-mode`).
-_PERMISSION_MODES = {
-    Autonomy.Normal: "manual",
-    Autonomy.Auto: "auto",
-    Autonomy.Dangerous: "bypassPermissions",
-}
 
 
 def _matches_model(expected: str, observed: str) -> bool:
@@ -154,6 +148,7 @@ class ClaudeCodeAdapter:
         binary: str = "claude",
         *,
         settings_path: str | None = None,
+        bundle: ClaudeCodeBundleDelivery | None = None,
         autonomy: Autonomy = Autonomy.Dangerous,
         permission_mode: str | None = None,
         model: str = DEFAULT_WORKER_MODEL,
@@ -166,6 +161,9 @@ class ClaudeCodeAdapter:
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
+        # The published bundle's composed settings and companion files; it supersedes the
+        # runner's own hook file, which the composition already folded in.
+        self._bundle = bundle
         self._model = model
         # The runner's own tier tables (``[models.aliases]`` /
         # ``[effort.aliases]``), overriding this adapter's built-ins entry by entry.
@@ -294,8 +292,7 @@ class ClaudeCodeAdapter:
             cmd += ["--resume", resume_from]
         elif session_id:
             cmd += ["--session-id", session_id]
-        if self._settings_path:
-            cmd += ["--settings", self._settings_path]
+        cmd += self._settings_args()
         cmd += self._permission_args()
         # The preamble is composed in the core; the adapter only concatenates it ahead of
         # the envelope prompt (``bzh:deterministic-shell``).
@@ -361,8 +358,7 @@ class ClaudeCodeAdapter:
             cmd += ["--autocompact", compaction_window]
         # Prefix parity with `resume_with_message` — pinned by
         # `test_judge_prefix_matches_resume_with_messages_settings_and_effort`.
-        if self._settings_path:
-            cmd += ["--settings", self._settings_path]
+        cmd += self._settings_args()
         cmd += self._permission_args()
         cmd.append(judgement_prompt)
         env = (
@@ -415,8 +411,7 @@ class ClaudeCodeAdapter:
             cmd += ["--autocompact", compaction_window]
         # Re-attach the worker hooks: this re-enters a long-lived session that later exits
         # on its own, and a resume does not carry the original spawn's `--settings`.
-        if self._settings_path:
-            cmd += ["--settings", self._settings_path]
+        cmd += self._settings_args()
         cmd += self._permission_args()
         cmd.append(message)
         # Re-supply the per-lease identity: a resume inherits none of the spawn env, and
@@ -437,6 +432,15 @@ class ClaudeCodeAdapter:
             confirm_durable=launched.confirm_durable,
         )
 
+    def _settings_args(self) -> list[str]:
+        """The one owner of the settings argv shared by spawn, judge, and resume: the bundle's
+        composed ``--settings`` plus the companion flags present, else the runner's own hook
+        file. ``--mcp-config`` rides in its ``=`` form because the option is variadic and would
+        otherwise consume the trailing positional prompt."""
+        if self._bundle is not None:
+            return self._bundle.argv()
+        return ["--settings", self._settings_path] if self._settings_path else []
+
     def _permission_args(self, *, attended: bool = False) -> list[str]:
         """The one owner of the permission argv: the legacy override when set, else the
         mapped autonomy. ``--permission-prompts none`` denies anything that would prompt, so
@@ -444,7 +448,7 @@ class ClaudeCodeAdapter:
         to answer."""
         if self._permission_override is not None:
             return ["--permission-mode", self._permission_override] if self._permission_override else []
-        args = ["--permission-mode", _PERMISSION_MODES[self._autonomy]]
+        args = ["--permission-mode", PERMISSION_MODES[self._autonomy]]
         if self._autonomy is Autonomy.Normal and not attended:
             args += ["--permission-prompts", "none"]
         return args

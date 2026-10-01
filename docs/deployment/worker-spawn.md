@@ -102,11 +102,40 @@ symlink to the published snapshot, replaced atomically; a failed publish leaves 
 place, and an unchanged bundle reuses its snapshot. Changes to the bundle take effect on the next restart, and a turn
 already running keeps the snapshot it started with. Old snapshots are not pruned.
 
-`blizzard runner harness status --dir <runtime root>` prints the autonomy value and where it comes from, the configured
-`config_dir`, each harness's source directory and the entry points present, and the resolved snapshot path. It prints
-names and paths only, never file contents. With no `config_dir` it names the generated `worker_settings_path` and
-OpenCode worker config as the files in effect. It exits 1 when a `config_dir` is configured but no snapshot is
-published.
+`blizzard runner harness status --dir <runtime root>` prints the autonomy value and where it comes from, any Claude Code
+config conflict, the configured `config_dir`, each harness's source directory and the entry points present, the resolved
+snapshot path, and Claude Code's effective settings path with the flags it is passed. It prints names and paths only,
+never file contents. With no `config_dir` it names the generated `worker_settings_path` and OpenCode worker config as
+the files in effect. It exits 1 when a `config_dir` is configured but no snapshot is published.
+
+### Claude Code composition and delivery
+
+With a `claude-code/` directory in the bundle, publishing composes the operator's `settings.json` with the runner's
+required wiring — the PostToolUse heartbeat hook, the SessionEnd hook, the `permissions.deny` list, and a pinned
+`disableAllHooks: false` — and writes the result as the snapshot's `claude-code/settings.json`, even when the operator
+supplied none. Each hook event's array holds the operator's groups first, the runner's appended; `permissions.deny` is
+the operator's list plus any runner entries not already in it; every other key passes through untouched. The pin
+neutralizes a user- or project-level `disableAllHooks: true`, so such a setting no longer silences the heartbeat. It is
+part of the runner's own `worker_settings_path` document too, so a runner with no bundle carries it as well.
+
+A collision fails `runner host` and `runner tick` startup with an error naming `<config_dir>/claude-code/settings.json`
+and the JSON path, and leaves `current` where it was. The collisions are `disableAllHooks: true`; a `permissions.allow`
+or `permissions.ask` rule naming a tool the runner denies; `permissions.defaultMode`, which `[harness] autonomy` owns;
+`permissions.disableBypassPermissionsMode` while the resolved mode is `bypassPermissions`; and `hooks`, `permissions`,
+or a rule list of the wrong JSON type.
+
+Every unattended Claude Code invocation — spawn, resume (including a nudge), and judgement — passes the snapshot's
+composed file as `--settings`, plus `--mcp-config=<snapshot>/claude-code/mcp.json`, `--agents`, and `--plugin-dir` for
+each of `mcp.json`, `agents.json`, and `plugins/` the bundle holds. User and project settings and MCP servers still load
+beside them. With no `config_dir`, or no `claude-code/` directory, argv is unchanged:
+`--settings <worker_settings_path>` and no companion flags. An attended takeover loads neither the runner's settings nor
+the bundle.
+
+Settings the composed file cannot override make Claude Code unavailable with the health cause `config_conflict`: in the
+managed settings file (`/etc/claude-code/managed-settings.json`), `disableAllHooks`, `allowManagedHooksOnly`,
+`allowManagedPermissionRulesOnly`, and `permissions.disableBypassPermissionsMode` under `bypassPermissions`. The runner
+logs the file and key and `blizzard runner harness status` prints them, never file contents; the API reports only the
+cause.
 
 ## The three prompt layers
 
@@ -220,11 +249,11 @@ table is absent (its scaffolded default binds `opencode` on `PATH`). `binary` na
 `harness_binary` does for Claude Code — and, exactly as for Claude Code, naming one that does not exist or is not
 executable is caught by the runner's own health evaluation rather than surfacing only at spawn: health recalculates at
 daemon start, after an operator-triggered selftest, and when the observed binary version changes, and a binding that
-fails any required check — missing binary, an incompatible or unknown observed version, failed authentication, an
-unmapped configured tier, or a recorded selftest failure — is marked unavailable. `HarnessSelector` skips an unavailable
-member with its own `"unhealthy"` reason ([observability.md](./observability.md)) rather than selecting it, so a node
-whose acceptable set includes `opencode` falls back to another member instead of failing at spawn, and escalates only
-once every member is exhausted. The binding stays visible, with its cause, in this runner's own
+fails any required check — missing binary, an incompatible or unknown observed version, failed authentication, a config
+conflict, an unmapped configured tier, or a recorded selftest failure — is marked unavailable. `HarnessSelector` skips
+an unavailable member with its own `"unhealthy"` reason ([observability.md](./observability.md)) rather than selecting
+it, so a node whose acceptable set includes `opencode` falls back to another member instead of failing at spawn, and
+escalates only once every member is exhausted. The binding stays visible, with its cause, in this runner's own
 `GET /api/harness-health` diagnostics; the hub sees only the boolean flag, never the cause. Claude Code's own health
 check is the same evaluation, membership-only: an incompatible or unobserved version withholds availability exactly as
 OpenCode's does, but since Claude Code declares no compatibility corpus, an admitted version is never itself a cause —

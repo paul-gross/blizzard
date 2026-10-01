@@ -2105,7 +2105,7 @@
         "type": "object"
       },
       "HarnessHealthView": {
-        "description": "One configured harness binding's own computed health \u2014\n``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of\n``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,\n``unmapped_tier``, or ``selftest_failure`` when unavailable; ``declared_degradation`` when\navailable but degraded; ``None`` only when available with no declared degradation either.",
+        "description": "One configured harness binding's own computed health \u2014\n``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of\n``missing_binary``, ``incompatible_version``, ``unknown_version``, ``authentication_failure``,\n``config_conflict``, ``unmapped_tier``, or ``selftest_failure`` when unavailable; ``declared_degradation`` when\navailable but degraded; ``None`` only when available with no declared degradation either.",
         "properties": {
           "admitted_range": {
             "anyOf": [

@@ -21,6 +21,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.harness_registry import (
@@ -83,7 +84,9 @@ class RunnerProcess:
             self.engine.dispose()
 
 
-def build_runner_process(config: RunnerConfig, *, events: EventBroker | None = None) -> RunnerProcess:
+def build_runner_process(
+    config: RunnerConfig, *, events: EventBroker | None = None, bundle: BundleSnapshot | None = None
+) -> RunnerProcess:
     """Construct the process-scoped graph; dispose partial resources on failure."""
     engine = create_engine_from_url(config.db_url)
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
@@ -94,7 +97,7 @@ def build_runner_process(config: RunnerConfig, *, events: EventBroker | None = N
         clock = SystemClock()
         process = LinuxProcessProbe()
         provider = build_workspace_provider(config, held_ids=stores.environments.held_environment_ids)
-        harnesses = build_production_harness_registry(config, executor=executor, process=process)
+        harnesses = build_production_harness_registry(config, executor=executor, process=process, bundle=bundle)
         default_id = default_harness_id(harnesses)
         if default_id is not None:
             harnesses.transcript_source(default_id)

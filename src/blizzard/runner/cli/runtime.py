@@ -21,6 +21,7 @@ from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.composition import RunnerProcess, build_read_stores, build_runner_process
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
@@ -80,7 +81,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     directory = HostDirectory(directory, dir_option).path
     with click_exception_on(ConfigError):
         config = RunnerConfig.load(Path(directory), host=host_, port=port)
-    _publish_harness_bundle(config)
+    bundle = _publish_harness_bundle(config)
     for missing in config.missing_worker_path_prepend_entries:
         click.echo(f"warning: [worker] path_prepend entry does not exist: {missing}")
     with click_exception_on(RevisionMismatchError):
@@ -88,7 +89,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # One broker for the process: `host` is the one composer building both the
     # served app and the ticked loop, so every writer and the stream route share it.
     broker = EventBroker()
-    graph = build_runner_process(config, events=broker)
+    graph = build_runner_process(config, events=broker, bundle=bundle)
     try:
         hosted = build_hosted_app(config, process_graph=graph)
         try:
@@ -99,14 +100,21 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         graph.close()
 
 
-def _publish_harness_bundle(config: RunnerConfig) -> None:
+def _publish_harness_bundle(config: RunnerConfig) -> BundleSnapshot | None:
     """Load the operator's harness-config bundle and publish its snapshot before any work is
-    accepted; a runtime with no `[harness] config_dir` is left untouched."""
+    accepted, returning it for the process graph to deliver; a runtime with no
+    `[harness] config_dir` is left untouched."""
     if config.harness_config_dir is None:
-        return
+        return None
     with click_exception_on(ConfigError):
-        snapshot = publish_harness_bundle(config.harness_config_dir, config.root)
+        snapshot = publish_harness_bundle(
+            config.harness_config_dir,
+            config.root,
+            autonomy=config.autonomy,
+            permission_mode=config.harness_permission_mode,
+        )
     click.echo(snapshot.summary())
+    return snapshot
 
 
 def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -> None:
@@ -177,10 +185,10 @@ def tick_cmd(directory: str) -> None:
     live hub and workspace, then exit. Refuses on a store revision mismatch, like ``host``."""
     with click_exception_on(ConfigError):
         config = RunnerConfig.load(Path(directory))
-    _publish_harness_bundle(config)
+    bundle = _publish_harness_bundle(config)
     with click_exception_on(RevisionMismatchError):
         ensure_current_revision(config)
-    LoopWiring.of(config).tick_once()
+    LoopWiring.of(config, bundle=bundle).tick_once()
     click.echo("tick complete")
 
 

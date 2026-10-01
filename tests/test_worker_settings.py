@@ -41,3 +41,7 @@ def test_each_harness_denies_none_of_the_other_harnesss_tools() -> None:
     assert claude_denied
     assert opencode_denied
     assert not claude_denied & opencode_denied
+
+
+def test_worker_settings_pins_disable_all_hooks_off() -> None:
+    assert WorkerSettings.of().document["disableAllHooks"] is False

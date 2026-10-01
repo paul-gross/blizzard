@@ -47,6 +47,9 @@ class _HealthyWithDegradationProbe:
     def binary_present(self) -> bool:
         return True
 
+    def config_conflicts(self) -> tuple[str, ...]:
+        return ()
+
     def probe_authentication(self) -> bool:
         return True
 

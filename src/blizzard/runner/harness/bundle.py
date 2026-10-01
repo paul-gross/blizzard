@@ -52,6 +52,17 @@ class HarnessLayout:
 
     dirname: str
     entry_points: tuple[EntryPoint, ...]
+    #: Rewrites the staged copy in place before the snapshot is named; raising aborts the publish.
+    compose: Callable[[HarnessComposition], None] | None = None
+
+
+@dataclass(frozen=True)
+class HarnessComposition:
+    """What a layout's compose hook is given: the staged directory it may rewrite and the
+    operator's source directory, so a failure can name the native path."""
+
+    staged_dir: Path
+    source_dir: Path
 
 
 @dataclass(frozen=True)
@@ -109,6 +120,7 @@ def publish_bundle(config_dir: Path, runtime_root: Path, layouts: tuple[HarnessL
         raise HarnessBundleError(effective, f"cannot prepare the effective directory: {exc}") from exc
     try:
         _stage(plan, staging)
+        _compose(plan, staging)
         snapshot = snapshots / _tree_hash(staging)
         try:
             if snapshot.exists():
@@ -204,6 +216,12 @@ def _stage(plan: _Plan, staging: Path) -> None:
         for relative in (PurePosixPath(name) for name in present), companions:
             for item in relative:
                 _copy(source / item, target / item)
+
+
+def _compose(plan: _Plan, staging: Path) -> None:
+    for layout, source, _, _ in plan.harnesses:
+        if layout.compose is not None:
+            layout.compose(HarnessComposition(staging / layout.dirname, source))
 
 
 def _copy(source: Path, destination: Path) -> None:
