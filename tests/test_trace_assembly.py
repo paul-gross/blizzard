@@ -308,6 +308,13 @@ def test_hub_step_correlates_polls_and_slots_by_node_and_window_then_a_bounce() 
     assert first.context != second.context
 
 
+def test_a_hub_step_exited_in_the_write_that_minted_its_lease_still_stands_on_its_node() -> None:
+    facts = _hub_facts(transitions=(fx.to("g1", "build", 90, 2),))
+    (root,) = _step(facts)
+    assert root.name == "step poll"
+    assert (root.start, root.end) == (fx.at(5), fx.at(90))
+
+
 def test_events_after_the_step_end_are_clamped_to_it() -> None:
     facts = fx.make_facts(usage=(_usage(at=99),), transitions=(fx.to("g1", "review", 30, 1),), **fx.runner_epoch(1, 10))
     (root,) = _step(facts)

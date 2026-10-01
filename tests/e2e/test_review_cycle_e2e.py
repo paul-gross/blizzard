@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -140,7 +141,9 @@ def _graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
+def test_review_cycle_fails_once_then_delivers(
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+) -> None:
     """A scripted review fails once, the work re-builds, review passes, delivery lands."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
@@ -172,7 +175,10 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
     (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+    ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
 
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "review cycle", "body": "the chunk"})
@@ -211,6 +217,24 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
         assert any("BLOCKING" in (a["content"] or "") for a in findings), (
             f"the fail visit's findings content is not exposed: {[a['content'] for a in findings]}"
         )
+
+        # Fleet truth, as the trace backend sees it: the failed review is routing, not error — its root reads
+        # `transitioned` with choice `fail` back to build, and build's second arrival is visit 2.
+        with subtests.test(msg="fleet traces"):
+            fleet_traces.require()
+            traces = fleet_traces.traces(roots=5)
+            assert_skeleton(
+                traces,
+                [
+                    StepExpect("step build", "transitioned", "review", children=("queue wait", "claim")),
+                    StepExpect("step review", "transitioned", "build", link="next"),
+                    StepExpect("step build", "transitioned", "review", link="next"),
+                    StepExpect("step review", "transitioned", "deliver", link="next"),
+                    StepExpect("step deliver", "transitioned", "done", children=("hub exec",), link="next"),
+                ],
+            )
+            assert [t.root.attributes["blizzard.step.visit"] for t in traces] == [1, 1, 2, 2, 1]
+            assert [t.root.attributes.get("blizzard.step.choice") for t in traces[:2]] == ["pass", "fail"]
 
     # The review-fail cycle ran build TWICE — two 'build pass' lines land on main.
     build_md = _git_bare(origin_bare, "show", "main:BUILD.md")

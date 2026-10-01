@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,
@@ -92,7 +93,9 @@ def _session_state_path(workspace: Path, session_id: str) -> Path:
     return workspace / ".blizzard-mock-harness" / "sessions" / f"{session_id}.json"
 
 
-def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path) -> None:
+def test_retries_exhausted_escalates_and_takeover_resumes_session(
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+) -> None:
     """Two verdict-less exits exhaust the budget; the escalation's takeover command,
     run verbatim, resumes the parked mock session."""
     bin_dir = _mock_bin_dir()
@@ -124,7 +127,10 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path
     (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+    ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
 
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "escalation", "body": "the chunk"})
@@ -159,6 +165,18 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path
         runner_dir = (tmp_path / "runner").resolve()
         wrapped_takeover = escalation["wrapped_takeover_command"]
         assert wrapped_takeover == f"blizzard runner takeover {chunk_id} --dir {shlex.quote(str(runner_dir))}"
+
+        # Fleet truth, as the trace backend sees it: the first verdict-less attempt is superseded by the retry, and
+        # the retry's escalation is the one outcome that reads as an error.
+        with subtests.test(msg="fleet traces"):
+            fleet_traces.require()
+            assert_skeleton(
+                fleet_traces.traces(roots=2),
+                [
+                    StepExpect("step build", "superseded", None, children=("queue wait", "claim")),
+                    StepExpect("step build", "escalated", None, status="ERROR", link="retry"),
+                ],
+            )
 
         # The parked session the takeover command targets (parsed from the command
         # itself — proof the command names a real, resumable session).

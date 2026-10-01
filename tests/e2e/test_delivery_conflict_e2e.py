@@ -17,6 +17,7 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
+from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -115,7 +116,28 @@ def _drive_one_bounce(config: RunnerConfig, hub: httpx.Client, chunk_id: str, fe
         os.environ.update(prior)
 
 
-def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(tmp_path: Path) -> None:
+def _drive_until_rebuilt(config: RunnerConfig, hub: httpx.Client, chunk_id: str, fenced_env: dict[str, str]) -> None:
+    """Tick until the re-entered build has passed again — its step is closed, so it can be exported."""
+    prior = dict(os.environ)
+    os.environ.update(fenced_env)
+    try:
+        with _runner_api(config):
+            deadline = time.monotonic() + 60.0
+            while time.monotonic() < deadline:
+                LoopWiring.of(config).tick_once()
+                history = hub.get(f"/api/chunks/{chunk_id}").json()["history"]
+                if sum(1 for h in history if h["choice_name"] == "pass") >= 2:
+                    return
+                time.sleep(0.5)
+            raise AssertionError("the bounced chunk never re-passed build")
+    finally:
+        os.environ.clear()
+        os.environ.update(prior)
+
+
+def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+) -> None:
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
@@ -148,7 +170,10 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
     main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
 
     forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+    ):
         # Arm the mock forge's merge_conflict lever for the fixture repo — repo-scoped
         # (no PR number), so it applies to whichever PR the script opens.
         armed = forge.post("/_levers/merge_conflict", json={"repo": REPO})
@@ -182,6 +207,32 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
         # Git/forge truth: no PR for the fixture repo ever merged.
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert pulls and not any(p.get("merged") for p in pulls), f"a conflicted PR merged: {pulls}"
+
+        # Fleet truth, as the trace backend sees it: the bounced deliver step is routing, not error — it carries a
+        # `bounce` event with cause `conflict` and closes back to build, and the re-entered build links to it by
+        # `bounce`. The chunk keeps looping against the armed lever, so only the first three steps are read.
+        with subtests.test(msg="fleet traces"):
+            fleet_traces.require()
+            _drive_until_rebuilt(config, hub, chunk_id, fenced)
+            traces = fleet_traces.traces(roots=3, exact=False)
+            (bounce,) = [e for e in traces[1].root.events if e.name == "bounce"]
+            assert bounce.attributes["blizzard.bounce.cause"] == "conflict"
+            assert_skeleton(
+                traces,
+                [
+                    StepExpect("step build", "transitioned", "deliver", children=("queue wait", "claim")),
+                    StepExpect(
+                        "step deliver",
+                        "transitioned",
+                        "build",
+                        children=("hub exec",),
+                        events=("bounce",),
+                        link="next",
+                        attributes=(("blizzard.bounce.cause", "conflict"),),
+                    ),
+                    StepExpect("step build", "transitioned", "deliver", link="bounce"),
+                ],
+            )
 
     # Bare main is exactly where it started — the conflicted change never landed.
     main_after = _git_bare(origin_bare, "rev-parse", "main").strip()

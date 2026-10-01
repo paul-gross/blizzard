@@ -25,6 +25,7 @@ import uvicorn
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
+from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -183,7 +184,9 @@ def _session_state_path(workspace: Path, session_id: str) -> Path:
     return workspace / ".blizzard-mock-harness" / "sessions" / f"{session_id}.json"
 
 
-def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
+def test_ask_parks_then_answer_resumes_session_to_done(
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+) -> None:
     """A worker asks and parks; the human's answer resumes the session and the chunk lands."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
@@ -215,7 +218,10 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
     (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+    ):
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "ask/answer", "body": "the chunk"})
         assert issue.status_code == 201, issue.text
@@ -286,6 +292,25 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
         assert closed["delivered"] is True, f"the resume-with-answer left no delivery fact: {closed}"
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
+
+        # Fleet truth, as the trace backend sees it: the park and the answer are one build step, carrying an `ask`
+        # child that ended answered — the wait never splits the step in two.
+        with subtests.test(msg="fleet traces"):
+            fleet_traces.require()
+            assert_skeleton(
+                fleet_traces.traces(roots=3),
+                [
+                    StepExpect(
+                        "step build",
+                        "transitioned",
+                        "review",
+                        children=("queue wait", "claim", "ask"),
+                        child_attributes=(("ask", "blizzard.ask.answered", True),),
+                    ),
+                    StepExpect("step review", "transitioned", "deliver", link="next"),
+                    StepExpect("step deliver", "transitioned", "done", children=("hub exec",), link="next"),
+                ],
+            )
 
     # The dormant session was resumed around the answer — its persisted state advanced and
     # recorded the resume message carrying the human's answer script (same session).

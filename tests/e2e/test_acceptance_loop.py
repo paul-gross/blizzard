@@ -21,12 +21,13 @@ import httpx
 import pytest
 import uvicorn
 
-from blizzard.hub.config import HubConfig, WorkSourceConfig
+from blizzard.hub.config import HubConfig, TracingConfig, WorkSourceConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
+from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
 from tests.support import (
     daemon_log_sink,
     free_port,
@@ -278,12 +279,18 @@ def _hub(
     annotate: bool = False,
     annotation_interval_seconds: int | None = None,
     extra_env: Mapping[str, str] | None = None,
+    collector: FleetCollector | None = None,
 ) -> Iterator[httpx.Client]:
+    """A hub daemon over ``hub_dir``. Traced (exporting to ``collector``, sweeping every second with no settle)
+    when a usable collector is given; otherwise every inherited ``OTEL_*`` is stripped so a developer's own
+    endpoint never receives e2e spans."""
+    export_to = collector if collector is not None and collector.available else None
     env = {
-        **os.environ,
+        **{k: v for k, v in os.environ.items() if not k.startswith("OTEL_")},
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
         "BZ_FORGE_OWNER": OWNER,
         WORK_SOURCE_TOKEN_ENV: "e2e-fixture-token",
+        **({"OTEL_EXPORTER_OTLP_ENDPOINT": export_to.endpoint} if export_to else {}),
         **(extra_env or {}),
     }
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
@@ -303,7 +310,12 @@ def _hub(
             )
         ],
     )
-    if route_token_mode is not None or produces_mode is not None or annotation_interval_seconds is not None:
+    if (
+        export_to
+        or route_token_mode is not None
+        or produces_mode is not None
+        or annotation_interval_seconds is not None
+    ):
         # Flags read once, at `host` startup: set before the
         # daemon starts, not mutable afterward.
         config = HubConfig.load(hub_dir)
@@ -314,6 +326,8 @@ def _hub(
             overrides["produces_mode"] = produces_mode
         if annotation_interval_seconds is not None:
             overrides["annotation_interval_seconds"] = annotation_interval_seconds
+        if export_to:
+            overrides["tracing"] = TracingConfig(sweep_seconds=1, settle_seconds=0)
         config = dataclasses.replace(config, **overrides)
         config.config_path.write_text(config.to_toml())
     log = hub_dir / "daemon.log"
@@ -345,7 +359,9 @@ def _terminate(proc: subprocess.Popen[str]) -> None:
 # The loop
 
 
-def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
+def test_acceptance_loop_one_chunk_ingest_to_landed(
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+) -> None:
     """One chunk travels the whole lifecycle and derives ``done``."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
@@ -383,7 +399,10 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
     (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
 
     forge_port, hub_port = _free_port(), _free_port()
-    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+    ):
         # Sanity: the forge sees the fixture's bare repo on default branch main.
         repo = forge.get(f"/repos/{REPO}")
         assert repo.status_code == 200, repo.text
@@ -422,7 +441,20 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
         assert pulls, "no PR was opened at the forge"
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 
-    # 4c. Git truth — the mock harness's file is present on the bare origin's main.
+        # 4c. Fleet truth, as the trace backend sees it: build, review and the hub's deliver step, each told once,
+        #    chained by `next` links, the last leading to the reserved terminal.
+        with subtests.test(msg="fleet traces"):
+            fleet_traces.require()
+            assert_skeleton(
+                fleet_traces.traces(roots=3),
+                [
+                    StepExpect("step build", "transitioned", "review", children=("queue wait", "claim")),
+                    StepExpect("step review", "transitioned", "deliver", link="next"),
+                    StepExpect("step deliver", "transitioned", "done", children=("hub exec",), link="next"),
+                ],
+            )
+
+    # 4d. Git truth — the mock harness's file is present on the bare origin's main.
     tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
     assert "LANDED.md" in tree.split(), f"landed file not reachable from bare main:\n{tree}"
 

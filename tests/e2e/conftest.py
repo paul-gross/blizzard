@@ -6,10 +6,13 @@ absent the browser scenario **skips cleanly** rather than erroring.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from tests.e2e.fleet_traces import FleetCollector, fleet_collector
 
 if TYPE_CHECKING:
     # Annotation-only: the module must stay importable on a machine that has never
@@ -47,3 +50,11 @@ def wide_viewport() -> ViewportSize:
 def narrow_viewport() -> ViewportSize:
     """A ~390px phone-width `Page` viewport — the narrow end of the tier rule."""
     return _NARROW_VIEWPORT.copy()
+
+
+@pytest.fixture
+def fleet_traces(tmp_path: Path) -> Iterator[FleetCollector]:
+    """A collector for this test's hub to export to; where none is usable it is inert, the hub runs untraced and
+    the scenario's own proof stands while its ``fleet traces`` subtest skips."""
+    with fleet_collector(tmp_path / "collector") as collector:
+        yield collector

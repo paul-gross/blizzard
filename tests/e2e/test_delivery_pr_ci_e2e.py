@@ -17,6 +17,7 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import LoopWiring
+from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -55,7 +56,7 @@ _BUILD_SCRIPT = (
 _BUILD_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 
 
-def _graph_yaml() -> str:
+def _graph_yaml(poll_timeout: int = 600) -> str:
     """The PR+CI delivery policy's shape, inlined with a re-poll-every-tick cadence.
 
     Names the SAME real `land_pr_ci` script and choice names the shipped graph authors,
@@ -81,7 +82,7 @@ def _graph_yaml() -> str:
             "deliver": {
                 "executor": "hub",
                 "poll_interval": 1,  # a brisk 1s cadence so the scenario converges in seconds
-                "poll_timeout": 600,  # never time out — these prove routing, not #64's timeout kick-back
+                "poll_timeout": poll_timeout,  # 600: never time out — these prove routing, not #64's timeout kick-back
                 "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"}],
                 "judgement": {
                     "choices": {
@@ -133,8 +134,8 @@ def _reset_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     return bin_dir, workspace, origins, origin_bare
 
 
-def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client) -> str:
-    assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client, *, poll_timeout: int = 600) -> str:
+    assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(poll_timeout)}).status_code == 201
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": "pr-ci", "body": "the PR+CI chunk"})
     assert issue.status_code == 201, issue.text
     ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
@@ -419,3 +420,62 @@ def test_pr_ci_refuses_a_foreign_commit_on_the_head(tmp_path: Path) -> None:
         assert foreign in (findings.get("content") or "")
 
     assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a foreign head"
+
+
+def test_pr_ci_bounces_a_poll_timeout_back_to_build(
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+) -> None:
+    """A PR that stays blocked past `poll_timeout` is a kick-back, not a failure that ends the chunk: the
+    delivery bounces with cause `poll-timeout` and the chunk re-enters build."""
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+
+    forge_port, hub_port = _free_port(), _free_port()
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+    ):
+        # `blocked` for good: polls pend every second until the node's few-second timeout fires.
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge, poll_timeout=4)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
+        assert bounced["bounces"][0]["cause"] == "poll-timeout", bounced["bounces"]
+        assert bounced["landed"] is False
+        assert bounced["current_node_name"] == "build"
+
+        pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
+        assert pulls and not any(p.get("merged") for p in pulls), f"a blocked PR merged: {pulls}"
+
+        # Fleet truth, as the trace backend sees it: the deliver step pended over several polls, then bounced with
+        # cause `poll-timeout`; the re-entered build links to it by `bounce`. The chunk keeps looping against the
+        # blocked PR, so only the first three steps are read.
+        with subtests.test(msg="fleet traces"):
+            fleet_traces.require()
+            _drive_until(
+                config, hub, chunk_id, fenced, lambda b: sum(1 for h in b["history"] if h["choice_name"] == "pass") >= 2
+            )
+            traces = fleet_traces.traces(roots=3, exact=False)
+            (bounce,) = [e for e in traces[1].root.events if e.name == "bounce"]
+            assert bounce.attributes["blizzard.bounce.cause"] == "poll-timeout"
+            assert_skeleton(
+                traces,
+                [
+                    StepExpect("step build", "transitioned", "deliver", children=("queue wait", "claim")),
+                    StepExpect(
+                        "step deliver",
+                        "transitioned",
+                        "build",
+                        events=("bounce",),
+                        min_events=(("hub poll pending", 2),),
+                        min_children=(("hub exec", 1),),
+                        link="next",
+                        attributes=(("blizzard.bounce.cause", "poll-timeout"),),
+                    ),
+                    StepExpect("step build", "transitioned", "deliver", link="bounce"),
+                ],
+            )
+
+    assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a poll timeout"
