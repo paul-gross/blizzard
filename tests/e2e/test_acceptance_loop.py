@@ -14,7 +14,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import httpx
@@ -277,12 +277,14 @@ def _hub(
     produces_mode: str | None = None,
     annotate: bool = False,
     annotation_interval_seconds: int | None = None,
+    extra_env: Mapping[str, str] | None = None,
 ) -> Iterator[httpx.Client]:
     env = {
         **os.environ,
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
         "BZ_FORGE_OWNER": OWNER,
         WORK_SOURCE_TOKEN_ENV: "e2e-fixture-token",
+        **(extra_env or {}),
     }
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)

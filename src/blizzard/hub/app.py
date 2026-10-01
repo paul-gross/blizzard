@@ -58,6 +58,7 @@ from blizzard.hub.domain.registry import RunnerRetired
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.trace_export.settings import TracingSettings
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
@@ -288,6 +289,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         close_forge_writes_enabled=config.close_forge_writes_enabled,
     )
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
+    tracing = TracingSettings.of(os.environ)
 
     # The provider-login seam is built only under `oauth`: under `none`
     # there is no login mechanism to serve.
@@ -316,10 +318,30 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     if readiness.evaluate().ready:
         OrphanedProviders.of(config, services).check()
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
+        _announce_rejected_tracing(tracing, services)
     app = create_app(config, readiness=readiness, services=services)
+    # The parsed enablement, kept for the trace-status read.
+    app.state.tracing = tracing
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
     return app
+
+
+def _announce_rejected_tracing(tracing: TracingSettings, services: HubServices) -> None:
+    """A rejected tracing setting never stops startup: the hub serves with tracing off and
+    records one hub-wide ``trace-config-rejected`` per start, naming the setting."""
+    if tracing.state != "rejected":
+        return
+    services.event_log.record(
+        kind="trace-config-rejected",
+        runner_id=None,
+        chunk_id=None,
+        lease_id=None,
+        node_name=None,
+        message=tracing.rejection_message,
+        detail={"setting": tracing.setting, "value": tracing.value},
+        at=services.clock.now(),
+    )
 
 
 @dataclass(frozen=True)

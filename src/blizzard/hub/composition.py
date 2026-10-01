@@ -183,6 +183,8 @@ class HubServices:
     #: so every reader agrees on the one live token per (chunk, node, epoch).
     marker_authority: MarkerAuthority
     events: EventBroker
+    #: The one event-log recorder every hub-side authoring site shares.
+    event_log: EventLogService
     clock: IClock
     default_graph_doc: GraphDoc
     default_graph_yaml: str
@@ -605,6 +607,7 @@ def build_services(
         hub_node=hub_node,
         marker_authority=marker_authority,
         events=events,
+        event_log=event_log,
         clock=clock,
         default_graph_doc=PACKAGED.default.doc,
         default_graph_yaml=PACKAGED.default.text,

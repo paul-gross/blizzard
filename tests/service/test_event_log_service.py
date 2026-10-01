@@ -203,3 +203,20 @@ def test_activity_backfill_merges_several_cause_families_bounded_and_newest_firs
         assert {"claimed", "node-completed", "escalated", "paused", "resumed"} <= narrowed_chunk_causes, narrowed
         assert any(r["type"] == "event-logged" and r["kind"] == "worker-context-warned" for r in narrowed), narrowed
         assert any(r["type"] == "runner-changed" and r["kind"] == "locally-paused" for r in narrowed), narrowed
+
+
+@pytest.mark.parametrize("protocol_env", ["OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"])
+def test_a_grpc_tracing_protocol_leaves_the_hub_serving_with_one_rejection(tmp_path: Path, protocol_env: str) -> None:
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    tracing_env = {"OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{_free_port()}", protocol_env: "grpc"}
+    with (
+        _forge(bin_dir, origins, forge_port),
+        _hub(tmp_path / "hub", forge_port, hub_port, extra_env=tracing_env) as hub,
+    ):
+        assert hub.get("/api/health").status_code == 200
+        rejected = [e for e in _events(hub) if e["kind"] == "trace-config-rejected"]
+        assert len(rejected) == 1, rejected
+        assert rejected[0]["severity"] == "warning"
+        assert rejected[0]["chunk_id"] is None
+        assert rejected[0]["runner_id"] is None
+        assert rejected[0]["detail"] == {"setting": protocol_env, "value": "grpc"}
