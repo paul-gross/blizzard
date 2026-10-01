@@ -10,9 +10,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
+from blizzard.hub.domain.tracing.assembly import assemble_step
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import StepFacts
 from blizzard.hub.domain.tracing.repository import IReadTraceSteps
+from blizzard.hub.domain.tracing.spans import SpanRecord
 from blizzard.hub.domain.tracing.steps import NodeStep, identify_steps
 
 
@@ -63,3 +65,20 @@ def read_window(reads: IReadTraceSteps, since: CursorKey, until: datetime, limit
     candidates = reads.closing_candidates(since.at, until, limit)
     facts = reads.step_facts_for(candidates.chunk_ids)
     return select_window(facts.values(), since, until, candidates.frontier, limit)
+
+
+def assemble_window(window: TraceWindow) -> tuple[SpanRecord, ...]:
+    """Every span of every step in the window — the one assembly a sweep and a replay both tell."""
+    return tuple(span for closed in window.steps for span in assemble_step(closed.facts, closed.step))
+
+
+def oldest_unsent(reads: IReadTraceSteps, since: CursorKey, until: datetime) -> ClosedStep | None:
+    """The first step closed after ``since`` and at or before ``until``, or ``None``. Read a step at a
+    time, moving past closing facts that close nothing."""
+    while True:
+        window = read_window(reads, since, until, 1)
+        if window.steps:
+            return window.steps[0]
+        if window.position == since:
+            return None
+        since = window.position

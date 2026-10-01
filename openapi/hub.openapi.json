@@ -8091,6 +8091,222 @@
         "title": "ToolCallSegmentView",
         "type": "object"
       },
+      "TraceReplayFailure": {
+        "description": "The exporter refused or raised: ``steps``, ``spans`` and ``batches`` count what it accepted before the\nreplay stopped. ``detail`` is fixed text, never the exporter's own error.",
+        "properties": {
+          "batches": {
+            "title": "Batches",
+            "type": "integer"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "spans": {
+            "title": "Spans",
+            "type": "integer"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "detail",
+          "steps",
+          "spans",
+          "batches"
+        ],
+        "title": "TraceReplayFailure",
+        "type": "object"
+      },
+      "TraceReplayRequest": {
+        "description": "The half-open window ``[since, until)`` to tell again \u2014 a ``trace-window-skipped`` event's own\n``since``/``until`` pastes straight in. ``dry_run`` counts what would be told and exports nothing.",
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until"
+        ],
+        "title": "TraceReplayRequest",
+        "type": "object"
+      },
+      "TraceReplayResponse": {
+        "description": "What a replay told, or with ``dry_run`` would have told.",
+        "properties": {
+          "batches": {
+            "title": "Batches",
+            "type": "integer"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "spans": {
+            "title": "Spans",
+            "type": "integer"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "steps",
+          "spans",
+          "batches",
+          "dry_run"
+        ],
+        "title": "TraceReplayResponse",
+        "type": "object"
+      },
+      "TraceStatusResponse": {
+        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only \u2014\nscheme, host and port. ``rejected_setting``/``rejected_value`` name what a ``rejected`` state could not\nhonor. ``lag_seconds`` is the age of the oldest closed step the cursor has not passed, ``None`` when\nnothing waits. ``last_error_at`` is when the newest failure began, and ``last_error_ongoing`` whether no\nexport has succeeded since; no exporter error text is carried, only the event's fixed message.",
+        "properties": {
+          "cursor_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor At"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "lag_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lag Seconds"
+          },
+          "last_error_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error At"
+          },
+          "last_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Message"
+          },
+          "last_error_ongoing": {
+            "title": "Last Error Ongoing",
+            "type": "boolean"
+          },
+          "last_export_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Export At"
+          },
+          "last_export_span_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Export Span Count"
+          },
+          "rejected_setting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Setting"
+          },
+          "rejected_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Value"
+          },
+          "state": {
+            "enum": [
+              "enabled",
+              "disabled",
+              "rejected"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "endpoint",
+          "rejected_setting",
+          "rejected_value",
+          "cursor_at",
+          "lag_seconds",
+          "last_export_at",
+          "last_export_span_count",
+          "last_error_at",
+          "last_error_message",
+          "last_error_ongoing"
+        ],
+        "title": "TraceStatusResponse",
+        "type": "object"
+      },
       "TranscriptSegmentAck": {
         "description": "The hub's per-batch acknowledgement against the transcript lane's high-water mark.\n\n``capped`` is the cap-rejection class \u2014 acknowledged, content-dropped, and the\nhigh-water advances past it, a durable decision that must not re-adjudicate on replay.",
         "properties": {
@@ -18552,6 +18768,80 @@
         "summary": "Fleet Spend",
         "tags": [
           "spend"
+        ]
+      }
+    },
+    "/api/traces/replay": {
+      "post": {
+        "description": "Tell every step closed in ``[since, until)`` again, inside the request, without moving the live cursor.\nA bad window is 422, a replay that must export while tracing is off is 409, and an exporter that\nrefuses is 502 with the counts it accepted before.",
+        "operationId": "trace_replay_api_traces_replay_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TraceReplayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceReplayFailure"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Trace Replay",
+        "tags": [
+          "traces"
+        ]
+      }
+    },
+    "/api/traces/status": {
+      "get": {
+        "description": "Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error.",
+        "operationId": "trace_status_api_traces_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Trace Status",
+        "tags": [
+          "traces"
         ]
       }
     },
