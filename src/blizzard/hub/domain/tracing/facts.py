@@ -209,6 +209,5 @@ class StepFacts:
     promotions: tuple[PromotionRecord, ...] = ()
     prerequisites_met: tuple[PrerequisiteMetRecord, ...] = ()
     usage: tuple[UsageFact, ...] = ()
-    #: The chunk's work items as pre-rendered source-native tokens (``acme#42``) — the label is a
-    #: configured binding, so it is rendered by the hydrator rather than rebuilt here.
+    #: Source-native work-ref tokens (``acme#42``), rendered by the hydrator's configured binding.
     work_refs: tuple[str, ...] = ()
