@@ -1,0 +1,30 @@
+# Example operator collector: one OTLP/HTTP stream in, two backends out.
+# Validate with `mise run collector-config-check`; docs/deployment/tracing.md explains each block.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  # A self-hosted store (Tempo-shaped): OTLP over gRPC.
+  otlp/store:
+    endpoint: ${env:TRACE_STORE_ENDPOINT}
+    tls:
+      insecure: ${env:TRACE_STORE_INSECURE}
+  # A hosted service (Honeycomb-shaped): OTLP over HTTP with an API key header.
+  otlphttp/hosted:
+    endpoint: ${env:HOSTED_TRACES_ENDPOINT}
+    headers:
+      x-honeycomb-team: ${env:HOSTED_TRACES_API_KEY}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/store, otlphttp/hosted]

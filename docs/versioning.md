@@ -11,15 +11,29 @@ project reaches 1.0 — so under semver's own pre-1.0 carve-out a `MINOR` bump m
 | hub↔runner wire | is not wire-compatible with the previous minor — an `/api/fleet/...` route, or a field the runner's `IHubClient` (`src/blizzard/runner/loop/hub.py`) depends on |
 | Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-runner.toml` key, or moves or removes a durable path under the runtime root                               |
 | Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                              |
+| Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                  |
 
 [`docs/backup.md`](./backup.md) owns the current durable layout. Every schema revision blizzard has ever shipped keeps a
 working `downgrade()`, held mechanically for every revision in the tree by
 `tests/test_store_migrations.py::test_migrate_up_and_down`.
 
-Adding an optional config key, a new route, a new event type, or a migration that walks back cleanly is not breaking.
+Adding an optional config key, a new route, a new event type, a new trace attribute or span, or a migration that walks
+back cleanly is not breaking.
 
 Mark a breaking commit with a `!` before the colon of its Conventional Commit subject: `feat!: ...`,
 `feat(scope)!: ...`.
+
+## The trace contract
+
+[`contracts/traces/`](../contracts/traces/README.md) pins the shape of a step's trace: `dictionary.json` is the authored
+contract, and `golden/` is the spans the hub assembles for seeded scenarios. `blizzard:trace-contract` fails when the
+assembled spans drift from either, so a shape change is always a deliberate edit to the dictionary.
+
+A rename is not a single release: the release that introduces the new name emits both, for at least one minor, with the
+old name marked deprecated in `dictionary.json`. Removing the old name afterwards is the breaking change. Every breaking
+trace change raises `blizzard.trace.schema_version` and the instrumentation scope version together, so a backend can
+tell shapes apart without reading the release notes. [`docs/deployment/tracing.md`](./deployment/tracing.md) describes
+the shape for operators.
 
 ## The hub↔runner skew window
 
@@ -53,10 +67,9 @@ The capability-matched fleet peek sits on the additive side of that same window 
 calls it and keeps reading the unfiltered order; and a registration's `capabilities` field defaults empty like every
 other optional field on that model, so a previous-minor runner parses and registers exactly as it always has.
 
-A registration's `subscriptions` field is additive the same way: it defaults to `None`, so a
-previous-minor runner that has never heard of a declared roster simply omits it, and the hub falls back to its
-pre-existing age-gated membership rule for that runner rather than rejecting the registration or defaulting the roster
-to empty.
+A registration's `subscriptions` field is additive the same way: it defaults to `None`, so a previous-minor runner that
+has never heard of a declared roster simply omits it, and the hub falls back to its pre-existing age-gated membership
+rule for that runner rather than rejecting the registration or defaulting the roster to empty.
 
 ## What a tag publishes
 

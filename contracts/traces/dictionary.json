@@ -1,0 +1,687 @@
+{
+  "attributes": [
+    {
+      "meaning": "The chunk the step belongs to.",
+      "name": "blizzard.chunk.id",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "The chunk's work items as source-native tokens, such as `acme#42`.",
+      "name": "blizzard.chunk.work_refs",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": true,
+      "type": "string[]"
+    },
+    {
+      "meaning": "The name of the graph the chunk was on.",
+      "name": "blizzard.graph.name",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "The id of that graph version.",
+      "name": "blizzard.graph.id",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "The node the step was at.",
+      "name": "blizzard.node.name",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "The id of that node in its graph version.",
+      "name": "blizzard.node.id",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "Who ran the step: `runner`, `hub` or `human`.",
+      "name": "blizzard.node.executor",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "The attempt counter the step ran under.",
+      "name": "blizzard.step.epoch",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "How many times the chunk has arrived at this node, counting this one.",
+      "name": "blizzard.step.visit",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "How the step ended: `transitioned`, `gated`, `migrated`, `escalated`, `released`, `stopped`, `completed`, `superseded`, `decided` or `restarted`.",
+      "name": "blizzard.step.outcome",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "The name of the choice that moved the chunk on.",
+      "name": "blizzard.step.choice",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "The node the step moved the chunk to; `graph:<name>` for a move to another graph.",
+      "name": "blizzard.step.to_node.name",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "What sits between this step and the previous one: `restart`, `requeue` or `released-claim`.",
+      "name": "blizzard.step.preceded_by",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "The runner that held the step.",
+      "name": "blizzard.runner.id",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "The harness that ran the step's last invocation that recorded one.",
+      "name": "blizzard.harness.id",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec",
+        "event:invocation"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "The harness version the invocation recorded.",
+      "name": "blizzard.harness.version",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "The distinct models the step's invocations used, in first-use order.",
+      "name": "blizzard.step.models",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec"
+      ],
+      "optional": true,
+      "type": "string[]"
+    },
+    {
+      "meaning": "Why the chunk was bounced back from this step.",
+      "name": "blizzard.bounce.cause",
+      "on": [
+        "step",
+        "gate",
+        "queue",
+        "claim",
+        "ask",
+        "pause",
+        "pickup",
+        "hub-exec",
+        "event:bounce"
+      ],
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "meaning": "Whether a person had answered the question when the span ended.",
+      "name": "blizzard.ask.answered",
+      "on": [
+        "ask"
+      ],
+      "optional": false,
+      "type": "bool"
+    },
+    {
+      "meaning": "Set when the answer is stamped before the question, so the span is clamped to zero length.",
+      "name": "blizzard.clock_skew",
+      "on": [
+        "ask"
+      ],
+      "optional": true,
+      "type": "bool"
+    },
+    {
+      "meaning": "Why this trace follows the one it links to: `next`, `retry`, `bounce`, `restart` or `migration`.",
+      "name": "blizzard.link.reason",
+      "on": [
+        "link"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "Input tokens the step's invocations used, not counting cache.",
+      "name": "blizzard.step.input_tokens",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Output tokens the step's invocations produced.",
+      "name": "blizzard.step.output_tokens",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Input tokens the step's invocations read from the cache.",
+      "name": "blizzard.step.cache_read_tokens",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Input tokens the step's invocations wrote to the cache.",
+      "name": "blizzard.step.cache_create_tokens",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "The step's cost in US dollars, including any estimate.",
+      "name": "blizzard.step.cost.usd",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "double"
+    },
+    {
+      "meaning": "Whether part of the cost is a subscription estimate rather than a billed amount.",
+      "name": "blizzard.step.cost.estimated",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "bool"
+    },
+    {
+      "meaning": "Whether some invocation reported no cost, so the total is a floor.",
+      "name": "blizzard.step.cost.partial",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "bool"
+    },
+    {
+      "meaning": "Milliseconds the chunk waited claimable before a runner or the hub took it.",
+      "name": "blizzard.step.wait.queue_ms",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Milliseconds between the claim and the step starting.",
+      "name": "blizzard.step.wait.claim_ms",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Milliseconds the step spent waiting on a person's answer.",
+      "name": "blizzard.step.wait.ask_ms",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Milliseconds the step spent paused.",
+      "name": "blizzard.step.wait.pause_ms",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Milliseconds between a person deciding a gate and the decision being picked up.",
+      "name": "blizzard.step.wait.pickup_ms",
+      "on": [
+        "step",
+        "gate"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "What the invocation was, such as `spawn`.",
+      "name": "blizzard.invocation.kind",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "Input tokens, not counting cache.",
+      "name": "blizzard.invocation.input_tokens",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Output tokens.",
+      "name": "blizzard.invocation.output_tokens",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Input tokens read from the cache.",
+      "name": "blizzard.invocation.cache_read_tokens",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Input tokens written to the cache.",
+      "name": "blizzard.invocation.cache_create_tokens",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "The invocation's cost in US dollars, including any estimate.",
+      "name": "blizzard.invocation.cost.usd",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": true,
+      "type": "double"
+    },
+    {
+      "meaning": "Whether the cost is a subscription estimate.",
+      "name": "blizzard.invocation.cost.estimated",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": true,
+      "type": "bool"
+    },
+    {
+      "meaning": "The model that answered.",
+      "name": "gen_ai.response.model",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "meaning": "All input tokens, cache reads and writes included.",
+      "name": "gen_ai.usage.input_tokens",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Output tokens.",
+      "name": "gen_ai.usage.output_tokens",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Input tokens read from the cache.",
+      "name": "gen_ai.usage.cache_read.input_tokens",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": false,
+      "type": "int"
+    },
+    {
+      "meaning": "Input tokens written to the cache.",
+      "name": "gen_ai.usage.cache_creation.input_tokens",
+      "on": [
+        "event:invocation"
+      ],
+      "optional": false,
+      "type": "int"
+    }
+  ],
+  "event_names": [
+    "bounce",
+    "hub poll pending",
+    "invocation"
+  ],
+  "genai_semconv_version": "1.44.0",
+  "ids": {
+    "discriminators": "The source row's own id for a role that occurs more than once in a step (ask, pause, hub-exec); empty otherwise.",
+    "flags": "Every derived context is sampled.",
+    "hash": "sha256",
+    "key": {
+      "attempt": "<chunk_id>/<epoch>",
+      "gate": "<chunk_id>/<epoch>/gate/<decision_id>"
+    },
+    "span": {
+      "bytes": 8,
+      "prefix": "blizzard-span/v1/",
+      "text": "<prefix><key>/<role>/<discriminator>"
+    },
+    "trace": {
+      "bytes": 16,
+      "prefix": "blizzard-trace/v1/",
+      "text": "<prefix><key>"
+    },
+    "vectors": [
+      {
+        "chunk_id": "ch_1",
+        "discriminator": "",
+        "epoch": 1,
+        "key": "ch_1/1",
+        "kind": "attempt",
+        "role": "step",
+        "span_id": "88d23b1ca9cc34d2",
+        "trace_id": "914265ea3262e40441fa95402ba66e6d"
+      },
+      {
+        "chunk_id": "ch_1",
+        "discriminator": "q1",
+        "epoch": 1,
+        "key": "ch_1/1",
+        "kind": "attempt",
+        "role": "ask",
+        "span_id": "dda4afb651e1a008",
+        "trace_id": "914265ea3262e40441fa95402ba66e6d"
+      },
+      {
+        "chunk_id": "ch_1",
+        "decision_id": "d1",
+        "discriminator": "",
+        "epoch": 1,
+        "key": "ch_1/1/gate/d1",
+        "kind": "gate",
+        "role": "gate",
+        "span_id": "43607f0078ab5f54",
+        "trace_id": "02e23e56fc308497307e06c3e01d3360"
+      }
+    ],
+    "zero_rule": "An all-zero digest has its last byte set to 01."
+  },
+  "instrumentation_scope": {
+    "name": "blizzard.hub.fleet_spans",
+    "version": "1"
+  },
+  "link_reasons": [
+    {
+      "meaning": "The chunk moved on to the next node.",
+      "name": "next"
+    },
+    {
+      "meaning": "The previous step ended without moving the chunk, and this one is at the same node.",
+      "name": "retry"
+    },
+    {
+      "meaning": "The previous step ended in a bounce.",
+      "name": "bounce"
+    },
+    {
+      "meaning": "An operator restarted the chunk between the two steps.",
+      "name": "restart"
+    },
+    {
+      "meaning": "The chunk moved to another graph between the two steps.",
+      "name": "migration"
+    }
+  ],
+  "resource_attributes": [
+    {
+      "meaning": "The service name; `blizzard-hub` unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one.",
+      "name": "service.name",
+      "type": "string"
+    },
+    {
+      "meaning": "The running hub's version.",
+      "name": "service.version",
+      "type": "string"
+    },
+    {
+      "meaning": "The version of this contract.",
+      "name": "blizzard.trace.schema_version",
+      "type": "string"
+    }
+  ],
+  "schema_version": "1",
+  "spans": [
+    {
+      "meaning": "One runner or hub attempt at a node, the root of its trace.",
+      "name": "step <node>",
+      "role": "step"
+    },
+    {
+      "meaning": "One human decision at a node, the root of its trace.",
+      "name": "gate <node>",
+      "role": "gate"
+    },
+    {
+      "meaning": "The chunk waiting claimable, pauses excluded.",
+      "name": "queue wait",
+      "role": "queue"
+    },
+    {
+      "meaning": "From the claim to the runner starting the step.",
+      "name": "claim",
+      "role": "claim"
+    },
+    {
+      "meaning": "A question to a person, from asked to answered.",
+      "name": "ask",
+      "role": "ask"
+    },
+    {
+      "meaning": "The fleet paused during the step.",
+      "name": "pause",
+      "role": "pause"
+    },
+    {
+      "meaning": "From a person deciding a gate to the decision being picked up.",
+      "name": "decision pickup",
+      "role": "pickup"
+    },
+    {
+      "meaning": "A hub node's run holding its execution slot.",
+      "name": "hub exec",
+      "role": "hub-exec"
+    }
+  ]
+}
