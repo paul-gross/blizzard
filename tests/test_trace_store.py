@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.event_log import EventLogKind
-from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.tracing.cursor import CursorKey
 from blizzard.hub.domain.tracing.facts import (
     ChunkStoppedRecord,
@@ -22,100 +21,20 @@ from blizzard.hub.domain.tracing.facts import (
 from blizzard.hub.domain.tracing.repository import TraceCursorRecord
 from blizzard.hub.domain.tracing.steps import StepOutcome, identify_steps
 from blizzard.hub.domain.tracing.window import read_window
-from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.store.internal.trace_store import TraceStore
-from tests.support import HubHarness, build_hub, count_queries, hub_store_connections, ingest, report_lease
+from tests.support import HubHarness, count_queries, hub_store_connections
+from tests.trace_hub import label, stop, trace_hub, transitioned_and_stopped
 
 pytestmark = pytest.mark.component
 
-_GRAPH_YAML = """
-name: default-delivery
-entry: build
-nodes:
-  build:
-    executor: runner
-    prompt: |
-      Build the change.
-    judgement:
-      prompt: |
-        Assess the build.
-      choices:
-        pass:
-          description: Complete and green.
-          to: review
-        fail:
-          description: Incomplete.
-          to: build
-  review:
-    executor: runner
-    prompt: |
-      Review the change.
-    judgement:
-      prompt: |
-        Assess the review.
-      choices:
-        pass:
-          description: Approved.
-          to: done
-        fail:
-          description: Rejected.
-          to: build
-"""
-
-
-def _label(ref: WorkRef) -> str | None:
-    return f"{ref.source}#{ref.ref}"
-
 
 def _store(hub: HubHarness) -> TraceStore:
-    return TraceStore(hub_store_connections(hub.engine), graphs=hub.services.graphs, label=_label)
-
-
-def _hub(tmp_path: Path) -> tuple[HubHarness, Graph]:
-    hub = build_hub(tmp_path)
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
-    graph = hub.services.graphs.get_enabled_by_name("default-delivery")
-    assert graph is not None
-    return hub, graph
-
-
-def _claim(hub: HubHarness, chunk_id: str, seq: int) -> None:
-    resp = hub.client.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
-    )
-    assert resp.status_code == 201, resp.text
-    report_lease(hub, chunk_id, epoch=1, seq=seq)
-
-
-def _pass_build(hub: HubHarness, chunk_id: str, graph: Graph) -> None:
-    build = next(n for n in graph.nodes if n.name == "build")
-    resp = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/completions",
-        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": build.node_id, "artifacts": []},
-    )
-    assert resp.status_code == 200, resp.text
-
-
-def _stop(hub: HubHarness, chunk_id: str) -> None:
-    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
-
-
-def _transitioned_and_stopped(hub: HubHarness, graph: Graph, ref: int) -> tuple[str, str]:
-    """Two chunks claimed at the same instant: one transitions out of ``build``, one is stopped."""
-    moved = ingest(hub, [{"source": "default", "ref": str(ref)}])
-    stopped = ingest(hub, [{"source": "default", "ref": str(ref + 1)}])
-    _claim(hub, moved, seq=ref)
-    _claim(hub, stopped, seq=ref + 1)
-    hub.clock.advance(timedelta(seconds=5))
-    _pass_build(hub, moved, graph)
-    _stop(hub, stopped)
-    return moved, stopped
+    return TraceStore(hub_store_connections(hub.engine), graphs=hub.services.graphs, label=label)
 
 
 def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
-    moved, stopped = _transitioned_and_stopped(hub, graph, 1)
+    hub, graph = trace_hub(tmp_path)
+    moved, stopped = transitioned_and_stopped(hub, graph, 1)
     at = hub.clock.now()
     claimed = at - timedelta(seconds=5)
     build = next(n for n in graph.nodes if n.name == "build")
@@ -172,11 +91,11 @@ def _drain(store: TraceStore, since: CursorKey, until, limit: int) -> list[Curso
 
 @pytest.mark.parametrize("limit", [1, 2, 50])
 def test_ties_across_tables_and_ambient_closers_are_told_exactly_once(tmp_path: Path, limit: int) -> None:
-    hub, graph = _hub(tmp_path)
-    moved, stopped = _transitioned_and_stopped(hub, graph, 1)
+    hub, graph = trace_hub(tmp_path)
+    moved, stopped = transitioned_and_stopped(hub, graph, 1)
     tie = hub.clock.now()
     hub.clock.advance(timedelta(seconds=10))
-    _stop(hub, moved)
+    stop(hub, moved)
 
     told = _drain(_store(hub), CursorKey.opening(tie - timedelta(seconds=1)), tie + timedelta(hours=1), limit)
 
@@ -185,8 +104,8 @@ def test_ties_across_tables_and_ambient_closers_are_told_exactly_once(tmp_path: 
 
 
 def test_a_window_reading_from_a_tie_tells_only_what_sorts_after_the_cursor(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
-    moved, stopped = _transitioned_and_stopped(hub, graph, 1)
+    hub, graph = trace_hub(tmp_path)
+    moved, stopped = transitioned_and_stopped(hub, graph, 1)
     first, second = sorted([CursorKey(hub.clock.now(), moved, 1), CursorKey(hub.clock.now(), stopped, 1)])
 
     window = read_window(_store(hub), first, hub.clock.now() + timedelta(hours=1), 50)
@@ -195,8 +114,8 @@ def test_a_window_reading_from_a_tie_tells_only_what_sorts_after_the_cursor(tmp_
 
 
 def test_until_holds_back_steps_closing_after_it(tmp_path: Path) -> None:
-    hub, graph = _hub(tmp_path)
-    _transitioned_and_stopped(hub, graph, 1)
+    hub, graph = trace_hub(tmp_path)
+    transitioned_and_stopped(hub, graph, 1)
     now = hub.clock.now()
 
     window = read_window(
@@ -208,9 +127,9 @@ def test_until_holds_back_steps_closing_after_it(tmp_path: Path) -> None:
 
 def _fleet(tmp_path: Path, pairs: int) -> HubHarness:
     tmp_path.mkdir()
-    hub, graph = _hub(tmp_path)
+    hub, graph = trace_hub(tmp_path)
     for i in range(pairs):
-        _transitioned_and_stopped(hub, graph, 10 * (i + 1))
+        transitioned_and_stopped(hub, graph, 10 * (i + 1))
     return hub
 
 
@@ -232,7 +151,7 @@ def test_statement_count_is_flat_as_the_window_grows(tmp_path: Path) -> None:
 
 
 def test_cursor_rows_append_and_the_newest_is_the_position(tmp_path: Path) -> None:
-    hub, _graph = _hub(tmp_path)
+    hub, _graph = trace_hub(tmp_path)
     store = _store(hub)
     now = hub.clock.now()
     assert store.newest_cursor() is None
@@ -246,7 +165,7 @@ def test_cursor_rows_append_and_the_newest_is_the_position(tmp_path: Path) -> No
 
 
 def test_the_export_latch_reads_the_newer_of_the_two_kinds(tmp_path: Path) -> None:
-    hub, _graph = _hub(tmp_path)
+    hub, _graph = trace_hub(tmp_path)
     store = _store(hub)
     assert store.newest_export_latch() is None
 

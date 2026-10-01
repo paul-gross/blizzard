@@ -50,12 +50,15 @@ from blizzard.hub.config import (
     RUNNER_AUTH_WARN,
     AuthConfig,
     HubConfig,
+    TracingConfig,
     WorkSourceConfig,
 )
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.graph import Edge, Graph, Node
+from blizzard.hub.domain.tracing.export import ITraceExporter
+from blizzard.hub.domain.tracing.spans import SpanRecord
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import (
     Chunk,
@@ -142,6 +145,32 @@ class FakeHubCommandRunner:
         if queue:
             return queue.pop(0) if len(queue) > 1 else queue[0]
         return self.default
+
+
+class InMemoryTraceExporter:
+    """An in-process :class:`ITraceExporter` — records each batch it accepts.
+
+    ``fail`` set makes every export refuse its batch; ``raises`` makes it raise instead.
+    ``attempts`` counts every call, accepted or not."""
+
+    def __init__(self) -> None:
+        self.batches: list[tuple[SpanRecord, ...]] = []
+        self.attempts = 0
+        self.fail = False
+        self.raises = False
+
+    def export(self, spans: Sequence[SpanRecord]) -> bool:
+        self.attempts += 1
+        if self.raises:
+            raise RuntimeError("in-memory trace exporter told to raise")
+        if self.fail:
+            return False
+        self.batches.append(tuple(spans))
+        return True
+
+    @property
+    def spans(self) -> list[SpanRecord]:
+        return [span for batch in self.batches for span in batch]
 
 
 class FakeHubWorkdir:
@@ -575,6 +604,8 @@ def build_hub(
     trusted_proxies: Sequence[str] = (),
     transcript_caps: TranscriptCaps | None = None,
     system_artifacts: PackagedSystemArtifacts | None = None,
+    trace_exporter: ITraceExporter | None = None,
+    tracing: TracingConfig | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -591,6 +622,7 @@ def build_hub(
         follow_latest=follow_latest,
         auth=AuthConfig(mode=auth_mode, superuser=superuser),
         trusted_proxies=tuple(trusted_proxies),
+        tracing=tracing or TracingConfig(),
     )
     # A second build over the same ``tmp_path`` reopens the store the first one wrote;
     # copying over it would discard that state, so only a fresh directory takes the copy.
@@ -638,6 +670,8 @@ def build_hub(
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=transcript_caps,
         system_artifacts=system_artifacts,
+        trace_exporter=trace_exporter,
+        tracing=config.tracing,
     )
     app = create_app(config, services=services)
     client = TestClient(app)

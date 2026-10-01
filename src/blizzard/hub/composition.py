@@ -39,7 +39,7 @@ from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import IpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.config import OAuthProviderConfig
+from blizzard.hub.config import OAuthProviderConfig, TracingConfig
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
@@ -102,7 +102,11 @@ from blizzard.hub.domain.routines import (
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.stop import StopService
+from blizzard.hub.domain.tracing.export import ITraceExporter
+from blizzard.hub.domain.tracing.repository import WorkRefLabel
+from blizzard.hub.domain.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
+from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.domain.work_closure import CloseIntentDrainer
 from blizzard.hub.domain.work_item_materialization import WorkItemMaterializationReconciler
 from blizzard.hub.domain.work_items import WorkItemEditService
@@ -127,6 +131,7 @@ from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
+from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -195,6 +200,9 @@ class HubServices:
     #: The close-intent drain sweep — built here because it needs the
     #: write-capable chunk repository, which only the composition root holds.
     close_drain: CloseIntentDrainer
+    #: The fleet-trace export sweep — ``None`` unless a trace exporter was wired, which
+    #: happens only when OpenTelemetry's own configuration enables tracing.
+    trace_export: TraceExportSweep | None
     #: The delivery-materialization reconciler — built here for the same
     #: reason: it needs the write-capable chunk and work-item repositories.
     work_item_materialization: WorkItemMaterializationReconciler
@@ -372,6 +380,14 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
     )
 
 
+def _work_ref_label(work_sources: IWorkSourceRegistry) -> WorkRefLabel:
+    def label(ref: WorkRef) -> str | None:
+        source = work_sources.get(ref.source)
+        return source.label(ref) if source is not None else None
+
+    return label
+
+
 def build_services(
     core: HubCore,
     *,
@@ -392,6 +408,8 @@ def build_services(
     trusted_proxies: TrustedProxies | None = None,
     transcript_caps: TranscriptCaps | None = None,
     system_artifacts: PackagedSystemArtifacts | None = None,
+    trace_exporter: ITraceExporter | None = None,
+    tracing: TracingConfig | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over the shared :class:`HubCore`.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
@@ -437,6 +455,17 @@ def build_services(
     # service, shared by every event-authoring call site below, over the same store and
     # broker instance every other collaborator holds.
     event_log = EventLogService(events=chunk_events, publisher=events)
+    trace_export = (
+        TraceExportSweep(
+            steps=TraceStore(store_connections, graphs=graph_store, label=_work_ref_label(work_sources)),
+            exporter=trace_exporter,
+            events=event_log,
+            clock=clock,
+            config=tracing or TracingConfig(),
+        )
+        if trace_exporter is not None
+        else None
+    )
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
         artifacts=chunk_artifacts,
@@ -616,6 +645,7 @@ def build_services(
         close_drain=CloseIntentDrainer(
             delivery=chunk_delivery, events=event_log, work_sources=work_sources, clock=clock
         ),
+        trace_export=trace_export,
         work_item_materialization=WorkItemMaterializationReconciler(
             delivery=chunk_delivery,
             items=work_item_store,

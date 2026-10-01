@@ -55,9 +55,11 @@ from blizzard.hub.auth.bootstrap import Superuser
 from blizzard.hub.composition import HubServices, build_hub_core, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
 from blizzard.hub.domain.registry import RunnerRetired
+from blizzard.hub.domain.tracing.attributes import resource_attributes
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.hub.trace_export.settings import TracingSettings
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 
@@ -106,7 +108,8 @@ class Sweep:
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
         """The forge-status sweep a work source opts into, plus the always-on
-        event-derivation, delivery-materialization, and close-drain sweeps — none on the
+        event-derivation, delivery-materialization, and close-drain sweeps, plus the trace-export
+        sweep when tracing is enabled — none on the
         store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
         here so their recurring cadence decorrelates from its second pass
         on."""
@@ -143,6 +146,15 @@ class Sweep:
             "blizzard.hub.work_closure",
             jitter_seconds=random.uniform(0, CLOSE_DRAIN_INTERVAL_SECONDS),
         )
+        if services.trace_export is not None:
+            every = app.state.config.tracing.sweep_seconds
+            yield cls(
+                services.trace_export,
+                every,
+                app.state.shutdown,
+                "blizzard.hub.trace_export",
+                jitter_seconds=random.uniform(0, every),
+            )
 
     async def _wait(self, timeout: float) -> None:
         with contextlib.suppress(TimeoutError):
@@ -312,6 +324,11 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         signing_keys_dir=signing_keys_dir,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
         transcript_caps=_transcript_caps(config),
+        # No exporter is built unless OpenTelemetry's own variables enable tracing.
+        trace_exporter=(
+            OtlpTraceExporter(resource=resource_attributes(os.environ, __version__)) if tracing.enabled() else None
+        ),
+        tracing=config.tracing,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
