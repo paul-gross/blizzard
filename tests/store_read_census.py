@@ -70,6 +70,8 @@ from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.routines import IReadRoutineRepository, IReadRoutineScopeRepository, RunMode
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeSlug
+from blizzard.hub.domain.tracing.cursor import CursorKey
+from blizzard.hub.domain.tracing.repository import IReadTraceSteps, TraceCursorRecord
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments
 from blizzard.hub.domain.work import (
     Chunk,
@@ -86,6 +88,7 @@ from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStor
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
+from blizzard.hub.store.internal.trace_store import TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.runner.auth.tokens import IReadTokenRepository
@@ -786,6 +789,10 @@ RUNNER_EXEMPTIONS: dict[tuple[type, str], str] = {
 
 _HUB_BASE = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
 _HUB_UNTIL = _HUB_BASE + timedelta(days=365)
+
+
+def _trace_store_of(connections: HubStoreConnections, hub: HubHarness) -> TraceStore:
+    return TraceStore(connections, graphs=hub.services.graphs, label=lambda ref: f"{ref.source}#{ref.ref}")
 
 
 def _ht(offset_seconds: float) -> datetime:
@@ -1624,6 +1631,9 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(99),
     )
 
+    # --- trace export cursor ----------------------------------------------------------
+    _trace_store_of(store_connections, hub).append_cursor(TraceCursorRecord(CursorKey.opening(_ht(0)), 0, _ht(100)))
+
     return HubWorld(
         hub=hub,
         engine=engine,
@@ -1961,6 +1971,23 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadTranscriptSegments, "records_for_lease"): lambda w: w.hub.services.transcripts.records_for_lease(
         w.transcript_chunk, w.build_node_id, 1, HUB_RUNNER_ID
     ),
+    (IReadTraceSteps, "closing_candidates"): lambda w: _trace_store_of(w.store_connections, w.hub).closing_candidates(
+        _HUB_BASE, _ht(10_000), 50
+    ),
+    (IReadTraceSteps, "step_facts_for"): lambda w: _trace_store_of(w.store_connections, w.hub).step_facts_for(
+        [
+            w.chunk_transition,
+            w.chunk_migration,
+            w.chunk_decision_1,
+            w.chunk_question,
+            w.chunk_dependency_dependent,
+            w.chunk_route_a,
+        ]
+    ),
+    (IReadTraceSteps, "newest_cursor"): lambda w: _trace_store_of(w.store_connections, w.hub).newest_cursor(),
+    (IReadTraceSteps, "newest_export_latch"): lambda w: _trace_store_of(
+        w.store_connections, w.hub
+    ).newest_export_latch(),
     (IReadWorkItemRepository, "get"): lambda w: w.work_items.get("hub", w.work_item_ref_1),
     (IReadWorkItemRepository, "list"): lambda w: w.work_items.list("hub", limit=200),
     (IReadWorkItemRepository, "get_many"): lambda w: w.work_items.get_many(

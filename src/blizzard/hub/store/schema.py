@@ -540,6 +540,8 @@ epoch_owners = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
     UniqueConstraint("chunk_id", "epoch", name="uq_epoch_owners_chunk_id_epoch"),
 )
+# (recorded_at, id) for the trace sweep's closing-fact read since a timestamp.
+Index("ix_epoch_owners_recorded_at_id", epoch_owners.c.recorded_at, epoch_owners.c.id)
 
 # --- Routes (route.created / route.released) ----------------------------------
 
@@ -1244,6 +1246,23 @@ event_log = Table(
 
 # The read's own sort key (newest-first) — indexed so ordering never scans the table.
 Index("ix_event_log_recorded_at", event_log.c.recorded_at)
+
+# --- Trace export cursor (trace_cursor) ---------------------------------------
+# Append-only, one row per advancing sweep; the newest row is the position.
+
+trace_cursor = Table(
+    "trace_cursor",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("position_at", UtcDateTime, nullable=False),  # the told step's closing-fact time
+    Column("chunk_id", String, nullable=False),  # empty, so no foreign key, on an opening row
+    Column("epoch", Integer, nullable=False),
+    Column("decision_id", String, nullable=False),  # empty for runner and hub steps
+    Column("span_count", Integer, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+# The newest-row read's own sort key.
+Index("ix_trace_cursor_recorded_at_id", trace_cursor.c.recorded_at, trace_cursor.c.id)
 
 # --- Transcript segments (epic:transcripts) ----------------------
 # One row per shipped record, append-only; the natural key dedupes re-offers.
