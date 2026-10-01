@@ -101,6 +101,18 @@ refinement: the federation token returns by cross-site `form_post` and needs `Sa
 browsers honor only alongside Secure — a scheme read as http drops them to Lax, the browser withholds them on the
 cross-site POST, and the callback fails its state check, surfacing as "bad or expired state".
 
+### Keeping sessions across a runner restart
+
+The runner's session cookie is signed with a secret read from the environment variable `session_secret_env` names in
+`blizzard-runner.toml` (default `BZ_RUNNER_SESSION_SECRET`); the toml holds only the name. Generate a value with
+`openssl rand -base64 48` and set it in the runner's runtime env file. It must be base64 decoding to at least 32 bytes,
+or config load fails with a `ConfigError` naming the variable. With the secret set, a session minted before a restart
+still verifies after it, until its 8-hour TTL expires; unset or empty, the runner draws a fresh secret each start,
+logs that sessions will not survive a restart, and every board logs in again.
+
+Each runner needs its own secret. A secret shared across runners lets a session minted on one verify on another and
+carry a role resolved under the first runner's config.
+
 ## Runner-local roles
 
 Runner-local role resolution is a separate `[auth]` table living only on the runner, never in the hub store or its admin

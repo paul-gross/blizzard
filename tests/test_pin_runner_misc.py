@@ -30,10 +30,10 @@ from blizzard.runner.environments.internal.git import SubprocessEnvGit
 
 
 @pytest.mark.unit
-def test_a_session_minted_before_a_restart_is_refused_after_it() -> None:
-    """The session is stateless: nothing but the HMAC over the daemon's per-process
-    secret admits it, so a restart's fresh secret invalidates every live cookie rather
-    than resolving it from a store row that outlived the process."""
+def test_an_unconfigured_session_minted_before_a_restart_is_refused_after_it() -> None:
+    """With no secret configured the session is stateless: nothing but the HMAC over the
+    daemon's per-process secret admits it, so a restart's fresh secret invalidates every live
+    cookie rather than resolving it from a store row that outlived the process."""
     now = datetime(2026, 1, 1, tzinfo=UTC)
     session = RunnerSession(username="alice", role=Role.ADMIN, issued_at=now, expires_at=now + timedelta(hours=8))
     before_restart = b"secret-of-the-first-process"
@@ -42,6 +42,27 @@ def test_a_session_minted_before_a_restart_is_refused_after_it() -> None:
 
     assert SessionCookie(before_restart).read(cookie, now=now) == session
     assert SessionCookie(after_restart).read(cookie, now=now) is None
+
+
+@pytest.mark.component
+def test_a_configured_session_secret_survives_a_restart_and_the_fallback_does_not(tmp_path: Path) -> None:
+    """Two app instances sharing a configured secret accept each other's cookie; two with none
+    each draw a fresh secret and refuse it."""
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    session = RunnerSession(username="alice", role=Role.ADMIN, issued_at=now, expires_at=now + timedelta(hours=8))
+
+    def secret_of(config: RunnerConfig) -> bytes:
+        app = create_app(config)
+        with TestClient(app):
+            return app.state.session_secret
+
+    configured = RunnerConfig(root=tmp_path, db_url="sqlite://", session_secret=b"k" * 48)
+    cookie = SessionCookie(secret_of(configured)).mint(session)
+    assert SessionCookie(secret_of(configured)).read(cookie, now=now) == session
+
+    unset = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    cookie = SessionCookie(secret_of(unset)).mint(session)
+    assert SessionCookie(secret_of(unset)).read(cookie, now=now) is None
 
 
 # --- runner/environments/internal/git.py: the reset-on-acquire clean and origin read --

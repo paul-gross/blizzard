@@ -280,9 +280,16 @@ def create_app(
     # The reverse-proxy trust set, empty by default — so
     # `X-Forwarded-Proto` is ignored from every peer.
     app.state.trusted_proxies = TrustedProxies.parse(config.trusted_proxies)
-    # Minted fresh at every daemon start, so a restart invalidates every live session
-    # — an accepted tradeoff, see `runner/auth/session.py`.
-    app.state.session_secret = secrets.token_bytes(32)
+    # The configured secret keeps sessions alive across a restart; without one, a fresh
+    # per-process secret means a restart invalidates every live session — see `runner/auth/session.py`.
+    if config.session_secret:
+        app.state.session_secret = config.session_secret
+    else:
+        log.warning(
+            "session secret unset; sessions will not survive a runner restart",
+            env_var=config.session_secret_env,
+        )
+        app.state.session_secret = secrets.token_bytes(32)
     app.state.cookie_names = CookieNames(config.runner_id)
 
     @app.exception_handler(NeedsFederationBounce)

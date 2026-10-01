@@ -52,6 +52,13 @@ Install the token on the runner machine in the environment variable its `token_e
 ([`docs/deployment/runner-auth.md`](./deployment/runner-auth.md)) — the unit's `EnvironmentFile` is the natural place —
 then restart the runner.
 
+Give the runner its own session-signing secret too, so board sessions survive a restart: generate one with
+`openssl rand -base64 48` and put it in the environment variable the `session_secret_env` key names (default
+`BZ_RUNNER_SESSION_SECRET`), beside the token. It must be base64 decoding to at least 32 bytes — a shorter one fails
+config load with an error naming the variable. Unset, the runner signs with a fresh random secret each start and logs
+that sessions will not survive a restart. Never share one secret between runners: a cookie minted by one would verify on
+the other.
+
 A brand-new runner cannot join a hub already at `runner_auth_mode = "enforce"` unaided: registration itself is
 authenticated under `enforce`, and enrollment requires a prior registration. The operator bridges an enforcing hub by
 hand: set it to `runner_auth_mode = "warn"` and restart, let the new runner register, enroll it, install the token, then
