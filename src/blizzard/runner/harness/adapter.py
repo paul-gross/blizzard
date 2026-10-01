@@ -34,9 +34,8 @@ class HarnessSpawnError(RuntimeError):
 
 class WorkerIdentityError(RuntimeError):
     """``PendingWorkerHandle.await_identity`` could not confirm the launch's session id.
-    Distinct from :class:`HarnessSpawnError`: a real process already exists, so its
-    caller (:class:`~blizzard.runner.loop.spawn.Spawner`) must kill the group it
-    already durably recorded, never treat it as "nothing started"."""
+    Distinct from :class:`HarnessSpawnError`: a real process already exists, so the
+    caller must kill its group, never treat it as "nothing started"."""
 
 
 @dataclass(frozen=True)
@@ -123,9 +122,8 @@ class PendingWorkerHandle(Protocol):
 
 
 class IHarnessWorkerLifecycle(Protocol):
-    """Spawning, resuming, and judging a worker process (``bzh:seam-size-ceiling``) — one of the six slices
-    ``IHarnessAdapter`` composes, the narrower seam for a consumer driving only worker lifecycle. Every
-    ``session_cwd`` is the session's spawn cwd (``SpawnCwd.of_session``), whatever it resolved to: a harness
+    """Spawning, resuming, and judging a worker process (``bzh:seam-size-ceiling``). Every
+    ``session_cwd`` is the session's spawn cwd, whatever it resolved to: a harness
     scoping sessions to their launch directory never completes a turn run from anywhere else."""
 
     def spawn(
@@ -148,9 +146,8 @@ class IHarnessWorkerLifecycle(Protocol):
 
     def honors_session_hint(self) -> bool:
         """True iff a fresh spawn's identified session id always equals ``session_hint``.
-        Claude Code declares ``True`` (preassigned ``--session-id``); a self-assigning
-        harness declares ``False`` — the selftest's spawn gate
-        (``blizzard.runner.selftest.checks.Spawn``) only demands hint-equality where ``True``."""
+        A harness that preassigns the id declares ``True``; a self-assigning one declares
+        ``False``."""
         ...
 
     def observe_version(self) -> str | None:
@@ -370,8 +367,7 @@ class IHarnessProviderOverload(Protocol):
 class IHarnessHealthProbe(Protocol):
     """The evidence a harness-health evaluation needs that no other adapter seam supplies —
     binary discovery, provider authentication, the binding's supported-version declaration,
-    and its declared degradations. Narrow and separate from IHarnessWorkerLifecycle: the
-    evaluator (runner/harness/health.py) is this seam's only consumer."""
+    and its declared degradations."""
 
     def binary_present(self) -> bool:
         """Whether the configured binary resolves right now — bounded and non-raising,
@@ -426,11 +422,8 @@ class IHarnessLifecycleAndVerdict(IHarnessWorkerLifecycle, IHarnessVerdictParsin
 
 
 class IHarnessSelfTestSeam(IHarnessWorkerLifecycle, IHarnessVerdictParsing, IHarnessUsageAccounting, Protocol):
-    """The selftest canary's own composed slice (``bzh:seam-size-ceiling``):
-    :class:`IHarnessLifecycleAndVerdict`'s pair plus usage accounting, its widened roster's
-    ``UsageParsing``/``TranscriptReadability`` checks needing ``parse_usage`` and
-    ``transcript_source`` too — still narrower than the full adapter, which it takes no
-    model-resolution slice from at all."""
+    """Worker lifecycle, verdict parsing, and usage accounting plus ``transcript_source``
+    (``bzh:seam-size-ceiling``) — no model-resolution slice."""
 
     def transcript_source(self) -> IHarnessTranscriptSource: ...
 
@@ -445,9 +438,7 @@ class IHarnessAdapter(
     Protocol,
 ):
     """The coding-harness seam: its six narrower slices (``bzh:seam-size-ceiling``) plus
-    ``transcript_source``, unsliced since no consumer needs it alone. Dumb: translates, never
-    decides. A genuine pass-through — threading the adapter on rather than calling it —
-    takes this alias; a caller takes the narrowest slice its job needs."""
+    ``transcript_source``. Dumb: translates, never decides."""
 
     def transcript_source(self) -> IHarnessTranscriptSource:
         """This harness's transcript source.

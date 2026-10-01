@@ -1,17 +1,10 @@
 """The runner-store bundles and umbrella Protocols.
 
-``RunnerStores`` is the frozen bundle of write-capable Protocol seams
-:mod:`~blizzard.runner.composition` builds, for a collaborator spanning several concepts.
+``RunnerStores`` is the frozen bundle of write-capable concept Protocol seams.
 ``RunnerReadStores`` narrows it statically, one field per concept typed to its ``IRead*``
-twin, over the same adapter instances — the bundle every route resolves, so
-``bzh:controller-read-only`` holds at type-check time for the one collaborator every
-handler reaches through. ``IReadRunnerStore``/``IWriteRunnerStore`` compose every concept
-Protocol into one seam — no ``src/`` collaborator holds either directly, every one now
-narrowed to a concept Protocol or one of the two bundles above, but ``tests/runner_fakes.py``
-still takes ``IWriteRunnerStore`` to type a fake that structurally satisfies every concept at
-once, and the write-protocol census gate walks both to check every concept's write-only
-surface. This module, not ``runner/store/``, is their home, since no Protocol may be declared
-there."""
+twin, over the same adapter instances. ``IReadRunnerStore``/``IWriteRunnerStore`` compose
+every concept Protocol into one seam. This module, not ``runner/store/``, is their home,
+since no Protocol may be declared there."""
 
 from __future__ import annotations
 
@@ -86,9 +79,7 @@ class IReadRunnerStore(
     IReadSelfTestResultRepository,
     Protocol,
 ):
-    """Read-only runner-store queries, every concept's read seam composed (held by
-    read-path edges) — the pre-narrowing umbrella a many-concept collaborator still takes
-    directly."""
+    """Read-only runner-store queries, every concept's read seam composed."""
 
 
 class IWriteRunnerStore(
@@ -118,14 +109,12 @@ class IWriteRunnerStore(
     IReadRunnerStore,
     Protocol,
 ):
-    """Read-write runner store, every concept's write seam composed — held only by the
-    domain (the loop steps)."""
+    """Read-write runner store, every concept's write seam composed."""
 
 
 @dataclass(frozen=True)
 class RunnerStores:
-    """The wired concept-store collaborators, built by
-    :func:`~blizzard.runner.composition.build_stores`."""
+    """The wired concept-store collaborators, each typed to its write Protocol."""
 
     lease_record: IWriteLeaseRecordRepository
     session: IWriteLeaseSessionRepository
@@ -154,11 +143,8 @@ class RunnerStores:
 
 @dataclass(frozen=True)
 class RunnerReadStores:
-    """The controller-facing runner-store bundle — every field typed to its concept's
-    read Protocol only, so ``bzh:controller-read-only`` is enforced at type-check time for
-    the one collaborator every route handler reaches through. Narrows statically over the
-    same adapter instances :func:`of` is given — it wraps nothing and opens no second
-    connection."""
+    """The read-only runner-store bundle — every field typed to its concept's read
+    Protocol only, over the same instances :meth:`of` is given."""
 
     lease_record: IReadLeaseRecordRepository
     session: IReadLeaseSessionRepository
