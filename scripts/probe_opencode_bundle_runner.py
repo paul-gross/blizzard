@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import http.server
 import json
 import os
 import shutil
 import signal
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -28,6 +30,77 @@ def _request(url: str, body: object | None = None) -> dict:
     )
     with urllib.request.urlopen(request, timeout=5) as response:
         return json.load(response)
+
+
+def _guarded_hub(hub_url: str, chunk_id: str) -> http.server.ThreadingHTTPServer:
+    """Only expose the selected chunk at FILL's read and claim doors."""
+
+    class Guard(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+        def _reply(self, status: int, body: bytes, content_type: str = "application/json") -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _forward(self) -> None:
+            path = self.path.split("?", 1)[0]
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            if path == "/api/fleet/queue/peek" and self.command in {"GET", "POST"}:
+                selected = _request(f"{hub_url}/api/chunks/{chunk_id}")
+                entries = []
+                if selected["status"] == "ready":
+                    entries = [
+                        {
+                            "chunk_id": chunk_id,
+                            "graph_id": selected["graph_id"],
+                            "position": 0,
+                            "work_refs": selected.get("work_refs", []),
+                            "blocked": selected.get("blocked"),
+                        }
+                    ]
+                self._reply(200, json.dumps({"entries": entries}).encode())
+                return
+            if path == "/api/fleet/routes" and self.command == "POST" and json.loads(body).get("chunk_id") != chunk_id:
+                self._reply(409, b'{"detail":"probe refuses a foreign chunk claim"}')
+                return
+            headers = {
+                name: value
+                for name, value in self.headers.items()
+                if name.lower() not in {"host", "connection", "content-length", "accept-encoding"}
+            }
+            upstream = urllib.request.Request(
+                hub_url + self.path,
+                data=body if self.command in {"POST", "PUT", "PATCH"} else None,
+                method=self.command,
+                headers=headers,
+            )
+            try:
+                with urllib.request.urlopen(upstream, timeout=15) as response:
+                    self._reply(
+                        response.status, response.read(), response.headers.get("Content-Type", "application/json")
+                    )
+            except urllib.error.HTTPError as exc:
+                self._reply(exc.code, exc.read(), exc.headers.get("Content-Type", "application/json"))
+
+        def do_GET(self) -> None:
+            self._forward()
+
+        def do_POST(self) -> None:
+            self._forward()
+
+        def do_PUT(self) -> None:
+            self._forward()
+
+        def do_DELETE(self) -> None:
+            self._forward()
+
+    return http.server.ThreadingHTTPServer(("127.0.0.1", 0), Guard)
 
 
 def _worker(path: Path) -> None:
@@ -55,7 +128,7 @@ def _worker(path: Path) -> None:
     path.chmod(0o755)
 
 
-def _runtime(root: Path, scratch: Path, env: dict[str, str]) -> Path:
+def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> Path:
     bundle = scratch / "bundle" / "opencode"
     bundle.mkdir(parents=True)
     (bundle / "opencode.json").write_text('{"permission":{"bash":"deny"}}')
@@ -75,7 +148,11 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str]) -> Path:
         f'[opencode]\nenabled = true\nbinary = "{worker}"\nauth_path = "{auth}"',
     )
     text = text.replace('# config_dir = "~/.config/blizzard/harness"', f'config_dir = "{bundle.parent}"')
+    direct_hub = f'hub_url = "{env["BZ_HUB_URL"]}"'
+    assert text.count(direct_hub) == 1
+    text = text.replace(direct_hub, f'hub_url = "{proxy_url}"')
     config.write_text(text)
+    env["BZ_HUB_URL"] = proxy_url
     return bundle.parent
 
 
@@ -98,12 +175,22 @@ def main() -> None:
     root.mkdir()
     base = f"http://127.0.0.1:{args.port}"
     env = dict(os.environ)
+    proxy = _guarded_hub(hub_url, args.chunk_id)
+    proxy_url = f"http://127.0.0.1:{proxy.server_port}"
+    proxy_thread = threading.Thread(target=proxy.serve_forever, name="bundle-probe-hub", daemon=True)
+    proxy_thread.start()
     process: subprocess.Popen[bytes] | None = None
     log = root / "host.log"
     routed = False
     lease_pid: int | None = None
     try:
-        _runtime(root, scratch, env)
+        try:
+            _request(proxy_url + "/api/fleet/routes", {"chunk_id": "__foreign_probe__"})
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 409
+        else:
+            raise AssertionError("probe guard allowed a foreign chunk claim")
+        _runtime(root, scratch, env, proxy_url)
         with log.open("wb") as output:
             process = subprocess.Popen(
                 ["uv", "run", "blizzard", "runner", "host", "--dir", str(root), "--port", str(args.port)],
@@ -198,6 +285,9 @@ def main() -> None:
             except urllib.error.HTTPError as exc:
                 if exc.code != 409:
                     raise
+        proxy.shutdown()
+        proxy.server_close()
+        proxy_thread.join(timeout=5)
         shutil.rmtree(root)
         shutil.rmtree(scratch, ignore_errors=True)
 
