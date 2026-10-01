@@ -67,6 +67,7 @@ from blizzard.runner.auth.federation import router as auth_router
 from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
+from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.asks import AskService
@@ -282,6 +283,7 @@ def create_app(
     # Minted fresh at every daemon start, so a restart invalidates every live session
     # — an accepted tradeoff, see `runner/auth/session.py`.
     app.state.session_secret = secrets.token_bytes(32)
+    app.state.cookie_names = CookieNames(config.runner_id)
 
     @app.exception_handler(NeedsFederationBounce)
     def _bounce_to_login(_: Request, exc: NeedsFederationBounce) -> RedirectResponse:

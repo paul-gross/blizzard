@@ -21,6 +21,7 @@ import httpx
 import pytest
 
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
+from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.config import RunnerConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
 from tests.service.support import require_stub_idp, stub_idp
@@ -38,10 +39,12 @@ _SECRET_ENV = "BZ_OAUTH_E2E_FED_SECRET"
 _SECRET = "e2e-fed-oauth-secret"
 _PROVIDER_NAME = "oidc-fed"
 _PROFILE_EMAIL = "fed-admin@example.com"
-_BOUNCE_STATE_COOKIE = "bz_runner_bounce_state"
+_NAMES_A = CookieNames("runner-e2e-a")
+_NAMES_B = CookieNames("runner-e2e-b")
+_NAMES_SESSION = CookieNames("runner-e2e-session")
 
 
-def _bounce_state_cookie(response: Any) -> str:
+def _bounce_state_cookie(response: Any, names: CookieNames) -> str:
     """Read the runner's bounce-state value straight off a login redirect's
     ``Set-Cookie`` header, rather than through ``BrowserContext.cookies()`` — Playwright's
     loopback handling never attributes this ``Secure`` cookie to a plain-``http`` URL, so
@@ -49,10 +52,10 @@ def _bounce_state_cookie(response: Any) -> str:
     for header in response.headers_array:
         if header["name"].lower() != "set-cookie":
             continue
-        match = re.match(rf"{_BOUNCE_STATE_COOKIE}=([^;]+)", header["value"])
+        match = re.match(rf"{re.escape(names.bounce_state)}=([^;]+)", header["value"])
         if match:
             return match.group(1)
-    raise AssertionError(f"login response carried no {_BOUNCE_STATE_COOKIE} cookie: {response.headers_array}")
+    raise AssertionError(f"login response carried no {names.bounce_state} cookie: {response.headers_array}")
 
 
 def _hub_bin() -> str:
@@ -180,8 +183,12 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
 
         with (
             _oauth_hub(tmp_path / "hub", idp_port, hub_port),
-            _federated_runner(tmp_path / "runner-a", hub_port=hub_port, port=runner_a_port, runner_id="runner-e2e-a"),
-            _federated_runner(tmp_path / "runner-b", hub_port=hub_port, port=runner_b_port, runner_id="runner-e2e-b"),
+            _federated_runner(
+                tmp_path / "runner-a", hub_port=hub_port, port=runner_a_port, runner_id=_NAMES_A.runner_id
+            ),
+            _federated_runner(
+                tmp_path / "runner-b", hub_port=hub_port, port=runner_b_port, runner_id=_NAMES_B.runner_id
+            ),
         ):
             browser = pw.chromium.launch(headless=True)
             context = browser.new_context()
@@ -205,7 +212,7 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # dance, lands back on runner A's own served page authenticated.
                 page.goto(f"{runner_a_url}/", wait_until="load")
                 expect(page).to_have_title(re.compile("blizzard runner"))
-                assert any(c.get("name") == "bz_runner_session" for c in context.cookies(runner_a_url))
+                assert any(c.get("name") == _NAMES_A.session for c in context.cookies(runner_a_url))
 
                 # AC: the token never appears in a query string, across every request
                 # Chromium made during the whole dance.
@@ -223,12 +230,12 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # different `aud`), is rejected even with a state B itself minted.
                 login_b = page.request.get(f"{runner_b_url}/api/auth/login?return_to=/", max_redirects=0)
                 assert login_b.status in (302, 307)
-                state_b = _bounce_state_cookie(login_b)
+                state_b = _bounce_state_cookie(login_b, _NAMES_B)
                 cross_resp = page.request.post(
                     f"{runner_b_url}/api/auth/callback",
                     headers={
                         "content-type": "application/x-www-form-urlencoded",
-                        "cookie": f"{_BOUNCE_STATE_COOKIE}={state_b}",
+                        "cookie": f"{_NAMES_B.bounce_state}={state_b}",
                     },
                     data=f"token={captured_token}&state={state_b}",
                 )
@@ -238,12 +245,12 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # A-own state so only the jti check can fail it), is rejected.
                 login_a_again = page.request.get(f"{runner_a_url}/api/auth/login?return_to=/", max_redirects=0)
                 assert login_a_again.status in (302, 307)
-                state_a2 = _bounce_state_cookie(login_a_again)
+                state_a2 = _bounce_state_cookie(login_a_again, _NAMES_A)
                 replay_resp = page.request.post(
                     f"{runner_a_url}/api/auth/callback",
                     headers={
                         "content-type": "application/x-www-form-urlencoded",
-                        "cookie": f"{_BOUNCE_STATE_COOKIE}={state_a2}",
+                        "cookie": f"{_NAMES_A.bounce_state}={state_a2}",
                     },
                     data=f"token={captured_token}&state={state_a2}",
                 )
@@ -252,12 +259,12 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # --- 4. A mismatched `state` is rejected outright.
                 login_a_3 = page.request.get(f"{runner_a_url}/api/auth/login?return_to=/", max_redirects=0)
                 assert login_a_3.status in (302, 307)
-                state_a3 = _bounce_state_cookie(login_a_3)
+                state_a3 = _bounce_state_cookie(login_a_3, _NAMES_A)
                 mismatch_resp = page.request.post(
                     f"{runner_a_url}/api/auth/callback",
                     headers={
                         "content-type": "application/x-www-form-urlencoded",
-                        "cookie": f"{_BOUNCE_STATE_COOKIE}={state_a3}",
+                        "cookie": f"{_NAMES_A.bounce_state}={state_a3}",
                     },
                     data=f"token={captured_token}&state=not-the-real-state",
                 )
@@ -270,7 +277,7 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
 
                 page.goto(f"{runner_b_url}/", wait_until="load")
                 expect(page).to_have_title(re.compile("blizzard runner"))
-                assert any(c.get("name") == "bz_runner_session" for c in context.cookies(runner_b_url))
+                assert any(c.get("name") == _NAMES_B.session for c in context.cookies(runner_b_url))
             finally:
                 browser.close()
 
@@ -296,7 +303,9 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
 
         with (
             _oauth_hub(tmp_path / "hub", idp_port, hub_port),
-            _federated_runner(runner_dir, hub_port=hub_port, port=runner_port, runner_id="runner-e2e-session") as proc,
+            _federated_runner(
+                runner_dir, hub_port=hub_port, port=runner_port, runner_id=_NAMES_SESSION.runner_id
+            ) as proc,
         ):
             browser = pw.chromium.launch(headless=True)
             context = browser.new_context()
@@ -310,7 +319,7 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
                 expect(page).to_have_title(re.compile("blizzard runner"))
                 expect(page.locator('[data-testid="identity-username"]')).to_be_visible()
                 before_cookie = next(
-                    c.get("value") for c in context.cookies(runner_url) if c.get("name") == "bz_runner_session"
+                    c.get("value") for c in context.cookies(runner_url) if c.get("name") == _NAMES_SESSION.session
                 )
 
                 # 2. Restart in place (same dir/port, no re-`init`) — a redeploy.
@@ -325,7 +334,7 @@ def test_runner_session_reacquisition_e2e(tmp_path: Path) -> None:
                 page.wait_for_load_state("load")
                 expect(page.locator('[data-testid="identity-username"]')).to_be_visible()
                 after_cookie = next(
-                    c.get("value") for c in context.cookies(runner_url) if c.get("name") == "bz_runner_session"
+                    c.get("value") for c in context.cookies(runner_url) if c.get("name") == _NAMES_SESSION.session
                 )
                 assert after_cookie != before_cookie, "the session cookie never changed — no fresh bounce happened"
             finally:

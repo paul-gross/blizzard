@@ -21,6 +21,7 @@ import httpx
 import pytest
 
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
+from blizzard.runner.auth.session import CookieNames
 from blizzard.runner.config import RunnerConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
 from tests.service.support import require_stub_idp, service_gate, stub_idp
@@ -32,7 +33,8 @@ _SECRET_ENV = "BZ_OAUTH_TEST_SECRET"
 _SECRET = "test-secret"
 _RUNNER_ID = "runner-svc-a"
 
-_BOUNCE_COOKIES = ("bz_runner_bounce_state", "bz_runner_bounce_return")
+_NAMES = CookieNames(_RUNNER_ID)
+_BOUNCE_COOKIES = (_NAMES.bounce_state, _NAMES.bounce_return)
 
 
 def _replay_bounce_cookies(runner: httpx.Client, login_resp: httpx.Response) -> None:
@@ -138,7 +140,7 @@ def _bounce_once(hub: httpx.Client, runner: httpx.Client) -> None:
     login_resp = runner.get("/api/auth/login?return_to=/", follow_redirects=False)
     assert login_resp.status_code in (302, 307)
     authorize_url = login_resp.headers["location"]
-    state = login_resp.cookies["bz_runner_bounce_state"]
+    state = login_resp.cookies[_NAMES.bounce_state]
 
     authorize_resp = hub.get(authorize_url, follow_redirects=False)
     assert authorize_resp.status_code == 200, authorize_resp.text
@@ -156,7 +158,7 @@ def _bounce_once(hub: httpx.Client, runner: httpx.Client) -> None:
         follow_redirects=False,
     )
     assert callback_resp.status_code == 303, callback_resp.text
-    assert "bz_runner_session" in callback_resp.cookies
+    assert _NAMES.session in callback_resp.cookies
 
 
 def test_the_wire_leg_ends_in_an_unlocked_runner_route(tmp_path: Path) -> None:
@@ -187,7 +189,7 @@ def test_the_wire_leg_ends_in_an_unlocked_runner_route(tmp_path: Path) -> None:
 
                 _bounce_once(hub, runner)
 
-                session_cookie = runner.cookies.get("bz_runner_session")
+                session_cookie = runner.cookies.get(_NAMES.session)
                 assert session_cookie
                 gated = runner.get("/")
                 assert gated.status_code == 200
@@ -271,7 +273,7 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
             login_resp = runner.get("/api/auth/login?return_to=/", follow_redirects=False)
             assert login_resp.status_code in (302, 307)
             authorize_url = login_resp.headers["location"]
-            bounce_state = login_resp.cookies["bz_runner_bounce_state"]
+            bounce_state = login_resp.cookies[_NAMES.bounce_state]
 
             # 2. A fresh browser hits authorize. Two providers means no single dance to
             #    auto-run, so it is handed to the /login chooser as return_to.
@@ -309,6 +311,6 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
                     follow_redirects=False,
                 )
                 assert callback_resp.status_code == 303, callback_resp.text
-                assert "bz_runner_session" in callback_resp.cookies
+                assert _NAMES.session in callback_resp.cookies
             finally:
                 browser.close()
