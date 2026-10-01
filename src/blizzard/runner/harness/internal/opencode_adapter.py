@@ -25,6 +25,7 @@ from blizzard.runner.harness.adapter import (
     WorkerIdentityError,
     WorkerPreamble,
 )
+from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal import harness_shared
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
@@ -208,6 +209,7 @@ class OpenCodeAdapter:
         model_aliases: Sequence[tuple[str, str]] = (),
         effort_aliases: Sequence[tuple[str, str]] = (),
         worker_config_path: str | None = None,
+        autonomy: Autonomy = Autonomy.Dangerous,
         transcript_source: IHarnessTranscriptSource | None = None,
         price_catalog: IOpenCodePriceCatalog | None = None,
         descendant_usage: OpenCodeDescendantUsage | None = None,
@@ -229,6 +231,8 @@ class OpenCodeAdapter:
         # The runner-owned permission/plugin document; `None` when this runtime
         # predates the OpenCode binding, or a deployment chose not to scaffold one.
         self._worker_config_path = worker_config_path
+        # `--auto` auto-approves what the permission map does not deny; `Normal` omits it.
+        self._autonomy = autonomy
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
         # Injected, optional: with no catalog, a zero-cost step never gets an estimate.
         self._price_catalog = price_catalog
@@ -329,7 +333,7 @@ class OpenCodeAdapter:
             session_id=resume_from,
             model=model or self._model,
             variant=effort,
-            auto=True,
+            auto=self._autonomy is not Autonomy.Normal,
         )
         env = self._spawn_env(envelope, preamble, resume_from or "")
         # Both go through `harness_shared.stdout_target`, empty meaning DEVNULL — the same
@@ -398,7 +402,7 @@ class OpenCodeAdapter:
             prompt=judgement_prompt,
             session_id=session_id,
             variant=effort,
-            auto=True,
+            auto=self._autonomy is not Autonomy.Normal,
         )
         env = (
             self.identity_env(preamble, chunk_id, session_id, elicitation=True)
@@ -445,7 +449,7 @@ class OpenCodeAdapter:
             prompt=message,
             session_id=session_id,
             variant=effort,
-            auto=True,
+            auto=self._autonomy is not Autonomy.Normal,
         )
         env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
         # Deferred: a resume gets the same ownership spawn/judge get — `dormant.py::_wake`

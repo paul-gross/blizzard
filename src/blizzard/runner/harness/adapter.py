@@ -212,9 +212,9 @@ class IHarnessWorkerLifecycle(Protocol):
     ) -> str:
         """The literal interactive-takeover shell command for the escalation record.
 
-        ``attended=True`` composes the exec'd command (#258), reasserting the configured permission mode; the default
-        composes the advertised paste string. Carries the stamped ``model``/``effort``, deliberately no
-        ``compaction_window`` (not a fleet-driven turn)."""
+        ``attended=True`` composes the exec'd command (#258), reasserting the harness's configured permission
+        posture; the default composes the advertised paste string. Carries the stamped ``model``/``effort``,
+        deliberately no ``compaction_window`` (not a fleet-driven turn)."""
         ...
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:

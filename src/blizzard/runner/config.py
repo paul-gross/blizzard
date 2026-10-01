@@ -16,6 +16,7 @@ from typing import Any
 
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
+from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
@@ -46,7 +47,6 @@ ENV_HUB_URL = "BZ_HUB_URL"
 ENV_WORKSPACE_ROOT = "BZ_WORKSPACE_ROOT"
 ENV_WORKSPACE_ENVS = "BZ_WORKSPACE_ENVS"  # comma-separated env-id pool
 ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
-ENV_HARNESS_PERMISSION_MODE = "BZ_HARNESS_PERMISSION_MODE"
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
 ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline
@@ -69,9 +69,6 @@ DEFAULT_WORKSPACE_ID = "workspace-local"
 DEFAULT_HARNESS_BINARY = "claude"
 # OpenCode's own binary path — independent of `harness_binary`'s Claude Code meaning.
 DEFAULT_OPENCODE_BINARY = "opencode"
-# A headless worker has no one to approve tool use, so it needs a non-interactive mode;
-# a config may set this empty to omit the flag.
-DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
 # The env var NAMING this runner's hub bearer token — the toml round-trips the
@@ -107,6 +104,17 @@ class WorkspaceRepo:
 
     name: str
     url: str
+
+
+def _parse_autonomy(value: object, path: Path) -> Autonomy:
+    """The ``[harness] autonomy`` value; absent resolves to :attr:`Autonomy.Dangerous`."""
+    if value is None:
+        return Autonomy.Dangerous
+    try:
+        return Autonomy(value)
+    except ValueError:
+        allowed = ", ".join(repr(a.value) for a in Autonomy)
+        raise ConfigError(f"[harness] autonomy must be one of {allowed}, got {value!r} (in {path})") from None
 
 
 def _workspace_repos(raw: object) -> tuple[WorkspaceRepo, ...]:
@@ -475,7 +483,11 @@ class RunnerConfig:
     harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod
     #: `[claude_code].enabled` — false leaves Claude Code unbound, unprobed, and unadvertised.
     claude_code_enabled: bool = True
-    harness_permission_mode: str | None = None  # `claude -p --permission-mode` (headless); None omits it
+    #: `[harness] autonomy`, the runner-wide approval posture each harness binding translates.
+    autonomy: Autonomy = Autonomy.Dangerous
+    #: Legacy Claude Code-only `--permission-mode` override. `None` is absent (autonomy maps);
+    #: empty is present-but-empty (no flag); never set together with `[harness] autonomy`.
+    harness_permission_mode: str | None = None
     worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)
     #: Override for the Claude Code health probe's own credential file; `None` is its own default.
     claude_code_credentials_path: str | None = None
@@ -749,8 +761,6 @@ class RunnerConfig:
             workspace_provider="basic" if not os.environ.get(ENV_WORKSPACE_ROOT) else "winter",
             workspace_envs=tuple(e.strip() for e in envs.split(",") if e.strip()) if envs else DEFAULT_ENV_POOL,
             harness_binary=os.environ.get(ENV_HARNESS_BINARY, DEFAULT_HARNESS_BINARY),
-            harness_permission_mode=os.environ.get(ENV_HARNESS_PERMISSION_MODE, DEFAULT_HARNESS_PERMISSION_MODE)
-            or None,
             base_branch=os.environ.get(ENV_BASE_BRANCH, DEFAULT_BASE_BRANCH),
             gates=tuple(g.strip() for g in gates.split(",") if g.strip()) if gates else (),
             # The worker hook file `init` writes alongside the config; the adapter
@@ -817,7 +827,6 @@ class RunnerConfig:
             "# Released folders remain for inspection until the cap needs room; oldest\n"
             "# unheld folders are evicted first. Reacquisition resets all repo worktrees.\n"
             "# A commented [[workspace_repo]] example is at the end of this file.\n"
-            f'harness_permission_mode = "{self.harness_permission_mode or ""}"\n'
             f"worker_settings_path = {settings}\n"
             + (
                 f'claude_code_credentials_path = "{self.claude_code_credentials_path}"\n'
@@ -846,6 +855,10 @@ class RunnerConfig:
             "\n# Where the coding harness writes session transcripts;\n"
             "# empty = ~/.claude/projects.\n"
             f'transcripts_root = "{self.transcripts_root}"\n'
+            "\n# How freely an unattended worker may act without a human approving tool use:\n"
+            '# "normal", "auto", or "dangerous". Each harness translates it into its own terms.\n'
+            "[harness]\n"
+            f'autonomy = "{self.autonomy}"\n'
             "\n# The transcript outbound lane — off by default; the hub's own\n"
             "# durable, compressed-at-rest segment store is already landed, so\n"
             "# turning this on is a rollout decision, not a bandwidth-for-nothing one.\n"
@@ -1015,6 +1028,14 @@ class RunnerConfig:
         claude_code = Table.of(raw.get("claude_code"))
         if "harness_binary" in raw and "binary" in claude_code.body:
             raise ConfigError("set Claude Code's binary once: 'harness_binary' or '[claude_code].binary', not both")
+        harness = Table.of(raw.get("harness"))
+        legacy_permission_mode = None if "harness_permission_mode" not in raw else str(raw["harness_permission_mode"])
+        if legacy_permission_mode is not None and "autonomy" in harness.body:
+            raise ConfigError(
+                f"set the approval posture once in {path}: 'harness_permission_mode' and '[harness] autonomy' "
+                "are both set; keep only '[harness] autonomy'"
+            )
+        autonomy = _parse_autonomy(harness.body.get("autonomy"), path)
         claude_code_enabled = claude_code.boolean("enabled", True)
         opencode_enabled = opencode.boolean("enabled", True)
         if not claude_code_enabled and not opencode_enabled:
@@ -1043,9 +1064,8 @@ class RunnerConfig:
             workspace_envs=Table.of(raw).listed("workspace_envs", DEFAULT_ENV_POOL),
             harness_binary=str(raw.get("harness_binary", claude_code.body.get("binary", DEFAULT_HARNESS_BINARY))),
             claude_code_enabled=claude_code_enabled,
-            harness_permission_mode=(str(raw["harness_permission_mode"]) or None)
-            if raw.get("harness_permission_mode")
-            else None,
+            autonomy=autonomy,
+            harness_permission_mode=legacy_permission_mode,
             worker_settings_path=(str(raw["worker_settings_path"]) or None)
             if raw.get("worker_settings_path")
             else None,

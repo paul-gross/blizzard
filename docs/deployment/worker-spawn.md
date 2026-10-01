@@ -44,6 +44,33 @@ Nothing about a turn's completion or a lease's correctness rests on it — proce
 harnesses alike — so a runner whose OpenCode plugin never loads still executes work correctly and merely goes quiet
 between tool calls.
 
+## Harness autonomy
+
+An unattended worker has no one to approve tool use, so the runner picks how freely it acts. One runner-wide setting,
+`[harness] autonomy` in `blizzard-runner.toml`, takes `normal`, `auto`, or `dangerous`; each harness binding translates
+it into its own terms on every unattended invocation — spawn, resume, nudge, and judge. No hub, graph, or chunk field
+carries it, so nothing remote overrides it.
+
+| Value       | Claude Code                                                 | OpenCode      |
+| ----------- | ----------------------------------------------------------- | ------------- |
+| `normal`    | `--permission-mode manual` plus `--permission-prompts none` | omit `--auto` |
+| `auto`      | `--permission-mode auto`                                    | `--auto`      |
+| `dangerous` | `--permission-mode bypassPermissions`                       | `--auto`      |
+
+`--permission-prompts none` denies anything that would prompt, instead of hanging a headless turn; `normal` therefore
+needs a Claude Code version that has the flag. An unknown value fails config load, naming the value, the allowed set,
+and the config path.
+
+Absent, the setting resolves to `dangerous`, and a scaffolded config writes `autonomy = "dangerous"`. The legacy
+top-level `harness_permission_mode` still works alone as a Claude Code-only override: a non-empty value is passed as
+`--permission-mode <value>` with no `--permission-prompts`, an empty one omits the flag, and OpenCode keeps `--auto`.
+Setting it together with `[harness] autonomy` fails config load, naming both and asking you to keep only `autonomy`.
+
+`dangerous` may skip your own Claude Code deny rules, and blizzard does not compensate for that. The runner-owned
+denials — Claude Code's in the `--settings` file, OpenCode's in its worker config — hold under every value. OpenCode's
+`normal` omits `--auto` only; a permission that resolves to `ask` can still stall a headless turn. What an attended
+takeover keeps or drops is owned by [takeover.md](./chunk-operations/takeover.md).
+
 ## The three prompt layers
 
 A worker's first spawn on a session carries three ordered layers ahead of the node's own envelope prompt: a baked-in

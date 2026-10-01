@@ -28,8 +28,10 @@ from blizzard.runner.config import (
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver, ResumeMarking, _LazyUsageHttpClient
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
@@ -225,7 +227,28 @@ def test_loop_wiring_threads_the_worker_settings_path_and_permission_mode(tmp_pa
 
         assert isinstance(harness, ClaudeCodeAdapter)
         assert harness._settings_path == settings
-        assert harness._permission_mode == "acceptEdits"
+        assert harness._permission_override == "acceptEdits"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("autonomy", list(Autonomy))
+def test_registry_threads_the_autonomy_to_both_bindings(tmp_path: Path, autonomy: Autonomy) -> None:
+    """The constructor path is the only way ``autonomy`` reaches a binding."""
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_root=str(tmp_path / "workspace"),
+        autonomy=autonomy,
+    )
+
+    with loop_context(config) as ctx:
+        claude = ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
+        opencode = ctx.harnesses.lifecycle(OPENCODE_HARNESS_ID)
+
+        assert isinstance(claude, ClaudeCodeAdapter)
+        assert isinstance(opencode, OpenCodeAdapter)
+        assert claude._autonomy is autonomy
+        assert opencode._autonomy is autonomy
 
 
 @pytest.mark.unit

@@ -7,11 +7,12 @@ bad choice, not just what the prompt asked it to do.
 ## What is true today
 
 Workspace providers give chunks separate working environments; that separation is for organizing work, not an operating
-system sandbox. A runner's workers can execute arbitrary tools with the access of the account running them. Claude
-Code's scaffolded runner configuration uses `bypassPermissions`; unattended OpenCode runs use `--auto`, with explicit
-tool denials in runner-owned configuration. These modes avoid waiting for an approval that no one is present to give.
-Their deny rules can prevent particular tool calls, but they do not confine everything a shell command or its
-descendants can do.
+system sandbox. A runner's workers can execute arbitrary tools with the access of the account running them. The
+runner-wide `[harness] autonomy` setting chooses each harness's approval mode, and a scaffolded configuration sets
+`dangerous`: Claude Code runs `bypassPermissions` and OpenCode runs `--auto`, with explicit tool denials in runner-owned
+configuration. These modes avoid waiting for an approval that no one is present to give; the
+[mapping and its caveats](docs/deployment/worker-spawn.md#harness-autonomy) are documented there. Their deny rules can
+prevent particular tool calls, but they do not confine everything a shell command or its descendants can do.
 
 Do not treat an unattended runner on a shared host as confined merely because its agents received different worktrees.
 Run it with an account, workspace, network access, and credentials appropriate for code executed by those agents.
