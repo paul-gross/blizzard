@@ -1,9 +1,4 @@
-"""The default/PR-CI land scripts' PR title and merge commit message — unit tier.
-
-Exercises the two scripts' ``main()`` against a scripted forge fake: the opened PR's
-``title`` is JUST the resolved ``BZ_HUB_FEATURE_TITLE``, falling back to the branch; the
-merge's ``commit_message`` falls back to ``blizzard: land ...``.
-"""
+"""Land-script PR titles, merge messages, CI routing and marker writes."""
 
 from __future__ import annotations
 
@@ -21,15 +16,13 @@ _BRANCH = "feature-branch"
 _COMMIT = "sha1"
 _COMMITS = [{"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT}]
 
-# The mid-run marker callback: every pushed/merged repo in these tests
-# records a marker, so every scripted forge double needs a response for it too.
+# Every scripted forge double needs a marker callback response.
 _CALLBACK_URL = "http://callback/hub-markers"
 _MARKER_TOKEN = "test-marker-token"
 
 
 def _marker_status_queue(marker_status: int | list[int]) -> tuple[list[int] | None, int]:
-    """Normalize ``marker_status`` into a (queue, fallback) pair: a list is consumed one
-    response per call, a bare int repeats forever."""
+    """A list supplies one status per call; an int repeats forever."""
     if isinstance(marker_status, list):
         return list(marker_status), 200
     return None, marker_status
@@ -45,11 +38,7 @@ def _scripted_forge(
     marker_headers: list[dict[str, str] | None] | None = None,
     marker_status: int | list[int] = 200,
 ):
-    """A minimal, deterministic double for ``land_default.forge_request`` — one repo,
-    no existing PR, a clean merge. Records every call for assertion. ``marker_status``
-    lets a caller script the marker POST's response(s) (a single status repeated, or a
-    list consumed one response per call — e.g. ``[503, 200]`` for a retry-then-succeed
-    scenario)."""
+    """A one-repo clean-merge forge double recording every call and marker response."""
     responses = {
         ("GET", f"http://forge/repos/{_REPO}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
         ("GET", f"http://forge/repos/{_REPO}/pulls?state=open"): (200, []),
@@ -161,8 +150,7 @@ def test_an_over_long_feature_title_is_truncated_for_the_pr_title(monkeypatch: p
     assert _merge_commit_message(calls) == long_title
 
 
-# land_pr_ci self-heal routing (component tier): heal `behind`, wait out transient/
-# CI-not-green, bounce only a real `dirty` — the pure decision is `Route.decision`.
+# PR-CI routing: heal behind, wait for CI, bounce on dirty.
 
 
 def _forge_with_state(
@@ -181,13 +169,8 @@ def _forge_with_state(
     head_sha: str = "sha1",
     extra_responses: dict[tuple[str, str], tuple[int, Any]] | None = None,
 ):
-    """A double whose one already-open PR reads ``mergeable_state``. Records every call.
-
-    ``head_check_runs``/``base_check_runs``, when given, stub the head/base
-    check-runs routes; left unstubbed, a route raises ``KeyError``, so the degradation
-    path reacts to the same real failure mode ``forge_request`` surfaces. Every
-    ``head_check_runs`` entry also gets its own rerequest route stubbed, keyed by its
-    ``id``."""
+    """An open-PR double; unstubbed check routes raise ``KeyError``. Head checks
+    with IDs also get a rerequest route."""
     base = f"http://forge/repos/{_REPO}"
     pull = {
         "number": 1,
@@ -609,8 +592,7 @@ def test_clean_merge_body_requests_a_merge_commit(
     assert pr_marker < merge_call
 
 
-# land_pr_ci terminal CI check failure + CI-watch findings: asserts the
-# check-runs GETs, the `delivery-findings` marker write, and the authored `failure` edge.
+# Terminal CI failures and findings.
 
 
 def _check_runs_urls(calls: list[tuple[str, str, dict[str, Any] | None]]) -> list[str]:
@@ -661,10 +643,7 @@ def test_a_terminal_check_failure_prints_the_failure_edge_and_writes_findings(
 def test_a_base_red_check_alongside_an_own_failure_still_fails_and_names_both(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A base-inherited check alone must not produce `_FAILED`, but one
-    among SEVERAL failing checks on the same repo does not waive the repo — the OTHER,
-    own failure is still this chunk's defect, so the repo still fails outright, with no
-    re-run fired for either check."""
+    """A base-inherited failure does not mask another failing check on the same repo."""
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setattr(
@@ -730,9 +709,7 @@ def test_an_inherited_only_failure_fires_a_rerequest_once_and_pends(
 def test_a_refused_rerequest_writes_no_rerun_marker(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], refusal: int
 ) -> None:
-    """The forge refusing the check-run rerequest is not a re-run: no `ci-rerun` marker
-    is written, so the next poll fires the rerequest again instead of routing the
-    inherited failure on."""
+    """A refused rerequest writes no marker, allowing another attempt on the next poll."""
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setattr(
@@ -760,9 +737,7 @@ def test_a_refused_rerequest_writes_no_rerun_marker(
 def test_a_re_requested_check_still_red_routes_the_inherited_failure_outcome(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Once the signature marker shows the re-run already fired at this
-    head sha, a still-red check routes the new `inherited-failure` outcome — never
-    `resolve`'s `failure` — with no second rerequest fired."""
+    """A marked rerequest still red routes inherited-failure without another rerequest."""
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"ci-rerun/{_REPO}/build/sha1"]))
@@ -794,8 +769,6 @@ def test_a_re_requested_check_still_red_routes_the_inherited_failure_outcome(
 def test_a_green_re_run_is_simply_not_failing_on_the_next_poll(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A re-run that turned green shows up as a non-terminal (or absent) check on the next
-    read — no special-casing needed, delivery just resumes."""
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
     monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"ci-rerun/{_REPO}/build/sha1"]))
@@ -1085,14 +1058,11 @@ def test_an_absent_expectation_signal_is_treated_as_expected(script, monkeypatch
     assert exc.value.code == 1
 
 
-# Durable marker writes: `land_default`/`land_pr_ci` share the same
-# PR-open-then-merge shape, exercised together via `_scripted_forge`/`_forge_with_state`.
+# Durable marker writes shared by both land scripts.
 
 
 def _forge_double_for(module: Any, calls: list[tuple[str, str, dict[str, Any] | None]], **kwargs: Any):
-    """The right scripted double for ``module`` — both share ``_REPO``/``_BRANCH``, but
-    ``land_pr_ci`` reads a live ``mergeable_state`` where ``land_default`` reads a fresh
-    PR, so each needs its own fixture shape."""
+    """Select a scripted forge double for a fresh or already-open PR."""
     if module is land_pr_ci:
         kwargs.setdefault("head_check_runs", [_check_run("completed", "success")])
         return _forge_with_state(calls, mergeable_state="clean", **kwargs)
@@ -1198,8 +1168,7 @@ def test_an_empty_callback_url_with_a_pending_repo_fails_instead_of_landing_sile
     assert "BZ_HUB_MARKER_CALLBACK_URL" in captured.err
 
 
-# land_pr_ci.Verdict + Findings: a terminally-failed check run must
-# never be polled out to `poll_timeout` — pure, network-free objects.
+# Network-free CI verdict and findings checks.
 
 
 def _check_run(status: str, conclusion: str | None = None, *, name: str = "build", check_id: int = 1) -> dict[str, Any]:
@@ -1219,9 +1188,7 @@ def test_verdict_is_failed_for_every_terminal_conclusion(conclusion: str) -> Non
 
 
 def test_verdict_waits_on_a_cancelled_conclusion() -> None:
-    """A concurrency-group cancellation is not a failed job, and the
-    check-run payload alone can't tell the two apart, so `cancelled` is re-polled rather
-    than classified terminal."""
+    """A cancellation is re-polled because it may come from a concurrency group."""
     assert land_pr_ci.Verdict([_check_run("completed", "cancelled")]).decision == land_pr_ci._WAIT
 
 

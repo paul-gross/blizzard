@@ -23,8 +23,7 @@ from blizzard.runner.environments.provider import (
 _MANAGED = ".blizzard-basic-env"
 _ACTIVE = ".blizzard-active"
 _REPOS_DIR = ".blizzard-manifests"
-# A first `git clone` of a large repo dwarfs the reset bound, and a timeout there would be a
-# permanent preparation failure.
+# An initial clone can outlast the reset bound without failing preparation.
 _CLONE_TIMEOUT = 300
 
 
@@ -38,8 +37,7 @@ class BasicWorkspaceProvider:
     """Allocate clean worktrees, retaining released folders until capacity pressure.
 
     The store's held IDs are the capacity and (when injected) manifest authority.
-    Direct consumers without a store use an active marker for manifest visibility.
-    """
+    Direct consumers without a store use an active marker for manifest visibility."""
 
     def __init__(
         self,

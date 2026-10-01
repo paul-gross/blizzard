@@ -23,12 +23,10 @@ from blizzard.wire.route import RouteClaim
 
 _log = get_logger("blizzard.runner.loop")
 
-# The env count a chunk gets when nothing says otherwise — a default, not a structural
-# assumption; a chunk holding several is representable.
+# Default count, not a limit on how many environments a chunk may hold.
 _DEFAULT_ENV_COUNT = 1
 
-# peek -> acquire -> BIND -> claim -> spawn. The local binding is written *before* the hub
-# claim, so a crash in that window is reconciled next tick — never a strand.
+# Bind before claiming so the next tick can reconcile a crash in that window.
 _CP_BEFORE_ACQUIRE = crashpoint("fill.before-env-acquire", "peeked a ready chunk; envs not acquired")
 _CP_AFTER_ACQUIRE = crashpoint("fill.after-env-acquire.before-bind", "envs acquired; binding not recorded")
 _CP_AFTER_BIND = crashpoint("fill.after-bind.before-claim", "binding recorded; route not claimed at the hub")
@@ -78,10 +76,8 @@ class ReadyQueue:
             return False
         if outcome.won:
             self.ctx.chunk_views.invalidate(chunk_id)  # a later get() this tick sees the win
-        # A dependency block discovered only here, at claim time, is invisible to the peeked
-        # snapshot's own `blocked` field — strict mode must hold at it exactly as it holds at
-        # a statically-known block, so `entry` stays in `_entries` rather than being
-        # dropped before the outcome that would have vetoed the drop was known.
+        # A claim-time dependency block is absent from the peeked snapshot; strict mode
+        # must keep the entry so it holds at this head on the next claim attempt.
         strict_dependency_hold = self.ctx.config.queue_strict and outcome.denied_dependency is not None
         if not strict_dependency_hold:
             self._entries.remove(entry)
@@ -102,10 +98,8 @@ class ReadyQueue:
             self.ctx.env_release.release_binding(chunk_id, acquired)
             return True
         if outcome.denied_dependency is not None:
-            # Stands on an unmet prerequisite — not a race loss either.
-            # Undo the binding; reach-ahead moves on since it may become claimable again
-            # later, but strict mode stops the whole run here instead of falling through
-            # past a head that is (dynamically) still blocked.
+            # An unmet prerequisite is not a race loss: strict holds at this head,
+            # while reach-ahead can try another entry.
             _log.info(
                 "route claim denied — unmet prerequisite",
                 chunk_id=chunk_id,
@@ -133,9 +127,8 @@ class ReadyQueue:
         """Pick this runner's entry out of this fill's one peeked snapshot,
         left in place until ``claim_one()`` knows the outcome and drops it itself —
         a later ``claim_one()`` this same ``Fill.run()`` must not silently move past an
-        entry whose outcome is still undetermined. Strict holds at a marked head and yields
-        nothing rather than falling through — an idle tick reads the same as an empty queue
-        at this seam. Reach-ahead (the default) scans for the first unmarked entry."""
+        entry whose outcome is still undetermined. Strict holds at a marked head;
+        reach-ahead scans for the first unmarked entry."""
         if not self._entries:
             return None
         if self.ctx.config.queue_strict:
@@ -209,9 +202,8 @@ class ReadyQueue:
 class InterruptedClaims:
     """Bindings left by a crash in FILL's bind→claim→spawn window.
 
-    The binding is written locally *before* the hub claim, so a crash there leaves a binding
-    for a chunk with no active lease. Runs before FILL peeks new work: adopt a route still
-    ours, else release the orphaned binding."""
+    A crash before the hub claim leaves a binding without an active lease. Before FILL
+    peeks new work, adopt a route still ours or release the orphaned binding."""
 
     ctx: LoopContext
 
@@ -219,9 +211,7 @@ class InterruptedClaims:
         """``braked`` — either pause brake is engaged: the reclaim arm, the only one that makes a
         new hub claim, keeps its binding instead of claiming; every other arm still runs.
 
-        Deliberately carries no open-takeover skip — see ``tests/test_runner_takeover.py``'s
-        ``test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover`` and
-        ``test_fill_adopts_a_restart_against_a_lease_the_escalation_already_closed``."""
+        Open takeovers do not suppress this reconciliation."""
         requeue_pending = self.ctx.stores.requeue.pending_requeue_chunk_ids()  # one read per FILL, not per chunk
         # One read before the loop, not one `active_lease_for_chunk` per chunk
         # (`bzh:bulk-reconstitution`) — safe because each iteration only mutates its own chunk.

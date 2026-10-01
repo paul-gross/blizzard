@@ -2,8 +2,7 @@
 
 The winter binding's reset-on-acquire removes the previous tenant's **untracked** files — the
 one reset step winter has no verb for. ``-fd``, not ``-fdx``: ignored files stay, since the
-dependency trees they hold cost more to rebuild than the tick allows
-(tests/test_pin_runner_misc.py). ``subprocess`` is confined here.
+dependency trees they hold cost more to rebuild than the tick allows.
 """
 
 from __future__ import annotations
@@ -15,8 +14,7 @@ from blizzard.foundation.logging import get_logger
 
 _log = get_logger("blizzard.runner.env.git")
 
-# A tick reaches this seam (FILL), so it must be bounded — the value is generous rather
-# than tuned, mirroring `checks.py`'s own default.
+# A FILL tick reaches this seam, so git calls must be bounded.
 ENV_GIT_TIMEOUT = 60
 
 

@@ -46,35 +46,30 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
-# Written when an outcome has no authored edge (`_route`); also the once-per-(node,
-# epoch) dedupe key gating the event_log row beside it.
+# Once-per-(node, epoch) dedupe key for an outcome with no authored edge.
 _UNROUTABLE_ARTIFACT_NAME = "hub-unroutable-outcome"
 _EVENT_UNROUTABLE_OUTCOME: EventLogKind = "hub-node-unroutable-outcome"
 
-# Measured against the injected clock, never wall time. Generous on purpose: only a slot
-# abandoned by a `kill -9` — no matching release ever comes — should be reclaimed.
+# Generous bound: reclaim only a slot abandoned without a matching release.
 DEFAULT_SLOT_STALE_AFTER = timedelta(minutes=30)
 
 # Pending-poll cadence defaults (#66), overridable per node.
 DEFAULT_POLL_INTERVAL = timedelta(seconds=30)
 DEFAULT_POLL_TIMEOUT = timedelta(minutes=30)
 
-# Crash points (``bzh:crash-point-registry``) — the per-step re-run windows; recovery is
-# the next hub-advance, which re-runs whatever the markers below do not cover.
+# Crash points for the per-step re-run windows (`bzh:crash-point-registry`).
 _CP_HUBNODE_AFTER_STEP_BEFORE_MARKER = crashpoint(
     "hubnode.after-step.before-marker", "a run: step exited 0; its produces: marker is not yet durable"
 )
 _CP_HUBNODE_AFTER_MARKER_BEFORE_NEXT = crashpoint(
     "hubnode.after-marker.before-next", "a run: step's marker is durable; the next step has not started"
 )
-# A kill here leaves the slot live with no release coming; `DEFAULT_SLOT_STALE_AFTER`
-# reclaims it, and pending-ness is re-derived from the durable poll fact.
+# A kill leaves the slot live; the stale bound reclaims it, with pending derived from the poll fact.
 _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
     "hubnode.after-poll.before-slot-release",
     "the poll-attempt fact is durable; the fleet-wide slot is not yet released",
 )
-# The close-intent outbox's first window — fires right after a landing marker and its
-# enqueued intents are both durable (same transaction), before any drain has run.
+# Fires after marker and intents are durable in one transaction, before drain.
 _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
     "close.after-enqueue.before-drain", "a landing marker and its close intents are durable; no drain has run yet"
 )
@@ -95,8 +90,7 @@ class HubRunResult:
     transition_id: str | None = None
 
 
-# The env-injection contract — documented here as the single source of truth a graph
-# author's `run:` script reads.
+# The env-injection contract read by a graph's `run:` script.
 ENV_CHUNK_ID = "BZ_HUB_CHUNK_ID"
 ENV_WORKDIR = "BZ_HUB_WORKDIR"
 ENV_NODE_ID = "BZ_HUB_NODE_ID"
@@ -107,18 +101,16 @@ ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"  # JSON list of {repo, branch, commit}
 ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"  # JSON list of already-recorded artifact names for this node
 ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"  # POST {name, content} records a marker mid-run
 ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"  # the capability token authorizing that POST
-# POST {delta, proposals} (artifact names) delivers a routine's run
+# POST {delta, proposals} delivers a routine's run.
 ENV_GARDEN_DELIVERY_URL = "BZ_HUB_GARDEN_DELIVERY_URL"
-# POST with no body delivers the chunk's own newest review-finding-delta artifact
+# POST with no body delivers the newest review-finding-delta artifact.
 ENV_REVIEW_FINDINGS_URL = "BZ_HUB_REVIEW_FINDINGS_URL"
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_common.LandRun.repo
-# the prose PR/merge title resolved from the chunk's primary work item, absent when
-# it can't be resolved
+# PR/merge title resolved from the primary work item, absent when unresolved.
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
-# "1" when some node in this chunk's graph declares a `git_commit`-kind `produces:`, "0"
-# when none does — see `Graph.declares_git_commit`.
+# "1" if the graph declares a `git_commit`-kind `produces:`, else "0".
 ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 
 
@@ -133,9 +125,8 @@ class UnconvergedDeliveryError(RuntimeError):
 class GitCommits:
     """A chunk's ``git_commit`` artifacts resolved to one row per repository **identity**.
 
-    Delivery's identity for a git pointer is :func:`~blizzard.foundation.repo_ref.repo_identity` —
-    ``owner/name`` when the origin names an owner, else the bare name — so a rewritten branch
-    supersedes the orphaned one while the same name under two owners stays two repositories."""
+    A rewritten branch supersedes its orphaned pointer, but the same name under two owners
+    stays two repositories."""
 
     rows: list[ArtifactRow]
 
@@ -332,13 +323,9 @@ class HubNodeExecutor:
     def record_marker(
         self, chunk_id: str, *, node_id: str, node_name: str, epoch: int, name: str, content: str
     ) -> bool:
-        """The mid-run marker callback's write (#65) — a ``run:`` step's own marker,
-        recorded ahead of that step's exit. Idempotent per
-        ``(chunk, node, name, epoch)``, like the executor's own ``produces:`` write, and
-        fenced against the chunk's current epoch (``bzh:epoch-fencing``): a caller-supplied
-        epoch the chunk has since moved past — a restart re-aiming it while this ``run:``
-        list is still executing — writes nothing, so a superseded run's marker can no
-        longer mark a repo landed or enqueue a close."""
+        """Record a ``run:`` step's marker ahead of its exit, idempotently per
+        ``(chunk, node, name, epoch)``. A superseded epoch writes nothing, preventing
+        its marker from landing a repo or enqueuing a close (``bzh:epoch-fencing``)."""
         wrote = self._artifacts.record_hub_artifact(
             chunk_id,
             node_id=node_id,
@@ -349,9 +336,7 @@ class HubNodeExecutor:
             content=content,
             at=self._clock.now(),
         )
-        # A fresh `merged/<repo>` marker is the one production choke point for "a repo
-        # landed" — gated on `wrote` so crash-recovery replay never double-counts
-        # (`count_landed_since`).
+        # Only a fresh marker counts as landed; replay must not double-count.
         if wrote and name.startswith(_MARKER_PREFIX):
             self._delivery.record_delivery_repo_landed(
                 chunk_id, repo=name.removeprefix(_MARKER_PREFIX), commit_hash=content, at=self._clock.now()

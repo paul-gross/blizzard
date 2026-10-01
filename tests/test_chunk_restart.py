@@ -1,9 +1,4 @@
-"""The ``/chunks/{id}/restart`` route over the HTTP surface (#370, #371).
-
-Proves the operator's forced move end to end: 202/404/409, the durable fact and its bumped
-epoch, the stale-epoch rejection the preempted worker's completion meets, the in-flight parks
-the move consumes, the artifacts it leaves alone, the fresh session it re-enters on — and, for
-a cross-graph move, the re-pin it rides with and the target graph's own stamps."""
+"""HTTP coverage for same-graph and cross-graph chunk restarts."""
 
 from __future__ import annotations
 
@@ -148,7 +143,6 @@ def _restart(hub, chunk_id: str, **body: object):  # type: ignore[no-untyped-def
 
 
 def test_restart_records_the_move_and_bumps_the_epoch(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The default target is the chunk's current node — restart this step on clean context."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     before = _detail(hub, chunk_id)
@@ -173,7 +167,6 @@ def test_restart_onto_another_node_lands_the_chunk_there(tmp_path) -> None:  # t
 
 
 def test_the_move_is_a_durable_fact_distinguishable_from_a_transition(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Chunk history carries it as its own entry, naming who moved it and to where."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
 
@@ -205,7 +198,6 @@ def test_restart_is_404_for_an_unknown_chunk(tmp_path) -> None:  # type: ignore[
 
 
 def test_restart_refuses_a_terminal_chunk(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """There is no node to re-enter, and a stopped chunk is never re-derived leasable."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
@@ -217,7 +209,6 @@ def test_restart_refuses_a_terminal_chunk(tmp_path) -> None:  # type: ignore[no-
 
 
 def test_a_preempted_workers_completion_is_rejected_by_the_stale_epoch_fence(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The move's whole point: the displaced worker can lose work but never land it."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     node_id = _detail(hub, chunk_id)["current_node_id"]
@@ -236,7 +227,6 @@ def test_a_preempted_workers_completion_is_rejected_by_the_stale_epoch_fence(tmp
 
 
 def test_restart_answers_an_open_ask_with_the_fixed_system_answer(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Exactly one answer ever exists, so the move consumes the question normally."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     asked = hub.client.post(
@@ -264,7 +254,6 @@ def test_restart_answers_an_open_ask_with_the_fixed_system_answer(tmp_path) -> N
 
 
 def test_a_persons_own_answer_outranks_the_moves(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """First-write-wins holds: the move never overwrites an answer a human already gave."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     hub.client.post(
@@ -287,8 +276,7 @@ def test_a_persons_own_answer_outranks_the_moves(tmp_path) -> None:  # type: ign
 
 
 def test_restart_closes_an_open_gate_decision(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A resolving fact is written, so the chunk stops deriving ``waiting_on_human`` — and
-    no choice is invented, so nothing downstream transitions along one."""
+    """Resolution without an invented choice leaves no downstream transition."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub, _GATE_YAML)
     build_node = _detail(hub, chunk_id)["current_node_id"]
@@ -308,7 +296,6 @@ def test_restart_closes_an_open_gate_decision(tmp_path) -> None:  # type: ignore
 
 
 def test_restart_supersedes_an_open_escalation(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Escalations carry no resolution fact, so the move closes this one by supersession."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     cast(IWriteChunkEscalationsRepository, hub.services.chunks.escalations).record_escalation(
@@ -330,7 +317,6 @@ def test_restart_supersedes_an_open_escalation(tmp_path) -> None:  # type: ignor
 
 
 def test_artifacts_from_the_superseded_step_stay_readable(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The move leaves the work already produced in place — only the session is discarded."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     plan_node = _detail(hub, chunk_id)["current_node_id"]
@@ -353,8 +339,7 @@ def test_artifacts_from_the_superseded_step_stay_readable(tmp_path) -> None:  # 
 
 
 def test_restart_works_on_a_chunk_with_no_live_lease(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Valid whether or not the chunk is leased: an unclaimed ready chunk moves too, and
-    the next claim's envelope is what carries the move to whoever takes it."""
+    """An unclaimed ready chunk can move before the next claim."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
     chunk_id = ingest(hub, [_POINTER])
@@ -369,8 +354,7 @@ def test_restart_works_on_a_chunk_with_no_live_lease(tmp_path) -> None:  # type:
 
 
 def test_the_envelope_after_a_restart_declares_a_fresh_session(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The node declares ``resume:main``; the forced visit overrides it, so the re-entry
-    mints rather than continuing the pool head, and stamps the pool's declared config."""
+    """The forced visit overrides ``resume:main`` without losing its config stamps."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
 
@@ -386,7 +370,6 @@ def test_the_envelope_after_a_restart_declares_a_fresh_session(tmp_path) -> None
 
 
 def test_a_transition_off_the_forced_visit_restores_the_declared_session_mode(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The override lasts exactly as long as the visit the move forced."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     assert _restart(hub, chunk_id, node="build").status_code == 202
@@ -417,8 +400,7 @@ def test_restart_publishes_a_chunk_changed_frame_naming_its_own_cause(tmp_path) 
 
 
 def test_restart_defaults_a_never_moved_chunk_to_its_graphs_entry_node(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A chunk that has not moved stands on nowhere, and the entry node is where it would
-    have started — the one case the omitted ``--node`` resolves to something derived."""
+    """With no prior move, an omitted node resolves to the graph's entry."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
     chunk_id = ingest(hub, [_POINTER])
@@ -429,8 +411,7 @@ def test_restart_defaults_a_never_moved_chunk_to_its_graphs_entry_node(tmp_path)
 
 
 def test_restart_refuses_a_chunk_standing_on_a_node_its_graph_does_not_carry(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Refused rather than rewound to the entry: the position is real, and defaulting it
-    away would silently discard every node the chunk already came through."""
+    """An absent current node must not silently rewind the chunk to entry."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub, _GATE_YAML)  # entry `build`, no `plan` node
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
@@ -456,9 +437,7 @@ def test_restart_refuses_a_chunk_standing_on_a_node_its_graph_does_not_carry(tmp
 
 
 def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A hub node reads its epoch, then runs minutes of git/forge work before recording the
-    exit. A restart landing inside that window has already re-aimed the chunk, so the exit
-    is refused: the move survives, rather than being erased by a write it predates."""
+    """A restart during a hub run fences that run's later exit transition."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     plan_node = _detail(hub, chunk_id)["current_node_id"]  # the node the hub run entered at epoch 1
@@ -487,7 +466,6 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
 
 
 def test_an_uncontested_hub_node_exit_still_records(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The fence's control: with nothing minted past the run's own epoch, the exit lands."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     plan_node = _detail(hub, chunk_id)["current_node_id"]
@@ -551,10 +529,7 @@ def test_a_cross_graph_restart_keeps_the_holding_runners_route(tmp_path) -> None
 
 
 def test_a_same_graph_restart_refuses_a_graph_that_changed_since_the_caller_loaded_it(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A same-graph restart's ``graph`` argument is re-checked against the chunk's
-    current pin under the row lock (``bzh:store-exclusive-write``) — a concurrent edit's
-    re-pin, already landed by the time the restart takes the lock, must not have the
-    restart resolve ``node_name`` against the graph it no longer stands on."""
+    """Under the row lock, a concurrent re-pin invalidates the stale graph argument."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
     chunk_id = ingest(hub, [_POINTER])  # left unclaimed: `set_graph` admits pre-claim statuses only
@@ -611,7 +586,6 @@ def test_the_restart_is_the_movement_the_chunk_stands_on(tmp_path) -> None:  # t
 
 
 def test_the_re_entered_node_stamps_the_target_graphs_declarations(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """AC3, the point of the feature: a stale stamp must not survive the graph move."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     assert _restart(hub, chunk_id, node="build").status_code == 202
@@ -660,9 +634,7 @@ def test_the_move_clears_a_standing_intended_migration(tmp_path) -> None:  # typ
 
 
 def test_the_preempted_workers_completion_cannot_land(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The move's own migration rides a bumped epoch, so the replay probe never answers it
-    MIGRATED; the re-pin then refuses the departed node ahead of the fence, as any migration's
-    does. Either way the displaced worker loses work and lands none."""
+    """A displaced worker's completion cannot land across the re-pin."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     node_id = _detail(hub, chunk_id)["current_node_id"]
@@ -680,9 +652,7 @@ def test_the_preempted_workers_completion_cannot_land(tmp_path) -> None:  # type
 
 
 def test_a_level_epoch_completion_is_fenced_rather_than_answered_migrated(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A lease whose `minted` fact is still buffered runner-side lands LEVEL with the move that
-    displaces it (`Fenced.out`), so its completion shares the migration's key. Answering that
-    MIGRATED would release the environments this re-pin kept — it is fenced like any stale one."""
+    """A level-epoch completion must be fenced, not treated as a migration replay."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     assert _restart(hub, chunk_id, node="build").status_code == 202  # stand it on a real node
@@ -835,8 +805,7 @@ def test_a_cross_graph_restart_of_a_never_moved_chunk_records_the_re_pin(tmp_pat
 
 
 def test_every_re_entry_into_the_forced_visit_is_fresh(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The freshness rides the move's own fact, not a one-shot flag: leases minted at the
-    forced node after the restart, before any transition, all get a fresh session."""
+    """Every lease minted on the forced visit gets a fresh session."""
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
     assert _restart(hub, chunk_id, node="build").status_code == 202

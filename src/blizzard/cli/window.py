@@ -22,9 +22,7 @@ def utc_query_value(value: datetime | None) -> str | None:
 
 
 def since_option(*, required: bool = False) -> Any:
-    # `default` is left unset (click's own UNSET sentinel) rather than passed as `None`
-    # when `required` — an explicit `None` default reads as "the caller supplied None",
-    # not "missing", so click's own required check would never fire.
+    # An explicit `None` default bypasses click's required-option check.
     attrs: dict[str, Any] = {"required": True} if required else {"default": None}
     return click.option(
         "--since",
@@ -35,9 +33,7 @@ def since_option(*, required: bool = False) -> Any:
 
 
 def until_option(*, required: bool = False) -> Any:
-    # `default` is left unset (click's own UNSET sentinel) rather than passed as `None`
-    # when `required` — an explicit `None` default reads as "the caller supplied None",
-    # not "missing", so click's own required check would never fire.
+    # An explicit `None` default bypasses click's required-option check.
     attrs: dict[str, Any] = {"required": True} if required else {"default": None}
     return click.option(
         "--until",
