@@ -179,7 +179,7 @@ nodes:
           to: pre-push
           prompt_addendum: ./prompts/pre-push.from-deliver.md
         failure:
-          description: A repo's check run completed with a terminal conclusion the base branch does not share, poll_timeout was exceeded, or the land script itself crashed; this lane has no resolve node, so it returns to pre-push — the same recovery point as conflict — to diagnose (via delivery-findings) and retry without discarding the validated spine.
+          description: A repo's check run completed with a terminal conclusion the base branch does not share, poll_timeout was exceeded, a PR head carries a commit beyond the submitted one and its own base merges (a foreign advance), or the land script itself crashed; this lane has no resolve node, so it returns to pre-push — the same recovery point as conflict — to diagnose (via delivery-findings) and retry without discarding the validated spine.
           to: pre-push
           prompt_addendum: ./prompts/pre-push.from-deliver.md
         inherited-failure:

@@ -60,10 +60,10 @@ def _scripted_forge(
                 "number": 1,
                 "merged": False,
                 "mergeable_state": "clean",
-                "head": {"ref": _BRANCH, "sha": "headsha"},
+                "head": {"ref": _BRANCH, "sha": "sha1"},
             },
         ),
-        ("GET", f"http://forge/repos/{_REPO}/commits/headsha/check-runs"): (
+        ("GET", f"http://forge/repos/{_REPO}/commits/sha1/check-runs"): (
             200,
             {"total_count": 1, "check_runs": [_check_run("completed", "success")]},
         ),
@@ -178,6 +178,8 @@ def _forge_with_state(
     base_check_runs: list[dict[str, Any]] | None = None,
     base_check_runs_status: int = 200,
     rerequest_status: int = 201,
+    head_sha: str = "sha1",
+    extra_responses: dict[tuple[str, str], tuple[int, Any]] | None = None,
 ):
     """A double whose one already-open PR reads ``mergeable_state``. Records every call.
 
@@ -191,18 +193,18 @@ def _forge_with_state(
         "number": 1,
         "merged": merged,
         "mergeable_state": mergeable_state,
-        "head": {"ref": _BRANCH, "sha": "headsha"},
+        "head": {"ref": _BRANCH, "sha": head_sha},
         "html_url": f"http://forge/{_REPO}/pull/1",
     }
     responses = {
         ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
-        ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
+        ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": head_sha}}]),
         ("GET", f"{base}/pulls/1"): (200, pull),
         ("PUT", f"{base}/pulls/1/update-branch"): (update_status, {"message": "Updating pull request branch."}),
         ("PUT", f"{base}/pulls/1/merge"): (200, {"sha": "merged-sha1", "merged": True}),
     }
     if head_check_runs is not None:
-        responses[("GET", f"{base}/commits/headsha/check-runs")] = (
+        responses[("GET", f"{base}/commits/{head_sha}/check-runs")] = (
             head_check_runs_status,
             {"total_count": len(head_check_runs), "check_runs": head_check_runs},
         )
@@ -215,6 +217,7 @@ def _forge_with_state(
             base_check_runs_status,
             {"total_count": len(base_check_runs), "check_runs": base_check_runs},
         )
+    responses.update(extra_responses or {})
     marker_queue, marker_fallback = _marker_status_queue(marker_status)
 
     def fake(
@@ -268,7 +271,7 @@ def test_behind_pr_fires_update_branch_and_pends(
     assert _last_line(capsys) == "pending"  # self-heal in flight, re-poll
     update = [body for m, url, body in calls if m == "PUT" and url.endswith("/update-branch")]
     assert update, "a behind PR must request update-branch"
-    assert update[0] == {"expected_head_sha": "headsha"}, "update-branch must guard on the current head"
+    assert update[0] == {"expected_head_sha": "sha1"}, "update-branch must guard on the current head"
     assert not any(url.endswith("/merge") for url in _urls(calls, "PUT")), "nothing merges while behind"
 
 
@@ -298,7 +301,244 @@ def test_clean_pr_merges_the_current_head_sha(
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "landed"
     merge = [body for m, url, body in calls if m == "PUT" and url.endswith("/merge") and body is not None]
-    assert merge and merge[0]["sha"] == "headsha", "a self-heal must merge the CURRENT head, not a stale commit"
+    assert merge and merge[0]["sha"] == "sha1"
+
+
+def _compare(
+    base: str,
+    head: str,
+    *,
+    status: str = "ahead",
+    commits: list[dict[str, Any]] | None = None,
+    files: list[dict[str, Any]] | None = None,
+    total: int | None = None,
+) -> dict[tuple[str, str], tuple[int, Any]]:
+    commits = commits or []
+    payload = {
+        "status": status,
+        "ahead_by": len(commits) if total is None else total,
+        "commits": commits,
+        "files": files or [],
+    }
+    return {("GET", f"http://forge/repos/{_REPO}/compare/{base}...{head}"): (200, payload)}
+
+
+def _commit(sha: str, *parents: str) -> dict[str, Any]:
+    return {"sha": sha, "parents": [{"sha": p} for p in parents]}
+
+
+def _file(name: str, blob: str, patch: str | None = "@@ -1 +1 @@\n-a\n+b") -> dict[str, Any]:
+    return {"filename": name, "status": "modified", "sha": blob, "patch": patch}
+
+
+def _base_merge(
+    *, merged_files: list[dict[str, Any]], base_files: list[dict[str, Any]]
+) -> dict[tuple[str, str], tuple[int, Any]]:
+    """A live head ``merge1``: the submitted ``sha1`` with base commit ``b1`` merged in."""
+    return {
+        **_compare(
+            "sha1", "merge1", commits=[_commit("b1", "base0"), _commit("merge1", "sha1", "b1")], files=merged_files
+        ),
+        **_compare("main", "b1", status="behind"),
+        **_compare("sha1", "b1", files=base_files),
+    }
+
+
+def _gate_forge(
+    calls: list[Any], *, head: str, responses: dict[tuple[str, str], tuple[int, Any]], state: str = "clean"
+):
+    return _forge_with_state(
+        calls,
+        mergeable_state=state,
+        head_sha=head,
+        head_check_runs=[_check_run("completed", "success")] if state == "clean" else None,
+        extra_responses=responses,
+    )
+
+
+def _no_writes(calls: list[tuple[str, str, dict[str, Any] | None]]) -> bool:
+    return not any(url.endswith(("/merge", "/update-branch")) for url in _urls(calls, "PUT"))
+
+
+def _land_against(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    responses: dict[tuple[str, str], tuple[int, Any]],
+    *,
+    head: str = "merge1",
+    state: str = "clean",
+) -> tuple[str, list[tuple[str, str, dict[str, Any] | None]]]:
+    _set_base_env(monkeypatch, feature_title="t")
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(land_common, "forge_request", _gate_forge(calls, head=head, responses=responses, state=state))
+    assert land_pr_ci.main() == 0
+    return _last_line(capsys), calls
+
+
+def _findings_text(calls: list[tuple[str, str, dict[str, Any] | None]]) -> str:
+    return "\n".join(post["content"] for post in _findings_posts(calls))
+
+
+def _foreign_findings(calls: list[tuple[str, str, dict[str, Any] | None]]) -> list[str]:
+    return [
+        body["content"]
+        for method, url, body in calls
+        if method == "POST" and url == _CALLBACK_URL and body and body["name"] == "delivery-findings/foreign-head"
+    ]
+
+
+def test_a_head_advanced_only_by_a_base_merge_lands_the_verified_head(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    files = [_file("a.txt", "blob1")]
+    outcome, calls = _land_against(monkeypatch, capsys, _base_merge(merged_files=files, base_files=files))
+
+    assert outcome == "landed"
+    merge = [body for m, url, body in calls if m == "PUT" and url.endswith("/merge") and body is not None]
+    assert merge and merge[0]["sha"] == "merge1", "the verified head, not the submitted commit, is what merges"
+
+
+def test_a_base_merge_where_the_feature_touched_the_file_too_matches_by_changed_lines(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    merged = [_file("a.txt", "mergedblob", "@@ -1,2 +1,2 @@\n ctx-feature\n-a\n+b")]
+    base_side = [_file("a.txt", "baseblob", "@@ -1,2 +1,2 @@\n ctx-base\n-a\n+b")]
+    outcome, _ = _land_against(monkeypatch, capsys, _base_merge(merged_files=merged, base_files=base_side))
+
+    assert outcome == "landed"
+
+
+def test_a_foreign_non_merge_commit_on_the_head_refuses_and_names_it(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    responses = _compare("sha1", "foreign1", commits=[_commit("foreign1", "sha1")])
+    outcome, calls = _land_against(monkeypatch, capsys, responses, head="foreign1")
+
+    assert outcome == "failure"
+    assert _no_writes(calls)
+    findings = _findings_text(calls)
+    assert "foreign1" in findings and "sha1" in findings and _REPO in findings
+    assert "CI check failures" not in findings, "a foreign advance must read differently from a CI failure"
+    assert _foreign_findings(calls) == [findings], "the same findings ride under the name a prior wait cannot shadow"
+    assert not any("/check-runs" in url for _, url, _ in calls), "a foreign head is never read for a verdict"
+
+
+def test_a_merge_adding_content_beyond_the_base_change_refuses(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    merged = [_file("a.txt", "blob1"), _file("smuggled.txt", "blob9")]
+    outcome, calls = _land_against(
+        monkeypatch, capsys, _base_merge(merged_files=merged, base_files=[_file("a.txt", "blob1")])
+    )
+
+    assert outcome == "failure"
+    assert _no_writes(calls)
+    assert "merge1" in _findings_text(calls)
+
+
+def test_a_merge_whose_second_parent_the_base_does_not_hold_refuses(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    responses = {
+        **_compare("sha1", "merge1", commits=[_commit("b1", "base0"), _commit("merge1", "sha1", "b1")]),
+        **_compare("main", "b1", status="diverged"),
+    }
+    outcome, calls = _land_against(monkeypatch, capsys, responses)
+
+    assert outcome == "failure"
+    assert _no_writes(calls)
+
+
+@pytest.mark.parametrize("status", ["behind", "diverged"])
+def test_a_head_that_no_longer_descends_from_the_submitted_commit_refuses(
+    status: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    outcome, calls = _land_against(monkeypatch, capsys, _compare("sha1", "merge1", status=status))
+
+    assert outcome == "failure"
+    assert _no_writes(calls)
+
+
+@pytest.mark.parametrize(
+    "responses",
+    [
+        _compare("sha1", "merge1", commits=[_commit("merge1", "sha1", "b1")], total=2),  # truncated commit list
+        _compare("sha1", "merge1", commits=[_commit("other", "sha1")]),  # chain never reaches the head
+        {("GET", f"http://forge/repos/{_REPO}/compare/sha1...merge1"): (404, {"message": "Not Found"})},
+        {
+            **_compare("sha1", "merge1", commits=[_commit("b1", "base0"), _commit("merge1", "sha1", "b1")]),
+            **_compare("main", "b1", status="behind"),
+            **_compare("sha1", "b1", files=[_file("a.txt", "x", patch=None)]),
+        },  # a base-side patch the forge did not send
+    ],
+    ids=["truncated-commits", "unreachable-head", "unanswered-compare", "missing-patch"],
+)
+def test_an_unprovable_head_refuses(
+    responses: dict[tuple[str, str], tuple[int, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    outcome, calls = _land_against(monkeypatch, capsys, responses)
+
+    assert outcome == "failure"
+    assert _no_writes(calls)
+
+
+def test_a_truncated_file_list_refuses(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    many = [_file(f"f{i}.txt", f"blob{i}") for i in range(300)]
+    outcome, calls = _land_against(monkeypatch, capsys, _base_merge(merged_files=many, base_files=many))
+
+    assert outcome == "failure"
+    assert _no_writes(calls)
+
+
+def test_a_degraded_compare_read_pends_without_writing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    responses = {("GET", f"http://forge/repos/{_REPO}/compare/sha1...merge1"): (502, {"message": "bad gateway"})}
+    outcome, calls = _land_against(monkeypatch, capsys, responses)
+
+    assert outcome == "pending"
+    assert _no_writes(calls)
+    assert not _findings_posts(calls)
+
+
+def test_a_foreign_head_in_one_repo_fires_nothing_in_a_sibling_that_is_behind(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    other_repo = "acme/gadget"
+    other = f"http://forge/repos/{other_repo}"
+    commits = [
+        {"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT},
+        {"repo": other_repo, "branch": "feat/x", "commit": "osha"},
+    ]
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps(commits))
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    sibling = {
+        ("GET", f"{other}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
+        ("GET", f"{other}/pulls?state=open"): (200, [{"number": 2, "head": {"ref": "feat/x", "sha": "osha"}}]),
+        ("GET", f"{other}/pulls/2"): (
+            200,
+            {
+                "number": 2,
+                "merged": False,
+                "mergeable_state": "behind",
+                "head": {"ref": "feat/x", "sha": "osha"},
+                "html_url": f"http://forge/{other_repo}/pull/2",
+            },
+        ),
+    }
+    inner = _gate_forge(
+        calls,
+        head="foreign1",
+        responses={**sibling, **_compare("sha1", "foreign1", commits=[_commit("foreign1", "sha1")])},
+    )
+    monkeypatch.setattr(land_common, "forge_request", inner)
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "failure"
+    assert _no_writes(calls), "no update-branch or merge for ANY repo"
 
 
 def test_clean_pr_waits_while_its_checks_are_still_pending(
@@ -483,7 +723,7 @@ def test_an_inherited_only_failure_fires_a_rerequest_once_and_pends(
         if m == "POST" and url == _CALLBACK_URL and body is not None and body["name"].startswith("ci-rerun/")
     ]
     assert len(signature_posts) == 1
-    assert signature_posts[0]["name"] == f"ci-rerun/{_REPO}/build/headsha"
+    assert signature_posts[0]["name"] == f"ci-rerun/{_REPO}/build/sha1"
 
 
 @pytest.mark.parametrize("refusal", [403, 422])
@@ -525,7 +765,7 @@ def test_a_re_requested_check_still_red_routes_the_inherited_failure_outcome(
     `resolve`'s `failure` — with no second rerequest fired."""
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
-    monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"ci-rerun/{_REPO}/build/headsha"]))
+    monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"ci-rerun/{_REPO}/build/sha1"]))
     monkeypatch.setattr(
         land_common,
         "forge_request",
@@ -548,7 +788,7 @@ def test_a_re_requested_check_still_red_routes_the_inherited_failure_outcome(
     assert _REPO in content
     assert "build" in content
     assert "main" in content  # the base branch named
-    assert f"ci-rerun/{_REPO}/build/headsha" in content  # the signature, for the loop bound
+    assert f"ci-rerun/{_REPO}/build/sha1" in content  # the signature, for the loop bound
 
 
 def test_a_green_re_run_is_simply_not_failing_on_the_next_poll(
@@ -558,7 +798,7 @@ def test_a_green_re_run_is_simply_not_failing_on_the_next_poll(
     read — no special-casing needed, delivery just resumes."""
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     _set_base_env(monkeypatch, feature_title="t")
-    monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"ci-rerun/{_REPO}/build/headsha"]))
+    monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"ci-rerun/{_REPO}/build/sha1"]))
     monkeypatch.setattr(
         land_common,
         "forge_request",
@@ -640,7 +880,7 @@ def test_two_pending_repos_one_failing_names_only_the_failing_repo_and_merges_ne
         ("GET", f"{other_base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
         ("GET", f"http://forge/repos/{_REPO}/pulls?state=open"): (
             200,
-            [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}],
+            [{"number": 1, "head": {"ref": _BRANCH, "sha": "sha1"}}],
         ),
         ("GET", f"http://forge/repos/{_REPO}/pulls/1"): (
             200,
@@ -648,11 +888,11 @@ def test_two_pending_repos_one_failing_names_only_the_failing_repo_and_merges_ne
                 "number": 1,
                 "merged": False,
                 "mergeable_state": "blocked",
-                "head": {"ref": _BRANCH, "sha": "headsha"},
+                "head": {"ref": _BRANCH, "sha": "sha1"},
                 "html_url": f"http://forge/{_REPO}/pull/1",
             },
         ),
-        ("GET", f"http://forge/repos/{_REPO}/commits/headsha/check-runs"): (
+        ("GET", f"http://forge/repos/{_REPO}/commits/sha1/check-runs"): (
             200,
             {"total_count": 1, "check_runs": [_check_run("completed", "failure")]},
         ),
@@ -969,7 +1209,7 @@ def _check_run(status: str, conclusion: str | None = None, *, name: str = "build
         "status": status,
         "conclusion": conclusion,
         "details_url": f"https://forge/{name}/{check_id}",
-        "head_sha": "headsha",
+        "head_sha": "sha1",
     }
 
 
@@ -1140,18 +1380,18 @@ def _forge_with_an_empty_repo(
     other_base = f"http://forge/repos/{other_repo}"
     responses = {
         ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
-        ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
+        ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "sha1"}}]),
         ("GET", f"{base}/pulls/1"): (
             200,
             {
                 "number": 1,
                 "merged": False,
                 "mergeable_state": "clean",
-                "head": {"ref": _BRANCH, "sha": "headsha"},
+                "head": {"ref": _BRANCH, "sha": "sha1"},
                 "html_url": f"http://forge/{_REPO}/pull/1",
             },
         ),
-        ("GET", f"{base}/commits/headsha/check-runs"): (
+        ("GET", f"{base}/commits/sha1/check-runs"): (
             200,
             {"total_count": 1, "check_runs": [_check_run("completed", "success")]},
         ),
@@ -1276,7 +1516,7 @@ def _forge_merging_without_a_sha(
             "number": 1,
             "merged": state["merged"],
             "mergeable_state": "clean",
-            "head": {"ref": _BRANCH, "sha": "headsha"},
+            "head": {"ref": _BRANCH, "sha": "sha1"},
             "html_url": f"http://forge/{_REPO}/pull/1",
         }
         if state["merged"]:
@@ -1298,12 +1538,12 @@ def _forge_merging_without_a_sha(
             merged = [{**pull(), "base": {"ref": "main"}, "merged_at": "t"}] if state["merged"] else []
             return 200, merged
         if url == f"{base}/pulls?state=open":
-            return 200, [] if state["merged"] else [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]
+            return 200, [] if state["merged"] else [{"number": 1, "head": {"ref": _BRANCH, "sha": "sha1"}}]
         if url == f"{base}/pulls/1":
             return 200, pull()
         if url == f"{base}/git/ref/heads/{_BRANCH}":
-            return 200, {"object": {"sha": "headsha"}}
-        if url == f"{base}/commits/headsha/check-runs":
+            return 200, {"object": {"sha": "sha1"}}
+        if url == f"{base}/commits/sha1/check-runs":
             return 200, {"total_count": 1, "check_runs": [_check_run("completed", "success")]}
         if method == "PUT" and url == f"{base}/pulls/1/merge":
             state["merged"] = True
@@ -1727,3 +1967,17 @@ def test_land_pr_ci_selftest_passes() -> None:
     """Binds `land_pr_ci --selftest`'s pure routing/check/inheritance tables to the unit
     tier — previously reachable only by hand via the CLI flag."""
     assert land_pr_ci._selftest() == 0
+
+
+def test_a_behind_head_that_is_a_verified_base_merge_updates_on_that_head(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    files = [_file("a.txt", "blob1")]
+    outcome, calls = _land_against(
+        monkeypatch, capsys, _base_merge(merged_files=files, base_files=files), state="behind"
+    )
+
+    assert outcome == "pending"
+    update = [body for m, url, body in calls if m == "PUT" and url.endswith("/update-branch")]
+    assert update == [{"expected_head_sha": "merge1"}], "update-branch guards on the head the gate verified"
+    assert not any(url.endswith("/merge") for url in _urls(calls, "PUT"))

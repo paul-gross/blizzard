@@ -1,17 +1,19 @@
 """The PR + CI-watch delivery policy's `deliver` node script — self-healing. Routes by the
 PR's live ``mergeable_state`` plus, for a ``clean``/``blocked``/``unstable`` head, its check
-runs — what eligibility turns on. ``behind`` self-heals via ``update-branch``, ``dirty`` is
-the one true LLM kick-back, everything else waits. Merges via merge commit. Honors the
-hub-command-node authoring contract (``blizzard-context:/standards/hub-nodes.md``)."""
+runs: ``behind`` self-heals via ``update-branch``, ``dirty`` is the one true LLM kick-back,
+everything else waits. A head beyond the submitted commit plus its own base merges prints
+``failure`` and merges nothing (``blizzard-context:/standards/hub-nodes.md``)."""
 
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from blizzard.hub.graphs.scripts.land_common import (
+    ForgeReadDegraded,
     LandedRevisionUnknown,
     LandRun,
     MarkerWriteError,
@@ -36,6 +38,8 @@ _INHERITED_FAILURE = "inherited-failure"
 
 # The marker name a terminal-CI-failure or a substantive wait writes its findings under.
 _FINDINGS_NAME = "delivery-findings"
+# The hub keeps the first write per name, so this survives an earlier wait's findings.
+_FOREIGN_FINDINGS_NAME = f"{_FINDINGS_NAME}/foreign-head"
 
 # The re-run signature marker's name prefix: one per (repo, check name, head sha) a
 # base-inherited failure was re-requested under, so a re-entry to `deliver` can tell
@@ -49,6 +53,10 @@ _WAIT = "wait"  # unknown / required-checks-not-green / … — re-poll, no side
 _UPDATE = "update"  # behind — fire update-branch, then re-poll
 _BOUNCE = "bounce"  # dirty — a real content conflict, kick back to build
 _FAILED = "failed"  # a check run completed with a terminal conclusion — never re-poll
+_FOREIGN = "foreign-head"  # the PR head carries something beyond the submitted commit and base merges
+
+# A compare this long may be cut short.
+_COMPARE_FILES_MAX = 300
 
 # A completed check run in any of these is never going to turn green on its own, so
 # polling on out to `poll_timeout` only burns the slot. `cancelled` is NOT
@@ -184,6 +192,110 @@ class Verdict:
         ]
 
 
+@dataclass(frozen=True)
+class HeadGate:
+    """Whether a live PR head is still the submitted work; ``offenders`` names what broke it."""
+
+    offenders: list[str]
+
+    def admitted(self) -> bool:
+        return not self.offenders
+
+
+def _first_parent_chain(commits: list[Any], head: str, submitted: str) -> tuple[list[dict[str, Any]], str | None]:
+    """``head``'s first-parent commits back to ``submitted``, and why the walk failed, if it did."""
+    by_sha = {c["sha"]: c for c in commits if isinstance(c, dict) and isinstance(c.get("sha"), str)}
+    chain: list[dict[str, Any]] = []
+    current = head
+    while current != submitted:
+        commit = by_sha.get(current)
+        parents = commit.get("parents") if commit else None
+        if commit is None or not isinstance(parents, list) or not parents:
+            return chain, f"{current} is not reachable from {submitted} within the listed commits"
+        chain.append(commit)
+        first = parents[0].get("sha") if isinstance(parents[0], dict) else None
+        if not isinstance(first, str) or len(chain) > len(by_sha):
+            return chain, f"{current} has no readable first parent"
+        current = first
+    return chain, None
+
+
+def _changed_lines(file: dict[str, Any]) -> Counter[str] | None:
+    """A patch's added and removed lines, or ``None`` when the forge sent no patch."""
+    patch = file.get("patch")
+    if not isinstance(patch, str):
+        return None
+    return Counter(line for line in patch.splitlines() if line[:1] in {"+", "-"})
+
+
+def _files_by_name(payload: dict[str, Any]) -> dict[str, dict[str, Any]] | None:
+    """A compare's files by name, or ``None`` when the list may be truncated or malformed."""
+    files = payload.get("files")
+    if not isinstance(files, list) or len(files) >= _COMPARE_FILES_MAX:
+        return None
+    if not all(isinstance(f, dict) and isinstance(f.get("filename"), str) for f in files):
+        return None
+    return {f["filename"]: f for f in files}
+
+
+def _contribution_matches(merged: dict[str, Any], base_side: dict[str, Any]) -> bool:
+    """Whether a merge adds exactly the base side's change: same files, each the same blob or
+    the same changed lines. Unprovable is ``False``."""
+    got, want = _files_by_name(merged), _files_by_name(base_side)
+    if got is None or want is None or got.keys() != want.keys():
+        return False
+    for name, file in got.items():
+        other = want[name]
+        if file.get("previous_filename") != other.get("previous_filename"):
+            return False
+        if file.get("sha") is not None and file.get("sha") == other.get("sha"):
+            continue
+        lines, other_lines = _changed_lines(file), _changed_lines(other)
+        if lines is None or other_lines is None or lines != other_lines:
+            return False
+    return True
+
+
+def gate_head(run: LandRun, bare_repo: str, submitted: str, head: str) -> HeadGate:
+    """Whether ``head`` is ``submitted`` or descends from it through base merges alone.
+
+    An answer it cannot prove refuses; a read that got none raises :class:`ForgeReadDegraded`."""
+    if head == submitted:
+        return HeadGate([])
+    ahead = run.compare(bare_repo, submitted, head)
+    if ahead is None:
+        return HeadGate([f"the forge would not compare {submitted}...{head}"])
+    if ahead.get("status") == "identical":
+        return HeadGate([])
+    if ahead.get("status") != "ahead":
+        return HeadGate([f"{head} does not descend from the submitted commit {submitted} (it was rewritten or reset)"])
+    commits = ahead.get("commits")
+    total = ahead.get("total_commits", ahead.get("ahead_by"))
+    if not isinstance(commits, list) or not isinstance(total, int) or len(commits) != total:
+        return HeadGate([f"the commit list between {submitted} and {head} is truncated or unreadable"])
+    chain, unreachable = _first_parent_chain(commits, head, submitted)
+    if unreachable is not None:
+        return HeadGate([unreachable])
+    offenders: list[str] = []
+    for commit in chain:
+        sha = commit["sha"]
+        parents = [p["sha"] for p in commit["parents"] if isinstance(p, dict) and isinstance(p.get("sha"), str)]
+        if len(parents) != 2 or len(commit["parents"]) != 2:
+            offenders.append(f"{sha} (not a merge of the base branch)")
+            continue
+        first, second = parents
+        if not run.base_holds(bare_repo, second):
+            offenders.append(f"{sha} (merges {second}, which the base branch does not hold)")
+            continue
+        merged = run.compare(bare_repo, first, sha)
+        base_side = run.compare(bare_repo, first, second)
+        if merged is None or base_side is None:
+            offenders.append(f"{sha} (its content could not be compared with the base branch's change)")
+        elif not _contribution_matches(merged, base_side):
+            offenders.append(f"{sha} (adds content beyond the base branch's change)")
+    return HeadGate(offenders)
+
+
 def _inheritance(base_red: bool | None) -> str:
     """Whether a head-failing check is inherited from the base, given the base's own
     reading of that same check name. A degraded base read (``None``) is conservative:
@@ -222,6 +334,8 @@ class _Section:
             return _Failed(record)
         if record["decision"] == _INHERITED_FAILURE:
             return _InheritedFailed(record)
+        if record["decision"] == _FOREIGN:
+            return _ForeignHead(record)
         return _Running(record)
 
     def rows(self) -> Iterator[str]:
@@ -253,6 +367,16 @@ class _InheritedFailed(_Section):
             yield f"  - {check['name']}: {check['conclusion']} — {check['details_url']}"
             yield f"    signature: {check['signature']}"
         yield f"  base branch: {self.record['base_branch']}"
+
+
+class _ForeignHead(_Section):
+    label = "The PR head carries more than the submitted commit (a foreign advance, not a CI failure):"
+
+    def rows(self) -> Iterator[str]:
+        yield f"  submitted commit: {self.record['submitted']}"
+        yield f"  live head: {self.record['head']}"
+        for offender in self.record["offenders"]:
+            yield f"  - {offender}"
 
 
 class _Running(_Section):
@@ -306,38 +430,73 @@ def _land() -> int:
         print(_LANDED)
         return 0
 
+    wait = False
+    # --- gate stage: every head is proven before any repo is routed, so a foreign head fires nothing anywhere.
+    resolved: list[tuple[dict[str, str], PullRequest]] = []
+    foreign: list[dict[str, Any]] = []
+    for commit in pending:
+        try:
+            pull = PullRequest.of(run, commit)
+        except NothingToLand as exc:
+            # A no-op landing: nothing to merge, and no poll changes that. The marker
+            # stops this repo being pending and completes the chunk's repo set.
+            print(f"{exc} — nothing to land", file=sys.stderr)
+            run.markers.record(commit["repo"], exc.landed_sha)
+            continue
+        except LandedRevisionUnknown as exc:
+            # The no-op is confirmed but its landed revision unread — another poll rereads it.
+            print(str(exc), file=sys.stderr)
+            wait = True
+            continue
+        except PullRequestOpenError as exc:
+            # A create hiccup is worth another poll, not a bounce.
+            print(str(exc), file=sys.stderr)
+            wait = True
+            continue
+        except PullRequestLookupError as exc:
+            # A degraded read is worth another poll too — never treated as "not merged".
+            print(str(exc), file=sys.stderr)
+            wait = True
+            continue
+        if pull.head_sha and not pull.merged:
+            try:
+                gate = gate_head(run, commit["repo"], commit["commit"], pull.head_sha)
+            except ForgeReadDegraded as exc:
+                print(f"{pull}: {exc}; re-polling", file=sys.stderr)
+                wait = True
+                continue
+            if not gate.admitted():
+                print(f"{pull}'s head {pull.head_sha} is not the submitted commit plus base merges", file=sys.stderr)
+                foreign.append(
+                    {
+                        "repo": pull.repo,
+                        "number": pull.number,
+                        "url": pull.url,
+                        "decision": _FOREIGN,
+                        "submitted": commit["commit"],
+                        "head": pull.head_sha,
+                        "offenders": gate.offenders,
+                    }
+                )
+                continue
+        resolved.append((commit, pull))
+
+    if foreign:
+        # Unguarded: unwritten findings leave the repair worker nothing to read.
+        rendered = Findings(foreign).render()
+        run.markers.post(_FINDINGS_NAME, rendered)
+        run.markers.post(_FOREIGN_FINDINGS_NAME, rendered)
+        print(_CI_FAILURE)
+        return 0
+
     # --- check stage: no repo is merged unless ALL check `clean` (chunk atomicity), and
     #     the loop never short-circuits on a failure, so findings accumulate together.
     to_merge: list[tuple[PullRequest, str]] = []
     failures: list[dict[str, Any]] = []
     inherited: list[dict[str, Any]] = []
     wait_records: list[dict[str, Any]] = []
-    wait = False
     try:
-        for commit in pending:
-            try:
-                pull = PullRequest.of(run, commit)
-            except NothingToLand as exc:
-                # A no-op landing: nothing to merge, and no poll changes that. The marker
-                # stops this repo being pending and completes the chunk's repo set.
-                print(f"{exc} — nothing to land", file=sys.stderr)
-                run.markers.record(commit["repo"], exc.landed_sha)
-                continue
-            except LandedRevisionUnknown as exc:
-                # The no-op is confirmed but its landed revision unread — another poll rereads it.
-                print(str(exc), file=sys.stderr)
-                wait = True
-                continue
-            except PullRequestOpenError as exc:
-                # A create hiccup is worth another poll, not a bounce.
-                print(str(exc), file=sys.stderr)
-                wait = True
-                continue
-            except PullRequestLookupError as exc:
-                # A degraded read is worth another poll too — never treated as "not merged".
-                print(str(exc), file=sys.stderr)
-                wait = True
-                continue
+        for commit, pull in resolved:
             head_sha = pull.head_sha or commit["commit"]
             state = pull.mergeable_state
             # A verdict is only ever worth reading for the states merge eligibility itself

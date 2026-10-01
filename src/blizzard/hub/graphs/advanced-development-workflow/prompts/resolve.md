@@ -23,7 +23,15 @@ CI on the PR is red on a check the base branch does not also fail — `deliver` 
 head and base, re-running it once before ever reaching here, so anything routed to you is this chunk's own. Do not fix
 it here: capture exactly which check failed and why in the `resolve-report`; your findings route back to build.
 
-### 3. Transient or infra failure
+### 3. Foreign commit on the PR head
+
+`delivery-findings/foreign-head` (read it with `--node deliver`) says the PR head carries a commit beyond the one the
+chunk submitted and its own base merges, and names it; `delivery-findings` may still show an earlier wait. Never select
+`resolved` over it: the commit has not been verified, reviewed, or pre-pushed. Read what it changed. If it belongs to
+the change, adopt it — fetch, declare the head as the repo's tip, and select `substantive` so it earns verification. If
+it does not belong, select `broken`.
+
+### 4. Transient or infra failure
 
 The land script crashed, or the forge state was momentary and the PRs now read clean. Confirm each repo's PR is
 mergeable, change nothing, and say so.

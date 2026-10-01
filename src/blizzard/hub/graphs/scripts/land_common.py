@@ -264,20 +264,35 @@ class LandRun:
             title = title[: _PR_TITLE_MAX - 1].rstrip() + "…"
         return title
 
+    def compare(self, bare_repo: str, base: str, head: str) -> dict[str, Any] | None:
+        """The forge's ``base...head`` comparison; ``None`` when answered unusably, and a read
+        with no answer (an exception, a 5xx) raises :class:`ForgeReadDegraded`."""
+        repo = self.repo(bare_repo)
+        try:
+            status, payload = self.api("GET", f"/repos/{repo}/compare/{base}...{head}")
+        except Exception as exc:
+            raise ForgeReadDegraded(f"could not read {repo}'s compare {base}...{head}: {exc}") from exc
+        if status >= 500:
+            raise ForgeReadDegraded(f"could not read {repo}'s compare {base}...{head} (HTTP {status})")
+        if status != 200 or not isinstance(payload, dict):
+            return None
+        return payload
+
+    def base_holds(self, bare_repo: str, ref: str) -> bool:
+        """Whether the base branch already holds every commit on ``ref``; a degraded read raises."""
+        payload = self.compare(bare_repo, self.base_branch, ref)
+        return payload is not None and payload.get("status") in {"identical", "behind"}
+
     def contains(self, bare_repo: str, ref: str) -> bool:
         """Whether ``bare_repo``'s base branch already holds every commit on ``ref``.
 
-        Read from the forge's own comparison, never from the text of a refusal:
-        ``identical``/``behind`` both mean ``ref`` adds nothing. Any unreadable answer is
-        ``False`` — a degraded read is never "there was nothing to land"."""
-        repo = self.repo(bare_repo)
+        Read from the forge's own comparison, never from the text of a refusal. Any
+        unreadable answer is ``False`` — a degraded read is never "there was nothing to
+        land"."""
         try:
-            status, payload = self.api("GET", f"/repos/{repo}/compare/{self.base_branch}...{ref}")
-        except Exception:
+            return self.base_holds(bare_repo, ref)
+        except ForgeReadDegraded:
             return False
-        if status != 200 or not isinstance(payload, dict):
-            return False
-        return payload.get("status") in {"identical", "behind"}
 
     def base_tip(self, bare_repo: str) -> str:
         """``bare_repo``'s base branch's live tip, read through the git-ref route.
@@ -326,6 +341,10 @@ class LandRun:
         if seconds > 0:
             print(f"[test] pausing {seconds}s after the first marker to widen the crash window", file=sys.stderr)
             time.sleep(seconds)
+
+
+class ForgeReadDegraded(Exception):
+    """A forge read got no answer (network error or 5xx); another poll may."""
 
 
 class PullRequestOpenError(Exception):

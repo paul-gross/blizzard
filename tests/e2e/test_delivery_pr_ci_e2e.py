@@ -169,6 +169,19 @@ def _drive_until(config: RunnerConfig, hub: httpx.Client, chunk_id: str, env: di
         os.environ.update(prior)
 
 
+def _push_commit(origin_bare: Path, branch: str, clone: Path, filename: str) -> str:
+    """Push one real commit onto ``branch`` of the bare origin and return its sha."""
+    subprocess.run(["git", "clone", "--quiet", "-b", branch, str(origin_bare), str(clone)], check=True)
+    (clone / filename).write_text(f"{filename}\n")
+    identity = ["-c", "user.email=other@blizzard.local", "-c", "user.name=Someone Else"]
+    subprocess.run(["git", "-C", str(clone), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(clone), *identity, "commit", "--quiet", "-m", f"add {filename}"], check=True)
+    subprocess.run(["git", "-C", str(clone), "push", "--quiet", "origin", f"HEAD:refs/heads/{branch}"], check=True)
+    return subprocess.run(
+        ["git", "-C", str(clone), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
 def _fenced_env() -> dict[str, str]:
     return {**os.environ, "BLIZZARD_MOCK_HARNESS_FENCE": "1"}
 
@@ -313,7 +326,10 @@ def test_pr_ci_routes_failure_on_a_terminally_failed_check(tmp_path: Path) -> No
 
 
 def test_pr_ci_self_heals_a_behind_branch_and_lands(tmp_path: Path) -> None:
+    """The base really moves before the PR opens, so the self-heal's update-branch merge
+    advances the head past the submitted commit and delivery still lands it."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    _push_commit(origin_bare, "main", tmp_path / "base-clone", "BASE_MOVED.md")
     main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
 
     forge_port, hub_port = _free_port(), _free_port()
@@ -339,6 +355,11 @@ def test_pr_ci_self_heals_a_behind_branch_and_lands(tmp_path: Path) -> None:
 
     main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
     assert main_after != main_before, "bare main did not move despite the self-healed land"
+    _, base_parent, head_parent = _git_bare(origin_bare, "rev-list", "--parents", "-n", "1", "main").split()
+    assert base_parent == main_before
+    assert main_before in _git_bare(origin_bare, "rev-list", "--parents", "-n", "1", head_parent).split()[1:], (
+        "the advanced head is not a merge of the moved base"
+    )
 
 
 def test_pr_ci_bounces_a_dirty_conflict_back_to_build(tmp_path: Path) -> None:
@@ -363,3 +384,38 @@ def test_pr_ci_bounces_a_dirty_conflict_back_to_build(tmp_path: Path) -> None:
         assert pulls and not any(p.get("merged") for p in pulls), f"a dirty PR merged: {pulls}"
 
     assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved despite the conflict"
+
+
+def test_pr_ci_refuses_a_foreign_commit_on_the_head(tmp_path: Path) -> None:
+    """A commit pushed onto the PR's branch after the chunk submitted is not the submitted
+    work: delivery bounces `failure` naming it, and nothing merges."""
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+
+    forge_port, hub_port = _free_port(), _free_port()
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        pending = _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
+        branch = pulls[0]["head"]["ref"]
+        foreign = _push_commit(origin_bare, branch, tmp_path / "foreign-clone", "FOREIGN.md")
+        assert pending["landed"] is False
+
+        assert forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
+        bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
+        assert bounced["bounces"][0]["cause"] == "failure", bounced["bounces"]
+        assert bounced["landed"] is False
+
+        pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
+        assert pulls and not any(p.get("merged") for p in pulls), f"a foreign-head PR merged: {pulls}"
+
+        artifacts = hub.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
+        findings = next((a for a in artifacts if a.get("name") == "delivery-findings/foreign-head"), None)
+        assert findings is not None, f"no foreign-head findings artifact recorded: {artifacts}"
+        assert foreign in (findings.get("content") or "")
+
+    assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a foreign head"

@@ -27,11 +27,16 @@ class SubprocessWorktreeGit:
     """Read-only confirmation of a declared git commit, via the real ``git`` CLI."""
 
     def verify(self, origin_url: str, branch: str, commit: str) -> bool:
-        out = self._git("ls-remote", origin_url, branch)
-        # `git ls-remote <url> <branch>` prints "<sha>\trefs/heads/<branch>" or nothing
-        # if the ref is absent — the first whitespace-delimited token is the sha.
-        line = out.strip().splitlines()[0] if out.strip() else ""
-        remote_sha = line.split()[0] if line else ""
+        ref = f"refs/heads/{branch}"
+        out = self._git("ls-remote", origin_url, ref)
+        # `git ls-remote` tail-matches its pattern, so `other/<branch>` answers for `<branch>`;
+        # only the line naming exactly `refs/heads/<branch>` is the declared branch.
+        remote_sha = ""
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[1] == ref:
+                remote_sha = parts[0]
+                break
         if remote_sha != commit:
             _log.warning(
                 "git-commit declaration ref mismatch",

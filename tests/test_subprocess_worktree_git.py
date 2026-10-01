@@ -145,3 +145,28 @@ def test_subprocess_worktree_git_has_no_push_or_head_inference_methods() -> None
         assert not hasattr(adapter, missing_attr)
         with pytest.raises(AttributeError):
             getattr(adapter, missing_attr)
+
+
+@pytest.mark.component
+def test_verify_rejects_a_branch_present_only_under_a_longer_ref(tmp_path: Path) -> None:
+    """`git ls-remote` tail-matches, so `other/feat` answers a query for `feat`; the
+    declared branch is `refs/heads/feat` exactly."""
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
+
+    workdir = tmp_path / "toy-api"
+    workdir.mkdir()
+    _git(workdir, "init", "-b", "main")
+    _git(workdir, "config", "user.email", "worker@example.test")
+    _git(workdir, "config", "user.name", "Worker")
+    (workdir / "f.txt").write_text("hello")
+    _git(workdir, "add", "f.txt")
+    _git(workdir, "commit", "-m", "work")
+    commit = _git(workdir, "rev-parse", "HEAD").strip()
+    _git(workdir, "remote", "add", "origin", f"file://{origin}")
+    _git(workdir, "push", "origin", "HEAD:refs/heads/other/feat")
+
+    assert SubprocessWorktreeGit().verify(f"file://{origin}", "feat", commit) is False
+
+    _git(workdir, "push", "origin", "HEAD:refs/heads/feat")
+    assert SubprocessWorktreeGit().verify(f"file://{origin}", "feat", commit) is True
