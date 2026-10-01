@@ -21,6 +21,7 @@ from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.composition import RunnerProcess, build_read_stores, build_runner_process
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
@@ -79,6 +80,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     directory = HostDirectory(directory, dir_option).path
     with click_exception_on(ConfigError):
         config = RunnerConfig.load(Path(directory), host=host_, port=port)
+    _publish_harness_bundle(config)
     for missing in config.missing_worker_path_prepend_entries:
         click.echo(f"warning: [worker] path_prepend entry does not exist: {missing}")
     with click_exception_on(RevisionMismatchError):
@@ -95,6 +97,16 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
             hosted.close()
     finally:
         graph.close()
+
+
+def _publish_harness_bundle(config: RunnerConfig) -> None:
+    """Load the operator's harness-config bundle and publish its snapshot before any work is
+    accepted; a runtime with no `[harness] config_dir` is left untouched."""
+    if config.harness_config_dir is None:
+        return
+    with click_exception_on(ConfigError):
+        snapshot = publish_harness_bundle(config.harness_config_dir, config.root)
+    click.echo(snapshot.summary())
 
 
 def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -> None:
@@ -165,6 +177,7 @@ def tick_cmd(directory: str) -> None:
     live hub and workspace, then exit. Refuses on a store revision mismatch, like ``host``."""
     with click_exception_on(ConfigError):
         config = RunnerConfig.load(Path(directory))
+    _publish_harness_bundle(config)
     with click_exception_on(RevisionMismatchError):
         ensure_current_revision(config)
     LoopWiring.of(config).tick_once()

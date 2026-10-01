@@ -71,6 +71,43 @@ denials — Claude Code's in the `--settings` file, OpenCode's in its worker con
 `normal` omits `--auto` only; a permission that resolves to `ask` can still stall a headless turn. What an attended
 takeover keeps or drops is owned by [takeover.md](./chunk-operations/takeover.md).
 
+## Harness configuration bundle
+
+`[harness] config_dir` in `blizzard-runner.toml` names an operator-owned directory of harness configuration. The path
+must be absolute (`~` expands) and may not be, or sit inside, the runner's own `harness-config/` directory. Absent, the
+runner reads no bundle and never creates `harness-config/`.
+
+The bundle holds one optional directory per harness, each limited to that binding's entry points:
+
+| Directory     | Entry points                                           |
+| ------------- | ------------------------------------------------------ |
+| `claude-code` | `settings.json`, `mcp.json`, `agents.json`, `plugins/` |
+| `opencode`    | `opencode.json`, `plugins/`                            |
+
+A JSON entry point must parse to an object. Files a JSON entry point references are its companions, and only a binding
+that knows how its harness resolves them declares any. OpenCode resolves a `{file:…}` substitution relative to
+`opencode.json`, so a relative one names a companion that is copied to the same relative location; an absolute or `~`
+reference is a host path and is left alone. Claude Code resolves relative paths against the worker's cwd, so it has no
+companions.
+
+`runner host` and `runner tick` read the bundle after loading config and before accepting any work. A missing directory,
+an unrecognized entry at the bundle root or inside a harness directory, a JSON entry point that does not parse to an
+object, and a companion that escapes its harness directory or does not exist all fail startup with an error naming the
+offending path. Every harness directory present is validated, whether or not that harness is enabled. The bundle is only
+ever read: neither startup nor `blizzard runner init` writes, deletes, or touches it.
+
+The supported material is copied, with symlinks dereferenced, into an immutable snapshot at
+`<runtime root>/harness-config/snapshots/<content-hash>/`, mirroring the bundle's layout. `harness-config/current` is a
+symlink to the published snapshot, replaced atomically; a failed publish leaves `current` and every earlier snapshot in
+place, and an unchanged bundle reuses its snapshot. Changes to the bundle take effect on the next restart, and a turn
+already running keeps the snapshot it started with. Old snapshots are not pruned.
+
+`blizzard runner harness status --dir <runtime root>` prints the autonomy value and where it comes from, the configured
+`config_dir`, each harness's source directory and the entry points present, and the resolved snapshot path. It prints
+names and paths only, never file contents. With no `config_dir` it names the generated `worker_settings_path` and
+OpenCode worker config as the files in effect. It exits 1 when a `config_dir` is configured but no snapshot is
+published.
+
 ## The three prompt layers
 
 A worker's first spawn on a session carries three ordered layers ahead of the node's own envelope prompt: a baked-in

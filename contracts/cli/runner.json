@@ -610,6 +610,33 @@
       "path": "runner garden",
       "short_help": "Worker: read this run's own garden machinery \u2014 the routine and scope are both derived server-side from the worker's own lease, so no verb here takes a flag naming either."
     },
+    "harness": {
+      "commands": {
+        "status": {
+          "help": "Report the bundle sources, the published snapshot, and the autonomy setting.\n\nPrints names and paths only, never file contents. Exits 1 when a bundle is configured\nbut no snapshot is published.",
+          "params": [
+            {
+              "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner harness status",
+          "short_help": "Report the bundle sources, the published snapshot, and the autonomy setting."
+        }
+      },
+      "help": "Operator: the harness-config bundle this runtime loads.",
+      "params": [],
+      "path": "runner harness",
+      "short_help": "Operator: the harness-config bundle this runtime loads."
+    },
     "heartbeat": {
       "help": "Worker hook: record a lease heartbeat (identity from the environment).\n\nFails **soft**: a hook must never break the worker's tool call, so a missing identity or an\nunreachable runner is reported to stderr and this still exits 0.",
       "params": [],

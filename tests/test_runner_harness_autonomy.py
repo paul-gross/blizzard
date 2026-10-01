@@ -40,6 +40,7 @@ class _RecordingLauncher:
 
     def __init__(self) -> None:
         self.argvs: list[list[str]] = []
+        self.envs: list[dict[str, str]] = []
 
     def launch(
         self,
@@ -52,6 +53,7 @@ class _RecordingLauncher:
         defer_disarm: bool = False,
     ) -> LaunchedProcess:
         self.argvs.append(list(argv))
+        self.envs.append(dict(env))
         return LaunchedProcess(pid=4242, pgid=4242, process_start_time="1", confirm_durable=lambda: None)
 
 
@@ -254,3 +256,21 @@ def test_claude_code_still_delivers_the_settings_file_under_every_autonomy(tmp_p
 
     for kind, argv in _unattended(adapter, tmp_path, launcher).items():
         assert _flag(argv, "--settings") == "/runner/worker-settings.json", kind
+
+
+# --------------------------------------------------------------------------- #
+# No `[harness] config_dir`: the launch is the one it always was.
+
+
+@pytest.mark.parametrize("make", [_claude, _opencode], ids=["claude-code", "opencode"])
+def test_argv_and_env_ignore_the_bundle_key(tmp_path: Path, make: Callable[..., Any]) -> None:
+    plain = _load(tmp_path, "")
+    keyed = _load(tmp_path, f'[harness]\nconfig_dir = "{tmp_path}"\n')
+    launches = []
+    for config in (plain, keyed):
+        launcher = _RecordingLauncher()
+        _unattended(make(launcher, autonomy=config.autonomy), tmp_path, launcher)
+        launches.append((launcher.argvs, launcher.envs))
+
+    assert launches[0] == launches[1]
+    assert len(launches[0][0]) == 4 == len(launches[0][1])
