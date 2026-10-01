@@ -65,7 +65,7 @@ _BUILD_ARTIFACT = {
     "kind": "git_commit",
     "repo": "acme/widget",
     "branch_name": "b",
-    "commit_hash": "c",
+    "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 }
 
 

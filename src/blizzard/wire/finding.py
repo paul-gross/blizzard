@@ -8,7 +8,17 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+
+def _require_text(value: str) -> str:
+    if not value.strip():
+        raise ValueError("must not be blank")
+    return value
+
+
+# A finding's class, locus, and summary are free text, but never empty: a blank one mints a finding no one can read.
+NonBlankText = Annotated[str, AfterValidator(_require_text)]
 
 
 class FindingCandidate(BaseModel):
@@ -20,9 +30,9 @@ class FindingCandidate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     ref: str
-    class_: str = Field(alias="class")
-    locus: str
-    summary: str
+    class_: NonBlankText = Field(alias="class")
+    locus: NonBlankText
+    summary: NonBlankText
     introduced: str | None = None
 
 
@@ -35,9 +45,9 @@ class AddFindingOp(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     op: Literal["add"] = "add"
-    class_: str = Field(alias="class")
-    locus: str
-    summary: str
+    class_: NonBlankText = Field(alias="class")
+    locus: NonBlankText
+    summary: NonBlankText
     introduced: str | None = None
     ref: str | None = None
 
@@ -86,9 +96,9 @@ class DeferredReviewFindingEntry(BaseModel):
     disposition: Literal["deferred"] = "deferred"
     severity: Literal["blocking", "should-fix"]
     scope: str
-    class_: str = Field(alias="class")
-    locus: str
-    summary: str
+    class_: NonBlankText = Field(alias="class")
+    locus: NonBlankText
+    summary: NonBlankText
 
 
 class FixedReviewFindingEntry(BaseModel):

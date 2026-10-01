@@ -103,7 +103,13 @@ def _hub_rejects(tmp_path: Path, requires_checks: bool, results: list[tuple[str,
             "from_node_id": node_id,
             "check_results": [{"command": c, "passed": p} for c, p in results],
             "artifacts": [
-                {"name": "w", "kind": "git_commit", "repo": "acme/w", "branch_name": "b", "commit_hash": "c"}
+                {
+                    "name": "w",
+                    "kind": "git_commit",
+                    "repo": "acme/w",
+                    "branch_name": "b",
+                    "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                }
             ],
         },
     )

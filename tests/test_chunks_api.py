@@ -88,7 +88,7 @@ def _build_completion(build_node_id: str, epoch: int) -> dict:
                 "kind": "git_commit",
                 "repo": "acme/widget",
                 "branch_name": "blizzard/ch-12",
-                "commit_hash": "abc123",
+                "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             }
         ],
     }

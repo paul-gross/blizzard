@@ -589,7 +589,13 @@ _FALLBACK_NOTES = [{"name": "notes", "kind": "asset", "content": "assessment fal
 #: A ``produces:`` name covered by a pushed git commit rather than an attach — note
 #: ``attached`` is absent (defaults False), the shape the regression class below covers.
 _GIT_COMMIT_NOTES = [
-    {"name": "notes", "kind": "git_commit", "repo": "toy-api", "branch_name": "bz/notes", "commit_hash": "cafe1234"}
+    {
+        "name": "notes",
+        "kind": "git_commit",
+        "repo": "toy-api",
+        "branch_name": "bz/notes",
+        "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    }
 ]
 
 
@@ -731,7 +737,13 @@ def _git_commit_kind_graph_yaml() -> str:
 #: Named after the repo (``toy-api``), never the literal produces name — proves the
 #: kind-match, not a coincidental name match.
 _GIT_COMMIT_REPO_NAMED = [
-    {"name": "toy-api", "kind": "git_commit", "repo": "toy-api", "branch_name": "bz/build", "commit_hash": "cafe1234"}
+    {
+        "name": "toy-api",
+        "kind": "git_commit",
+        "repo": "toy-api",
+        "branch_name": "bz/build",
+        "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    }
 ]
 
 

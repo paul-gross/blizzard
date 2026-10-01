@@ -69,7 +69,13 @@ def _completion(node_id: str, *, epoch: int) -> dict:
         "runner_id": "r1",
         "from_node_id": node_id,
         "artifacts": [
-            {"name": "w", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": "c"}
+            {
+                "name": "w",
+                "kind": "git_commit",
+                "repo": "acme/widget",
+                "branch_name": "b",
+                "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            }
         ],
     }
 

@@ -104,7 +104,13 @@ def _completion(node_id: str, *, epoch: int, choice: str = "pass") -> dict:
         "runner_id": "r1",
         "from_node_id": node_id,
         "artifacts": [
-            {"name": "w", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": "c"}
+            {
+                "name": "w",
+                "kind": "git_commit",
+                "repo": "acme/widget",
+                "branch_name": "b",
+                "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            }
         ],
     }
 
@@ -223,7 +229,13 @@ def _completion_with_checks(node_id: str, *, choice: str, check_results: list[di
         "from_node_id": node_id,
         "check_results": check_results,
         "artifacts": [
-            {"name": "w", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": "c"}
+            {
+                "name": "w",
+                "kind": "git_commit",
+                "repo": "acme/widget",
+                "branch_name": "b",
+                "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            }
         ],
     }
 

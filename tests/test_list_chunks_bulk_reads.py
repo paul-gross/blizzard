@@ -313,7 +313,15 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
         "/api/fleet/routes",
         json={"chunk_id": old_holder_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]["node"]["node_id"]
-    commit = [{"name": "w", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": "c"}]
+    commit = [
+        {
+            "name": "w",
+            "kind": "git_commit",
+            "repo": "acme/widget",
+            "branch_name": "b",
+            "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        }
+    ]
     to_review = _pass(hub, old_holder_id, build_id, 1, artifacts=commit)
     review_id = to_review["next_envelope"]["node"]["node_id"]
     assert (

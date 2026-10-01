@@ -31,6 +31,7 @@ from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunks.route import IReadChunkRouteRepository
+from blizzard.hub.domain.commit_pointer import CommitPointerPolicy
 from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Graph, Node
 from blizzard.hub.domain.produces_auth import Produces
@@ -261,6 +262,12 @@ class ApplyService:
         policy_rejection = ProposalPolicy(from_node, submission.proposals).rejection()
         if policy_rejection is not None:
             return ApplyResult.failure(policy_rejection)
+
+        # Commit-pointer refusal — unconditional and at the same point, so no dispatch fork
+        # records a `git_commit` that does not name a repo, a branch, and a full hash.
+        pointer_rejection = CommitPointerPolicy(submission.artifacts).rejection()
+        if pointer_rejection is not None:
+            return ApplyResult.failure(pointer_rejection)
 
         # A completion carrying a decision id is a gate-resolving transition — a graph gate
         # (human node) or a runner-config gate (worker node).

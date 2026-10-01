@@ -7,6 +7,7 @@ carries a note. Plain unit tests over hand-built objects — this module takes n
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import UTC, datetime
 
@@ -124,6 +125,16 @@ def test_parse_delta_rejects_malformed_json() -> None:
 def test_parse_delta_rejects_a_shape_mismatch() -> None:
     with pytest.raises(GardenDeliveryRejected, match=re.escape("survey.json")):
         parse_delta("survey.json", '{"revisions": {}}')  # missing required `scope`
+
+
+@pytest.mark.parametrize("field", ["class", "locus", "summary"])
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_parse_delta_rejects_an_add_with_a_blank_field(field: str, blank: str) -> None:
+    add = {"op": "add", "class": "c", "locus": "a.py:1", "summary": "s", field: blank}
+    raw = json.dumps({"scope": "runner", "findings": [add]})
+
+    with pytest.raises(GardenDeliveryRejected, match=re.escape("survey.json")):
+        parse_delta("survey.json", raw)
 
 
 def test_parse_delta_accepts_a_well_formed_delta() -> None:
