@@ -28,6 +28,8 @@ LEGACY_ANTHROPIC_NAME = "Anthropic"
 
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
+# The runner-owned directory the published harness-config snapshots live under.
+HARNESS_CONFIG_DIRNAME = "harness-config"
 # The runner-owned worker hook file `init` scaffolds, delivering the heartbeat hook.
 WORKER_SETTINGS_FILENAME = "worker-settings.json"
 # The runner-owned OpenCode permission/plugin document `init` scaffolds.
@@ -115,6 +117,25 @@ def _parse_autonomy(value: object, path: Path) -> Autonomy:
     except ValueError:
         allowed = ", ".join(repr(a.value) for a in Autonomy)
         raise ConfigError(f"[harness] autonomy must be one of {allowed}, got {value!r} (in {path})") from None
+
+
+def _parse_harness_config_dir(value: object, root: Path, path: Path) -> Path | None:
+    """The ``[harness] config_dir`` operator bundle: ``~`` expands, the path must be absolute,
+    and it may not be the runner's own ``harness-config`` root or inside it."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"[harness] config_dir must be a non-empty path string, got {value!r} (in {path})")
+    expanded = Path(value).expanduser()
+    if not expanded.is_absolute():
+        raise ConfigError(f"[harness] config_dir must be absolute (~ allowed), got {value!r} (in {path})")
+    effective = (root / HARNESS_CONFIG_DIRNAME).resolve()
+    if expanded.resolve().is_relative_to(effective):
+        raise ConfigError(
+            f"[harness] config_dir {value!r} is the runner's own {effective} or inside it; "
+            f"name a directory the operator owns (in {path})"
+        )
+    return expanded
 
 
 def _workspace_repos(raw: object) -> tuple[WorkspaceRepo, ...]:
@@ -485,6 +506,8 @@ class RunnerConfig:
     claude_code_enabled: bool = True
     #: `[harness] autonomy`, the runner-wide approval posture each harness binding translates.
     autonomy: Autonomy = Autonomy.Dangerous
+    #: `[harness] config_dir`, the operator-owned harness-config bundle; `None` is no bundle.
+    harness_config_dir: Path | None = None
     #: Legacy Claude Code-only `--permission-mode` override. `None` is absent (autonomy maps);
     #: empty is present-but-empty (no flag); never set together with `[harness] autonomy`.
     harness_permission_mode: str | None = None
@@ -859,7 +882,14 @@ class RunnerConfig:
             '# "normal", "auto", or "dangerous". Each harness translates it into its own terms.\n'
             "[harness]\n"
             f'autonomy = "{self.autonomy}"\n'
-            "\n# The transcript outbound lane — off by default; the hub's own\n"
+            "# An operator-owned bundle of harness configuration: optional `claude-code/` and\n"
+            "# `opencode/` directories, read at startup. Absolute path (~ allowed); absent = no bundle.\n"
+            + (
+                f"config_dir = {json.dumps(str(self.harness_config_dir))}\n"
+                if self.harness_config_dir
+                else '# config_dir = "~/.config/blizzard/harness"\n'
+            )
+            + "\n# The transcript outbound lane — off by default; the hub's own\n"
             "# durable, compressed-at-rest segment store is already landed, so\n"
             "# turning this on is a rollout decision, not a bandwidth-for-nothing one.\n"
             "[transcripts]\n"
@@ -1036,6 +1066,7 @@ class RunnerConfig:
                 "are both set; keep only '[harness] autonomy'"
             )
         autonomy = _parse_autonomy(harness.body.get("autonomy"), path)
+        harness_config_dir = _parse_harness_config_dir(harness.body.get("config_dir"), root, path)
         claude_code_enabled = claude_code.boolean("enabled", True)
         opencode_enabled = opencode.boolean("enabled", True)
         if not claude_code_enabled and not opencode_enabled:
@@ -1065,6 +1096,7 @@ class RunnerConfig:
             harness_binary=str(raw.get("harness_binary", claude_code.body.get("binary", DEFAULT_HARNESS_BINARY))),
             claude_code_enabled=claude_code_enabled,
             autonomy=autonomy,
+            harness_config_dir=harness_config_dir,
             harness_permission_mode=legacy_permission_mode,
             worker_settings_path=(str(raw["worker_settings_path"]) or None)
             if raw.get("worker_settings_path")
