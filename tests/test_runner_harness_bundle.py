@@ -17,10 +17,65 @@ from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness import bundle as bundle_module
 from blizzard.runner.harness.bundle import HarnessBundleError, published_snapshot
 from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
+from blizzard.runner.harness.internal.opencode_bundle import check_ambient_plugins, plugin_identity
 
 pytestmark = pytest.mark.component
 
 _SECRET = "sentinel-secret-value"
+
+
+def test_composed_opencode_config_preserves_settings_and_denials(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    native = bundle / "opencode" / "opencode.json"
+    shutil.rmtree(bundle / "opencode" / "prompts")
+    native.write_text(json.dumps({"model": "example/model", "permission": {"bash": "deny"}, "plugin": ["extra@1"]}))
+    snapshot = publish_harness_bundle(bundle, runtime)
+    composed = json.loads((snapshot.path / "opencode" / "opencode.json").read_text())
+    assert composed["model"] == "example/model"
+    assert composed["permission"] == {"bash": "deny", "question": "deny"}
+    worker = json.loads((runtime / "opencode-worker-config.json").read_text())
+    assert composed["plugin"] == ["extra@1", *worker["plugin"]]
+
+
+def test_collision_keeps_previous_snapshot(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
+    native = bundle / "opencode" / "opencode.json"
+    shutil.rmtree(bundle / "opencode" / "prompts")
+    native.write_text('{"permission": {"question": "allow"}}')
+    with pytest.raises(HarnessBundleError) as raised:
+        publish_harness_bundle(bundle, runtime)
+    assert raised.value.path == native
+    assert published_snapshot(runtime) == first.path.resolve()
+
+
+def test_plugin_identities_across_scopes(tmp_path: Path) -> None:
+    assert plugin_identity("@vendor/extra@1.2") == "@vendor/extra"
+    assert plugin_identity("file:///tmp/Extra.ts") == "extra"
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    (bundle / "opencode" / "plugins").mkdir()
+    (bundle / "opencode" / "plugins" / "extra.ts").write_text("export default () => ({})")
+    shutil.rmtree(bundle / "opencode" / "prompts")
+    (bundle / "opencode" / "opencode.json").write_text('{"plugin": ["file:///tmp/extra.ts"]}')
+    with pytest.raises(HarnessBundleError, match="duplicate plugin"):
+        publish_harness_bundle(bundle, runtime)
+    (bundle / "opencode" / "opencode.json").write_text("{}")
+    snapshot = publish_harness_bundle(bundle, runtime)
+    project = tmp_path / "project"
+    (project / ".opencode").mkdir(parents=True)
+    (project / ".opencode" / "opencode.json").write_text('{"plugin": ["file:///elsewhere/extra.js"]}')
+    with pytest.raises(HarnessBundleError, match=r"extra\.ts.*opencode\.json"):
+        check_ambient_plugins(snapshot.path / "opencode", project, {"HOME": str(tmp_path / "empty")})
+    (project / ".opencode" / "opencode.json").write_text("{}")
+    home = tmp_path / "home"
+    user = home / ".config" / "opencode"
+    user.mkdir(parents=True)
+    (user / "opencode.jsonc").write_text('// user plugins\n{"plugin": ["file:///elsewhere/extra.js",],}')
+    with pytest.raises(HarnessBundleError, match=r"extra\.ts.*opencode\.jsonc"):
+        check_ambient_plugins(snapshot.path / "opencode", project, {"HOME": str(home)})
 
 
 def _bundle(tmp_path: Path) -> Path:

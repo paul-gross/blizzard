@@ -112,6 +112,7 @@ def _publish_harness_bundle(config: RunnerConfig) -> BundleSnapshot | None:
             config.root,
             autonomy=config.autonomy,
             permission_mode=config.harness_permission_mode,
+            worker_config_path=Path(config.opencode_worker_config_path) if config.opencode_worker_config_path else None,
         )
     click.echo(snapshot.summary())
     return snapshot

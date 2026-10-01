@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.harness.bundle import published_snapshot
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_descendant_usage import OpenCodeDescendantUsage
 from blizzard.runner.harness.internal.opencode_export import SubprocessOpenCodeExporter
@@ -35,12 +36,22 @@ def build_opencode_binding(
     )
     cache_path = resolve_price_cache_path(worker_env.variables)
     price_catalog = FileOpenCodePriceCatalog(cache_path) if cache_path is not None else None
+    snapshot = published_snapshot(config.root) if config.harness_config_dir is not None else None
     adapter = OpenCodeAdapter(
         binary=config.opencode_binary,
         worker_env=worker_env,
         model_aliases=config.opencode_model_aliases,
         effort_aliases=config.opencode_effort_aliases,
-        worker_config_path=config.opencode_worker_config_path,
+        worker_config_path=(
+            str(snapshot / "opencode" / "opencode.json")
+            if snapshot is not None and (snapshot / "opencode" / "opencode.json").is_file()
+            else config.opencode_worker_config_path
+        ),
+        effective_config_dir=(
+            str(snapshot / "opencode")
+            if snapshot is not None and (snapshot / "opencode" / "opencode.json").is_file()
+            else None
+        ),
         autonomy=config.autonomy,
         transcript_source=transcript_source,
         price_catalog=price_catalog,

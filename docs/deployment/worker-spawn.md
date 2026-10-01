@@ -137,6 +137,27 @@ managed settings file (`/etc/claude-code/managed-settings.json`), `disableAllHoo
 logs the file and key and `blizzard runner harness status` prints them, never file contents; the API reports only the
 cause.
 
+### OpenCode composition and delivery
+
+For OpenCode, the snapshot's `opencode/opencode.json` is the effective configuration. It merges the operator's
+`permission` rules and `plugin` entries with the runner's `question: deny` and heartbeat plugin; other JSON keys pass
+through. A native `permission.question` entry collides even if it also says `deny`, since it is runner-owned. A plugin
+with the same package name or file basename (case-insensitive, ignoring package version or script extension) in the
+operator JSON, its `plugins/` directory, or the runner config also collides. Startup fails with the offending native
+path before replacing `current`. The worker receives the effective file as `OPENCODE_CONFIG`, its identical text as
+`OPENCODE_CONFIG_CONTENT`, and its parent directory as `OPENCODE_CONFIG_DIR`; relative `{file:…}` companions and native
+operator plugins are colocated there; the runner's plugin is explicitly referenced from its runtime-root scaffold.
+Config content takes precedence over project settings for keys it declares; independent
+user and project settings remain discoverable. Before each worker launch, duplicate plugin identities from the visible
+user configuration and project `.opencode/` directories are checked against the effective config and each other; an
+unresolvable duplicate fails with both source paths rather than loading twice. A bundle containing only `plugins/`
+also gets a generated effective JSON. With no bundle, the generated worker config remains in effect.
+
+Inspect paths with `blizzard runner harness status --dir <runtime root>` and the resolved JSON at its reported snapshot;
+the status verb never prints secrets. To prove native loader behavior, follow
+`blizzard-context:/verification/blizzard/manual.md`'s `blizzard:manual-opencode-operator-bundle` procedure with
+disposable user and project scopes and compare `opencode debug config` against plugin and heartbeat events.
+
 ## The three prompt layers
 
 A worker's first spawn on a session carries three ordered layers ahead of the node's own envelope prompt: a baked-in

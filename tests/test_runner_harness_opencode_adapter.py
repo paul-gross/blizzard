@@ -96,6 +96,25 @@ def _preamble(workdir: str, *, stdout_path: str = "", stderr_path: str = "") -> 
     )
 
 
+@pytest.mark.unit
+def test_effective_bundle_environment_reaches_identity_and_fallback_launches(
+    tmp_path: Path, spawn_executor: Executor
+) -> None:
+    effective = tmp_path / "effective"
+    effective.mkdir()
+    content = '{"permission":{"question":"deny"},"plugin":[]}'
+    (effective / "opencode.json").write_text(content)
+    adapter = _adapter(
+        spawn_executor,
+        worker_config_path=str(effective / "opencode.json"),
+        effective_config_dir=str(effective),
+    )
+    for env in (adapter.identity_env(_preamble(str(tmp_path)), "ch_1", "ses_1"), adapter._config_env()):
+        assert env["OPENCODE_CONFIG"] == str(effective / "opencode.json")
+        assert env["OPENCODE_CONFIG_CONTENT"] == content
+        assert env["OPENCODE_CONFIG_DIR"] == str(effective)
+
+
 # --------------------------------------------------------------------------- #
 # The one command builder: every non-interactive kind carries `--format json`.
 

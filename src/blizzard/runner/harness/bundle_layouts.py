@@ -21,7 +21,7 @@ from blizzard.runner.harness.internal.claude_code_bundle import (
     claude_code_bundle_layout,
 )
 from blizzard.runner.harness.internal.claude_code_settings_compose import resolved_permission_mode
-from blizzard.runner.harness.internal.opencode_bundle import OPENCODE_BUNDLE_LAYOUT
+from blizzard.runner.harness.internal.opencode_bundle import OPENCODE_BUNDLE_LAYOUT, opencode_bundle_layout
 
 BUNDLE_LAYOUTS = (CLAUDE_CODE_BUNDLE_LAYOUT, OPENCODE_BUNDLE_LAYOUT)
 
@@ -32,12 +32,20 @@ def publish_harness_bundle(
     *,
     autonomy: Autonomy = Autonomy.Dangerous,
     permission_mode: str | None = None,
+    worker_config_path: Path | None = None,
 ) -> BundleSnapshot:
     """Load ``config_dir`` against every binding's layout and publish it under ``runtime_root``,
     composing each binding's runner wiring in; ``autonomy`` and the legacy ``permission_mode``
-    override resolve the permission mode the Claude Code composition checks against."""
+    override resolve the permission mode the Claude Code composition checks against; the OpenCode
+    composition reads the runner's worker config from ``worker_config_path``, defaulting to the
+    one ``runner init`` scaffolds under ``runtime_root``."""
     mode = resolved_permission_mode(autonomy, permission_mode)
-    return publish_bundle(config_dir, runtime_root, (claude_code_bundle_layout(mode), OPENCODE_BUNDLE_LAYOUT))
+    worker_config = worker_config_path or runtime_root / "opencode-worker-config.json"
+    return publish_bundle(
+        config_dir,
+        runtime_root,
+        (claude_code_bundle_layout(mode), opencode_bundle_layout(worker_config)),
+    )
 
 
 def inspect_harness_bundle(config_dir: Path) -> tuple[HarnessSource, ...]:
