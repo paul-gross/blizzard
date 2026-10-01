@@ -31,6 +31,8 @@ for five required fields beyond `ref`/`disposition` in total:
 - `locus` — where it lives, the same meaning and the same freedom to name a whole body of ground instead of one point.
 - `summary` — what was observed, in enough words to judge without re-deriving it.
 
+As in the garden format, a blank `class`, `locus`, or `summary` is refused.
+
 A `fixed` or `refuted` entry carries only `ref` and `disposition` — never `severity`, `scope`, `class`, `locus`, or
 `summary`: unlike `garden/finding-format`'s single flat `AddFindingOp`/`ObservedFindingOp`/`GoneFindingOp` union, each
 disposition here is its own model, so an extra field on the wrong one is a shape violation, not a value nothing reads.

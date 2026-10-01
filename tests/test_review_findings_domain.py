@@ -7,6 +7,7 @@ itself refuses to parse one; a clean delta returns exactly its `deferred` entrie
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -172,3 +173,21 @@ def test_a_deferred_entry_with_an_unknown_extra_field_is_rejected() -> None:
     }
     with pytest.raises(ValidationError):
         DeferredReviewFindingEntry.model_validate(payload)
+
+
+@pytest.mark.parametrize("field", ["class", "locus", "summary"])
+@pytest.mark.parametrize("blank", ["", "  "])
+def test_a_deferred_entry_with_a_blank_field_is_refused_at_parse(field: str, blank: str) -> None:
+    entry = {
+        "ref": "F1",
+        "disposition": "deferred",
+        "severity": "should-fix",
+        "scope": "blizzard",
+        "class": "c",
+        "locus": "a.py:1",
+        "summary": "s",
+        field: blank,
+    }
+
+    with pytest.raises(ReviewFindingsRejected):
+        parse_review_finding_delta("review-findings", json.dumps({"entries": [entry]}))

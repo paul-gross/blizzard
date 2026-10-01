@@ -99,7 +99,7 @@ def test_completed_at_is_the_terminal_transitions_instant_for_done(tmp_path: Pat
                     "kind": "git_commit",
                     "repo": "acme/widget",
                     "branch_name": "blizzard/ch-12",
-                    "commit_hash": "abc123",
+                    "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 }
             ],
         },

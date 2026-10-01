@@ -972,7 +972,15 @@ def _submit_build_pass_with_commit(hub, chunk_id: str, build_node_id: str, epoch
             "runner_id": "r1",
             "from_node_id": build_node_id,
             "check_results": [],
-            "artifacts": [{"name": "w", "kind": "git_commit", "repo": repo, "branch_name": "b", "commit_hash": "c"}],
+            "artifacts": [
+                {
+                    "name": "w",
+                    "kind": "git_commit",
+                    "repo": repo,
+                    "branch_name": "b",
+                    "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                }
+            ],
         },
     )
 

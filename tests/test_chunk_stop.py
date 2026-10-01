@@ -105,7 +105,7 @@ def _ingest_and_deliver(hub) -> str:  # type: ignore[no-untyped-def]
                     "kind": "git_commit",
                     "repo": "acme/widget",
                     "branch_name": "blizzard/ch-12",
-                    "commit_hash": "abc123",
+                    "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 }
             ],
         },

@@ -21,6 +21,8 @@ ever mints a real id.
   body of ground rather than one point inside it may name that ground instead. blizzard stores the string and never
   resolves it.
 - `summary` — what was observed, in enough words for a person or a later pass to judge without re-deriving it.
+
+The hub refuses a candidate or `add` whose `class`, `locus`, or `summary` is empty or only whitespace.
 - `introduced` — best effort: the commit that introduced what the finding objects to, from `blame` on the locus. Omit it
   rather than guess — a reformat defeats blame, and a rule that went stale because the standard around it moved has no
   introducing commit at all.

@@ -21,6 +21,7 @@ from blizzard.hub.domain.chunks.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunks.fence import Claimant, EpochAdmission
 from blizzard.hub.domain.chunks.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.chunks.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.commit_pointer import CommitPointerPolicy
 from blizzard.hub.domain.errors import ChunkNotFound
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.proposal_auth import ProposalPolicy
@@ -119,6 +120,12 @@ class DecisionService:
         policy_rejection = ProposalPolicy(node, submission.proposals).rejection()
         if policy_rejection is not None:
             return DecisionSubmitResult.failure(policy_rejection)
+
+        # Commit-pointer refusal — unconditional and at the same point, so no dispatch fork
+        # records a `git_commit` that does not name a repo, a branch, and a full hash.
+        pointer_rejection = CommitPointerPolicy(submission.artifacts).rejection()
+        if pointer_rejection is not None:
+            return DecisionSubmitResult.failure(pointer_rejection)
 
         decision_id = Id.mint(DECISION_PREFIX, self._clock).value
         refusal = self._decisions.record_decision(

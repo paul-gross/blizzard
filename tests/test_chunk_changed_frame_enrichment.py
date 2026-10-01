@@ -148,7 +148,13 @@ def test_node_completion_carries_prev_node_node_and_status_change(tmp_path: Path
         "runner_id": "r1",
         "from_node_id": node_id,
         "artifacts": [
-            {"name": "w", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": "c"}
+            {
+                "name": "w",
+                "kind": "git_commit",
+                "repo": "acme/widget",
+                "branch_name": "b",
+                "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            }
         ],
     }
     resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=completion)

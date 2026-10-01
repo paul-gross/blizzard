@@ -61,6 +61,10 @@ manifest, not a flag. A `git_commit` entry is met only when the worker pushed it
 the push — the worker pushes, never the runner, an undeclared push does not count, and a name backed only by the
 assessment fallback is not proof the thing was produced.
 
+The hub refuses a `git_commit` without a repo, a branch with no `:` in it, and a full lowercase hash (40 or 64 hex
+characters) — the completion or decision comes back as a failure naming the artifact and the field, and nothing is
+recorded. It stores every asset as submitted, with no content validation.
+
 The artifact verbs are pure clients of the runner's local API, authorized by the spawn-injected lease identity;
 [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shapes.
 

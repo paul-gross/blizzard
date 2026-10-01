@@ -64,7 +64,7 @@ _BUILD_ARTIFACT = {
     "kind": "git_commit",
     "repo": "acme/widget",
     "branch_name": "feature/widget",
-    "commit_hash": "abc123",
+    "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 }
 
 
@@ -122,7 +122,11 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     assert len(detail["artifacts"]) == 1
     art = detail["artifacts"][0]
     assert art["kind"] == "git_commit"
-    assert (art["repo"], art["branch_name"], art["commit_hash"]) == ("acme/widget", "feature/widget", "abc123")
+    assert (art["repo"], art["branch_name"], art["commit_hash"]) == (
+        "acme/widget",
+        "feature/widget",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
     assert art["branch_url"] == "http://forge.local/acme/widget/tree/feature/widget"
 
     # The open gate decision with its choices.

@@ -101,7 +101,7 @@ _BUILD_ARTIFACT = {
     "kind": "git_commit",
     "repo": "acme/widget",
     "branch_name": "b",
-    "commit_hash": "c",
+    "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 }
 
 
@@ -443,3 +443,25 @@ def test_reclaim_at_a_same_instant_tie_still_derives_running(tmp_path: Path) -> 
     )
     assert reclaim.status_code == 201, reclaim.text
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
+
+
+def test_a_malformed_commit_pointer_is_refused_on_completion_and_decision(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, nodes = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    bad = {k: v for k, v in _BUILD_ARTIFACT.items() if k != "commit_hash"}
+
+    completion = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(nodes["build"], choice="pass", artifacts=[bad])
+    ).json()
+    assert completion["outcome"] == "failure" and "commit_hash" in completion["detail"]
+
+    decision = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/decisions",
+        json={"from_node_id": nodes["build"], "epoch": 1, "runner_id": "r1", "artifacts": [bad]},
+    ).json()
+    assert decision["outcome"] == "failure" and "commit_hash" in decision["detail"]
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "running" and detail["artifacts"] == []
+    assert hub.client.get("/api/decisions").json()["decisions"] == []
