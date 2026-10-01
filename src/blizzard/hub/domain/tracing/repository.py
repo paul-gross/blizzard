@@ -36,6 +36,14 @@ class ClosingCandidates:
     frontier: datetime | None = None
 
 
+@dataclass(frozen=True)
+class TraceFailureRecord:
+    """One ``trace-export-failed`` event: when it was recorded and its fixed message."""
+
+    at: datetime
+    message: str
+
+
 class IReadTraceSteps(Protocol):
     def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         """The chunks with a closing fact recorded in ``[since, until]``, read from every closing-fact
@@ -52,6 +60,26 @@ class IReadTraceSteps(Protocol):
 
     def newest_export_latch(self) -> EventLogKind | None:
         """The kind of the newest ``trace-export-failed`` or ``trace-export-recovered`` event, or ``None``."""
+        ...
+
+
+class IReadTraceStatus(Protocol):
+    """What the operator status reads — facts the sweep already left behind, never process memory."""
+
+    def newest_cursor(self) -> TraceCursorRecord | None:
+        """The newest ``trace_cursor`` row — the cursor's position — or ``None`` before the first pass."""
+        ...
+
+    def newest_export_latch(self) -> EventLogKind | None:
+        """The kind of the newest ``trace-export-failed`` or ``trace-export-recovered`` event, or ``None``."""
+        ...
+
+    def newest_export_cursor(self) -> TraceCursorRecord | None:
+        """The newest ``trace_cursor`` row that told at least one span, or ``None`` if none ever did."""
+        ...
+
+    def newest_export_failure(self) -> TraceFailureRecord | None:
+        """The newest ``trace-export-failed`` event, or ``None``."""
         ...
 
 

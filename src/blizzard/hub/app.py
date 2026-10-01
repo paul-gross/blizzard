@@ -48,6 +48,7 @@ from blizzard.hub.api.routines import router as routines_router
 from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.api.scopes import router as scopes_router
 from blizzard.hub.api.spend import router as spend_router
+from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
 from blizzard.hub.api.work_sources import router as work_sources_router
@@ -257,6 +258,7 @@ def create_app(
     app.include_router(users_router)
     app.include_router(transcripts_router)
     app.include_router(analytics_router)
+    app.include_router(traces_router)
     app.include_router(work_sources_router)
     # The runner-authenticated fleet router — a fleet verb is authenticated
     # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
@@ -329,6 +331,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
             OtlpTraceExporter(resource=resource_attributes(os.environ, __version__)) if tracing.enabled() else None
         ),
         tracing=config.tracing,
+        tracing_settings=tracing,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
@@ -337,8 +340,6 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         Superuser(email=config.auth.superuser, users=services.users, auth=services.auth).ensure()
         _announce_rejected_tracing(tracing, services)
     app = create_app(config, readiness=readiness, services=services)
-    # The parsed enablement, kept for the trace-status read.
-    app.state.tracing = tracing
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
     return app

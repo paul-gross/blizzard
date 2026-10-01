@@ -8091,6 +8091,138 @@
         "title": "ToolCallSegmentView",
         "type": "object"
       },
+      "TraceStatusResponse": {
+        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only \u2014\nscheme, host and port. ``rejected_setting``/``rejected_value`` name what a ``rejected`` state could not\nhonor. ``lag_seconds`` is the age of the oldest closed step the cursor has not passed, ``None`` when\nnothing waits. ``last_error_at`` is when the newest failure began, and ``last_error_ongoing`` whether no\nexport has succeeded since; no exporter error text is carried, only the event's fixed message.",
+        "properties": {
+          "cursor_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor At"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "lag_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lag Seconds"
+          },
+          "last_error_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error At"
+          },
+          "last_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Message"
+          },
+          "last_error_ongoing": {
+            "title": "Last Error Ongoing",
+            "type": "boolean"
+          },
+          "last_export_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Export At"
+          },
+          "last_export_span_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Export Span Count"
+          },
+          "rejected_setting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Setting"
+          },
+          "rejected_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Value"
+          },
+          "state": {
+            "enum": [
+              "enabled",
+              "disabled",
+              "rejected"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "endpoint",
+          "rejected_setting",
+          "rejected_value",
+          "cursor_at",
+          "lag_seconds",
+          "last_export_at",
+          "last_export_span_count",
+          "last_error_at",
+          "last_error_message",
+          "last_error_ongoing"
+        ],
+        "title": "TraceStatusResponse",
+        "type": "object"
+      },
       "TranscriptSegmentAck": {
         "description": "The hub's per-batch acknowledgement against the transcript lane's high-water mark.\n\n``capped`` is the cap-rejection class \u2014 acknowledged, content-dropped, and the\nhigh-water advances past it, a durable decision that must not re-adjudicate on replay.",
         "properties": {
@@ -18552,6 +18684,28 @@
         "summary": "Fleet Spend",
         "tags": [
           "spend"
+        ]
+      }
+    },
+    "/api/traces/status": {
+      "get": {
+        "description": "Tracing on or off, the redacted endpoint, the cursor and its lag, the last export and the last error.",
+        "operationId": "trace_status_api_traces_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Trace Status",
+        "tags": [
+          "traces"
         ]
       }
     },

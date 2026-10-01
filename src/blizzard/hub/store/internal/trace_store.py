@@ -42,15 +42,18 @@ from blizzard.hub.domain.tracing.facts import (
 )
 from blizzard.hub.domain.tracing.repository import (
     ClosingCandidates,
+    IReadTraceStatus,
     IWriteTraceCursor,
     TraceCursorRecord,
+    TraceFailureRecord,
     WorkRefLabel,
 )
 from blizzard.hub.domain.work import MigrationSource, UsageFact, WorkRef
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 
-_LATCH_KINDS: tuple[EventLogKind, ...] = ("trace-export-failed", "trace-export-recovered")
+_FAILED: EventLogKind = "trace-export-failed"
+_LATCH_KINDS: tuple[EventLogKind, ...] = (_FAILED, "trace-export-recovered")
 
 #: Every closing-fact table (spans.md §Closing a step) with its ``(time, id)``-indexed columns.
 _CLOSING_TABLES: tuple[tuple[Table, Column, Column], ...] = (
@@ -252,14 +255,30 @@ class TraceStore:
     # --- cursor and latch -----------------------------------------------------------
 
     def newest_cursor(self) -> TraceCursorRecord | None:
+        return self._newest_cursor("newest_cursor")
+
+    def newest_export_cursor(self) -> TraceCursorRecord | None:
+        """The newest row that told spans — rows of zero are jumps and idle advances."""
+        return self._newest_cursor("newest_export_cursor", s.trace_cursor.c.span_count > 0)
+
+    def _newest_cursor(self, operation: str, *where) -> TraceCursorRecord | None:  # type: ignore[no-untyped-def]
         c = s.trace_cursor.c
-        with self._store.read("newest_cursor") as conn:
-            row = conn.execute(select(s.trace_cursor).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)).first()
+        with self._store.read(operation) as conn:
+            row = conn.execute(
+                select(s.trace_cursor).where(*where).order_by(c.recorded_at.desc(), c.id.desc()).limit(1)
+            ).first()
         if row is None:
             return None
         return TraceCursorRecord(
             CursorKey(row.position_at, row.chunk_id, row.epoch, row.decision_id), row.span_count, row.recorded_at
         )
+
+    def newest_export_failure(self) -> TraceFailureRecord | None:
+        c = s.event_log.c
+        stmt = select(c.recorded_at, c.message).where(c.kind == _FAILED).order_by(c.recorded_at.desc(), c.id.desc())
+        with self._store.read("newest_export_failure") as conn:
+            row = conn.execute(stmt.limit(1)).first()
+        return TraceFailureRecord(row.recorded_at, row.message) if row is not None else None
 
     def newest_export_latch(self) -> EventLogKind | None:
         """Walks the event log newest-first to the first match — run once per process start, not per pass."""
@@ -355,5 +374,5 @@ def _with_graphs(facts: StepFacts, graphs: dict[str, Graph]) -> StepFacts:
     return replace(facts, graphs={g: graphs[g] for g in _graph_ids(facts) if g in graphs})
 
 
-def _conforms_trace_store(x: TraceStore) -> IWriteTraceCursor:
-    return x
+def _conforms_trace_store(x: TraceStore) -> tuple[IWriteTraceCursor, IReadTraceStatus]:
+    return x, x

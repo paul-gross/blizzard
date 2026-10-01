@@ -104,6 +104,7 @@ from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, Sco
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.tracing.export import ITraceExporter
 from blizzard.hub.domain.tracing.repository import WorkRefLabel
+from blizzard.hub.domain.tracing.status import TraceStatusReader
 from blizzard.hub.domain.tracing.sweep import TraceExportSweep
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments, TranscriptCaps, TranscriptIngestService
 from blizzard.hub.domain.work import WorkRef
@@ -137,6 +138,7 @@ from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegme
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
+from blizzard.hub.trace_export.settings import TracingSettings
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 
@@ -203,6 +205,8 @@ class HubServices:
     #: The fleet-trace export sweep — ``None`` unless a trace exporter was wired, which
     #: happens only when OpenTelemetry's own configuration enables tracing.
     trace_export: TraceExportSweep | None
+    #: The operator's read of fleet tracing — always composed, so status answers with tracing off.
+    trace_status: TraceStatusReader
     #: The delivery-materialization reconciler — built here for the same
     #: reason: it needs the write-capable chunk and work-item repositories.
     work_item_materialization: WorkItemMaterializationReconciler
@@ -410,6 +414,7 @@ def build_services(
     system_artifacts: PackagedSystemArtifacts | None = None,
     trace_exporter: ITraceExporter | None = None,
     tracing: TracingConfig | None = None,
+    tracing_settings: TracingSettings | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over the shared :class:`HubCore`.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
@@ -455,9 +460,10 @@ def build_services(
     # service, shared by every event-authoring call site below, over the same store and
     # broker instance every other collaborator holds.
     event_log = EventLogService(events=chunk_events, publisher=events)
+    trace_store = TraceStore(store_connections, graphs=graph_store, label=_work_ref_label(work_sources))
     trace_export = (
         TraceExportSweep(
-            steps=TraceStore(store_connections, graphs=graph_store, label=_work_ref_label(work_sources)),
+            steps=trace_store,
             exporter=trace_exporter,
             events=event_log,
             clock=clock,
@@ -465,6 +471,9 @@ def build_services(
         )
         if trace_exporter is not None
         else None
+    )
+    trace_status = TraceStatusReader(
+        settings=tracing_settings or TracingSettings("disabled"), status=trace_store, steps=trace_store, clock=clock
     )
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
@@ -646,6 +655,7 @@ def build_services(
             delivery=chunk_delivery, events=event_log, work_sources=work_sources, clock=clock
         ),
         trace_export=trace_export,
+        trace_status=trace_status,
         work_item_materialization=WorkItemMaterializationReconciler(
             delivery=chunk_delivery,
             items=work_item_store,

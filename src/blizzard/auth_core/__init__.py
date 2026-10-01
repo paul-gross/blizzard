@@ -50,8 +50,8 @@ USER_MANAGE = Permission("user:manage")
 #: Read a chunk's stored transcript segments — above ``fleet:view``,
 #: since a transcript carries everything a worker saw, not just the fleet's state.
 TRANSCRIPT_READ = Permission("transcript:read")
-#: Force a transcript-event re-derivation — a mutation, so above the
-#: read-only :data:`TRANSCRIPT_READ`.
+#: Force a transcript-event re-derivation, or replay a window of fleet traces — mutations
+#: or re-sends, so above the read-only :data:`TRANSCRIPT_READ`.
 ANALYTICS_ADMIN = Permission("analytics:admin")
 
 #: ``guest`` — read everything, mutate nothing.

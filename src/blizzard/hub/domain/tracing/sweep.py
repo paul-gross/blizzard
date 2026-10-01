@@ -15,7 +15,6 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.config import TracingConfig
 from blizzard.hub.domain.event_log import EventLogService
-from blizzard.hub.domain.tracing.assembly import assemble_step
 from blizzard.hub.domain.tracing.cursor import (
     CursorJump,
     CursorKey,
@@ -26,7 +25,7 @@ from blizzard.hub.domain.tracing.cursor import (
 from blizzard.hub.domain.tracing.export import ITraceExporter
 from blizzard.hub.domain.tracing.repository import IWriteTraceCursor, TraceCursorRecord
 from blizzard.hub.domain.tracing.spans import SpanRecord
-from blizzard.hub.domain.tracing.window import read_window
+from blizzard.hub.domain.tracing.window import assemble_window, oldest_unsent, read_window
 
 _log = get_logger("blizzard.hub.trace_export")
 
@@ -96,7 +95,7 @@ class TraceExportSweep:
             if window.position != cursor:
                 self._steps.append_cursor(TraceCursorRecord(window.position, 0, now))
             return
-        spans = tuple(span for closed in window.steps for span in assemble_step(closed.facts, closed.step))
+        spans = assemble_window(window)
         if not self._export(spans):
             self._failed(now, len(window.steps))
             return
@@ -131,24 +130,16 @@ class TraceExportSweep:
         self._record(_RECOVERED, "fleet trace export recovered; held steps are being told", None)
 
     def _jump(self, jump: CursorJump, now: datetime) -> None:
-        if jump.skipped_from is not None and self._held_a_step(jump.skipped_from, jump.to.at):
+        if (
+            jump.skipped_from is not None
+            and oldest_unsent(self._steps, jump.skipped_from, jump.to.at - timedelta(microseconds=1)) is not None
+        ):
             self._record(
                 _SKIPPED,
                 f"fleet trace cursor jumped ({jump.reason.value}); the skipped window is told only by replay",
                 {"reason": jump.reason.value, "since": _key_detail(jump.skipped_from), "until": iso_utc(jump.to.at)},
             )
         self._steps.append_cursor(TraceCursorRecord(jump.to, 0, now))
-
-    def _held_a_step(self, since: CursorKey, until: datetime) -> bool:
-        """Whether a step closed in ``(since, until)`` — read a step at a time, moving past closing
-        facts that close nothing."""
-        while True:
-            window = read_window(self._steps, since, until - timedelta(microseconds=1), 1)
-            if window.steps:
-                return True
-            if window.position == since:
-                return False
-            since = window.position
 
     def _record(self, kind: EventLogKind, message: str, detail: dict | None) -> None:  # type: ignore[type-arg]
         self._events.record(

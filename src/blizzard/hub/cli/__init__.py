@@ -25,6 +25,7 @@ from blizzard.hub.cli.scope import scope_group
 from blizzard.hub.cli.sessions.internal.session_file import SessionFile
 from blizzard.hub.cli.sessions.service import SessionService
 from blizzard.hub.cli.status import status as _status_command
+from blizzard.hub.cli.traces import traces_group
 
 
 @click.group(invoke_without_command=True)
@@ -63,3 +64,4 @@ hub.add_command(queue_group)
 hub.add_command(decision_group)
 hub.add_command(question_group)
 hub.add_command(analytics_group)
+hub.add_command(traces_group)

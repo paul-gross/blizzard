@@ -5314,6 +5314,45 @@
       ],
       "path": "hub status",
       "short_help": "The fleet view: every chunk with its derived status, the runners, and open questions."
+    },
+    "traces": {
+      "commands": {
+        "status": {
+          "help": "Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the\nlast error. A credential in the endpoint is never shown.",
+          "params": [
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub traces status",
+          "short_help": "Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the last error."
+        }
+      },
+      "help": "Operator verbs over fleet-trace export.",
+      "params": [],
+      "path": "hub traces",
+      "short_help": "Operator verbs over fleet-trace export."
     }
   },
   "help": "Talk to \u2014 or become \u2014 the blizzard hub.",

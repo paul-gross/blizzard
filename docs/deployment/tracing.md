@@ -163,3 +163,23 @@ Collector configuration that receives OTLP over HTTP and sends every trace to tw
   `TRACE_STORE_INSECURE`, `HOSTED_TRACES_ENDPOINT`, `HOSTED_TRACES_API_KEY`), never written into the file.
 
 Adjust the endpoints and the header name to your backends; keep the pipeline shape.
+
+## Checking on tracing
+
+`blizzard hub traces status` reads `GET /api/traces/status`, open to anyone who can view the fleet. It reports:
+
+- **State.** Tracing is on, off, or rejected. A rejected setting is one the hub cannot honor, such as a protocol other
+  than `http/protobuf`; status names the setting and its value, and the fix is to point the hub at an OpenTelemetry
+  Collector that receives OTLP over HTTP and fan out from there.
+- **Endpoint.** The scheme, host and port only. Any userinfo, path, query or fragment in the configured endpoint is
+  dropped when the hub starts, and the export headers are never read, so no credential can appear. An endpoint that does
+  not parse as a URL shows as a placeholder.
+- **Cursor and lag.** The cursor is how far the sweep has told. Lag is the age of the oldest closed step the cursor has
+  not passed, and is empty when nothing waits; a lag under `settle_seconds` is normal, since a step is held that long
+  before it is told. An idle fleet shows no lag however old the cursor is.
+- **Last export.** When the sweep last told spans, and how many.
+- **Last error.** When the newest failure began, and whether it is ongoing. The sweep records only the first failure
+  after a success, so during an outage this is when the outage began; it is not ongoing once an export succeeds. Status
+  carries no exporter error text, which can hold the endpoint; the details are in the hub's log.
+
+Last export and last error are read from what the sweep recorded, so they survive a restart.

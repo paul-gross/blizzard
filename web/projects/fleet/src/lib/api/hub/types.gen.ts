@@ -5153,6 +5153,62 @@ export type ToolCallSegmentView = {
 };
 
 /**
+ * TraceStatusResponse
+ *
+ * Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only —
+ * scheme, host and port. ``rejected_setting``/``rejected_value`` name what a ``rejected`` state could not
+ * honor. ``lag_seconds`` is the age of the oldest closed step the cursor has not passed, ``None`` when
+ * nothing waits. ``last_error_at`` is when the newest failure began, and ``last_error_ongoing`` whether no
+ * export has succeeded since; no exporter error text is carried, only the event's fixed message.
+ */
+export type TraceStatusResponse = {
+    /**
+     * Cursor At
+     */
+    cursor_at: string | null;
+    /**
+     * Endpoint
+     */
+    endpoint: string | null;
+    /**
+     * Lag Seconds
+     */
+    lag_seconds: number | null;
+    /**
+     * Last Error At
+     */
+    last_error_at: string | null;
+    /**
+     * Last Error Message
+     */
+    last_error_message: string | null;
+    /**
+     * Last Error Ongoing
+     */
+    last_error_ongoing: boolean;
+    /**
+     * Last Export At
+     */
+    last_export_at: string | null;
+    /**
+     * Last Export Span Count
+     */
+    last_export_span_count: number | null;
+    /**
+     * Rejected Setting
+     */
+    rejected_setting: string | null;
+    /**
+     * Rejected Value
+     */
+    rejected_value: string | null;
+    /**
+     * State
+     */
+    state: 'enabled' | 'disabled' | 'rejected';
+};
+
+/**
  * TranscriptSegmentAck
  *
  * The hub's per-batch acknowledgement against the transcript lane's high-water mark.
@@ -10978,6 +11034,22 @@ export type FleetSpendApiSpendGetResponses = {
 };
 
 export type FleetSpendApiSpendGetResponse = FleetSpendApiSpendGetResponses[keyof FleetSpendApiSpendGetResponses];
+
+export type TraceStatusApiTracesStatusGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/traces/status';
+};
+
+export type TraceStatusApiTracesStatusGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TraceStatusResponse;
+};
+
+export type TraceStatusApiTracesStatusGetResponse = TraceStatusApiTracesStatusGetResponses[keyof TraceStatusApiTracesStatusGetResponses];
 
 export type ListUsersApiUsersGetData = {
     body?: never;

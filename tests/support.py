@@ -75,6 +75,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
+from blizzard.hub.trace_export.settings import TracingSettings
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor
@@ -606,6 +607,7 @@ def build_hub(
     system_artifacts: PackagedSystemArtifacts | None = None,
     trace_exporter: ITraceExporter | None = None,
     tracing: TracingConfig | None = None,
+    tracing_settings: TracingSettings | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -671,6 +673,7 @@ def build_hub(
         transcript_caps=transcript_caps,
         system_artifacts=system_artifacts,
         trace_exporter=trace_exporter,
+        tracing_settings=tracing_settings,
         tracing=config.tracing,
     )
     app = create_app(config, services=services)
