@@ -83,9 +83,15 @@ class CliContext:
                 return rows
 
     def post(
-        self, path: str, operation: str, *, json_body: object | None = None, on_status: dict[int, str] | None = None
+        self,
+        path: str,
+        operation: str,
+        *,
+        json_body: object | None = None,
+        on_status: dict[int, str] | None = None,
+        timeout: float = CLIENT_TIMEOUT,
     ) -> httpx.Response:
-        return self._verb("post", path, operation, json_body=json_body, on_status=on_status)
+        return self._verb("post", path, operation, json_body=json_body, on_status=on_status, timeout=timeout)
 
     def patch(
         self, path: str, operation: str, *, json_body: object | None = None, on_status: dict[int, str] | None = None
@@ -133,14 +139,20 @@ class CliContext:
             raise self.failed(operation, exc) from exc
 
     def send(
-        self, method: str, path: str, *, json_body: object | None = None, params: dict[str, str] | None = None
+        self,
+        method: str,
+        path: str,
+        *,
+        json_body: object | None = None,
+        params: dict[str, str] | None = None,
+        timeout: float = CLIENT_TIMEOUT,
     ) -> httpx.Response:
         """The call itself, unchecked — for a verb that reads a status code of its own first.
         Dispatches through ``httpx``'s module-level verb function, same as :meth:`stream` —
         except a DELETE carrying a JSON body, which ``httpx.delete`` refuses a ``json`` keyword
         for: that case goes through ``httpx.request`` instead."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
-        kwargs: dict[str, Any] = {"timeout": CLIENT_TIMEOUT}
+        kwargs: dict[str, Any] = {"timeout": timeout}
         if json_body is not None:
             kwargs["json"] = json_body
         if params is not None:
@@ -224,8 +236,9 @@ class CliContext:
         json_body: object | None = None,
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
+        timeout: float = CLIENT_TIMEOUT,
     ) -> httpx.Response:
-        resp = self.send(method, path, json_body=json_body, params=params)
+        resp = self.send(method, path, json_body=json_body, params=params, timeout=timeout)
         self.check(resp, operation, on_status=on_status)
         return resp
 

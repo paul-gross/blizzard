@@ -120,6 +120,11 @@ def _mutations(ids: dict[str, str]) -> list[tuple[str, str, dict[str, object]]]:
         ("POST", "/api/graphs", {"definition_yaml": _GRAPH_YAML}),  # GRAPH_EDIT
         ("GET", "/api/users", {}),  # USER_MANAGE
         ("POST", "/api/analytics/re-derive", {"limit": 1}),  # ANALYTICS_ADMIN
+        (
+            "POST",
+            "/api/traces/replay",
+            {"since": "2026-07-13T00:00:00+00:00", "until": "2026-07-13T01:00:00+00:00"},
+        ),  # ANALYTICS_ADMIN
     ]
 
 

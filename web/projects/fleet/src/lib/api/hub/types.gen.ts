@@ -5153,6 +5153,76 @@ export type ToolCallSegmentView = {
 };
 
 /**
+ * TraceReplayFailure
+ *
+ * The exporter refused or raised: ``steps``, ``spans`` and ``batches`` count what it accepted before the
+ * replay stopped. ``detail`` is fixed text, never the exporter's own error.
+ */
+export type TraceReplayFailure = {
+    /**
+     * Batches
+     */
+    batches: number;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Spans
+     */
+    spans: number;
+    /**
+     * Steps
+     */
+    steps: number;
+};
+
+/**
+ * TraceReplayRequest
+ *
+ * The half-open window ``[since, until)`` to tell again — a ``trace-window-skipped`` event's own
+ * ``since``/``until`` pastes straight in. ``dry_run`` counts what would be told and exports nothing.
+ */
+export type TraceReplayRequest = {
+    /**
+     * Dry Run
+     */
+    dry_run?: boolean;
+    /**
+     * Since
+     */
+    since: string;
+    /**
+     * Until
+     */
+    until: string;
+};
+
+/**
+ * TraceReplayResponse
+ *
+ * What a replay told, or with ``dry_run`` would have told.
+ */
+export type TraceReplayResponse = {
+    /**
+     * Batches
+     */
+    batches: number;
+    /**
+     * Dry Run
+     */
+    dry_run: boolean;
+    /**
+     * Spans
+     */
+    spans: number;
+    /**
+     * Steps
+     */
+    steps: number;
+};
+
+/**
  * TraceStatusResponse
  *
  * Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only —
@@ -11034,6 +11104,35 @@ export type FleetSpendApiSpendGetResponses = {
 };
 
 export type FleetSpendApiSpendGetResponse = FleetSpendApiSpendGetResponses[keyof FleetSpendApiSpendGetResponses];
+
+export type TraceReplayApiTracesReplayPostData = {
+    body: TraceReplayRequest;
+    path?: never;
+    query?: never;
+    url: '/api/traces/replay';
+};
+
+export type TraceReplayApiTracesReplayPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Bad Gateway
+     */
+    502: TraceReplayFailure;
+};
+
+export type TraceReplayApiTracesReplayPostError = TraceReplayApiTracesReplayPostErrors[keyof TraceReplayApiTracesReplayPostErrors];
+
+export type TraceReplayApiTracesReplayPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: TraceReplayResponse;
+};
+
+export type TraceReplayApiTracesReplayPostResponse = TraceReplayApiTracesReplayPostResponses[keyof TraceReplayApiTracesReplayPostResponses];
 
 export type TraceStatusApiTracesStatusGetData = {
     body?: never;

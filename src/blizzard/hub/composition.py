@@ -103,6 +103,7 @@ from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.tracing.export import ITraceExporter
+from blizzard.hub.domain.tracing.replay import TraceReplay
 from blizzard.hub.domain.tracing.repository import WorkRefLabel
 from blizzard.hub.domain.tracing.status import TraceStatusReader
 from blizzard.hub.domain.tracing.sweep import TraceExportSweep
@@ -207,6 +208,8 @@ class HubServices:
     trace_export: TraceExportSweep | None
     #: The operator's read of fleet tracing — always composed, so status answers with tracing off.
     trace_status: TraceStatusReader
+    #: Tells a past window again — always composed; holds the sweep's own exporter, or ``None`` with tracing off.
+    trace_replay: TraceReplay
     #: The delivery-materialization reconciler — built here for the same
     #: reason: it needs the write-capable chunk and work-item repositories.
     work_item_materialization: WorkItemMaterializationReconciler
@@ -461,17 +464,19 @@ def build_services(
     # broker instance every other collaborator holds.
     event_log = EventLogService(events=chunk_events, publisher=events)
     trace_store = TraceStore(store_connections, graphs=graph_store, label=_work_ref_label(work_sources))
+    trace_config = tracing or TracingConfig()
     trace_export = (
         TraceExportSweep(
             steps=trace_store,
             exporter=trace_exporter,
             events=event_log,
             clock=clock,
-            config=tracing or TracingConfig(),
+            config=trace_config,
         )
         if trace_exporter is not None
         else None
     )
+    trace_replay = TraceReplay(steps=trace_store, exporter=trace_exporter, config=trace_config)
     trace_status = TraceStatusReader(
         settings=tracing_settings or TracingSettings("disabled"), status=trace_store, steps=trace_store, clock=clock
     )
@@ -656,6 +661,7 @@ def build_services(
         ),
         trace_export=trace_export,
         trace_status=trace_status,
+        trace_replay=trace_replay,
         work_item_materialization=WorkItemMaterializationReconciler(
             delivery=chunk_delivery,
             items=work_item_store,

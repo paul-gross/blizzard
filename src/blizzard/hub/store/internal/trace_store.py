@@ -274,10 +274,15 @@ class TraceStore:
         )
 
     def newest_export_failure(self) -> TraceFailureRecord | None:
+        """Walks the latch events newest-first — one per outage edge, so a few — to the first failure."""
         c = s.event_log.c
-        stmt = select(c.recorded_at, c.message).where(c.kind == _FAILED).order_by(c.recorded_at.desc(), c.id.desc())
+        stmt = (
+            select(c.kind, c.recorded_at, c.message)
+            .where(c.kind.in_(_LATCH_KINDS))
+            .order_by(c.recorded_at.desc(), c.id.desc())
+        )
         with self._store.read("newest_export_failure") as conn:
-            row = conn.execute(stmt.limit(1)).first()
+            row = next((r for r in conn.execute(stmt) if r.kind == _FAILED), None)
         return TraceFailureRecord(row.recorded_at, row.message) if row is not None else None
 
     def newest_export_latch(self) -> EventLogKind | None:

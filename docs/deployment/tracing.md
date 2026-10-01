@@ -183,3 +183,21 @@ Adjust the endpoints and the header name to your backends; keep the pipeline sha
   carries no exporter error text, which can hold the endpoint; the details are in the hub's log.
 
 Last export and last error are read from what the sweep recorded, so they survive a restart.
+
+## Telling a window again
+
+`blizzard hub traces replay --since <t> --until <t>` tells every step that closed in the window again. It is how a
+window the sweep skipped, or a backend that lost spans, is filled in. A `trace-window-skipped` event's `since` and
+`until` paste straight in.
+
+- **Same ids as the live sweep.** A replay assembles spans the way the sweep does, so a step's trace and span ids are
+  the ones it was told under before. A backend that dedupes on those ids sees no duplicates.
+- **The live cursor does not move.** A replay records no event and leaves the sweep's cursor, failure state and backoff
+  as they were, so it can run beside a live sweep.
+- **The window is bounded.** It is half-open, from `since` up to but not including `until`. It must be positive, and no
+  wider than `replay_max_window` seconds in the `[tracing]` block; a wider window is refused with the limit named.
+  Replay runs inside the request, so a long window takes a while, and a command line client waits up to ten minutes.
+- **`--dry-run` sends nothing.** It reports the steps, spans and batches the window would tell, and works with tracing
+  off, which is a cheap way to size a window. Without `--dry-run`, a hub with tracing off refuses the replay.
+
+If the exporter refuses a batch, the replay stops and reports what it had told by then.

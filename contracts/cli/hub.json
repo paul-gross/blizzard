@@ -5317,6 +5317,73 @@
     },
     "traces": {
       "commands": {
+        "replay": {
+          "help": "Tell every step that closed in [since, until) again, with the live sweep's span ids. The live cursor\ndoes not move, so spans the backend already holds arrive again \u2014 it dedupes on their ids. The window is\nbounded by the hub's replay_max_window.",
+          "params": [
+            {
+              "help": "Only records at/after this instant, read in the caller's own local time.",
+              "hidden": false,
+              "kind": "option",
+              "name": "since",
+              "opts": [
+                "--since"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "help": "Only records before this instant, read in the caller's own local time.",
+              "hidden": false,
+              "kind": "option",
+              "name": "until",
+              "opts": [
+                "--until"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "datetime"
+            },
+            {
+              "help": "Count what would be told; export nothing.",
+              "hidden": false,
+              "kind": "option",
+              "name": "dry_run",
+              "opts": [
+                "--dry-run"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub traces replay",
+          "short_help": "Tell every step that closed in [since, until) again, with the live sweep's span ids."
+        },
         "status": {
           "help": "Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the\nlast error. A credential in the endpoint is never shown.",
           "params": [

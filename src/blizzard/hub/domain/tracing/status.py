@@ -1,4 +1,4 @@
-"""The operator's read of fleet tracing: whether it is on, where it exports, how far the cursor has come, what last failed.
+"""The operator's read of fleet tracing: on or off, where it exports, the cursor and its lag, what last failed.
 
 Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/emission.md`` §Operator surface. Everything
 here is a fact the sweep left in the store or the settings parsed at start (``bzh:facts-not-status``), so it
@@ -46,10 +46,10 @@ class TraceStatusReader:
         self._clock = clock
 
     def read(self) -> TraceStatus:
-        cursor = self._status.newest_cursor()
+        cursor = self._steps.newest_cursor()
         exported = self._status.newest_export_cursor()
         failure = self._status.newest_export_failure()
-        ongoing = failure is not None and self._status.newest_export_latch() == "trace-export-failed"
+        ongoing = failure is not None and self._steps.newest_export_latch() == "trace-export-failed"
         return TraceStatus(
             state=self._settings.state,
             endpoint=self._settings.endpoint,

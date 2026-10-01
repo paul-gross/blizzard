@@ -183,6 +183,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/analytics/re-derive"): ANALYTICS_ADMIN,
     # Fleet-trace operator surface — status is redacted fleet state.
     ("GET", "/api/traces/status"): FLEET_VIEW,
+    # Replay re-sends a window to the exporter — above the read-only tiers.
+    ("POST", "/api/traces/replay"): ANALYTICS_ADMIN,
     # The read-only events/counts surfaces — no grant of their own.
     ("GET", "/api/analytics/events"): TRANSCRIPT_READ,
     ("GET", "/api/analytics/events/ndjson"): TRANSCRIPT_READ,

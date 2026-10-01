@@ -64,15 +64,8 @@ class IReadTraceSteps(Protocol):
 
 
 class IReadTraceStatus(Protocol):
-    """What the operator status reads — facts the sweep already left behind, never process memory."""
-
-    def newest_cursor(self) -> TraceCursorRecord | None:
-        """The newest ``trace_cursor`` row — the cursor's position — or ``None`` before the first pass."""
-        ...
-
-    def newest_export_latch(self) -> EventLogKind | None:
-        """The kind of the newest ``trace-export-failed`` or ``trace-export-recovered`` event, or ``None``."""
-        ...
+    """What the operator status reads beyond the cursor and latch :class:`IReadTraceSteps` already holds —
+    facts the sweep left behind, never process memory."""
 
     def newest_export_cursor(self) -> TraceCursorRecord | None:
         """The newest ``trace_cursor`` row that told at least one span, or ``None`` if none ever did."""

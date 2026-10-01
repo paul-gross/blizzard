@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import click
+import httpx
 
+from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+
+#: A replay runs inside the request, and a week-long window outlasts the default client timeout.
+_REPLAY_TIMEOUT = 600.0
 
 _COLLECTOR_HINT = "point the hub at an OpenTelemetry Collector that receives OTLP over HTTP, and fan out from there"
 
@@ -54,3 +60,26 @@ def traces_status(cli: CliContext) -> None:
     last error. A credential in the endpoint is never shown."""
     status = cli.get("/api/traces/status", "GET /traces/status").json()
     cli.show(status, StatusView(status))
+
+
+@traces_group.command("replay", cls=FleetCommand)
+@since_option(required=True)
+@until_option(required=True)
+@click.option("--dry-run", is_flag=True, default=False, help="Count what would be told; export nothing.")
+def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bool) -> None:
+    """Tell every step that closed in [since, until) again, with the live sweep's span ids. The live cursor
+    does not move, so spans the backend already holds arrive again — it dedupes on their ids. The window is
+    bounded by the hub's replay_max_window."""
+    body = {"since": utc_query_value(since), "until": utc_query_value(until), "dry_run": dry_run}
+    operation = "POST /traces/replay"
+    resp = cli.send("post", "/api/traces/replay", json_body=body, timeout=_REPLAY_TIMEOUT)
+    if resp.status_code == httpx.codes.BAD_GATEWAY:
+        failure = resp.json()
+        raise click.ClickException(
+            f"{failure['detail']} (told {failure['steps']} steps, {failure['spans']} spans "
+            f"in {failure['batches']} batches before it stopped)"
+        )
+    cli.check(resp, operation, on_status={409: "tracing is off", 422: "window refused"})
+    result = resp.json()
+    verb = "would tell" if dry_run else "told"
+    cli.show_lines(result, f"{verb} {result['steps']} steps, {result['spans']} spans in {result['batches']} batches")

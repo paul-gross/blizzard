@@ -71,7 +71,7 @@ from blizzard.hub.domain.routines import IReadRoutineRepository, IReadRoutineSco
 from blizzard.hub.domain.run_context import IReadRunContextRepository
 from blizzard.hub.domain.scopes import IReadScopeRepository, ScopeSlug
 from blizzard.hub.domain.tracing.cursor import CursorKey
-from blizzard.hub.domain.tracing.repository import IReadTraceSteps, TraceCursorRecord
+from blizzard.hub.domain.tracing.repository import IReadTraceStatus, IReadTraceSteps, TraceCursorRecord
 from blizzard.hub.domain.transcripts import IReadTranscriptSegments
 from blizzard.hub.domain.work import (
     Chunk,
@@ -1988,6 +1988,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadTraceSteps, "newest_export_latch"): lambda w: _trace_store_of(
         w.store_connections, w.hub
     ).newest_export_latch(),
+    (IReadTraceStatus, "newest_export_cursor"): lambda w: _trace_store_of(
+        w.store_connections, w.hub
+    ).newest_export_cursor(),
+    (IReadTraceStatus, "newest_export_failure"): lambda w: _trace_store_of(
+        w.store_connections, w.hub
+    ).newest_export_failure(),
     (IReadWorkItemRepository, "get"): lambda w: w.work_items.get("hub", w.work_item_ref_1),
     (IReadWorkItemRepository, "list"): lambda w: w.work_items.list("hub", limit=200),
     (IReadWorkItemRepository, "get_many"): lambda w: w.work_items.get_many(
