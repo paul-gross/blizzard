@@ -253,7 +253,8 @@ def test_takeover_cli_still_declares_the_dir_flag_and_a_chunk_id_argument() -> N
     """Pins the CLI-flag shape ``TakeoverCommand`` hard-codes against the
     REAL Click command object, not the composed string — a rename of ``--dir`` or the
     chunk id here would silently break the board command while other tests stay green."""
-    takeover_cmd = runner_group.commands["takeover"]
+    takeover_cmd = runner_group.get_command(click.Context(runner_group), "takeover")
+    assert takeover_cmd is not None
 
     directory_param = next(p for p in takeover_cmd.params if p.name == "directory")
     assert directory_param.opts == ["--dir"]
@@ -271,7 +272,8 @@ def test_composed_wrapped_command_parses_through_the_real_takeover_grammar() -> 
     argv = shlex.split(composed)
     assert argv[:3] == ["blizzard", "runner", "takeover"]
 
-    takeover_cmd = runner_group.commands["takeover"]
+    takeover_cmd = runner_group.get_command(click.Context(runner_group), "takeover")
+    assert takeover_cmd is not None
     with takeover_cmd.make_context("takeover", argv[3:]) as click_ctx:
         assert click_ctx.params["chunk_id"] == "ch_1"
         # The whitespace-bearing dir round-trips through quote -> shell-split -> parse.

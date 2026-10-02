@@ -59,8 +59,11 @@ def _node_shape(command: click.Command, path: str) -> dict[str, Any]:
         "params": [_param_shape(p) for p in command.params],
     }
     if isinstance(command, click.Group):
+        ctx = click.Context(command)
         node["commands"] = {
-            name: _node_shape(child, f"{path} {name}") for name, child in sorted(command.commands.items())
+            name: _node_shape(child, f"{path} {name}")
+            for name in command.list_commands(ctx)
+            if (child := command.get_command(ctx, name)) is not None
         }
     return node
 

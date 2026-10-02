@@ -1,63 +1,57 @@
 """``blizzard runner <cmd>`` — the registry: declares the root ``runner`` group and
-composes each concept module's commands onto it."""
+maps each concept module's commands onto it.
+
+The registry is lazy: a command's module is imported only when that command runs, is listed or is
+described. A worker verb therefore loads its own module and never the OpenTelemetry SDK or the
+daemons' stacks that the host and control verbs reach. A command added here is named as
+``"<module>:<attribute>"`` and its module must not import a heavy dependency at module level
+where a worker verb's module would."""
 
 from __future__ import annotations
 
 import click
 
-from blizzard.runner.cli.analytics import analytics_group
-from blizzard.runner.cli.artifact import artifact_group
-from blizzard.runner.cli.control import pause, requeue, selftest, start, status, takeover
-from blizzard.runner.cli.external_usage import external_usage_group
-from blizzard.runner.cli.finding import finding_group
-from blizzard.runner.cli.garden import garden_group
-from blizzard.runner.cli.harness import harness_group
-from blizzard.runner.cli.opencode import opencode_group
-from blizzard.runner.cli.prompt import prompt_group
-from blizzard.runner.cli.runtime import host, init, migrate_cmd, tick_cmd
-from blizzard.runner.cli.scope import scope_group
-from blizzard.runner.cli.traces import traces_group
-from blizzard.runner.cli.transcript import transcript_group
-from blizzard.runner.cli.worker import ask, attach, chunk_group, heartbeat, pm_items, session_end, work_items
+from blizzard.cli.lazy_group import LazyGroup
+
+_CLI = "blizzard.runner.cli"
+
+_COMMANDS = {
+    "init": f"{_CLI}.runtime:init",
+    "migrate": f"{_CLI}.runtime:migrate_cmd",
+    "host": f"{_CLI}.runtime:host",
+    "tick": f"{_CLI}.runtime:tick_cmd",
+    "external-usage": f"{_CLI}.external_usage:external_usage_group",
+    "opencode": f"{_CLI}.opencode:opencode_group",
+    "heartbeat": f"{_CLI}.worker:heartbeat",
+    "session-end": f"{_CLI}.worker:session_end",
+    "ask": f"{_CLI}.worker:ask",
+    "attach": f"{_CLI}.worker:attach",
+    "work-items": f"{_CLI}.worker:work_items",
+    "pm-items": f"{_CLI}.worker:pm_items",
+    "chunk": f"{_CLI}.worker:chunk_group",
+    "prompt": f"{_CLI}.prompt:prompt_group",
+    "harness": f"{_CLI}.harness:harness_group",
+    "transcript": f"{_CLI}.transcript:transcript_group",
+    "artifact": f"{_CLI}.artifact:artifact_group",
+    "garden": f"{_CLI}.garden:garden_group",
+    "finding": f"{_CLI}.finding:finding_group",
+    "scope": f"{_CLI}.scope:scope_group",
+    "analytics": f"{_CLI}.analytics:analytics_group",
+    "traces": f"{_CLI}.traces:traces_group",
+    "status": f"{_CLI}.control:status",
+    "pause": f"{_CLI}.control:pause",
+    "start": f"{_CLI}.control:start",
+    "takeover": f"{_CLI}.control:takeover",
+    "requeue": f"{_CLI}.control:requeue",
+    "selftest": f"{_CLI}.control:selftest",
+}
 
 
-@click.group(invoke_without_command=True)
+@click.group(cls=LazyGroup, lazy=_COMMANDS, invoke_without_command=True)
 @click.pass_context
 def runner(ctx: click.Context) -> None:
     """Talk to — or become — the blizzard runner."""
     if ctx.invoked_subcommand is None:
+        host = runner.get_command(ctx, "host")
+        assert host is not None
         ctx.invoke(host)
-
-
-runner.add_command(init)
-runner.add_command(migrate_cmd)
-runner.add_command(host)
-runner.add_command(tick_cmd)
-
-runner.add_command(external_usage_group)
-runner.add_command(opencode_group)
-
-runner.add_command(heartbeat)
-runner.add_command(session_end)
-runner.add_command(ask)
-runner.add_command(attach)
-runner.add_command(work_items)
-runner.add_command(pm_items)
-runner.add_command(chunk_group)
-
-runner.add_command(prompt_group)
-runner.add_command(harness_group)
-runner.add_command(transcript_group)
-runner.add_command(artifact_group)
-runner.add_command(garden_group)
-runner.add_command(finding_group)
-runner.add_command(scope_group)
-runner.add_command(analytics_group)
-runner.add_command(traces_group)
-
-runner.add_command(status)
-runner.add_command(pause)
-runner.add_command(start)
-runner.add_command(takeover)
-runner.add_command(requeue)
-runner.add_command(selftest)
