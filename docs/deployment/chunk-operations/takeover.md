@@ -34,7 +34,7 @@ taken-over session did. Under it, the session's `blizzard runner` verbs (`attach
 and the bare `blizzard` binary resolves to the deployment's venv. The exec on Claude Code reasserts the
 `--permission-mode` that `[harness] autonomy` maps to (or the legacy `harness_permission_mode` override), but never
 `--permission-prompts none`: you are present to answer prompts. On OpenCode the exec carries no `--auto` under any
-value. The mapping is owned by [worker-spawn.md](../worker-spawn.md#harness-autonomy).
+value and none of the `deny` overrides `normal` composes for unattended launches: you are present to answer asks. The mapping is owned by [worker-spawn.md](../worker-spawn.md#harness-autonomy).
 
 A taken-over session loads neither the runner's settings nor the operator's harness-config bundle, and installs no
 heartbeat or session-end hooks: quitting records no done-signal against the lease, and liveness stays a

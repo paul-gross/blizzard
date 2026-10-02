@@ -12,6 +12,7 @@ from blizzard.runner.harness.bundle import published_snapshot
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
 from blizzard.runner.harness.internal.opencode_descendant_usage import OpenCodeDescendantUsage
 from blizzard.runner.harness.internal.opencode_export import SubprocessOpenCodeExporter
+from blizzard.runner.harness.internal.opencode_permission_resolver import SubprocessOpenCodePermissionResolver
 from blizzard.runner.harness.internal.opencode_price_cache import FileOpenCodePriceCatalog, resolve_price_cache_path
 from blizzard.runner.harness.internal.opencode_transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.process_launch import IProcessLauncher
@@ -56,6 +57,7 @@ def build_opencode_binding(
         transcript_source=transcript_source,
         price_catalog=price_catalog,
         descendant_usage=OpenCodeDescendantUsage(exporter),
+        permission_resolver=SubprocessOpenCodePermissionResolver(binary=config.opencode_binary),
         process=process,
         launcher=launcher,
     )

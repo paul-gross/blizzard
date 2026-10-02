@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, cast
@@ -644,6 +645,67 @@ def parse_worker_config(value: object) -> OpenCodeWorkerConfig:
     return OpenCodeWorkerConfig.parse(value)
 
 
+@dataclass(frozen=True)
+class OpenCodePermissionRule:
+    """One resolved ``{permission, pattern, action}`` rule of an agent's ordered ruleset."""
+
+    permission: str
+    pattern: str
+    action: str
+
+
+_AGENT_LIST_HEADER = re.compile(r"^(\S+) \((?:primary|subagent|all)\)$", re.MULTILINE)
+
+
+def parse_permission_ruleset(value: object, *, where: str = "ruleset") -> tuple[OpenCodePermissionRule, ...]:
+    """Parse one agent's ordered resolved ruleset (the later rule wins)."""
+
+    if not isinstance(value, list):
+        raise OpenCodeShapeError(f"{where} must be an array, got {type(value).__name__}")
+    rules: list[OpenCodePermissionRule] = []
+    for index, raw in enumerate(value):
+        rule = _object(raw, f"{where}[{index}]")
+        action = _string(rule, "action", f"{where}[{index}]")
+        if action not in {"allow", "ask", "deny"}:
+            raise UnknownOpenCodeShapeError(f"{where}[{index}] has unknown action {action!r}")
+        rules.append(
+            OpenCodePermissionRule(
+                permission=_string(rule, "permission", f"{where}[{index}]"),
+                pattern=_string(rule, "pattern", f"{where}[{index}]"),
+                action=action,
+            )
+        )
+    return tuple(rules)
+
+
+def parse_agent_rulesets(text: str) -> dict[str, tuple[OpenCodePermissionRule, ...]]:
+    """Parse ``opencode agent list`` stdout: ``<name> (<mode>)`` headers, each followed by that
+    agent's ruleset as an indented JSON array."""
+
+    headers = list(_AGENT_LIST_HEADER.finditer(text))
+    if not headers:
+        raise OpenCodeShapeError("agent list names no agents")
+    rulesets: dict[str, tuple[OpenCodePermissionRule, ...]] = {}
+    for index, header in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
+        name = header.group(1)
+        try:
+            body = json.loads(text[header.end() : end])
+        except json.JSONDecodeError as exc:
+            raise OpenCodeShapeError(f"agent list ruleset for {name!r} is not JSON: {exc.msg}") from exc
+        rulesets[name] = parse_permission_ruleset(body, where=f"agent {name!r} ruleset")
+    return rulesets
+
+
+def parse_resolved_config(text: str) -> dict[str, Any]:
+    """Parse ``opencode debug config`` stdout: the merged configuration object."""
+
+    try:
+        return _object(json.loads(text), "debug config")
+    except json.JSONDecodeError as exc:
+        raise OpenCodeShapeError(f"debug config is not JSON: {exc.msg}") from exc
+
+
 __all__ = [
     "KNOWN_EVENT_TYPES",
     "KNOWN_PART_TYPES",
@@ -657,6 +719,7 @@ __all__ = [
     "OpenCodePart",
     "OpenCodePartType",
     "OpenCodePermissionRequest",
+    "OpenCodePermissionRule",
     "OpenCodeRunEvent",
     "OpenCodeSessionExport",
     "OpenCodeSessionInfo",
@@ -666,8 +729,11 @@ __all__ = [
     "OpenCodeToolStatus",
     "OpenCodeWorkerConfig",
     "UnknownOpenCodeShapeError",
+    "parse_agent_rulesets",
     "parse_child_sessions",
     "parse_model_reference",
+    "parse_permission_ruleset",
+    "parse_resolved_config",
     "parse_run_event",
     "parse_run_events",
     "parse_run_jsonl",

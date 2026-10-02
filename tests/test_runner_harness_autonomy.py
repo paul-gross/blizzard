@@ -20,13 +20,18 @@ from blizzard.runner.config import (
     RunnerConfig,
 )
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import WorkerPreamble
+from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.internal.claude_code_bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.internal.claude_code_denials import CLAUDE_CODE_DENIED_TOOLS
 from blizzard.runner.harness.internal.opencode_adapter import OpenCodeAdapter
+from blizzard.runner.harness.internal.opencode_permission_resolver import (
+    OpenCodeEffectivePermissions,
+    OpenCodePermissionResolveError,
+)
+from blizzard.runner.harness.internal.opencode_shapes import OpenCodePermissionRule
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.runtime import Runtime
 from tests.runner_fakes import FakeProbe, make_envelope
@@ -74,7 +79,34 @@ def _claude(launcher: _RecordingLauncher, **kwargs: Any) -> ClaudeCodeAdapter:
     )
 
 
+def _rule(permission: str, pattern: str, action: str) -> OpenCodePermissionRule:
+    return OpenCodePermissionRule(permission, pattern, action)
+
+
+class _FakeResolver:
+    """Resolves from a canned answer; once the launch env carries a ``bash`` ask override it reports the
+    asks gone (``stuck=False``) or still present (``stuck=True``), as OpenCode's own re-resolution would."""
+
+    def __init__(self, *, ask: bool = True, stuck: bool = False, error: Exception | None = None) -> None:
+        self.calls: list[dict[str, str]] = []
+        self._ask = ask
+        self._stuck = stuck
+        self._error = error
+
+    def resolve(self, *, cwd: str, env: Any) -> OpenCodeEffectivePermissions:
+        self.calls.append(dict(env))
+        if self._error is not None:
+            raise self._error
+        composed = '"bash": "deny"' in env.get("OPENCODE_CONFIG_CONTENT", "")
+        asking = self._ask and (self._stuck or not composed)
+        rules = (_rule("*", "*", "allow"), _rule("bash", "*", "ask" if asking else "deny"))
+        return OpenCodeEffectivePermissions(
+            merged_config={"permission": {"bash": "ask"}}, agent_rulesets={"build": rules}
+        )
+
+
 def _opencode(launcher: _RecordingLauncher, **kwargs: Any) -> OpenCodeAdapter:
+    kwargs.setdefault("permission_resolver", _FakeResolver(ask=False))
     return OpenCodeAdapter(
         "opencode", worker_env=AllowlistedEnv.of(()), process=FakeProbe(), launcher=launcher, **kwargs
     )
@@ -155,6 +187,97 @@ def test_opencode_passes_auto_on_every_unattended_kind_except_normal(tmp_path: P
 
     for kind, argv in _unattended(adapter, tmp_path, launcher).items():
         assert ("--auto" in argv) is (autonomy is not Autonomy.Normal), kind
+
+
+def _content(env: dict[str, str]) -> dict[str, Any]:
+    return json.loads(env["OPENCODE_CONFIG_CONTENT"])
+
+
+def test_opencode_normal_composes_ask_denials_into_every_unattended_kind(tmp_path: Path) -> None:
+    launcher = _RecordingLauncher()
+    resolver = _FakeResolver()
+    adapter = _opencode(launcher, autonomy=Autonomy.Normal, permission_resolver=resolver)
+
+    kinds = _unattended(adapter, tmp_path, launcher)
+
+    assert len(launcher.envs) == len(kinds)
+    for env in launcher.envs:
+        assert _content(env)["permission"] == {"bash": "deny"}
+    assert len(resolver.calls) == 2 * len(kinds)
+
+
+def test_opencode_normal_keeps_the_published_document_and_adds_only_the_overrides(tmp_path: Path) -> None:
+    config = tmp_path / "opencode.json"
+    config.write_text(json.dumps({"permission": {"question": "deny", "bash": "ask"}, "plugin": ["p"]}))
+    launcher = _RecordingLauncher()
+    adapter = _opencode(
+        launcher, autonomy=Autonomy.Normal, permission_resolver=_FakeResolver(), worker_config_path=str(config)
+    )
+
+    _unattended(adapter, tmp_path, launcher)
+
+    for env in launcher.envs:
+        assert env["OPENCODE_CONFIG"] == str(config)
+        assert _content(env) == {"permission": {"question": "deny", "bash": "deny"}, "plugin": ["p"]}
+    assert json.loads(config.read_text())["permission"]["bash"] == "ask"
+
+
+@pytest.mark.parametrize("autonomy", [Autonomy.Auto, Autonomy.Dangerous])
+def test_opencode_auto_and_dangerous_carry_no_overrides_and_never_resolve(tmp_path: Path, autonomy: Autonomy) -> None:
+    launcher = _RecordingLauncher()
+    resolver = _FakeResolver()
+    adapter = _opencode(launcher, autonomy=autonomy, permission_resolver=resolver)
+
+    _unattended(adapter, tmp_path, launcher)
+
+    assert resolver.calls == []
+    assert all("OPENCODE_CONFIG_CONTENT" not in env for env in launcher.envs)
+
+
+def test_opencode_normal_with_nothing_to_deny_launches_unchanged(tmp_path: Path) -> None:
+    launcher = _RecordingLauncher()
+    adapter = _opencode(launcher, autonomy=Autonomy.Normal, permission_resolver=_FakeResolver(ask=False))
+
+    _unattended(adapter, tmp_path, launcher)
+
+    assert all("OPENCODE_CONFIG_CONTENT" not in env for env in launcher.envs)
+
+
+def test_opencode_takeover_env_carries_no_overrides(tmp_path: Path) -> None:
+    launcher = _RecordingLauncher()
+    resolver = _FakeResolver()
+    adapter = _opencode(launcher, autonomy=Autonomy.Normal, permission_resolver=resolver)
+
+    env = adapter.identity_env(_preamble(tmp_path), "ch_1", "sess-1")
+
+    assert "OPENCODE_CONFIG_CONTENT" not in env
+    assert resolver.calls == []
+
+
+@pytest.mark.parametrize(
+    ("resolver", "needle"),
+    [
+        (_FakeResolver(stuck=True), "permission 'bash' pattern '*'"),
+        (_FakeResolver(error=OpenCodePermissionResolveError("boom")), "boom"),
+        (None, "no OpenCode permission resolver"),
+    ],
+)
+def test_opencode_normal_refuses_to_launch_what_it_cannot_prove(tmp_path: Path, resolver: Any, needle: str) -> None:
+    launcher = _RecordingLauncher()
+    adapter = OpenCodeAdapter(
+        "opencode",
+        worker_env=AllowlistedEnv.of(()),
+        process=FakeProbe(),
+        launcher=launcher,
+        autonomy=Autonomy.Normal,
+        permission_resolver=resolver,
+    )
+
+    with pytest.raises(HarnessSpawnError) as caught:
+        _unattended(adapter, tmp_path, launcher)
+
+    assert needle in str(caught.value)
+    assert launcher.argvs == []
 
 
 @pytest.mark.parametrize("autonomy", _ALL)
