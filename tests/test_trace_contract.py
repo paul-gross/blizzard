@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.node_steps import Executor
-from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey, span_id, trace_id
+from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, SpanRole, StepKey, span_id, trace_id
 from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.assembly import assemble_step
@@ -39,6 +39,10 @@ from blizzard.hub.domain.tracing.facts import (
 )
 from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.domain.work import UsageFact
+from blizzard.runner.domain.tracing import attributes as runner_attr
+from blizzard.runner.domain.tracing.assembly import assemble_lease
+from blizzard.runner.domain.tracing.facts import LeaseTraceFacts
+from tests import runner_trace_fixtures as rfx
 from tests import trace_fixtures as fx
 from tests.repo_files import repo_root
 from tests.trace_contract_support import PARAMETERIZED_NAMES, dictionary, otlp_type, required_by_role, role_of_name
@@ -53,6 +57,7 @@ _VERSIONING_DOC = _ROOT / "docs" / "versioning.md"
 _REGEN_VARIABLE = "BLIZZARD_REGEN_TRACE_CONTRACT"
 _REGEN_COMMAND = f"{_REGEN_VARIABLE}=1 uv run pytest tests/test_trace_contract.py"
 _ATTRIBUTE_TYPES = {"string", "int", "double", "bool", "string[]"}
+_ROLES: dict[str, SpanRole | RunnerSpanRole] = {role.value: role for role in (*SpanRole, *RunnerSpanRole)}
 
 
 def _graph() -> Any:
@@ -164,6 +169,27 @@ SCENARIOS = {
 }
 
 
+def _runner_judged() -> LeaseTraceFacts:
+    facts = rfx.make_facts(
+        boundaries=(rfx.boundary(1, 1, "spawn", 1, 100), rfx.boundary(2, 1, "judge", 50, 100)),
+        usage=(
+            rfx.usage(1, 1, "spawn", 30),
+            rfx.usage(2, 1, "judge", 60, model="haiku", cost_usd=None, harness_id="opencode", harness_version="0.9"),
+        ),
+    )
+    return rfx.with_context(facts, session_name=None)
+
+
+RUNNER_SCENARIOS = {
+    "runner-lease": rfx.busy_facts,
+    "runner-judged": _runner_judged,
+}
+
+
+def _declared_events(module: object) -> set[str]:
+    return {value for name, value in vars(module).items() if name.startswith("EVENT_")}
+
+
 def _instant(value: datetime) -> str:
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
@@ -211,8 +237,13 @@ def _serialize(facts: StepFacts) -> str:
     return json.dumps(spans, indent=2, sort_keys=True) + "\n"
 
 
+def _serialize_lease(facts: LeaseTraceFacts) -> str:
+    return json.dumps([_span(span) for span in assemble_lease(facts)], indent=2, sort_keys=True) + "\n"
+
+
 def _live() -> dict[str, str]:
-    return {name: _serialize(build()) for name, build in SCENARIOS.items()}
+    hub = {name: _serialize(build()) for name, build in SCENARIOS.items()}
+    return hub | {name: _serialize_lease(build()) for name, build in RUNNER_SCENARIOS.items()}
 
 
 def _golden() -> dict[str, list[dict[str, Any]]]:
@@ -270,27 +301,34 @@ def test_the_live_assembly_equals_the_golden() -> None:
 def test_the_dictionary_names_exactly_the_attributes_the_code_declares() -> None:
     d = dictionary()
     named = {a["name"] for a in d["attributes"]} | {a["name"] for a in d["resource_attributes"]}
-    assert named == attr.DECLARED_ATTRIBUTES
-    assert {a["name"] for a in d["resource_attributes"]} == set(attr.resource_attributes({}, "0"))
+    assert named == attr.DECLARED_ATTRIBUTES | runner_attr.DECLARED_ATTRIBUTES
+    resource = {a["name"] for a in d["resource_attributes"]}
+    assert resource == set(attr.resource_attributes({}, "0")) == set(runner_attr.resource_attributes({}, "0"))
 
 
 def test_the_dictionary_constants_equal_the_code_constants() -> None:
     d = dictionary()
-    assert d["instrumentation_scope"] == {
-        "name": attr.INSTRUMENTATION_SCOPE,
-        "version": attr.INSTRUMENTATION_SCOPE_VERSION,
-    }
+    assert d["instrumentation_scopes"] == [
+        {"name": attr.INSTRUMENTATION_SCOPE, "version": attr.INSTRUMENTATION_SCOPE_VERSION},
+        {"name": runner_attr.INSTRUMENTATION_SCOPE, "version": runner_attr.INSTRUMENTATION_SCOPE_VERSION},
+    ]
     assert d["schema_version"] == shared.SCHEMA_VERSION
     assert d["genai_semconv_version"] == shared.GENAI_SEMCONV_VERSION
-    assert d["event_names"] == sorted([attr.EVENT_INVOCATION, attr.EVENT_HUB_POLL, attr.EVENT_BOUNCE])
+    assert d["event_names"] == sorted(_declared_events(attr) | _declared_events(runner_attr))
 
 
 def test_the_dictionary_roles_are_the_code_roles() -> None:
     d = dictionary()
-    assert {entry["role"] for entry in d["spans"]} == {role.value for role in SpanRole}
+    assert {entry["role"] for entry in d["spans"]} == set(_ROLES)
+    for entry in d["spans"]:
+        hub = isinstance(_ROLES[entry["role"]], SpanRole)
+        assert entry["scope"] == (attr.INSTRUMENTATION_SCOPE if hub else runner_attr.INSTRUMENTATION_SCOPE), entry[
+            "role"
+        ]
     for entry in d["attributes"]:
         assert entry["type"] in _ATTRIBUTE_TYPES, entry["name"]
         assert entry["meaning"], entry["name"]
+        assert set(entry.get("optional_on", ())) <= set(entry["on"]), entry["name"]
 
 
 def test_the_golden_shape_is_the_dictionary_shape() -> None:
@@ -339,9 +377,20 @@ def test_the_id_vectors_reproduce_through_the_derivation() -> None:
         key = StepKey(vector["chunk_id"], vector["epoch"], vector.get("decision_id"))
         assert key.text() == vector["key"]
         assert f"{trace_id(key):032x}" == vector["trace_id"]
-        role = SpanRole(vector["role"])
+        role = _ROLES[vector["role"]]
         assert f"{span_id(key, role, vector['discriminator']):016x}" == vector["span_id"]
         assert DerivedContext.of(key, role, vector["discriminator"]).trace_flags == 1
+        if "parent_span_id" in vector:
+            assert vector["parent_span_id"] == f"{span_id(key, SpanRole.STEP):016x}"
+
+
+def test_a_runner_worker_vector_parents_into_the_step_vector_of_its_attempt() -> None:
+    vectors = dictionary()["ids"]["vectors"]
+    workers = [v for v in vectors if v["role"] == RunnerSpanRole.WORKER]
+    assert workers
+    for worker in workers:
+        step = next(v for v in vectors if v["role"] == SpanRole.STEP and v["key"] == worker["key"])
+        assert (worker["trace_id"], worker["parent_span_id"]) == (step["trace_id"], step["span_id"])
 
 
 def test_the_trace_id_prefix_and_span_prefix_match_thedictionary() -> None:

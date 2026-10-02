@@ -26,8 +26,8 @@ Mark a breaking commit with a `!` before the colon of its Conventional Commit su
 ## The trace contract
 
 [`contracts/traces/`](../contracts/traces/README.md) pins the shape of a step's trace: `dictionary.json` is the authored
-contract, and `golden/` is the spans the hub assembles for seeded scenarios. `blizzard:trace-contract` fails when the
-assembled spans drift from either, so a shape change is always a deliberate edit to the dictionary.
+contract, and `golden/` is the spans the hub and a runner assemble for seeded scenarios. `blizzard:trace-contract` fails
+when the assembled spans drift from either, so a shape change is always a deliberate edit to the dictionary.
 
 A rename is not a single release: the release that introduces the new name emits both, for at least one minor, with the
 old name marked deprecated in `dictionary.json`. Removing the old name afterwards is the breaking change. Every breaking

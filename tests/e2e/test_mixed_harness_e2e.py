@@ -59,8 +59,10 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.domain.analytics.events import KIND_AGENT_SPAWN, KIND_SKILL_INVOCATION
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.store import schema as runner_schema
 from tests.crash.support import (
     ENV_HARNESS_FENCE,
@@ -69,6 +71,7 @@ from tests.crash.support import (
     REPO_NAME,
     await_http,
     build_script,
+    default_work_sources,
     forge_daemon,
     git_bare,
     mock_bin_dir,
@@ -80,8 +83,10 @@ from tests.crash.support import (
     winter_source,
     write_runner_config,
 )
+from tests.e2e.fleet_traces import FleetCollector, InvocationExpect, assert_invocations
+from tests.e2e.harness_variants import MOCK_CLAUDE_CODE_MODEL
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.support import daemon_log_sink, free_port
+from tests.support import daemon_log_sink, free_port, write_work_sources
 
 pytestmark = [
     pytest.mark.e2e,
@@ -147,14 +152,25 @@ _GIT_COMMIT_PRODUCES = [{"name": "commit", "kind": "git_commit"}]
 #: actually makes this non-racy; this constant only bounds how long that slack is.
 _BOUNDARY_TICK_SECONDS = "8"
 
+_TRACING = TracingConfig(sweep_seconds=1, settle_seconds=0)
 
-def _start_runner(runner_dir: Path, *, tick_seconds: str) -> subprocess.Popen[str]:
+
+def _scaffold_traced_hub(hub_dir: Path, forge_port: int) -> None:
+    hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
+    subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
+    config = dataclasses.replace(write_work_sources(hub_dir, default_work_sources(forge_port)), tracing=_TRACING)
+    config.config_path.write_text(config.to_toml())
+
+
+def _start_runner(
+    runner_dir: Path, *, tick_seconds: str, extra_env: dict[str, str] | None = None
+) -> subprocess.Popen[str]:
     """`tests.crash.support.start_runner`'s own body, parameterized on the tick interval
     instead of hardcoding its brisk crash-sweep cadence — this module's one genuine
     divergence from that helper's needs (see the module docstring). Never arms a
     crash point: every restart here is a clean operator-style SIGTERM, not a kill -9."""
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
-    env = {**os.environ, "BZ_RUNNER_TICK_SECONDS": tick_seconds, ENV_HARNESS_FENCE: "1"}
+    env = {**os.environ, "BZ_RUNNER_TICK_SECONDS": tick_seconds, ENV_HARNESS_FENCE: "1", **(extra_env or {})}
     return subprocess.Popen(
         [runner_bin, "host", "--dir", str(runner_dir)],
         env=env,
@@ -362,7 +378,7 @@ def _wait_build_judged(runner_dir: Path, chunk_id: str, build_node_id: str, *, t
 
 
 def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_restarts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fleet_traces: FleetCollector, subtests: pytest.Subtests
 ) -> None:
     """One chunk's one traversal crosses from Claude Code into OpenCode; the runner
     daemon is cleanly restarted once at the lineage boundary and once more mid-session
@@ -408,9 +424,12 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     runner_client = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=15.0)
     daemon_log = runner_dir / "daemon.log"
+    otel_env = {"OTEL_EXPORTER_OTLP_ENDPOINT": fleet_traces.endpoint} if fleet_traces.available else {}
     try:
         with forge_daemon(bin_dir, origins, forge_port) as forge:
-            hub_proc = start_hub(hub_dir, forge_port=forge_port, port=hub_port, crash_point=None)
+            if fleet_traces.available:
+                _scaffold_traced_hub(hub_dir, forge_port)
+            hub_proc = start_hub(hub_dir, forge_port=forge_port, port=hub_port, crash_point=None, extra_env=otel_env)
             await_http(hub, "/api/health", proc=hub_proc)
 
             # 1. Mint the mixed graph and resolve each node's id (`GET/POST /api/graphs`'s
@@ -457,12 +476,13 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
                 transcripts_root=str(transcripts_root),
                 transcripts_ship=True,
                 worker_env_passthrough=(ENV_HARNESS_FENCE, ENV_TRANSCRIPTS_ROOT),
+                **({"tracing": _TRACING} if fleet_traces.available else {}),
             )
             config.config_path.write_text(config.to_toml())
 
             # 3. Start the runner — on the wide boundary tick (see the module docstring)
             # — and let the Claude Code lineage (`build`) run to completion.
-            runner_proc = _start_runner(runner_dir, tick_seconds=_BOUNDARY_TICK_SECONDS)
+            runner_proc = _start_runner(runner_dir, tick_seconds=_BOUNDARY_TICK_SECONDS, extra_env=otel_env)
             await_http(runner_client, "/api/health", proc=runner_proc)
             assert _daemon_start_count(daemon_log) == 1, "the runner's own first start left no startup banner"
 
@@ -478,7 +498,7 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
             terminate(runner_proc)
             assert runner_proc.poll() is not None, "restart #1: the runner did not actually exit"
             # Every start from here on reverts to the crash tier's own brisk tick.
-            runner_proc = start_runner(runner_dir, crash_point=None)
+            runner_proc = start_runner(runner_dir, crash_point=None, extra_env=otel_env)
             await_http(runner_client, "/api/health", proc=runner_proc)
             assert runner_proc.pid != old_pid, "restart #1: the daemon was not genuinely relaunched"
             assert _daemon_start_count(daemon_log) == 2, "restart #1 did not relaunch a fresh daemon process"
@@ -503,7 +523,7 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
             assert _open_resume_intents(runner_dir) == {lease_id}, (
                 "graceful shutdown before restart #2 did not mark the hung opencode-review lease for resume"
             )
-            runner_proc = start_runner(runner_dir, crash_point=None)
+            runner_proc = start_runner(runner_dir, crash_point=None, extra_env=otel_env)
             await_http(runner_client, "/api/health", proc=runner_proc)
             assert _daemon_start_count(daemon_log) == 3, "restart #2 did not relaunch a fresh daemon process"
 
@@ -616,6 +636,20 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
             assert all(e["harness_id"] == "opencode" for e in review_spawn), review_spawn
             assert {e["effort"] for e in review_spawn} == {_SESSION_EFFORT}, review_spawn
             assert {e["model"] for e in review_spawn} == set(_SESSION_MODEL), review_spawn
+
+            fleet_traces.await_workers(2)
+            with subtests.test(msg="runner traces"):
+                fleet_traces.require()
+                runner = fleet_traces.runner_spans(roots=3, workers=2)
+                assert_invocations(
+                    runner,
+                    {
+                        "build": InvocationExpect(
+                            CLAUDE_CODE_HARNESS_ID, MOCK_CLAUDE_CODE_MODEL, _CHUNK_DEFAULT_MODEL[0]
+                        ),
+                        "opencode-review": InvocationExpect(OPENCODE_HARNESS_ID, _SESSION_MODEL[0], _SESSION_MODEL[0]),
+                    },
+                )
     finally:
         hub.close()
         runner_client.close()

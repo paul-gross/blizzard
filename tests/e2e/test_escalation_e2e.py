@@ -1,8 +1,8 @@
 """Retries exhausted -> needs_human -> resumable takeover — the `test_escalation_e2e`
 scenario of the standing e2e smoke — MVP criterion 6.
 
-Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree
-provisioned. Reuses the acceptance loop's live-stack scaffolding.
+Runs under both mock harnesses. Skipped unless ``BLIZZARD_E2E=1`` with the sibling
+``blizzard-mock`` worktree provisioned. Reuses the acceptance loop's live-stack scaffolding.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
-import re
 import shlex
 import subprocess
 import uuid
@@ -18,7 +17,15 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
+from tests.e2e.fleet_traces import (
+    FleetCollector,
+    InvocationExpect,
+    StepExpect,
+    assert_invocations,
+    assert_skeleton,
+    runner_sweep,
+)
+from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,
@@ -52,9 +59,7 @@ _TAKEOVER_MARKER = f"human-takeover-{uuid.uuid4().hex}"
 _TAKEOVER_INPUT = f"# {_TAKEOVER_MARKER}\n"
 
 
-def _graph_yaml() -> str:
-    import yaml
-
+def _graph_yaml(harness: MockHarness) -> str:
     graph = {
         "name": "default-delivery",
         "entry": "build",
@@ -84,7 +89,7 @@ def _graph_yaml() -> str:
             },
         },
     }
-    return yaml.safe_dump(graph, sort_keys=False)
+    return harness.graph_yaml(graph)
 
 
 def _session_state_path(workspace: Path, session_id: str) -> Path:
@@ -93,8 +98,9 @@ def _session_state_path(workspace: Path, session_id: str) -> Path:
     return workspace / ".blizzard-mock-harness" / "sessions" / f"{session_id}.json"
 
 
+@both_mock_harnesses
 def test_retries_exhausted_escalates_and_takeover_resumes_session(
-    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests, harness: MockHarness
 ) -> None:
     """Two verdict-less exits exhaust the budget; the escalation's takeover command,
     run verbatim, resumes the parked mock session."""
@@ -131,7 +137,7 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(
         _forge(bin_dir, origins, forge_port) as forge,
         _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(harness)}).status_code == 201
 
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "escalation", "body": "the chunk"})
         assert issue.status_code == 201, issue.text
@@ -148,7 +154,10 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(
         config = dataclasses.replace(config, max_agents=1)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_until_done(config, hub, chunk_id, fenced)
+        with runner_sweep(config, fleet_traces) as sweep:
+            sweep.plant()
+            status = _drive_until_done(config, hub, chunk_id, fenced)
+            sweep.drain(workers=2)
 
         # The retry budget exhausted after two verdict-less attempts -> needs_human.
         assert status == "needs_human", f"chunk did not derive needs_human (last status {status!r})"
@@ -178,11 +187,15 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(
                 ],
             )
 
+        with subtests.test(msg="runner traces"):
+            fleet_traces.require()
+            runner = fleet_traces.runner_spans(roots=2, workers=2)
+            expect = InvocationExpect(harness.harness_id, harness.response_model, harness.request_model)
+            assert_invocations(runner, {"build": expect})
+
         # The parked session the takeover command targets (parsed from the command
         # itself — proof the command names a real, resumable session).
-        match = re.search(r"--resume (\S+)", takeover)
-        assert match is not None, f"takeover command carries no --resume session: {takeover!r}"
-        session_id = match.group(1)
+        session_id = harness.takeover_session(takeover)
         state_path = _session_state_path(workspace, session_id)
         assert state_path.is_file(), f"the parked session state should exist on disk: {state_path}"
         turns_before = json.loads(state_path.read_text())["turns"]
@@ -199,6 +212,9 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(
         )
         assert result.returncode == 0, f"takeover command failed ({result.returncode}):\n{result.stderr}"
 
+    if harness is not CLAUDE_CODE:
+        assert session_id in result.stdout, f"the opencode takeover did not open the parked session: {result.stdout!r}"
+        return
     # The verbatim command actually resumed the session: its persisted state advanced a
     # turn AND recorded the human's takeover message — not just that the string existed.
     after = json.loads(state_path.read_text())

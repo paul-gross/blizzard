@@ -2,7 +2,7 @@
 
 The happy-path `build -> review -> deliver` companion, but the scripted review fails once
 before passing: the `fail` edge carries its findings + `prompt_addendum` into build's
-re-entry, and build runs twice — both commits land on bare `main`.
+re-entry, and build runs twice — both commits land on bare `main`. Runs under both mock harnesses.
 """
 
 from __future__ import annotations
@@ -14,7 +14,15 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
+from tests.e2e.fleet_traces import (
+    FleetCollector,
+    InvocationExpect,
+    StepExpect,
+    assert_invocations,
+    assert_skeleton,
+    runner_sweep,
+)
+from tests.e2e.harness_variants import MockHarness, both_mock_harnesses
 from tests.e2e.test_acceptance_loop import (
     _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
@@ -45,12 +53,12 @@ _BUILD_SCRIPT = (
     f"repo = {REPO_NAME!r}\n"
     'p = pathlib.Path(repo) / "BUILD.md"\n'
     'p.write_text((p.read_text() if p.exists() else "") + "build pass\\n")\n'
-    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
+    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'
     "subprocess.run(\n"
     '    ["git", "-C", repo,\n'
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: a build pass"],\n'
-    "    check=True,\n"
+    "    check=True, capture_output=True,\n"
     ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
@@ -60,12 +68,12 @@ _BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
 _REVIEW_ADDENDUM = (
     "# re-entry after a failed review — address the findings\n"
     'pathlib.Path(repo, "REVIEW_ADDRESSED.md").write_text("addressed the review findings\\n")\n'
-    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
+    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True, capture_output=True)\n'
     "subprocess.run(\n"
     '    ["git", "-C", repo,\n'
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "fix: address review findings"],\n'
-    "    check=True,\n"
+    "    check=True, capture_output=True,\n"
     ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 
@@ -85,9 +93,7 @@ _REVIEW_JUDGEMENT = (
 )
 
 
-def _graph_yaml() -> str:
-    import yaml
-
+def _graph_yaml(harness: MockHarness) -> str:
     graph = {
         "name": "default-delivery",
         "entry": "build",
@@ -138,11 +144,12 @@ def _graph_yaml() -> str:
             },
         },
     }
-    return yaml.safe_dump(graph, sort_keys=False)
+    return harness.graph_yaml(graph)
 
 
+@both_mock_harnesses
 def test_review_cycle_fails_once_then_delivers(
-    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests, harness: MockHarness
 ) -> None:
     """A scripted review fails once, the work re-builds, review passes, delivery lands."""
     bin_dir = _mock_bin_dir()
@@ -179,7 +186,7 @@ def test_review_cycle_fails_once_then_delivers(
         _forge(bin_dir, origins, forge_port) as forge,
         _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(harness)}).status_code == 201
 
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "review cycle", "body": "the chunk"})
         assert issue.status_code == 201, issue.text
@@ -196,7 +203,10 @@ def test_review_cycle_fails_once_then_delivers(
         config = dataclasses.replace(config, max_agents=1)
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-        status = _drive_until_done(config, hub, chunk_id, fenced)
+        with runner_sweep(config, fleet_traces) as sweep:
+            sweep.plant()
+            status = _drive_until_done(config, hub, chunk_id, fenced)
+            sweep.drain(workers=4)
 
         assert status == "done", f"chunk did not reach done (last status {status!r})"
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
@@ -235,6 +245,12 @@ def test_review_cycle_fails_once_then_delivers(
             )
             assert [t.root.attributes["blizzard.step.visit"] for t in traces] == [1, 1, 2, 2, 1]
             assert [t.root.attributes.get("blizzard.step.choice") for t in traces[:2]] == ["pass", "fail"]
+
+        with subtests.test(msg="runner traces"):
+            fleet_traces.require()
+            runner = fleet_traces.runner_spans(roots=5, workers=4)
+            expect = InvocationExpect(harness.harness_id, harness.response_model, harness.request_model)
+            assert_invocations(runner, {"build": expect, "review": expect})
 
     # The review-fail cycle ran build TWICE — two 'build pass' lines land on main.
     build_md = _git_bare(origin_bare, "show", "main:BUILD.md")

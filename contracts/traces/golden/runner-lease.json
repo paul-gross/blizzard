@@ -1,0 +1,281 @@
+[
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "blizzard#745"
+      ],
+      "blizzard.effort.resolved": "high",
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.harness.id": "claude-code",
+      "blizzard.harness.version": "2.1",
+      "blizzard.lease.close_reason": "transitioned",
+      "blizzard.lease.id": "lease_1",
+      "blizzard.model.resolved": "opus",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.session.name": "builder",
+      "blizzard.step.epoch": 1
+    },
+    "end": "2026-01-01T00:01:40Z",
+    "events": [
+      {
+        "attributes": {},
+        "name": "nudge",
+        "time": "2026-01-01T00:01:25Z"
+      },
+      {
+        "attributes": {
+          "blizzard.check.index": 1,
+          "blizzard.check.passed": false
+        },
+        "name": "check",
+        "time": "2026-01-01T00:01:35Z"
+      },
+      {
+        "attributes": {
+          "blizzard.checks.count": 1,
+          "blizzard.checks.passed": false
+        },
+        "name": "checks ran",
+        "time": "2026-01-01T00:01:35Z"
+      }
+    ],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "worker build",
+    "parent_span_id": "88d23b1ca9cc34d2",
+    "span_id": "b122cf84fa5df19f",
+    "start": "2026-01-01T00:00:00Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "blizzard#745"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.harness.id": "claude-code",
+      "blizzard.harness.version": "2.1",
+      "blizzard.invocation.cache_create_tokens": 50,
+      "blizzard.invocation.cache_read_tokens": 1000,
+      "blizzard.invocation.cost.estimated": false,
+      "blizzard.invocation.cost.usd": 0.5,
+      "blizzard.invocation.end_source": "session_end",
+      "blizzard.invocation.generation": 1,
+      "blizzard.invocation.input_tokens": 100,
+      "blizzard.invocation.kind": "spawn",
+      "blizzard.invocation.nudge": false,
+      "blizzard.invocation.output_tokens": 10,
+      "blizzard.lease.id": "lease_1",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.session.name": "builder",
+      "blizzard.step.epoch": 1,
+      "gen_ai.agent.name": "builder",
+      "gen_ai.conversation.id": "sess-1",
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.request.model": "opus",
+      "gen_ai.response.model": "claude-opus",
+      "gen_ai.usage.cache_creation.input_tokens": 50,
+      "gen_ai.usage.cache_read.input_tokens": 1000,
+      "gen_ai.usage.input_tokens": 1150,
+      "gen_ai.usage.output_tokens": 10
+    },
+    "end": "2026-01-01T00:00:19Z",
+    "events": [
+      {
+        "attributes": {},
+        "name": "session identified",
+        "time": "2026-01-01T00:00:02Z"
+      },
+      {
+        "attributes": {
+          "blizzard.context.tokens": 500
+        },
+        "name": "context sample",
+        "time": "2026-01-01T00:00:10Z"
+      },
+      {
+        "attributes": {},
+        "name": "session end",
+        "time": "2026-01-01T00:00:19Z"
+      }
+    ],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "invoke_agent builder",
+    "parent_span_id": "b122cf84fa5df19f",
+    "span_id": "72881c7fb0ee66ec",
+    "start": "2026-01-01T00:00:01Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "blizzard#745"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.lease.id": "lease_1",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.epoch": 1
+    },
+    "end": "2026-01-01T00:00:40Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "parked on ask",
+    "parent_span_id": "b122cf84fa5df19f",
+    "span_id": "adc43956102791c2",
+    "start": "2026-01-01T00:00:20Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "blizzard#745"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.harness.id": "claude-code",
+      "blizzard.harness.version": "2.1",
+      "blizzard.invocation.cache_create_tokens": 50,
+      "blizzard.invocation.cache_read_tokens": 1000,
+      "blizzard.invocation.cost.estimated": true,
+      "blizzard.invocation.cost.usd": 0.6,
+      "blizzard.invocation.end_source": "lease_close",
+      "blizzard.invocation.generation": 2,
+      "blizzard.invocation.input_tokens": 100,
+      "blizzard.invocation.kind": "resume",
+      "blizzard.invocation.nudge": false,
+      "blizzard.invocation.output_tokens": 10,
+      "blizzard.lease.id": "lease_1",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.session.name": "builder",
+      "blizzard.step.epoch": 1,
+      "gen_ai.agent.name": "builder",
+      "gen_ai.conversation.id": "sess-2",
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.request.model": "opus",
+      "gen_ai.response.model": "claude-opus",
+      "gen_ai.usage.cache_creation.input_tokens": 50,
+      "gen_ai.usage.cache_read.input_tokens": 1000,
+      "gen_ai.usage.input_tokens": 1150,
+      "gen_ai.usage.output_tokens": 10
+    },
+    "end": "2026-01-01T00:01:40Z",
+    "events": [
+      {
+        "attributes": {},
+        "name": "session identified",
+        "time": "2026-01-01T00:00:42Z"
+      }
+    ],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "invoke_agent builder",
+    "parent_span_id": "b122cf84fa5df19f",
+    "span_id": "986386d3bf6b208c",
+    "start": "2026-01-01T00:00:41Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "blizzard#745"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.lease.id": "lease_1",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.epoch": 1
+    },
+    "end": "2026-01-01T00:01:40Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "parked on pause",
+    "parent_span_id": "b122cf84fa5df19f",
+    "span_id": "69a7aaa187c8b456",
+    "start": "2026-01-01T00:00:50Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "blizzard#745"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.lease.id": "lease_1",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.overload.streak": 1,
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.epoch": 1
+    },
+    "end": "2026-01-01T00:01:10Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "provider overload backoff",
+    "parent_span_id": "b122cf84fa5df19f",
+    "span_id": "e4feeae6bfaf2cba",
+    "start": "2026-01-01T00:01:00Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  },
+  {
+    "attributes": {
+      "blizzard.chunk.id": "ch_1",
+      "blizzard.chunk.work_refs": [
+        "blizzard#745"
+      ],
+      "blizzard.graph.id": "g1",
+      "blizzard.graph.name": "flow",
+      "blizzard.lease.id": "lease_1",
+      "blizzard.node.executor": "runner",
+      "blizzard.node.id": "g1-build",
+      "blizzard.node.name": "build",
+      "blizzard.runner.id": "r-1",
+      "blizzard.step.epoch": 1
+    },
+    "end": "2026-01-01T00:01:40Z",
+    "events": [],
+    "kind": "INTERNAL",
+    "links": [],
+    "name": "takeover",
+    "parent_span_id": "b122cf84fa5df19f",
+    "span_id": "ccbb1eaf0411b3f2",
+    "start": "2026-01-01T00:01:20Z",
+    "status": "UNSET",
+    "trace_id": "914265ea3262e40441fa95402ba66e6d"
+  }
+]
