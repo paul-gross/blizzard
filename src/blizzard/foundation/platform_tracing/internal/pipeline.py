@@ -19,6 +19,7 @@ from opentelemetry.metrics import NoOpMeterProvider
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import Span, SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
+from opentelemetry.trace import Status, StatusCode
 from sqlalchemy import Engine
 
 from blizzard.foundation.platform_tracing.handle import ScopeFilter
@@ -52,10 +53,19 @@ class _SdkTracer:
 
     @contextmanager
     def _span(self, name: str, attributes: Attributes | None, context: Context | None) -> Iterator[None]:
+        # An exception's message can carry a secret, so the span records that it failed and never why.
         with self._tracer.start_as_current_span(
-            name, context=context, attributes=dict(attributes or {}), record_exception=False
-        ):
-            yield
+            name,
+            context=context,
+            attributes=dict(attributes or {}),
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            try:
+                yield
+            except BaseException:
+                span.set_status(Status(StatusCode.ERROR))
+                raise
 
 
 class EnabledPlatformTracing:

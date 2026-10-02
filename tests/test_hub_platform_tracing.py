@@ -74,7 +74,9 @@ def test_a_sweep_pass_opens_its_own_root(tmp_path: Path) -> None:
     handle = _handle(config, exporter)
     app = hub_app.build_hosted_app(config, platform_tracing=handle)
     app.state.shutdown = asyncio.Event()
-    sweep = next(hub_app.Sweep.all(app))
+    sweeps = list(hub_app.Sweep.all(app))
+    assert {sweep.name for sweep in sweeps} >= {"transcript_events", "work_closure", "work_item_materialization"}
+    sweep = next(sweep for sweep in sweeps if sweep.name == "work_closure")
 
     async def one_pass() -> None:
         task = asyncio.create_task(sweep.run())
@@ -83,7 +85,7 @@ def test_a_sweep_pass_opens_its_own_root(tmp_path: Path) -> None:
         await task
 
     asyncio.run(one_pass())
-    roots = [s for s in _spans(handle, exporter) if s.name == f"sweep {sweep.name}"]
+    roots = [s for s in _spans(handle, exporter) if s.name == "sweep work_closure"]
     assert roots
     assert all(s.parent is None for s in roots)
 
@@ -134,3 +136,15 @@ def test_platform_off_with_an_endpoint_set_builds_no_provider(tmp_path: Path, mo
     from opentelemetry import trace
 
     assert type(trace.get_tracer_provider()).__name__ == "ProxyTracerProvider"
+
+
+def test_a_route_without_a_chunk_id_carries_no_chunk_attribute(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    config = _config(tmp_path)
+    handle = _handle(config, exporter)
+    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    with TestClient(app) as client:
+        client.get("/api/health")
+    server = [s for s in _spans(handle, exporter) if s.name == "GET /api/health"]
+    assert len(server) == 1
+    assert _CHUNK_ID not in (server[0].attributes or {})

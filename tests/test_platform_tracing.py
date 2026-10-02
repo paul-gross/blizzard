@@ -199,3 +199,22 @@ def test_importing_the_package_with_tracing_off_loads_no_sdk_or_instrumentation(
     loaded = json.loads(result.stdout)
     heavy = [m for m in loaded if m.startswith(("opentelemetry.sdk", "opentelemetry.instrumentation"))]
     assert not heavy, heavy
+
+
+def test_a_raising_span_records_failure_but_never_the_exception_message() -> None:
+    exporter = InMemorySpanExporter()
+    handle = build_platform_tracing(
+        TracingConfig(platform=True, platform_sample_ratio=1.0),
+        _ENDPOINT,
+        resource=_RESOURCE,
+        scope="s",
+        scope_version="1",
+        exporter=exporter,
+    )
+    with pytest.raises(ValueError), handle.tracer.root("tick"):
+        raise ValueError("token=s3cret")
+    handle.shutdown(5.0)
+    (span,) = exporter.get_finished_spans()
+    assert span.status.status_code.name == "ERROR"
+    assert span.status.description is None
+    assert "s3cret" not in repr((dict(span.attributes or {}), span.events))
