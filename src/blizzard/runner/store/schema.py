@@ -452,6 +452,8 @@ lease_tokens = Table(
     Column("token_hash", Text, nullable=False),
     Column("minted_at", UtcDateTime, nullable=False),
 )
+# A request that carries only the token finds its lease by hash.
+Index("ix_lease_tokens_token_hash", lease_tokens.c.token_hash)
 
 # --- Attachments (a worker's explicit artifact submission) ------
 # Append-only, latest-wins-per-``(lease_id, name)``, so a re-submit is a correction.

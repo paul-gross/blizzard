@@ -8,12 +8,21 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class ReceiverStatus(BaseModel):
+    """The runner's span receiver since it started: worker spans accepted into its export pipeline, and
+    spans refused — out of step, off allowlist, or over a cap."""
+
+    accepted_spans: int
+    dropped_spans: int
+
+
 class TraceStatusResponse(BaseModel):
     """Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only —
     scheme, host and port. ``rejected_setting``/``rejected_value`` name what a ``rejected`` state could not
     honor. ``lag_seconds`` is the age of the oldest closed step the cursor has not passed, ``None`` when
     nothing waits. ``last_error_at`` is when the newest failure began, and ``last_error_ongoing`` whether no
-    export has succeeded since; no exporter error text is carried, only the event's fixed message."""
+    export has succeeded since; no exporter error text is carried, only the event's fixed message. ``receiver``
+    is the runner's span-receiver tally and is ``None`` on the hub, which has no receiver."""
 
     state: Literal["enabled", "disabled", "rejected"]
     endpoint: str | None
@@ -26,6 +35,7 @@ class TraceStatusResponse(BaseModel):
     last_error_at: str | None
     last_error_message: str | None
     last_error_ongoing: bool
+    receiver: ReceiverStatus | None = None
 
 
 class TraceReplayRequest(BaseModel):

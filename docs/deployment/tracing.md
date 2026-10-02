@@ -251,14 +251,51 @@ its time. They share no trace with a step, and the [Spans](#spans) table does no
 - **What never leaves.** The [What never leaves](#what-never-leaves) rules hold here too. A request's query string and a
   query's bound values are never recorded, and nor are headers or bodies.
 
+### Worker spans
+
+A worker's own tools can send spans to the runner that spawned them. The runner serves OTLP over HTTP at
+`POST /v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts through its own
+platform pipeline, so the spans leave to the same endpoint, through the same redacting export, as its own.
+The receiver exists only while platform tracing is on; with it off the path answers `404`, and a sender is expected to
+carry on.
+
+- **Authentication.** The worker's lease token, in `X-Blizzard-Lease-Token` or as an `Authorization: Bearer` header. The
+  request names no lease: the runner finds the lease the token was minted for, which must still be active or under an
+  open takeover. A missing, unknown or closed-lease token is refused `403`.
+- **Encodings.** `application/json` and `application/x-protobuf`, both identity-encoded; any `Content-Encoding` but
+  `identity` is refused `415`, as is any other content type. A malformed body is refused `400`. A `200` carries an
+  OTLP `ExportTraceServiceResponse` in the request's encoding, whose `partial_success.rejected_spans` counts the spans
+  that were refused.
+- **What is kept.** A span is kept only if it belongs to the trace of the lease's own step attempt and arrives under the
+  scope `blizzard.cli`. Anything else is dropped, and counted. Events, links, trace state and the status message are
+  never kept.
+- **What is rewritten.** The span leaves under the runner's resource with `service.name` set to `blizzard-cli`, whatever
+  the sender said. Only the CLI attributes in [Platform attributes](#platform-attributes) are kept, and only with the
+  value type listed there; the runner then stamps `blizzard.caller` as `worker` and `blizzard.chunk.id` and
+  `blizzard.lease.id` from the lease, replacing anything the sender set. A URL attribute loses its query string and
+  fragment, as every platform span's does.
+- **Caps.** A request body over 1 MiB is refused `413`. Each lease may send 1000 spans in a burst and 50 a second
+  sustained; a request needing more spans than its bucket holds is refused `429` whole, and its spans are counted as
+  dropped. A span keeps at most 64 of its attributes, and a span name, scope version or string attribute value is cut at
+  1024 characters.
+
 ### Platform attributes
 
-| Attribute            | Type     | Meaning                                                                                                      |
-| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `blizzard.caller`    | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
-| `blizzard.chunk.id`  | `string` | The chunk a request's route names.                                                                           |
-| `blizzard.runner.id` | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
-| `blizzard.tick.step` | `string` | The tick step a child span covers.                                                                           |
+| Attribute                   | Type     | Meaning                                                                                                      |
+| --------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `blizzard.caller`           | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
+| `blizzard.chunk.id`         | `string` | The chunk a request's route names.                                                                           |
+| `blizzard.cli.command`      | `string` | The CLI command a worker ran, as a span of the scope `blizzard.cli`.                                         |
+| `blizzard.lease.id`         | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |
+| `blizzard.runner.id`        | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
+| `blizzard.tick.step`        | `string` | The tick step a child span covers.                                                                           |
+| `error.type`                | `string` | The error class when the CLI's request failed.                                                               |
+| `http.request.method`       | `string` | The HTTP method of the CLI's request to a daemon.                                                            |
+| `http.response.status_code` | `int`    | The status the daemon answered the CLI's request with.                                                       |
+| `process.exit.code`         | `int`    | The exit code of the CLI command.                                                                            |
+| `server.address`            | `string` | The host the CLI's request went to.                                                                          |
+| `server.port`               | `int`    | The port the CLI's request went to.                                                                          |
+| `url.full`                  | `string` | The CLI request's URL, without query string or fragment.                                                     |
 
 ## Checking on tracing
 
@@ -279,6 +316,10 @@ its time. They share no trace with a step, and the [Spans](#spans) table does no
   carries no exporter error text, which can hold the endpoint; the details are in the hub's log.
 
 Last export and last error are read from what the sweep recorded, so they survive a restart.
+
+`blizzard runner traces status` also reports the runner's receiver: the worker spans it accepted and dropped since it
+started. These are counts held in memory, so they reset on a restart; `blizzard hub traces status` has no such line,
+since the hub has no receiver.
 
 ## Telling a window again
 

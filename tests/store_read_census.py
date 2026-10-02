@@ -681,6 +681,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadTokenRepository, "route_token"): lambda w: w.read.tokens.route_token(w.chunk_1),
     (IReadTokenRepository, "lease_token_hash"): lambda w: w.read.tokens.lease_token_hash(w.lease_2),
+    (IReadTokenRepository, "lease_for_token_hash"): lambda w: w.read.tokens.lease_for_token_hash("absent"),
     (IReadWorkspacePromptRepository, "workspace_prompt_override"): lambda w: (
         w.read.workspace_prompt.workspace_prompt_override(w.workspace_id)
     ),

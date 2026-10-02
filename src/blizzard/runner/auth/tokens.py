@@ -27,6 +27,11 @@ class IReadTokenRepository(Protocol):
         presented plaintext's hash against."""
         ...
 
+    def lease_for_token_hash(self, token_hash: str) -> str | None:
+        """The lease whose minted token has this hash, or ``None`` — how a request that
+        carries only the token, and no lease id, finds the lease it presents."""
+        ...
+
 
 class IWriteTokenRepository(IReadTokenRepository, Protocol):
     """Read-write token store — held only by the domain."""

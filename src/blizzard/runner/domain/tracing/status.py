@@ -13,6 +13,7 @@ from datetime import datetime
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.trace_export.settings import TracingSettings, TracingState
 from blizzard.runner.domain.tracing.cursor import LeaseCursorKey
+from blizzard.runner.domain.tracing.receiver_limits import ReceiverCount, ReceiverCounter
 from blizzard.runner.domain.tracing.repository import IReadLeaseTraceCursor
 from blizzard.runner.domain.tracing.sweep import FAILED_MESSAGE
 
@@ -22,7 +23,7 @@ class LeaseTraceStatus:
     """``endpoint`` is the redacted origin; ``lag_seconds`` is the age of the oldest closed lease the cursor
     has not passed, ``None`` when nothing waits. ``last_error_at`` is when the newest failure began — the
     sweep records only the first failure after a success — and ``last_error_ongoing`` whether no export has
-    succeeded since."""
+    succeeded since. ``receiver`` tallies worker spans since start, ``None`` where none is wired."""
 
     state: TracingState
     endpoint: str | None
@@ -35,11 +36,20 @@ class LeaseTraceStatus:
     last_error_at: datetime | None
     last_error_message: str | None
     last_error_ongoing: bool
+    receiver: ReceiverCount | None = None
 
 
 class LeaseTraceStatusReader:
-    def __init__(self, *, settings: TracingSettings, leases: IReadLeaseTraceCursor, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        settings: TracingSettings,
+        leases: IReadLeaseTraceCursor,
+        clock: IClock,
+        receiver: ReceiverCounter | None = None,
+    ) -> None:
         self._settings = settings
+        self._receiver = receiver
         self._leases = leases
         self._clock = clock
 
@@ -60,6 +70,7 @@ class LeaseTraceStatusReader:
             last_error_at=failure.at if failure else None,
             last_error_message=FAILED_MESSAGE if failure else None,
             last_error_ongoing=ongoing,
+            receiver=self._receiver.count() if self._receiver else None,
         )
 
     def _lag(self, position: LeaseCursorKey) -> float | None:

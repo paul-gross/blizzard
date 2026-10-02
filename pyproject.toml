@@ -44,6 +44,8 @@ dependencies = [
     "packaging>=24.0",
     # Fleet-trace export over OTLP http/protobuf, bound only behind `foundation/trace_export/internal/`.
     "opentelemetry-sdk>=1.45.0",
+    # Decoded directly by the span receiver; also pulled in by the exporter.
+    "opentelemetry-proto>=1.45.0",
     "opentelemetry-exporter-otlp-proto-http>=1.45.0",
     # Platform spans, bound only behind `foundation/platform_tracing/internal/`; exact pins
     # hold the emitted HTTP and database semconv versions still.

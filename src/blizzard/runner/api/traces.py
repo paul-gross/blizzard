@@ -11,6 +11,7 @@ from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.domain.tracing.replay import ReplayUnavailable, ReplayWindowRefused
 from blizzard.wire.runner_traces import (
+    ReceiverStatus,
     RunnerTraceReplayFailure,
     RunnerTraceReplayResponse,
     TraceReplayRequest,
@@ -36,6 +37,11 @@ def trace_status(request: Request) -> TraceStatusResponse:
         last_error_at=iso_utc(read.last_error_at) if read.last_error_at else None,
         last_error_message=read.last_error_message,
         last_error_ongoing=read.last_error_ongoing,
+        receiver=(
+            ReceiverStatus(accepted_spans=read.receiver.accepted, dropped_spans=read.receiver.dropped)
+            if read.receiver
+            else None
+        ),
     )
 
 

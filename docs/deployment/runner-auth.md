@@ -7,6 +7,9 @@ Every outbound runner-to-hub call — the reconciliation loop and the work-items
 `Authorization: Bearer` with the runner's enrolled token; an unenrolled runner attaches nothing, and `runner_auth_mode`
 decides whether the hub tolerates it.
 
+A worker's lease token, which it presents to the runner's own API, also authorizes its `POST /v1/traces` span export;
+[tracing.md](./tracing.md#worker-spans) owns what the runner keeps from it.
+
 Two independent rollout flags, scaffolded into `blizzard-hub.toml` by `hub init` and defaulting to `warn`, gate the
 defenses: `runner_auth_mode` requires every fleet-router call's bearer token to resolve to a known runner identity, and
 `route_token_mode` requires the per-acquisition route capability token on every chunk-scoped write. Under `warn` a

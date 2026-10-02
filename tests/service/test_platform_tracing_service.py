@@ -3,20 +3,26 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import signal
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 import pytest
 
+from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.hub.config import HubConfig
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.leases import NewLease
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _runner_config
 from tests.otlp_sink import OtlpSink, otlp_sink
+from tests.runner_fakes import make_store
 from tests.service.support import (
     mint_fixture,
     mock_hub,
@@ -139,3 +145,68 @@ def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_sp
         assert "tick" in names
         assert any(name == "Reap" for name in names)
         assert "planted-secret" not in repr(sink.requests)
+
+
+def _cli_export(trace: int) -> str:
+    span = {
+        "traceId": f"{trace:032x}",
+        "spanId": f"{0x00F067AA0BA902B7:016x}",
+        "name": "blizzard artifact create",
+        "kind": 3,
+        "startTimeUnixNano": "1000",
+        "endTimeUnixNano": "2000",
+        "attributes": [{"key": "blizzard.cli.command", "value": {"stringValue": "artifact create"}}],
+    }
+    return json.dumps({"resourceSpans": [{"scopeSpans": [{"scope": {"name": "blizzard.cli"}, "spans": [span]}]}]})
+
+
+def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(tmp_path: Path) -> None:
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    hub_port = _free_port()
+    token = "service-lease-token"
+    with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
+        config: RunnerConfig = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
+        config.config_path.write_text(config.to_toml())
+        env = {**os.environ, "BLIZZARD_MOCK_HARNESS_FENCE": "1", "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
+        log = config.root / "daemon.log"
+        proc = subprocess.Popen(
+            [str(Path(sys.executable).parent / "blizzard-runner"), "host", "--dir", str(config.root)],
+            env=env,
+            stdout=daemon_log_sink(log),
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        tcp = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
+        uds = httpx.Client(
+            base_url="http://runner", transport=httpx.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
+        )
+        headers = {"Content-Type": "application/json", "X-Blizzard-Lease-Token": token}
+        try:
+            _await_http(proc, tcp, "/api/health", log=log)
+            store = make_store(config.db_url)
+            now = datetime.now(UTC)
+            store.record_lease(
+                NewLease(
+                    lease_id="lease_svc",
+                    chunk_id="ch_svc",
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    runner_id=config.runner_id,
+                    retries_max=2,
+                    created_at=now,
+                )
+            )
+            store.record_lease_token("lease_svc", TokenHash(token).hex, now)
+            body = _cli_export(trace_id(StepKey.attempt("ch_svc", 1)))
+            assert tcp.post("/v1/traces", content=body, headers=headers).status_code == 200
+            assert uds.post("/v1/traces", content=body, headers=headers).status_code == 200
+        finally:
+            tcp.close()
+            uds.close()
+            _stop(proc)
+        cli = [(r, s) for r, s in _platform_spans(sink) if r["service.name"] == "blizzard-cli"]
+        assert len(cli) == 2, read_daemon_log(log)

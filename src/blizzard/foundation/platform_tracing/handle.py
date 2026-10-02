@@ -5,12 +5,13 @@ accept. The SDK pipeline and every instrumentation package are imported only on 
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, MutableMapping
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from typing import TYPE_CHECKING, Any, Protocol
 
 from fastapi.telemetry import TelemetryConfig
 
+from blizzard.foundation.platform_tracing.received import ReceivedSpan
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -48,6 +49,11 @@ class IPlatformTracing(Protocol):
         """No span of any instrumentation starts inside — an excluded request's children included."""
         ...
 
+    def forward(self, spans: Sequence[ReceivedSpan], resource_service_name: str) -> None:
+        """Hand already-admitted spans to the process's own export pipeline, under this process's resource
+        with ``service.name`` replaced by ``resource_service_name``. A no-op when platform tracing is off."""
+        ...
+
     def shutdown(self, timeout: float) -> None:
         """Flush what is buffered, waiting at most ``timeout`` seconds, then stop."""
         ...
@@ -76,6 +82,9 @@ class DisabledPlatformTracing:
 
     def suppressed(self) -> AbstractContextManager[object]:
         return nullcontext()
+
+    def forward(self, spans: Sequence[ReceivedSpan], resource_service_name: str) -> None:
+        return None
 
     def shutdown(self, timeout: float) -> None:
         return None
