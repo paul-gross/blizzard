@@ -13,6 +13,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
+from tests.worker_http import bind_stubs
 
 _ENV = {
     "BLIZZARD_LEASE_ID": "lease_9",
@@ -60,7 +61,7 @@ def test_findings_gets_the_lease_scoped_route_with_inherited_identity_and_token(
         calls.append((url, headers))
         return _FakeResponse(text=_FINDINGS_TEXT)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(runner_group, ["garden", "findings"], env=_ENV)
 
     assert result.exit_code == 0, result.output
@@ -78,7 +79,7 @@ def test_findings_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyP
         calls.append(headers)
         return _FakeResponse(text="[]")
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     env = {k: v for k, v in _ENV.items() if k != "BLIZZARD_LEASE_TOKEN"}
     result = CliRunner().invoke(runner_group, ["garden", "findings"], env=env)
 
@@ -95,7 +96,7 @@ def test_findings_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> No
         attempted = True
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(
         runner_group, ["garden", "findings"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
     )
@@ -107,8 +108,8 @@ def test_findings_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.unit
 def test_findings_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"})
+    bind_stubs(
+        monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"})
     )
     result = CliRunner().invoke(runner_group, ["garden", "findings"], env=_ENV)
 
@@ -118,9 +119,7 @@ def test_findings_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypat
 
 @pytest.mark.unit
 def test_findings_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 carries no run context"})
-    )
+    bind_stubs(monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 carries no run context"}))
     result = CliRunner().invoke(runner_group, ["garden", "findings"], env=_ENV)
 
     assert result.exit_code != 0

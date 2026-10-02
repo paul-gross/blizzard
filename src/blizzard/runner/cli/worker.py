@@ -16,7 +16,7 @@ def heartbeat() -> None:
 
     Fails **soft**: a hook must never break the worker's tool call, so a missing identity or an
     unreachable runner is reported to stderr and this still exits 0."""
-    worker = WorkerCall.hook("heartbeat")
+    worker = WorkerCall.hook("heartbeat", traced=False)
     if worker is not None:
         worker.soft_post(
             "/api/heartbeat", failure="could not reach the runner", json_body={"lease_id": worker.lease_id}

@@ -17,6 +17,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from tests.runner_fakes import no_retry_clock
+from tests.worker_http import bind_stubs
 
 _HUB_URL = "http://hub.local:8421"
 _CHUNK = "ch_pass"
@@ -203,7 +204,7 @@ def test_verb_gets_the_local_proxy_with_inherited_identity(monkeypatch: pytest.M
         calls.append((url, timeout))
         return _FakeLocalResponse('{"body": "please fix the flake"}')
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(
         runner_group,
         ["work-items", _CHUNK],
@@ -225,7 +226,7 @@ def test_verb_errors_without_a_runner_url(monkeypatch: pytest.MonkeyPatch) -> No
         attempted = True
         return _FakeLocalResponse("")
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(runner_group, ["work-items", _CHUNK], env={"BLIZZARD_RUNNER_URL": ""})
 
     assert result.exit_code != 0

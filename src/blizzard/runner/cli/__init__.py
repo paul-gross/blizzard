@@ -1,17 +1,13 @@
-"""``blizzard runner <cmd>`` — the registry: declares the root ``runner`` group and
-maps each concept module's commands onto it.
-
-The registry is lazy: a command's module is imported only when that command runs, is listed or is
-described. A worker verb therefore loads its own module and never the OpenTelemetry SDK or the
-daemons' stacks that the host and control verbs reach. A command added here is named as
-``"<module>:<attribute>"`` and its module must not import a heavy dependency at module level
-where a worker verb's module would."""
+"""``blizzard runner <cmd>`` — the registry: declares the root ``runner`` group and maps each
+concept module's commands onto it as ``"<module>:<attribute>"``, imported only when a command
+runs, so a worker verb never loads the OpenTelemetry SDK or a daemon's stack."""
 
 from __future__ import annotations
 
 import click
 
 from blizzard.cli.lazy_group import LazyGroup
+from blizzard.runner.cli.worker_call import WorkerSession
 
 _CLI = "blizzard.runner.cli"
 
@@ -47,7 +43,16 @@ _COMMANDS = {
 }
 
 
-@click.group(cls=LazyGroup, lazy=_COMMANDS, invoke_without_command=True)
+class _RunnerGroup(LazyGroup):
+    """The root of a runner command: it owns the process's :class:`WorkerSession`, so the one
+    HTTP client and the command's span are finished — and the span sent — as the command ends,
+    before click reports any error."""
+
+    def invoke(self, ctx: click.Context) -> object:
+        return WorkerSession.begin(ctx).run(lambda: super(_RunnerGroup, self).invoke(ctx))
+
+
+@click.group(cls=_RunnerGroup, lazy=_COMMANDS, invoke_without_command=True)
 @click.pass_context
 def runner(ctx: click.Context) -> None:
     """Talk to — or become — the blizzard runner."""

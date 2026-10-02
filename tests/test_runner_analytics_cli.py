@@ -17,6 +17,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
+from tests.worker_http import bind_stubs
 
 
 @contextlib.contextmanager
@@ -90,7 +91,7 @@ def test_each_verb_hits_its_lease_scoped_path_with_since_converted_to_utc(
         calls.append((url, headers, params))
         return _FakeResponse(text=_COUNTS_TEXT)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
         result = CliRunner().invoke(runner_group, [*argv, "--since", "2026-01-01T10:00:00"], env=_ENV)
 
@@ -112,7 +113,7 @@ def test_until_is_carried_through_when_given(monkeypatch: pytest.MonkeyPatch, ar
         calls.append(params)
         return _FakeResponse(text=_COUNTS_TEXT)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
         result = CliRunner().invoke(
             runner_group, [*argv, "--since", "2026-01-01T10:00:00", "--until", "2026-01-01T12:00:00"], env=_ENV
@@ -132,7 +133,7 @@ def test_since_is_required(monkeypatch: pytest.MonkeyPatch, argv: list[str], _pa
         attempted = True
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(runner_group, argv, env=_ENV)
 
     assert result.exit_code != 0
@@ -150,7 +151,7 @@ def test_errors_without_identity(monkeypatch: pytest.MonkeyPatch, argv: list[str
         attempted = True
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(
         runner_group,
         [*argv, "--since", "2026-01-01T00:00:00"],
@@ -165,9 +166,7 @@ def test_errors_without_identity(monkeypatch: pytest.MonkeyPatch, argv: list[str
 @pytest.mark.unit
 @pytest.mark.parametrize(("argv", "_path"), _VERBS)
 def test_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch, argv: list[str], _path: str) -> None:
-    monkeypatch.setattr(
-        httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 carries no run context"})
-    )
+    bind_stubs(monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 carries no run context"}))
     result = CliRunner().invoke(runner_group, [*argv, "--since", "2026-01-01T00:00:00"], env=_ENV)
 
     assert result.exit_code != 0

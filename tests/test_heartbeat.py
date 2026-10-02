@@ -20,6 +20,7 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from tests.runner_fakes import make_store, make_stores
+from tests.worker_http import bind_stubs
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -116,7 +117,7 @@ def test_heartbeat_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPatch
         calls.append((url, json))
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    bind_stubs(monkeypatch, post=fake_post)
     result = CliRunner().invoke(
         runner_group,
         ["heartbeat"],
@@ -137,7 +138,7 @@ def test_heartbeat_verb_soft_fails_without_identity(monkeypatch: pytest.MonkeyPa
         posted = True
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    bind_stubs(monkeypatch, post=fake_post)
     result = CliRunner().invoke(runner_group, ["heartbeat"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""})
 
     assert result.exit_code == 0  # soft-fail, never raise
@@ -152,7 +153,7 @@ def test_heartbeat_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest.M
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    bind_stubs(monkeypatch, post=fake_post)
     result = CliRunner().invoke(
         runner_group,
         ["heartbeat"],

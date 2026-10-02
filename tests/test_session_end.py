@@ -21,6 +21,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import NewLease
 from blizzard.runner.harness.worker_settings import SESSION_END_HOOK_COMMAND, WorkerSettings
 from tests.runner_fakes import make_store, make_stores
+from tests.worker_http import bind_stubs
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -119,7 +120,7 @@ def test_session_end_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPat
         calls.append(url)
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    bind_stubs(monkeypatch, post=fake_post)
     result = CliRunner().invoke(
         runner_group,
         ["session-end"],
@@ -139,7 +140,7 @@ def test_session_end_verb_skips_on_elicitation_marker(monkeypatch: pytest.Monkey
         calls.append(url)
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    bind_stubs(monkeypatch, post=fake_post)
     result = CliRunner().invoke(
         runner_group,
         ["session-end"],
@@ -164,7 +165,7 @@ def test_session_end_verb_soft_fails_without_identity(monkeypatch: pytest.Monkey
         posted = True
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    bind_stubs(monkeypatch, post=fake_post)
     result = CliRunner().invoke(runner_group, ["session-end"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""})
 
     assert result.exit_code == 0  # soft-fail, never raise
@@ -179,7 +180,7 @@ def test_session_end_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    bind_stubs(monkeypatch, post=fake_post)
     result = CliRunner().invoke(
         runner_group,
         ["session-end"],

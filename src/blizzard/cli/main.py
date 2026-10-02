@@ -11,8 +11,7 @@ import click
 from blizzard import __version__
 from blizzard.cli.lazy_group import LazyGroup
 
-# Each target's module loads only when its subcommand runs, so `blizzard runner <verb>` never
-# pays for the hub's imports.
+# Each target loads only when run, so `blizzard runner <verb>` never imports the hub.
 _TARGETS = {
     "hub": "blizzard.hub.cli:hub",
     "runner": "blizzard.runner.cli:runner",

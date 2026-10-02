@@ -99,7 +99,41 @@ def step_traceparent(chunk_id: str, epoch: int) -> str:
     """The W3C ``traceparent`` of a step's root span — what a worker's environment carries so its
     commands nest inside the step. Contract: ``blizzard-product:/plans/tracing/platform-spans/spec/nesting.md``."""
     root = DerivedContext.of(StepKey.attempt(chunk_id, epoch), SpanRole.STEP)
-    return f"00-{root.trace_id:032x}-{root.span_id:016x}-{root.trace_flags:02x}"
+    return format_traceparent(root.trace_id, root.span_id, root.trace_flags)
+
+
+def format_traceparent(trace_id: int, span_id: int, trace_flags: int) -> str:
+    """A version-``00`` W3C ``traceparent`` carrying the given ids and flags."""
+    return f"00-{trace_id:032x}-{span_id:016x}-{trace_flags:02x}"
+
+
+_HEX = frozenset("0123456789abcdef")
+
+
+def _hex_field(text: str, width: int) -> int | None:
+    if len(text) != width or not _HEX.issuperset(text):
+        return None
+    return int(text, 16)
+
+
+def parse_traceparent(value: str) -> DerivedContext | None:
+    """The context a W3C ``traceparent`` carries, or ``None`` for anything malformed.
+
+    A zero trace or span id and the reserved version ``ff`` are malformed; a version above ``00``
+    may carry further fields, which are ignored."""
+    parts = value.strip().split("-")
+    if len(parts) < 4:
+        return None
+    version, trace, span, flags = parts[:4]
+    version_number = _hex_field(version, 2)
+    if version_number is None or version_number == 0xFF or (version_number == 0 and len(parts) != 4):
+        return None
+    trace_number = _hex_field(trace, 32)
+    span_number = _hex_field(span, 16)
+    flag_number = _hex_field(flags, 2)
+    if not trace_number or not span_number or flag_number is None:
+        return None
+    return DerivedContext(trace_number, span_number, flag_number)
 
 
 @dataclass(frozen=True)
