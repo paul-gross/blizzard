@@ -65,8 +65,19 @@ __all__ = [
     "LocalLeaseService",
     "NewLease",
     "PoolHead",
+    "WorkRefStamp",
     "as_utc",
 ]
+
+
+@dataclass(frozen=True)
+class WorkRefStamp:
+    """One work ref as the mint's envelope delivered it; ``label`` is the hub-rendered source-native
+    token, ``None`` when no configured source rendered one."""
+
+    source: str
+    ref: str
+    label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +99,9 @@ class NewLease:
     resolved_model: str | None = None
     resolved_effort: str | None = None
     resolved_compaction_window: str | None = None
+    # What the envelope named at mint. `None` means *unknown*, never a value.
+    graph_name: str | None = None
+    work_refs: tuple[WorkRefStamp, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -128,6 +142,8 @@ class LeaseRecord:
     resolved_model: str | None = None
     resolved_effort: str | None = None
     resolved_compaction_window: str | None = None
+    graph_name: str | None = None
+    work_refs: tuple[WorkRefStamp, ...] | None = None
     pid: int | None = None
     process_start_time: str | None = None
     session_id: str | None = None

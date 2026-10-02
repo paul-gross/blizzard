@@ -39,6 +39,7 @@ from blizzard.hub.domain.proposal_auth import ProposalPolicy
 from blizzard.hub.domain.proposals import WorkItemProposalRow
 from blizzard.hub.domain.registry import RetiredRunnerGuard
 from blizzard.hub.domain.route_auth import RouteToken
+from blizzard.hub.domain.tracing.repository import WorkRefLabel
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -183,6 +184,7 @@ class ApplyService:
         retired: RetiredRunnerGuard,
         clock: IClock,
         hub_node_executor: HubNodeExecutor,
+        label: WorkRefLabel,
     ) -> None:
         self._facts = facts
         self._movement = movement
@@ -193,6 +195,7 @@ class ApplyService:
         self._retired = retired
         self._clock = clock
         self._hub_node_executor = hub_node_executor
+        self._label = label
 
     def apply(
         self,
@@ -649,6 +652,7 @@ class ApplyService:
             artifacts=self._artifacts.load_artifacts(chunk.chunk_id),
             epoch=submission.epoch,
             arrival_addendum=arrival.addendum,
+            label=self._label,
         )
         return ApplyResult.advance(envelope.wire, transition_id)
 

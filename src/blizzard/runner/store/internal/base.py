@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy import Connection, and_, select
 
-from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases import LeaseRecord, WorkRefStamp
 from blizzard.runner.store.schema import (
     binding_releases,
     env_bindings,
@@ -151,7 +151,24 @@ def lease_select():  # type: ignore[no-untyped-def]
         lease_context.c.resolved_model,
         lease_context.c.resolved_effort,
         lease_context.c.resolved_compaction_window,
+        lease_context.c.graph_name,
+        lease_context.c.work_refs,
     ).join(lease_context, lease_context.c.lease_id == leases.c.lease_id)
+
+
+def encode_work_refs(refs: tuple[WorkRefStamp, ...] | None) -> str | None:
+    """The ``work_refs`` column's JSON array; ``label`` rides only where one was rendered."""
+    if refs is None:
+        return None
+    return json.dumps(
+        [{"source": s.source, "ref": s.ref, **({"label": s.label} if s.label is not None else {})} for s in refs]
+    )
+
+
+def decode_work_refs(raw: str | None) -> tuple[WorkRefStamp, ...] | None:
+    if raw is None:
+        return None
+    return tuple(WorkRefStamp(source=e["source"], ref=e["ref"], label=e.get("label")) for e in json.loads(raw))
 
 
 def row_to_lease(r) -> LeaseRecord:  # type: ignore[no-untyped-def]
@@ -169,6 +186,8 @@ def row_to_lease(r) -> LeaseRecord:  # type: ignore[no-untyped-def]
         resolved_model=r.resolved_model,
         resolved_effort=r.resolved_effort,
         resolved_compaction_window=r.resolved_compaction_window,
+        graph_name=r.graph_name,
+        work_refs=decode_work_refs(r.work_refs),
         pid=int(r.pid) if r.pid is not None else None,
         process_start_time=str(r.process_start_time) if r.process_start_time is not None else None,
         session_id=str(r.session_id) if r.session_id is not None else None,

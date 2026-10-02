@@ -3525,6 +3525,10 @@ export type NodeEnvelope = {
      */
     graph_id: string;
     /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    /**
      * Judgement Prompt
      */
     judgement_prompt: string | null;

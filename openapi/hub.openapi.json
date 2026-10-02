@@ -5615,6 +5615,17 @@
             "title": "Graph Id",
             "type": "string"
           },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
           "judgement_prompt": {
             "anyOf": [
               {

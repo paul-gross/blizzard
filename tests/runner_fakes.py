@@ -1336,6 +1336,8 @@ def make_envelope(
     requires_checks: set[str] | None = None,
     graph_artifacts: list[GraphArtifact] | None = None,
     retries_max: int | None = 2,
+    graph_name: str | None = None,
+    work_refs: list[dict[str, str]] | None = None,
 ) -> NodeEnvelope:
     """A minimal runner-node envelope for a step test.
 
@@ -1369,10 +1371,12 @@ def make_envelope(
     return NodeEnvelope(
         chunk_id=chunk_id,
         graph_id="gr_test",
+        graph_name=graph_name,
         epoch=epoch,
         node=node,
         prompt="commit('work')",
         judgement_prompt="Assess the build.",
+        work_refs=work_refs or [],
         graph_artifacts=graph_artifacts or [],
     )
 

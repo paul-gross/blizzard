@@ -111,6 +111,10 @@ lease_context = Table(
     Column("resolved_model", String, nullable=True),
     Column("resolved_effort", String, nullable=True),
     Column("resolved_compaction_window", String, nullable=True),
+    # What the mint's envelope named: the pinned graph's name and the chunk's work refs as a JSON array
+    # of `{source, ref, label?}`. NULL means *unknown*; an empty array means none.
+    Column("graph_name", String, nullable=True),
+    Column("work_refs", Text, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
