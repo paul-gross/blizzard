@@ -45,6 +45,10 @@ dependencies = [
     # Fleet-trace export over OTLP http/protobuf, bound only behind `foundation/trace_export/internal/`.
     "opentelemetry-sdk>=1.45.0",
     "opentelemetry-exporter-otlp-proto-http>=1.45.0",
+    # Platform spans, bound only behind `foundation/platform_tracing/internal/`; exact pins
+    # hold the emitted HTTP and database semconv versions still.
+    "opentelemetry-instrumentation-httpx==0.66b0",
+    "opentelemetry-instrumentation-sqlalchemy==0.66b0",
 ]
 
 # The sqlite/systemd path stays lean by default (`bzh:sql-portable`) — the postgres

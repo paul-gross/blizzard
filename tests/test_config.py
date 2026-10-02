@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_export.config import TracingConfig, toml_literal
 from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
 from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
@@ -1940,7 +1940,7 @@ def test_tracing_scaffold_renders_every_knob_commented_at_its_default(tmp_path: 
     text = HubConfig.scaffold(root).to_toml()
     assert "[tracing]\n" in text
     for key, value in dataclasses.asdict(TracingConfig()).items():
-        assert f"# {key} = {value}\n" in text
+        assert f"# {key} = {toml_literal(value)}\n" in text
     (root / "blizzard-hub.toml").write_text(text)
     assert HubConfig.load(root).tracing == TracingConfig()
 
@@ -1950,7 +1950,13 @@ def test_tracing_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) -
     root = tmp_path / "hub"
     root.mkdir()
     tracing = TracingConfig(
-        sweep_seconds=5, settle_seconds=0, batch_limit=10, max_lag_seconds=3600, replay_max_window=7200
+        sweep_seconds=5,
+        settle_seconds=0,
+        batch_limit=10,
+        max_lag_seconds=3600,
+        replay_max_window=7200,
+        platform=True,
+        platform_sample_ratio=0.25,
     )
     config = dataclasses.replace(HubConfig.scaffold(root), tracing=tracing)
     (root / "blizzard-hub.toml").write_text(config.to_toml())
@@ -1968,6 +1974,27 @@ def test_tracing_parses_from_a_hand_written_table(tmp_path: Path) -> None:
     assert tracing.settle_seconds == 0
     assert tracing.batch_limit == 50
     assert tracing.sweep_seconds == 60
+    assert tracing.platform is False
+
+
+@pytest.mark.unit
+def test_platform_tracing_parses_from_a_hand_written_table(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(
+        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nplatform = true\nplatform_sample_ratio = 0\n'
+    )
+    tracing = HubConfig.load(root).tracing
+    assert tracing.platform is True
+    assert tracing.platform_sample_ratio == 0.0
+
+
+@pytest.mark.unit
+def test_runner_platform_tracing_parses_from_a_hand_written_table(tmp_path: Path) -> None:
+    _write_runner_config(tmp_path / "runner", "\n[tracing]\nplatform = true\nplatform_sample_ratio = 0.5\n")
+    tracing = RunnerConfig.load(tmp_path / "runner").tracing
+    assert tracing.platform is True
+    assert tracing.platform_sample_ratio == 0.5
 
 
 @pytest.mark.unit
@@ -1980,6 +2007,12 @@ def test_tracing_parses_from_a_hand_written_table(tmp_path: Path) -> None:
         ("max_lag_seconds", '"1d"'),
         ("replay_max_window", "true"),
         ("sweep_seconds", "1.5"),
+        ("platform", '"yes"'),
+        ("platform", "1"),
+        ("platform_sample_ratio", "1.5"),
+        ("platform_sample_ratio", "-0.1"),
+        ("platform_sample_ratio", "true"),
+        ("platform_sample_ratio", '"half"'),
     ],
 )
 def test_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value: str) -> None:
@@ -2006,7 +2039,7 @@ def test_runner_tracing_scaffold_renders_every_knob_commented_and_names_closed_l
     assert "[tracing]\n" in text
     assert "closed leases per export" in text
     for key, value in dataclasses.asdict(TracingConfig()).items():
-        assert f"# {key} = {value}\n" in text
+        assert f"# {key} = {toml_literal(value)}\n" in text
     (root / "blizzard-runner.toml").write_text(text)
     assert RunnerConfig.load(root).tracing == TracingConfig()
 
@@ -2015,14 +2048,30 @@ def test_runner_tracing_scaffold_renders_every_knob_commented_and_names_closed_l
 def test_runner_tracing_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
     root = tmp_path / "runner"
     root.mkdir()
-    tracing = TracingConfig(sweep_seconds=5, settle_seconds=0, batch_limit=10, max_lag_seconds=3600)
+    tracing = TracingConfig(
+        sweep_seconds=5,
+        settle_seconds=0,
+        batch_limit=10,
+        max_lag_seconds=3600,
+        platform=True,
+        platform_sample_ratio=1.0,
+    )
     config = dataclasses.replace(RunnerConfig.scaffold(root), tracing=tracing)
     (root / "blizzard-runner.toml").write_text(config.to_toml())
     assert RunnerConfig.load(root).tracing == tracing
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(("key", "value"), [("sweep_seconds", "0"), ("settle_seconds", "-1"), ("batch_limit", '"x"')])
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("sweep_seconds", "0"),
+        ("settle_seconds", "-1"),
+        ("batch_limit", '"x"'),
+        ("platform", '"on"'),
+        ("platform_sample_ratio", "2"),
+    ],
+)
 def test_runner_tracing_rejects_an_invalid_knob(tmp_path: Path, key: str, value: str) -> None:
     _write_runner_config(tmp_path / "runner", f"\n[tracing]\n{key} = {value}\n")
     with pytest.raises(ConfigError, match=f"tracing.{key}"):

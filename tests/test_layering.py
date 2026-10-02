@@ -688,13 +688,15 @@ def test_trace_assembly_loads_no_http_driver_opentelemetry_or_hub_store() -> Non
     assert not heavy, heavy
 
 
-def test_only_the_trace_export_binding_imports_opentelemetry() -> None:
-    """No daemon installs a global provider or instrumentation: OpenTelemetry is named only
-    by the shared OTLP binding, which builds finished spans and calls the exporter directly."""
-    binding = _FOUNDATION_DIR / "trace_export" / "internal"
-    violations = [
-        v for v in _violations(_SRC_DIR, ("opentelemetry",)) if not v.startswith(str(binding.relative_to(_REPO_ROOT)))
-    ]
+def test_only_the_trace_bindings_import_opentelemetry() -> None:
+    """No daemon installs a global provider or instrumentation: OpenTelemetry is named only by the
+    shared OTLP binding, which builds finished spans and calls the exporter directly, and by
+    platform tracing, which hands one per-process provider to each instrumentation explicitly."""
+    homes = tuple(
+        str(path.relative_to(_REPO_ROOT))
+        for path in (_FOUNDATION_DIR / "trace_export" / "internal", _FOUNDATION_DIR / "platform_tracing")
+    )
+    violations = [v for v in _violations(_SRC_DIR, ("opentelemetry",)) if not v.startswith(homes)]
     assert not violations, violations
 
 
