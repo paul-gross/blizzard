@@ -1,34 +1,44 @@
-"""``blizzard hub <cmd>`` — the registry: declares the root ``hub`` group and
-composes each concept module's commands onto it."""
+"""``blizzard hub <cmd>`` — the registry: declares the root ``hub`` group and maps each
+concept module's commands onto it as ``"<module>:<attribute>"``, imported only when a command
+runs, so a client verb never loads the OpenTelemetry SDK or the hub's daemon stack."""
 
 from __future__ import annotations
 
 import click
 
-from blizzard.hub.cli.analytics import analytics_group
-from blizzard.hub.cli.auth import login as _login_command
-from blizzard.hub.cli.auth import logout, rotate_signing_key
-from blizzard.hub.cli.chunk import chunk_group
-from blizzard.hub.cli.decision import decision_group
-from blizzard.hub.cli.finding import finding_group
-from blizzard.hub.cli.garden_proposal import garden_proposal_group
-from blizzard.hub.cli.garden_run import run_group
-from blizzard.hub.cli.graph import graph_group
-from blizzard.hub.cli.item import item_group
-from blizzard.hub.cli.marker import record_marker
-from blizzard.hub.cli.question import question_group
-from blizzard.hub.cli.queue import queue_group
-from blizzard.hub.cli.routine import routine_group
-from blizzard.hub.cli.runner import runner_group
-from blizzard.hub.cli.runtime import host, init, migrate_cmd
-from blizzard.hub.cli.scope import scope_group
+from blizzard.cli.lazy_group import LazyGroup
 from blizzard.hub.cli.sessions.internal.session_file import SessionFile
 from blizzard.hub.cli.sessions.service import SessionService
-from blizzard.hub.cli.status import status as _status_command
-from blizzard.hub.cli.traces import traces_group
+
+_CLI = "blizzard.hub.cli"
+
+_COMMANDS = {
+    "init": f"{_CLI}.runtime:init",
+    "migrate": f"{_CLI}.runtime:migrate_cmd",
+    "host": f"{_CLI}.runtime:host",
+    "status": f"{_CLI}.status:status",
+    "record-marker": f"{_CLI}.marker:record_marker",
+    "rotate-signing-key": f"{_CLI}.auth:rotate_signing_key",
+    "login": f"{_CLI}.auth:login",
+    "logout": f"{_CLI}.auth:logout",
+    "chunk": f"{_CLI}.chunk:chunk_group",
+    "item": f"{_CLI}.item:item_group",
+    "runner": f"{_CLI}.runner:runner_group",
+    "graph": f"{_CLI}.graph:graph_group",
+    "scope": f"{_CLI}.scope:scope_group",
+    "routine": f"{_CLI}.routine:routine_group",
+    "run": f"{_CLI}.garden_run:run_group",
+    "finding": f"{_CLI}.finding:finding_group",
+    "garden-proposal": f"{_CLI}.garden_proposal:garden_proposal_group",
+    "queue": f"{_CLI}.queue:queue_group",
+    "decision": f"{_CLI}.decision:decision_group",
+    "question": f"{_CLI}.question:question_group",
+    "analytics": f"{_CLI}.analytics:analytics_group",
+    "traces": f"{_CLI}.traces:traces_group",
+}
 
 
-@click.group(invoke_without_command=True)
+@click.group(cls=LazyGroup, lazy=_COMMANDS, invoke_without_command=True)
 @click.pass_context
 def hub(ctx: click.Context) -> None:
     """Talk to — or become — the blizzard hub."""
@@ -39,29 +49,6 @@ def hub(ctx: click.Context) -> None:
     # tests/test_layering.py::test_session_file_is_named_only_at_its_composition_root).
     ctx.obj = SessionService(SessionFile.of())
     if ctx.invoked_subcommand is None:
+        host = hub.get_command(ctx, "host")
+        assert host is not None
         ctx.invoke(host)
-
-
-hub.add_command(init)
-hub.add_command(migrate_cmd)
-hub.add_command(host)
-hub.add_command(_status_command)
-hub.add_command(record_marker)
-hub.add_command(rotate_signing_key)
-hub.add_command(_login_command)
-hub.add_command(logout)
-
-hub.add_command(chunk_group)
-hub.add_command(item_group)
-hub.add_command(runner_group)
-hub.add_command(graph_group)
-hub.add_command(scope_group)
-hub.add_command(routine_group)
-hub.add_command(run_group)
-hub.add_command(finding_group)
-hub.add_command(garden_proposal_group)
-hub.add_command(queue_group)
-hub.add_command(decision_group)
-hub.add_command(question_group)
-hub.add_command(analytics_group)
-hub.add_command(traces_group)

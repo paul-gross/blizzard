@@ -700,6 +700,18 @@ def test_a_worker_verb_loads_no_opentelemetry() -> None:
     )
 
 
+def test_a_hub_client_verb_loads_no_opentelemetry() -> None:
+    """A hub client verb is a short-lived process that must not pay for the hub's app or its SDK."""
+    loaded = _loaded_after_running(["hub", "chunk", "list", "--hub-url", "http://127.0.0.1:1"])
+    heavy = sorted(m for m in loaded if m.split(".")[0] == "opentelemetry")
+    assert not heavy, (
+        f"a hub client verb loaded {len(heavy)} opentelemetry modules, first {heavy[:3]}. Command modules "
+        "load on demand through the lazy registry in blizzard.hub.cli (blizzard.cli.lazy_group.LazyGroup): "
+        "register a new verb there by 'module:attribute' and keep a client verb's module free of "
+        "module-level imports of the hub app, fastapi, or telemetry stacks"
+    )
+
+
 def test_trace_ids_load_no_driver_or_hub_store() -> None:
     """The runner imports the id derivation, so it loads nothing but the standard library and the kernel."""
     loaded = _loaded_after_importing("blizzard.foundation.trace_ids")
