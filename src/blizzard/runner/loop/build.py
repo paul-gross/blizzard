@@ -16,6 +16,7 @@ import httpx
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.events.broker import EventBroker
@@ -96,7 +97,14 @@ class LoopWiring:
         """Read the prompt files now, on the calling thread."""
         return cls(config, config.resolved_workspace_prompt(), config.resolved_runner_prompt(), broker, bundle)
 
-    def context(self, hub: IHubClient, graph: RunnerProcess, *, sweep_worker_scratch: bool = False) -> LoopContext:
+    def context(
+        self,
+        hub: IHubClient,
+        graph: RunnerProcess,
+        *,
+        sweep_worker_scratch: bool = False,
+        tracer: IPlatformTracer | None = None,
+    ) -> LoopContext:
         """Wire a :class:`LoopContext` over ``graph``, the process's one composition-root graph;
         the caller owns the ``httpx.Client`` behind ``hub``, and the returned context's own
         ``usage_http_client`` — closed the same way, once the caller is done with the context.
@@ -104,7 +112,7 @@ class LoopWiring:
         ``sweep_worker_scratch`` runs the per-lease scratch directory's one-shot orphan sweep —
         ``True`` only from :class:`PeriodicDriver`'s own daemon-start build, ahead of its first
         tick, when no spawn can race it; every other caller (``tick_once`` and siblings, a build
-        wired only to inspect it) leaves it off."""
+        wired only to inspect it) leaves it off. ``tracer`` is the tick's span seam — only the daemon passes one."""
         config = self.config
         stores, provider, harnesses, clock = graph.stores, graph.provider, graph.harnesses, graph.clock
         # A startup guard: this composition's transcripts lane requires the default
@@ -232,6 +240,7 @@ class LoopWiring:
             harness_health=graph.health,
             # Mirrors `harness_versions`: built once, long-lived across every tick.
             retention_passes=RetentionPasses(),
+            tracer=tracer or NoopPlatformTracer(),
         )
 
     def _with_context(self, use: Callable[[LoopContext], _T]) -> _T:
@@ -340,9 +349,15 @@ class PeriodicDriver:
     def _run(self) -> None:
         config = self._wiring.config
         self._client = httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers())
+        self._graph.platform_tracing.instrument_client(self._client)
         ctx: LoopContext | None = None
         try:
-            ctx = self._wiring.context(HttpHubClient(self._client), self._graph, sweep_worker_scratch=True)
+            ctx = self._wiring.context(
+                HttpHubClient(self._client),
+                self._graph,
+                sweep_worker_scratch=True,
+                tracer=self._graph.platform_tracing.tracer,
+            )
             _log.info("reconciliation loop started", runner_id=config.runner_id, interval=self._interval)
             while not self._stop.is_set():
                 try:

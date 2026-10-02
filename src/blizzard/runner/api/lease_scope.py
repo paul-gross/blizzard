@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import Request, status
 from fastapi.exceptions import HTTPException
 
+from blizzard.foundation.platform_tracing.attributes import annotate_caller
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.tokens import IReadTokenRepository
@@ -24,6 +25,7 @@ def authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=f"presented token does not authorize lease {lease_id}"
         )
+    annotate_caller("worker")
     return lease
 
 

@@ -18,7 +18,12 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.composition import RunnerProcess, build_read_stores, build_runner_process
+from blizzard.runner.composition import (
+    RunnerProcess,
+    build_read_stores,
+    build_runner_platform_tracing,
+    build_runner_process,
+)
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.domain.tracing.sweep import announce_rejected_tracing
 from blizzard.runner.events.broker import EventBroker
@@ -91,7 +96,9 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     # One broker for the process: `host` is the one composer building both the
     # served app and the ticked loop, so every writer and the stream route share it.
     broker = EventBroker()
-    graph = build_runner_process(config, events=broker, bundle=bundle)
+    graph = build_runner_process(
+        config, events=broker, bundle=bundle, platform_tracing=build_runner_platform_tracing(config)
+    )
     try:
         hosted = build_hosted_app(config, process_graph=graph)
         try:

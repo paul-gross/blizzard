@@ -920,6 +920,42 @@
       "name": "migration"
     }
   ],
+  "platform": {
+    "attributes": [
+      {
+        "name": "blizzard.caller",
+        "type": "string",
+        "meaning": "Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified."
+      },
+      {
+        "name": "blizzard.chunk.id",
+        "type": "string",
+        "meaning": "The chunk a request's route names."
+      },
+      {
+        "name": "blizzard.runner.id",
+        "type": "string",
+        "meaning": "The runner the span belongs to, or the runner a request authenticated as."
+      },
+      {
+        "name": "blizzard.tick.step",
+        "type": "string",
+        "meaning": "The tick step a child span covers."
+      }
+    ],
+    "database_semconv_version": "1.25.0",
+    "http_semconv_version": "1.21.0",
+    "instrumentation_scopes": [
+      {
+        "name": "blizzard.hub.platform",
+        "version": "1"
+      },
+      {
+        "name": "blizzard.runner.platform",
+        "version": "1"
+      }
+    ]
+  },
   "resource_attributes": [
     {
       "meaning": "The service name; `blizzard-hub` or `blizzard-runner` unless `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` names one.",

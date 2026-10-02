@@ -12,6 +12,7 @@ from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import HarnessHealthCache
@@ -186,6 +187,8 @@ class LoopContext:
     #: The shared subscription-sampling HTTP client's owner — see
     #: :class:`ICloseableUsageHttpClient`.
     usage_http_client: ICloseableUsageHttpClient = field(default_factory=_NoUsageHttpClient)
+    #: Opens the tick's root and step spans — the no-op on a standalone ``blizzard runner tick``.
+    tracer: IPlatformTracer = field(default_factory=NoopPlatformTracer)
     #: This tick's capability memo (``tick()`` wires it); ``None`` rebuilds it per read.
     capabilities: TickCapabilities | None = None
     #: The loop's own cross-tick harness-version cache — unlike ``capabilities`` above, never rebound per tick.

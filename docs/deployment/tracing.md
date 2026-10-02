@@ -223,6 +223,42 @@ hears of it, so a `worker` span can start before its parent. Neither side clamps
 described under [Runner steps start at the claim](#runner-steps-start-at-the-claim), made visible; a gap that does not
 match the runner's drain cadence points at clock skew between the hosts.
 
+## Platform spans
+
+Beside the step traces, each daemon can trace its own work: the hub's requests, store queries, outbound calls and sweep
+passes, and the runner's requests, store queries, hub calls and ticks. These spans tell an operator where a daemon spent
+its time. They share no trace with a step, and the [Spans](#spans) table does not list them.
+
+- **Turning them on.** Both switches are needed: `platform = true` in the `[tracing]` block of `blizzard-hub.toml` or
+  `blizzard-runner.toml`, and an OTLP endpoint in OpenTelemetry's own variables, the same ones the step traces read.
+  Either alone leaves them off, and a protocol other than `http/protobuf` turns them off too. With them off, a daemon
+  installs no tracer provider.
+- **Sampling.** A trace's root, which is a request that arrives with no `traceparent`, a runner tick or a hub sweep
+  pass, is kept with probability `platform_sample_ratio`, default `0.01`, which must lie in 0 to 1. A request that
+  arrives sampled is always kept. `OTEL_TRACES_SAMPLER` replaces the ratio when it is set.
+- **What each daemon traces.** The hub traces each request under its route template, such as
+  `GET /api/chunks/{chunk_id}`, each store query, each call to the OAuth provider, the forge and the work sources, and
+  each sweep pass as a root named `sweep <name>`. The runner traces the same for its own app, whether served over TCP or
+  the unix socket, its calls to the hub, and each tick as a root named `tick` with a child per step. A runner's calls to
+  its hub carry `traceparent`.
+- **What is left out.** The runner's worker `POST /api/heartbeat` and any `/v1/traces` path make no span, and neither do
+  the store queries they run.
+- **Names.** `service.name` follows the rule in [Resource attributes](#resource-attributes). The scopes are
+  `blizzard.hub.platform` and `blizzard.runner.platform`, each at version `1`. Request spans follow the stable HTTP
+  semantic conventions, version 1.21.0, and query spans the stable database conventions, version 1.25.0, whatever
+  `OTEL_SEMCONV_STABILITY_OPT_IN` says.
+- **What never leaves.** The [What never leaves](#what-never-leaves) rules hold here too. A request's query string and a
+  query's bound values are never recorded, and nor are headers or bodies.
+
+### Platform attributes
+
+| Attribute            | Type     | Meaning                                                                                                      |
+| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `blizzard.caller`    | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
+| `blizzard.chunk.id`  | `string` | The chunk a request's route names.                                                                           |
+| `blizzard.runner.id` | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
+| `blizzard.tick.step` | `string` | The tick step a child span covers.                                                                           |
+
 ## Checking on tracing
 
 `blizzard hub traces status` reads `GET /api/traces/status`, open to anyone who can view the fleet. It reports:

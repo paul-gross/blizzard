@@ -14,6 +14,8 @@ import pytest
 
 from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.node_steps import Executor
+from blizzard.foundation.platform_tracing import attributes as platform_attr
+from blizzard.foundation.platform_tracing.semconv import DATABASE_SEMCONV_VERSION, HTTP_SEMCONV_VERSION
 from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, SpanRole, StepKey, span_id, trace_id
 from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord
 from blizzard.hub.domain.tracing import attributes as attr
@@ -40,6 +42,7 @@ from blizzard.hub.domain.tracing.facts import (
 from blizzard.hub.domain.tracing.steps import identify_steps
 from blizzard.hub.domain.work import UsageFact
 from blizzard.runner.domain.tracing import attributes as runner_attr
+from blizzard.runner.domain.tracing import platform as runner_platform
 from blizzard.runner.domain.tracing.assembly import assemble_lease
 from blizzard.runner.domain.tracing.facts import LeaseTraceFacts
 from tests import runner_trace_fixtures as rfx
@@ -422,6 +425,43 @@ def test_the_published_attribute_table_is_thedictionary() -> None:
     d = dictionary()
     authored = [(a["name"], a["type"], a["meaning"]) for a in d["attributes"]]
     assert published == authored
+
+
+def test_the_platform_section_is_the_code_constants() -> None:
+    platform = dictionary()["platform"]
+    assert platform["instrumentation_scopes"] == [
+        {"name": attr.PLATFORM_INSTRUMENTATION_SCOPE, "version": attr.PLATFORM_INSTRUMENTATION_SCOPE_VERSION},
+        {
+            "name": runner_platform.PLATFORM_INSTRUMENTATION_SCOPE,
+            "version": runner_platform.PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+        },
+    ]
+    assert platform["http_semconv_version"] == HTTP_SEMCONV_VERSION
+    assert platform["database_semconv_version"] == DATABASE_SEMCONV_VERSION
+    assert {a["name"] for a in platform["attributes"]} == {
+        platform_attr.CALLER,
+        shared.CHUNK_ID,
+        attr.RUNNER_ID,
+        runner_platform.TICK_STEP,
+    }
+    assert attr.RUNNER_ID == runner_attr.RUNNER_ID
+    assert all(a["type"] == "string" for a in platform["attributes"])
+
+
+def test_the_published_platform_attribute_table_is_thedictionary() -> None:
+    rows = _table_rows(_TRACING_DOC.read_text(), "### Platform attributes")
+    published = [(_unticked(r[0]), _unticked(r[1]), r[2]) for r in rows]
+    authored = [(a["name"], a["type"], a["meaning"]) for a in dictionary()["platform"]["attributes"]]
+    assert published == authored
+
+
+def test_the_platform_section_of_the_page_states_the_dictionary_versions_and_scopes() -> None:
+    section = _TRACING_DOC.read_text().split("\n## Platform spans\n", 1)[1]
+    platform = dictionary()["platform"]
+    for scope in platform["instrumentation_scopes"]:
+        assert f"`{scope['name']}`" in section
+    assert platform["http_semconv_version"] in section
+    assert platform["database_semconv_version"] in section
 
 
 def test_the_published_resource_table_is_thedictionary() -> None:

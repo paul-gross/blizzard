@@ -47,7 +47,6 @@ class PresentedSession:
         session_id = self.request.cookies.get(_SESSION_COOKIE_NAME) or presented_bearer(self.request)
         return None if session_id is None else SessionId(session_id).hash
 
-    @property
     def caller(self) -> Caller:
         """Whom a resolved session speaks for: the board's cookie, else the operator's bearer."""
         return "board" if self.request.cookies.get(_SESSION_COOKIE_NAME) else "operator"
@@ -86,7 +85,7 @@ def require(permission: Permission) -> Callable[[Request], ResolvedIdentity]:
         identity = resolve_identity(request, services)
         if identity is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
-        annotate_caller(PresentedSession(request).caller)
+        annotate_caller(PresentedSession(request).caller())
         if permission not in identity.permissions:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"missing permission {permission!r}")
         return identity

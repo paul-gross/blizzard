@@ -21,6 +21,7 @@ from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.origin import Origin
+from blizzard.foundation.platform_tracing.attributes import annotate_caller
 from blizzard.foundation.return_to import ReturnTo
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
@@ -110,6 +111,7 @@ class HumanLane:
         session = self.session
         if session is None:
             raise NeedsFederationBounce(return_to=self.request.url.path)
+        annotate_caller("board")
         return session
 
     def demand_api(self) -> RunnerSession:
@@ -119,6 +121,7 @@ class HumanLane:
         session = self.session
         if session is None:
             raise HTTPException(status_code=401, detail="runner session required")
+        annotate_caller("board")
         return session
 
 

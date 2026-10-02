@@ -12,13 +12,18 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import Engine
 
 from blizzard import __version__
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.handle import (
+    DisabledPlatformTracing,
+    IPlatformTracing,
+    build_platform_tracing,
+)
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
@@ -27,7 +32,12 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.tracing.attributes import (
     INSTRUMENTATION_SCOPE,
     INSTRUMENTATION_SCOPE_VERSION,
+    RUNNER_ID,
     resource_attributes,
+)
+from blizzard.runner.domain.tracing.platform import (
+    PLATFORM_INSTRUMENTATION_SCOPE,
+    PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
 )
 from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
 from blizzard.runner.domain.tracing.sweep import LeaseTraceSweep
@@ -96,12 +106,35 @@ class RunnerProcess:
     trace_sweep: LeaseTraceSweep | None
     #: The operator's replay over the same assembly and exporter — dry-run only while tracing is off.
     trace_replay: LeaseTraceReplay
+    #: Platform spans — off unless the host passed a handle; every collaborator opens spans through it.
+    platform_tracing: IPlatformTracing = field(default_factory=DisabledPlatformTracing)
 
     def close(self) -> None:
         try:
             self.executor.shutdown(wait=True)
         finally:
-            self.engine.dispose()
+            try:
+                self.engine.dispose()
+            finally:
+                self.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
+
+
+#: How long the runner's shutdown waits for buffered platform spans to leave.
+PLATFORM_TRACING_SHUTDOWN_SECONDS = 3.0
+
+
+def build_runner_platform_tracing(config: RunnerConfig, environ: Mapping[str, str] | None = None) -> IPlatformTracing:
+    """The handle ``[tracing]`` and the OTLP environment decide for this runner; every span it
+    records carries the runner's id. Only the ``host`` daemon builds one."""
+    env = os.environ if environ is None else environ
+    return build_platform_tracing(
+        config.tracing,
+        env,
+        resource=resource_attributes(env, __version__),
+        scope=PLATFORM_INSTRUMENTATION_SCOPE,
+        scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+        stamped={RUNNER_ID: config.runner_id},
+    )
 
 
 def build_runner_process(
@@ -111,12 +144,16 @@ def build_runner_process(
     bundle: BundleSnapshot | None = None,
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
+    platform_tracing: IPlatformTracing | None = None,
 ) -> RunnerProcess:
     """Construct the process-scoped graph; dispose partial resources on failure.
 
     ``environ`` (default ``os.environ``) decides whether tracing is enabled; ``trace_exporter``
-    replaces the OTLP binding an enabled sweep would otherwise build."""
+    replaces the OTLP binding an enabled sweep would otherwise build. ``platform_tracing`` is off
+    unless the daemon host passes a handle; the engine is instrumented through it."""
+    platform_tracing = platform_tracing or DisabledPlatformTracing()
     engine = create_engine_from_url(config.db_url)
+    platform_tracing.instrument_engine(engine)
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
     try:
         stores, connections = build_stores_and_connections(
@@ -166,6 +203,7 @@ def build_runner_process(
             trace_settings=tracing,
             trace_sweep=trace_sweep,
             trace_replay=trace_replay,
+            platform_tracing=platform_tracing,
         )
     except BaseException:
         try:

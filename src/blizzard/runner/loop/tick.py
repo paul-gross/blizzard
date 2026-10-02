@@ -8,8 +8,10 @@ comment below states why its position matters."""
 from __future__ import annotations
 
 import dataclasses
+from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.domain.tracing.platform import TICK_STEP
 from blizzard.runner.loop.capability_snapshot import TickCapabilities
 from blizzard.runner.loop.chunk_status_cache import MemoizingChunkViewCache
 from blizzard.runner.loop.context import LoopContext
@@ -29,8 +31,26 @@ from blizzard.runner.loop.transcript_drain import TranscriptDrain
 _log = get_logger("blizzard.runner.loop")
 
 
+class _Step(Protocol):
+    def __init__(self, ctx: LoopContext) -> None: ...
+
+    def run(self) -> object: ...
+
+
+def _traced(ctx: LoopContext, step: type[_Step]) -> None:
+    """Run one step under its own span, named for the step class."""
+    name = step.__name__
+    with ctx.tracer.child(name, {TICK_STEP: name}):
+        step(ctx).run()
+
+
 def tick(ctx: LoopContext) -> None:
     """Run one reconciliation pass. Idempotent; safe to call on startup and per-timer."""
+    with ctx.tracer.root("tick"):
+        _tick(ctx)
+
+
+def _tick(ctx: LoopContext) -> None:
     _log.debug("tick start", runner_id=ctx.config.runner_id)
     # Stamp liveness first, so a pass that dies mid-step still leaves the beat
     # proving the daemon reached it — the reference the next startup's scan ages against.
@@ -51,25 +71,25 @@ def tick(ctx: LoopContext) -> None:
     )
     ctx.chunk_views.prime(_primed_chunk_ids(ctx))
     # The spend-ceiling kill-switch — first, so it brakes the same tick it fires in.
-    SpendCeiling(ctx).run()
-    Reap(ctx).run()  # startup recovery IS reap running early
-    Resume(ctx).run()  # before ADVANCE — else a killed-mid-work worker reads as done
-    Pull(ctx).run()
-    Fill(ctx).run()
-    Advance(ctx).run()
+    _traced(ctx, SpendCeiling)
+    _traced(ctx, Reap)  # startup recovery IS reap running early
+    _traced(ctx, Resume)  # before ADVANCE — else a killed-mid-work worker reads as done
+    _traced(ctx, Pull)
+    _traced(ctx, Fill)
+    _traced(ctx, Advance)
     # After every fact-lane-draining step — bounded (the real bound
     # is `transcript_drain.py`'s own, see there), so it delays nothing fleet-truth-bearing.
-    TranscriptDrain(ctx).run()
+    _traced(ctx, TranscriptDrain)
     # Not load-bearing: each prune preserves what this tick's other readers see
     # — placed here only so a fact just enqueued isn't pruned the same tick it lands.
-    Retention(ctx).run()
+    _traced(ctx, Retention)
     # Observation only, so its position is not load-bearing: it gates nothing and nothing
     # reads its samples. Placed after ADVANCE so a lease that finished this tick is already
     # closed and not sampled one last time on its way out.
-    ContextSample(ctx).run()
+    _traced(ctx, ContextSample)
     # Last — its own docstring reserves this position; still safe to run
     # before or after TranscriptDrain, since either's fact-lane enqueue waits for PULL anyway.
-    ExternalUsageSample(ctx).run()
+    _traced(ctx, ExternalUsageSample)
     _log.debug("tick end", runner_id=ctx.config.runner_id)
 
 
