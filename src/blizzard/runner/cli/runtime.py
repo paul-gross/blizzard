@@ -20,11 +20,13 @@ from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.composition import RunnerProcess, build_read_stores, build_runner_process
 from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.domain.tracing.sweep import announce_rejected_tracing
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
 from blizzard.runner.listeners import ListenerError, Listeners, Uds
 from blizzard.runner.loop.build import LoopWiring, PeriodicDriver
+from blizzard.runner.loop.trace_driver import TraceSweepDriver
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import RunnerReadStores
@@ -125,6 +127,13 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
     # configured-but-missing prompt raises here, before any socket binds.
     with click_exception_on(ConfigError):
         driver = PeriodicDriver(config, interval_seconds=interval, process_graph=graph)
+    # Built only here, so `runner tick` never runs a sweep.
+    trace_driver = (
+        TraceSweepDriver(graph.trace_sweep, interval_seconds=config.tracing.sweep_seconds)
+        if graph.trace_sweep is not None
+        else None
+    )
+    announce_rejected_tracing(graph.trace_settings, graph.stores.outbound, graph.clock.now())
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
     # served by the single `Server` below, which keeps the shutdown path on one frame.
@@ -156,12 +165,16 @@ def _serve_host(config: RunnerConfig, graph: RunnerProcess, hosted: HostedApp) -
 
         driver.start()  # startup recovery is REAP running first inside the tick
         started = True
+        if trace_driver is not None:
+            trace_driver.start()
         server.run(sockets=sockets)
     finally:
         try:
             if started:
                 # Quiesce before marking; the spawner executor and engine outlive
                 # the drain and are closed by the outer host frame.
+                if trace_driver is not None:
+                    trace_driver.stop()
                 driver.stop()
                 marked = hosted.resume.on_shutdown()
                 if marked:

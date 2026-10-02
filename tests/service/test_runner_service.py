@@ -13,10 +13,12 @@ import json
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -27,12 +29,13 @@ from fastapi import FastAPI
 from sqlalchemy import select
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.runtime import init_environment as init_runner_environment
-from blizzard.runner.store.schema import escalation_closures
+from blizzard.runner.store.schema import escalation_closures, outbound_buffer
 from tests.e2e.test_acceptance_loop import (
     REPO,
     REPO_NAME,
@@ -1080,3 +1083,135 @@ def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_
     finally:
         client.close()
         _terminate(proc)
+
+
+# --- The lease trace sweep's own thread in `runner host` ---
+
+
+@contextlib.contextmanager
+def _hung_otlp_sink() -> Iterator[tuple[str, list[socket.socket]]]:
+    """A loopback endpoint that accepts every connection and never answers — an export to it
+    hangs for the exporter's whole timeout. Yields ``(endpoint, accepted)``."""
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen()
+    accepted: list[socket.socket] = []
+    stop = threading.Event()
+
+    def accept() -> None:
+        server.settimeout(0.2)
+        while not stop.is_set():
+            with contextlib.suppress(TimeoutError):
+                accepted.append(server.accept()[0])
+
+    thread = threading.Thread(target=accept, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.getsockname()[1]}/v1/traces", accepted
+    finally:
+        stop.set()
+        thread.join(timeout=5)
+        for conn in accepted:
+            conn.close()
+        server.close()
+
+
+def _host(config: RunnerConfig, env: dict[str, str]) -> subprocess.Popen[str]:
+    runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
+    return subprocess.Popen(
+        [runner_bin, "host", "--dir", str(config.root)],
+        env=env,
+        stdout=daemon_log_sink(config.root / "daemon.log"),
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+
+def _traced(config: RunnerConfig) -> RunnerConfig:
+    traced = dataclasses.replace(config, tracing=TracingConfig(sweep_seconds=1, settle_seconds=0))
+    traced.config_path.write_text(traced.to_toml())
+    return traced
+
+
+def test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown(tmp_path: Path) -> None:
+    """The sweep runs on its own thread: with an export hung on a sink that never answers,
+    ticks continue on schedule and SIGTERM still exits within the sweep's bounded stop."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub, _hung_otlp_sink() as (endpoint, accepted):
+        config = _traced(_runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
+        env = {
+            **_tick_env(),
+            "BZ_RUNNER_TICK_SECONDS": "0.5",
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": endpoint,
+            "OTEL_EXPORTER_OTLP_TRACES_TIMEOUT": "120",
+        }
+        log = config.root / "daemon.log"
+        proc = _host(config, env)
+        client = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
+        try:
+            _await_http(proc, client, "/api/health", log=log)
+            # A closed lease is what the sweep tells: run one chunk to done.
+            chunk_id = _seed(hub)
+            assert poll_until(lambda: _status(hub, chunk_id) == "done", timeout=120.0), read_daemon_log(log)
+            assert poll_until(lambda: bool(accepted), timeout=15.0), "the sweep never opened an export"
+
+            ticks = read_daemon_log(log).count('"tick end"')
+            time.sleep(3.0)
+            assert read_daemon_log(log).count('"tick end"') >= ticks + 3, "ticks stalled behind the hung export"
+            assert proc.poll() is None
+
+            started = time.monotonic()
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(timeout=20.0)
+            assert time.monotonic() - started < 20.0
+            assert "lease trace sweep still running at shutdown" in read_daemon_log(log)
+        finally:
+            client.close()
+            _terminate(proc)
+
+
+def _trace_config_rejections(config: RunnerConfig, *, pending: bool) -> int:
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(select(outbound_buffer.c.payload, outbound_buffer.c.acked_at)).all()
+    finally:
+        engine.dispose()
+    return sum(
+        1
+        for row in rows
+        if json.loads(row.payload).get("kind") == "trace-config-rejected" and (row.acked_at is None) == pending
+    )
+
+
+def test_a_grpc_protocol_serves_with_tracing_off_and_one_rejection_reaches_the_hub(tmp_path: Path) -> None:
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        config = _traced(_runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
+        env = {
+            **_tick_env(),
+            "BZ_RUNNER_TICK_SECONDS": "0.5",
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+            "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+        }
+        # Held unreachable first so the buffered rejection is read before any flush can ack it.
+        assert hub.post("/_levers/unreachable", json={"remaining": 10_000}).status_code == 200
+        log = config.root / "daemon.log"
+        proc = _host(config, env)
+        client = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
+        try:
+            _await_http(proc, client, "/api/health", log=log)
+            assert _trace_config_rejections(config, pending=True) == 1
+
+            assert hub.post("/_levers/reset").status_code == 200
+            assert poll_until(lambda: _trace_config_rejections(config, pending=True) == 0, timeout=30.0)
+            captured = hub.get("/_captured").json()["requests"]
+            assert any(r["method"] == "POST" and r["path"] == "/api/fleet/events" for r in captured)
+            assert client.get("/api/health").status_code == 200
+        finally:
+            client.close()
+            _terminate(proc)

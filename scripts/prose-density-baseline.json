@@ -4259,10 +4259,10 @@
    "total": 199
   },
   "blizzard/runner/cli/runtime.py": {
-   "comments": 14,
+   "comments": 15,
    "docstrings": 19,
    "over_cap": 0,
-   "total": 205
+   "total": 218
   },
   "blizzard/runner/cli/scope.py": {
    "comments": 0,
@@ -4289,16 +4289,16 @@
    "total": 125
   },
   "blizzard/runner/composition.py": {
-   "comments": 0,
-   "docstrings": 21,
+   "comments": 2,
+   "docstrings": 24,
    "over_cap": 2,
-   "total": 171
+   "total": 228
   },
   "blizzard/runner/config.py": {
-   "comments": 132,
+   "comments": 133,
    "docstrings": 122,
    "over_cap": 37,
-   "total": 1180
+   "total": 1185
   },
   "blizzard/runner/domain/__init__.py": {
    "comments": 0,
@@ -4457,10 +4457,10 @@
    "total": 306
   },
   "blizzard/runner/domain/tracing/attributes.py": {
-   "comments": 7,
-   "docstrings": 5,
+   "comments": 8,
+   "docstrings": 7,
    "over_cap": 0,
-   "total": 59
+   "total": 72
   },
   "blizzard/runner/domain/tracing/cursor.py": {
    "comments": 0,
@@ -5163,6 +5163,12 @@
    "docstrings": 9,
    "over_cap": 2,
    "total": 84
+  },
+  "blizzard/runner/loop/trace_driver.py": {
+   "comments": 2,
+   "docstrings": 8,
+   "over_cap": 0,
+   "total": 61
   },
   "blizzard/runner/loop/transcript_backfill.py": {
    "comments": 17,
@@ -6214,7 +6220,7 @@
    "comments": 35,
    "docstrings": 99,
    "over_cap": 10,
-   "total": 915
+   "total": 917
   },
   "crash/test_basic_workspace_crash.py": {
    "comments": 3,
@@ -6223,16 +6229,16 @@
    "total": 145
   },
   "crash/test_kill9_sweep.py": {
-   "comments": 305,
-   "docstrings": 209,
+   "comments": 311,
+   "docstrings": 213,
    "over_cap": 31,
-   "total": 3307
+   "total": 3419
   },
   "crash_points.py": {
    "comments": 1,
    "docstrings": 7,
    "over_cap": 0,
-   "total": 38
+   "total": 39
   },
   "e2e/__init__.py": {
    "comments": 0,
@@ -6434,9 +6440,9 @@
   },
   "event_log_kind_census.py": {
    "comments": 1,
-   "docstrings": 12,
+   "docstrings": 13,
    "over_cap": 1,
-   "total": 56
+   "total": 74
   },
   "journey/__init__.py": {
    "comments": 0,
@@ -6667,10 +6673,10 @@
    "total": 150
   },
   "service/test_runner_service.py": {
-   "comments": 77,
-   "docstrings": 74,
+   "comments": 80,
+   "docstrings": 78,
    "over_cap": 4,
-   "total": 1082
+   "total": 1217
   },
   "service/test_system_artifacts_service.py": {
    "comments": 3,
@@ -7324,7 +7330,7 @@
    "comments": 73,
    "docstrings": 44,
    "over_cap": 0,
-   "total": 1992
+   "total": 2029
   },
   "test_config_keys_reach_a_gating_tier.py": {
    "comments": 3,
@@ -7556,9 +7562,9 @@
   },
   "test_event_log_kind_census.py": {
    "comments": 2,
-   "docstrings": 6,
+   "docstrings": 7,
    "over_cap": 0,
-   "total": 66
+   "total": 77
   },
   "test_event_log_service_unit.py": {
    "comments": 0,
@@ -9545,6 +9551,12 @@
    "docstrings": 2,
    "over_cap": 0,
    "total": 718
+  },
+  "test_runner_trace_composition.py": {
+   "comments": 3,
+   "docstrings": 2,
+   "over_cap": 0,
+   "total": 162
   },
   "test_runner_transcript_segments_api.py": {
    "comments": 5,

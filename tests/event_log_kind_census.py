@@ -15,10 +15,12 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Recorded:
-    """This kind lands as a stored ``event_log`` row, written from ``where``."""
+    """This kind lands as a stored ``event_log`` row, written from ``where`` — and from each of
+    ``also``, a site in the other daemon recording the same kind."""
 
     where: str
     severity: str
+    also: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -49,8 +51,24 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "worker-context-warned": Recorded("runner/loop/steps.py:ContextSample._event", "warning"),
     "attempt-abandoned": Recorded("runner/loop/attempt.py:Attempt.fail", "info"),
     "work-item-closed": Recorded("hub/domain/work_closure.py:CloseIntentDrainer.sweep", "info"),
-    "trace-export-failed": Recorded("hub/domain/tracing/sweep.py:TraceExportSweep.sweep", "warning"),
-    "trace-export-recovered": Recorded("hub/domain/tracing/sweep.py:TraceExportSweep.sweep", "info"),
-    "trace-window-skipped": Recorded("hub/domain/tracing/sweep.py:TraceExportSweep.sweep", "warning"),
-    "trace-config-rejected": Recorded("hub/app.py:_announce_rejected_tracing", "warning"),
+    "trace-export-failed": Recorded(
+        "hub/domain/tracing/sweep.py:TraceExportSweep.sweep",
+        "warning",
+        ("runner/domain/tracing/sweep.py:LeaseTraceSweep._failed",),
+    ),
+    "trace-export-recovered": Recorded(
+        "hub/domain/tracing/sweep.py:TraceExportSweep.sweep",
+        "info",
+        ("runner/domain/tracing/sweep.py:LeaseTraceSweep._recovered",),
+    ),
+    "trace-window-skipped": Recorded(
+        "hub/domain/tracing/sweep.py:TraceExportSweep.sweep",
+        "warning",
+        ("runner/domain/tracing/sweep.py:LeaseTraceSweep._jump",),
+    ),
+    "trace-config-rejected": Recorded(
+        "hub/app.py:_announce_rejected_tracing",
+        "warning",
+        ("runner/domain/tracing/sweep.py:announce_rejected_tracing",),
+    ),
 }
