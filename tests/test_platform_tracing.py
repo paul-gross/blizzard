@@ -19,12 +19,15 @@ from blizzard.foundation.platform_tracing.attributes import CALLER, annotate_cal
 from blizzard.foundation.platform_tracing.exclusion import is_excluded
 from blizzard.foundation.platform_tracing.handle import (
     DisabledPlatformTracing,
+    IPlatformTracing,
     build_platform_tracing,
     platform_tracing_enabled,
 )
 from blizzard.foundation.platform_tracing.internal.redaction import RedactingExporter
 from blizzard.foundation.platform_tracing.internal.sampling import sampler
+from blizzard.foundation.platform_tracing.tracer import NoopPlatformTracer
 from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 
 pytestmark = pytest.mark.unit
 
@@ -218,3 +221,61 @@ def test_a_raising_span_records_failure_but_never_the_exception_message() -> Non
     assert span.status.status_code.name == "ERROR"
     assert span.status.description is None
     assert "s3cret" not in repr((dict(span.attributes or {}), span.events))
+
+
+_DERIVED = DerivedContext.of(StepKey.attempt("ch_1", 3), SpanRole.STEP)
+
+
+def _ratio_handle(exporter: InMemorySpanExporter, ratio: float) -> IPlatformTracing:
+    return build_platform_tracing(
+        TracingConfig(platform=True, platform_sample_ratio=ratio),
+        _ENDPOINT,
+        resource=_RESOURCE,
+        scope="s",
+        scope_version="1",
+        exporter=exporter,
+    )
+
+
+@pytest.mark.parametrize("ratio", [0.0, 1.0])
+def test_a_span_opened_under_a_derived_context_is_its_sampled_child_whatever_the_ratio(ratio: float) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _ratio_handle(exporter, ratio)
+    with handle.tracer.root("ambient"), handle.tracer.under(_DERIVED), handle.tracer.child("call"):
+        pass
+    with handle.tracer.root("after"):
+        pass
+    handle.shutdown(5.0)
+    spans = {span.name: span for span in exporter.get_finished_spans()}
+    call = spans["call"]
+    assert call.context is not None and call.context.trace_id == _DERIVED.trace_id
+    assert call.parent is not None and call.parent.span_id == _DERIVED.span_id and call.parent.is_remote
+    assert ("after" in spans) == (ratio == 1.0)
+
+
+def test_under_opens_no_span_of_its_own() -> None:
+    exporter = InMemorySpanExporter()
+    handle = _ratio_handle(exporter, 1.0)
+    with handle.tracer.under(_DERIVED):
+        pass
+    handle.shutdown(5.0)
+    assert exporter.get_finished_spans() == ()
+
+
+def test_link_adds_the_derived_context_to_the_current_span() -> None:
+    exporter = InMemorySpanExporter()
+    handle = _ratio_handle(exporter, 1.0)
+    handle.tracer.link(_DERIVED)
+    with handle.tracer.root("request"):
+        handle.tracer.link(_DERIVED)
+    handle.shutdown(5.0)
+    (span,) = exporter.get_finished_spans()
+    assert [(link.context.trace_id, link.context.span_id) for link in span.links] == [
+        (_DERIVED.trace_id, _DERIVED.span_id)
+    ]
+
+
+def test_the_noop_tracer_under_and_link_do_nothing() -> None:
+    tracer = NoopPlatformTracer()
+    with tracer.under(_DERIVED):
+        tracer.link(_DERIVED)

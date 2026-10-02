@@ -19,6 +19,7 @@ from blizzard.foundation.platform_tracing.semconv import DATABASE_SEMCONV_VERSIO
 from blizzard.foundation.trace_ids import DerivedContext, RunnerSpanRole, SpanRole, StepKey, span_id, trace_id
 from blizzard.foundation.trace_spans import EventRecord, LinkRecord, SpanRecord
 from blizzard.hub.domain.tracing import attributes as attr
+from blizzard.hub.domain.tracing import platform as hub_platform
 from blizzard.hub.domain.tracing.assembly import assemble_step
 from blizzard.hub.domain.tracing.facts import (
     BounceRecord,
@@ -443,12 +444,15 @@ def test_the_platform_section_is_the_code_constants() -> None:
         platform_attr.CALLER,
         shared.CHUNK_ID,
         platform_attr.LEASE_ID,
+        hub_platform.RUN_STEP_EXIT_CODE,
+        hub_platform.RUN_STEP_NAME,
         attr.RUNNER_ID,
         runner_platform.TICK_STEP,
         *platform_attr.CLI_ATTRIBUTES,
     }
     assert attr.RUNNER_ID == runner_attr.RUNNER_ID
     declared = {a["name"]: a["type"] for a in platform["attributes"]}
+    assert declared.pop(hub_platform.RUN_STEP_EXIT_CODE) == "int"
     assert all(declared[name] == type_ for name, type_ in platform_attr.CLI_ATTRIBUTES.items())
     assert all(t == "string" for n, t in declared.items() if n not in platform_attr.CLI_ATTRIBUTES)
 

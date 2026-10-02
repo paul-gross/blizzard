@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation import trace_attributes as shared
-from blizzard.foundation.trace_ids import DerivedContext, SpanRole
+from blizzard.foundation.trace_ids import DerivedContext, SpanRole, step_root
 from blizzard.foundation.trace_spans import (
     Attributes,
     AttributeValue,
@@ -313,8 +313,7 @@ def _link(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]) -> tupl
     if not index:
         return ()
     previous = steps[index - 1]
-    role = SpanRole.GATE if previous.kind is StepKind.GATE else SpanRole.STEP
-    return (LinkRecord(DerivedContext.of(previous.key, role), {attr.LINK_REASON: _link_reason(facts, step, previous)}),)
+    return (LinkRecord(step_root(previous.key), {attr.LINK_REASON: _link_reason(facts, step, previous)}),)
 
 
 def assemble_step(facts: StepFacts, step: NodeStep) -> tuple[SpanRecord, ...]:
@@ -335,8 +334,7 @@ def assemble_step(facts: StepFacts, step: NodeStep) -> tuple[SpanRecord, ...]:
             waits[child.wait] += _ms(child.start, child.end)
 
     gate = step.kind is StepKind.GATE
-    root_role = SpanRole.GATE if gate else SpanRole.STEP
-    root_context = DerivedContext.of(step.key, root_role)
+    root_context = step_root(step.key)
     root = SpanRecord(
         context=root_context,
         parent_span_id=None,

@@ -227,7 +227,8 @@ match the runner's drain cadence points at clock skew between the hosts.
 
 Beside the step traces, each daemon can trace its own work: the hub's requests, store queries, outbound calls and sweep
 passes, and the runner's requests, store queries, hub calls and ticks. These spans tell an operator where a daemon spent
-its time. They share no trace with a step, and the [Spans](#spans) table does not list them.
+its time. Most of them form their own traces; the ones made on a step's behalf join that step's trace, as described
+under **Nesting under a step** below. The [Spans](#spans) table does not list them.
 
 - **Turning them on.** Both switches are needed: `platform = true` in the `[tracing]` block of `blizzard-hub.toml` or
   `blizzard-runner.toml`, and an OTLP endpoint in OpenTelemetry's own variables, the same ones the step traces read.
@@ -241,6 +242,27 @@ its time. They share no trace with a step, and the [Spans](#spans) table does no
   each sweep pass as a root named `sweep <name>`. The runner traces the same for its own app, whether served over TCP or
   the unix socket, its calls to the hub, and each tick as a root named `tick` with a child per step. A runner's calls to
   its hub carry `traceparent`.
+- **Nesting under a step.** A platform span made on one step's behalf parents on that step's derived root or `hub exec`
+  span, using the ids in [Trace and span ids](#trace-and-span-ids). Such a span is always kept, whatever the sample
+  ratio, because its parent counts as sampled.
+  - *The runner's own calls.* The runner's completion and judgement-decision submissions, its gate apply, its envelope
+    re-reads and its hub-node polls each send their request under the step they serve. A completion or decision nests
+    under its attempt's root, and a gate apply under the gate's root. An envelope re-read nests under the newest attempt
+    the runner knows of; with no known epoch it starts a trace of its own. A hub-node poll nests under the hub step it
+    drives, the step after the newest epoch the chunk's status reports. The runner's fact drain belongs to no step.
+  - *The hub's `run:` steps.* Each `run:` step a hub node executes is a span named `hub run step`, a direct child of
+    that step's `hub exec` span. A step its `produces:` skips makes no span, and no span wraps the node as a whole. The
+    span carries the step's exit code and its authored name, never its command, output or environment. The request that
+    drove the node, which is a hub-advance poll or a completion or migration apply, carries a link to the `hub exec`
+    span.
+  - *A restart between poll and exit.* A poll's spans parent on a step root the trace sweep exports only once that hub
+    step closes. A restart between a poll and the exit of the hub node it drove can leave that root never exported. A
+    trace backend then shows the poll's spans under a missing parent.
+- **Continuing an incoming trace.** The hub continues an incoming `traceparent` only for a caller it authenticates: a
+  runner bearer that resolves to a registered, unrevoked runner, or a human session or operator bearer under the
+  configured auth mode. For any other request, including every request under `auth.mode = none` and an unknown or absent
+  bearer under `runner_auth_mode = warn`, the hub drops `traceparent`, `tracestate` and `baggage` and the request starts
+  a new root. The runner continues an incoming `traceparent` as before.
 - **What is left out.** The runner's worker `POST /api/heartbeat` and any `/v1/traces` path make no span, and neither do
   the store queries they run.
 - **Names.** `service.name` follows the rule in [Resource attributes](#resource-attributes). Sweep and tick spans carry
@@ -254,18 +276,17 @@ its time. They share no trace with a step, and the [Spans](#spans) table does no
 ### Worker spans
 
 A worker's own tools can send spans to the runner that spawned them. The runner serves OTLP over HTTP at
-`POST /v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts through its own
-platform pipeline, so the spans leave to the same endpoint, through the same redacting export, as its own.
-The receiver exists only while platform tracing is on; with it off the path answers `404`, and a sender is expected to
-carry on.
+`POST /v1/traces` on the same TCP port and unix socket as its API, and forwards what it accepts through its own platform
+pipeline, so the spans leave to the same endpoint, through the same redacting export, as its own. The receiver exists
+only while platform tracing is on; with it off the path answers `404`, and a sender is expected to carry on.
 
 - **Authentication.** The worker's lease token, in `X-Blizzard-Lease-Token` or as an `Authorization: Bearer` header. The
   request names no lease: the runner finds the lease the token was minted for, which must still be active or under an
   open takeover. A missing, unknown or closed-lease token is refused `403`.
 - **Encodings.** `application/json` and `application/x-protobuf`, both identity-encoded; any `Content-Encoding` but
-  `identity` is refused `415`, as is any other content type. A malformed body is refused `400`. A `200` carries an
-  OTLP `ExportTraceServiceResponse` in the request's encoding, whose `partial_success.rejected_spans` counts the spans
-  that were refused.
+  `identity` is refused `415`, as is any other content type. A malformed body is refused `400`. A `200` carries an OTLP
+  `ExportTraceServiceResponse` in the request's encoding, whose `partial_success.rejected_spans` counts the spans that
+  were refused.
 - **What is kept.** A span is kept only if it belongs to the trace of the lease's own step attempt and arrives under the
   scope `blizzard.cli`. Anything else is dropped, and counted. Events, links, trace state and the status message are
   never kept.
@@ -281,21 +302,23 @@ carry on.
 
 ### Platform attributes
 
-| Attribute                   | Type     | Meaning                                                                                                      |
-| --------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `blizzard.caller`           | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
-| `blizzard.chunk.id`         | `string` | The chunk a request's route names.                                                                           |
-| `blizzard.cli.command`      | `string` | The CLI command a worker ran, as a span of the scope `blizzard.cli`.                                         |
-| `blizzard.lease.id`         | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |
-| `blizzard.runner.id`        | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
-| `blizzard.tick.step`        | `string` | The tick step a child span covers.                                                                           |
-| `error.type`                | `string` | The error class when the CLI's request failed.                                                               |
-| `http.request.method`       | `string` | The HTTP method of the CLI's request to a daemon.                                                            |
-| `http.response.status_code` | `int`    | The status the daemon answered the CLI's request with.                                                       |
-| `process.exit.code`         | `int`    | The exit code of the CLI command.                                                                            |
-| `server.address`            | `string` | The host the CLI's request went to.                                                                          |
-| `server.port`               | `int`    | The port the CLI's request went to.                                                                          |
-| `url.full`                  | `string` | The CLI request's URL, without query string or fragment.                                                     |
+| Attribute                         | Type     | Meaning                                                                                                      |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `blizzard.caller`                 | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
+| `blizzard.chunk.id`               | `string` | The chunk a request's route names.                                                                           |
+| `blizzard.cli.command`            | `string` | The CLI command a worker ran, as a span of the scope `blizzard.cli`.                                         |
+| `blizzard.hub.run_step.exit_code` | `int`    | The exit code of a hub node's `run:` step.                                                                   |
+| `blizzard.hub.run_step.name`      | `string` | A hub node's `run:` step's authored name, never its command line; absent when the step authors none.         |
+| `blizzard.lease.id`               | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |
+| `blizzard.runner.id`              | `string` | The runner the span belongs to, or the runner a request authenticated as.                                    |
+| `blizzard.tick.step`              | `string` | The tick step a child span covers.                                                                           |
+| `error.type`                      | `string` | The error class when the CLI's request failed.                                                               |
+| `http.request.method`             | `string` | The HTTP method of the CLI's request to a daemon.                                                            |
+| `http.response.status_code`       | `int`    | The status the daemon answered the CLI's request with.                                                       |
+| `process.exit.code`               | `int`    | The exit code of the CLI command.                                                                            |
+| `server.address`                  | `string` | The host the CLI's request went to.                                                                          |
+| `server.port`                     | `int`    | The port the CLI's request went to.                                                                          |
+| `url.full`                        | `string` | The CLI request's URL, without query string or fragment.                                                     |
 
 ## Checking on tracing
 

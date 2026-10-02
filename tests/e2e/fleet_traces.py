@@ -1,7 +1,9 @@
 """Fleet-trace proof for the e2e tier: a real ``otelcol-contrib`` between a real hub (and runner) and a file.
 
 The collector starts before the hub; its file is read back against the dictionary and the span spec, runner
-``worker`` spans nesting on hub step roots by id (:func:`assert_runner_nesting`)."""
+``worker`` spans nesting on hub step roots by id (:func:`assert_runner_nesting`). Platform spans share the
+file; they are partitioned out by instrumentation scope (:func:`is_fleet`), so the skeleton reads fleet spans
+only and :meth:`FleetCollector.platform_spans` reads the rest."""
 
 from __future__ import annotations
 
@@ -192,6 +194,11 @@ def parse_export(text: str) -> list[ExportedSpan]:
                         )
                     )
     return spans
+
+
+def is_fleet(span: ExportedSpan) -> bool:
+    """Whether a span is the fleet sweep's — its scope is one the dictionary's fleet ``spans`` publish."""
+    return span.scope in {entry["scope"] for entry in dictionary()["spans"]}
 
 
 def traces_of(spans: Sequence[ExportedSpan]) -> list[StepTrace]:
@@ -409,6 +416,7 @@ class FleetCollector:
         self._port = 0
         self._workers = 0
         self._spans: list[ExportedSpan] | None = None
+        self._all: list[ExportedSpan] | None = None
 
     @property
     def available(self) -> bool:
@@ -481,6 +489,9 @@ class FleetCollector:
         except json.JSONDecodeError:  # a line the exporter is still writing
             return []
 
+    def _read_fleet(self) -> list[ExportedSpan]:
+        return [s for s in self._read() if is_fleet(s)]
+
     @staticmethod
     def _counts(spans: Sequence[ExportedSpan]) -> tuple[int, int]:
         return sum(1 for s in spans if s.is_root), sum(1 for s in spans if s.is_runner and s.role == _WORKER_ROLE)
@@ -493,7 +504,7 @@ class FleetCollector:
         while time.monotonic() < deadline:
             if drive is not None:
                 drive()
-            if self._counts(self._read())[1] >= workers:
+            if self._counts(self._read_fleet())[1] >= workers:
                 return
             time.sleep(0.25)
 
@@ -506,17 +517,23 @@ class FleetCollector:
         if self._spans is None:
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
-                seen_roots, seen_workers = self._counts(self._read())
+                seen_roots, seen_workers = self._counts(self._read_fleet())
                 if seen_roots >= roots and seen_workers >= self._workers:
                     break
                 time.sleep(0.25)
             self.stop()
-            self._spans = self._read()
+            self._all = self._read()
+            self._spans = [s for s in self._all if is_fleet(s)]
         seen = [s.name for s in self._spans if s.is_root]
         assert len(seen) == roots or (not exact and len(seen) > roots), (
             f"expected {roots} step roots in the collector's file, saw {len(seen)}: {seen}"
         )
         return self._spans
+
+    def platform_spans(self) -> list[ExportedSpan]:
+        """Every non-fleet span in the file, read by the same :meth:`spans` call that completed it."""
+        assert self._all is not None, "read the fleet spans first — that is what completes the file"
+        return [s for s in self._all if not is_fleet(s)]
 
     def traces(self, *, roots: int, exact: bool = True, decision_ids: Sequence[str] = ()) -> list[StepTrace]:
         """The step traces, once they have passed the shape and identity checks."""

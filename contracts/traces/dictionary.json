@@ -938,6 +938,16 @@
         "meaning": "The CLI command a worker ran, as a span of the scope `blizzard.cli`."
       },
       {
+        "name": "blizzard.hub.run_step.exit_code",
+        "type": "int",
+        "meaning": "The exit code of a hub node's `run:` step."
+      },
+      {
+        "name": "blizzard.hub.run_step.name",
+        "type": "string",
+        "meaning": "A hub node's `run:` step's authored name, never its command line; absent when the step authors none."
+      },
+      {
         "name": "blizzard.lease.id",
         "type": "string",
         "meaning": "The lease a worker's span arrived under, stamped by the runner."

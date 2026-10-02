@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from typing import Protocol
 
+from blizzard.foundation.trace_ids import DerivedContext
 from blizzard.foundation.trace_spans import Attributes
 
 
@@ -18,6 +19,12 @@ class IPlatformTracer(Protocol):
         """A span under whichever span is current."""
         ...
 
+    def under(self, derived: DerivedContext) -> AbstractContextManager[None]:
+        """Make ``derived`` the remote, sampled parent of whatever opens inside; opens no span itself."""
+        ...
+
+    def link(self, derived: DerivedContext) -> None: ...
+
 
 class NoopPlatformTracer:
     """What every consumer holds while platform tracing is off."""
@@ -27,6 +34,12 @@ class NoopPlatformTracer:
 
     def child(self, name: str, attributes: Attributes | None = None) -> AbstractContextManager[None]:
         return _nothing()
+
+    def under(self, derived: DerivedContext) -> AbstractContextManager[None]:
+        return _nothing()
+
+    def link(self, derived: DerivedContext) -> None:
+        return None
 
 
 @contextmanager

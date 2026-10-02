@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import httpx
 import pytest
@@ -17,15 +19,16 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.foundation.trace_ids import StepKey, trace_id
+from blizzard.foundation.trace_ids import DerivedContext, StepKey, step_root, trace_id
 from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.domain.leases import LeaseRecord, NewLease
 from blizzard.runner.domain.tracing.attributes import RUNNER_ID
 from blizzard.runner.domain.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
@@ -35,13 +38,22 @@ from blizzard.runner.domain.tracing.platform import (
 from blizzard.runner.domain.tracing.receiver import MAX_BODY_BYTES
 from blizzard.runner.domain.tracing.receiver_limits import ReceiverCounter, SpanRateLimiter
 from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
+from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.loop.context import LoopContext
+from blizzard.runner.loop.outbound import OutboundFacts
+from blizzard.runner.loop.steps import Advance
 from blizzard.runner.loop.tick import tick
+from blizzard.wire.chunk import ChunkDecisionStatusView, ChunkStatusView
+from blizzard.wire.completion import CompletionSubmission
+from blizzard.wire.decision import DecisionSubmission
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
     FakeProvider,
     make_context,
+    make_envelope,
     make_store,
     make_stores,
     no_retry_clock,
@@ -202,7 +214,7 @@ def test_no_planted_secret_reaches_any_span(tmp_path: Path) -> None:
 
 
 class _CallingHub:
-    """Delegates to a fake hub, making one traced outbound call first — a stand-in for the hub client."""
+    """Delegates to a fake hub, first making one traced call whose path names the method — a stand-in for the hub client."""
 
     def __init__(self, inner: FakeHub, client: httpx.Client) -> None:
         self._inner = inner
@@ -214,7 +226,7 @@ class _CallingHub:
             return attr
 
         def call(*args, **kwargs):  # type: ignore[no-untyped-def]
-            self._client.get("http://hub.local/peek")
+            self._client.get(f"http://hub.local/{name}")
             return attr(*args, **kwargs)
 
         return call
@@ -472,3 +484,150 @@ def test_a_non_404_lease_failure_propagates_and_an_unknown_hash_is_403(tmp_path:
 
         monkeypatch.setattr(RunnerWiring, "worker_lease", failing)
         assert _post_json(client, _export(_own_trace())).status_code == 503
+
+
+def _ticked(
+    tmp_path: Path,
+    hub: FakeHub,
+    seed: Callable[[LoopContext], None],
+    run: Callable[[LoopContext], object] = tick,
+) -> list[ReadableSpan]:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={})))
+    handle.instrument_client(client)
+    ctx = make_context(
+        store,
+        hub=cast(FakeHub, _CallingHub(hub, client)),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(
+            handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200),
+            verdict="pass",
+        ),
+        probe=FakeProbe(alive=set()),
+    )
+    ctx = type(ctx)(**{**ctx.__dict__, "tracer": handle.tracer})
+    seed(ctx)
+    run(ctx)
+    return _finished(handle, exporter)
+
+
+def _calls(spans: list[ReadableSpan], method: str) -> list[ReadableSpan]:
+    calls = [s for s in spans if s.kind.name == "CLIENT" and str(_attr(s, "url.full")).endswith(f"/{method}")]
+    return sorted(calls, key=lambda s: s.start_time or 0)
+
+
+def _call(spans: list[ReadableSpan], method: str) -> ReadableSpan:
+    (span,) = _calls(spans, method)
+    return span
+
+
+def _assert_directly_under(span: ReadableSpan, root: DerivedContext) -> None:
+    assert span.context is not None and span.context.trace_id == root.trace_id
+    assert _parent_id(span) == root.span_id
+
+
+def _lease(epoch: int) -> NewLease:
+    return NewLease(
+        lease_id=f"lease_{epoch}",
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        node_id="nd_build",
+        node_name="build",
+        epoch=epoch,
+        runner_id=_RUNNER,
+        retries_max=2,
+        created_at=_NOW,
+    )
+
+
+def _buffer_closed(ctx: LoopContext, epoch: int, enqueue: Callable[[OutboundFacts, LeaseRecord], None]) -> None:
+    ctx.stores.lease_record.record_lease(_lease(epoch))
+    lease = ctx.stores.lease_record.active_lease(f"lease_{epoch}")
+    assert lease is not None
+    enqueue(OutboundFacts(ctx), lease)
+    ctx.stores.lease_record.record_closure(
+        lease_id=lease.lease_id, chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+
+
+def test_a_buffered_completion_posts_under_its_attempt_step_root(tmp_path: Path) -> None:
+    hub = FakeHub()
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    submission = CompletionSubmission(choice="pass", epoch=3, runner_id=_RUNNER, from_node_id="nd_build")
+
+    def seed(ctx: LoopContext) -> None:
+        _buffer_closed(ctx, 3, lambda facts, lease: facts.completion(lease, submission, at=_NOW))
+
+    spans = _ticked(tmp_path, hub, seed)
+    _assert_directly_under(_call(spans, "submit_completion"), step_root(StepKey.attempt("ch_1", 3)))
+
+
+def test_a_buffered_decision_posts_under_its_attempt_step_root(tmp_path: Path) -> None:
+    submission = DecisionSubmission(from_node_id="nd_build", epoch=4, runner_id=_RUNNER)
+
+    def seed(ctx: LoopContext) -> None:
+        _buffer_closed(ctx, 4, lambda facts, lease: facts.decision(lease, submission, at=_NOW))
+
+    spans = _ticked(tmp_path, FakeHub(), seed)
+    _assert_directly_under(_call(spans, "submit_decision"), step_root(StepKey.attempt("ch_1", 4)))
+
+
+def _held(ctx: LoopContext) -> None:
+    ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+
+def test_a_resolved_gate_applies_under_its_gate_step_root(tmp_path: Path) -> None:
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1",
+        status=ChunkStatus.RUNNING,
+        latest_epoch=2,
+        route_runner_id=_RUNNER,
+        decision=ChunkDecisionStatusView(
+            decision_id="dec_1", node_id="nd_gate", epoch=2, resolved_choice="approve", transitioned=False
+        ),
+    )
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE)]
+    spans = _ticked(tmp_path, hub, _held)
+    _assert_directly_under(_call(spans, "submit_completion"), step_root(StepKey.gate("ch_1", 2, "dec_1")))
+
+
+def _advanced_to(epoch: int) -> FakeHub:
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=epoch, route_runner_id=_RUNNER
+    )
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "verify", node_id="nd_verify", choices=[("pass", "done")])
+    return hub
+
+
+def _held_after_lease_1(ctx: LoopContext) -> None:
+    ctx.stores.lease_record.record_lease(_lease(1))
+    ctx.stores.lease_record.record_closure(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    _held(ctx)
+
+
+def test_an_adopted_chunk_reads_its_envelope_under_the_views_latest_step(tmp_path: Path) -> None:
+    spans = _ticked(tmp_path, _advanced_to(5), _held_after_lease_1)
+    _assert_directly_under(_calls(spans, "get_envelope")[0], step_root(StepKey.attempt("ch_1", 5)))
+
+
+def test_an_advanced_held_chunk_reads_its_envelope_under_the_views_latest_step(tmp_path: Path) -> None:
+    spans = _ticked(tmp_path, _advanced_to(5), _held_after_lease_1, run=lambda ctx: Advance(ctx).run())
+    _assert_directly_under(_call(spans, "get_envelope"), step_root(StepKey.attempt("ch_1", 5)))
+
+
+@pytest.mark.parametrize("latest_epoch", [1, 4])
+def test_a_hub_node_poll_parents_one_past_the_views_latest_epoch_even_ahead_of_the_lease_record(
+    tmp_path: Path, latest_epoch: int
+) -> None:
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkStatusView(
+        chunk_id="ch_1", status=ChunkStatus.DELIVERING, latest_epoch=latest_epoch, route_runner_id=_RUNNER
+    )
+    spans = _ticked(tmp_path, hub, _held_after_lease_1)
+    _assert_directly_under(_call(spans, "hub_advance"), step_root(StepKey.attempt("ch_1", latest_epoch + 1)))

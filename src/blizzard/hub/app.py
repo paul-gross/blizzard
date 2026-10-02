@@ -59,6 +59,7 @@ from blizzard.hub.api.routines import router as routines_router
 from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.api.scopes import router as scopes_router
 from blizzard.hub.api.spend import router as spend_router
+from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
 from blizzard.hub.api.users import router as users_router
@@ -265,7 +266,7 @@ def create_app(
 
     platform_tracing = platform_tracing or DisabledPlatformTracing()
     # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
-    app = FastAPI(
+    app = TraceGatedFastAPI(
         title="blizzard-hub",
         version=__version__,
         lifespan=_lifespan,
@@ -411,6 +412,7 @@ def build_hosted_app(
         ),
         tracing=config.tracing,
         tracing_settings=tracing,
+        platform_tracer=platform_tracing.tracer,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).

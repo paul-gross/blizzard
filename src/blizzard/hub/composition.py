@@ -22,6 +22,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -422,6 +423,7 @@ def build_services(
     trace_exporter: ITraceExporter | None = None,
     tracing: TracingConfig | None = None,
     tracing_settings: TracingSettings | None = None,
+    platform_tracer: IPlatformTracer | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over the shared :class:`HubCore`.
     ``hub_command_runner``/``hub_workdir`` are the hub command node's mechanism seams
@@ -498,6 +500,7 @@ def build_services(
         marker_authority=marker_authority,
         base_branch=base_branch,
         marker_callback_base_url=hub_marker_callback_base_url,
+        tracer=platform_tracer,
         forge_url=forge_url,
         forge_token=forge_token,
         forge_owner=forge_owner,

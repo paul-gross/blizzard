@@ -11,6 +11,7 @@ from blizzard.foundation.trace_ids import (
     StepKey,
     nonzero,
     span_id,
+    step_root,
     step_traceparent,
     trace_id,
 )
@@ -62,3 +63,8 @@ def test_every_derived_context_is_sampled() -> None:
 def test_step_traceparent_is_the_derived_step_root() -> None:
     # The step root's identity vectors above, in W3C form with the sampled flag.
     assert step_traceparent("ch_1", 3) == "00-0d338bce0f63eb7ab7992a965d508c04-74b20379223e78cb-01"
+
+
+def test_a_step_root_is_the_gate_role_for_a_gate_key_and_the_step_role_otherwise() -> None:
+    assert step_root(_GATE) == DerivedContext.of(_GATE, SpanRole.GATE)
+    assert step_root(_ATTEMPT) == DerivedContext.of(_ATTEMPT, SpanRole.STEP)

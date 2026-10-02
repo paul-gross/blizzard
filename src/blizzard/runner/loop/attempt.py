@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.leases.closure import (
     ESCALATED,
@@ -163,7 +164,8 @@ class Attempt:
             _log.warning("requeue with no bound env — cannot re-spawn", chunk_id=lease.chunk_id)
             return
         try:
-            envelope = self.ctx.hub.get_envelope(lease.chunk_id)  # idempotent re-read
+            with self.ctx.tracer.under(step_root(StepKey.attempt(lease.chunk_id, lease.epoch))):
+                envelope = self.ctx.hub.get_envelope(lease.chunk_id)  # idempotent re-read
         except ChunkNotFoundError:
             _log.warning("hub reports chunk unknown at requeue — releasing envs", chunk_id=lease.chunk_id)
             self.ctx.env_release.release_chunk(lease.chunk_id)
@@ -461,7 +463,8 @@ class Attempt:
             _log.warning("restart with no bound env — cannot re-enter", chunk_id=lease.chunk_id)
             return
         try:
-            envelope = self.ctx.hub.get_envelope(lease.chunk_id)
+            with self.ctx.tracer.under(step_root(StepKey.attempt(lease.chunk_id, lease.epoch))):
+                envelope = self.ctx.hub.get_envelope(lease.chunk_id)
         except ChunkNotFoundError:
             _log.warning("hub reports chunk unknown at restart — releasing envs", chunk_id=lease.chunk_id)
             self.ctx.env_release.release_chunk(lease.chunk_id)
