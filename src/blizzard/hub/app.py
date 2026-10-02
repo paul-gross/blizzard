@@ -227,7 +227,13 @@ def create_app(
     """
     log = get_logger("blizzard.hub")
 
-    app = FastAPI(title="blizzard-hub", version=__version__, lifespan=_lifespan)
+    # No framework exporters: tests/test_apps.py::test_an_otlp_endpoint_installs_no_framework_exporters.
+    app = FastAPI(
+        title="blizzard-hub",
+        version=__version__,
+        lifespan=_lifespan,
+        telemetry={"auto_configure": False},
+    )
     app.state.config = config
     app.state.readiness = readiness
     app.state.services = services

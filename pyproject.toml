@@ -10,7 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     # HTTP surface + SSE — both daemons (hub, runner) are FastAPI apps served by
     # uvicorn; the CLI's client verbs are pure HTTP clients of those APIs.
-    "fastapi>=0.115.0",
+    "fastapi>=0.142.0",
     "uvicorn[standard]>=0.32.0",
     # httpx backs FastAPI's TestClient and the CLI's daemon-API client verbs.
     "httpx>=0.27.0",
