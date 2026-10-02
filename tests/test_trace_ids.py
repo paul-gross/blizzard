@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.foundation.trace_ids import SAMPLED, DerivedContext, SpanRole, StepKey, nonzero, span_id, trace_id
+from blizzard.foundation.trace_ids import (
+    SAMPLED,
+    DerivedContext,
+    SpanRole,
+    StepKey,
+    nonzero,
+    span_id,
+    step_traceparent,
+    trace_id,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -48,3 +57,8 @@ def test_every_derived_context_is_sampled() -> None:
         assert context.trace_flags == SAMPLED
         assert context.trace_id == trace_id(key)
         assert context.span_id == span_id(key, role)
+
+
+def test_step_traceparent_is_the_derived_step_root() -> None:
+    # The step root's identity vectors above, in W3C form with the sampled flag.
+    assert step_traceparent("ch_1", 3) == "00-0d338bce0f63eb7ab7992a965d508c04-74b20379223e78cb-01"

@@ -10,6 +10,7 @@ from datetime import datetime
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, Id
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.trace_ids import step_traceparent
 from blizzard.runner.domain.artifacts import GraphArtifactRecord
 from blizzard.runner.domain.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.domain.lease_auth import LeaseToken
@@ -189,7 +190,7 @@ class Spawner:
         try:
             pending = harness.spawn(
                 envelope,
-                self._worker_preamble(lease, environments, rendered),
+                self._worker_preamble(chunk_id, lease, environments, rendered),
                 session_hint=str(uuid.uuid4()),
                 resume_from=resume_from.session_id if resume_from is not None else None,
                 model=lease.model,
@@ -375,7 +376,11 @@ class Spawner:
             local_api_url=self.ctx.config.local_api_url,
             lease_token=lease_token,
             tmpdir=self.ctx.worker_scratch.ensure(lease.lease_id),
+            traceparent=self._traceparent(lease.chunk_id, lease.epoch),
         )
+
+    def _traceparent(self, chunk_id: str, epoch: int) -> str:
+        return step_traceparent(chunk_id, epoch) if self.ctx.config.platform_tracing else ""
 
     def _mint(
         self,
@@ -480,7 +485,7 @@ class Spawner:
         )
 
     def _worker_preamble(
-        self, lease: MintedLease, environments: list[AcquiredEnvironment], rendered: Preamble
+        self, chunk_id: str, lease: MintedLease, environments: list[AcquiredEnvironment], rendered: Preamble
     ) -> WorkerPreamble:
         generation = self.generation(lease.lease_id)
         return WorkerPreamble(
@@ -493,4 +498,5 @@ class Spawner:
             stderr_path=self.ctx.worker_files.stderr_path(lease.lease_id, generation),
             lease_token=lease.token,
             tmpdir=self.ctx.worker_scratch.ensure(lease.lease_id),
+            traceparent=self._traceparent(chunk_id, lease.epoch),
         )

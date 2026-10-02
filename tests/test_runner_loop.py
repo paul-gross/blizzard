@@ -25,6 +25,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
+from blizzard.foundation.trace_ids import step_traceparent
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD, NewLease
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
@@ -617,6 +618,27 @@ def test_fresh_mint_with_no_acceptable_set_mints_under_the_runner_default(tmp_pa
     assert default.spawns != []
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.harness_id == CLAUDE_CODE_HARNESS_ID
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("platform_tracing", [True, False])
+def test_spawn_preamble_carries_the_step_traceparent_only_with_platform_tracing_on(tmp_path, platform_tracing):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    default = FakeHarness(handle=_HANDLE, verdict="pass")
+    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, platform_tracing=platform_tracing)
+    ctx = make_context(
+        store, hub=FakeHub(), provider=FakeProvider({"e1": "/ws/e1"}), harness=default, probe=FakeProbe(), config=config
+    )
+
+    Spawner(ctx).spawn(
+        "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+    )
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    expected = step_traceparent("ch_1", lease.epoch) if platform_tracing else ""
+    assert default.spawns[0][1].traceparent == expected
+    assert Spawner(ctx).preamble(lease, []).traceparent == expected
 
 
 @pytest.mark.unit

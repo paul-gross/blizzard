@@ -19,6 +19,7 @@ from typing import Any
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.public_origins import PublicOrigins
 from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
@@ -643,7 +644,21 @@ class RunnerConfig:
         """The one allowlisted env every runner-spawned child is built from
         (``bzh:worker-env-allowlist``) — the sole accessor a composition root reads instead
         of constructing an :class:`AllowlistedEnv` from the raw fields itself."""
-        return AllowlistedEnv.of(self.worker_env_passthrough, path_prepend=self.worker_path_prepend)
+        return self._build_worker_env()
+
+    def _build_worker_env(self) -> AllowlistedEnv:
+        dropped = self.dropped_otel_passthrough
+        passthrough = tuple(name for name in self.worker_env_passthrough if name not in dropped)
+        return AllowlistedEnv.of(passthrough, path_prepend=self.worker_path_prepend)
+
+    @property
+    def dropped_otel_passthrough(self) -> tuple[str, ...]:  # ast-grep-ignore: bzh:property-delegates
+        """The ``OTEL_*`` names in ``[worker] env_passthrough`` that are withheld from every worker
+        while tracing is on — a worker must never inherit the runner's exporter configuration or
+        credentials. ``host``'s own startup warning names them."""
+        if not TracingSettings.of(os.environ).enabled():
+            return ()
+        return tuple(name for name in self.worker_env_passthrough if name.startswith("OTEL_"))
 
     @property
     def missing_worker_path_prepend_entries(self) -> tuple[str, ...]:  # ast-grep-ignore: bzh:property-delegates
