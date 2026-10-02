@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -235,7 +237,7 @@ class InterruptedClaims:
             # An explicit human decision outranks every other branch below —
             # nothing here should second-guess it.
             if ours:
-                self._resume_requeued(chunk_id)
+                self._resume_requeued(chunk_id, view.latest_epoch)
             else:
                 self._release(chunk_id, "releasing binding — chunk requeued locally but no longer routed here")
             return
@@ -247,7 +249,7 @@ class InterruptedClaims:
         if not bindings:
             return
         if view.status == ChunkStatus.RUNNING and ours:
-            self._adopt(chunk_id)  # route ours — just spawn the current node
+            self._adopt(chunk_id, view.latest_epoch)  # route ours — just spawn the current node
         elif view.status == ChunkStatus.READY:
             if braked:
                 return  # a claim is a new claim — the binding is durable; reclaimed once the brake lifts
@@ -263,7 +265,7 @@ class InterruptedClaims:
                 hub_status=str(view.status),
             )
 
-    def _adopt(self, chunk_id: str) -> None:
+    def _adopt(self, chunk_id: str, latest_epoch: int | None) -> None:
         """Spawn the current node for a claimed chunk whose FILL crashed before the lease minted.
 
         The route is confirmed and the binding held, but no lease was ever minted, so recovery is
@@ -283,7 +285,7 @@ class InterruptedClaims:
                 return  # hub unreachable — the binding is durable; retry next tick
             self.ctx.chunk_views.invalidate(chunk_id)  # named alongside the other writes
             self.ctx.stores.tokens.set_route_token(chunk_id, token=rekeyed.route_token, at=self.ctx.clock.now())
-        envelope = self._envelope(chunk_id, "adopted")
+        envelope = self._envelope(chunk_id, "adopted", latest_epoch)
         if envelope is None:
             return
         _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
@@ -291,7 +293,7 @@ class InterruptedClaims:
             chunk_id, envelope, Environments(bindings).acquired, via="adopt", harness_id=self._latest_owner(chunk_id)
         )
 
-    def _resume_requeued(self, chunk_id: str) -> None:
+    def _resume_requeued(self, chunk_id: str, latest_epoch: int | None) -> None:
         """Spawn a fresh attempt at the chunk's current node — its local hold is cleared (#53).
 
         The hold-clearing fact is already durable when this runs (``bzh:crash-correctness``). The
@@ -301,7 +303,7 @@ class InterruptedClaims:
         if not bindings:
             _log.warning("requeue-resume with no bound env — cannot spawn", chunk_id=chunk_id)
             return
-        envelope = self._envelope(chunk_id, "requeued")
+        envelope = self._envelope(chunk_id, "requeued", latest_epoch)
         if envelope is None:
             return
         _log.info("resuming requeued chunk — spawning current node", chunk_id=chunk_id)
@@ -356,14 +358,21 @@ class InterruptedClaims:
         latest = self.ctx.stores.lease_record.latest_lease_for_chunk(chunk_id)
         return latest.harness_id if latest is not None else None
 
-    def _envelope(self, chunk_id: str, what: str) -> NodeEnvelope | None:
+    def _envelope(self, chunk_id: str, what: str, latest_epoch: int | None) -> NodeEnvelope | None:
         try:
-            return self.ctx.hub.get_envelope(chunk_id)
+            with self._under_latest_step(chunk_id, latest_epoch):
+                return self.ctx.hub.get_envelope(chunk_id)
         except ChunkNotFoundError:
             self._unknown(chunk_id, what)
             return None
         except HubClientError:
             return None  # hub unreachable — the binding is durable; retry next tick
+
+    def _under_latest_step(self, chunk_id: str, latest_epoch: int | None) -> AbstractContextManager[None]:
+        epoch = latest_epoch or self.ctx.stores.lease_record.latest_epoch(chunk_id)
+        if not epoch:
+            return nullcontext()
+        return self.ctx.tracer.under(step_root(StepKey.attempt(chunk_id, epoch)))
 
     def _unknown(self, chunk_id: str, what: str) -> None:
         _log.warning("hub reports chunk unknown — releasing envs", what=what, chunk_id=chunk_id)

@@ -8,6 +8,7 @@ from contextlib import AbstractContextManager, contextmanager
 
 import httpx
 from fastapi.telemetry import TelemetryConfig
+from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -29,7 +30,9 @@ from blizzard.foundation.platform_tracing.internal.sampling import sampler
 from blizzard.foundation.platform_tracing.internal.semconv import pin_stable_semconv
 from blizzard.foundation.platform_tracing.received import ReceivedSpan
 from blizzard.foundation.platform_tracing.semconv import DATABASE_SEMCONV_VERSION
+from blizzard.foundation.platform_tracing.span_context import span_context
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
+from blizzard.foundation.trace_ids import DerivedContext
 from blizzard.foundation.trace_spans import Attributes
 
 _SQLALCHEMY_SCOPE = "opentelemetry.instrumentation.sqlalchemy"
@@ -52,6 +55,20 @@ class _SdkTracer:
 
     def child(self, name: str, attributes: Attributes | None = None) -> AbstractContextManager[None]:
         return self._span(name, attributes, None)
+
+    @contextmanager
+    def under(self, derived: DerivedContext) -> Iterator[None]:
+        parent = trace.set_span_in_context(trace.NonRecordingSpan(span_context(derived, remote=True)), Context())
+        token = otel_context.attach(parent)
+        try:
+            yield
+        finally:
+            otel_context.detach(token)
+
+    def link(self, derived: DerivedContext) -> None:
+        span = trace.get_current_span()
+        if span.is_recording():
+            span.add_link(span_context(derived))
 
     @contextmanager
     def _span(self, name: str, attributes: Attributes | None, context: Context | None) -> Iterator[None]:

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.domain.leases import LeaseRecord
 from blizzard.runner.domain.leases.closure import FAILED, PARKED, TRANSITIONED
 from blizzard.runner.domain.outbound import BufferedFact
@@ -98,7 +99,8 @@ class OutboundDrain:
         submission = CompletionSubmission.model_validate(json.loads(fact.payload)["submission"])
         _CP_BEFORE_SUBMIT.reached()
         try:
-            response = self.ctx.hub.submit_completion(fact.chunk_id or "", submission)
+            with self.ctx.tracer.under(step_root(StepKey.attempt(fact.chunk_id or "", submission.epoch))):
+                response = self.ctx.hub.submit_completion(fact.chunk_id or "", submission)
         except HubClientError:
             return False  # stays durable in the buffer; the mid-node worker is unaffected
         _CP_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay
@@ -120,7 +122,8 @@ class OutboundDrain:
         environments. The apply is natural-key idempotent, so a re-flush just clears the buffer."""
         submission = DecisionSubmission.model_validate(json.loads(fact.payload)["submission"])
         try:
-            response = self.ctx.hub.submit_decision(fact.chunk_id or "", submission)
+            with self.ctx.tracer.under(step_root(StepKey.attempt(fact.chunk_id or "", submission.epoch))):
+                response = self.ctx.hub.submit_decision(fact.chunk_id or "", submission)
         except HubClientError:
             return False  # decision stays durable in the buffer; retried next tick
         if fact.chunk_id:

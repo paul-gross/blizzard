@@ -113,3 +113,7 @@ class DerivedContext:
     @classmethod
     def of(cls, key: StepKey, role: SpanRole | RunnerSpanRole, discriminator: str = "") -> DerivedContext:
         return cls(trace_id(key), span_id(key, role, discriminator))
+
+
+def step_root(key: StepKey) -> DerivedContext:
+    return DerivedContext.of(key, SpanRole.STEP if key.decision_id is None else SpanRole.GATE)

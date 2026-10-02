@@ -9,6 +9,7 @@ from datetime import timedelta
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.domain.checks import CheckResultRecord
 from blizzard.runner.domain.elicitation import ElicitationRecord
 from blizzard.runner.domain.leases import LeaseRecord, as_utc
@@ -120,7 +121,8 @@ class Judgement:
             _log.warning("exited worker with no bound env — skipping", chunk_id=lease.chunk_id)
             return None
         try:
-            envelope = ctx.hub.get_envelope(lease.chunk_id)
+            with ctx.tracer.under(step_root(StepKey.attempt(lease.chunk_id, lease.epoch))):
+                envelope = ctx.hub.get_envelope(lease.chunk_id)
         except HubClientError:
             return None  # hub unreachable — the worker's exit is durable; retry next tick
         return cls(ctx, lease, envelope, bindings)

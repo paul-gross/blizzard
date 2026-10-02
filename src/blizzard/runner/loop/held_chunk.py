@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
@@ -83,25 +84,24 @@ class HeldChunk:
         ):
             # The strictly-higher epoch is load-bearing: a just-escalated chunk still derives
             # `running` at the SAME epoch until its fact flushes, and would re-spawn forever (#63).
-            self._spawn_advanced_node()
+            self._spawn_advanced_node(hub_epoch)
         elif view.status == ChunkStatus.DELIVERING:
             # A chunk parked at a hub node — drive it one step; a no-op leaves this binding
             # held and polled again next tick (#65/#66).
-            self._poll_hub_node()
+            self._poll_hub_node(hub_epoch)
         # Every other shape keeps its binding and is polled again next tick.
 
-    def _poll_hub_node(self) -> None:
-        """Drive a chunk parked at a hub node one step via ``POST /chunks/{id}/hub-advance``
-        (#65/#66) — the re-drive path a hub node otherwise has no liveness poll for.
-
-        A no-op upstream is expected and silent; a transport failure is likewise swallowed."""
+    def _poll_hub_node(self, latest_epoch: int | None) -> None:
+        """Drive a chunk parked at a hub node one step via ``POST /chunks/{id}/hub-advance`` — the
+        re-drive path a hub node otherwise has no liveness poll for. A no-op or transport failure is swallowed."""
         try:
-            self.ctx.hub.hub_advance(self.chunk_id)
+            with self.ctx.tracer.under(step_root(StepKey.attempt(self.chunk_id, (latest_epoch or 0) + 1))):
+                self.ctx.hub.hub_advance(self.chunk_id)
         except HubClientError:
             return  # hub unreachable — retried next tick
         self.ctx.chunk_views.invalidate(self.chunk_id)  # a later get() this tick sees the step
 
-    def _spawn_advanced_node(self) -> None:
+    def _spawn_advanced_node(self, latest_epoch: int) -> None:
         """Spawn the held chunk's current node into its already-bound, warm environment.
 
         The chunk advanced while this runner retained the route, so no active lease was minted
@@ -111,7 +111,8 @@ class HeldChunk:
             _log.warning("held chunk advanced with no bound env — cannot spawn", chunk_id=self.chunk_id)
             return
         try:
-            envelope = self.ctx.hub.get_envelope(self.chunk_id)
+            with self.ctx.tracer.under(step_root(StepKey.attempt(self.chunk_id, latest_epoch))):
+                envelope = self.ctx.hub.get_envelope(self.chunk_id)
         except ChunkNotFoundError:
             _log.warning("hub reports advanced chunk unknown — releasing envs", chunk_id=self.chunk_id)
             self.ctx.env_release.release_chunk(self.chunk_id)
@@ -139,7 +140,9 @@ class HeldChunk:
             lease_id=parked.lease_id if parked is not None and parked.epoch == decision.epoch else None,
         )
         try:
-            response = self.ctx.hub.submit_completion(self.chunk_id, submission)
+            gate = StepKey.gate(self.chunk_id, decision.epoch, decision.decision_id)
+            with self.ctx.tracer.under(step_root(gate)):
+                response = self.ctx.hub.submit_completion(self.chunk_id, submission)
         except HubClientError:
             return  # the resolution is durable at the hub; retry next tick
         if response.outcome == ApplyOutcome.FAILURE:
