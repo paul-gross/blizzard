@@ -187,6 +187,7 @@ class LoopWiring:
             transcript_chunk_max_bytes=config.transcript_chunk_max_bytes,
             queue_strict=config.queue_strict,
             platform_tracing=graph.platform_tracing.enabled,
+            worker_program_tracing=graph.platform_tracing.enabled and config.tracing.worker_programs,
         )
         _worker_files = WorkerStdoutFiles(str(worker_stdout_dir), stores.liveness)
         _elicitation_files = ElicitationFiles(str(elicitation_output_dir))

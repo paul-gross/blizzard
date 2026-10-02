@@ -117,6 +117,8 @@ class LoopConfig:
     queue_strict: bool = False
     #: Platform tracing runs on this runner, so every worker invocation carries its step's trace context.
     platform_tracing: bool = False
+    #: ``[tracing] worker_programs`` is on too, so every worker invocation is pointed at the runner's receiver.
+    worker_program_tracing: bool = False
 
 
 @dataclass(frozen=True)

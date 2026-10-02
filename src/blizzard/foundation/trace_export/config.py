@@ -19,6 +19,8 @@ class TracingConfig:
     #: Platform spans run only with this on *and* an OTLP endpoint configured.
     platform: bool = False
     platform_sample_ratio: float = 0.01
+    #: Worker programs' own spans reach the runner's receiver; takes effect only alongside ``platform``.
+    worker_programs: bool = False
 
     @classmethod
     def of(cls, raw_tracing: object, invalid: type[Exception]) -> TracingConfig:
@@ -37,6 +39,7 @@ class TracingConfig:
             platform_sample_ratio=cls._ratio(
                 raw_tracing, "platform_sample_ratio", defaults.platform_sample_ratio, invalid
             ),
+            worker_programs=cls._boolean(raw_tracing, "worker_programs", defaults.worker_programs, invalid),
         )
 
     @staticmethod
@@ -75,6 +78,8 @@ class TracingConfig:
             "# sweep knobs tune fleet-trace export once it runs. Seconds, except batch_limit\n"
             f"# ({unit} per export). platform = true also emits platform spans (requests,\n"
             "# queries, outbound calls), roots kept at platform_sample_ratio, 0 to 1.\n"
+            "# worker_programs = true (with platform) also lets a worker's own programs send\n"
+            "# spans to the runner; a third-party program may record bodies or parameters.\n"
             "# Uncomment to override.\n",
             "[tracing]\n",
         ]
@@ -93,6 +98,7 @@ _KEYS = (
     "replay_max_window",
     "platform",
     "platform_sample_ratio",
+    "worker_programs",
 )
 
 

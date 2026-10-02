@@ -37,10 +37,11 @@ _WORKER = "worker"
 @dataclass(frozen=True)
 class Allowlist:
     """The one scope a span may arrive under and the attributes it may carry, each with its declared value
-    type: ``string``, ``int`` or ``double``."""
+    type: ``string``, ``int`` or ``double``. ``None`` for either admits any scope, or any attribute, the
+    caps still holding."""
 
-    scope: str
-    attributes: Mapping[str, str]
+    scope: str | None
+    attributes: Mapping[str, str] | None
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,7 @@ def admit(spans: list[ReceivedSpan], lease: LeaseRecord, allowlist: Allowlist) -
     kept = [
         _rebuilt(span, lease, allowlist)
         for span in spans
-        if span.trace_id == expected and span.scope_name == allowlist.scope
+        if span.trace_id == expected and (allowlist.scope is None or span.scope_name == allowlist.scope)
     ]
     return Admission(kept=kept, dropped=len(spans) - len(kept))
 
@@ -71,6 +72,9 @@ def _rebuilt(span: ReceivedSpan, lease: LeaseRecord, allowlist: Allowlist) -> Re
     for key, value in span.attributes.items():
         if len(attributes) >= MAX_ATTRIBUTES:
             break
+        if allowlist.attributes is None:
+            attributes[key] = _truncated(value)
+            continue
         declared = allowlist.attributes.get(key)
         if declared is not None and _is_type(value, declared):
             attributes[key] = _truncated(value)

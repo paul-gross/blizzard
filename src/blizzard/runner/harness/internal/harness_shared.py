@@ -130,6 +130,10 @@ def build_identity_env(
         # `BLIZZARD_TRACEPARENT` is the only name the CLI reads; `TRACEPARENT` is OpenTelemetry's carrier name.
         env["BLIZZARD_TRACEPARENT"] = preamble.traceparent
         env["TRACEPARENT"] = preamble.traceparent
+        if preamble.worker_programs and preamble.lease_token:
+            env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = f"{preamble.local_api_url}/v1/traces"
+            env["OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"] = "http/protobuf"
+            env["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] = f"X-Blizzard-Lease-Token={preamble.lease_token}"
     if elicitation:
         env["BLIZZARD_ELICITATION"] = "1"
     return env

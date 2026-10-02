@@ -29,7 +29,11 @@ router = APIRouter(include_in_schema=False)
 #: ``service.name`` on every span a worker's CLI sends, whatever its own resource said.
 CLI_SERVICE_NAME = "blizzard-cli"
 
-_ALLOWLIST = Allowlist(scope=CLI_SCOPE, attributes=CLI_ATTRIBUTES)
+#: ``service.name`` on every other worker program's spans, kept only under ``[tracing] worker_programs``.
+PROGRAM_SERVICE_NAME = "blizzard-worker-program"
+
+_CLI_ALLOWLIST = Allowlist(scope=CLI_SCOPE, attributes=CLI_ATTRIBUTES)
+_PROGRAM_ALLOWLIST = Allowlist(scope=None, attributes=None)
 _ENCODINGS = (JSON_CONTENT_TYPE, PROTOBUF_CONTENT_TYPE)
 
 
@@ -59,8 +63,16 @@ async def receive_traces(request: Request) -> Response:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="span rate exceeded", headers={"Retry-After": "1"}
         )
-    admission = admit(spans, lease, _ALLOWLIST)
-    await run_in_threadpool(platform_tracing.forward, admission.kept, CLI_SERVICE_NAME)
+    config = wiring.maybe_config()
+    programs = config is not None and config.tracing.worker_programs
+    admission = admit(spans, lease, _PROGRAM_ALLOWLIST if programs else _CLI_ALLOWLIST)
+    cli = [span for span in admission.kept if span.scope_name == CLI_SCOPE]
+    if programs:
+        # The CLI's spans keep their declared attributes; only a third-party program's attributes pass wholesale.
+        cli = admit(cli, lease, _CLI_ALLOWLIST).kept
+        others = [span for span in admission.kept if span.scope_name != CLI_SCOPE]
+        await run_in_threadpool(platform_tracing.forward, others, PROGRAM_SERVICE_NAME)
+    await run_in_threadpool(platform_tracing.forward, cli, CLI_SERVICE_NAME)
     counter.record(accepted=len(admission.kept), dropped=admission.dropped)
     return Response(content=encode_export_response(admission.dropped, content_type), media_type=content_type)
 
