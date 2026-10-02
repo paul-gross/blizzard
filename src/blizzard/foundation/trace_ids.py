@@ -33,6 +33,19 @@ class SpanRole(StrEnum):
     HUB_EXEC = "hub-exec"
 
 
+class RunnerSpanRole(StrEnum):
+    """A runner span's role within a lease's slice of its step's trace.
+
+    Contract: ``blizzard-product:/plans/tracing/runner-spans/spec/spans.md``."""
+
+    WORKER = "runner/worker"
+    INVOCATION = "runner/invocation"
+    ASK_PARK = "runner/ask-park"
+    PAUSE_PARK = "runner/pause-park"
+    OVERLOAD = "runner/overload"
+    TAKEOVER = "runner/takeover"
+
+
 @dataclass(frozen=True)
 class StepKey:
     """The identity of one step: an attempt at a node, or one human decision.
@@ -72,7 +85,7 @@ def trace_id(key: StepKey) -> int:
     return int.from_bytes(nonzero(digest), "big")
 
 
-def span_id(key: StepKey, role: SpanRole, discriminator: str = "") -> int:
+def span_id(key: StepKey, role: SpanRole | RunnerSpanRole, discriminator: str = "") -> int:
     """A span's 64-bit id — the first 8 bytes of
     ``SHA-256("blizzard-span/v1/" + key + "/" + role + "/" + discriminator)``.
 
@@ -91,5 +104,5 @@ class DerivedContext:
     trace_flags: int = SAMPLED
 
     @classmethod
-    def of(cls, key: StepKey, role: SpanRole, discriminator: str = "") -> DerivedContext:
+    def of(cls, key: StepKey, role: SpanRole | RunnerSpanRole, discriminator: str = "") -> DerivedContext:
         return cls(trace_id(key), span_id(key, role, discriminator))

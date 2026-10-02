@@ -11,6 +11,13 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases.closure import (
+    ESCALATED,
+    ESCALATION_MINT,
+    NO_ACCEPTABLE_HARNESS_MINT,
+    PREEMPTED,
+    RELEASED,
+)
 from blizzard.runner.domain.owned_process import interrupt_owned_process, kill_owned_process
 from blizzard.runner.domain.takeover import TakeoverCommand
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
@@ -27,21 +34,6 @@ from blizzard.wire.facts import EVENT_RECORDED
 from blizzard.wire.sse_runner import LeaseChangeCause
 
 _log = get_logger("blizzard.runner.loop")
-
-# Closure reasons (lease_closures.reason).
-TRANSITIONED = "transitioned"
-REAPED = "reaped"
-FAILED = "failed"
-ESCALATED = "escalated"
-PARKED = "parked"  # a runner-config gate: the node-step completed, the chunk parks on a decision
-RELEASED = "released"  # the chunk was found reassigned/detached/unknown — abandon, no requeue
-PREEMPTED = "preempted"  # an operator restart re-aimed the chunk (#370): envs and route kept
-
-# The owner-unresolvable escalation mint's own closure reason (store-only, never published).
-ESCALATION_MINT = "owner-unresolvable-mint"
-
-# The no-acceptable-harness escalation mint's own closure reason (store-only, never published).
-NO_ACCEPTABLE_HARNESS_MINT = "no-acceptable-harness-mint"
 
 # ABANDON — the reassigned/detached release, in two windows. Release runs BEFORE the closure so
 # the still-active lease stays the handle recovery re-derives the idempotent abandon from.

@@ -1,6 +1,7 @@
-"""Finished span records — the domain's own output shape for a step's trace.
+"""Finished span records — the output shape both daemons' trace assembly produces.
 
-Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md`` §Spans in a step's trace.
+Contract: ``blizzard-product:/plans/tracing/fleet-spans/spec/spans.md`` §Spans in a step's trace and
+``blizzard-product:/plans/tracing/runner-spans/spec/spans.md``.
 Frozen and free of any OpenTelemetry type; mapping to SDK span data happens at the exporter seam."""
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ class LinkRecord:
 @dataclass(frozen=True)
 class SpanRecord:
     context: DerivedContext
-    #: ``None`` for a step's root; a child carries its root's span id.
+    #: ``None`` for a trace's root; a child carries its parent's span id.
     parent_span_id: int | None
     name: str
     start: datetime

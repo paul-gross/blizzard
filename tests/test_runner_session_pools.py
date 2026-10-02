@@ -18,6 +18,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.domain.leases import NewLease, WorkRefStamp
+from blizzard.runner.domain.leases.closure import FAILED
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -25,7 +26,7 @@ from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTr
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop.attempt import FAILED, Attempt
+from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.session import SessionResolver
 from blizzard.runner.loop.spawn import Spawner
 from blizzard.runner.loop.steps import Advance, Fill, Pull

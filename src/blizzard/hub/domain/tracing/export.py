@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from blizzard.hub.domain.tracing.spans import SpanRecord
+from blizzard.foundation.trace_spans import SpanRecord
 
 
 class ITraceExporter(Protocol):

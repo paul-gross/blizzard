@@ -10,8 +10,9 @@ from dataclasses import dataclass
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import LeaseRecord
+from blizzard.runner.domain.leases.closure import FAILED, PARKED, TRANSITIONED
 from blizzard.runner.domain.outbound import BufferedFact
-from blizzard.runner.loop.attempt import FAILED, PARKED, TRANSITIONED, Attempt
+from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.held_chunk import HeldChunk
 from blizzard.runner.loop.hub import HubClientError

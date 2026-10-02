@@ -17,10 +17,10 @@ from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import Link, SpanContext, SpanKind, Status, StatusCode, TraceFlags
 
 from blizzard.foundation.trace_ids import DerivedContext
+from blizzard.foundation.trace_spans import Attributes, SpanRecord
+from blizzard.foundation.trace_spans import SpanKind as RecordKind
+from blizzard.foundation.trace_spans import SpanStatus as RecordStatus
 from blizzard.hub.domain.tracing.attributes import INSTRUMENTATION_SCOPE, INSTRUMENTATION_SCOPE_VERSION
-from blizzard.hub.domain.tracing.spans import Attributes, SpanRecord
-from blizzard.hub.domain.tracing.spans import SpanKind as RecordKind
-from blizzard.hub.domain.tracing.spans import SpanStatus as RecordStatus
 
 _KINDS = {RecordKind.INTERNAL: SpanKind.INTERNAL}
 _STATUSES = {RecordStatus.UNSET: StatusCode.UNSET, RecordStatus.ERROR: StatusCode.ERROR}

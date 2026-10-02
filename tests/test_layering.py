@@ -38,6 +38,16 @@ _MOVED_HOMES = {
     "EVENT_LOG_SEVERITY": "blizzard.foundation.event_log",
     "PROVIDER_ANTHROPIC": "blizzard.runner.subscriptions.subscription_sampler",
     "PROVIDER_OPENAI": "blizzard.runner.subscriptions.subscription_sampler",
+    # ``EventRecord`` is left out: hub analytics owns an unrelated record by that name.
+    "SpanRecord": "blizzard.foundation.trace_spans",
+    "LinkRecord": "blizzard.foundation.trace_spans",
+    "SpanKind": "blizzard.foundation.trace_spans",
+    "SpanStatus": "blizzard.foundation.trace_spans",
+    "AttributeValue": "blizzard.foundation.trace_spans",
+    "Attributes": "blizzard.foundation.trace_spans",
+    "GENAI_SEMCONV_VERSION": "blizzard.foundation.trace_attributes",
+    "SHARED_ATTRIBUTES": "blizzard.foundation.trace_attributes",
+    "genai_usage": "blizzard.foundation.trace_attributes",
 }
 
 

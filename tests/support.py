@@ -37,6 +37,7 @@ from blizzard.foundation.ids import USER_PREFIX, Id
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
+from blizzard.foundation.trace_spans import SpanRecord
 from blizzard.hub.app import create_app
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.oauth.provider import IOAuthProvider
@@ -58,7 +59,6 @@ from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.chunks.stores import ChunkStores
 from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.tracing.export import ITraceExporter
-from blizzard.hub.domain.tracing.spans import SpanRecord
 from blizzard.hub.domain.transcripts import TranscriptCaps
 from blizzard.hub.domain.work import (
     Chunk,

@@ -8,14 +8,12 @@ from sqlalchemy import select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.escalations import EscalationRecord, IWriteEscalationRepository
+from blizzard.runner.domain.leases.closure import ESCALATION_REASONS
 from blizzard.runner.store.errors import RunnerStoreConnections
 from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION
 from blizzard.runner.store.schema import escalation_closures, lease_closures, lease_context, lease_spawns, leases
 
 _log = get_logger("blizzard.runner.store")
-
-# The closure reasons "open escalation" derives from: ordinary plus the two escalation mints.
-_ESCALATION_REASONS = ("escalated", "owner-unresolvable-mint", "no-acceptable-harness-mint")
 
 
 class EscalationStore:
@@ -83,7 +81,7 @@ class EscalationStore:
                     lease_context, lease_context.c.lease_id == leases.c.lease_id
                 )
             )
-            .where(lease_closures.c.reason.in_(_ESCALATION_REASONS))
+            .where(lease_closures.c.reason.in_(sorted(ESCALATION_REASONS)))
         )
 
     @staticmethod

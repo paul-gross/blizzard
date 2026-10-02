@@ -9,7 +9,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole
+from blizzard.foundation.trace_spans import (
+    Attributes,
+    AttributeValue,
+    EventRecord,
+    LinkRecord,
+    SpanRecord,
+    SpanStatus,
+)
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.domain.tracing import attributes as attr
 from blizzard.hub.domain.tracing.facts import (
@@ -19,14 +28,6 @@ from blizzard.hub.domain.tracing.facts import (
     RestartRecord,
     StepFacts,
     TransitionRecord,
-)
-from blizzard.hub.domain.tracing.spans import (
-    Attributes,
-    AttributeValue,
-    EventRecord,
-    LinkRecord,
-    SpanRecord,
-    SpanStatus,
 )
 from blizzard.hub.domain.tracing.steps import NodeStep, PrecededBy, StepKind, StepOutcome, identify_steps
 from blizzard.hub.domain.work import UsageFact, UsageTotal
@@ -112,18 +113,18 @@ def _dimensions(facts: StepFacts, step: NodeStep, usage: list[UsageFact]) -> dic
     assert step.close is not None
     graph = facts.graphs[step.position.graph_id]
     dims: dict[str, AttributeValue] = {
-        attr.CHUNK_ID: facts.chunk_id,
-        attr.GRAPH_NAME: graph.name,
-        attr.GRAPH_ID: graph.graph_id,
-        attr.NODE_NAME: step.position.node_name,
-        attr.NODE_ID: step.position.node_id,
+        shared.CHUNK_ID: facts.chunk_id,
+        shared.GRAPH_NAME: graph.name,
+        shared.GRAPH_ID: graph.graph_id,
+        shared.NODE_NAME: step.position.node_name,
+        shared.NODE_ID: step.position.node_id,
         attr.NODE_EXECUTOR: _node_executor(facts, step),
-        attr.STEP_EPOCH: step.epoch,
-        attr.STEP_VISIT: step.position.visit,
+        shared.STEP_EPOCH: step.epoch,
+        shared.STEP_VISIT: step.position.visit,
         attr.STEP_OUTCOME: step.close.outcome.value,
     }
     if facts.work_refs:
-        dims[attr.CHUNK_WORK_REFS] = tuple(facts.work_refs)
+        dims[shared.CHUNK_WORK_REFS] = tuple(facts.work_refs)
     to_node, choice = _led_to(facts, step.close.fact)
     resolution = next((r for r in facts.decision_resolutions if r.decision_id == step.decision_id), None)
     if step.kind is StepKind.GATE and resolution is not None and resolution.choice is not None:
@@ -133,7 +134,7 @@ def _dimensions(facts: StepFacts, step: NodeStep, usage: list[UsageFact]) -> dic
         attr.STEP_TO_NODE_NAME: to_node,
         attr.STEP_PRECEDED_BY: step.preceded_by.value if step.preceded_by is not None else None,
         attr.RUNNER_ID: _runner_id(facts, step),
-        attr.HARNESS_ID: next((u.harness_id for u in reversed(usage) if u.harness_id is not None), None),
+        shared.HARNESS_ID: next((u.harness_id for u in reversed(usage) if u.harness_id is not None), None),
         attr.BOUNCE_CAUSE: _bounce_cause(facts, step),
     }
     dims.update({k: v for k, v in optional.items() if v is not None})
@@ -163,24 +164,22 @@ def _measures(usage: list[UsageFact], waits: dict[str, int]) -> dict[str, Attrib
 def _invocation(row: UsageFact, at: datetime) -> EventRecord:
     total = UsageTotal.of([row])
     attrs: dict[str, AttributeValue] = {
-        attr.INVOCATION_KIND: row.kind,
-        attr.GEN_AI_RESPONSE_MODEL: row.model,
-        attr.GEN_AI_INPUT_TOKENS: row.input_tokens + row.cache_read_tokens + row.cache_create_tokens,
-        attr.GEN_AI_OUTPUT_TOKENS: row.output_tokens,
-        attr.GEN_AI_CACHE_READ_TOKENS: row.cache_read_tokens,
-        attr.GEN_AI_CACHE_CREATE_TOKENS: row.cache_create_tokens,
-        attr.INVOCATION_INPUT_TOKENS: row.input_tokens,
-        attr.INVOCATION_OUTPUT_TOKENS: row.output_tokens,
-        attr.INVOCATION_CACHE_READ_TOKENS: row.cache_read_tokens,
-        attr.INVOCATION_CACHE_CREATE_TOKENS: row.cache_create_tokens,
+        shared.INVOCATION_KIND: row.kind,
+        shared.GEN_AI_RESPONSE_MODEL: row.model,
+        **shared.genai_usage(
+            input_tokens=row.input_tokens,
+            output_tokens=row.output_tokens,
+            cache_read_tokens=row.cache_read_tokens,
+            cache_create_tokens=row.cache_create_tokens,
+        ),
     }
     if row.harness_id is not None:
-        attrs[attr.HARNESS_ID] = row.harness_id
+        attrs[shared.HARNESS_ID] = row.harness_id
     if row.harness_version is not None:
         attrs[attr.HARNESS_VERSION] = row.harness_version
     if row.cost_usd is not None or row.estimated_cost_usd is not None:
-        attrs[attr.INVOCATION_COST_USD] = _cost(total)
-        attrs[attr.INVOCATION_COST_ESTIMATED] = row.estimated_cost_usd is not None
+        attrs[shared.INVOCATION_COST_USD] = _cost(total)
+        attrs[shared.INVOCATION_COST_ESTIMATED] = row.estimated_cost_usd is not None
     return EventRecord(attr.EVENT_INVOCATION, at, attrs)
 
 

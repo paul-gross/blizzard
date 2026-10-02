@@ -12,12 +12,13 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.checks import CheckResultRecord
 from blizzard.runner.domain.elicitation import ElicitationRecord
 from blizzard.runner.domain.leases import LeaseRecord, as_utc
+from blizzard.runner.domain.leases.closure import FAILED
 from blizzard.runner.environments.repository import EnvBindingRecord
 from blizzard.runner.harness.adapter import IHarnessLifecycleAndVerdict
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.loop.attempt import FAILED, Attempt
+from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.dormant import DormantSession

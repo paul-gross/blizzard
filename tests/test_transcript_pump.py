@@ -16,6 +16,7 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.transcripts import RECORD_MAX_BYTES as HUB_RECORD_MAX_BYTES
 from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.domain.leases.closure import FAILED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.transcript import (
@@ -26,7 +27,7 @@ from blizzard.runner.harness.transcript import (
     TranscriptBatch,
     TranscriptPosition,
 )
-from blizzard.runner.loop.attempt import FAILED, Attempt
+from blizzard.runner.loop.attempt import Attempt
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.transcript_pump import (
     _ARRAY_SEPARATOR_BYTES,
