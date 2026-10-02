@@ -118,7 +118,7 @@ def _dimensions(facts: StepFacts, step: NodeStep, usage: list[UsageFact]) -> dic
         shared.GRAPH_ID: graph.graph_id,
         shared.NODE_NAME: step.position.node_name,
         shared.NODE_ID: step.position.node_id,
-        attr.NODE_EXECUTOR: _node_executor(facts, step),
+        shared.NODE_EXECUTOR: _node_executor(facts, step),
         shared.STEP_EPOCH: step.epoch,
         shared.STEP_VISIT: step.position.visit,
         attr.STEP_OUTCOME: step.close.outcome.value,
@@ -176,7 +176,7 @@ def _invocation(row: UsageFact, at: datetime) -> EventRecord:
     if row.harness_id is not None:
         attrs[shared.HARNESS_ID] = row.harness_id
     if row.harness_version is not None:
-        attrs[attr.HARNESS_VERSION] = row.harness_version
+        attrs[shared.HARNESS_VERSION] = row.harness_version
     if row.cost_usd is not None or row.estimated_cost_usd is not None:
         attrs[shared.INVOCATION_COST_USD] = _cost(total)
         attrs[shared.INVOCATION_COST_ESTIMATED] = row.estimated_cost_usd is not None

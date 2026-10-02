@@ -19,9 +19,11 @@ GRAPH_NAME = "blizzard.graph.name"
 GRAPH_ID = "blizzard.graph.id"
 NODE_NAME = "blizzard.node.name"
 NODE_ID = "blizzard.node.id"
+NODE_EXECUTOR = "blizzard.node.executor"
 STEP_EPOCH = "blizzard.step.epoch"
 STEP_VISIT = "blizzard.step.visit"
 HARNESS_ID = "blizzard.harness.id"
+HARNESS_VERSION = "blizzard.harness.version"
 
 # Invocation
 INVOCATION_KIND = "blizzard.invocation.kind"

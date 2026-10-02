@@ -14,13 +14,11 @@ INSTRUMENTATION_SCOPE_VERSION = "1"
 DEFAULT_SERVICE_NAME = "blizzard-hub"
 
 # Dimensions
-NODE_EXECUTOR = "blizzard.node.executor"
 STEP_OUTCOME = "blizzard.step.outcome"
 STEP_CHOICE = "blizzard.step.choice"
 STEP_TO_NODE_NAME = "blizzard.step.to_node.name"
 STEP_PRECEDED_BY = "blizzard.step.preceded_by"
 RUNNER_ID = "blizzard.runner.id"
-HARNESS_VERSION = "blizzard.harness.version"
 STEP_MODELS = "blizzard.step.models"
 BOUNCE_CAUSE = "blizzard.bounce.cause"
 ASK_ANSWERED = "blizzard.ask.answered"
