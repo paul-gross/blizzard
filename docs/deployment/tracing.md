@@ -243,9 +243,10 @@ its time. They share no trace with a step, and the [Spans](#spans) table does no
   its hub carry `traceparent`.
 - **What is left out.** The runner's worker `POST /api/heartbeat` and any `/v1/traces` path make no span, and neither do
   the store queries they run.
-- **Names.** `service.name` follows the rule in [Resource attributes](#resource-attributes). The scopes are
-  `blizzard.hub.platform` and `blizzard.runner.platform`, each at version `1`. Request spans follow the stable HTTP
-  semantic conventions, version 1.21.0, and query spans the stable database conventions, version 1.25.0, whatever
+- **Names.** `service.name` follows the rule in [Resource attributes](#resource-attributes). Sweep and tick spans carry
+  the scope `blizzard.hub.platform` or `blizzard.runner.platform`, each at version `1`; request, query and outbound-call
+  spans carry the scope of the library that opened them. Request spans follow the stable HTTP semantic conventions,
+  version 1.21.0, and query spans the stable database conventions, version 1.25.0, whatever
   `OTEL_SEMCONV_STABILITY_OPT_IN` says.
 - **What never leaves.** The [What never leaves](#what-never-leaves) rules hold here too. A request's query string and a
   query's bound values are never recorded, and nor are headers or bodies.
