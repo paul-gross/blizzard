@@ -13,6 +13,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.graph import Edge, Graph, Node
+from blizzard.hub.domain.tracing.repository import WorkRefLabel
 from blizzard.hub.domain.work import Chunk, ChunkFacts, MovementKind, TransitionFact
 from blizzard.wire.envelope import (
     EnvelopeArtifact,
@@ -145,6 +146,19 @@ class Envelope:
     # This visit was forced by an operator restart, which overrides the node's
     # declared session mode below — derived from the durable fact, so a re-read still says so.
     entered_by_restart: bool = False
+    # Renders a work ref's source-native token; omitted, no ref carries a label.
+    label: WorkRefLabel | None = None
+
+    @property
+    def work_refs(self) -> list[dict[str, str]]:  # ast-grep-ignore: bzh:property-delegates
+        refs: list[dict[str, str]] = []
+        for p in self.chunk.work_refs:
+            entry = {"source": p.source, "ref": p.ref}
+            label = self.label(p) if self.label is not None else None
+            if label is not None:
+                entry["label"] = label
+            refs.append(entry)
+        return refs
 
     @property
     def prompt(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
@@ -224,11 +238,12 @@ class Envelope:
         return NodeEnvelope(
             chunk_id=self.chunk.chunk_id,
             graph_id=self.chunk.graph_id,
+            graph_name=self.graph.name,
             epoch=self.epoch,
             node=self.config,
             prompt=self.prompt,
             judgement_prompt=self.judgement_prompt,
-            work_refs=[{"source": p.source, "ref": p.ref} for p in self.chunk.work_refs],
+            work_refs=self.work_refs,
             artifacts=LatestArtifacts.of(self.artifacts).wire,
             graph_artifacts=[
                 GraphArtifact(name=a.name, kind=ArtifactKind.ASSET, content=a.content) for a in self.graph.artifacts

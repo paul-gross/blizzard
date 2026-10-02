@@ -49,7 +49,7 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
     assert env["judgement_prompt"]
     assert "<Choice>" not in env["judgement_prompt"]  # the tail is the runner's to render
     assert {c["name"] for c in env["node"]["choices"]} == {"already-done", "basic", "advanced", "harness"}
-    assert env["work_refs"] == [_POINTER]
+    assert env["work_refs"] == [{**_POINTER, "label": "default#7"}]
 
 
 def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path) -> None:

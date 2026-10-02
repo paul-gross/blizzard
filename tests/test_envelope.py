@@ -410,3 +410,27 @@ def test_arrival_is_nothing_once_a_restart_supersedes_the_transition() -> None:
 def test_arrival_is_nothing_for_a_chunk_that_has_not_moved() -> None:
     assert Arrival.of_facts(_addended_graph(), None).addendum is None
     assert Arrival.of_facts(_addended_graph(), ChunkFacts(minted=True)).addendum is None
+
+
+def test_envelope_carries_the_graph_name_and_labels_each_work_ref_its_source_renders() -> None:
+    chunk = replace(
+        _chunk(),
+        work_refs=[WorkRef(source="gh", ref="42"), WorkRef(source="hub", ref="7"), WorkRef(source="gone", ref="1")],
+    )
+    labels = {"gh": "acme#42", "hub": "hub:7"}
+
+    env = Envelope(
+        chunk=chunk,
+        graph=_graph(),
+        node=_node(),
+        artifacts=[],
+        epoch=1,
+        label=lambda ref: labels.get(ref.source),
+    ).wire
+
+    assert env.graph_name == "t"
+    assert env.work_refs == [
+        {"source": "gh", "ref": "42", "label": "acme#42"},
+        {"source": "hub", "ref": "7", "label": "hub:7"},
+        {"source": "gone", "ref": "1"},
+    ]

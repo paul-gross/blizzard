@@ -200,6 +200,8 @@ class HubServices:
     #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
     system_artifacts: PackagedSystemArtifacts
     work_sources: IWorkSourceRegistry
+    #: Renders a work ref's source-native token — the one rule fleet spans and envelopes share.
+    work_ref_label: WorkRefLabel
     #: The close-intent drain sweep — built here because it needs the
     #: write-capable chunk repository, which only the composition root holds.
     close_drain: CloseIntentDrainer
@@ -559,7 +561,9 @@ def build_services(
     commit_resolver = GitHubCommitResolver(
         httpx.Client(timeout=10.0), forge_url=forge_url, forge_token=forge_token, forge_owner=forge_owner
     ).resolve
+    work_ref_label = _work_ref_label(work_sources)
     return HubServices(
+        work_ref_label=work_ref_label,
         chunks=ChunkReadStores(
             facts=chunk_facts,
             record=chunk_record,
@@ -589,6 +593,7 @@ def build_services(
             retired=retired,
             exclusive=chunk_exclusive,
             clock=clock,
+            label=work_ref_label,
         ),
         apply=ApplyService(
             facts=chunk_facts,
@@ -600,6 +605,7 @@ def build_services(
             retired=retired,
             clock=clock,
             hub_node_executor=hub_node,
+            label=work_ref_label,
         ),
         decisions=DecisionService(
             facts=chunk_facts, route=chunk_route, decisions=chunk_decisions, retired=retired, clock=clock

@@ -111,11 +111,14 @@ class NodeEnvelope(BaseModel):
 
     chunk_id: str
     graph_id: str
+    # The pinned graph's name; ``None`` from a hub that predates the field.
+    graph_name: str | None = None
     epoch: int
     node: NodeConfig
     # The pre-prompt: base prompt + inlined arrival addendum. ``None`` where there is no worker prompt.
     prompt: str | None
     judgement_prompt: str | None
+    # Each entry carries ``source`` and ``ref``, plus the source-native ``label`` when a configured source renders one.
     work_refs: list[dict[str, str]] = []
     artifacts: list[EnvelopeArtifact] = []
     # The pinned mint's graph-scoped `artifacts:` declarations, empty for a graph that

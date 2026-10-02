@@ -1171,6 +1171,7 @@ _HISTORICAL_RESHAPES: list[tuple[str, str, str, tuple[str, ...]] | tuple[str, st
         ("session_name", "resolved_model", "resolved_effort"),
     ),
     ("runner", "20260817_1000_runner_graph_artifacts", "lease_context", ("resolved_compaction_window",)),
+    ("runner", "20260924_0500_in_flight_elicitations_autoincrement", "lease_context", ("graph_name", "work_refs")),
     # runner tree — instance 7 (drop-and-recreate: environment_id added, forge dropped)
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("environment_id",)),
     ("runner", "20260725_1200_runner_check_results", "git_commit_declarations", ("forge",), "removed"),

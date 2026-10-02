@@ -22,6 +22,7 @@ from blizzard.hub.domain.envelope import Arrival, Envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.registry import IReadRunnerRegistry, RetiredRunnerGuard
+from blizzard.hub.domain.tracing.repository import WorkRefLabel
 from blizzard.hub.domain.work import Chunk, holds_claim
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -114,6 +115,7 @@ class ClaimService:
         retired: RetiredRunnerGuard,
         exclusive: IChunkExclusiveWrites,
         clock: IClock,
+        label: WorkRefLabel,
     ) -> None:
         self._route = route
         self._artifacts = artifacts
@@ -128,6 +130,7 @@ class ClaimService:
         # The rekey's refusal; the claim refuses through the registration it already reads.
         self._retired = retired
         self._clock = clock
+        self._label = label
 
     # runner_id resolves a paused-runner guard, a domain rule (bzh:domain-takes-objects).
     # ast-grep-ignore: bzh:domain-takes-objects
@@ -235,6 +238,7 @@ class ClaimService:
             epoch=epoch,
             arrival_addendum=Arrival.of_facts(graph, facts).addendum,
             entered_by_restart=facts is not None and facts.entered_by_restart(),
+            label=self._label,
         ).wire
         return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
 

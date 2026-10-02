@@ -16,6 +16,7 @@ from blizzard.runner.domain.lease_auth import LeaseToken
 from blizzard.runner.domain.leases import (
     LeaseRecord,
     NewLease,
+    WorkRefStamp,
 )
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.repository import EnvBindingRecord
@@ -430,6 +431,10 @@ class Spawner:
                 resolved_model=model,
                 resolved_effort=effort,
                 resolved_compaction_window=compaction_window,
+                graph_name=envelope.graph_name,
+                work_refs=tuple(
+                    WorkRefStamp(source=w["source"], ref=w["ref"], label=w.get("label")) for w in envelope.work_refs
+                ),
                 created_at=at,
             )
         )

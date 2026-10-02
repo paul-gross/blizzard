@@ -13,7 +13,13 @@ from sqlalchemy import and_, func, select
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.domain.leases import ClosedLeaseRecord, IWriteLeaseRecordRepository, LeaseRecord, NewLease
 from blizzard.runner.store.errors import RunnerStoreConnections
-from blizzard.runner.store.internal.base import Unclosed, enqueue_transcript_final, lease_select, row_to_lease
+from blizzard.runner.store.internal.base import (
+    Unclosed,
+    encode_work_refs,
+    enqueue_transcript_final,
+    lease_select,
+    row_to_lease,
+)
 from blizzard.runner.store.schema import (
     lease_closures,
     lease_context,
@@ -163,6 +169,8 @@ class LeaseRecordStore:
                     resolved_model=lease.resolved_model,
                     resolved_effort=lease.resolved_effort,
                     resolved_compaction_window=lease.resolved_compaction_window,
+                    graph_name=lease.graph_name,
+                    work_refs=encode_work_refs(lease.work_refs),
                     recorded_at=lease.created_at,
                 )
             )

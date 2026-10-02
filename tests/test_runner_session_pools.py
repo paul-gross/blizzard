@@ -17,7 +17,7 @@ from sqlalchemy import update
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.runner.domain.leases import NewLease
+from blizzard.runner.domain.leases import NewLease, WorkRefStamp
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -457,6 +457,74 @@ def test_a_lease_predating_the_stamps_inherits_unknown_rather_than_a_guess(tmp_p
     assert h2.spawn_compaction_windows == [None]
 
 
+def _mint_lease(tmp_path, **envelope_kwargs):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.FRESH, **envelope_kwargs
+    )
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t1", pgid=100), verdict="pass"
+    )
+    Fill(_ctx(store, hub, FakeProvider({"e1": "/ws/e1"}), harness)).run()
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    return lease
+
+
+@pytest.mark.component
+def test_a_mint_records_the_graph_name_and_labelled_work_refs(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    lease = _mint_lease(
+        tmp_path,
+        graph_name="advanced",
+        work_refs=[{"source": "gh", "ref": "42", "label": "acme#42"}, {"source": "gone", "ref": "1"}],
+    )
+
+    assert lease.graph_name == "advanced"
+    assert lease.work_refs == (WorkRefStamp("gh", "42", "acme#42"), WorkRefStamp("gone", "1", None))
+
+
+@pytest.mark.component
+def test_a_mint_with_no_work_refs_reads_back_an_empty_tuple(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    lease = _mint_lease(tmp_path, graph_name="advanced")
+
+    assert lease.graph_name == "advanced"
+    assert lease.work_refs == ()
+
+
+@pytest.mark.component
+def test_a_mint_from_an_envelope_without_a_graph_name_reads_back_none(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    assert _mint_lease(tmp_path).graph_name is None
+
+
+@pytest.mark.component
+def test_a_lease_minted_before_the_columns_reads_graph_name_and_work_refs_as_unknown(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = make_envelope(
+        "ch_1",
+        "build",
+        node_id="nd_build",
+        choices=_CHOICES,
+        graph_name="advanced",
+        work_refs=[{"source": "gh", "ref": "1"}],
+    )
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-1", pid=100, process_start_time="t1", pgid=100), verdict="pass"
+    )
+    Fill(_ctx(store, hub, FakeProvider({"e1": "/ws/e1"}), harness)).run()
+    _blank_stamps(store, "ch_1")
+
+    lease = store.active_lease_for_chunk("ch_1")
+
+    assert lease is not None
+    assert (lease.graph_name, lease.work_refs) == (None, None)
+
+
 def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
     from sqlalchemy import update
 
@@ -466,7 +534,14 @@ def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
         conn.execute(
             update(s.lease_context)
             .where(s.lease_context.c.chunk_id == chunk_id)
-            .values(session_name=None, resolved_model=None, resolved_effort=None, resolved_compaction_window=None)
+            .values(
+                session_name=None,
+                resolved_model=None,
+                resolved_effort=None,
+                resolved_compaction_window=None,
+                graph_name=None,
+                work_refs=None,
+            )
         )
 
 
