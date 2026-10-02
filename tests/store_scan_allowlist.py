@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 from blizzard.hub.domain.findings import IReadFindingRepository
 from blizzard.runner.domain.outbound import IReadOutboundRepository
-from blizzard.runner.domain.tracing.repository import IReadLeaseTraceCursor
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 
 #: The ceiling an allow-list entry's declared row bound must never exceed.
@@ -83,14 +82,6 @@ RUNNER_ALLOWED_SCANS: list[TableWideAllowance | MethodScopedAllowance] = [
     TableWideAllowance("selftest_results", 200, _ENV_SCOPED_HISTORY_REASON),
     TableWideAllowance("overload_facts", 200, _ENV_SCOPED_HISTORY_REASON),
     TableWideAllowance("overload_resets", 200, _ENV_SCOPED_HISTORY_REASON),
-    MethodScopedAllowance(
-        IReadLeaseTraceCursor,
-        "newest_export_failure",
-        "trace_export_latch",
-        200,
-        "filters on kind, a column ix_trace_export_latch_recorded_at_id doesn't cover — the latch holds one row "
-        "per export outage transition, one environment's own sparse history.",
-    ),
     # --- rare operator-triggered events -------------------------------------------------
     TableWideAllowance("resume_intents", 50, _RARE_OPERATOR_EVENT_REASON),
     TableWideAllowance("resume_clears", 50, _RARE_OPERATOR_EVENT_REASON),

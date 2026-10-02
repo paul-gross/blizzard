@@ -182,6 +182,12 @@ trace_export_latch = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 Index("ix_trace_export_latch_recorded_at_id", trace_export_latch.c.recorded_at, trace_export_latch.c.id)
+Index(
+    "ix_trace_export_latch_kind_recorded_at_id",
+    trace_export_latch.c.kind,
+    trace_export_latch.c.recorded_at,
+    trace_export_latch.c.id,
+)
 
 # --- Binding releases (released iff a release fact exists) -------------------
 # Held env ids are `env_bindings` minus `binding_releases`.
