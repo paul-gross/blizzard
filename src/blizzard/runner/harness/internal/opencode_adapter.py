@@ -14,6 +14,7 @@ import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import (
@@ -28,6 +29,7 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.env_allowlist import AllowlistedEnv
 from blizzard.runner.harness.internal import harness_shared
+from blizzard.runner.harness.internal.opencode_bundle import check_ambient_plugins, content_with_snapshot_references
 from blizzard.runner.harness.internal.opencode_command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.internal.opencode_descendant_usage import DescendantStep, OpenCodeDescendantUsage
 from blizzard.runner.harness.internal.opencode_price_cache import (
@@ -209,6 +211,7 @@ class OpenCodeAdapter:
         model_aliases: Sequence[tuple[str, str]] = (),
         effort_aliases: Sequence[tuple[str, str]] = (),
         worker_config_path: str | None = None,
+        effective_config_dir: str | None = None,
         autonomy: Autonomy = Autonomy.Dangerous,
         transcript_source: IHarnessTranscriptSource | None = None,
         price_catalog: IOpenCodePriceCatalog | None = None,
@@ -231,6 +234,7 @@ class OpenCodeAdapter:
         # The runner-owned permission/plugin document; `None` when this runtime
         # predates the OpenCode binding, or a deployment chose not to scaffold one.
         self._worker_config_path = worker_config_path
+        self._effective_config_dir = effective_config_dir
         # `--auto` auto-approves what the permission map does not deny; `Normal` omits it.
         self._autonomy = autonomy
         self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
@@ -336,6 +340,8 @@ class OpenCodeAdapter:
             auto=self._autonomy is not Autonomy.Normal,
         )
         env = self._spawn_env(envelope, preamble, resume_from or "")
+        if workdir is not None:
+            self._check_plugins(workdir, env)
         # Both go through `harness_shared.stdout_target`, empty meaning DEVNULL — the same
         # idiom Claude Code's `spawn` honors `preamble.stderr_path` with.
         with (
@@ -407,8 +413,9 @@ class OpenCodeAdapter:
         env = (
             self.identity_env(preamble, chunk_id, session_id, elicitation=True)
             if preamble is not None
-            else self._worker_env.variables
+            else self._config_env()
         )
+        self._check_plugins(session_cwd, env)
         try:
             with harness_shared.stdout_target(output_path, mode="wb") as stdout_file:
                 # Deferred — the caller's own `confirm_durable()` (right after ITS durable
@@ -451,7 +458,8 @@ class OpenCodeAdapter:
             variant=effort,
             auto=self._autonomy is not Autonomy.Normal,
         )
-        env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._worker_env.variables
+        env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._config_env()
+        self._check_plugins(session_cwd, env)
         # Deferred: a resume gets the same ownership spawn/judge get — `dormant.py::_wake`
         # calls `confirm_durable()` right after its own durable `record_spawn` lands.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
@@ -490,16 +498,32 @@ class OpenCodeAdapter:
         env = harness_shared.build_identity_env(
             preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
         )
+        config_env = self._config_env()
+        for key in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_CONFIG_DIR"):
+            if key in config_env:
+                env[key] = config_env[key]
+        return env
+
+    def _config_env(self) -> dict[str, str]:
+        env = dict(self._worker_env.variables)
         if self._worker_config_path:
             # The runner-owned permission/plugin document — supplied both as a path and
             # its serialized content, as the compatibility proof's `configuration_isolation` probe established.
             env["OPENCODE_CONFIG"] = self._worker_config_path
-            try:
-                with open(self._worker_config_path, encoding="utf-8") as f:
-                    env["OPENCODE_CONFIG_CONTENT"] = f.read()
-            except OSError:
-                pass  # best-effort — a missing file just leaves OpenCode's own discovery
+            with open(self._worker_config_path, encoding="utf-8") as f:
+                content = f.read()
+            env["OPENCODE_CONFIG_CONTENT"] = (
+                content_with_snapshot_references(content, Path(self._effective_config_dir))
+                if self._effective_config_dir
+                else content
+            )
+            if self._effective_config_dir:
+                env["OPENCODE_CONFIG_DIR"] = self._effective_config_dir
         return env
+
+    def _check_plugins(self, cwd: str, env: dict[str, str]) -> None:
+        if self._effective_config_dir:
+            check_ambient_plugins(Path(self._effective_config_dir), Path(cwd), env)
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
         return self.identity_env(preamble, envelope.chunk_id, session_id)

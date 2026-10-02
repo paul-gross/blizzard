@@ -17,10 +17,115 @@ from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness import bundle as bundle_module
 from blizzard.runner.harness.bundle import HarnessBundleError, published_snapshot
 from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
+from blizzard.runner.harness.internal.opencode_bundle import check_ambient_plugins, plugin_identity
 
 pytestmark = pytest.mark.component
 
 _SECRET = "sentinel-secret-value"
+
+
+def test_composed_opencode_config_preserves_settings_and_denials(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    native = bundle / "opencode" / "opencode.json"
+    shutil.rmtree(bundle / "opencode" / "prompts")
+    native.write_text(json.dumps({"model": "example/model", "permission": {"bash": "deny"}, "plugin": ["extra@1"]}))
+    snapshot = publish_harness_bundle(bundle, runtime)
+    composed = json.loads((snapshot.path / "opencode" / "opencode.json").read_text())
+    assert composed["model"] == "example/model"
+    assert composed["permission"] == {"bash": "deny", "question": "deny"}
+    worker = json.loads((runtime / "opencode-worker-config.json").read_text())
+    assert composed["plugin"] == ["extra@1", *worker["plugin"]]
+
+
+def test_collision_keeps_previous_snapshot(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
+    native = bundle / "opencode" / "opencode.json"
+    shutil.rmtree(bundle / "opencode" / "prompts")
+    native.write_text('{"permission": {"question": "allow"}}')
+    with pytest.raises(HarnessBundleError) as raised:
+        publish_harness_bundle(bundle, runtime)
+    assert raised.value.path == native
+    assert published_snapshot(runtime) == first.path.resolve()
+
+
+def test_runner_plugin_collision_names_native_source_and_keeps_snapshot(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
+    worker = json.loads((runtime / "opencode-worker-config.json").read_text())
+    native = bundle / "opencode" / "opencode.json"
+    shutil.rmtree(bundle / "opencode" / "prompts")
+    native.write_text(json.dumps({"plugin": worker["plugin"]}))
+
+    with pytest.raises(HarnessBundleError) as raised:
+        publish_harness_bundle(bundle, runtime)
+    assert raised.value.path == native
+    assert str(runtime / "opencode-worker-config.json") in str(raised.value)
+    assert published_snapshot(runtime) == first.path.resolve()
+
+
+@pytest.mark.unit
+def test_missing_runner_config_blocks_publish_without_repointing_snapshot(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
+    missing = runtime / "missing-worker-config.json"
+    with pytest.raises(HarnessBundleError) as raised:
+        publish_harness_bundle(bundle, runtime, worker_config_path=missing)
+    assert raised.value.path == missing
+    assert published_snapshot(runtime) == first.path.resolve()
+
+
+def test_plugin_identities_across_scopes(tmp_path: Path) -> None:
+    assert plugin_identity("@vendor/extra@1.2") == "@vendor/extra"
+    assert plugin_identity("file:///tmp/Extra.ts") == "extra"
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    (bundle / "opencode" / "plugins").mkdir()
+    (bundle / "opencode" / "plugins" / "extra.ts").write_text("export default () => ({})")
+    shutil.rmtree(bundle / "opencode" / "prompts")
+    (bundle / "opencode" / "opencode.json").write_text('{"plugin": ["file:///tmp/extra.ts"]}')
+    with pytest.raises(HarnessBundleError, match="duplicate plugin"):
+        publish_harness_bundle(bundle, runtime)
+    (bundle / "opencode" / "opencode.json").write_text("{}")
+    snapshot = publish_harness_bundle(bundle, runtime)
+    project = tmp_path / "project"
+    (project / ".opencode").mkdir(parents=True)
+    (project / ".opencode" / "opencode.json").write_text('{"plugin": ["file:///elsewhere/extra.js"]}')
+    with pytest.raises(HarnessBundleError, match=r"extra\.ts.*opencode\.json"):
+        check_ambient_plugins(snapshot.path / "opencode", project, {"HOME": str(tmp_path / "empty")})
+    (project / ".opencode" / "opencode.json").write_text("{}")
+    home = tmp_path / "home"
+    user = home / ".config" / "opencode"
+    user.mkdir(parents=True)
+    (user / "opencode.jsonc").write_text('// user plugins\n{"plugin": ["file:///elsewhere/extra.js",],}')
+    with pytest.raises(HarnessBundleError, match=r"extra\.ts.*opencode\.jsonc"):
+        check_ambient_plugins(snapshot.path / "opencode", project, {"HOME": str(home)})
+
+
+def test_ambient_directory_plugins_collide_with_operator_and_each_other(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    (bundle / "opencode" / "plugins").mkdir()
+    (bundle / "opencode" / "plugins" / "duplicate.ts").write_text("export const Plugin = () => ({})")
+    snapshot = publish_harness_bundle(bundle, runtime)
+    project = tmp_path / "project"
+    local_plugins = project / ".opencode" / "plugins"
+    local_plugins.mkdir(parents=True)
+    (local_plugins / "DUPLICATE.js").write_text("export const Plugin = () => ({})")
+    home = tmp_path / "home"
+    global_plugins = home / ".config" / "opencode" / "plugins"
+    global_plugins.mkdir(parents=True)
+    with pytest.raises(HarnessBundleError, match=r"duplicate\.ts.*DUPLICATE\.js"):
+        check_ambient_plugins(snapshot.path / "opencode", project, {"HOME": str(home)})
+    (bundle / "opencode" / "plugins" / "duplicate.ts").unlink()
+    snapshot = publish_harness_bundle(bundle, runtime)
+    (global_plugins / "duplicate.mjs").write_text("export const Plugin = () => ({})")
+    with pytest.raises(HarnessBundleError, match=r"duplicate\.mjs.*DUPLICATE\.js"):
+        check_ambient_plugins(snapshot.path / "opencode", project, {"HOME": str(home)})
 
 
 def _bundle(tmp_path: Path) -> Path:
@@ -160,13 +265,13 @@ def test_a_harness_directory_is_validated_even_alone(tmp_path: Path) -> None:
 
 def test_snapshot_mirrors_layout_and_copies_relative_companions(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
-    snapshot = publish_harness_bundle(bundle, tmp_path / "rt")
+    snapshot = publish_harness_bundle(bundle, _runtime(tmp_path))
 
     assert (snapshot.path / "opencode" / "prompts" / "p.txt").read_text() == _SECRET
     assert (snapshot.path / "claude-code" / "settings.json").is_file()
     assert [h.dirname for h in snapshot.harnesses] == ["claude-code", "opencode"]
     assert snapshot.harnesses[1].entry_points == ("opencode.json",)
-    assert published_snapshot(tmp_path / "rt") == snapshot.path.resolve()
+    assert published_snapshot(tmp_path / "runner") == snapshot.path.resolve()
 
 
 def test_absolute_references_are_left_alone(tmp_path: Path) -> None:
@@ -176,7 +281,7 @@ def test_absolute_references_are_left_alone(tmp_path: Path) -> None:
     (bundle / "opencode" / "opencode.json").write_text(json.dumps({"p": f"{{file:{outside}}}"}))
     shutil.rmtree(bundle / "opencode" / "prompts")
 
-    snapshot = publish_harness_bundle(bundle, tmp_path / "rt")
+    snapshot = publish_harness_bundle(bundle, _runtime(tmp_path))
 
     assert not (snapshot.path / "opencode" / "prompts").exists()
     assert sorted(p.name for p in (snapshot.path / "opencode").iterdir()) == ["opencode.json"]
@@ -188,7 +293,7 @@ def test_symlinks_are_dereferenced(tmp_path: Path) -> None:
     target.write_text("{}")
     (bundle / "claude-code" / "mcp.json").symlink_to(target)
 
-    snapshot = publish_harness_bundle(bundle, tmp_path / "rt")
+    snapshot = publish_harness_bundle(bundle, _runtime(tmp_path))
 
     copied = snapshot.path / "claude-code" / "mcp.json"
     assert copied.is_file() and not copied.is_symlink()
@@ -200,30 +305,33 @@ def test_symlinks_are_dereferenced(tmp_path: Path) -> None:
 
 def test_unchanged_bundle_reuses_its_snapshot(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
-    first = publish_harness_bundle(bundle, tmp_path / "rt")
-    second = publish_harness_bundle(bundle, tmp_path / "rt")
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
+    second = publish_harness_bundle(bundle, runtime)
 
     assert first.path == second.path
-    assert len(list((tmp_path / "rt" / "harness-config" / "snapshots").iterdir())) == 1
-    assert list((tmp_path / "rt" / "harness-config" / "staging").iterdir()) == []
+    assert len(list((runtime / "harness-config" / "snapshots").iterdir())) == 1
+    assert list((runtime / "harness-config" / "staging").iterdir()) == []
 
 
 def test_changed_bundle_publishes_a_new_snapshot_and_keeps_the_old(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
-    first = publish_harness_bundle(bundle, tmp_path / "rt")
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
     (bundle / "claude-code" / "settings.json").write_text("{}")
-    second = publish_harness_bundle(bundle, tmp_path / "rt")
+    second = publish_harness_bundle(bundle, runtime)
 
     assert first.path != second.path
     assert first.path.is_dir()
-    assert published_snapshot(tmp_path / "rt") == second.path.resolve()
+    assert published_snapshot(runtime) == second.path.resolve()
 
 
 def test_failure_mid_stage_leaves_the_previous_snapshot_current(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bundle = _bundle(tmp_path)
-    first = publish_harness_bundle(bundle, tmp_path / "rt")
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
     (bundle / "claude-code" / "settings.json").write_text("{}")
 
     def explode(*args: object, **kwargs: object) -> None:
@@ -231,16 +339,17 @@ def test_failure_mid_stage_leaves_the_previous_snapshot_current(
 
     monkeypatch.setattr(bundle_module.shutil, "copy2", explode)
     with pytest.raises(HarnessBundleError, match="disk gone"):
-        publish_harness_bundle(bundle, tmp_path / "rt")
+        publish_harness_bundle(bundle, runtime)
 
-    assert published_snapshot(tmp_path / "rt") == first.path.resolve()
-    assert len(list((tmp_path / "rt" / "harness-config" / "snapshots").iterdir())) == 1
-    assert list((tmp_path / "rt" / "harness-config" / "staging").iterdir()) == []
+    assert published_snapshot(runtime) == first.path.resolve()
+    assert len(list((runtime / "harness-config" / "snapshots").iterdir())) == 1
+    assert list((runtime / "harness-config" / "staging").iterdir()) == []
 
 
 def test_failure_swapping_current_leaves_the_previous_pointer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bundle = _bundle(tmp_path)
-    first = publish_harness_bundle(bundle, tmp_path / "rt")
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
     (bundle / "claude-code" / "settings.json").write_text("{}")
 
     def explode(*args: object, **kwargs: object) -> None:
@@ -248,10 +357,10 @@ def test_failure_swapping_current_leaves_the_previous_pointer(tmp_path: Path, mo
 
     monkeypatch.setattr(os, "replace", explode)
     with pytest.raises(HarnessBundleError, match="swap failed"):
-        publish_harness_bundle(bundle, tmp_path / "rt")
+        publish_harness_bundle(bundle, runtime)
 
-    assert published_snapshot(tmp_path / "rt") == first.path.resolve()
-    assert [p.name for p in (tmp_path / "rt" / "harness-config").iterdir() if p.name.startswith(".")] == []
+    assert published_snapshot(runtime) == first.path.resolve()
+    assert [p.name for p in (runtime / "harness-config").iterdir() if p.name.startswith(".")] == []
 
 
 # --------------------------------------------------------------------------- #

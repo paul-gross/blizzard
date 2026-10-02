@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.harness.bundle_layouts import publish_harness_bundle
 from blizzard.runner.loop.build import LoopWiring
 from blizzard.runner.store.schema import leases, usage_facts
 from tests.e2e.test_acceptance_loop import REPO_NAME, _free_port, _git_bare, _runner_api, _runner_config
@@ -102,6 +103,48 @@ def test_opencode_build_and_review_resume_the_same_session_to_done(tmp_path: Pat
         "build's fresh mint, build's judgement resume, review's node-entry resume, and "
         f"review's judgement resume, in order — got {kinds}"
     )
+
+
+def test_runner_serves_a_mock_opencode_lease_with_a_published_bundle(tmp_path: Path) -> None:
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_fixture(bin_dir, require_winter_source(), tmp_path / "scratch")
+    bundle = tmp_path / "bundle" / "opencode"
+    bundle.mkdir(parents=True)
+    (bundle / "opencode.json").write_text('{"permission":{"bash":"deny"}}')
+    fenced = _tick_env()
+
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        chunk_id = _seed_opencode(hub)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port(), harness_config_dir=bundle.parent)
+        snapshot = publish_harness_bundle(bundle.parent, config.root)
+        composed = json.loads((snapshot.path / "opencode" / "opencode.json").read_text())
+        assert composed["permission"] == {"bash": "deny", "question": "deny"}
+
+        with _runner_api(config):
+            client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            try:
+                assert client.get("/api/health").status_code == 200
+                minted = poll_until(lambda: _tick_and_check_lease(config, fenced, client, chunk_id), timeout=60.0)
+                assert minted
+                lease = next(item for item in client.get("/api/leases").json()["items"] if item["chunk_id"] == chunk_id)
+                heartbeat = client.post("/api/heartbeat", json={"lease_id": lease["lease_id"]})
+                assert heartbeat.status_code == 200, heartbeat.text
+                _drive(config, fenced, ticks=1)
+                dashboard = client.get("/api/dashboard").json()
+                lease_after = next(
+                    item for item in client.get("/api/leases").json()["items"] if item["chunk_id"] == chunk_id
+                )
+                assert dashboard["runner"]["last_tick_at"] is not None
+                assert lease_after["last_heartbeat_at"] is not None
+            finally:
+                client.close()
+
+
+def _tick_and_check_lease(config: RunnerConfig, fenced: dict[str, str], client: httpx.Client, chunk_id: str) -> bool:
+    _drive(config, fenced, ticks=1, pause=0.3)
+    return any(item["chunk_id"] == chunk_id for item in client.get("/api/leases").json()["items"])
 
 
 #: A real diff — OpenCode reads the mock's first stdout line as the session id, so no captured child stdout may reach the real one.
