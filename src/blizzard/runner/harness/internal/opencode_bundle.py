@@ -153,7 +153,7 @@ def _compose(composition: HarnessComposition, worker_config_path: Path) -> None:
     """Compose inside staging, before the snapshot can be published."""
     source = composition.source_dir
     if not worker_config_path.is_file():
-        return
+        raise HarnessBundleError(worker_config_path, "runner OpenCode worker config is missing")
     native = source / "opencode.json"
     document: dict[str, Any] = {}
     if native.is_file():

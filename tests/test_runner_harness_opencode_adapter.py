@@ -11,7 +11,7 @@ import os
 import shutil
 import subprocess
 from concurrent.futures import Executor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -113,6 +113,24 @@ def test_effective_bundle_environment_reaches_identity_and_fallback_launches(
         assert env["OPENCODE_CONFIG"] == str(effective / "opencode.json")
         assert env["OPENCODE_CONFIG_CONTENT"] == content
         assert env["OPENCODE_CONFIG_DIR"] == str(effective)
+
+
+@pytest.mark.unit
+def test_identity_env_keeps_lease_token_over_allowlisted_daemon_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
+    monkeypatch.setenv("BLIZZARD_LEASE_TOKEN", "daemon-token")
+    config = tmp_path / "opencode.json"
+    config.write_text('{"permission":{"question":"deny"},"plugin":[]}')
+    adapter = _adapter(
+        spawn_executor,
+        worker_env=AllowlistedEnv.of(("BLIZZARD_LEASE_TOKEN",)),
+        worker_config_path=str(config),
+    )
+    preamble = replace(_preamble(str(tmp_path)), lease_token="child-token")
+    env = adapter.identity_env(preamble, "ch_1", "ses_1")
+    assert env["BLIZZARD_LEASE_TOKEN"] == "child-token"
+    assert env["OPENCODE_CONFIG_CONTENT"] == config.read_text()
 
 
 @pytest.mark.unit

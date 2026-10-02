@@ -498,7 +498,10 @@ class OpenCodeAdapter:
         env = harness_shared.build_identity_env(
             preamble, chunk_id, session_id, self._worker_env, elicitation=elicitation
         )
-        env.update(self._config_env())
+        config_env = self._config_env()
+        for key in ("OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_CONFIG_DIR"):
+            if key in config_env:
+                env[key] = config_env[key]
         return env
 
     def _config_env(self) -> dict[str, str]:

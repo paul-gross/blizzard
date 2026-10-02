@@ -144,7 +144,9 @@ For OpenCode, the snapshot's `opencode/opencode.json` is the effective configura
 through. A native `permission.question` entry collides even if it also says `deny`, since it is runner-owned. A plugin
 with the same package name or file basename (case-insensitive, ignoring package version or script extension) in the
 operator JSON, its `plugins/` directory, or the runner config also collides. Startup fails with the offending native
-path before replacing `current`. The worker receives the effective file as `OPENCODE_CONFIG`, its JSON as
+path before replacing `current`. If an OpenCode directory is present but the configured runner worker-config file is
+missing, startup fails naming that file instead of publishing an incomplete snapshot. The worker receives the effective
+file as `OPENCODE_CONFIG`, its JSON as
 `OPENCODE_CONFIG_CONTENT`, and its parent directory as `OPENCODE_CONFIG_DIR`; relative `{file:…}` companions and native
 operator plugins are colocated there; the runner's plugin is explicitly referenced from its runtime-root scaffold.
 For relative `{file:…}` companions, OpenCode resolves `OPENCODE_CONFIG_CONTENT` against the worker cwd rather than the

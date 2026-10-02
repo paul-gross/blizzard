@@ -67,6 +67,18 @@ def test_runner_plugin_collision_names_native_source_and_keeps_snapshot(tmp_path
     assert published_snapshot(runtime) == first.path.resolve()
 
 
+@pytest.mark.unit
+def test_missing_runner_config_blocks_publish_without_repointing_snapshot(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
+    missing = runtime / "missing-worker-config.json"
+    with pytest.raises(HarnessBundleError) as raised:
+        publish_harness_bundle(bundle, runtime, worker_config_path=missing)
+    assert raised.value.path == missing
+    assert published_snapshot(runtime) == first.path.resolve()
+
+
 def test_plugin_identities_across_scopes(tmp_path: Path) -> None:
     assert plugin_identity("@vendor/extra@1.2") == "@vendor/extra"
     assert plugin_identity("file:///tmp/Extra.ts") == "extra"
@@ -253,13 +265,13 @@ def test_a_harness_directory_is_validated_even_alone(tmp_path: Path) -> None:
 
 def test_snapshot_mirrors_layout_and_copies_relative_companions(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
-    snapshot = publish_harness_bundle(bundle, tmp_path / "rt")
+    snapshot = publish_harness_bundle(bundle, _runtime(tmp_path))
 
     assert (snapshot.path / "opencode" / "prompts" / "p.txt").read_text() == _SECRET
     assert (snapshot.path / "claude-code" / "settings.json").is_file()
     assert [h.dirname for h in snapshot.harnesses] == ["claude-code", "opencode"]
     assert snapshot.harnesses[1].entry_points == ("opencode.json",)
-    assert published_snapshot(tmp_path / "rt") == snapshot.path.resolve()
+    assert published_snapshot(tmp_path / "runner") == snapshot.path.resolve()
 
 
 def test_absolute_references_are_left_alone(tmp_path: Path) -> None:
@@ -269,7 +281,7 @@ def test_absolute_references_are_left_alone(tmp_path: Path) -> None:
     (bundle / "opencode" / "opencode.json").write_text(json.dumps({"p": f"{{file:{outside}}}"}))
     shutil.rmtree(bundle / "opencode" / "prompts")
 
-    snapshot = publish_harness_bundle(bundle, tmp_path / "rt")
+    snapshot = publish_harness_bundle(bundle, _runtime(tmp_path))
 
     assert not (snapshot.path / "opencode" / "prompts").exists()
     assert sorted(p.name for p in (snapshot.path / "opencode").iterdir()) == ["opencode.json"]
@@ -281,7 +293,7 @@ def test_symlinks_are_dereferenced(tmp_path: Path) -> None:
     target.write_text("{}")
     (bundle / "claude-code" / "mcp.json").symlink_to(target)
 
-    snapshot = publish_harness_bundle(bundle, tmp_path / "rt")
+    snapshot = publish_harness_bundle(bundle, _runtime(tmp_path))
 
     copied = snapshot.path / "claude-code" / "mcp.json"
     assert copied.is_file() and not copied.is_symlink()
@@ -293,30 +305,33 @@ def test_symlinks_are_dereferenced(tmp_path: Path) -> None:
 
 def test_unchanged_bundle_reuses_its_snapshot(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
-    first = publish_harness_bundle(bundle, tmp_path / "rt")
-    second = publish_harness_bundle(bundle, tmp_path / "rt")
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
+    second = publish_harness_bundle(bundle, runtime)
 
     assert first.path == second.path
-    assert len(list((tmp_path / "rt" / "harness-config" / "snapshots").iterdir())) == 1
-    assert list((tmp_path / "rt" / "harness-config" / "staging").iterdir()) == []
+    assert len(list((runtime / "harness-config" / "snapshots").iterdir())) == 1
+    assert list((runtime / "harness-config" / "staging").iterdir()) == []
 
 
 def test_changed_bundle_publishes_a_new_snapshot_and_keeps_the_old(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
-    first = publish_harness_bundle(bundle, tmp_path / "rt")
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
     (bundle / "claude-code" / "settings.json").write_text("{}")
-    second = publish_harness_bundle(bundle, tmp_path / "rt")
+    second = publish_harness_bundle(bundle, runtime)
 
     assert first.path != second.path
     assert first.path.is_dir()
-    assert published_snapshot(tmp_path / "rt") == second.path.resolve()
+    assert published_snapshot(runtime) == second.path.resolve()
 
 
 def test_failure_mid_stage_leaves_the_previous_snapshot_current(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bundle = _bundle(tmp_path)
-    first = publish_harness_bundle(bundle, tmp_path / "rt")
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
     (bundle / "claude-code" / "settings.json").write_text("{}")
 
     def explode(*args: object, **kwargs: object) -> None:
@@ -324,16 +339,17 @@ def test_failure_mid_stage_leaves_the_previous_snapshot_current(
 
     monkeypatch.setattr(bundle_module.shutil, "copy2", explode)
     with pytest.raises(HarnessBundleError, match="disk gone"):
-        publish_harness_bundle(bundle, tmp_path / "rt")
+        publish_harness_bundle(bundle, runtime)
 
-    assert published_snapshot(tmp_path / "rt") == first.path.resolve()
-    assert len(list((tmp_path / "rt" / "harness-config" / "snapshots").iterdir())) == 1
-    assert list((tmp_path / "rt" / "harness-config" / "staging").iterdir()) == []
+    assert published_snapshot(runtime) == first.path.resolve()
+    assert len(list((runtime / "harness-config" / "snapshots").iterdir())) == 1
+    assert list((runtime / "harness-config" / "staging").iterdir()) == []
 
 
 def test_failure_swapping_current_leaves_the_previous_pointer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bundle = _bundle(tmp_path)
-    first = publish_harness_bundle(bundle, tmp_path / "rt")
+    runtime = _runtime(tmp_path)
+    first = publish_harness_bundle(bundle, runtime)
     (bundle / "claude-code" / "settings.json").write_text("{}")
 
     def explode(*args: object, **kwargs: object) -> None:
@@ -341,10 +357,10 @@ def test_failure_swapping_current_leaves_the_previous_pointer(tmp_path: Path, mo
 
     monkeypatch.setattr(os, "replace", explode)
     with pytest.raises(HarnessBundleError, match="swap failed"):
-        publish_harness_bundle(bundle, tmp_path / "rt")
+        publish_harness_bundle(bundle, runtime)
 
-    assert published_snapshot(tmp_path / "rt") == first.path.resolve()
-    assert [p.name for p in (tmp_path / "rt" / "harness-config").iterdir() if p.name.startswith(".")] == []
+    assert published_snapshot(runtime) == first.path.resolve()
+    assert [p.name for p in (runtime / "harness-config").iterdir() if p.name.startswith(".")] == []
 
 
 # --------------------------------------------------------------------------- #
