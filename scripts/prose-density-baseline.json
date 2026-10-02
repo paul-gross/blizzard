@@ -1620,9 +1620,9 @@
   },
   "blizzard/foundation/trace_ids.py": {
    "comments": 1,
-   "docstrings": 21,
+   "docstrings": 23,
    "over_cap": 0,
-   "total": 108
+   "total": 115
   },
   "blizzard/foundation/trace_spans.py": {
    "comments": 1,
@@ -4352,7 +4352,7 @@
    "comments": 15,
    "docstrings": 19,
    "over_cap": 0,
-   "total": 225
+   "total": 228
   },
   "blizzard/runner/cli/scope.py": {
    "comments": 0,
@@ -4391,10 +4391,10 @@
    "total": 278
   },
   "blizzard/runner/config.py": {
-   "comments": 133,
-   "docstrings": 122,
+   "comments": 134,
+   "docstrings": 125,
    "over_cap": 37,
-   "total": 1185
+   "total": 1200
   },
   "blizzard/runner/domain/__init__.py": {
    "comments": 0,
@@ -4697,10 +4697,10 @@
    "total": 26
   },
   "blizzard/runner/harness/adapter.py": {
-   "comments": 13,
+   "comments": 14,
    "docstrings": 198,
    "over_cap": 4,
-   "total": 455
+   "total": 456
   },
   "blizzard/runner/harness/admission.py": {
    "comments": 0,
@@ -4829,10 +4829,10 @@
    "total": 86
   },
   "blizzard/runner/harness/internal/harness_shared.py": {
-   "comments": 4,
+   "comments": 5,
    "docstrings": 53,
    "over_cap": 0,
-   "total": 218
+   "total": 222
   },
   "blizzard/runner/harness/internal/offline_compatibility.py": {
    "comments": 3,
@@ -5120,7 +5120,7 @@
    "comments": 32,
    "docstrings": 53,
    "over_cap": 3,
-   "total": 372
+   "total": 373
   },
   "blizzard/runner/loop/capability_snapshot.py": {
    "comments": 0,
@@ -5147,10 +5147,10 @@
    "total": 374
   },
   "blizzard/runner/loop/context.py": {
-   "comments": 58,
+   "comments": 59,
    "docstrings": 27,
    "over_cap": 20,
-   "total": 234
+   "total": 236
   },
   "blizzard/runner/loop/dormant.py": {
    "comments": 70,
@@ -5276,7 +5276,7 @@
    "comments": 50,
    "docstrings": 46,
    "over_cap": 1,
-   "total": 496
+   "total": 502
   },
   "blizzard/runner/loop/steps.py": {
    "comments": 97,
@@ -9463,10 +9463,10 @@
    "total": 107
   },
   "test_runner_loop.py": {
-   "comments": 422,
+   "comments": 423,
    "docstrings": 222,
    "over_cap": 6,
-   "total": 3980
+   "total": 4002
   },
   "test_runner_loop_build.py": {
    "comments": 7,
@@ -9804,6 +9804,12 @@
    "over_cap": 0,
    "total": 412
   },
+  "test_runner_worker_trace_env.py": {
+   "comments": 0,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 71
+  },
   "test_runner_write_protocol_census.py": {
    "comments": 2,
    "docstrings": 17,
@@ -10021,10 +10027,10 @@
    "total": 348
   },
   "test_trace_ids.py": {
-   "comments": 5,
+   "comments": 6,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 50
+   "total": 64
   },
   "test_trace_position.py": {
    "comments": 7,

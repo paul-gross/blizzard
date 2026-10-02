@@ -102,10 +102,6 @@ class EnabledPlatformTracing:
         self._processor = processor
         self._engine_tracers: list[EngineTracer] = []
 
-    @property
-    def enabled(self) -> bool:
-        return True
-
     @classmethod
     def build(
         cls,

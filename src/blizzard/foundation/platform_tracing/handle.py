@@ -37,11 +37,6 @@ class IPlatformTracing(Protocol):
     @property
     def tracer(self) -> IPlatformTracer: ...
 
-    @property
-    def enabled(self) -> bool:
-        """Whether spans are exported at all — what a span receiver has nothing to forward to without."""
-        ...
-
     def fastapi_telemetry(self, *, exclude: ScopeFilter | None = None) -> TelemetryConfig:
         """The ``FastAPI(telemetry=...)`` config for one app; ``exclude`` skips a request's server span."""
         ...
@@ -75,10 +70,6 @@ class DisabledPlatformTracing:
     @property
     def tracer(self) -> IPlatformTracer:
         return self._tracer
-
-    @property
-    def enabled(self) -> bool:
-        return False
 
     def fastapi_telemetry(self, *, exclude: ScopeFilter | None = None) -> TelemetryConfig:
         return {"tracing": False, "auto_configure": False}
