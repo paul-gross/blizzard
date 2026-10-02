@@ -172,7 +172,7 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
     forge_port, hub_port = _free_port(), _free_port()
     with (
         _forge(bin_dir, origins, forge_port) as forge,
-        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces) as hub,
+        _hub(tmp_path / "hub", forge_port, hub_port, collector=fleet_traces, platform_spans=True) as hub,
     ):
         # Arm the mock forge's merge_conflict lever for the fixture repo — repo-scoped
         # (no PR number), so it applies to whichever PR the script opens.
@@ -211,6 +211,8 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
         # Fleet truth, as the trace backend sees it: the bounced deliver step is routing, not error — it carries a
         # `bounce` event with cause `conflict` and closes back to build, and the re-entered build links to it by
         # `bounce`. The chunk keeps looping against the armed lever, so only the first three steps are read.
+        # The hub runs platform spans at a zero root sample ratio: its `hub run step` spans still export, parented
+        # on the very `hub exec` span the sweep tells, which proves the inline derivation and the sweep agree.
         with subtests.test(msg="fleet traces"):
             fleet_traces.require()
             _drive_until_rebuilt(config, hub, chunk_id, fenced)
@@ -233,6 +235,16 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
                     StepExpect("step build", "transitioned", "deliver", link="bounce"),
                 ],
             )
+            deliver = traces[1]
+            (hub_exec,) = [c for c in deliver.children if c.name == "hub exec"]
+            run_steps = [
+                s
+                for s in fleet_traces.platform_spans()
+                if s.name == "hub run step" and s.trace_id == deliver.root.trace_id
+            ]
+            assert run_steps, "the deliver step's trace carries no `hub run step` span"
+            assert {s.parent_span_id for s in run_steps} == {hub_exec.span_id}
+            assert all("blizzard.hub.run_step.exit_code" in s.attributes for s in run_steps)
 
     # Bare main is exactly where it started — the conflicted change never landed.
     main_after = _git_bare(origin_bare, "rev-parse", "main").strip()

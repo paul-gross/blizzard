@@ -227,7 +227,8 @@ match the runner's drain cadence points at clock skew between the hosts.
 
 Beside the step traces, each daemon can trace its own work: the hub's requests, store queries, outbound calls and sweep
 passes, and the runner's requests, store queries, hub calls and ticks. These spans tell an operator where a daemon spent
-its time. They share no trace with a step, and the [Spans](#spans) table does not list them.
+its time. Most of them form their own traces; the ones made on a step's behalf join that step's trace, as described
+under **Nesting under a step** below. The [Spans](#spans) table does not list them.
 
 - **Turning them on.** Both switches are needed: `platform = true` in the `[tracing]` block of `blizzard-hub.toml` or
   `blizzard-runner.toml`, and an OTLP endpoint in OpenTelemetry's own variables, the same ones the step traces read.
@@ -241,6 +242,27 @@ its time. They share no trace with a step, and the [Spans](#spans) table does no
   each sweep pass as a root named `sweep <name>`. The runner traces the same for its own app, whether served over TCP or
   the unix socket, its calls to the hub, and each tick as a root named `tick` with a child per step. A runner's calls to
   its hub carry `traceparent`.
+- **Nesting under a step.** A platform span made on one step's behalf parents on that step's derived root or `hub exec`
+  span, using the ids in [Trace and span ids](#trace-and-span-ids). Such a span is always kept, whatever the sample
+  ratio, because its parent counts as sampled.
+  - *The runner's own calls.* The runner's completion and judgement-decision submissions, its gate apply, its envelope
+    re-reads and its hub-node polls each send their request under the step they serve. A completion or decision nests
+    under its attempt's root, and a gate apply under the gate's root. An envelope re-read nests under the newest attempt
+    the runner knows of; with no known epoch it starts a trace of its own. A hub-node poll nests under the hub step it
+    drives, the step after the newest epoch the chunk's status reports. The runner's fact drain belongs to no step.
+  - *The hub's `run:` steps.* Each `run:` step a hub node executes is a span named `hub run step`, a direct child of
+    that step's `hub exec` span. A step its `produces:` skips makes no span, and no span wraps the node as a whole. The
+    span carries the step's exit code and its authored name, never its command, output or environment. The request that
+    drove the node, which is a hub-advance poll or a completion or migration apply, carries a link to the `hub exec`
+    span.
+  - *A restart between poll and exit.* A poll's spans parent on a step root the trace sweep exports only once that hub
+    step closes. A restart between a poll and the exit of the hub node it drove can leave that root never exported. A
+    trace backend then shows the poll's spans under a missing parent.
+- **Continuing an incoming trace.** The hub continues an incoming `traceparent` only for a caller it authenticates: a
+  runner bearer that resolves to a registered, unrevoked runner, or a human session or operator bearer under the
+  configured auth mode. For any other request, including every request under `auth.mode = none` and an unknown or absent
+  bearer under `runner_auth_mode = warn`, the hub drops `traceparent`, `tracestate` and `baggage` and the request starts
+  a new root. The runner continues an incoming `traceparent` as before.
 - **What is left out.** The runner's worker `POST /api/heartbeat` and any `/v1/traces` path make no span, and neither do
   the store queries they run.
 - **Names.** `service.name` follows the rule in [Resource attributes](#resource-attributes). Sweep and tick spans carry

@@ -287,9 +287,11 @@ def _hub(
     annotation_interval_seconds: int | None = None,
     extra_env: Mapping[str, str] | None = None,
     collector: FleetCollector | None = None,
+    platform_spans: bool = False,
 ) -> Iterator[httpx.Client]:
     """A hub daemon over ``hub_dir``. Traced (exporting to ``collector``, sweeping every second with no settle)
-    when a usable collector is given; otherwise every inherited ``OTEL_*`` is stripped so a developer's own
+    when a usable collector is given — with platform spans on at a zero root sample ratio when
+    ``platform_spans``, so only spans parented on a sampled context export; otherwise every inherited ``OTEL_*`` is stripped so a developer's own
     endpoint never receives e2e spans."""
     export_to = collector if collector is not None and collector.available else None
     env = {
@@ -334,7 +336,9 @@ def _hub(
         if annotation_interval_seconds is not None:
             overrides["annotation_interval_seconds"] = annotation_interval_seconds
         if export_to:
-            overrides["tracing"] = TracingConfig(sweep_seconds=1, settle_seconds=0)
+            overrides["tracing"] = TracingConfig(
+                sweep_seconds=1, settle_seconds=0, platform=platform_spans, platform_sample_ratio=0.0
+            )
         config = dataclasses.replace(config, **overrides)
         config.config_path.write_text(config.to_toml())
     log = hub_dir / "daemon.log"
