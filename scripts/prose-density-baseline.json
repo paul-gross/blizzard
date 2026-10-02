@@ -9511,10 +9511,10 @@
    "total": 1751
   },
   "test_runner_platform_tracing.py": {
-   "comments": 10,
+   "comments": 12,
    "docstrings": 2,
    "over_cap": 0,
-   "total": 458
+   "total": 474
   },
   "test_runner_preempt.py": {
    "comments": 42,
@@ -9865,10 +9865,10 @@
    "total": 62
   },
   "test_span_receiver.py": {
-   "comments": 1,
+   "comments": 2,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 261
+   "total": 348
   },
   "test_spawn_suppressed_registry.py": {
    "comments": 11,

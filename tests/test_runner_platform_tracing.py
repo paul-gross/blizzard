@@ -456,3 +456,19 @@ def test_the_receiver_makes_no_server_span_of_its_own(tmp_path: Path) -> None:
         _post_json(client, _export(_own_trace()))
     spans = _finished(handle, exporter)
     assert [s for s in spans if s not in _worker_spans(spans)] == []
+
+
+def test_a_non_404_lease_failure_propagates_and_an_unknown_hash_is_403(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from fastapi import HTTPException
+
+    from blizzard.runner.api.wiring import RunnerWiring
+
+    handle = _handle(InMemorySpanExporter())
+    with TestClient(_app(tmp_path, handle, []), raise_server_exceptions=False) as client:
+        assert _post_json(client, _export(_own_trace()), {"X-Blizzard-Lease-Token": "unknown"}).status_code == 403
+
+        def failing(self, lease_id):  # type: ignore[no-untyped-def]
+            raise HTTPException(status_code=503, detail="down")
+
+        monkeypatch.setattr(RunnerWiring, "worker_lease", failing)
+        assert _post_json(client, _export(_own_trace())).status_code == 503

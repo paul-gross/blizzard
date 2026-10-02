@@ -149,6 +149,93 @@ def test_a_malformed_body_is_a_typed_decode_error(body: bytes, content_type: str
         decode_otlp(body, content_type)
 
 
+def _json_span(**fields: object) -> bytes:
+    span = {"traceId": f"{_trace():032x}", "spanId": f"{_SPAN_ID:016x}", **fields}
+    return json.dumps({"resourceSpans": [{"scopeSpans": [{"spans": [span]}]}]}).encode()
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _json_span(name={"a": 1}),
+        _json_span(startTimeUnixNano="-1"),
+        _json_span(startTimeUnixNano="99999999999999999999999"),
+        _json_span(attributes=[{"key": "k", "value": {"intValue": "x"}}]),
+        _json_span(traceId="ab" * 15),
+        _json_span(spanId="ab" * 7),
+        _json_span(parentSpanId="ab" * 7),
+        b"[" * 100000,
+        b'{"resourceSpans": [1]}',
+        b'{"resourceSpans": [{"scopeSpans": [{"spans": [5]}]}]}',
+    ],
+)
+def test_every_malformed_json_shape_is_a_decode_error(body: bytes) -> None:
+    with pytest.raises(OtlpDecodeError):
+        decode_otlp(body, JSON_CONTENT_TYPE)
+
+
+def test_empty_hex_ids_are_a_decode_error_and_an_empty_parent_is_a_root() -> None:
+    with pytest.raises(OtlpDecodeError):
+        decode_otlp(_json_span(traceId=""), JSON_CONTENT_TYPE)
+    (span,) = decode_otlp(_json_span(parentSpanId=""), JSON_CONTENT_TYPE)
+    assert span.parent_span_id is None
+    assert decode_otlp(b"{}", JSON_CONTENT_TYPE) == []
+
+
+def test_a_protobuf_span_with_a_short_id_is_a_decode_error() -> None:
+    message = ExportTraceServiceRequest()
+    span = message.resource_spans.add().scope_spans.add().spans.add()
+    span.trace_id = b"\x01" * 15
+    span.span_id = b"\x01" * 8
+    with pytest.raises(OtlpDecodeError):
+        decode_otlp(message.SerializeToString(), PROTOBUF_CONTENT_TYPE)
+
+
+def test_admit_checks_each_declared_value_type() -> None:
+    allowlist = Allowlist(scope=CLI_SCOPE, attributes={"i": "int", "d": "double", "s": "string", "u": "other"})
+    attributes = {"i": True, "d": 1, "s": 1, "u": "x"}
+    (kept,) = admit([_span(attributes=attributes)], _lease(), allowlist).kept
+    assert set(kept.attributes) == {"blizzard.caller", "blizzard.chunk.id", "blizzard.lease.id"}
+    good = {"i": 3, "d": 1.5, "s": "x"}
+    (kept,) = admit([_span(attributes=good)], _lease(), allowlist).kept
+    assert {k: kept.attributes[k] for k in good} == good
+
+
+@pytest.mark.parametrize(
+    ("kind", "name"),
+    [(0, "INTERNAL"), (1, "INTERNAL"), (2, "SERVER"), (3, "CLIENT"), (4, "PRODUCER"), (5, "CONSUMER"), (9, "INTERNAL")],
+)
+def test_forward_maps_otlp_kinds_and_statuses(kind: int, name: str) -> None:
+    exporter = InMemorySpanExporter()
+    handle = _handle(exporter)
+    handle.forward([_span(kind=kind, status_code=2, scope_version="")], "blizzard-cli")
+    handle.forward([_span(span_id=2, status_code=1)], "blizzard-cli")
+    handle.forward([_span(span_id=3, status_code=7)], "blizzard-cli")
+    handle.shutdown(5.0)
+    first, ok, unknown = exporter.get_finished_spans()
+    assert first.kind.name == name
+    assert (first.status.status_code.name, ok.status.status_code.name, unknown.status.status_code.name) == (
+        "ERROR",
+        "OK",
+        "UNSET",
+    )
+    assert (first.start_time, first.end_time) == (1_000, 2_000)
+    assert first.parent is None
+    assert first.instrumentation_scope is not None and first.instrumentation_scope.version is None
+    assert ok.instrumentation_scope is not None and ok.instrumentation_scope.version == "1"
+
+
+def _handle(exporter: InMemorySpanExporter):  # type: ignore[no-untyped-def]
+    return build_platform_tracing(
+        TracingConfig(platform=True, platform_sample_ratio=0.0),
+        {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"},
+        resource={"service.name": "blizzard-runner"},
+        scope="s",
+        scope_version="1",
+        exporter=exporter,
+    )
+
+
 def test_admit_keeps_an_in_step_cli_span_and_drops_the_rest() -> None:
     spans = [
         _span(),

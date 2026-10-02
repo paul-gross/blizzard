@@ -6,7 +6,7 @@ import base64
 import json
 from typing import Any
 
-from google.protobuf.json_format import MessageToJson, ParseDict
+from google.protobuf.json_format import MessageToJson, ParseDict, ParseError
 from google.protobuf.message import DecodeError
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
     ExportTraceServiceRequest,
@@ -56,7 +56,7 @@ def _parse_json(body: bytes, message: ExportTraceServiceRequest) -> None:
         document = json.loads(body)
         _normalize_ids(document)
         ParseDict(document, message, ignore_unknown_fields=True)
-    except (ValueError, TypeError, AttributeError, KeyError) as exc:
+    except (ValueError, TypeError, AttributeError, KeyError, RecursionError, ParseError) as exc:
         raise OtlpDecodeError("malformed JSON body") from exc
 
 
