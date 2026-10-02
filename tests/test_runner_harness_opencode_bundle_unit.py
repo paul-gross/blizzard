@@ -108,7 +108,7 @@ def test_runner_publication_passes_the_configured_worker_path(tmp_path: Path, mo
     worker = tmp_path / "custom" / "worker.json"
     observed: list[tuple[Path, Path, Path | None]] = []
 
-    def publish(source: Path, root: Path, *, worker_config_path: Path | None = None) -> SimpleNamespace:
+    def publish(source: Path, root: Path, *, worker_config_path: Path | None = None, **_: object) -> SimpleNamespace:
         observed.append((source, root, worker_config_path))
         return SimpleNamespace(summary=lambda: "published")
 

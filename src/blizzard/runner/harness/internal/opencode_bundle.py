@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import replace
 from collections.abc import Iterator, Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
