@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from blizzard.foundation import cli_spans
 from blizzard.foundation import trace_attributes as shared
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.platform_tracing import attributes as platform_attr
@@ -451,6 +452,9 @@ def test_the_platform_section_is_the_code_constants() -> None:
         *platform_attr.CLI_ATTRIBUTES,
     }
     assert attr.RUNNER_ID == runner_attr.RUNNER_ID
+    assert cli_spans.SCOPE_NAME == platform_attr.CLI_SCOPE
+    assert (cli_spans.ATTR_COMMAND, cli_spans.ATTR_EXIT_CODE) == (platform_attr.CLI_COMMAND, platform_attr.EXIT_CODE)
+    assert (cli_spans.ATTR_LEASE_ID, cli_spans.ATTR_CHUNK_ID) == (platform_attr.LEASE_ID, shared.CHUNK_ID)
     declared = {a["name"]: a["type"] for a in platform["attributes"]}
     assert declared.pop(hub_platform.RUN_STEP_EXIT_CODE) == "int"
     assert all(declared[name] == type_ for name, type_ in platform_attr.CLI_ATTRIBUTES.items())

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -667,6 +668,36 @@ def _loaded_after_importing(module: str) -> set[str]:
     code = f"import sys, json; import {module}; print(json.dumps(sorted(sys.modules)))"
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     return set(json.loads(result.stdout))
+
+
+def _loaded_after_running(argv: list[str], env: dict[str, str] | None = None) -> set[str]:
+    """The modules a ``blizzard`` invocation leaves loaded, in a fresh interpreter."""
+    code = (
+        "import sys, json; from click.testing import CliRunner; from blizzard.cli.main import blizzard; "
+        f"CliRunner().invoke(blizzard, {argv!r}); print(json.dumps(sorted(sys.modules)))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True, env={**os.environ, **(env or {})}
+    )
+    return set(json.loads(result.stdout))
+
+
+def test_a_worker_verb_loads_no_opentelemetry() -> None:
+    """A worker verb is a short-lived process that must not pay for the OpenTelemetry SDK."""
+    loaded = _loaded_after_running(
+        ["runner", "chunk", "--help"],
+        {
+            "BLIZZARD_TRACEPARENT": "00-" + "1" * 32 + "-" + "2" * 16 + "-01",
+            "BLIZZARD_RUNNER_URL": "http://127.0.0.1:1",
+        },
+    )
+    heavy = sorted(m for m in loaded if m.split(".")[0] == "opentelemetry")
+    assert not heavy, (
+        f"a worker verb loaded {len(heavy)} opentelemetry modules, first {heavy[:3]}. Command modules "
+        "load on demand through the lazy registries in blizzard.cli.main and blizzard.runner.cli "
+        "(blizzard.cli.lazy_group.LazyGroup): register a new verb there by 'module:attribute' and keep "
+        "its module free of module-level imports of the hub, fastapi, or telemetry stacks"
+    )
 
 
 def test_trace_ids_load_no_driver_or_hub_store() -> None:

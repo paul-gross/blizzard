@@ -12,6 +12,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
+from tests.worker_http import bind_stubs
 
 _ENV = {
     "BLIZZARD_LEASE_ID": "lease_9",
@@ -62,7 +63,7 @@ def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(monk
         calls.append((url, headers))
         return _FakeResponse(text=_LIST_TEXT)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(runner_group, ["finding", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
@@ -80,7 +81,7 @@ def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch
         calls.append(headers)
         return _FakeResponse(text="[]")
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     env = {k: v for k, v in _ENV.items() if k != "BLIZZARD_LEASE_TOKEN"}
     result = CliRunner().invoke(runner_group, ["finding", "list"], env=env)
 
@@ -97,7 +98,7 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
         attempted = True
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(
         runner_group, ["finding", "list"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
     )
@@ -109,8 +110,8 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 def test_list_surfaces_a_404_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 answers no accepted proposal"})
+    bind_stubs(
+        monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 answers no accepted proposal"})
     )
     result = CliRunner().invoke(runner_group, ["finding", "list"], env=_ENV)
 
@@ -126,7 +127,7 @@ def test_get_gets_the_lease_scoped_route_naming_the_finding_id(monkeypatch: pyte
         calls.append(url)
         return _FakeResponse(text=_GET_TEXT)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(runner_group, ["finding", "get", "fin_1"], env=_ENV)
 
     assert result.exit_code == 0, result.output
@@ -136,8 +137,8 @@ def test_get_gets_the_lease_scoped_route_naming_the_finding_id(monkeypatch: pyte
 
 @pytest.mark.unit
 def test_get_surfaces_a_404_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "finding fin_other is not among the findings"})
+    bind_stubs(
+        monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "finding fin_other is not among the findings"})
     )
     result = CliRunner().invoke(runner_group, ["finding", "get", "fin_other"], env=_ENV)
 

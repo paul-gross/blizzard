@@ -287,6 +287,12 @@ only while platform tracing is on; with it off the path answers `404`, and a sen
   `identity` is refused `415`, as is any other content type. A malformed body is refused `400`. A `200` carries an OTLP
   `ExportTraceServiceResponse` in the request's encoding, whose `partial_success.rejected_spans` counts the spans that
   were refused.
+- **What the CLI sends.** Each `blizzard runner` command a worker runs, other than `heartbeat`, is one span named for
+  the command, such as `runner chunk history`, a child of the step's span, whose context the runner passes down in
+  `BLIZZARD_TRACEPARENT`. Its own context goes out as `traceparent` on every request the command makes. Just before the
+  command exits, the span is posted here within 100 ms in total, whatever the outcome. A failed send is silent and never
+  changes the command's output or exit code; set `BLIZZARD_TRACE_DEBUG` to see it on stderr. The span records the
+  command's names, never an argument or option value.
 - **What is kept.** A span is kept only if it belongs to the trace of the lease's own step attempt and arrives under the
   scope `blizzard.cli`. Anything else is dropped, and counted. Events, links, trace state and the status message are
   never kept.

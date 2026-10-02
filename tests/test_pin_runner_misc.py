@@ -12,7 +12,6 @@ from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import httpx
 import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
@@ -25,6 +24,7 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.worker_call import READ_TIMEOUT
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
+from tests.worker_http import bind_stubs
 
 # --- runner/auth/session.py: the stateless, per-process-secret session ---------------
 
@@ -212,7 +212,7 @@ def test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item(monkeypatch
         calls.append(url)
         return _FakeLocalResponse('{"items": []}')
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(
         runner_group,
         ["pm-items", "ch_1"],

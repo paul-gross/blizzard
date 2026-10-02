@@ -11,6 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
+from tests.worker_http import bind_stubs
 
 _ENV = {
     "BLIZZARD_LEASE_ID": "lease_9",
@@ -53,7 +54,7 @@ def test_list_gets_the_lease_scoped_route_with_inherited_identity_and_token(
         calls.append((url, headers))
         return _FakeResponse(text=_SCOPES_TEXT)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(runner_group, ["scope", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
@@ -70,7 +71,7 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
         attempted = True
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(
         runner_group, ["scope", "list"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
     )
@@ -82,8 +83,8 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 def test_list_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"})
+    bind_stubs(
+        monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"})
     )
     result = CliRunner().invoke(runner_group, ["scope", "list"], env=_ENV)
 

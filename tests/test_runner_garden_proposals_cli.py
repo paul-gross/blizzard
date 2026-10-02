@@ -11,6 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
+from tests.worker_http import bind_stubs
 
 _ENV = {
     "BLIZZARD_LEASE_ID": "lease_9",
@@ -57,7 +58,7 @@ def test_proposals_gets_the_lease_scoped_route_with_inherited_identity_and_token
         calls.append((url, headers))
         return _FakeResponse(text=_PROPOSALS_TEXT)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(runner_group, ["garden", "proposals"], env=_ENV)
 
     assert result.exit_code == 0, result.output
@@ -75,7 +76,7 @@ def test_proposals_defaults_state_to_open(monkeypatch: pytest.MonkeyPatch) -> No
         calls.append(params)
         return _FakeResponse(text=_PROPOSALS_TEXT)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(runner_group, ["garden", "proposals"], env=_ENV)
 
     assert result.exit_code == 0, result.output
@@ -90,7 +91,7 @@ def test_proposals_state_flag_is_forwarded_as_a_query_param(monkeypatch: pytest.
         calls.append(params)
         return _FakeResponse(text="[]")
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(runner_group, ["garden", "proposals", "--state", "closed"], env=_ENV)
 
     assert result.exit_code == 0, result.output
@@ -113,7 +114,7 @@ def test_proposals_omits_the_token_header_when_absent(monkeypatch: pytest.Monkey
         calls.append(headers)
         return _FakeResponse(text="[]")
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     env = {k: v for k, v in _ENV.items() if k != "BLIZZARD_LEASE_TOKEN"}
     result = CliRunner().invoke(runner_group, ["garden", "proposals"], env=env)
 
@@ -130,7 +131,7 @@ def test_proposals_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> N
         attempted = True
         return _FakeResponse()
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bind_stubs(monkeypatch, get=fake_get)
     result = CliRunner().invoke(
         runner_group, ["garden", "proposals"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
     )
@@ -142,8 +143,8 @@ def test_proposals_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.unit
 def test_proposals_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"})
+    bind_stubs(
+        monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "presented token does not authorize lease"})
     )
     result = CliRunner().invoke(runner_group, ["garden", "proposals"], env=_ENV)
 
@@ -153,9 +154,7 @@ def test_proposals_surfaces_a_403_as_a_nonzero_exit_with_the_hub_detail(monkeypa
 
 @pytest.mark.unit
 def test_proposals_surfaces_a_404_as_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        httpx, "get", lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 carries no run context"})
-    )
+    bind_stubs(monkeypatch, get=lambda *a, **k: _RejectingResponse({"detail": "chunk ch_1 carries no run context"}))
     result = CliRunner().invoke(runner_group, ["garden", "proposals"], env=_ENV)
 
     assert result.exit_code != 0
