@@ -16,9 +16,12 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, Id
+from blizzard.foundation.platform_tracing.attributes import annotate
+from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.repo_ref import repo_identity
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.delivery.command_runner import IHubCommandRunner
+from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
+from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.artifacts import ArtifactRow
@@ -37,7 +40,9 @@ from blizzard.hub.domain.graph import (
     RESERVED_TERMINAL,
     Graph,
     Node,
+    RunStep,
 )
+from blizzard.hub.domain.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
 from blizzard.hub.domain.work import (
     Chunk,
     HubNodePollFact,
@@ -297,6 +302,7 @@ class HubNodeExecutor:
         forge_owner: str | None = None,
         work_sources: IWorkSourceRegistry | None = None,
         slot_stale_after: timedelta = DEFAULT_SLOT_STALE_AFTER,
+        tracer: IPlatformTracer | None = None,
     ) -> None:
         self._facts = facts
         self._artifacts = artifacts
@@ -315,6 +321,7 @@ class HubNodeExecutor:
         self._forge_owner = forge_owner
         self._work_sources = work_sources
         self._slot_stale_after = slot_stale_after
+        self._tracer = tracer or NoopPlatformTracer()
 
     @staticmethod
     def _log_name(index: int, step_name: str | None, produces: str | None) -> str:
@@ -359,13 +366,23 @@ class HubNodeExecutor:
         )
         if slot_id is None:
             return None
+        # The same inputs the sweep derives its `hub exec` span from, so `run:` steps nest under it.
+        hub_exec = DerivedContext.of(StepKey.attempt(chunk.chunk_id, epoch + 1), SpanRole.HUB_EXEC, slot_id)
+        self._tracer.link(hub_exec)
         try:
-            return self._run_locked(chunk, graph, node, epoch=epoch, poll_history=poll_history)
+            return self._run_locked(chunk, graph, node, epoch=epoch, poll_history=poll_history, hub_exec=hub_exec)
         finally:
             self._hub_exec.release_hub_exec_slot(chunk.chunk_id, at=self._clock.now())
 
     def _run_locked(
-        self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int, poll_history: list[HubNodePollFact]
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        node: Node,
+        *,
+        epoch: int,
+        poll_history: list[HubNodePollFact],
+        hub_exec: DerivedContext,
     ) -> HubRunResult:
         if poll_history and self._clock.now() - poll_history[0].polled_at >= PollPolicy.of(node).timeout:
             # The bound is elapsed since the FIRST pending attempt of this visit: stop
@@ -418,7 +435,7 @@ class HubNodeExecutor:
                 ):
                     continue  # already done — the at-least-once-per-step skip (#65)
 
-                result = self._runner.run(command=step.command, cwd=workdir, env=env)
+                result = self._run_step(step, workdir=workdir, env=env, hub_exec=hub_exec)
                 self._artifacts.record_hub_artifact(
                     chunk.chunk_id,
                     node_id=node.node_id,
@@ -462,6 +479,19 @@ class HubNodeExecutor:
             return self._route(chunk, graph, node, epoch=epoch, choice=chosen, commits=commits)
         finally:
             self._marker_authority.revoke(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
+
+    def _run_step(
+        self, step: RunStep | _NoopStep, *, workdir: str, env: dict[str, str], hub_exec: DerivedContext
+    ) -> CommandResult:
+        if isinstance(step, _NoopStep):
+            return self._runner.run(command=step.command, cwd=workdir, env=env)
+        with (
+            self._tracer.under(hub_exec),
+            self._tracer.child(RUN_STEP_SPAN, {RUN_STEP_NAME: step.name} if step.name else None),
+        ):
+            result = self._runner.run(command=step.command, cwd=workdir, env=env)
+            annotate({RUN_STEP_EXIT_CODE: result.exit_code})
+        return result
 
     def _record_pending(self, chunk: Chunk, node: Node, *, epoch: int) -> HubRunResult:
         """Record one pending-poll-attempt fact (#66) — no transition, and the slot is

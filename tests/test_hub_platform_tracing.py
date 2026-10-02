@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -148,3 +149,182 @@ def test_a_route_without_a_chunk_id_carries_no_chunk_attribute(tmp_path: Path) -
     server = [s for s in _spans(handle, exporter) if s.name == "GET /api/health"]
     assert len(server) == 1
     assert _CHUNK_ID not in (server[0].attributes or {})
+
+
+_PLANTED_TRACE = 0x4BF92F3577B34DA6A3CE929D0E0E4736
+_PLANTED_SPAN = 0x00F067AA0BA902B7
+_TRACEPARENT = {"traceparent": f"00-{_PLANTED_TRACE:032x}-{_PLANTED_SPAN:016x}-01"}
+
+
+def _enrolled_token(client: TestClient, runner_id: str) -> str:
+    assert client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": "ws-a"}).status_code == 201
+    return client.post(f"/api/runners/{runner_id}/enrollments").json()["token"]
+
+
+def _server_span(spans: list, prefix: str):  # type: ignore[no-untyped-def,type-arg]
+    server = [s for s in spans if s.kind.name == "SERVER" and s.name.startswith(prefix)]
+    assert len(server) == 1, [s.name for s in spans]
+    return server[0]
+
+
+def _continues_planted(span) -> bool:  # type: ignore[no-untyped-def]
+    return span.context.trace_id == _PLANTED_TRACE and span.parent is not None and span.parent.span_id == _PLANTED_SPAN
+
+
+def test_a_registered_runner_bearer_continues_an_incoming_trace(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    config = _config(tmp_path)
+    handle = _handle(config, exporter)
+    with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
+        token = _enrolled_token(client, "runner-a")
+        client.get("/api/fleet/queue/peek", headers={"Authorization": f"Bearer {token}", **_TRACEPARENT})
+    spans = _spans(handle, exporter)
+    assert _continues_planted(_server_span(spans, "GET /api/fleet/queue/peek"))
+    gate_lookups = [
+        s
+        for s in spans
+        if s.parent is None and "runner_registrations" in str((s.attributes or {}).get("db.query.text"))
+    ]
+    assert not gate_lookups, "the gate's own lookups opened root spans"
+
+
+@pytest.mark.parametrize("credential", ["anonymous", "unknown", "revoked"])
+def test_an_unresolved_runner_credential_starts_a_fresh_root(tmp_path: Path, credential: str) -> None:
+    exporter = InMemorySpanExporter()
+    config = _config(tmp_path)
+    handle = _handle(config, exporter)
+    with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
+        token = _enrolled_token(client, "runner-a")
+        if credential == "revoked":
+            assert client.post("/api/runners/runner-a/token-revocations", json={}).status_code == 201
+        headers = dict(_TRACEPARENT)
+        if credential != "anonymous":
+            headers["Authorization"] = f"Bearer {token if credential == 'revoked' else 'not-a-token'}"
+        client.get("/api/fleet/queue/peek", headers=headers)
+    server = _server_span(_spans(handle, exporter), "GET /api/fleet/queue/peek")
+    assert server.parent is None
+    assert server.context.trace_id != _PLANTED_TRACE
+
+
+def test_a_human_route_under_auth_mode_none_starts_a_fresh_root(tmp_path: Path) -> None:
+    exporter = InMemorySpanExporter()
+    config = _config(tmp_path)
+    assert config.auth.mode == "none"
+    handle = _handle(config, exporter)
+    with TestClient(hub_app.build_hosted_app(config, platform_tracing=handle)) as client:
+        client.get("/api/chunks", headers=_TRACEPARENT)
+    server = _server_span(_spans(handle, exporter), "GET /api/chunks")
+    assert server.parent is None
+    assert server.context.trace_id != _PLANTED_TRACE
+
+
+_POLLING_GRAPH_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: merge
+        fail:
+          description: Incomplete.
+          to: build
+  merge:
+    executor: hub
+    poll_interval: 1
+    poll_timeout: 600
+    run:
+      - name: prepare
+        command: "true"
+        produces: prepared
+      - command: "if [ -f polled ]; then echo success; else touch polled; echo pending; fi"
+    judgement:
+      choices:
+        success:
+          description: Landed.
+          to: done
+        failure:
+          description: Failed.
+          to: build
+"""
+
+
+def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_request_links_it(
+    tmp_path: Path,
+) -> None:
+    from sqlalchemy import select
+
+    from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
+    from blizzard.hub.domain.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
+    from blizzard.hub.store import schema as s
+
+    exporter = InMemorySpanExporter()
+    config = _config(tmp_path)
+    handle = _handle(config, exporter)
+    app = hub_app.build_hosted_app(config, platform_tracing=handle)
+    with TestClient(app) as client:
+        assert client.post("/api/graphs", json={"definition_yaml": _POLLING_GRAPH_YAML}).status_code == 201
+        chunk_id = client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
+        assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        claim = client.post(
+            "/api/fleet/routes",
+            json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
+        )
+        assert claim.status_code == 201, claim.text
+        build_node_id = claim.json()["envelope"]["node"]["node_id"]
+        minted = {"seq": 1, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 1}}
+        assert client.post("/api/fleet/events", json={"runner_id": "r1", "facts": [minted]}).status_code == 200
+        applied = client.post(
+            f"/api/fleet/chunks/{chunk_id}/completions",
+            json={
+                "choice": "pass",
+                "epoch": 1,
+                "runner_id": "r1",
+                "from_node_id": build_node_id,
+                "check_results": [],
+                "artifacts": [],
+            },
+        )
+        assert applied.json()["outcome"] == "hub_node_taken", applied.text
+        time.sleep(1.1)
+        advanced = client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+        assert advanced.json()["outcome_choice"] == "success", advanced.text
+    with app.state.engine.connect() as conn:
+        slots = conn.execute(
+            select(s.hub_exec_slot.c.slot_id)
+            .where(s.hub_exec_slot.c.holder_chunk_id == chunk_id)
+            .order_by(s.hub_exec_slot.c.acquired_at)
+        ).all()
+    spans = _spans(handle, exporter)
+    assert len(slots) == 2
+    hub_execs = [DerivedContext.of(StepKey.attempt(chunk_id, 2), SpanRole.HUB_EXEC, row.slot_id) for row in slots]
+
+    drivers = [
+        _server_span(spans, f"POST /api/fleet/chunks/{{chunk_id}}/{verb}") for verb in ("completions", "hub-advance")
+    ]
+    for driver, hub_exec in zip(drivers, hub_execs, strict=True):
+        assert [(link.context.trace_id, link.context.span_id) for link in driver.links] == [
+            (hub_exec.trace_id, hub_exec.span_id)
+        ]
+
+    run_steps = [s for s in spans if s.name == RUN_STEP_SPAN]
+    by_parent: dict[int, list] = {}  # type: ignore[type-arg]
+    for span in run_steps:
+        assert span.context.trace_id == span.parent.trace_id
+        by_parent.setdefault(span.parent.span_id, []).append(span)
+    first, second = (by_parent[h.span_id] for h in hub_execs)
+    assert all(span.context.trace_id == hub_execs[0].trace_id for span in run_steps)
+    assert [dict(span.attributes or {}) for span in first] == [
+        {RUN_STEP_NAME: "prepare", RUN_STEP_EXIT_CODE: 0},
+        {RUN_STEP_EXIT_CODE: 0},
+    ]
+    assert [dict(span.attributes or {}) for span in second] == [{RUN_STEP_EXIT_CODE: 0}]
+    assert "polled" not in repr([dict(s.attributes or {}) for s in spans if s.name == RUN_STEP_SPAN])
+    assert not [s for s in spans if "exec" in s.name and s.name != RUN_STEP_SPAN]
