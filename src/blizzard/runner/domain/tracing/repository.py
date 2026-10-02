@@ -21,6 +21,13 @@ class LeaseCursorRecord:
     recorded_at: datetime
 
 
+@dataclass(frozen=True)
+class LeaseFailureRecord:
+    """One ``trace-export-failed`` latch row: when the outage began."""
+
+    at: datetime
+
+
 class IReadLeaseTraceFacts(Protocol):
     def lease_trace_facts(self, lease_id: str) -> LeaseTraceFacts | None:
         """The lease's facts, or ``None`` when it is unknown or has no closure yet."""
@@ -47,6 +54,14 @@ class IReadLeaseTraceCursor(Protocol):
 
     def newest_trace_latch(self) -> EventLogKind | None:
         """The kind of the newest ``trace_export_latch`` row, or ``None``."""
+        ...
+
+    def newest_export_cursor(self) -> LeaseCursorRecord | None:
+        """The newest ``trace_cursor`` row that told at least one span, or ``None`` if none ever did."""
+        ...
+
+    def newest_export_failure(self) -> LeaseFailureRecord | None:
+        """The newest ``trace-export-failed`` latch row, or ``None``."""
         ...
 
 

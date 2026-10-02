@@ -28,6 +28,8 @@ from blizzard.runner.domain.pause import PauseService
 from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
+from blizzard.runner.domain.tracing.replay import LeaseTraceReplay
+from blizzard.runner.domain.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
@@ -87,6 +89,14 @@ class RunnerWiring:
     def status(self) -> RunnerStatusService:
         service: RunnerStatusService | None = getattr(self.state, "runner_status", None)
         return service if service is not None else self._refuse("runner status service")
+
+    def trace_status(self) -> LeaseTraceStatusReader:
+        reader: LeaseTraceStatusReader | None = getattr(self.state, "trace_status", None)
+        return reader if reader is not None else self._refuse("trace status reader")
+
+    def trace_replay(self) -> LeaseTraceReplay:
+        replay: LeaseTraceReplay | None = getattr(self.state, "trace_replay", None)
+        return replay if replay is not None else self._refuse("trace replay")
 
     def leases(self) -> LocalLeaseService:
         service: LocalLeaseService | None = getattr(self.state, "leases", None)
