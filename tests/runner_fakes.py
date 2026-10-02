@@ -75,6 +75,7 @@ from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessSto
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
 from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
 from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
+from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFactsStore
 from blizzard.runner.store.internal.outbound_store import OutboundStore
 from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
@@ -146,6 +147,7 @@ class SqlAlchemyRunnerStore(
     ElicitationStore,
     InvocationBoundaryStore,
     SelfTestResultStore,
+    LeaseTraceFactsStore,
 ):
     """The flat, every-concept-at-once runner store — test support only:
     production composes the extracted concept adapters individually via
@@ -178,6 +180,7 @@ class SqlAlchemyRunnerStore(
         ElicitationStore.__init__(self, store)
         InvocationBoundaryStore.__init__(self, store)
         SelfTestResultStore.__init__(self, store)
+        LeaseTraceFactsStore.__init__(self, store)
         self._engine = engine
         self._errors = errors
 
@@ -267,6 +270,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         elicitations=store,
         invocation_boundaries=store,
         selftest_results=store,
+        lease_traces=store,
     )
 
 

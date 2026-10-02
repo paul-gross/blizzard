@@ -45,6 +45,7 @@ from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessSto
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
 from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
 from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
+from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFactsStore
 from blizzard.runner.store.internal.outbound_store import OutboundStore
 from blizzard.runner.store.internal.overload_store import OverloadStore
 from blizzard.runner.store.internal.pause_store import PauseStore
@@ -160,6 +161,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         elicitations=ElicitationStore(connections),
         invocation_boundaries=InvocationBoundaryStore(connections),
         selftest_results=SelfTestResultStore(connections),
+        lease_traces=LeaseTraceFactsStore(connections),
     )
 
 

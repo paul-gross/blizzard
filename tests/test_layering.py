@@ -700,11 +700,14 @@ def test_only_the_trace_export_binding_imports_opentelemetry() -> None:
 
 def test_the_trace_sweep_and_cursor_import_no_store_or_opentelemetry() -> None:
     tracing = _HUB_DIR / "domain" / "tracing"
+    runner_tracing = _RUNNER_DOMAIN_DIR / "tracing"
     shared_cursor = _FOUNDATION_DIR / "trace_export" / "cursor.py"
+    paths = (tracing / "sweep.py", tracing / "cursor.py", shared_cursor, *sorted(runner_tracing.glob("*.py")))
     violations = [
         f"{path.relative_to(_REPO_ROOT)} imports {module}"
-        for path in (tracing / "sweep.py", tracing / "cursor.py", shared_cursor)
+        for path in paths
         for module in sorted(_imported_modules(path))
-        if module.split(".")[0] in ("opentelemetry", "sqlalchemy") or module.startswith("blizzard.hub.store")
+        if module.split(".")[0] in ("opentelemetry", "sqlalchemy")
+        or module.startswith(("blizzard.hub.store", "blizzard.runner.store"))
     ]
     assert not violations, violations

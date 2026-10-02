@@ -45,6 +45,7 @@ from blizzard.runner.domain.selftest_result import (
     IWriteSelfTestResultRepository,
 )
 from blizzard.runner.domain.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
+from blizzard.runner.domain.tracing.repository import IReadLeaseTraces, IWriteLeaseTraces
 from blizzard.runner.domain.usage import IReadUsageRepository, IWriteUsageRepository
 from blizzard.runner.environments.repository import IReadEnvironmentRepository, IWriteEnvironmentRepository
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
@@ -77,6 +78,7 @@ class IReadRunnerStore(
     IReadElicitationRepository,
     IReadInvocationBoundaryRepository,
     IReadSelfTestResultRepository,
+    IReadLeaseTraces,
     Protocol,
 ):
     """Read-only runner-store queries, every concept's read seam composed."""
@@ -106,6 +108,7 @@ class IWriteRunnerStore(
     IWriteElicitationRepository,
     IWriteInvocationBoundaryRepository,
     IWriteSelfTestResultRepository,
+    IWriteLeaseTraces,
     IReadRunnerStore,
     Protocol,
 ):
@@ -139,6 +142,7 @@ class RunnerStores:
     elicitations: IWriteElicitationRepository
     invocation_boundaries: IWriteInvocationBoundaryRepository
     selftest_results: IWriteSelfTestResultRepository
+    lease_traces: IWriteLeaseTraces
 
 
 @dataclass(frozen=True)
@@ -169,6 +173,7 @@ class RunnerReadStores:
     elicitations: IReadElicitationRepository
     invocation_boundaries: IReadInvocationBoundaryRepository
     selftest_results: IReadSelfTestResultRepository
+    lease_traces: IReadLeaseTraces
 
     @classmethod
     def of(cls, stores: RunnerStores) -> RunnerReadStores:
@@ -198,4 +203,5 @@ class RunnerReadStores:
             elicitations=stores.elicitations,
             invocation_boundaries=stores.invocation_boundaries,
             selftest_results=stores.selftest_results,
+            lease_traces=stores.lease_traces,
         )

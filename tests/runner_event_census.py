@@ -281,6 +281,15 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         _INTERNAL_BOOKKEEPING + " (blizzard#438 — a harness's just-completed selftest run, consumed by the"
         " harness-health evaluator in a later phase, not by any panel surface today)"
     ),
+    # --- the lease trace sweep ---------------------------------------------------------
+    "append_trace_cursor": Silent(
+        _INTERNAL_BOOKKEEPING + " (LeaseTraceSweep.sweep, runner/domain/tracing/sweep.py — the export cursor)"
+    ),
+    "record_trace_latch": Silent(
+        "LeaseTraceSweep._latch (runner/domain/tracing/sweep.py) runs off the loop with no event broker; "
+        "the report row it buffers reaches the local fact log's poll backstop and the hub's event log, "
+        "never a live frame."
+    ),
     # --- the transcript lane — its own poll, no kind in this vocabulary ----------------
     "mark_transcript_record_truncated": Silent(_TRANSCRIPT_LANE_POLLS),
     "stop_transcript_segment_shipping": Silent(_TRANSCRIPT_LANE_POLLS),
