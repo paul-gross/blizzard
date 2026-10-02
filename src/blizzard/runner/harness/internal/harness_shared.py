@@ -134,6 +134,9 @@ def build_identity_env(
             env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = f"{preamble.local_api_url}/v1/traces"
             env["OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"] = "http/protobuf"
             env["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] = f"X-Blizzard-Lease-Token={preamble.lease_token}"
+            # Winter ignores the generic names and switches on only its own; it appends `/v1/traces` itself.
+            env["WINTER_OTEL_EXPORTER_OTLP_ENDPOINT"] = preamble.local_api_url
+            env["WINTER_OTEL_EXPORTER_OTLP_HEADERS"] = f"x-blizzard-lease-token={preamble.lease_token}"
     if elicitation:
         env["BLIZZARD_ELICITATION"] = "1"
     return env

@@ -305,8 +305,11 @@ only while platform tracing is on; with it off the path answers `404`, and a sen
 With `worker_programs = true` in the `[tracing]` block of `blizzard-runner.toml`, default `false` and effective only
 alongside `platform = true`, the runner also lets the programs a worker runs send their own spans. Each invocation's
 environment then carries `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (the runner's `/v1/traces`),
-`OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and `OTEL_EXPORTER_OTLP_TRACES_HEADERS` (the lease token); with it
-off, no `OTEL_EXPORTER_*` variable reaches a worker.
+`OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and `OTEL_EXPORTER_OTLP_TRACES_HEADERS` (the lease token). It also
+sets winter's own switch, which ignores the generic names: `WINTER_OTEL_EXPORTER_OTLP_ENDPOINT` (the runner's base URL;
+winter appends `/v1/traces`) and `WINTER_OTEL_EXPORTER_OTLP_HEADERS` (the lease token), so `winter` command spans nest
+under the step. With it off, no `OTEL_EXPORTER_*` or `WINTER_OTEL_*` variable reaches a worker, and `WINTER_OTEL_*`
+names in `env_passthrough` are always withheld.
 
 - **What changes.** The receiver keeps spans under any scope with any attributes, and their `service.name` is
   `blizzard-worker-program`. Everything else holds: only spans inside the presenting lease's step are kept, the runner

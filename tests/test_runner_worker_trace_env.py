@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -87,6 +88,8 @@ def test_identity_env_points_exporters_at_the_receiver_only_for_worker_programs(
     assert env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] == "http://127.0.0.1:8431/v1/traces"
     assert env["OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"] == "http/protobuf"
     assert env["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] == "X-Blizzard-Lease-Token=tok"
+    assert env["WINTER_OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://127.0.0.1:8431"
+    assert env["WINTER_OTEL_EXPORTER_OTLP_HEADERS"] == "x-blizzard-lease-token=tok"
 
 
 @pytest.mark.parametrize(("worker_programs", "traceparent"), [(False, _TRACEPARENT), (True, "")])
@@ -95,4 +98,13 @@ def test_identity_env_carries_no_exporter_variable_without_both_switches(
 ) -> None:
     preamble = _programs_preamble(worker_programs=worker_programs, traceparent=traceparent)
     env = build_identity_env(preamble, "ch_1", "sess", AllowlistedEnv.of(()))
-    assert not [name for name in env if name.startswith("OTEL_EXPORTER_")]
+    assert not [name for name in env if name.startswith(("OTEL_EXPORTER_", "WINTER_OTEL_"))]
+
+
+def test_winter_otel_names_never_pass_through(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
+    config = replace(_config(tmp_path), worker_env_passthrough=("MY_QUIRK", "WINTER_OTEL_EXPORTER_OTLP_ENDPOINT"))
+    assert config.worker_env.passthrough == ("MY_QUIRK",)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
+    assert config.dropped_otel_passthrough == ("WINTER_OTEL_EXPORTER_OTLP_ENDPOINT",)
